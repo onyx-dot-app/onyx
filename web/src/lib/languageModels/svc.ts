@@ -33,9 +33,8 @@ import {
   type NebiusTokenfactoryFetchParams,
   type NebiusTokenfactoryModelResponse,
   type PortkeyFetchParams,
-  type PortkeyModelResponse,
   type CheaperInferenceFetchParams,
-  type CheaperInferenceModelResponse,
+  type GatewayModelResponse,
 } from "@/lib/languageModels/types";
 
 /**
@@ -735,17 +734,33 @@ export const fetchNebiusTokenfactoryModels = async (
   }
 };
 
-/** Fetches models from a Portkey gateway; same endpoint for every API surface. */
-export const fetchPortkeyModels = async (
-  params: PortkeyFetchParams
-): Promise<{ models: ModelConfiguration[]; error?: string }> => {
+/**
+ * Shared fetch for the gateways whose `available-models` endpoint takes
+ * `{ api_base, api_key, provider_id }` and answers with the same model shape
+ * (Portkey, Cheaper Inference). Errors are returned as data, and also logged,
+ * so a caller that only wants the models still leaves a trace in the console.
+ */
+const fetchGatewayModels = async ({
+  endpoint,
+  label,
+  params,
+}: {
+  endpoint: string;
+  label: string;
+  params: {
+    api_base?: string;
+    api_key?: string;
+    provider_id?: number;
+    signal?: AbortSignal;
+  };
+}): Promise<{ models: ModelConfiguration[]; error?: string }> => {
   const apiBase = params.api_base;
   if (!apiBase) {
     return { models: [], error: "API Base is required" };
   }
 
   try {
-    const response = await fetch("/api/admin/llm/portkey/available-models", {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -765,14 +780,14 @@ export const fetchPortkeyModels = async (
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch (jsonError) {
         console.warn(
-          "Failed to parse Portkey model fetch error response",
+          `Failed to parse ${label} model fetch error response`,
           jsonError
         );
       }
       return { models: [], error: errorMessage };
     }
 
-    const data: PortkeyModelResponse[] = await response.json();
+    const data: GatewayModelResponse[] = await response.json();
     const models: ModelConfiguration[] = data.map((modelData) => ({
       name: modelData.name,
       display_name: modelData.display_name,
@@ -785,67 +800,29 @@ export const fetchPortkeyModels = async (
 
     return { models };
   } catch (error) {
+    console.warn(`Failed to fetch ${label} models`, error);
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
     return { models: [], error: errorMessage };
   }
 };
+
+/** Fetches models from a Portkey gateway; same endpoint for every API surface. */
+export const fetchPortkeyModels = async (
+  params: PortkeyFetchParams
+): Promise<{ models: ModelConfiguration[]; error?: string }> =>
+  fetchGatewayModels({
+    endpoint: "/api/admin/llm/portkey/available-models",
+    label: "Portkey",
+    params,
+  });
 
 /** Fetches models from the Cheaper Inference gateway (/v1/models). */
 export const fetchCheaperInferenceModels = async (
   params: CheaperInferenceFetchParams
-): Promise<{ models: ModelConfiguration[]; error?: string }> => {
-  const apiBase = params.api_base;
-  if (!apiBase) {
-    return { models: [], error: "API Base is required" };
-  }
-
-  try {
-    const response = await fetch(
-      "/api/admin/llm/cheaperinference/available-models",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          api_base: apiBase,
-          api_key: params.api_key,
-          provider_id: params.provider_id,
-        }),
-        signal: params.signal,
-      }
-    );
-
-    if (!response.ok) {
-      let errorMessage = "Failed to fetch models";
-      try {
-        const errorData: ErrorResponseBody = await response.json();
-        errorMessage = errorData.detail || errorData.message || errorMessage;
-      } catch (jsonError) {
-        console.warn(
-          "Failed to parse Cheaper Inference model fetch error response",
-          jsonError
-        );
-      }
-      return { models: [], error: errorMessage };
-    }
-
-    const data: CheaperInferenceModelResponse[] = await response.json();
-    const models: ModelConfiguration[] = data.map((modelData) => ({
-      name: modelData.name,
-      display_name: modelData.display_name,
-      is_visible: true,
-      max_input_tokens: modelData.max_input_tokens,
-      supports_image_input: modelData.supports_image_input,
-      supports_reasoning: modelData.supports_reasoning,
-      effectiveDisplayName: modelData.display_name || modelData.name,
-    }));
-
-    return { models };
-  } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
-    return { models: [], error: errorMessage };
-  }
-};
+): Promise<{ models: ModelConfiguration[]; error?: string }> =>
+  fetchGatewayModels({
+    endpoint: "/api/admin/llm/cheaperinference/available-models",
+    label: "Cheaper Inference",
+    params,
+  });

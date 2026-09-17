@@ -2451,7 +2451,12 @@ def get_cheaperinference_available_models(
                     or is_reasoning_model(model_id, model_name),
                 )
             )
-        except Exception as e:
+        except (AttributeError, TypeError, ValueError) as e:
+            # Only a malformed entry is skipped: a non-dict item, a field of the
+            # wrong type, or a value the response model rejects (pydantic's
+            # ValidationError is a ValueError). Anything else - a capability
+            # lookup or LiteLLM failure - propagates rather than silently
+            # shrinking the catalog.
             logger.warning(
                 "Failed to parse Cheaper Inference model entry",
                 extra={"error": str(e), "item": str(model)[:1000]},

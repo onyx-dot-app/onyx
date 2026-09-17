@@ -11,7 +11,10 @@ from sqlalchemy.orm import Session
 
 from onyx.db.models import User
 from onyx.server.manage.llm.api import get_cheaperinference_available_models
-from onyx.server.manage.llm.models import CheaperInferenceModelsRequest
+from onyx.server.manage.llm.models import (
+    CheaperInferenceFinalModelResponse,
+    CheaperInferenceModelsRequest,
+)
 
 # Trimmed /v1/models payload. The gateway lists chat models plus an embedding
 # entry, which must be dropped.
@@ -46,7 +49,7 @@ _SAMPLE = {
 }
 
 
-def _fetch() -> list:
+def _fetch() -> list[CheaperInferenceFinalModelResponse]:
     with (
         patch("onyx.server.manage.llm.api._resolve_api_key", return_value="k"),
         patch(

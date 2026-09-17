@@ -64,8 +64,9 @@ function CheaperInferenceModalInternals({
   };
 
   // Refetch once on open so an edit's picker matches the "add" view.
-  // Best-effort: ignore errors so the modal still works if the gateway is
-  // unreachable.
+  // Best-effort: a failure leaves the stored picker in place so the modal still
+  // works when the gateway is unreachable, but it is logged either way - the
+  // service reports failures in `error` rather than by throwing.
   const autoRefetched = useRef(false);
   useEffect(() => {
     if (autoRefetched.current || !existingLlmProvider?.id) return;
@@ -76,12 +77,21 @@ function CheaperInferenceModalInternals({
       api_key: formikProps.values.api_key || undefined,
       provider_id: existingLlmProvider.id,
     })
-      .then(({ models }) => {
+      .then(({ models, error }) => {
+        if (error) {
+          console.warn(
+            "Cheaper Inference model refresh failed; keeping the stored models",
+            error
+          );
+          return;
+        }
         if (models.length > 0) {
           formikProps.setValues(withFetchedModels(models));
         }
       })
-      .catch(() => undefined);
+      .catch((error) => {
+        console.warn("Cheaper Inference model refresh threw", error);
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
