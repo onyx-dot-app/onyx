@@ -21,19 +21,22 @@ class _MemoryCacheBackend(CacheBackend):
 
     def __init__(self) -> None:
         self._store: dict[str, bytes] = {}
+        self._ttls: dict[str, int] = {}
 
     def get(self, key: str) -> bytes | None:
         return self._store.get(key)
 
     def getdel(self, key: str) -> bytes | None:
+        self._ttls.pop(key, None)
         return self._store.pop(key, None)
 
     def set(
         self,
         key: str,
         value: str | bytes | int | float,
-        ex: int | None = None,  # noqa: ARG002
+        ex: int | None = None,
     ) -> None:
+        self._ttls[key] = ex if ex is not None else -1
         if isinstance(value, bytes):
             self._store[key] = value
         else:
@@ -52,15 +55,17 @@ class _MemoryCacheBackend(CacheBackend):
 
     def delete(self, key: str) -> None:
         self._store.pop(key, None)
+        self._ttls.pop(key, None)
 
     def exists(self, key: str) -> bool:
         return key in self._store
 
     def expire(self, key: str, seconds: int) -> None:
-        pass
+        if key in self._store:
+            self._ttls[key] = seconds
 
     def ttl(self, key: str) -> int:
-        return -2 if key not in self._store else -1
+        return self._ttls.get(key, -2)
 
     def lock(self, name: str, timeout: float | None = None) -> CacheLock:
         raise NotImplementedError

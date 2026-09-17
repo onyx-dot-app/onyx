@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
-from onyx.agents.tools import ToolInvocation, ToolProgress
+from onyx.agents.tools import ToolInvocation
 from onyx.agents.transcript import AgentRestorationConfig
 from onyx.coding_agent.agent import BASH_TOOL_SENTINEL_ID, CodingAgent, _setup_session
 from onyx.coding_agent.models import CodingAgentCallResult
@@ -23,7 +23,6 @@ from onyx.tools.interface import (
     ToolContext,
     parse_tool_arguments,
 )
-from onyx.tools.progress import CodingCompleted, CodingStarted
 from onyx.tools.tool_implementations.bash.bash_tool import BashTool
 from onyx.utils.logger import setup_logger
 
@@ -120,11 +119,6 @@ class CodingAgentTool(Tool):
         self, invocation: ToolInvocation, _context: ToolContext
     ) -> ToolResult:
         arguments = parse_tool_arguments(CodingAgentArguments, invocation.arguments)
-        invocation.update(
-            ToolProgress(
-                details=CodingStarted(query=arguments.query, repo=arguments.github_repo)
-            )
-        )
         sandbox = _setup_session(
             repo=arguments.github_repo, github_token=self._github_token
         )
@@ -161,7 +155,6 @@ class CodingAgentTool(Tool):
             answer = completed.output.text
             if not answer:
                 raise ValueError("Coding agent produced no final answer")
-            invocation.update(ToolProgress(details=CodingCompleted(answer=answer)))
             return ToolResult(
                 content=answer, details=CodingAgentCallResult(answer=answer)
             )

@@ -264,9 +264,10 @@ class SetPreferredResponseRequest(BaseModel):
 
 
 class CurrentRunInfo(BaseModel):
-    """In-flight run whose stream buffer can be replayed/tailed."""
+    """Buffered response with worker liveness for replay or live reconnection."""
 
     run_id: int
+    is_running: bool
 
 
 class ChatSessionDetailResponse(BaseModel):
@@ -284,8 +285,7 @@ class ChatSessionDetailResponse(BaseModel):
     deleted: bool = False
     owner_name: str | None = None
     packets: list[list[Packet]]
-    # Set while a run is in flight and resumable: cursor-0 replay+tail is
-    # available at /chat-session/{id}/resume-stream.
+    # The buffer also retains interrupted work until its cache TTL expires.
     current_run: CurrentRunInfo | None = None
     # True for sessions pinned to an incognito record mode, so a reload can
     # restore the incognito UI state.

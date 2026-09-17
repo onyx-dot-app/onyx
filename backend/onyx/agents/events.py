@@ -5,13 +5,10 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny
 
-from onyx.agents.items import ResponseItem, build_response_items
 from onyx.agents.tools import ToolProgress
-from onyx.agents.transcript import OperationSnapshot, RunStatus
+from onyx.agents.transcript import RunStatus
 from onyx.llm.models import (
     AssistantMessage,
-    GenerationDoneEvent,
-    GenerationErrorEvent,
     GenerationEvent,
     ToolCall,
     ToolResult,
@@ -64,47 +61,11 @@ class MessageUpdateEvent(_AgentEvent):
     step_index: int = Field(ge=0)
     generation_event: GenerationEvent
 
-    @property
-    def items(self) -> list[ResponseItem]:
-        return build_response_items(
-            self.run_id,
-            [self.generation_event.message],
-            [
-                OperationSnapshot(
-                    step_index=self.step_index,
-                    message_index=0,
-                    status=(
-                        RunStatus.COMPLETE
-                        if isinstance(self.generation_event, GenerationDoneEvent)
-                        else RunStatus.ERROR
-                        if isinstance(self.generation_event, GenerationErrorEvent)
-                        else RunStatus.RUNNING
-                    ),
-                )
-            ],
-            step_offset=self.step_index,
-        )
-
 
 class MessageEndEvent(_AgentEvent):
     type: Literal[AgentEventType.MESSAGE_END] = AgentEventType.MESSAGE_END
     step_index: int = Field(ge=0)
     message: AssistantMessage
-
-    @property
-    def items(self) -> list[ResponseItem]:
-        return build_response_items(
-            self.run_id,
-            [self.message],
-            [
-                OperationSnapshot(
-                    step_index=self.step_index,
-                    message_index=0,
-                    status=RunStatus.COMPLETE,
-                )
-            ],
-            step_offset=self.step_index,
-        )
 
 
 class ToolStartEvent(_AgentEvent):

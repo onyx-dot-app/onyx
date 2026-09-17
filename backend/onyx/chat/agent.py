@@ -190,6 +190,10 @@ class ChatAgent:
         if isinstance(result.details, SearchDocsResponse):
             search = result.details
             result.details = ChatSearchResult(
+                queries=search.queries,
+                sources=search.sources,
+                time_filter_start=search.time_filter_start,
+                time_filter_end=search.time_filter_end,
                 search_docs=search.search_docs,
                 citation_mapping=search.citation_mapping,
                 displayed_docs=search.displayed_docs,

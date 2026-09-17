@@ -47,15 +47,12 @@ def _run_tool(
     code: str = "print('hi')",
 ) -> ToolResult:
     """Call tool.run() with a mocked CodeInterpreterClient context manager."""
-    from onyx.server.query_and_chat.placement import Placement
 
     mock_client.execute_streaming.return_value = iter([_make_stream_result()])
 
     ctx = MagicMock()
     ctx.__enter__ = MagicMock(return_value=mock_client)
     ctx.__exit__ = MagicMock(return_value=False)
-
-    Placement(turn_index=0, tab_index=0)
 
     with patch(f"{TOOL_MODULE}.CodeInterpreterClient", return_value=ctx):
         return tool.run(
@@ -106,9 +103,6 @@ def test_cached_file_id_is_staged_on_second_run() -> None:
     ctx.__enter__ = MagicMock(return_value=client)
     ctx.__exit__ = MagicMock(return_value=False)
 
-    from onyx.server.query_and_chat.placement import Placement
-
-    Placement(turn_index=1, tab_index=0)
     with patch(f"{TOOL_MODULE}.CodeInterpreterClient", return_value=ctx):
         tool.run(
             invocation=ToolInvocation(

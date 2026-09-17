@@ -2,7 +2,7 @@ from pydantic import BaseModel, TypeAdapter
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
-from onyx.agents.tools import ToolInvocation, ToolProgress
+from onyx.agents.tools import ToolInvocation
 from onyx.configs.app_configs import (
     CODE_INTERPRETER_BASE_URL,
     CODE_INTERPRETER_DEFAULT_TIMEOUT_MS,
@@ -16,8 +16,7 @@ from onyx.tools.interface import (
     ToolContext,
     parse_tool_arguments,
 )
-from onyx.tools.models import ToolCallException
-from onyx.tools.progress import BashOutput, BashStarted
+from onyx.tools.models import LlmBashExecutionResult, ToolCallException
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
 )
@@ -31,14 +30,6 @@ CMD_FIELD = "cmd"
 
 class BashArguments(BaseModel):
     cmd: str
-
-
-class LlmBashExecutionResult(BaseModel):
-    stdout: str
-    stderr: str
-    exit_code: int | None
-    timed_out: bool
-    error: str | None = None
 
 
 class BashTool(Tool):
@@ -145,8 +136,6 @@ class BashTool(Tool):
 
         cmd = parse_tool_arguments(BashArguments, invocation.arguments).cmd
 
-        invocation.update(ToolProgress(details=BashStarted(cmd=cmd)))
-
         adapter = TypeAdapter(LlmBashExecutionResult)
 
         try:
@@ -167,18 +156,10 @@ class BashTool(Tool):
                 timed_out=False,
                 error=error_msg,
             )
-            invocation.update(
-                ToolProgress(
-                    details=BashOutput(
-                        stdout="",
-                        stderr=error_msg,
-                        exit_code=-1,
-                        timed_out=False,
-                    )
-                )
-            )
             return ToolResult(
                 content=adapter.dump_json(error_result).decode(),
+                details=error_result,
+                is_error=True,
             )
 
         truncated_stdout = _truncate_output(
@@ -196,17 +177,8 @@ class BashTool(Tool):
             error=(None if response.exit_code == 0 else truncated_stderr),
         )
 
-        invocation.update(
-            ToolProgress(
-                details=BashOutput(
-                    stdout=truncated_stdout,
-                    stderr=truncated_stderr,
-                    exit_code=response.exit_code,
-                    timed_out=response.timed_out,
-                )
-            )
-        )
-
         return ToolResult(
             content=adapter.dump_json(result).decode(),
+            details=result,
+            is_error=response.exit_code != 0,
         )

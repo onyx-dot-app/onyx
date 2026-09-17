@@ -115,7 +115,7 @@ function AssistantMessage({
   // Re-derived every flush so the reader keeps up with a step that is still streaming; parking the
   // string at open time would freeze the body and make Copy yield a truncated prefix.
   const fullText = useMemo(
-    () => resolveGroupReasoning(processed.groupedPacketsMap, fullTextKey),
+    () => resolveGroupReasoning(processed.groupedItemsMap, fullTextKey),
     [fullTextKey, processed],
   );
 
@@ -161,7 +161,7 @@ function AssistantMessage({
           {pacedDisplayGroups.map((displayGroup, groupIndex) => (
             <RendererComponent
               key={`${displayGroup.turn_index}-${displayGroup.tab_index}`}
-              packets={displayGroup.packets}
+              items={displayGroup.items}
               chatState={chatState}
               messageNodeId={node.nodeId}
               hasTimelineThinking={pacedTurnGroups.length > 0 || hasSteps}

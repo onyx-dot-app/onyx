@@ -15,6 +15,7 @@ import time
 from uuid import UUID
 
 from onyx.configs.constants import MessageType
+from onyx.server.query_and_chat.streaming_models import ItemUpdate, Packet, TextItem
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.chat import ChatSessionManager
@@ -122,12 +123,13 @@ def test_resume_replays_and_tails_in_flight_run(admin_user: DATestUser) -> None:
     # Second client attaches mid-run: cursor-0 replay plus live tail to the end.
     lines = _resume_lines(test_chat_session.id, admin_user)
     assert lines is not None, "in-flight run should be resumable"
-    packet_types = {
-        line["obj"]["type"] for line in lines if isinstance(line.get("obj"), dict)
-    }
-    assert "message_delta" in packet_types or "message_start" in packet_types, (
-        f"resume should replay answer packets, got types: {packet_types}"
-    )
+    packets = [Packet.model_validate(line) for line in lines if "obj" in line]
+    assert any(
+        isinstance(packet.obj, ItemUpdate)
+        and isinstance(packet.obj.item, TextItem)
+        and packet.obj.item.text
+        for packet in packets
+    ), "Resume must include answer content"
 
     assert send_done.wait(timeout=120)
     final_message = _wait_for_completed_assistant_message(test_chat_session, admin_user)

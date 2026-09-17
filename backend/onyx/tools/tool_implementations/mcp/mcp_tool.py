@@ -4,7 +4,7 @@ from typing import Any
 
 from mcp.client.auth import OAuthClientProvider
 
-from onyx.agents.tools import ToolInvocation, ToolProgress
+from onyx.agents.tools import ToolInvocation
 from onyx.db.enums import MCPAuthenticationType, MCPTransport
 from onyx.db.models import MCPConnectionConfig, MCPServer
 from onyx.llm.models import ToolResult
@@ -24,7 +24,6 @@ from onyx.server.metrics.mcp_client import record_mcp_client_tool_outcome
 from onyx.server.metrics.mcp_common import MCPToolCallStatus
 from onyx.tools.interface import FunctionToolDefinition, Tool, ToolContext
 from onyx.tools.models import CustomToolCallSummary
-from onyx.tools.progress import CustomToolOutput, CustomToolStarted
 from onyx.tools.tool_name import sanitize_tool_name
 from onyx.utils.logger import setup_logger
 
@@ -131,7 +130,6 @@ class MCPTool(Tool):
         }
 
     def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        invocation.update(ToolProgress(details=CustomToolStarted(tool_name=self._name)))
         _start = time.monotonic()
         _server = self.mcp_server.name
         outcome = MCPToolCallStatus.ERROR
@@ -173,16 +171,6 @@ class MCPTool(Tool):
 
                 error_result = {"error": auth_error_msg}
                 content = json.dumps(error_result)
-
-                invocation.update(
-                    ToolProgress(
-                        details=CustomToolOutput(
-                            tool_name=self._name,
-                            response_type="json",
-                            data=error_result,
-                        )
-                    )
-                )
 
                 outcome = MCPToolCallStatus.AUTH_ERROR
                 return ToolResult(
@@ -239,16 +227,6 @@ class MCPTool(Tool):
             tool_result_dict = {"tool_result": tool_result}
             content = json.dumps(tool_result_dict)
 
-            invocation.update(
-                ToolProgress(
-                    details=CustomToolOutput(
-                        tool_name=self._name,
-                        response_type="json",
-                        data=tool_result_dict,
-                    )
-                )
-            )
-
             response = ToolResult(
                 details=CustomToolCallSummary(
                     tool_name=self._name,
@@ -280,16 +258,6 @@ class MCPTool(Tool):
                 error_result = {"error": f"Tool execution failed: {str(e)}"}
 
             content = json.dumps(error_result)
-
-            invocation.update(
-                ToolProgress(
-                    details=CustomToolOutput(
-                        tool_name=self._name,
-                        response_type="json",
-                        data=error_result,
-                    )
-                )
-            )
 
             return ToolResult(
                 details=CustomToolCallSummary(

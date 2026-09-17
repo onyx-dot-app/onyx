@@ -1,71 +1,30 @@
 import uuid
-from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import patch
 
-import pytest
 from sqlalchemy.orm import Session
 
-from onyx.chat.models import AnswerStreamPart, StreamingError
 from onyx.chat.process_message import handle_stream_message_objects
 from onyx.db.chat import create_chat_session
 from onyx.db.models import User
 from onyx.db.persona import upsert_persona
+from onyx.llm.litellm_models import Delta
 from onyx.server.query_and_chat.models import MessageResponseIDInfo, SendMessageRequest
-from onyx.server.query_and_chat.streaming_models import AgentResponseDelta, Packet
 from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
+from tests.external_dependency_unit.answer.stream_test_utils import final_answer
 from tests.external_dependency_unit.conftest import create_test_user
+from tests.unit.onyx.agents.fakes import ScriptedLLM
 
 
-@pytest.mark.skip(reason="Temporarily disabled")
 def test_stream_chat_message_objects_without_web_search(
     db_session: Session,
     full_deployment_setup: None,  # noqa: ARG001
     mock_external_deps: None,  # noqa: ARG001
 ) -> None:
-    """
-    Test that when web search is requested but the persona has no web search tool,
-    the system handles it gracefully and returns a message explaining that web
-    search is not available.
-    """
-
-    # Mock the model server HTTP calls for embeddings
-    def mock_post(
-        url: str,
-        json: dict[str, Any] | None = None,
-        headers: dict[str, str] | None = None,  # noqa: ARG001
-        **kwargs: Any,  # noqa: ARG001
-    ) -> MagicMock:
-        """Mock requests.post for model server embedding calls"""
-        mock_response = MagicMock()
-
-        # Check if this is a call to the embedding endpoint
-        if "encoder/bi-encoder-embed" in url:
-            # Return a mock embedding response
-            # The embedding dimension doesn't matter for this test,
-            # just needs to be a valid response structure
-            num_texts = len(json.get("texts", [])) if json else 1
-            mock_response.status_code = 200
-            mock_response.json.return_value = {
-                "embeddings": [[0.1] * 768]
-                * num_texts  # 768 is a common embedding dimension
-            }
-            mock_response.raise_for_status = MagicMock()
-            return mock_response
-
-        # For other URLs, return a generic success response
-        mock_response.status_code = 200
-        mock_response.json.return_value = {}
-        mock_response.raise_for_status = MagicMock()
-        return mock_response
-
-    # First, ensure we have an LLM provider set up
+    """An assistant without web search excludes it from model requests."""
     ensure_default_llm_provider(db_session)
 
-    # Create a test user
     test_user: User = create_test_user(db_session, email_prefix="test_web_search")
 
-    # Create a test persona explicitly WITHOUT any tools (including web search)
-    # This ensures the test doesn't rely on the state of the default persona
     test_persona = upsert_persona(
         user=None,  # System persona
         name=f"Test Persona {uuid.uuid4()}",
@@ -82,52 +41,25 @@ def test_stream_chat_message_objects_without_web_search(
         default_model_configuration_id=None,
     )
 
-    # Create a chat session with our test persona
     chat_session = create_chat_session(
         db_session=db_session,
         description="Test web search without tool",
-        user_id=test_user.id if test_user else None,
+        user_id=test_user.id,
         persona_id=test_persona.id,
     )
-    # Create the chat message request with a query that attempts to force web search
     chat_request = SendMessageRequest(
         message="run a web search for 'Onyx'",
         chat_session_id=chat_session.id,
     )
-    # Call handle_stream_message_objects
     response_generator = handle_stream_message_objects(
         new_msg_req=chat_request,
         user=test_user,
     )
-    # Collect all packets from the response
-    raw_answer_stream: list[AnswerStreamPart] = []
-    message_content = ""
-    error_occurred = False
-
-    for packet in response_generator:
-        raw_answer_stream.append(packet)
-        if isinstance(packet, Packet):
-            if isinstance(packet.obj, AgentResponseDelta):
-                # Direct MessageDelta (if not wrapped)
-                if packet.obj.content:
-                    message_content += packet.obj.content
-            elif isinstance(packet.obj, StreamingError):
-                error_occurred = True
-                break
-
-    assert not error_occurred, "Should not have received a streaming error"
-
-    # Verify that we got a response
-    assert len(raw_answer_stream) > 0, "Should have received at least some packets"
-
-    # Check if we got MessageResponseIDInfo packet (indicating message was created)
-    has_message_id = any(
-        isinstance(packet, MessageResponseIDInfo) for packet in raw_answer_stream
-    )
-    assert has_message_id, "Should have received a message ID packet"
-
-    assert len(message_content) > 0, "Should have received some message content"
-
-
-def test_nothing() -> None:
-    assert True, "This test is just to ensure the test suite is running"
+    llm = ScriptedLLM([Delta(content="Web search is unavailable for this assistant.")])
+    with patch("onyx.chat.prepare.get_llm_for_persona", return_value=llm):
+        raw = list(response_generator)
+    assert "web_search" not in {
+        tool["function"]["name"] for tool in llm.requests[0]["tools"]
+    }
+    assert final_answer(raw)
+    assert any(isinstance(part, MessageResponseIDInfo) for part in raw)

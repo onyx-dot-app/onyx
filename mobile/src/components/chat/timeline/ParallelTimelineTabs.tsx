@@ -60,8 +60,8 @@ export function ParallelTimelineTabs({
         turnGroup.steps.map((step) => [
           step.key,
           !stopPacketSeen &&
-            step.packets.length > 0 &&
-            !isToolComplete(step.packets),
+            step.items.length > 0 &&
+            !isToolComplete(step.items),
         ]),
       ),
     [turnGroup.steps, stopPacketSeen],
@@ -80,7 +80,7 @@ export function ParallelTimelineTabs({
     [isLastTurnGroup],
   );
 
-  const hasActivePackets = Boolean(activeStep && activeStep.packets.length > 0);
+  const hasActivePackets = Boolean(activeStep && activeStep.items.length > 0);
   const headerIsLast =
     isLastTurnGroup && (!shouldShowResults || !hasActivePackets);
 
@@ -126,10 +126,10 @@ export function ParallelTimelineTabs({
                   <Tabs.Trigger
                     key={step.key}
                     value={step.key}
-                    icon={getToolIcon(step.packets)}
+                    icon={getToolIcon(step.items)}
                     isLoading={loadingStates.get(step.key)}
                   >
-                    {getToolName(step.packets)}
+                    {getToolName(step.items)}
                   </Tabs.Trigger>
                 ))}
               </Tabs.List>
@@ -142,7 +142,7 @@ export function ParallelTimelineTabs({
         <TimelineRendererComponent
           // Re-key so switching tab or folding remounts the renderer at the right expansion.
           key={`${activeTab}-${isExpanded}`}
-          packets={activeStep.packets}
+          items={activeStep.items}
           chatState={chatState}
           animate={!stopPacketSeen}
           stopPacketSeen={stopPacketSeen}

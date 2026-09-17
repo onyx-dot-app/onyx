@@ -4,23 +4,23 @@ import { useState, useMemo, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
 import { StopReason } from "@/app/app/services/streamingModels";
-import { FullChatState } from "../interfaces";
-import { TurnGroup } from "./transformers";
+import { FullChatState } from "@/app/app/message/messageComponents/interfaces";
+import { TurnGroup } from "@/app/app/message/messageComponents/timeline/transformers";
 import {
   getToolName,
   getToolIcon,
   isToolComplete,
-} from "../toolDisplayHelpers";
+} from "@/app/app/message/messageComponents/toolDisplayHelpers";
 import {
   TimelineRendererComponent,
   TimelineRendererOutput,
-} from "./TimelineRendererComponent";
+} from "@/app/app/message/messageComponents/timeline/TimelineRendererComponent";
 import { Button, Tabs } from "@opal/components";
 import { SvgBranch, SvgFold, SvgExpand } from "@opal/icons";
 import { TimelineRow } from "@/app/app/message/messageComponents/timeline/primitives/TimelineRow";
 import { TimelineSurface } from "@/app/app/message/messageComponents/timeline/primitives/TimelineSurface";
 import { TimelineTopSpacer } from "@/app/app/message/messageComponents/timeline/primitives/TimelineTopSpacer";
-import { TimelineStepComposer } from "./TimelineStepComposer";
+import { TimelineStepComposer } from "@/app/app/message/messageComponents/timeline/TimelineStepComposer";
 
 export interface ParallelTimelineTabsProps {
   /** Turn group containing parallel steps */
@@ -68,8 +68,8 @@ export function ParallelTimelineTabs({
         turnGroup.steps.map((step) => [
           step.key,
           !stopPacketSeen &&
-            step.packets.length > 0 &&
-            !isToolComplete(step.packets),
+            step.items.length > 0 &&
+            !isToolComplete(step.items),
         ])
       ),
     [turnGroup.steps, stopPacketSeen]
@@ -88,7 +88,7 @@ export function ParallelTimelineTabs({
     [isLastTurnGroup]
   );
 
-  const hasActivePackets = Boolean(activeStep && activeStep.packets.length > 0);
+  const hasActivePackets = Boolean(activeStep && activeStep.items.length > 0);
   const headerIsLast =
     isLastTurnGroup && (!shouldShowResults || !hasActivePackets);
 
@@ -146,8 +146,8 @@ export function ParallelTimelineTabs({
                     isLoading={loadingStates.get(step.key)}
                   >
                     <span className="flex items-center gap-1.5">
-                      {getToolIcon(step.packets)}
-                      {getToolName(step.packets, t)}
+                      {getToolIcon(step.items)}
+                      {getToolName(step.items, t)}
                     </span>
                   </Tabs.Trigger>
                 ))}
@@ -159,7 +159,7 @@ export function ParallelTimelineTabs({
         {shouldShowResults && activeStep && (
           <TimelineRendererComponent
             key={`${activeTab}-${isExpanded}`}
-            packets={activeStep.packets}
+            items={activeStep.items}
             chatState={chatState}
             animate={!stopPacketSeen}
             stopPacketSeen={stopPacketSeen}

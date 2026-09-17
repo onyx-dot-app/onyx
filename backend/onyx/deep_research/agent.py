@@ -11,7 +11,7 @@ from onyx.agents.models import (
     StepResult,
 )
 from onyx.agents.runtime import Agent, RunFailed
-from onyx.agents.tools import AgentTool, ToolInvocation, ToolProgress
+from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.agents.transcript import (
     AgentRestorationConfig,
     CompactionCheckpoint,
@@ -70,7 +70,6 @@ from onyx.prompts.deep_research.orchestration_layer import (
 from onyx.prompts.deep_research.research_agent import MAX_RESEARCH_CYCLES
 from onyx.prompts.prompt_utils import get_current_llm_day_time
 from onyx.tools.interface import FunctionToolDefinition, Tool, parse_tool_arguments
-from onyx.tools.progress import ResearchStarted
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tracing.flows import LLMFlow
 from onyx.utils.logger import setup_logger
@@ -307,9 +306,6 @@ class DeepResearchAgent:
 
     async def _research(self, invocation: ToolInvocation) -> ToolResult:
         task = parse_tool_arguments(ResearchTask, invocation.arguments)
-        invocation.update(
-            ToolProgress(details=ResearchStarted(research_task=task.task))
-        )
         child = ResearchAgent(
             tools=self.tools,
             llm=self.llm,

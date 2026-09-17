@@ -51,11 +51,11 @@ export class StreamHttpError extends Error {
   }
 }
 
-// The wire mixes wrapped packets ({placement, obj}) with root control objects; discriminate by field, not `type`.
+// Response events have an obj field; request control messages do not.
 export type StreamEvent = Packet | MessageResponseIDInfo | StreamingError;
 
 export function isPacket(event: StreamEvent): event is Packet {
-  return "obj" in event && "placement" in event;
+  return "obj" in event;
 }
 
 export function isMessageIdInfo(

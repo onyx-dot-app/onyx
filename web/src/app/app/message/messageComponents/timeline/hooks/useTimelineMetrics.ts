@@ -4,10 +4,10 @@ import {
   TransformedStep,
 } from "@/app/app/message/messageComponents/timeline/transformers";
 import {
-  isCodingAgentPackets,
-  isResearchAgentPackets,
+  isCodingAgentItems,
+  isResearchAgentItems,
   stepSupportsCollapsedStreaming,
-} from "@/app/app/message/messageComponents/timeline/packetHelpers";
+} from "@/app/app/message/messageComponents/timeline/itemHelpers";
 
 export interface TimelineMetrics {
   totalSteps: number;
@@ -37,15 +37,15 @@ export function useTimelineMetrics(
     const lastTurnGroup = turnGroups[turnGroups.length - 1];
     const lastStep = lastTurnGroup?.steps[lastTurnGroup.steps.length - 1];
 
-    // Analyze last step packets once
+    // Analyze last step items once
     const lastStepIsResearchAgent = lastStep
-      ? isResearchAgentPackets(lastStep.packets)
+      ? isResearchAgentItems(lastStep.items)
       : false;
     const lastStepIsCodingAgent = lastStep
-      ? isCodingAgentPackets(lastStep.packets)
+      ? isCodingAgentItems(lastStep.items)
       : false;
     const lastStepSupportsCollapsedStreaming = lastStep
-      ? stepSupportsCollapsedStreaming(lastStep.packets)
+      ? stepSupportsCollapsedStreaming(lastStep.items)
       : false;
 
     return {

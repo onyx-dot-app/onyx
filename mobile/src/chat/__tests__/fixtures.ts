@@ -2,7 +2,10 @@ import { type SearchDoc } from "@/chat/contracts/documents";
 import { UserFileStatus, type ProjectFile } from "@/chat/contracts/projects";
 import { ChatFileType } from "@/chat/interfaces";
 import {
-  type ObjTypes,
+  type PacketObj,
+  type ChatItem,
+  type ResponseItem,
+  type PacketIdentity,
   type Packet,
   type Placement,
 } from "@/chat/streamingModels";
@@ -23,27 +26,57 @@ export function makeProjectFile(
   };
 }
 
-export function makePacket(obj: ObjTypes, turnIndex = 0): Packet {
-  return { placement: { turn_index: turnIndex }, obj };
-}
-
-// Packet with an explicit placement (turn/tab/sub_turn/model). turn_index defaults to 0.
-export function makePlacedPacket(
-  obj: ObjTypes,
+export function makeItem(
+  content: ChatItem,
   placement: Partial<Placement> = {},
-): Packet {
-  return { placement: { turn_index: 0, ...placement }, obj };
+  id = "message",
+): ResponseItem {
+  const identity: PacketIdentity = {
+    response_id: 1,
+    run_id: "root",
+    message_id: id,
+    part_id: content.kind,
+  };
+  if (content.kind === "tool") identity.tool_call_id = id;
+  return { identity, placement: { turn_index: 0, ...placement }, content };
 }
-
+export function makePacket(obj: PacketObj, id = "message"): Packet {
+  return {
+    identity: {
+      response_id: 1,
+      run_id: "root",
+      message_id: id,
+      part_id: "text",
+    },
+    obj,
+  };
+}
+export function packetForItem(item: ResponseItem): Packet {
+  return {
+    identity: item.identity,
+    obj: { type: "item_update", item: item.content },
+  };
+}
 export function makeCitationPacket(
   citationNumber: number,
   documentId: string,
 ): Packet {
-  return makePacket({
-    type: "citation_info",
-    citation_number: citationNumber,
-    document_id: documentId,
-  });
+  return packetForItem(
+    makeItem(
+      {
+        kind: "text",
+        text: "",
+        purpose: "answer",
+        status: "running",
+        documents: [],
+        citations: [
+          { citation_number: citationNumber, document_id: documentId },
+        ],
+      },
+      {},
+      `citation-${documentId}`,
+    ),
+  );
 }
 
 export function makeSearchDoc(overrides: Partial<SearchDoc> = {}): SearchDoc {
@@ -74,22 +107,44 @@ export function makeSearchDocsPacket(
   docs: SearchDoc[],
   kind: "search" | "open_url" = "search",
 ): Packet {
-  return makePacket(
-    kind === "open_url"
-      ? { type: "open_url_documents", documents: docs }
-      : { type: "search_tool_documents_delta", documents: docs },
+  return packetForItem(
+    makeItem(
+      {
+        kind: "tool",
+        name: kind === "search" ? "internal_search" : "open_url",
+        arguments: {},
+        status: "complete",
+        output: "",
+        metadata: {
+          type: "search_result",
+          queries: [],
+          sources: [],
+          search_docs: docs,
+          displayed_docs: null,
+          citation_mapping: {},
+          time_filter_start: null,
+          time_filter_end: null,
+        },
+      },
+      {},
+      kind,
+    ),
   );
 }
-
-export function makeMessageStartPacket(finalDocuments?: SearchDoc[]): Packet {
-  return makePacket({
-    type: "message_start",
-    id: "m",
-    content: "",
-    final_documents: finalDocuments ?? null,
-  });
+export function makeMessageStartPacket(
+  finalDocuments: SearchDoc[] = [],
+): Packet {
+  return packetForItem(
+    makeItem({
+      kind: "text",
+      text: "",
+      purpose: "answer",
+      status: "running",
+      documents: finalDocuments,
+      citations: [],
+    }),
+  );
 }
-
 export function makeStopPacket(): Packet {
   return makePacket({ type: "stop" });
 }

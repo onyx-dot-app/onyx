@@ -1,5 +1,5 @@
 import { useTranslations } from "next-intl";
-import { FetchToolPacket } from "@/app/app/services/streamingModels";
+import { ResponseItem } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
   RenderType,
@@ -7,13 +7,16 @@ import {
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { ValidSources } from "@/lib/types";
-import { SearchChipList, SourceInfo } from "../search/SearchChipList";
-import { getMetadataTags } from "../search/searchStateUtils";
+import {
+  SearchChipList,
+  SourceInfo,
+} from "@/app/app/message/messageComponents/timeline/renderers/search/SearchChipList";
+import { getMetadataTags } from "@/app/app/message/messageComponents/timeline/renderers/search/searchStateUtils";
 import {
   constructCurrentFetchState,
   INITIAL_URLS_TO_SHOW,
   URLS_PER_EXPANSION,
-} from "./fetchStateUtils";
+} from "@/app/app/message/messageComponents/timeline/renderers/fetch/fetchStateUtils";
 import Text from "@/refresh-components/texts/Text";
 import { SvgCircle } from "@opal/icons";
 
@@ -47,8 +50,8 @@ const documentToSourceInfo = (doc: OnyxDocument): SourceInfo => ({
  * - HIGHLIGHT: Shows URL list with header embedded directly in content.
  *              No StepContainer wrapper. Used for parallel streaming preview.
  */
-export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
-  packets,
+export const FetchToolRenderer: MessageRenderer<ResponseItem, {}> = ({
+  items,
   onComplete,
   animate,
   stopPacketSeen,
@@ -56,7 +59,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
   children,
 }) => {
   const t = useTranslations("chat.messages.timeline");
-  const fetchState = constructCurrentFetchState(packets);
+  const fetchState = constructCurrentFetchState(items);
   const { urls, documents, hasStarted, isLoading, isComplete } = fetchState;
   const isCompact = renderType === RenderType.COMPACT;
   const isHighlight = renderType === RenderType.HIGHLIGHT;

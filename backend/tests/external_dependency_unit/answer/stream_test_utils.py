@@ -1,14 +1,10 @@
-from __future__ import annotations
-
 from collections.abc import Iterator
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.chat.models import AnswerStreamPart
+from onyx.chat.models import AnswerStreamPart, StreamingError
 from onyx.chat.process_message import handle_stream_message_objects
-from onyx.configs.constants import DocumentSource
-from onyx.context.search.models import SearchDoc
 from onyx.db.chat import create_chat_session_from_request
 from onyx.db.models import ChatSession, User
 from onyx.llm.override_models import LLMOverride
@@ -16,28 +12,29 @@ from onyx.server.query_and_chat.models import (
     ChatSessionCreationRequest,
     SendMessageRequest,
 )
-from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
-    AgentResponseDelta,
+    ItemUpdate,
     Packet,
-    ReasoningDelta,
+    TextItem,
+    TextPurpose,
 )
-from tests.external_dependency_unit.mock_content_provider import MockWebContent
-from tests.external_dependency_unit.mock_search_provider import MockWebSearchResult
 
 
-def create_placement(
-    turn_index: int,
-    tab_index: int = 0,
-    sub_turn_index: int | None = None,
-    model_index: int | None = 0,
-) -> Placement:
-    return Placement(
-        turn_index=turn_index,
-        tab_index=tab_index,
-        sub_turn_index=sub_turn_index,
-        model_index=model_index,
-    )
+def final_answer(parts: list[AnswerStreamPart]) -> str:
+    errors = [part for part in parts if isinstance(part, StreamingError)]
+    assert not errors, errors
+    answers = [
+        part.obj.item.text
+        for part in parts
+        if isinstance(part, Packet)
+        and isinstance(part.obj, ItemUpdate)
+        and isinstance(part.obj.item, TextItem)
+        and part.obj.item.purpose == TextPurpose.ANSWER
+        and part.identity is not None
+        and part.identity.parent_run_id is None
+    ]
+    assert answers, "Expected an assistant answer item"
+    return answers[-1]
 
 
 def submit_query(
@@ -71,60 +68,3 @@ def create_chat_session(
         user=user,
         db_session=db_session,
     )
-
-
-def create_packet_with_agent_response_delta(token: str, turn_index: int) -> Packet:
-    return Packet(
-        placement=create_placement(turn_index),
-        obj=AgentResponseDelta(
-            content=token,
-        ),
-    )
-
-
-def create_packet_with_reasoning_delta(token: str, turn_index: int) -> Packet:
-    return Packet(
-        placement=create_placement(turn_index),
-        obj=ReasoningDelta(
-            reasoning=token,
-        ),
-    )
-
-
-def create_web_search_doc(
-    semantic_identifier: str,
-    link: str,
-    blurb: str,
-) -> SearchDoc:
-    return SearchDoc(
-        document_id=f"WEB_SEARCH_DOC_{link}",
-        chunk_ind=0,
-        semantic_identifier=semantic_identifier,
-        link=link,
-        blurb=blurb,
-        source_type=DocumentSource.WEB,
-        boost=1,
-        hidden=False,
-        metadata={},
-        match_highlights=[],
-    )
-
-
-def mock_web_search_result_to_search_doc(result: MockWebSearchResult) -> SearchDoc:
-    return create_web_search_doc(
-        semantic_identifier=result.title,
-        link=result.link,
-        blurb=result.snippet,
-    )
-
-
-def mock_web_content_to_search_doc(content: MockWebContent) -> SearchDoc:
-    return create_web_search_doc(
-        semantic_identifier=content.title,
-        link=content.url,
-        blurb=content.title,
-    )
-
-
-def tokenise(text: str) -> list[str]:
-    return [(token + " ") for token in text.split(" ")]

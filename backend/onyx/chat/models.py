@@ -36,11 +36,11 @@ from onyx.server.query_and_chat.streaming_models import (
 )
 from onyx.tools.models import (
     ChatFile,
+    GeneratedImage,
     PersonaToolConfiguration,
     SearchToolUsage,
     ToolCallInfo,
 )
-from onyx.tools.progress import GeneratedImage
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
 
 MAX_DISCOVERED_AGENTS = 128
@@ -66,7 +66,6 @@ class MessageRendering(BaseModel):
     mode: PresentationMode = PresentationMode.ANSWER
     text_as_thinking: bool = False
     think_tool: str | None = None
-    argument_tools: set[str] = Field(default_factory=set)
     is_clarification: bool = False
     citation_mode: CitationMode | None = None
     citation_documents: dict[int, str] = Field(default_factory=dict)

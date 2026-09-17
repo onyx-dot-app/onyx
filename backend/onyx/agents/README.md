@@ -125,8 +125,8 @@ provides everything the tool needs:
 - `arguments` — the parsed JSON arguments.
 - `call_id`, `call_index`, `messages` — the call's identity and logical working history.
 - `cancellation` — a `CancellationSignal`; long-running tools should call `check()` often.
-- `update(ToolProgress(...))` — streaming progress. Typed `details` reach application
-  artifacts but never durable storage.
+- `update(ToolProgress(...))` — the current partial output and typed result details.
+  Each update replaces the previous partial value. Return the complete value in `ToolResult`.
 - `agents` — the subagent coordinator (next section).
 - `run_blocking(fn)` — runs sync work on the shared worker pool. Async tools use this
   instead of blocking the event loop.
@@ -207,27 +207,38 @@ back up past the queue bound, the runtime rejects new observer events and sets t
 `delivery_failed` flag; the recorded state stays correct, and the consumer rebuilds its view
 from the snapshot. Already queued callbacks may still drain.
 
-## Planned chat packet redesign
+## Chat stream
 
-The chat packet system will receive a full redesign across the backend and frontend.
-Craft's packet-driven rendering is the reference for the developer experience. OpenCode and ACP are optional design references, not compatibility requirements.
-This work is separate from the current SDK refactor; the existing packet contract remains in use.
+Model events describe one LLM request. Agent events add tool execution and run boundaries.
+`ResponsePresenter` converts these events into the public chat stream.
+It attaches message and parent identities, validates tool metadata, and formats citations.
+The frontend chooses cards, tabs, and grouping from these identities and content.
+The envelope’s `model_index` routes responses to the correct model panel. Layout coordinates exist only in the frontend.
 
-The target contract has:
+The public content types are text, reasoning, and tool items:
 
-- Stable agent, run, message, tool-call, and parent identities.
-- Explicit append, state-replacement, completion, failure, and cancellation semantics.
-- Reusable text, reasoning, tool, source, and file primitives with typed feature-specific data.
-- The same message and tool state after live streaming or loading saved history.
+| Item | Contents |
+| --- | --- |
+| Text | Text, purpose, citations, source documents, and status. |
+| Reasoning | Reasoning text and status. |
+| Tool | Name, arguments, status, output, and typed result metadata. |
 
-Packets describe content and execution. The frontend chooses cards, tabs, grouping, and layout.
-The backend supplies semantic information, such as research-plan identity, and owns authorization, safe serialization, citation associations, and persistence.
+`item_update` supplies the complete current item and replaces its previous value.
+`item_delta` appends text or string argument fragments, or replaces partial tool output and metadata.
+Tool items progress from `pending` arguments to `running` execution, then a terminal status.
+`run_update` closes unfinished items when a run ends, including cancellation and failure.
+A root `stop` packet closes the response. `chat_heartbeat` keeps the connection active during quiet work.
 
-Replace the translation and reconstruction machinery in `chat/presentation.py`, `chat/renderer.py`, and `chat/tool_progress.py` as part of that redesign.
-Saved responses should not require replay through a UI packet renderer.
-Tool completion should supply authoritative final state without reconstructing progress and subtracting previously streamed fields.
+Tools supply partial and final results using the same metadata model.
+For example, search metadata contains queries, filters, and documents.
+Python metadata contains stdout, stderr, generated files, and execution errors.
+Tools with plain text results use the tool item's `output` field.
 
-Design the contract and frontend consumers together. Preserve current chat, research, coding, citation, partial-output, and history behavior during the transition.
+Live streams send deltas followed by a complete item.
+History loading builds complete items directly from accepted content and saved tool metadata.
+Both paths use the same citation formatter and frontend item reducer.
+Partial tool updates are transient. History retains accepted tool results; cancellation before a result can leave live-only tool output.
+Provider-only fields, such as reasoning signatures, remain outside the public stream.
 
 ## Saving and restoring
 

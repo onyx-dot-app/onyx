@@ -1,54 +1,39 @@
-import React, { useEffect, useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { SvgImage } from "@opal/icons";
+import { ResponseItem } from "@/app/app/services/streamingModels";
 import {
-  PacketType,
-  ImageGenerationToolPacket,
-  ImageGenerationToolStart,
-  ImageGenerationToolDelta,
-  SectionEnd,
-} from "../../../services/streamingModels";
-import { MessageRenderer, RenderType } from "../interfaces";
-import { InMessageImage } from "../../../components/files/images/InMessageImage";
-import GeneratingImageDisplay from "../../../components/tools/GeneratingImageDisplay";
+  MessageRenderer,
+  RenderType,
+} from "@/app/app/message/messageComponents/interfaces";
+import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
+import GeneratingImageDisplay from "@/app/app/components/tools/GeneratingImageDisplay";
+import {
+  isComplete as itemsComplete,
+  toolMetadata,
+} from "@/app/app/services/responseItems";
 
-// Helper function to construct current image state
-function constructCurrentImageState(packets: ImageGenerationToolPacket[]) {
-  const imageStart = packets.find(
-    (packet) => packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START
-  )?.obj as ImageGenerationToolStart | null;
-  const imageDeltas = packets
-    .filter(
-      (packet) => packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_DELTA
-    )
-    .map((packet) => packet.obj as ImageGenerationToolDelta);
-  const imageEnd = packets.find(
-    (packet) =>
-      packet.obj.type === PacketType.SECTION_END ||
-      packet.obj.type === PacketType.ERROR
-  )?.obj as SectionEnd | null;
-
-  const prompt = ""; // Image generation tools don't have a main description
-  const images = imageDeltas.flatMap((delta) => delta?.images || []);
-  const isGenerating = imageStart && !imageEnd;
-  const isComplete = imageStart && imageEnd;
-
+function constructCurrentImageState(items: ResponseItem[]) {
   return {
-    prompt,
-    images,
-    isGenerating,
-    isComplete,
-    error: false, // For now, we don't have error state in the packets
+    prompt: "",
+    images: toolMetadata(items, "image_generation_result").flatMap(
+      (value) => value.generated_images
+    ),
+    isGenerating: !itemsComplete(items),
+    isComplete: itemsComplete(items),
+    error: items.some((item) => item.content.status === "error"),
   };
 }
 
-export const ImageToolRenderer: MessageRenderer<
-  ImageGenerationToolPacket,
-  {}
-> = ({ packets, onComplete, renderType, children }) => {
+export const ImageToolRenderer: MessageRenderer<ResponseItem, {}> = ({
+  items,
+  onComplete,
+  renderType,
+  children,
+}) => {
   const t = useTranslations("chat.messages");
   const { prompt, images, isGenerating, isComplete, error } =
-    constructCurrentImageState(packets);
+    constructCurrentImageState(items);
 
   useEffect(() => {
     if (isComplete) {

@@ -55,6 +55,8 @@ class AgentControl(Protocol):
 
 
 class ToolProgress(BaseModel):
+    """Current partial tool output; each update replaces the previous partial value."""
+
     content: str = ""
     details: SerializeAsAny[BaseModel] | None = None
 

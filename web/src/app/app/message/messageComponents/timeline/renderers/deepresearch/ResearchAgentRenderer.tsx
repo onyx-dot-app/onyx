@@ -1,14 +1,7 @@
 import React, { useMemo, useCallback } from "react";
 import { useTranslations } from "next-intl";
-import { SvgCircle, SvgCheckCircle, SvgBookOpen } from "@opal/icons";
-
-import {
-  PacketType,
-  Packet,
-  ResearchAgentPacket,
-  ResearchAgentStart,
-  IntermediateReportDelta,
-} from "@/app/app/services/streamingModels";
+import { SvgCircle, SvgBookOpen } from "@opal/icons";
+import { ResponseItem } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
   FullChatState,
@@ -28,34 +21,28 @@ import {
   useMarkdownComponents,
   renderMarkdown,
 } from "@/app/app/message/messageComponents/markdownUtils";
+import {
+  firstTool,
+  isComplete as itemsComplete,
+  stringArgument,
+  textContent,
+  toolMetadata,
+} from "@/app/app/services/responseItems";
 
 interface NestedToolGroup {
   sub_turn_index: number;
   toolType: string;
   status: string;
   isComplete: boolean;
-  packets: Packet[];
+  items: ResponseItem[];
 }
 
-/**
- * ResearchAgentRenderer - Renders research agent steps in deep research
- *
- * Segregates packets by tool and uses StepContainer + TimelineRendererComponent.
- *
- * RenderType modes:
- * - FULL: Shows all nested tool groups, research task, and report. Headers passed as `status` prop.
- *         Used when step is expanded in timeline.
- * - COMPACT: Shows only the latest active item (tool or report). Header passed as `status` prop.
- *            Used when step is collapsed in timeline, still wrapped in StepContainer.
- * - HIGHLIGHT: Shows only the latest active item with header embedded directly in content.
- *              No StepContainer wrapper. Used for parallel streaming preview.
- *              Nested tools are rendered with HIGHLIGHT mode recursively.
- */
+/** Render child activity and its report within the parent research tool. */
 export const ResearchAgentRenderer: MessageRenderer<
-  ResearchAgentPacket,
+  ResponseItem,
   FullChatState
 > = ({
-  packets,
+  items,
   state,
   onComplete,
   renderType,
@@ -66,52 +53,43 @@ export const ResearchAgentRenderer: MessageRenderer<
 }) => {
   const t = useTranslations("chat.messages.timeline");
 
-  // Extract the research task from the start packet
-  const startPacket = packets.find(
-    (p) => p.obj.type === PacketType.RESEARCH_AGENT_START
-  );
-  const researchTask = startPacket
-    ? (startPacket.obj as ResearchAgentStart).research_task
-    : "";
+  const researchTask = stringArgument(firstTool(items), "research_task");
 
-  // Separate parent packets from nested tool packets
-  const { parentPackets, nestedToolGroups } = useMemo(() => {
-    const parent: Packet[] = [];
-    const nestedBySubTurn = new Map<number, Packet[]>();
+  // Separate parent items from nested tool items
+  const { parentItems, nestedToolGroups } = useMemo(() => {
+    const parent: ResponseItem[] = [];
+    const nestedBySubTurn = new Map<number, ResponseItem[]>();
 
-    packets.forEach((packet) => {
+    items.forEach((packet) => {
+      if (packet.content.kind === "text" && packet.content.purpose === "report")
+        return;
       const subTurnIndex = packet.placement.sub_turn_index;
       if (subTurnIndex === undefined || subTurnIndex === null) {
         parent.push(packet);
       } else {
-        if (!nestedBySubTurn.has(subTurnIndex)) {
-          nestedBySubTurn.set(subTurnIndex, []);
-        }
-        nestedBySubTurn.get(subTurnIndex)!.push(packet);
+        const group = nestedBySubTurn.get(subTurnIndex) ?? [];
+        group.push(packet);
+        nestedBySubTurn.set(subTurnIndex, group);
       }
     });
 
-    // Convert nested packets to groups with metadata
+    // Convert nested items to groups with metadata
     const groups: NestedToolGroup[] = Array.from(nestedBySubTurn.entries())
       .sort(([a], [b]) => a - b)
-      .map(([subTurnIndex, toolPackets]) => {
-        const name = getToolName(toolPackets, t);
-        const isComplete = toolPackets.some(
-          (p) =>
-            p.obj.type === PacketType.SECTION_END ||
-            p.obj.type === PacketType.REASONING_DONE
-        );
+      .map(([subTurnIndex, toolItems]) => {
+        const name = getToolName(toolItems, t);
+        const isComplete = itemsComplete(toolItems);
         return {
           sub_turn_index: subTurnIndex,
           toolType: name,
           status: isComplete ? "Complete" : "Running",
           isComplete,
-          packets: toolPackets,
+          items: toolItems,
         };
       });
 
-    return { parentPackets: parent, nestedToolGroups: groups };
-  }, [packets, t]);
+    return { parentItems: parent, nestedToolGroups: groups };
+  }, [items, t]);
 
   // Filter nested tool groups based on renderType (COMPACT and HIGHLIGHT show only latest)
   const visibleNestedToolGroups = useMemo(() => {
@@ -127,23 +105,12 @@ export const ResearchAgentRenderer: MessageRenderer<
     return latestGroup ? [latestGroup] : [];
   }, [renderType, nestedToolGroups]);
 
-  // Check completion from parent packets
-  const isComplete = parentPackets.some(
-    (p) => p.obj.type === PacketType.SECTION_END
-  );
-
-  // Determine if report is actively streaming
+  const isComplete = itemsComplete(parentItems);
   const isReportStreaming = !isComplete && !stopPacketSeen;
-
-  // Build report content from parent packets
-  const fullReportContent = parentPackets
-    .map((packet) => {
-      if (packet.obj.type === PacketType.INTERMEDIATE_REPORT_DELTA) {
-        return (packet.obj as IntermediateReportDelta).content;
-      }
-      return "";
-    })
-    .join("");
+  const fullReportContent =
+    textContent(items, "report") ||
+    toolMetadata(items, "research_result").at(-1)?.intermediate_report ||
+    "";
 
   // Condensed modes: show only the currently active/streaming section
   const isCompact = renderType === RenderType.COMPACT;
@@ -219,7 +186,7 @@ export const ResearchAgentRenderer: MessageRenderer<
         return (
           <TimelineRendererComponent
             key={latestGroup.sub_turn_index}
-            packets={latestGroup.packets}
+            items={latestGroup.items}
             chatState={state}
             animate={!stopPacketSeen && !latestGroup.isComplete}
             stopPacketSeen={stopPacketSeen}
@@ -322,7 +289,7 @@ export const ResearchAgentRenderer: MessageRenderer<
           return (
             <TimelineRendererComponent
               key={group.sub_turn_index}
-              packets={group.packets}
+              items={group.items}
               chatState={state}
               animate={!stopPacketSeen && !group.isComplete}
               stopPacketSeen={stopPacketSeen}

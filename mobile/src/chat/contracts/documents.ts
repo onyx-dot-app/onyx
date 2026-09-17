@@ -1,6 +1,4 @@
-// Mobile-native port of the backend `SearchDoc` (the doc object carried by search/fetch document
-// packets and `message_start.final_documents`) plus the citation read-models. Full field set — 9b's
-// search/fetch sub-renderers consume the extras, so model it once here.
+// Search documents attached to response text and tool results.
 
 export interface SearchDoc {
   document_id: string;

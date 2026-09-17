@@ -1,10 +1,9 @@
-import json
-from typing import Any, Literal, TypedDict, cast
 from uuid import UUID
 
 import httpx
+from pydantic import BaseModel
 
-from onyx.context.search.models import SavedSearchDoc, SearchDoc
+from onyx.context.search.models import SavedSearchDoc, SearchDoc, SearchDocsResponse
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.models import (
@@ -12,7 +11,16 @@ from onyx.server.query_and_chat.models import (
     ChatSessionCreationRequest,
     SendMessageRequest,
 )
-from onyx.server.query_and_chat.streaming_models import StreamingType
+from onyx.server.query_and_chat.streaming_models import (
+    ChatHeartbeat,
+    ItemUpdate,
+    PacketIdentity,
+    PacketObj,
+    TextItem,
+    TextPurpose,
+    ToolItem,
+)
+from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import (
@@ -27,47 +35,12 @@ from tests.integration.common_utils.test_models import (
 )
 
 
-class StreamPacketObj(TypedDict, total=False):
-    """Base structure for streaming packet objects."""
-
-    type: Literal[
-        "message_start",
-        "message_delta",
-        "search_tool_start",
-        "search_tool_queries_delta",
-        "search_tool_documents_delta",
-        "image_generation_start",
-        "image_generation_heartbeat",
-        "image_generation_final",
-        "tool_call_debug",
-    ]
-    content: str
-    final_documents: list[dict[str, Any]]
-    is_internet_search: bool
-    images: list[dict[str, Any]]
-    queries: list[str]
-    documents: list[dict[str, Any]]
-    tool_call_id: str
-    tool_name: str
-    tool_args: dict[str, Any]
-
-
-class PlacementData(TypedDict, total=False):
-    """Structure for packet placement information."""
-
-    turn_index: int
-    tab_index: int
-    sub_turn_index: int | None
-
-
-class StreamPacketData(TypedDict, total=False):
-    """Structure for streaming response packets."""
-
-    reserved_assistant_message_id: int
-    error: str
-    stack_trace: str
-    obj: StreamPacketObj
-    placement: PlacementData
+class StreamEnvelope(BaseModel):
+    reserved_assistant_message_id: int | None = None
+    error: str | None = None
+    stack_trace: str | None = None
+    obj: PacketObj | None = None
+    identity: PacketIdentity | None = None
 
 
 class ChatSessionManager:
@@ -219,119 +192,73 @@ class ChatSessionManager:
 
     @staticmethod
     def analyze_response(response: httpx.Response) -> StreamedResponse:
-        response_data = cast(
-            list[StreamPacketData],
-            [json.loads(line) for line in response.iter_lines() if line],
-        )
-        ind_to_tool_use: dict[int, ToolResult] = {}
-        tool_call_debug: list[ToolCallDebug] = []
+        tools: dict[tuple[str, str], ToolItem] = {}
         top_documents: list[SearchDoc] = []
-        heartbeat_packets: list[StreamPacketData] = []
+        heartbeat_packets: list[StreamEnvelope] = []
         full_message = ""
         assistant_message_id: int | None = None
         error = None
-        ind: int
-        for data in response_data:
-            if reserved_id := data.get("reserved_assistant_message_id"):
-                assistant_message_id = reserved_id
-            elif data.get("error"):
+        for line in response.iter_lines():
+            if not line:
+                continue
+            envelope = StreamEnvelope.model_validate_json(line)
+            if envelope.reserved_assistant_message_id is not None:
+                assistant_message_id = envelope.reserved_assistant_message_id
+            if envelope.error:
                 error = ErrorResponse(
-                    error=str(data["error"]),
-                    stack_trace=str(data.get("stack_trace") or ""),
+                    error=envelope.error, stack_trace=envelope.stack_trace or ""
                 )
-            elif (error_obj := cast(dict[str, Any], data.get("obj") or {})) and (
-                error_obj.get("error")
-                or error_obj.get("type") == StreamingType.ERROR.value
+            if isinstance(envelope.obj, ChatHeartbeat):
+                heartbeat_packets.append(envelope)
+            if not isinstance(envelope.obj, ItemUpdate) or envelope.identity is None:
+                continue
+            item = envelope.obj.item
+            if (
+                isinstance(item, TextItem)
+                and item.purpose == TextPurpose.ANSWER
+                and envelope.identity.parent_run_id is None
             ):
-                error = ErrorResponse(
-                    error=str(error_obj.get("error") or "Streaming error"),
-                    stack_trace=str(
-                        error_obj.get("stack_trace") or data.get("stack_trace") or ""
-                    ),
-                )
+                full_message = item.text
+                top_documents = item.documents
             elif (
-                (data_obj := data.get("obj"))
-                and (packet_type := data_obj.get("type"))
-                and (
-                    ind := cast(
-                        int,
-                        (
-                            data.get("ind")
-                            if data.get("ind") is not None
-                            else data.get("placement", {}).get("turn_index")
-                        ),
-                    )
-                )
-                is not None
+                isinstance(item, ToolItem)
+                and envelope.identity.tool_call_id is not None
             ):
-                packet_type_str = str(packet_type)
-                if packet_type_str == StreamingType.MESSAGE_START.value:
-                    final_docs = data_obj.get("final_documents")
-                    if isinstance(final_docs, list):
-                        top_documents = [SearchDoc(**doc) for doc in final_docs]
-                    full_message += data_obj.get("content", "")
-                elif packet_type_str == StreamingType.MESSAGE_DELTA.value:
-                    full_message += data_obj["content"]
-                elif packet_type_str == StreamingType.SEARCH_TOOL_START.value:
-                    tool_name = (
-                        ToolName.INTERNET_SEARCH
-                        if data_obj.get("is_internet_search", False)
-                        else ToolName.INTERNAL_SEARCH
-                    )
-                    ind_to_tool_use[ind] = ToolResult(
-                        tool_name=tool_name,
-                    )
-                elif packet_type_str == StreamingType.IMAGE_GENERATION_START.value:
-                    ind_to_tool_use[ind] = ToolResult(
-                        tool_name=ToolName.IMAGE_GENERATION,
-                    )
-                elif packet_type_str == StreamingType.IMAGE_GENERATION_HEARTBEAT.value:
-                    # Track heartbeat packets for debugging/testing
-                    heartbeat_packets.append(data)
-                elif packet_type_str == StreamingType.IMAGE_GENERATION_FINAL.value:
-                    from tests.integration.common_utils.test_models import (
-                        GeneratedImage,
-                    )
-
-                    images = data_obj.get("images", [])
-                    ind_to_tool_use[ind].images.extend(
-                        [GeneratedImage(**img) for img in images]
-                    )
-                elif packet_type_str == StreamingType.SEARCH_TOOL_QUERIES_DELTA.value:
-                    ind_to_tool_use[ind].queries.extend(data_obj.get("queries", []))
-                elif packet_type_str == StreamingType.SEARCH_TOOL_DOCUMENTS_DELTA.value:
-                    docs = []
-                    for doc in data_obj.get("documents", []):
-                        if "db_doc_id" in doc:
-                            # Already a SavedSearchDoc format
-                            docs.append(SavedSearchDoc(**doc))
-                        else:
-                            # SearchDoc format - Convert to SavedSearchDoc
-                            search_doc = SearchDoc(**doc)
-                            docs.append(
-                                SavedSearchDoc.from_search_doc(search_doc, db_doc_id=0)
-                            )
-                    ind_to_tool_use[ind].documents.extend(docs)
-                elif packet_type_str == StreamingType.TOOL_CALL_DEBUG.value:
-                    tool_call_debug.append(
-                        ToolCallDebug(
-                            tool_call_id=str(data_obj.get("tool_call_id", "")),
-                            tool_name=str(data_obj.get("tool_name", "")),
-                            tool_args=cast(
-                                dict[str, Any], data_obj.get("tool_args") or {}
-                            ),
-                        )
-                    )
-        # If there's an error, assistant_message_id might not be present
-        if not assistant_message_id and not error:
+                tools[
+                    (envelope.identity.message_id, envelope.identity.tool_call_id)
+                ] = item
+        if assistant_message_id is None and error is None:
             raise ValueError("Assistant message id not found")
+        used_tools: list[ToolResult] = []
+        for item in tools.values():
+            if item.name not in {name.value for name in ToolName}:
+                continue
+            result = ToolResult(tool_name=ToolName(item.name))
+            if isinstance(item.metadata, SearchDocsResponse):
+                result.queries = item.metadata.queries
+                result.documents = [
+                    SavedSearchDoc.from_search_doc(doc, db_doc_id=0)
+                    for doc in item.metadata.displayed_docs or item.metadata.search_docs
+                ]
+            elif isinstance(item.metadata, FinalImageGenerationResponse):
+                result.images = item.metadata.generated_images
+            used_tools.append(result)
         return StreamedResponse(
             full_message=full_message,
-            assistant_message_id=assistant_message_id or -1,  # Use -1 for error cases
+            assistant_message_id=assistant_message_id
+            if assistant_message_id is not None
+            else -1,
             top_documents=top_documents,
-            used_tools=list(ind_to_tool_use.values()),
-            tool_call_debug=tool_call_debug,
-            heartbeat_packets=[dict(packet) for packet in heartbeat_packets],
+            used_tools=used_tools,
+            tool_call_debug=[
+                ToolCallDebug(
+                    tool_call_id=key[1], tool_name=item.name, tool_args=item.arguments
+                )
+                for key, item in tools.items()
+            ],
+            heartbeat_packets=[
+                packet.model_dump(mode="json") for packet in heartbeat_packets
+            ],
             error=error,
         )
 

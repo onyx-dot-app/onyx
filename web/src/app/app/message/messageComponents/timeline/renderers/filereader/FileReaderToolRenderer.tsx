@@ -2,11 +2,7 @@ import { useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { Card } from "@opal/components";
 import { SvgFileText } from "@opal/icons";
-import {
-  PacketType,
-  FileReaderToolPacket,
-  FileReaderResult,
-} from "@/app/app/services/streamingModels";
+import { ResponseItem } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
   RenderType,
@@ -14,6 +10,10 @@ import {
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
+import {
+  isComplete as itemsComplete,
+  toolMetadata,
+} from "@/app/app/services/responseItems";
 
 interface FileReaderState {
   fileName: string | null;
@@ -27,20 +27,10 @@ interface FileReaderState {
   isComplete: boolean;
 }
 
-function constructFileReaderState(
-  packets: FileReaderToolPacket[]
-): FileReaderState {
-  const result = packets.find(
-    (p) => p.obj.type === PacketType.FILE_READER_RESULT
-  )?.obj as FileReaderResult | null;
-
-  const hasStart = packets.some(
-    (p) => p.obj.type === PacketType.FILE_READER_START
-  );
-  const hasEnd = packets.some(
-    (p) =>
-      p.obj.type === PacketType.SECTION_END || p.obj.type === PacketType.ERROR
-  );
+function constructFileReaderState(items: ResponseItem[]): FileReaderState {
+  const result = toolMetadata(items, "file_read_result").at(-1);
+  const hasStart = items.length > 0;
+  const hasEnd = itemsComplete(items);
 
   return {
     fileName: result?.file_name ?? null,
@@ -55,12 +45,15 @@ function constructFileReaderState(
   };
 }
 
-export const FileReaderToolRenderer: MessageRenderer<
-  FileReaderToolPacket,
-  {}
-> = ({ packets, onComplete, stopPacketSeen, renderType, children }) => {
+export const FileReaderToolRenderer: MessageRenderer<ResponseItem, {}> = ({
+  items,
+  onComplete,
+  stopPacketSeen,
+  renderType,
+  children,
+}) => {
   const t = useTranslations("chat.messages.timeline");
-  const state = constructFileReaderState(packets);
+  const state = constructFileReaderState(items);
 
   useEffect(() => {
     if (state.isComplete) {

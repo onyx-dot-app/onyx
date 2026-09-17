@@ -36,6 +36,8 @@ from onyx.llm.models import (
     GenerationStartEvent,
     ReasoningEffort,
     TextContent,
+    ToolCall,
+    ToolResultMessage,
 )
 from onyx.server.query_and_chat.models import MessageResponseIDInfo
 from onyx.utils.threadpool_concurrency import ContextThreadPoolExecutor
@@ -295,3 +297,48 @@ def test_projection_retains_unfinished_descendant_for_inspection() -> None:
     assert response.response is not None
     assert response.response.child_runs[0].status == RunStatus.RUNNING
     assert snapshot.child_runs[0].status == RunStatus.RUNNING
+
+
+def test_full_response_reads_canonical_tool_output() -> None:
+    snapshot = RunSnapshot(
+        run_id="root",
+        status=RunStatus.COMPLETE,
+        messages=[
+            AssistantMessage(content=[ToolCall(id="tool", name="echo", arguments={})]),
+            ToolResultMessage(
+                tool_call_id="tool", tool_name="echo", content="tool output"
+            ),
+            AssistantMessage(content=[TextContent(text="Answer")]),
+        ],
+        operations=[
+            OperationSnapshot(step_index=0, message_index=0, status=RunStatus.COMPLETE),
+            OperationSnapshot(
+                step_index=0,
+                message_index=0,
+                tool_call_id="tool",
+                status=RunStatus.COMPLETE,
+            ),
+            OperationSnapshot(step_index=1, message_index=2, status=RunStatus.COMPLETE),
+        ],
+        answer_message_index=2,
+    )
+    projected = project_response(snapshot, response_id=42, tool_ids={"echo": 1})
+    assert projected.tool_calls[0].tool_call_response == "tool output"
+    assert projected.tool_calls[0].result_metadata is None
+    future: Future[ChatResponseOutcome] = Future()
+    future.set_result(
+        ChatResponseOutcome(
+            response=projected, persistence_status=PersistenceStatus.SAVED
+        )
+    )
+    response = gather_stream_full(
+        iter(
+            [
+                MessageResponseIDInfo(
+                    user_message_id=41, reserved_assistant_message_id=42
+                )
+            ]
+        ),
+        future,
+    )
+    assert response.tool_calls[0].tool_result == "tool output"

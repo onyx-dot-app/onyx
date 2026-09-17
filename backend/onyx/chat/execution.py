@@ -9,7 +9,10 @@ from onyx.agents.runtime import Run
 from onyx.agents.transcript import RunStatus
 from onyx.chat.agent import ChatAgent
 from onyx.chat.cancellation import clear_stop, is_stop_requested
-from onyx.chat.chat_processing_checker import set_processing_status
+from onyx.chat.chat_processing_checker import (
+    PROCESSING_REFRESH_INTERVAL_S,
+    set_processing_status,
+)
 from onyx.chat.emitter import Emitter
 from onyx.chat.errors import chat_error
 from onyx.chat.models import (
@@ -36,7 +39,6 @@ from onyx.deep_research.tool_definitions import RESEARCH_AGENT_TOOL_NAME
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
-from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
 from onyx.server.settings.store import load_settings
 from onyx.tracing.framework.create import ChatTraceMetadata, trace
@@ -45,7 +47,6 @@ from onyx.utils.threadpool_concurrency import ContextThreadPoolExecutor
 
 logger = setup_logger()
 _CANCEL_POLL_INTERVAL_S = 0.25
-_STATUS_REFRESH_INTERVAL_S = 60.0
 _PERSISTENCE_WAIT_SECONDS = 30.0
 
 if MAX_ACTIVE_CHAT_RESPONSES < 1:
@@ -284,7 +285,6 @@ class ChatTurnExecution:
             if self._stopped_by_user:
                 self.delivery.publish(
                     Packet(
-                        placement=Placement(turn_index=0),
                         obj=OverallStop(stop_reason="user_cancelled"),
                     )
                 )
@@ -384,7 +384,11 @@ class ChatTurnExecution:
                         max_steps=chat_agent.max_steps,
                         cancellation=cancellation,
                         coordinator=coordinator,
-                        on_event=ResponsePresenter(emitter, coordinator).consume,
+                        on_event=ResponsePresenter(
+                            emitter,
+                            coordinator,
+                            tool_ids={tool.name: tool.id for tool in chat_agent.tools},
+                        ).consume,
                     )
                     run.result(timeout=CHAT_RESPONSE_WAIT_TIMEOUT_S)
             except BaseException as failure:
@@ -526,7 +530,7 @@ class ChatTurnExecution:
             ):
                 self._stopped_by_user = True
                 self.cancellation.cancel()
-        if now - self._last_refresh >= _STATUS_REFRESH_INTERVAL_S:
+        if now - self._last_refresh >= PROCESSING_REFRESH_INTERVAL_S:
             self._last_refresh = now
             try:
                 set_processing_status(

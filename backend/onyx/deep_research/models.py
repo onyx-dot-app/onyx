@@ -1,13 +1,15 @@
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from onyx.chat.citation_processor import CitationMapping
+from onyx.context.search.models import SearchDoc
 
 
 class ResearchAgentCallResult(BaseModel):
+    type: Literal["research_result"] = "research_result"
     intermediate_report: str
-    citation_mapping: CitationMapping
+    citation_mapping: dict[int, SearchDoc]
 
 
 class ResearchPhase(str, Enum):
@@ -23,5 +25,5 @@ class ResearchMessageMetadata(BaseModel):
     phase: ResearchPhase
     is_intermediate: bool = False
     is_reasoning_model: bool
-    sources: CitationMapping = Field(default_factory=dict)
+    sources: dict[int, SearchDoc] = Field(default_factory=dict)
     elapsed_seconds: float = 0

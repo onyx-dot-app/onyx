@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from typing_extensions import override
 
-from onyx.agents.tools import ToolExecutionMode, ToolInvocation, ToolProgress
+from onyx.agents.tools import ToolExecutionMode, ToolInvocation
 from onyx.db.memory import add_memory, update_memory_at_index
 from onyx.llm.cancellation import check_cancelled
 from onyx.llm.interfaces import LLM
@@ -14,8 +14,7 @@ from onyx.tools.interface import (
     parse_tool_arguments,
     tool_message_history,
 )
-from onyx.tools.models import ToolCallException
-from onyx.tools.progress import MemoryOperation, MemoryStarted, MemoryUpdated
+from onyx.tools.models import MemoryOperation, MemoryUpdated, ToolCallException
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_incognito_record_mode
 
@@ -90,7 +89,6 @@ class MemoryTool(Tool):
 
     @override
     def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
-        invocation.update(ToolProgress(details=MemoryStarted()))
         if MEMORY_FIELD not in invocation.arguments:
             raise ToolCallException(
                 message=f"Missing required '{MEMORY_FIELD}' parameter in add_memory tool call",
@@ -158,5 +156,4 @@ class MemoryTool(Tool):
             memory_id=memory_id,
             index=index_to_replace,
         )
-        invocation.update(ToolProgress(details=snapshot))
         return ToolResult(content=snapshot.model_dump_json(), details=snapshot)

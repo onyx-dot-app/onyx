@@ -25,7 +25,7 @@ describe("messageProcessor", () => {
     ]);
   });
 
-  it("upserts documentMap from both document packet types and final_documents", () => {
+  it("collects documents from tool metadata and response text", () => {
     let state = createInitialState(1);
     state = processPackets(state, [
       makeSearchDocsPacket([makeSearchDoc({ document_id: "d1" })], "search"),

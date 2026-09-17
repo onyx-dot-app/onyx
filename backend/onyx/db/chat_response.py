@@ -99,6 +99,11 @@ def _attach_tool_artifacts(
         record = db_session.get(ToolCall, record_id)
         if record is None:
             raise ValueError("Accepted tool call is unavailable")
+        record.legacy_response = (
+            info.result_metadata.model_dump_json()
+            if info.result_metadata is not None
+            else ""
+        )
         record.tool_id = info.tool_id
         record.turn_number = info.turn_index
         record.tab_index = info.tab_index
