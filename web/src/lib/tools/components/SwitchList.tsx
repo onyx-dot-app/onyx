@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useId, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useFocusOnMount } from "@opal/hooks";
 import {
@@ -11,7 +11,7 @@ import {
   InputSwitch,
   Tooltip,
 } from "@opal/components";
-import { ContentAction } from "@opal/layouts";
+import { InputHorizontal } from "@opal/layouts";
 import type { IconProps } from "@opal/types";
 import { SvgChevronLeft, SvgPlug, SvgUnplug } from "@opal/icons";
 
@@ -50,7 +50,6 @@ export default function SwitchList({
   footer,
 }: SwitchListProps) {
   const t = useTranslations("actions");
-  const listId = useId();
   const [searchTerm, setSearchTerm] = useState("");
   const focusOnMount = useFocusOnMount<HTMLInputElement>();
   const filteredItems = useMemo(() => {
@@ -103,49 +102,44 @@ export default function SwitchList({
             : item.description;
           return (
             <Tooltip key={item.id} tooltip={tooltip}>
-              {/* A real <label> for the InputSwitch, so pressing anywhere on
-                  the row — the text included — toggles it. Padding matches
-                  LineItemButton so it lines up with the rows around it.
+              {/* InputHorizontal's implicit label forwards a press anywhere
+                  on the row — the text included — to the InputSwitch. The
+                  wrapper carries the padding LineItemButton applies, so the
+                  row lines up with the rows around it.
 
-                  It takes a tab stop only while disabled. The InputSwitch is a
-                  native disabled button then, so it cannot be focused, and the
-                  tooltip explaining why would be reachable by pointer alone.
-                  Enabled, the InputSwitch carries the focus and the tooltip opens
-                  from it, so a stop here would only be a second one. */}
-              <label
-                htmlFor={`${listId}-${item.id}`}
-                className={
-                  item.disabled
-                    ? "block w-full p-1.5"
-                    : "block w-full cursor-pointer p-1.5"
-                }
+                  The wrapper takes a tab stop only while disabled. The
+                  InputSwitch is a native disabled button then, so it cannot
+                  be focused, and the tooltip explaining why would be
+                  reachable by pointer alone. Enabled, the InputSwitch
+                  carries the focus and the tooltip opens from it, so a stop
+                  here would only be a second one. */}
+              <div
+                className="w-full p-2"
                 // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- the stop exists so a keyboard can reach the tooltip that says why the row is disabled; its InputSwitch is a disabled button and cannot hold focus
                 tabIndex={item.disabled ? 0 : undefined}
               >
-                <ContentAction
-                  sizePreset="main-ui"
-                  padding={0.5}
+                <InputHorizontal
+                  withLabel
                   center
+                  disabled={item.disabled}
                   icon={
                     item.leading
                       ? ((() =>
                           item.leading) as React.FunctionComponent<IconProps>)
                       : undefined
                   }
-                  rightChildren={
-                    <InputSwitch
-                      id={`${listId}-${item.id}`}
-                      checked={item.isEnabled}
-                      onCheckedChange={item.onToggle}
-                      aria-label={t("switchList.toggle.ariaLabel", {
-                        name: item.label,
-                      })}
-                      disabled={item.disabled}
-                    />
-                  }
                   title={item.label}
-                />
-              </label>
+                >
+                  <InputSwitch
+                    checked={item.isEnabled}
+                    onCheckedChange={item.onToggle}
+                    aria-label={t("switchList.toggle.ariaLabel", {
+                      name: item.label,
+                    })}
+                    disabled={item.disabled}
+                  />
+                </InputHorizontal>
+              </div>
             </Tooltip>
           );
         }),
