@@ -17,6 +17,7 @@ from dataclasses import dataclass, replace
 from html import unescape
 from io import BytesIO
 from typing import Any, cast
+from weakref import WeakKeyDictionary
 
 import mistune
 from docx import Document
@@ -29,6 +30,7 @@ from docx.opc.packuri import PackURI
 from docx.opc.part import XmlPart
 from docx.oxml import OxmlElement, parse_xml
 from docx.oxml.ns import qn
+from docx.parts.numbering import NumberingPart
 from docx.shared import Inches, Pt, RGBColor, Twips
 from docx.styles.style import ParagraphStyle
 from docx.table import _Cell
@@ -506,6 +508,22 @@ def _render_list(
                 _render_blocks(document, [child], footnotes)
 
 
+_next_num_id_by_part: WeakKeyDictionary[NumberingPart, int] = WeakKeyDictionary()
+
+
+def _allocate_num_id(numbering_part: NumberingPart) -> int:
+    num_id = _next_num_id_by_part.get(numbering_part)
+    if num_id is None:
+        existing = [
+            int(num.get(qn("w:numId")))
+            for num in numbering_part.element.findall(qn("w:num"))
+            if num.get(qn("w:numId")) is not None
+        ]
+        num_id = max(existing, default=0) + 1
+    _next_num_id_by_part[numbering_part] = num_id + 1
+    return num_id
+
+
 def _create_list_numbering(
     document: DocxDocument, list_style_name: str, start: int
 ) -> int | None:
@@ -519,17 +537,13 @@ def _create_list_numbering(
     falls back to the list style).
     """
     style = document.styles[list_style_name]
-    numbering = document.part.numbering_part.element
+    numbering_part = document.part.numbering_part
+    numbering = numbering_part.element
     abstract_num_id = _abstract_num_id_for_style(numbering, style.style_id)
     if abstract_num_id is None:
         return None
 
-    num_ids = [
-        int(num.get(qn("w:numId")))
-        for num in numbering.findall(qn("w:num"))
-        if num.get(qn("w:numId")) is not None
-    ]
-    next_num_id = max(num_ids, default=0) + 1
+    next_num_id = _allocate_num_id(numbering_part)
 
     num = OxmlElement("w:num")
     num.set(qn("w:numId"), str(next_num_id))

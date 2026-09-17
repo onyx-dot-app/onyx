@@ -24,6 +24,7 @@ logger = setup_logger()
 
 
 BUS_CLOSED_SENTINEL = None
+_MAX_SSE_BUFFER_CHARS = 8 * 1024 * 1024
 
 
 @dataclass
@@ -262,10 +263,14 @@ class PodEventBus:
                 buf += chunk
                 while "\n\n" in buf:
                     block, buf = buf.split("\n\n", 1)
+                    if len(block) > _MAX_SSE_BUFFER_CHARS:
+                        raise ValueError("SSE event exceeds the buffer limit")
                     evt = _parse_sse_block(block)
                     if evt is None:
                         continue
                     self._dispatch(evt)
+                if len(buf) > _MAX_SSE_BUFFER_CHARS:
+                    raise ValueError("Unterminated SSE event exceeds the buffer limit")
 
     def _refresh_auth_on_401(self) -> bool:
         """Reload auth after a 401; True if the credential actually rotated.

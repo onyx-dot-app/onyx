@@ -21,7 +21,12 @@ from collections.abc import Callable, Generator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from uuid import UUID
 
-from onyx.server.features.build.configs import TURN_BUDGET_FILE_NAME
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.build.configs import (
+    MAX_DOWNLOAD_FILE_SIZE_BYTES,
+    TURN_BUDGET_FILE_NAME,
+)
 from onyx.server.features.build.sandbox.event_schema import (
     AgentMessageChunk,
     AgentPlanUpdate,
@@ -82,6 +87,15 @@ SandboxEvent = (
     | Error
     | SSEKeepalive
 )
+
+
+def enforce_read_file_size_limit(content: bytes) -> bytes:
+    if len(content) > MAX_DOWNLOAD_FILE_SIZE_BYTES:
+        raise OnyxError(
+            OnyxErrorCode.PAYLOAD_TOO_LARGE,
+            "Sandbox file exceeds the download size limit.",
+        )
+    return content
 
 
 class SandboxManager(_ServeMixin, ABC):
