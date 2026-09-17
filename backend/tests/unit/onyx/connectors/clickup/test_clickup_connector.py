@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 import requests
 
 from onyx.connectors.clickup.connector import CLICKUP_API_BASE_URL, ClickupConnector
-
+from onyx.connectors.models import TextSection
 
 def _mock_response(json_response: dict[str, Any]) -> MagicMock:
     response = MagicMock()
@@ -49,10 +49,9 @@ def test_task_comment_fetch_failure_does_not_abort_indexing() -> None:
         {"tasks": [_mock_task("task-1"), _mock_task("task-2")], "last_page": True}
     )
 
-    def _mock_comments(task_id: str) -> list[Any]:
+    def _mock_comments(task_id: str) -> list[TextSection]:
         if task_id == "task-1":
             raise requests.exceptions.RequestException("boom")
-        from onyx.connectors.models import TextSection
         return [TextSection(text="Valid Comment")]
 
     with patch("onyx.connectors.clickup.connector.requests.get") as mock_get, patch.object(
