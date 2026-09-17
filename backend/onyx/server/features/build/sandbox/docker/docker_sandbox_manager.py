@@ -83,6 +83,7 @@ from onyx.db.enums import SandboxStatus
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import (
     ATTACHMENTS_DIRECTORY,
+    MAX_DOWNLOAD_FILE_SIZE_BYTES,
     ONYX_SERVER_URL,
     OPENCODE_SERVE_PORT,
     OPENCODE_SERVER_PASSWORD,
@@ -101,6 +102,7 @@ from onyx.server.features.build.sandbox.base import (
     BUN_CACHE_DIR,
     BUN_IMAGE_CACHE_DIR,
     SandboxManager,
+    enforce_read_file_size_limit,
 )
 from onyx.server.features.build.sandbox.docker.dev_mode_serve import (
     opencode_serve_port_bindings,
@@ -1743,7 +1745,7 @@ fi
                 [
                     "/bin/sh",
                     "-c",
-                    f"if [ -f {quoted} ]; then base64 {quoted}; else echo 'ERROR_NOT_FOUND'; fi",
+                    f"if [ -f {quoted} ]; then /usr/bin/head -c {MAX_DOWNLOAD_FILE_SIZE_BYTES + 1} {quoted} | /usr/bin/base64; else echo 'ERROR_NOT_FOUND'; fi",
                 ],
                 check=False,
             )
@@ -1753,7 +1755,9 @@ fi
         if "ERROR_NOT_FOUND" in result.stdout_text:
             raise ValueError(f"File not found: {path}")
         try:
-            return base64.b64decode(result.stdout_text.strip())
+            return enforce_read_file_size_limit(
+                base64.b64decode(result.stdout_text.strip())
+            )
         except binascii.Error as e:
             raise RuntimeError(f"Failed to decode file content: {e}") from e
 

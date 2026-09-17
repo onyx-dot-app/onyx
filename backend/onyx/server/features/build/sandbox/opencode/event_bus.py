@@ -24,6 +24,7 @@ logger = setup_logger()
 
 
 BUS_CLOSED_SENTINEL = None
+_MAX_SSE_BUFFER_CHARS = 8 * 1024 * 1024
 
 
 @dataclass
@@ -256,16 +257,27 @@ class PodEventBus:
                 response.status_code,
             )
             buf = ""
+            # Oversized frames are dropped, not retried: cumulative part
+            # updates only grow, so a reconnect would hit the same limit.
+            skipping = False
             for chunk in response.iter_text():
                 if self._stop.is_set():
                     return
                 buf += chunk
                 while "\n\n" in buf:
                     block, buf = buf.split("\n\n", 1)
+                    if skipping or len(block) > _MAX_SSE_BUFFER_CHARS:
+                        skipping = False
+                        logger.warning("Dropped SSE event over the buffer limit")
+                        continue
                     evt = _parse_sse_block(block)
                     if evt is None:
                         continue
                     self._dispatch(evt)
+                if skipping or len(buf) > _MAX_SSE_BUFFER_CHARS:
+                    skipping = True
+                    # Keep one char in case the separator spans chunks.
+                    buf = buf[-1:]
 
     def _refresh_auth_on_401(self) -> bool:
         """Reload auth after a 401; True if the credential actually rotated.

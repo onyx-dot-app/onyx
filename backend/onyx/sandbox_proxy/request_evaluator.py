@@ -31,6 +31,7 @@ from onyx.external_apps.matching.engine import (
     apply_credential_gate,
     recognize_actions,
 )
+from onyx.external_apps.matching.graphql_parsing import GraphQLParsingLimitError
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.sandbox_proxy.mcp_jsonrpc import (
     McpRpcClassification,
@@ -131,10 +132,26 @@ class ExternalAppRequestEvaluator(RequestEvaluator):
                 path=(request.path or "").split("?", 1)[0],
                 body=request.raw_content,
             )
+            try:
+                recognized = recognize_actions(db, app, proxied)
+            except GraphQLParsingLimitError:
+                return AllMatchedActions(
+                    target=GatedTarget(
+                        kind=GatedAppKind.EXTERNAL_APP, id=app.id, app_name=app.name
+                    ),
+                    actions=(
+                        MatchedAction(
+                            action_type="graphql.unclassifiable",
+                            display_name="Unclassifiable GraphQL request",
+                            description="The request exceeds the parsing depth limit.",
+                            policy=EndpointPolicy.DENY,
+                        ),
+                    ),
+                )
             matched_actions = apply_credential_gate(
                 app,
                 proxied,
-                recognize_actions(db, app, proxied),
+                recognized,
                 is_available=app_is_available(db, app, user_id),
             )
             if matched_actions is None:
@@ -280,7 +297,7 @@ def _decode_body(body: bytes, content_type: str) -> dict[str, Any] | None:
     if "application/json" in content_type:
         try:
             decoded = json.loads(body.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError):
+        except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
             return None
         if isinstance(decoded, dict):
             return decoded
