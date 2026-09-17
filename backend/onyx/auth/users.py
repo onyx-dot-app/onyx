@@ -2523,7 +2523,10 @@ async def current_user_from_websocket(
             logger.warning("WS auth: user not found for id=%s", token_data.get("sub"))
             raise WebSocketException(code=1008)
 
-        user = await double_check_user(user)
+        try:
+            user = await double_check_user(user)
+        except BasicAuthenticationError as e:
+            raise WebSocketException(code=1008) from e
 
         if is_limited_user(user):
             logger.warning("WS auth: user %s is limited", user.email)
@@ -2556,7 +2559,9 @@ async def current_user_from_websocket_cookie(
         raise WebSocketException(code=1008)
 
     # The single-tenant session token can be a JWT with no Redis entry, so only
-    # consult Redis when the tenant is actually needed.
+    # consult Redis when the tenant is actually needed. Multi-tenant requires
+    # the Redis session backend — the HTTP tenant middleware resolves tenants
+    # from the same Redis lookup (see _get_tenant_id_from_request).
     if MULTI_TENANT:
         try:
             token_data = await retrieve_auth_token_data(token)
@@ -2584,7 +2589,10 @@ async def current_user_from_websocket_cookie(
         if user is None or not user.is_active:
             raise WebSocketException(code=1008)
 
-        user = await double_check_user(user)
+        try:
+            user = await double_check_user(user)
+        except BasicAuthenticationError as e:
+            raise WebSocketException(code=1008) from e
 
         if Permission.BASIC_ACCESS not in get_effective_permissions(user):
             logger.warning("WS auth: user %s lacks basic access", user.email)

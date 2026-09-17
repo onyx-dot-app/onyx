@@ -145,7 +145,10 @@ def test_cookie_websocket_auth_sets_tenant_from_session_token(
         asyncio.run(_run())
     finally:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(reset_token)
+        # Commit the cleanup: the craft conftest teardown rolls the session
+        # back, which would undo an uncommitted delete.
         delete_test_user(db_session, user)
+        db_session.commit()
 
 
 def test_cookie_websocket_auth_rejects_expired_session(
@@ -179,7 +182,10 @@ def test_cookie_websocket_auth_rejects_expired_session(
         asyncio.run(_run())
     finally:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(reset_token)
+        # Commit the cleanup: the craft conftest teardown rolls the session
+        # back, which would undo an uncommitted delete.
         delete_test_user(db_session, user)
+        db_session.commit()
 
 
 def test_cookie_websocket_auth_rejects_missing_cookie(
