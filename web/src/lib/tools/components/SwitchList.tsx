@@ -7,7 +7,7 @@ import {
   Button,
   InputTypeIn,
   LineItemButton,
-  PopoverMenu,
+  Popover,
   InputSwitch,
   Tooltip,
 } from "@opal/components";
@@ -65,7 +65,7 @@ export default function SwitchList({
   }, [items, searchTerm]);
 
   return (
-    <PopoverMenu footer={footer}>
+    <Popover.Menu footer={footer}>
       {[
         <div className="flex items-center gap-1" key="search">
           <Button
@@ -95,6 +95,8 @@ export default function SwitchList({
           onClick={allDisabled ? onEnableAll : onDisableAll}
           title={allDisabled ? enableAllLabel : disableAllLabel}
         />,
+
+        null,
 
         ...filteredItems.map((item) => {
           const tooltip = item.disabled
@@ -144,6 +146,6 @@ export default function SwitchList({
           );
         }),
       ]}
-    </PopoverMenu>
+    </Popover.Menu>
   );
 }
