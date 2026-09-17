@@ -1,5 +1,6 @@
 from typing import Any
 from unittest.mock import MagicMock, patch
+import requests
 
 from onyx.connectors.clickup.connector import CLICKUP_API_BASE_URL, ClickupConnector
 
@@ -21,6 +22,45 @@ def test_get_all_tasks_filtered_uses_relative_endpoint() -> None:
 
     mock_get.assert_called_once()
     assert mock_get.call_args.args[0] == f"{CLICKUP_API_BASE_URL}/team/123/task"
+
+def _mock_task(task_id: str) -> dict[str, Any]:
+    return {
+        "id": task_id,
+        "name": f"Task {task_id}",
+        "url": f"https://clickup.com{task_id}",
+        "description": "some description",
+        "date_created": "1700000000000",
+        "date_updated": "1700000000000",
+        "creator": {"username": "alice", "email": "alice@example.com"},
+        "assignees": [],
+        "status": {"status": "open"},
+        "list": {"name": "My List"},
+        "project": {"name": "My Project"},
+        "folder": {"name": "My Folder"},
+        "space": {"id": "space-1"},
+        "tags": [],
+    }
+
+
+def test_task_comment_fetch_failure_does_not_abort_indexing() -> None:
+    connector = ClickupConnector(api_token="test-token", team_id="123")
+    tasks_response = _mock_response(
+        {"tasks": [_mock_task("task-1"), _mock_task("task-2")], "last_page": True}
+    )
+
+    with patch("onyx.connectors.clickup.connector.requests.get") as mock_get, patch.object(
+        ClickupConnector,
+        "_get_task_comments",
+        side_effect=requests.exceptions.RequestException("boom"),
+    ):
+        mock_get.return_value = tasks_response
+        batches = list(connector._get_all_tasks_filtered())
+
+    documents = [doc for batch in batches for doc in batch]
+    assert [doc.id for doc in documents] == ["task-1", "task-2"]
+    assert all(len(doc.sections) == 1 for doc in documents)
+
+
 
 
 def test_get_task_comments_uses_relative_endpoint() -> None:
