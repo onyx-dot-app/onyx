@@ -18,20 +18,20 @@ import (
 
 // CoverageOptions holds options for the coverage command.
 type CoverageOptions struct {
-	Check     bool
-	Update    bool
-	Profile   string
-	HTML      string
-	Markdown  string
-	Tolerance float64
+	Profile  string
+	HTML     string
+	Markdown string
 	// FromProfile reports from a profile an earlier run kept, without running
 	// the tests. CI measures without credentials, then reports with them.
 	FromProfile string
 	// Base reports the run against the coverage snapshot of this commit-ish
 	// instead of the floors. The gate keeps using the floors.
 	Base           string
-	Publish        bool
 	SnapshotBucket string
+	Tolerance      float64
+	Check          bool
+	Update         bool
+	Publish        bool
 }
 
 // newSnapshotStore builds the snapshot store. Tests replace it to stay off

@@ -17,10 +17,10 @@ import (
 var validProfiles = []string{"dev", "multitenant"}
 
 type ComposeOptions struct {
+	Tag           string
 	Down          bool
 	Wait          bool
 	ForceRecreate bool
-	Tag           string
 	NoEE          bool
 	Infra         bool
 }
