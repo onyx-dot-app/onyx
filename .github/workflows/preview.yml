@@ -37,8 +37,13 @@ on:
 # One deploy per branch at a time. Without this, two commits deploying
 # together can finish out of order and leave the PR comment on the older
 # commit's URL. Cancelling the older run also frees the server sooner.
+#
+# Keyed on the branch, not github.ref, because ref differs by event:
+# `refs/pull/<n>/merge` for a pull_request against `refs/heads/<branch>` for a
+# dispatch. Keying on ref would put a manual redeploy and the PR's own run in
+# separate groups — which is the out-of-order case this block exists to stop.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 permissions:
