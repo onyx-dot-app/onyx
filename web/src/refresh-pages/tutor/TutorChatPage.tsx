@@ -13,6 +13,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import type { ChatSession } from "@/app/app/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import type { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import { useAgents } from "@/hooks/useAgents";
 import useChatSessions, {
@@ -83,7 +84,8 @@ export default function TutorChatPage() {
   const projectId = projectIdRaw ? parseInt(projectIdRaw) : null;
   const ltiContextId =
     searchParams?.get(SEARCH_PARAM_NAMES.LTI_CONTEXT_ID) ?? null;
-  const ltiCanvasCourseNodeId =
+  // Launch-time hint only; superseded below by the live connector-status value.
+  const launchCanvasCourseNodeId =
     searchParams?.get(SEARCH_PARAM_NAMES.LTI_CANVAS_COURSE_NODE_ID) ?? null;
   const requestedTutorTab = searchParams?.get(SEARCH_PARAM_NAMES.TUTOR_TAB);
   const showInstructorTabs = isEmbedded && isInstructor && projectId !== null;
@@ -113,17 +115,13 @@ export default function TutorChatPage() {
   // The set of tutors that belong to the current Canvas course. Used to scope
   // the History modal to only conversations with this course's tutors.
   const courseTutorsSwrKey = ltiContextId
-    ? `/api/auth/lti/tutors-for-course?context_id=${encodeURIComponent(
-        ltiContextId
-      )}`
+    ? SWR_KEYS.ltiTutorsForCourse(ltiContextId)
     : null;
   const { data: courseTutors, isLoading: isLoadingCourseTutors } = useSWR<
     MinimalPersonaSnapshot[]
   >(courseTutorsSwrKey, errorHandlingFetcher);
   const courseConnectorStatusSwrKey = ltiContextId
-    ? `/api/auth/lti/course/${encodeURIComponent(
-        ltiContextId
-      )}/connector-status`
+    ? SWR_KEYS.ltiCourseConnectorStatus(ltiContextId)
     : null;
   const {
     data: courseConnectorStatus,
@@ -137,10 +135,21 @@ export default function TutorChatPage() {
       refreshInterval: (latestStatus) => {
         if (!latestStatus) return 0;
         if (!latestStatus.has_connector) return 5000;
-        return latestStatus.has_indexed_documents ? 0 : 5000;
+        if (!latestStatus.has_indexed_documents) return 5000;
+        // Keep re-checking until the course's hierarchy node is indexed so
+        // the tutor editor can scope its Canvas picker to this course.
+        return latestStatus.canvas_course_node_id === null ? 5000 : 0;
       },
     }
   );
+  // The Canvas course's hierarchy node id. Once connector-status has loaded
+  // it is authoritative (null means "not indexed yet"); the launch-time URL
+  // param only bridges the gap while that first request is in flight.
+  const ltiCanvasCourseNodeId = courseConnectorStatus
+    ? courseConnectorStatus.canvas_course_node_id !== null
+      ? String(courseConnectorStatus.canvas_course_node_id)
+      : null
+    : launchCanvasCourseNodeId;
   const courseTutorIds = useMemo(() => {
     if (!courseTutors) return null;
     return new Set(courseTutors.map((t) => t.id));

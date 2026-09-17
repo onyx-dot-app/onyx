@@ -77,6 +77,9 @@
       "runtimeExecutable": "npm",
       "envFile": "${workspaceFolder}/.vscode/.env.web",
       "runtimeArgs": ["run", "dev"],
+      // Turbopack spawns PostCSS worker processes; letting the JS debugger
+      // auto-attach to them leaves hundreds of idle workers (tens of GB) alive.
+      "autoAttachChildProcesses": false,
       "presentation": {
         "group": "2"
       },

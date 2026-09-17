@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Callable
 from collections.abc import Iterator
 from typing import Any
 from urllib.parse import urlparse
@@ -16,6 +17,9 @@ logger = logging.getLogger(__name__)
 
 # Requests timeout in seconds.
 _CANVAS_CALL_TIMEOUT: int = 30
+# Files are streamed in chunks of this size so an oversized download can be
+# abandoned before it is fully buffered.
+_DOWNLOAD_CHUNK_SIZE: int = 64 * 1024
 _CANVAS_API_VERSION: str = "/api/v1"
 # Matches the "next" URL in a Canvas Link header, e.g.:
 #   <https://canvas.example.com/api/v1/courses?page=2>; rel="next"
@@ -43,11 +47,23 @@ def _error_code_for_status(status_code: int) -> OnyxErrorCode:
     return OnyxErrorCode.BAD_GATEWAY
 
 
+def _is_canvas_login_url(url: str) -> bool:
+    """True for Canvas's login page (``/login`` or ``/login/<provider>``)."""
+    path = urlparse(url).path.rstrip("/")
+    return path == "/login" or path.startswith("/login/")
+
+
+# Called when Canvas answers 401. Returns a fresh bearer token to retry with,
+# or None if no refresh is possible (static token / refresh failed).
+TokenRefresher = Callable[[], str | None]
+
+
 class CanvasApiClient:
     def __init__(
         self,
         bearer_token: str,
         canvas_base_url: str,
+        token_refresher: TokenRefresher | None = None,
     ) -> None:
         parsed_base = urlparse(canvas_base_url)
         if not parsed_base.hostname:
@@ -56,6 +72,7 @@ class CanvasApiClient:
         #     raise ValueError("canvas_base_url must use https")
 
         self._bearer_token = bearer_token
+        self._token_refresher = token_refresher
         self.base_url = (
             canvas_base_url.rstrip("/").removesuffix(_CANVAS_API_VERSION)
             + _CANVAS_API_VERSION
@@ -84,14 +101,15 @@ class CanvasApiClient:
         # next-page URL in the Link header).  For the first request we build
         # the URL from the endpoint name instead.
         url = full_url if full_url else self._build_url(endpoint)
-        headers = self._build_headers()
+        response = self._request(url, params if not full_url else None)
 
-        response = rl_requests.get(
-            url,
-            headers=headers,
-            params=params if not full_url else None,
-            timeout=_CANVAS_CALL_TIMEOUT,
-        )
+        # OAuth access tokens expire hourly. On a 401, ask the refresher for a
+        # new token and retry exactly once; static tokens have no refresher.
+        if response.status_code == 401 and self._token_refresher is not None:
+            refreshed_token = self._token_refresher()
+            if refreshed_token and refreshed_token != self._bearer_token:
+                self._bearer_token = refreshed_token
+                response = self._request(url, params if not full_url else None)
 
         try:
             response_json = response.json()
@@ -144,6 +162,105 @@ class CanvasApiClient:
         next_url = self._parse_next_link(response.headers.get("Link", ""))
         return response_json, next_url
 
+    def get_file_public_url(self, file_id: int) -> str | None:
+        """Ask Canvas for a self-authorizing download URL for a file.
+
+        ``GET /api/v1/files/:id/public_url`` returns a signed URL (S3 /
+        inst-fs) or, for local storage, a download URL carrying a
+        ``verifier``. Requires the ``url:GET|/api/v1/files/:id/public_url``
+        scope on developer keys that enforce scopes.
+        """
+        body, _ = self.get(f"files/{file_id}/public_url")
+        if not isinstance(body, dict):
+            return None
+        public_url = body.get("public_url")
+        return public_url if isinstance(public_url, str) and public_url else None
+
+    def download_file(self, url: str, max_bytes: int | None = None) -> bytes:
+        """Download a file's raw bytes from a self-authorizing Canvas URL.
+
+        ``url`` must carry its own authorization: a file ``url`` that includes
+        a ``verifier`` query parameter, or the signed URL returned by
+        ``get_file_public_url``. No Authorization header is sent: Canvas
+        rejects bearer tokens on the non-API ``/files/:id/download`` route
+        with 401 when the developer key enforces scopes, and omitting it also
+        keeps the token away from storage hosts the download redirects to.
+
+        When Canvas will not serve the file it redirects to its login page
+        with a 200, so that is detected and reported as a failure rather than
+        indexing the login page's HTML.
+
+        The body is streamed. When ``max_bytes`` is given, the download is
+        abandoned as soon as it is known to exceed that size (from
+        ``Content-Length`` or while reading), so a file whose advertised
+        ``size`` is missing or wrong cannot buffer unbounded data in memory.
+        """
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY,
+                detail=f"Invalid Canvas file download URL: {url!r}",
+            )
+
+        response = rl_requests.get(
+            url,
+            timeout=_CANVAS_CALL_TIMEOUT,
+            allow_redirects=True,
+            stream=True,
+        )
+        try:
+            if response.status_code >= 400:
+                raise OnyxError(
+                    _error_code_for_status(response.status_code),
+                    detail=(
+                        f"Failed to download Canvas file: "
+                        f"{response.reason or f'HTTP {response.status_code}'}"
+                    ),
+                    status_code_override=response.status_code,
+                )
+
+            visited = [r.url for r in response.history] + [response.url]
+            if any(_is_canvas_login_url(visited_url) for visited_url in visited):
+                raise OnyxError(
+                    OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                    detail=(
+                        "Canvas redirected the file download to its login page; "
+                        "the download URL is not authorized"
+                    ),
+                )
+
+            if max_bytes is not None:
+                content_length = response.headers.get("Content-Length")
+                if (
+                    isinstance(content_length, str)
+                    and content_length.isdigit()
+                    and int(content_length) > max_bytes
+                ):
+                    raise OnyxError(
+                        OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                        detail=(
+                            f"Canvas file is {content_length} bytes, over the "
+                            f"{max_bytes} byte limit"
+                        ),
+                    )
+
+            buffer = bytearray()
+            for chunk in response.iter_content(chunk_size=_DOWNLOAD_CHUNK_SIZE):
+                if not chunk:
+                    continue
+                buffer.extend(chunk)
+                if max_bytes is not None and len(buffer) > max_bytes:
+                    raise OnyxError(
+                        OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                        detail=(
+                            f"Canvas file download exceeded the {max_bytes} "
+                            "byte limit"
+                        ),
+                    )
+            return bytes(buffer)
+        finally:
+            response.close()
+
     def _parse_next_link(self, link_header: str) -> str | None:
         """Extract the 'next' URL from a Canvas Link header.
 
@@ -172,6 +289,18 @@ class CanvasApiClient:
             #     )
             return url
         return None
+
+    def _request(self, url: str, params: dict[str, Any] | None) -> Any:
+        return rl_requests.get(
+            url,
+            headers=self._build_headers(),
+            params=params,
+            timeout=_CANVAS_CALL_TIMEOUT,
+        )
+
+    @property
+    def bearer_token(self) -> str:
+        return self._bearer_token
 
     def _build_headers(self) -> dict[str, str]:
         """Return the Authorization header with the bearer token."""

@@ -60,6 +60,9 @@ PUBLIC_ENDPOINT_SPECS = [
     ("/auth/lti/jwks", {"GET"}),
     ("/auth/lti/login", {"GET", "POST"}),
     ("/auth/lti/launch", {"POST"}),
+    # Canvas OAuth consent popup lands here without an Onyx session (the LTI
+    # cookie is Partitioned); the single-use `state` param is the auth.
+    ("/auth/lti/canvas-oauth/callback", {"GET"}),
     # anonymous user on cloud
     ("/tenants/anonymous-user", {"POST"}),
     ("/metrics", {"GET"}),  # added by prometheus_fastapi_instrumentator

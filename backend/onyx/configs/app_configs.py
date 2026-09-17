@@ -620,6 +620,17 @@ CONFLUENCE_CONNECTOR_LABELS_TO_SKIP = [
     if ignored_tag
 ]
 
+# Canvas files larger than this (in bytes) are indexed by name only; their
+# contents are not downloaded.
+CANVAS_CONNECTOR_FILE_SIZE_THRESHOLD = int(
+    os.environ.get("CANVAS_CONNECTOR_FILE_SIZE_THRESHOLD", 10 * 1024 * 1024)
+)
+# Canvas files whose extracted text exceeds this many chars are indexed by
+# name only. Mirrors the Confluence attachment threshold below.
+CANVAS_CONNECTOR_FILE_CHAR_COUNT_THRESHOLD = int(
+    os.environ.get("CANVAS_CONNECTOR_FILE_CHAR_COUNT_THRESHOLD", 200_000)
+)
+
 # Attachments exceeding this size will not be retrieved (in bytes)
 CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD = int(
     os.environ.get("CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD", 10 * 1024 * 1024)

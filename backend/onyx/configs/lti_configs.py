@@ -35,6 +35,24 @@ LTI_FRAME_ANCESTORS: str = os.environ.get(
 # TTL (seconds) for the OIDC nonce/state stored in Redis
 LTI_NONCE_TTL_SECONDS: int = int(os.environ.get("LTI_NONCE_TTL_SECONDS", "300"))
 
+# Canvas *API* developer key used for the per-instructor OAuth2 flow that
+# replaces pasting a personal access token. This is a separate key from the
+# LTI developer key (`LTI_CLIENT_ID`): Canvas forces scope enforcement on LTI
+# keys and only allows LTI service scopes on them, so they cannot be used for
+# the user authorization-code grant. A Canvas admin creates this key once per
+# institution with the redirect URI + scopes reported by
+# `GET /auth/lti/canvas-oauth/registration-info`.
+LTI_CANVAS_OAUTH_CLIENT_ID: str | None = os.environ.get("LTI_CANVAS_OAUTH_CLIENT_ID")
+LTI_CANVAS_OAUTH_CLIENT_SECRET: str | None = os.environ.get(
+    "LTI_CANVAS_OAUTH_CLIENT_SECRET"
+)
+
+# TTL (seconds) for the Canvas OAuth `state` stored in Redis between opening
+# the consent popup and Canvas redirecting back to the callback.
+LTI_CANVAS_OAUTH_STATE_TTL_SECONDS: int = int(
+    os.environ.get("LTI_CANVAS_OAUTH_STATE_TTL_SECONDS", "600")
+)
+
 # Whether to mirror Canvas course rosters into Onyx user groups. Defaults on
 # whenever LTI is configured (see `lti_group_sync_enabled`).
 _LTI_GROUP_SYNC_ENABLED_OVERRIDE: str | None = os.environ.get("LTI_GROUP_SYNC_ENABLED")
@@ -55,6 +73,18 @@ def lti_is_configured() -> bool:
             LTI_JWKS_URL,
             LTI_DEPLOYMENT_ID,
         ]
+    )
+
+
+def lti_canvas_oauth_is_configured() -> bool:
+    """Return True if instructors can connect Canvas via OAuth2.
+
+    Requires the Canvas API developer key client id + secret on top of the
+    base LTI config. When False the instructor setup UI falls back to the
+    legacy paste-a-personal-access-token flow.
+    """
+    return lti_is_configured() and bool(
+        LTI_CANVAS_OAUTH_CLIENT_ID and LTI_CANVAS_OAUTH_CLIENT_SECRET
     )
 
 

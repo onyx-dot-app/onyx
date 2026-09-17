@@ -10,6 +10,8 @@ to type or paste a course ID — the launch handler threads `lti_context_id`
 through to the editor and picker views via URL params.
 """
 
+import html
+import json
 import re
 import secrets
 import uuid
@@ -26,15 +28,18 @@ from fastapi import Path
 from fastapi import Query
 from fastapi import Request
 from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import HTMLResponse
 from fastapi.responses import JSONResponse
 from fastapi.responses import RedirectResponse
 from fastapi_users.authentication import Strategy
 from pydantic import BaseModel
 from pydantic import Field
+from pydantic import model_validator
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import auth_backend
 from onyx.auth.users import current_chat_accessible_user
+from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import get_user_manager
 from onyx.auth.users import UserManager
 from onyx.background.celery.versioned_apps.client import app as client_app
@@ -45,6 +50,10 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.lti_configs import LTI_AUTH_LOGIN_URL
 from onyx.configs.lti_configs import LTI_AUTH_TOKEN_URL
 from onyx.configs.lti_configs import LTI_CANVAS_BASE_URL
+from onyx.configs.lti_configs import LTI_CANVAS_OAUTH_CLIENT_ID
+from onyx.configs.lti_configs import LTI_CANVAS_OAUTH_CLIENT_SECRET
+from onyx.configs.lti_configs import lti_canvas_oauth_is_configured
+from onyx.configs.lti_configs import LTI_CANVAS_OAUTH_STATE_TTL_SECONDS
 from onyx.configs.lti_configs import LTI_CLIENT_ID
 from onyx.configs.lti_configs import LTI_DEPLOYMENT_ID
 from onyx.configs.lti_configs import lti_group_sync_enabled
@@ -52,6 +61,22 @@ from onyx.configs.lti_configs import LTI_ISSUER
 from onyx.configs.lti_configs import LTI_JWKS_URL
 from onyx.connectors.canvas.client import CanvasApiClient
 from onyx.connectors.canvas.connector import CanvasCourse
+from onyx.connectors.canvas.oauth import build_canvas_authorize_url
+from onyx.connectors.canvas.oauth import CANVAS_ACCESS_TOKEN_KEY
+from onyx.connectors.canvas.oauth import CANVAS_BASE_URL_KEY
+from onyx.connectors.canvas.oauth import canvas_credential_is_invalidated
+from onyx.connectors.canvas.oauth import canvas_credential_is_oauth
+from onyx.connectors.canvas.oauth import CANVAS_OAUTH_CLIENT_ID_KEY
+from onyx.connectors.canvas.oauth import CANVAS_OAUTH_REQUIRED_SCOPES
+from onyx.connectors.canvas.oauth import CANVAS_REFRESH_TOKEN_KEY
+from onyx.connectors.canvas.oauth import CANVAS_TOKEN_EXPIRES_AT_KEY
+from onyx.connectors.canvas.oauth import CANVAS_USER_NAME_KEY
+from onyx.connectors.canvas.oauth import CanvasOAuthError
+from onyx.connectors.canvas.oauth import credential_json_from_tokens
+from onyx.connectors.canvas.oauth import exchange_canvas_authorization_code
+from onyx.connectors.canvas.oauth import mark_canvas_credential_invalid
+from onyx.connectors.canvas.oauth import refresh_canvas_credential_json_if_needed
+from onyx.connectors.canvas.oauth import revoke_canvas_access_token
 from onyx.connectors.google_utils.google_kv import get_auth_url
 from onyx.connectors.google_utils.google_kv import get_google_app_cred
 from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_DICT_TOKEN_KEY
@@ -72,16 +97,23 @@ from onyx.db.connector_credential_pair import get_connector_credential_pair_from
 from onyx.db.connector_credential_pair import (
     update_connector_credential_pair_from_id,
 )
+from onyx.db.credentials import backend_update_credential_json
 from onyx.db.credentials import create_credential
+from onyx.db.credentials import fetch_credential_by_id
 from onyx.db.credentials import fetch_credentials_by_source_for_user
 from onyx.db.document import get_document_counts_for_cc_pairs
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingMode
 from onyx.db.index_attempt import cancel_indexing_attempts_for_ccpair
 from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
+from onyx.db.lti import fetch_canvas_cc_pairs_for_credential
+from onyx.db.lti import fetch_canvas_course_node_id_for_cc_pair
+from onyx.db.lti import pause_cc_pairs_for_revoked_credential
+from onyx.db.lti import swap_lti_canvas_cc_pair_credential
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import User
@@ -132,7 +164,17 @@ _CANVAS_GLOBAL_LTI_HOSTS = {
 
 
 class LtiCanvasConnectorSetupRequest(BaseModel):
-    canvas_access_token: str = Field(min_length=1)
+    """Either a pasted personal access token (legacy) or the id of an OAuth
+    credential the instructor just authorized via the Canvas consent popup."""
+
+    canvas_access_token: str | None = Field(default=None, min_length=1)
+    credential_id: int | None = None
+
+    @model_validator(mode="after")
+    def _require_token_or_credential(self) -> "LtiCanvasConnectorSetupRequest":
+        if not self.canvas_access_token and self.credential_id is None:
+            raise ValueError("Provide either canvas_access_token or credential_id")
+        return self
 
 
 class LtiCanvasConnectorSetupResponse(BaseModel):
@@ -140,6 +182,50 @@ class LtiCanvasConnectorSetupResponse(BaseModel):
     connector_id: int
     credential_id: int
     created: bool
+
+
+class LtiCanvasOAuthConnectResponse(BaseModel):
+    credential_id: int
+    auth_url: str
+
+
+class LtiCanvasOAuthRegistrationInfo(BaseModel):
+    """Everything a Canvas admin needs to create the API developer key."""
+
+    configured: bool
+    client_id: str | None
+    redirect_uri: str
+    scopes: list[str]
+    notes: list[str]
+
+
+class LtiCanvasOAuthState(BaseModel):
+    """Bound to the Canvas OAuth `state` param in Redis.
+
+    The callback runs in a popup that cannot see the (Partitioned) LTI
+    session cookie, so this record is the callback's only authentication.
+    """
+
+    user_id: str
+    course_id: str
+    credential_id: int
+    canvas_base_url: str
+    tenant_id: str
+
+
+_LTI_CANVAS_OAUTH_STATE_PREFIX = "lti_canvas_oauth_state:"
+_LTI_CANVAS_OAUTH_CREDENTIAL_NAME = "Canvas instructor connection"
+_LTI_CANVAS_OAUTH_PURPOSE = "Onyx Virtual Tutor"
+_LTI_CANVAS_OAUTH_MESSAGE_TYPE = "onyx:lti-canvas-oauth"
+_LTI_CANVAS_OAUTH_NOTES = [
+    "Create an *API* developer key (not an LTI key) at Admin > Developer Keys "
+    "and turn it ON for the root account.",
+    "Add the redirect URI exactly as listed; Canvas requires an exact match.",
+    "If you enable Enforce Scopes, paste every scope listed and also check "
+    "'Allow Include Parameters' - Onyx relies on include[] query params.",
+    "Put the key's ID and secret in LTI_CANVAS_OAUTH_CLIENT_ID and "
+    "LTI_CANVAS_OAUTH_CLIENT_SECRET on the Onyx API server.",
+]
 
 
 # Crawl strategies an instructor can pick for a course website. We deliberately
@@ -514,25 +600,13 @@ def _resolve_canvas_api_course(
     )
 
 
-def _validate_canvas_token_and_resolve_course(
-    canvas_access_token: str,
-    canvas_base_url: str,
+def _validate_canvas_client_and_resolve_course(
+    canvas_client: CanvasApiClient,
     launch_context: LtiLaunchContext,
 ) -> CanvasCourse:
     try:
-        logger.info(
-            "Validating Canvas LTI connector token against %s for course context %s",
-            canvas_base_url,
-            launch_context.course_id,
-        )
-        canvas_client = CanvasApiClient(
-            bearer_token=canvas_access_token,
-            canvas_base_url=canvas_base_url,
-        )
         canvas_client.get("users/self")
         return _resolve_canvas_api_course(canvas_client, launch_context)
-    except ValueError as e:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
     except OnyxError as e:
         if e.status_code in (401, 403):
             raise OnyxError(
@@ -540,6 +614,330 @@ def _validate_canvas_token_and_resolve_course(
                 "Canvas token could not be validated for this course",
             ) from e
         raise
+
+
+def _validate_canvas_token_and_resolve_course(
+    canvas_access_token: str,
+    canvas_base_url: str,
+    launch_context: LtiLaunchContext,
+) -> CanvasCourse:
+    logger.info(
+        "Validating Canvas LTI connector token against %s for course context %s",
+        canvas_base_url,
+        launch_context.course_id,
+    )
+    try:
+        canvas_client = CanvasApiClient(
+            bearer_token=canvas_access_token,
+            canvas_base_url=canvas_base_url,
+        )
+    except ValueError as e:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
+    return _validate_canvas_client_and_resolve_course(canvas_client, launch_context)
+
+
+# ---------------------------------------------------------------------------
+# Canvas OAuth (instructor self-serve) helpers
+# ---------------------------------------------------------------------------
+
+
+def _canvas_oauth_redirect_uri() -> str:
+    return f"{WEB_DOMAIN}/auth/lti/canvas-oauth/callback"
+
+
+def _canvas_credential_json(credential: Credential) -> dict[str, Any]:
+    if credential.credential_json is None:
+        return {}
+    value = credential.credential_json.get_value(apply_mask=False)
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _canvas_oauth_state_key(state_token: str) -> str:
+    return f"{_LTI_CANVAS_OAUTH_STATE_PREFIX}{state_token}"
+
+
+def _store_canvas_oauth_state(oauth_state: LtiCanvasOAuthState) -> str:
+    state_token = secrets.token_urlsafe(32)
+    get_raw_redis_client().set(
+        _canvas_oauth_state_key(state_token),
+        oauth_state.model_dump_json(),
+        ex=LTI_CANVAS_OAUTH_STATE_TTL_SECONDS,
+    )
+    return state_token
+
+
+def _consume_canvas_oauth_state(state_token: str) -> LtiCanvasOAuthState | None:
+    """Atomically pop the state so a callback URL can only be replayed once."""
+    raw_state = get_raw_redis_client().getdel(_canvas_oauth_state_key(state_token))
+    if raw_state is None:
+        return None
+    raw_state_str = (
+        raw_state.decode("utf-8") if isinstance(raw_state, bytes) else str(raw_state)
+    )
+    try:
+        return LtiCanvasOAuthState.model_validate_json(raw_state_str)
+    except Exception:
+        logger.exception("Failed to parse stored Canvas OAuth state")
+        return None
+
+
+def _canvas_oauth_popup_response(
+    status: str,
+    *,
+    credential_id: int | None = None,
+    detail: str | None = None,
+) -> HTMLResponse:
+    """Self-closing page served to the consent popup.
+
+    Posts the outcome to the tutor iframe (the popup's opener) and closes.
+    The message is JSON-encoded with `<` escaped so Canvas-supplied error text
+    can never break out of the script block.
+    """
+    message = {
+        "type": _LTI_CANVAS_OAUTH_MESSAGE_TYPE,
+        "status": status,
+        "credential_id": credential_id,
+        "detail": detail,
+    }
+    message_json = json.dumps(message).replace("<", "\\u003c")
+    target_origin_json = json.dumps(WEB_DOMAIN).replace("<", "\\u003c")
+    visible_text = (
+        "Canvas is connected. You can close this window and return to the tutor."
+        if status == "success"
+        else "Canvas authorization did not finish. You can close this window and "
+        "try again from the tutor."
+    )
+    if detail and status != "success":
+        visible_text += f" ({html.escape(detail)})"
+
+    body = (
+        "<!doctype html>\n<html>\n<head><title>Canvas authorization</title></head>\n"
+        "<body>\n<script>\n"
+        f"var message = {message_json};\n"
+        f"var targetOrigin = {target_origin_json};\n"
+        "if (window.opener && !window.opener.closed) {\n"
+        "  window.opener.postMessage(message, targetOrigin);\n"
+        "}\n"
+        "window.close();\n"
+        "</script>\n"
+        f"<p>{visible_text}</p>\n"
+        "</body>\n</html>"
+    )
+    return HTMLResponse(content=body)
+
+
+def _refresh_lti_canvas_credential(
+    credential: Credential,
+    credential_json: dict[str, Any],
+    db_session: Session,
+    *,
+    force: bool,
+) -> dict[str, Any]:
+    """Refresh an OAuth credential if needed and persist the result."""
+    try:
+        refreshed_json, refreshed = refresh_canvas_credential_json_if_needed(
+            credential_json,
+            client_id=LTI_CANVAS_OAUTH_CLIENT_ID,
+            client_secret=LTI_CANVAS_OAUTH_CLIENT_SECRET,
+            force=force,
+        )
+    except CanvasOAuthError as e:
+        if e.permanent:
+            backend_update_credential_json(
+                credential, mark_canvas_credential_invalid(credential_json), db_session
+            )
+            raise OnyxError(
+                OnyxErrorCode.CREDENTIAL_EXPIRED,
+                "Canvas connection was revoked or expired. Reconnect Canvas to continue.",
+            ) from e
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            f"Could not refresh the Canvas access token: {e}",
+        ) from e
+
+    if refreshed:
+        backend_update_credential_json(credential, refreshed_json, db_session)
+    return refreshed_json
+
+
+def _canvas_client_for_credential(
+    credential: Credential,
+    canvas_base_url: str,
+    db_session: Session,
+) -> CanvasApiClient:
+    credential_json = _refresh_lti_canvas_credential(
+        credential, _canvas_credential_json(credential), db_session, force=False
+    )
+    access_token = credential_json.get(CANVAS_ACCESS_TOKEN_KEY)
+    if not isinstance(access_token, str) or not access_token:
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_INVALID,
+            "Canvas has not been authorized for this connection yet",
+        )
+
+    def _refresh_on_unauthorized() -> str | None:
+        latest_json = _canvas_credential_json(credential)
+        if not canvas_credential_is_oauth(latest_json):
+            return None
+        refreshed_json = _refresh_lti_canvas_credential(
+            credential, latest_json, db_session, force=True
+        )
+        refreshed_token = refreshed_json.get(CANVAS_ACCESS_TOKEN_KEY)
+        return refreshed_token if isinstance(refreshed_token, str) else None
+
+    try:
+        return CanvasApiClient(
+            bearer_token=access_token,
+            canvas_base_url=canvas_base_url,
+            token_refresher=_refresh_on_unauthorized,
+        )
+    except ValueError as e:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
+
+
+def _canvas_credential_matches_base_url(
+    credential_json: dict[str, Any], canvas_base_url: str
+) -> bool:
+    stored_base_url = credential_json.get(CANVAS_BASE_URL_KEY)
+    if not isinstance(stored_base_url, str) or not stored_base_url:
+        return True
+    return stored_base_url.rstrip("/") == canvas_base_url.rstrip("/")
+
+
+def _canvas_credential_is_connected(credential_json: dict[str, Any]) -> bool:
+    return canvas_credential_is_oauth(
+        credential_json
+    ) and not canvas_credential_is_invalidated(credential_json)
+
+
+def _get_lti_canvas_oauth_credential(
+    *,
+    db_session: Session,
+    user: User,
+    canvas_base_url: str,
+) -> Credential | None:
+    """Find the instructor's own Canvas OAuth credential for this Canvas host.
+
+    One credential per instructor per Canvas instance is reused across all of
+    their courses. Legacy pasted-token credentials are never returned.
+    """
+    credentials = fetch_credentials_by_source_for_user(
+        db_session=db_session,
+        user=user,
+        document_source=DocumentSource.CANVAS,
+        get_editable=False,
+    )
+    candidates: list[tuple[bool, Credential]] = []
+    for credential in credentials:
+        if credential.user_id != user.id:
+            continue
+        credential_json = _canvas_credential_json(credential)
+        is_oauth_style = (
+            CANVAS_OAUTH_CLIENT_ID_KEY in credential_json
+            or canvas_credential_is_oauth(credential_json)
+            or credential.name == _LTI_CANVAS_OAUTH_CREDENTIAL_NAME
+        )
+        if not is_oauth_style:
+            continue
+        if not _canvas_credential_matches_base_url(credential_json, canvas_base_url):
+            continue
+        candidates.append(
+            (_canvas_credential_is_connected(credential_json), credential)
+        )
+
+    if not candidates:
+        return None
+    # Prefer a live connection; otherwise reuse the oldest pending/expired one.
+    candidates.sort(key=lambda item: (not item[0], item[1].id))
+    return candidates[0][1]
+
+
+def _get_or_create_lti_canvas_oauth_credential(
+    *,
+    db_session: Session,
+    user: User,
+    canvas_base_url: str,
+) -> Credential:
+    credential = _get_lti_canvas_oauth_credential(
+        db_session=db_session, user=user, canvas_base_url=canvas_base_url
+    )
+    if credential is not None:
+        return credential
+
+    return create_credential(
+        credential_data=CredentialBase(
+            credential_json={CANVAS_BASE_URL_KEY: canvas_base_url.rstrip("/")},
+            admin_public=False,
+            curator_public=False,
+            source=DocumentSource.CANVAS,
+            name=_LTI_CANVAS_OAUTH_CREDENTIAL_NAME,
+        ),
+        user=user,
+        db_session=db_session,
+    )
+
+
+def _require_connected_canvas_oauth_credential(
+    *,
+    db_session: Session,
+    user: User,
+    credential_id: int,
+    canvas_base_url: str,
+) -> Credential:
+    """Load the instructor's own, connected Canvas OAuth credential.
+
+    The credential must have been issued by the Canvas host of the current
+    launch: the client built from it sends the credential's bearer token to
+    ``canvas_base_url``, so a credential from another Canvas instance would
+    leak that token to the wrong host.
+    """
+    credential = fetch_credential_by_id(credential_id, db_session)
+    if (
+        credential is None
+        or credential.user_id != user.id
+        or credential.source != DocumentSource.CANVAS
+    ):
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            "Canvas connection not found for this instructor",
+        )
+    credential_json = _canvas_credential_json(credential)
+    if not _canvas_credential_matches_base_url(credential_json, canvas_base_url):
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_INVALID,
+            "This Canvas connection belongs to a different Canvas instance",
+        )
+    if not _canvas_credential_is_connected(credential_json):
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_INVALID,
+            "Finish authorizing Canvas before starting indexing",
+        )
+    return credential
+
+
+def _canvas_connection_state(
+    cc_pair: ConnectorCredentialPair,
+) -> tuple[str | None, str | None]:
+    """Return (connection_state, connected Canvas user name) for a cc-pair.
+
+    `connected` / `expired` describe OAuth credentials; `static_token` is a
+    legacy pasted personal access token, which Onyx cannot refresh or verify
+    without a network call.
+    """
+    credential = getattr(cc_pair, "credential", None)
+    if credential is None:
+        return None, None
+    credential_json = _canvas_credential_json(credential)
+    canvas_user_name = credential_json.get(CANVAS_USER_NAME_KEY)
+    canvas_user = canvas_user_name if isinstance(canvas_user_name, str) else None
+
+    if canvas_credential_is_invalidated(credential_json):
+        return "expired", canvas_user
+    if canvas_credential_is_oauth(credential_json):
+        if cc_pair.status == ConnectorCredentialPairStatus.INVALID:
+            return "expired", canvas_user
+        return "connected", canvas_user
+    return "static_token", None
 
 
 def _build_canvas_connector_name(
@@ -639,6 +1037,11 @@ def _build_lti_course_connector_status(
         "total_docs_indexed": 0,
         "has_indexed_documents": False,
         "last_successful_index_time": None,
+        # The course's indexed COURSE hierarchy node, used by the tutor editor
+        # to scope its Canvas knowledge picker. Polled by the frontend so it
+        # fills in as soon as the connector indexes the course — unlike the
+        # launch-time URL param, which is only computed once.
+        "canvas_course_node_id": None,
     }
 
     if cc_pair is not None:
@@ -654,16 +1057,25 @@ def _build_lti_course_connector_status(
                 "total_docs_indexed": indexing_status.total_docs_indexed,
                 "has_indexed_documents": indexing_status.has_indexed_documents,
                 "last_successful_index_time": cc_pair.last_successful_index_time,
+                "canvas_course_node_id": fetch_canvas_course_node_id_for_cc_pair(
+                    db_session=db_session, cc_pair=cc_pair
+                ),
             }
         )
 
     if lti_roles_include_instructor(launch_context.roles):
         canvas_base_url = _canvas_base_url_for_launch_context(launch_context)
+        connection_state, connected_canvas_user = (
+            _canvas_connection_state(cc_pair) if cc_pair is not None else (None, None)
+        )
         status["setup"] = {
             "can_setup": cc_pair is None,
+            "oauth_available": lti_canvas_oauth_is_configured(),
             "canvas_token_url": _canvas_token_settings_url(canvas_base_url),
             "course_label": launch_context.course_label,
             "course_title": launch_context.course_title,
+            "connection_state": connection_state,
+            "connected_canvas_user": connected_canvas_user,
         }
 
     return status
@@ -721,20 +1133,48 @@ def setup_lti_course_canvas_connector(
         db_session=db_session,
         lti_context_id=course_id,
     )
-    if existing_cc_pair is not None:
-        return LtiCanvasConnectorSetupResponse(
-            cc_pair_id=existing_cc_pair.id,
-            connector_id=existing_cc_pair.connector_id,
-            credential_id=existing_cc_pair.credential_id,
-            created=False,
+    canvas_base_url = _canvas_base_url_for_launch_context(launch_context)
+
+    oauth_credential: Credential | None = None
+    if setup_request.credential_id is not None:
+        oauth_credential = _require_connected_canvas_oauth_credential(
+            db_session=db_session,
+            user=user,
+            credential_id=setup_request.credential_id,
+            canvas_base_url=canvas_base_url,
+        )
+        canvas_client = _canvas_client_for_credential(
+            oauth_credential, canvas_base_url, db_session
+        )
+        if existing_cc_pair is not None:
+            return _reconnect_lti_course_canvas_connector(
+                cc_pair=existing_cc_pair,
+                credential=oauth_credential,
+                canvas_client=canvas_client,
+                launch_context=launch_context,
+                db_session=db_session,
+            )
+        canvas_course = _validate_canvas_client_and_resolve_course(
+            canvas_client, launch_context
+        )
+    else:
+        if existing_cc_pair is not None:
+            return LtiCanvasConnectorSetupResponse(
+                cc_pair_id=existing_cc_pair.id,
+                connector_id=existing_cc_pair.connector_id,
+                credential_id=existing_cc_pair.credential_id,
+                created=False,
+            )
+        if not setup_request.canvas_access_token:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT, "A Canvas access token is required"
+            )
+        canvas_course = _validate_canvas_token_and_resolve_course(
+            canvas_access_token=setup_request.canvas_access_token,
+            canvas_base_url=canvas_base_url,
+            launch_context=launch_context,
         )
 
-    canvas_base_url = _canvas_base_url_for_launch_context(launch_context)
-    canvas_course = _validate_canvas_token_and_resolve_course(
-        canvas_access_token=setup_request.canvas_access_token,
-        canvas_base_url=canvas_base_url,
-        launch_context=launch_context,
-    )
     connector_name = _build_canvas_connector_name(
         launch_context=launch_context,
         db_session=db_session,
@@ -758,18 +1198,21 @@ def setup_lti_course_canvas_connector(
         raise OnyxError(OnyxErrorCode.DUPLICATE_RESOURCE, str(e)) from e
 
     connector_id = int(connector_response.id)
-    credential = create_credential(
-        credential_data=CredentialBase(
-            credential_json={
-                "canvas_access_token": setup_request.canvas_access_token,
-            },
-            admin_public=False,
-            source=DocumentSource.CANVAS,
-            name=f"{connector_name} credential",
-        ),
-        user=user,
-        db_session=db_session,
-    )
+    if oauth_credential is not None:
+        credential = oauth_credential
+    else:
+        credential = create_credential(
+            credential_data=CredentialBase(
+                credential_json={
+                    CANVAS_ACCESS_TOKEN_KEY: setup_request.canvas_access_token,
+                },
+                admin_public=False,
+                source=DocumentSource.CANVAS,
+                name=f"{connector_name} credential",
+            ),
+            user=user,
+            db_session=db_session,
+        )
 
     cc_pair_response = add_credential_to_connector(
         db_session=db_session,
@@ -805,6 +1248,284 @@ def setup_lti_course_canvas_connector(
         credential_id=credential.id,
         created=True,
     )
+
+
+def _reconnect_lti_course_canvas_connector(
+    *,
+    cc_pair: ConnectorCredentialPair,
+    credential: Credential,
+    canvas_client: CanvasApiClient,
+    launch_context: LtiLaunchContext,
+    db_session: Session,
+) -> LtiCanvasConnectorSetupResponse:
+    """Re-authorize an existing course connector with a (possibly different)
+    instructor's freshly authorized Canvas credential and run a full re-index.
+
+    A full re-index (rather than an incremental poll) is deliberate: the new
+    token may carry different scopes or belong to an instructor with access
+    to different content, and content that hasn't changed in Canvas would
+    otherwise never be re-fetched. It also re-fetches course permissions
+    during indexing instead of waiting for the next permission sync."""
+    _validate_canvas_client_and_resolve_course(canvas_client, launch_context)
+
+    if cc_pair.credential_id != credential.id:
+        swap_lti_canvas_cc_pair_credential(
+            db_session=db_session,
+            cc_pair=cc_pair,
+            new_credential_id=credential.id,
+        )
+
+    if cc_pair.status in (
+        ConnectorCredentialPairStatus.PAUSED,
+        ConnectorCredentialPairStatus.INVALID,
+    ):
+        update_connector_credential_pair_from_id(
+            db_session=db_session,
+            cc_pair_id=cc_pair.id,
+            status=ConnectorCredentialPairStatus.ACTIVE,
+        )
+    mark_ccpair_with_indexing_trigger(
+        cc_pair_id=cc_pair.id,
+        indexing_mode=IndexingMode.REINDEX,
+        db_session=db_session,
+    )
+    db_session.commit()
+    client_app.send_task(
+        OnyxCeleryTask.CHECK_FOR_INDEXING,
+        priority=OnyxCeleryPriority.HIGH,
+        kwargs={"tenant_id": get_current_tenant_id()},
+        expires=_CHECK_FOR_INDEXING_EXPIRES_SECONDS,
+    )
+
+    return LtiCanvasConnectorSetupResponse(
+        cc_pair_id=cc_pair.id,
+        connector_id=cc_pair.connector_id,
+        credential_id=credential.id,
+        created=False,
+    )
+
+
+@router.get("/canvas-oauth/registration-info")
+def lti_canvas_oauth_registration_info(
+    _: User = Depends(current_curator_or_admin_user),
+) -> LtiCanvasOAuthRegistrationInfo:
+    """What the Canvas admin pastes into the API developer key (admin only)."""
+    return LtiCanvasOAuthRegistrationInfo(
+        configured=lti_canvas_oauth_is_configured(),
+        client_id=LTI_CANVAS_OAUTH_CLIENT_ID,
+        redirect_uri=_canvas_oauth_redirect_uri(),
+        scopes=list(CANVAS_OAUTH_REQUIRED_SCOPES),
+        notes=list(_LTI_CANVAS_OAUTH_NOTES),
+    )
+
+
+@router.post("/course/{course_id}/canvas-oauth/connect")
+def connect_lti_course_canvas_oauth(
+    course_id: str = Path(..., min_length=1),
+    user: User = Depends(current_chat_accessible_user),
+    db_session: Session = Depends(get_session),
+) -> LtiCanvasOAuthConnectResponse:
+    """Start the Canvas consent flow for the launching instructor.
+
+    Called from inside the LTI iframe (which has the session). Returns the
+    Canvas authorize URL for the frontend to open in a popup; the popup never
+    needs an Onyx session because the callback authenticates via `state`.
+    """
+    launch_context = _get_launch_context_for_course_or_raise(user, course_id)
+    if not lti_roles_include_instructor(launch_context.roles):
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            "Only instructors can connect Canvas",
+        )
+    if not lti_canvas_oauth_is_configured() or not LTI_CANVAS_OAUTH_CLIENT_ID:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "Canvas OAuth is not configured on this Onyx instance. An admin needs "
+            "to add a Canvas API developer key first.",
+        )
+
+    canvas_base_url = _canvas_base_url_for_launch_context(launch_context)
+    credential = _get_or_create_lti_canvas_oauth_credential(
+        db_session=db_session,
+        user=user,
+        canvas_base_url=canvas_base_url,
+    )
+    state_token = _store_canvas_oauth_state(
+        LtiCanvasOAuthState(
+            user_id=str(user.id),
+            course_id=course_id,
+            credential_id=credential.id,
+            canvas_base_url=canvas_base_url,
+            tenant_id=get_current_tenant_id(),
+        )
+    )
+    auth_url = build_canvas_authorize_url(
+        canvas_base_url=canvas_base_url,
+        client_id=LTI_CANVAS_OAUTH_CLIENT_ID,
+        redirect_uri=_canvas_oauth_redirect_uri(),
+        state=state_token,
+        scopes=CANVAS_OAUTH_REQUIRED_SCOPES,
+        purpose=_LTI_CANVAS_OAUTH_PURPOSE,
+    )
+    return LtiCanvasOAuthConnectResponse(
+        credential_id=credential.id,
+        auth_url=auth_url,
+    )
+
+
+@router.get("/canvas-oauth/callback")
+def lti_canvas_oauth_callback(
+    code: str | None = Query(default=None),
+    state: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+    error_description: str | None = Query(default=None),
+) -> HTMLResponse:
+    """Canvas redirects the consent popup here. Unauthenticated by design:
+    the single-use `state` record is the proof this request belongs to an
+    instructor who just clicked Connect Canvas."""
+    if not state:
+        return _canvas_oauth_popup_response("failed", detail="Missing state parameter")
+
+    oauth_state = _consume_canvas_oauth_state(state)
+    if oauth_state is None:
+        return _canvas_oauth_popup_response(
+            "failed",
+            detail="This Canvas authorization link expired. Try connecting again.",
+        )
+
+    if error:
+        status = "cancelled" if error == "access_denied" else "failed"
+        logger.info(
+            "Canvas OAuth for course %s ended with error=%s",
+            oauth_state.course_id,
+            error,
+        )
+        return _canvas_oauth_popup_response(status, detail=error_description or error)
+
+    if not code:
+        return _canvas_oauth_popup_response(
+            "failed", detail="Canvas did not return an authorization code"
+        )
+    if not LTI_CANVAS_OAUTH_CLIENT_ID or not LTI_CANVAS_OAUTH_CLIENT_SECRET:
+        return _canvas_oauth_popup_response(
+            "failed", detail="Canvas OAuth is not configured on this Onyx instance"
+        )
+
+    try:
+        tokens = exchange_canvas_authorization_code(
+            canvas_base_url=oauth_state.canvas_base_url,
+            client_id=LTI_CANVAS_OAUTH_CLIENT_ID,
+            client_secret=LTI_CANVAS_OAUTH_CLIENT_SECRET,
+            redirect_uri=_canvas_oauth_redirect_uri(),
+            code=code,
+        )
+    except CanvasOAuthError as e:
+        logger.warning("Canvas OAuth code exchange failed: %s", e)
+        return _canvas_oauth_popup_response("failed", detail=str(e))
+
+    with get_session_with_tenant(tenant_id=oauth_state.tenant_id) as db_session:
+        credential = fetch_credential_by_id(oauth_state.credential_id, db_session)
+        if (
+            credential is None
+            or str(credential.user_id) != oauth_state.user_id
+            or credential.source != DocumentSource.CANVAS
+        ):
+            return _canvas_oauth_popup_response(
+                "failed", detail="Canvas connection record not found"
+            )
+        backend_update_credential_json(
+            credential,
+            credential_json_from_tokens(
+                tokens,
+                canvas_base_url=oauth_state.canvas_base_url,
+                client_id=LTI_CANVAS_OAUTH_CLIENT_ID,
+                existing=_canvas_credential_json(credential),
+            ),
+            db_session,
+        )
+
+    logger.info(
+        "Canvas OAuth connected for course %s (credential %s)",
+        oauth_state.course_id,
+        oauth_state.credential_id,
+    )
+    return _canvas_oauth_popup_response(
+        "success", credential_id=oauth_state.credential_id
+    )
+
+
+@router.delete("/course/{course_id}/canvas-oauth")
+def disconnect_lti_course_canvas_oauth(
+    course_id: str = Path(..., min_length=1),
+    user: User = Depends(current_chat_accessible_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    """Revoke the instructor's Canvas token and pause every connector using it.
+
+    The OAuth credential is shared across all of the instructor's LTI courses
+    on this Canvas host, so revoking it necessarily disconnects each of them.
+    Every cc-pair authenticating with the credential is paused (not just the
+    launching course's) so none is left ACTIVE with no access token.
+    """
+    launch_context = _get_launch_context_for_course_or_raise(user, course_id)
+    if not lti_roles_include_instructor(launch_context.roles):
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            "Only instructors can disconnect Canvas",
+        )
+
+    cc_pair = fetch_canvas_cc_pair_for_lti_course(
+        db_session=db_session, lti_context_id=course_id
+    )
+    if cc_pair is None:
+        raise OnyxError(
+            OnyxErrorCode.CONNECTOR_NOT_FOUND,
+            "Canvas has not been connected for this course",
+        )
+    credential = cc_pair.credential
+    credential_json = _canvas_credential_json(credential)
+    if not canvas_credential_is_oauth(credential_json):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "This course uses a pasted Canvas access token; revoke it from Canvas "
+            "account settings instead",
+        )
+    if credential.user_id != user.id:
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            "Only the instructor who connected Canvas can disconnect it",
+        )
+
+    access_token = credential_json.get(CANVAS_ACCESS_TOKEN_KEY)
+    if isinstance(access_token, str) and access_token:
+        revoke_canvas_access_token(
+            canvas_base_url=_canvas_base_url_for_launch_context(launch_context),
+            access_token=access_token,
+        )
+
+    cleared_json = {
+        key: value
+        for key, value in credential_json.items()
+        if key
+        not in (
+            CANVAS_ACCESS_TOKEN_KEY,
+            CANVAS_REFRESH_TOKEN_KEY,
+            CANVAS_TOKEN_EXPIRES_AT_KEY,
+        )
+    }
+    backend_update_credential_json(
+        credential, mark_canvas_credential_invalid(cleared_json), db_session
+    )
+
+    affected_cc_pairs = fetch_canvas_cc_pairs_for_credential(
+        db_session=db_session, credential_id=credential.id
+    )
+    if all(affected.id != cc_pair.id for affected in affected_cc_pairs):
+        affected_cc_pairs.append(cc_pair)
+    pause_cc_pairs_for_revoked_credential(
+        db_session=db_session, cc_pairs=affected_cc_pairs
+    )
+    db_session.commit()
 
 
 def _resolve_lti_course_user_group_id(
