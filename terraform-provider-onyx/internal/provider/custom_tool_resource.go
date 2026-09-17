@@ -40,17 +40,17 @@ type customToolResource struct {
 }
 
 type customToolResourceModel struct {
+	CustomHeaders          types.Map            `tfsdk:"custom_headers"`
+	CustomHeadersWO        types.Map            `tfsdk:"custom_headers_wo"`
 	ID                     types.String         `tfsdk:"id"`
 	Name                   types.String         `tfsdk:"name"`
 	Description            types.String         `tfsdk:"description"`
 	Definition             jsontypes.Normalized `tfsdk:"definition"`
-	CustomHeaders          types.Map            `tfsdk:"custom_headers"`
-	CustomHeadersWO        types.Map            `tfsdk:"custom_headers_wo"`
+	OAuthConfigID          types.String         `tfsdk:"oauth_config_id"`
+	DisplayName            types.String         `tfsdk:"display_name"`
 	CustomHeadersWOVersion types.Int64          `tfsdk:"custom_headers_wo_version"`
 	PassthroughAuth        types.Bool           `tfsdk:"passthrough_auth"`
-	OAuthConfigID          types.String         `tfsdk:"oauth_config_id"`
 	Enabled                types.Bool           `tfsdk:"enabled"`
-	DisplayName            types.String         `tfsdk:"display_name"`
 }
 
 func (r *customToolResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
