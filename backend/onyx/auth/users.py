@@ -922,7 +922,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             )
             if sync_user:
                 if _upgrade_will_add_seat(
-                    sync_user, will_become_active=bool(sync_user.is_active)
+                    sync_user, will_become_active=True
                 ):
                     enforce_seat_limit_locked(sync_db, seats_needed=1)
                     seat_added = True
