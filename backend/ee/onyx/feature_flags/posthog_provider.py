@@ -3,13 +3,10 @@ from uuid import UUID
 
 from ee.onyx.utils.posthog_client import posthog
 from onyx.db.models import User
-from onyx.feature_flags.interface import FeatureFlagProvider
+from onyx.feature_flags.interface import ANONYMOUS_USER_FLAG_ID, FeatureFlagProvider
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-# Same fallback distinct id the base class uses for anonymous users.
-ANONYMOUS_USER_FLAG_ID = UUID("caa1e0cd-6ee6-4550-b1ec-8affaef4bf83")
 
 
 class PostHogFeatureFlagProvider(FeatureFlagProvider):

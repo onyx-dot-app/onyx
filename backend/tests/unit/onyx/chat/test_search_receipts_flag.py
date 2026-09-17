@@ -8,7 +8,10 @@ import pytest
 from ee.onyx.feature_flags import posthog_provider
 from ee.onyx.feature_flags.posthog_provider import PostHogFeatureFlagProvider
 from onyx.chat.search_receipts import SEARCH_RECEIPTS_FLAG, search_receipts_enabled
-from onyx.feature_flags.interface import NoOpFeatureFlagProvider
+from onyx.feature_flags.interface import (
+    ANONYMOUS_USER_FLAG_ID,
+    NoOpFeatureFlagProvider,
+)
 
 MODULE = "onyx.chat.search_receipts"
 
@@ -97,4 +100,4 @@ def test_anonymous_user_uses_fixed_distinct_id() -> None:
         )
     assert result is False
     args, _ = fake_posthog.feature_enabled.call_args
-    assert args == (SEARCH_RECEIPTS_FLAG, str(posthog_provider.ANONYMOUS_USER_FLAG_ID))
+    assert args == (SEARCH_RECEIPTS_FLAG, str(ANONYMOUS_USER_FLAG_ID))

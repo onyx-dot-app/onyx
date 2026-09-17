@@ -30,7 +30,8 @@ receipt from a dev-stack turn against three ingested test documents, where the m
 asked for the Zephyr launch lead and date. The search tool ran seven lanes: the raw
 user question, the rephrased semantic query, the three model-written queries, and two
 keyword lanes at alpha 0.2. All three documents came back in every lane, and the model
-cited one of them.
+cited one of them. The JSON is pretty-printed here for readability; the emitted and
+persisted receipt is one compact line (`json.dumps` with no indent).
 
 ```text
 {"results": [{"document": 1, "title": "Onyx Receipt Test: Zephyr Launch Plan", ...}]}
