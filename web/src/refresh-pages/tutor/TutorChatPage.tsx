@@ -83,7 +83,8 @@ export default function TutorChatPage() {
   const projectId = projectIdRaw ? parseInt(projectIdRaw) : null;
   const ltiContextId =
     searchParams?.get(SEARCH_PARAM_NAMES.LTI_CONTEXT_ID) ?? null;
-  const ltiCanvasCourseNodeId =
+  // Launch-time hint only; superseded below by the live connector-status value.
+  const launchCanvasCourseNodeId =
     searchParams?.get(SEARCH_PARAM_NAMES.LTI_CANVAS_COURSE_NODE_ID) ?? null;
   const requestedTutorTab = searchParams?.get(SEARCH_PARAM_NAMES.TUTOR_TAB);
   const showInstructorTabs = isEmbedded && isInstructor && projectId !== null;
@@ -137,10 +138,21 @@ export default function TutorChatPage() {
       refreshInterval: (latestStatus) => {
         if (!latestStatus) return 0;
         if (!latestStatus.has_connector) return 5000;
-        return latestStatus.has_indexed_documents ? 0 : 5000;
+        if (!latestStatus.has_indexed_documents) return 5000;
+        // Keep re-checking until the course's hierarchy node is indexed so
+        // the tutor editor can scope its Canvas picker to this course.
+        return latestStatus.canvas_course_node_id === null ? 5000 : 0;
       },
     }
   );
+  // The Canvas course's hierarchy node id. Once connector-status has loaded
+  // it is authoritative (null means "not indexed yet"); the launch-time URL
+  // param only bridges the gap while that first request is in flight.
+  const ltiCanvasCourseNodeId = courseConnectorStatus
+    ? courseConnectorStatus.canvas_course_node_id !== null
+      ? String(courseConnectorStatus.canvas_course_node_id)
+      : null
+    : launchCanvasCourseNodeId;
   const courseTutorIds = useMemo(() => {
     if (!courseTutors) return null;
     return new Set(courseTutors.map((t) => t.id));

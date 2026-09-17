@@ -3,7 +3,10 @@
 import { useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
+import useSWR from "swr";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import type { LtiCourseConnectorStatus } from "@/refresh-pages/tutor/CanvasCourseSetupView";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
@@ -164,12 +167,33 @@ export default function TutorEditorPage({
   // whatever course label they already carry.
   const ltiContextId =
     searchParams?.get(SEARCH_PARAM_NAMES.LTI_CONTEXT_ID) ?? null;
-  const ltiCanvasCourseNodeIdRaw = searchParams?.get(
+  const launchCanvasCourseNodeIdRaw = searchParams?.get(
     SEARCH_PARAM_NAMES.LTI_CANVAS_COURSE_NODE_ID
   );
-  const ltiCanvasCourseNodeId = ltiCanvasCourseNodeIdRaw
-    ? parseInt(ltiCanvasCourseNodeIdRaw)
+  const launchCanvasCourseNodeId = launchCanvasCourseNodeIdRaw
+    ? parseInt(launchCanvasCourseNodeIdRaw)
     : null;
+  // Live course connector status. Its `canvas_course_node_id` is the
+  // authoritative scope for the Canvas knowledge picker: null means the
+  // course isn't indexed yet, in which case the picker shows nothing rather
+  // than every Canvas course. We keep polling until it resolves. The
+  // launch-time URL param only bridges the first request.
+  const courseConnectorStatusKey = ltiContextId
+    ? `/api/auth/lti/course/${encodeURIComponent(
+        ltiContextId
+      )}/connector-status`
+    : null;
+  const { data: courseConnectorStatus } = useSWR<LtiCourseConnectorStatus>(
+    courseConnectorStatusKey,
+    errorHandlingFetcher,
+    {
+      refreshInterval: (latestStatus) =>
+        latestStatus && latestStatus.canvas_course_node_id !== null ? 0 : 5000,
+    }
+  );
+  const ltiCanvasCourseNodeId = courseConnectorStatus
+    ? courseConnectorStatus.canvas_course_node_id
+    : launchCanvasCourseNodeId;
   // Carried through verbatim from the launch so the instructor lands back on
   // an embedded, project-scoped /tutor view. The Knowledge / Insights tabs
   // only render when `projectId` is present, so dropping it here is what made
@@ -186,10 +210,10 @@ export default function TutorEditorPage({
     const params = new URLSearchParams({
       [SEARCH_PARAM_NAMES.LTI_CONTEXT_ID]: courseLabelName,
     });
-    if (ltiCanvasCourseNodeIdRaw) {
+    if (ltiCanvasCourseNodeId !== null) {
       params.set(
         SEARCH_PARAM_NAMES.LTI_CANVAS_COURSE_NODE_ID,
-        ltiCanvasCourseNodeIdRaw
+        String(ltiCanvasCourseNodeId)
       );
     }
     if (projectIdRaw) {

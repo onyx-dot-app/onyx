@@ -47,6 +47,9 @@ export interface LtiCourseConnectorStatus {
   total_docs_indexed: number;
   has_indexed_documents: boolean;
   last_successful_index_time: string | null;
+  // Indexed COURSE hierarchy node for this course's Canvas connector. Null
+  // until the connector has indexed the course; polled so it fills in live.
+  canvas_course_node_id: number | null;
   setup?: LtiCourseConnectorSetup;
 }
 

@@ -110,6 +110,7 @@ from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingMode
 from onyx.db.index_attempt import cancel_indexing_attempts_for_ccpair
 from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
+from onyx.db.lti import fetch_canvas_course_node_id_for_cc_pair
 from onyx.db.lti import swap_lti_canvas_cc_pair_credential
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
@@ -1020,6 +1021,11 @@ def _build_lti_course_connector_status(
         "total_docs_indexed": 0,
         "has_indexed_documents": False,
         "last_successful_index_time": None,
+        # The course's indexed COURSE hierarchy node, used by the tutor editor
+        # to scope its Canvas knowledge picker. Polled by the frontend so it
+        # fills in as soon as the connector indexes the course — unlike the
+        # launch-time URL param, which is only computed once.
+        "canvas_course_node_id": None,
     }
 
     if cc_pair is not None:
@@ -1035,6 +1041,9 @@ def _build_lti_course_connector_status(
                 "total_docs_indexed": indexing_status.total_docs_indexed,
                 "has_indexed_documents": indexing_status.has_indexed_documents,
                 "last_successful_index_time": cc_pair.last_successful_index_time,
+                "canvas_course_node_id": fetch_canvas_course_node_id_for_cc_pair(
+                    db_session=db_session, cc_pair=cc_pair
+                ),
             }
         )
 

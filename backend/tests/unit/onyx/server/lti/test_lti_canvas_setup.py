@@ -163,6 +163,7 @@ def test_resolve_canvas_api_course_rejects_inaccessible_canvas_course_id() -> No
     assert exc_info.value.error_code == OnyxErrorCode.CREDENTIAL_INVALID
 
 
+@patch("onyx.server.lti.api.fetch_canvas_course_node_id_for_cc_pair")
 @patch("onyx.server.lti.api.get_document_counts_for_cc_pairs")
 @patch("onyx.server.lti.api.get_latest_index_attempt_for_cc_pair_id")
 @patch("onyx.server.lti.api.fetch_canvas_cc_pair_for_lti_course")
@@ -170,7 +171,9 @@ def test_lti_course_connector_status_uses_indexed_document_relationship(
     mock_fetch_cc_pair: MagicMock,
     mock_latest_attempt: MagicMock,
     mock_document_counts: MagicMock,
+    mock_course_node_id: MagicMock,
 ) -> None:
+    mock_course_node_id.return_value = 58
     mock_fetch_cc_pair.return_value = SimpleNamespace(
         id=10,
         connector_id=20,
@@ -199,6 +202,86 @@ def test_lti_course_connector_status_uses_indexed_document_relationship(
     assert status["has_connector"] is True
     assert status["has_indexed_documents"] is True
     assert status["total_docs_indexed"] == 1
+    assert status["canvas_course_node_id"] == 58
+
+
+@patch("onyx.server.lti.api.fetch_canvas_cc_pair_for_lti_course")
+def test_lti_course_connector_status_without_connector_has_no_course_node(
+    mock_fetch_cc_pair: MagicMock,
+) -> None:
+    mock_fetch_cc_pair.return_value = None
+
+    status = api._build_lti_course_connector_status(
+        course_id="opaque-lti-context",
+        launch_context=LtiLaunchContext(course_id="opaque-lti-context", roles=[]),
+        db_session=MagicMock(),
+    )
+
+    assert status["has_connector"] is False
+    assert status["canvas_course_node_id"] is None
+
+
+def _cc_pair_with_course_ids(course_ids: Any) -> Any:
+    return SimpleNamespace(
+        connector=SimpleNamespace(connector_specific_config={"course_ids": course_ids})
+    )
+
+
+@patch("onyx.db.lti.get_hierarchy_node_by_raw_id")
+def test_fetch_canvas_course_node_id_matches_course_raw_id(
+    mock_get_node: MagicMock,
+) -> None:
+    from onyx.db.enums import HierarchyNodeType
+    from onyx.db.lti import fetch_canvas_course_node_id_for_cc_pair
+
+    mock_get_node.return_value = SimpleNamespace(
+        id=58, node_type=HierarchyNodeType.COURSE
+    )
+    db_session = MagicMock()
+
+    node_id = fetch_canvas_course_node_id_for_cc_pair(
+        db_session=db_session, cc_pair=_cc_pair_with_course_ids([1])
+    )
+
+    assert node_id == 58
+    mock_get_node.assert_called_once_with(
+        db_session=db_session,
+        raw_node_id="canvas-course-1",
+        source=DocumentSource.CANVAS,
+    )
+
+
+@patch("onyx.db.lti.get_hierarchy_node_by_raw_id")
+def test_fetch_canvas_course_node_id_none_until_indexed(
+    mock_get_node: MagicMock,
+) -> None:
+    from onyx.db.lti import fetch_canvas_course_node_id_for_cc_pair
+
+    mock_get_node.return_value = None
+
+    assert (
+        fetch_canvas_course_node_id_for_cc_pair(
+            db_session=MagicMock(), cc_pair=_cc_pair_with_course_ids([1])
+        )
+        is None
+    )
+
+
+@patch("onyx.db.lti.get_hierarchy_node_by_raw_id")
+def test_fetch_canvas_course_node_id_requires_single_course(
+    mock_get_node: MagicMock,
+) -> None:
+    from onyx.db.lti import fetch_canvas_course_node_id_for_cc_pair
+
+    for course_ids in ([], [1, 2], None):
+        assert (
+            fetch_canvas_course_node_id_for_cc_pair(
+                db_session=MagicMock(),
+                cc_pair=_cc_pair_with_course_ids(course_ids),
+            )
+            is None
+        )
+    mock_get_node.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

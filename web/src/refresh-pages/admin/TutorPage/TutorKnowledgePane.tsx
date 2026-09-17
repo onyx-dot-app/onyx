@@ -3,7 +3,8 @@
 import { useCallback, useMemo, useState } from "react";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
-import { Content } from "@opal/layouts";
+import { Content, IllustrationContent } from "@opal/layouts";
+import SvgNoResult from "@opal/illustrations/no-result";
 import { Card } from "@/refresh-components/cards";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/texts/Text";
@@ -49,11 +50,10 @@ interface TutorKnowledgePaneProps {
   onFolderIdsChange: (ids: number[]) => void;
   initialAttachedDocuments?: AttachedDocumentSnapshot[];
   initialHierarchyNodes?: HierarchyNodeSnapshot[];
-  // The Canvas course's hierarchy node id, resolved at LTI launch by
-  // matching context.title against indexed course nodes. When provided,
-  // the browser is scoped to just that course's subtree. When null
-  // (Canvas not yet indexed, or duplicate course names), we fall back to
-  // showing the whole Canvas hierarchy.
+  // The Canvas course's indexed hierarchy node id (from the course's
+  // connector-status). When provided, the browser is scoped to just that
+  // course's subtree. When null the course hasn't been indexed yet, so the
+  // Canvas tab shows an empty state rather than every Canvas course.
   canvasCourseNodeId: number | null;
 }
 
@@ -204,24 +204,35 @@ export default function TutorKnowledgePane({
           </TableLayouts.SidebarLayout>
 
           <TableLayouts.ContentColumn>
-            <SourceHierarchyBrowser
-              source={activeSource}
-              selectedDocumentIds={selectedDocumentIds}
-              onToggleDocument={handleToggleDocument}
-              onSetDocumentIds={onDocumentIdsChange}
-              selectedFolderIds={selectedFolderIds}
-              onToggleFolder={handleToggleFolder}
-              onSetFolderIds={onFolderIdsChange}
-              onDeselectAllDocuments={handleDeselectAllDocuments}
-              onDeselectAllFolders={handleDeselectAllFolders}
-              onDeselectSourceItems={handleDeselectSourceItems}
-              initialAttachedDocuments={initialAttachedDocuments}
-              onSelectionCountChange={handleSelectionCountChange}
-              hideRootNode={activeSource === ValidSources.Canvas}
-              restrictToRootNodeId={
-                activeSource === ValidSources.Canvas ? canvasCourseNodeId : null
-              }
-            />
+            {activeSource === ValidSources.Canvas &&
+            canvasCourseNodeId === null ? (
+              <IllustrationContent
+                illustration={SvgNoResult}
+                title="Canvas course not synced yet"
+                description="This course's Canvas content hasn't finished indexing. Its pages, files, and assignments will appear here once the sync completes."
+              />
+            ) : (
+              <SourceHierarchyBrowser
+                source={activeSource}
+                selectedDocumentIds={selectedDocumentIds}
+                onToggleDocument={handleToggleDocument}
+                onSetDocumentIds={onDocumentIdsChange}
+                selectedFolderIds={selectedFolderIds}
+                onToggleFolder={handleToggleFolder}
+                onSetFolderIds={onFolderIdsChange}
+                onDeselectAllDocuments={handleDeselectAllDocuments}
+                onDeselectAllFolders={handleDeselectAllFolders}
+                onDeselectSourceItems={handleDeselectSourceItems}
+                initialAttachedDocuments={initialAttachedDocuments}
+                onSelectionCountChange={handleSelectionCountChange}
+                hideRootNode={activeSource === ValidSources.Canvas}
+                restrictToRootNodeId={
+                  activeSource === ValidSources.Canvas
+                    ? canvasCourseNodeId
+                    : null
+                }
+              />
+            )}
           </TableLayouts.ContentColumn>
         </TableLayouts.TwoColumnLayout>
       </Card>
