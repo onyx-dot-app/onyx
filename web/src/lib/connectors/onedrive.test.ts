@@ -1,11 +1,12 @@
 import { credentialTemplates } from "@/lib/connectors/credentials";
+import { connectorConfigs } from "@/lib/connectors/connectors";
 import {
   createConnectorInitialValues,
   createConnectorValidationSchema,
   getFileTypeDefinitionForField,
 } from "@/lib/connectors/utils";
 import { FileTypeCategory, OneDriveScope } from "@/lib/connectors/types";
-import { getSourceMetadata } from "@/lib/sources";
+import { getSourceDocLink, getSourceMetadata } from "@/lib/sources";
 import { ValidSources, validAutoSyncSources } from "@/lib/types";
 
 const ONE_DRIVE_USERS_REQUIRED = "Add at least one user for Specific scope";
@@ -39,6 +40,9 @@ describe("OneDrive connector metadata", () => {
   it("uses the OneDrive logo, PKCS12 upload type, and sync controls", () => {
     expect(getSourceMetadata(ValidSources.OneDrive).displayName).toBe(
       "OneDrive"
+    );
+    expect(getSourceDocLink(ValidSources.OneDrive)).toBe(
+      "https://docs.onyx.app/admins/connectors/official/onedrive"
     );
     expect(getFileTypeDefinitionForField("onedrive_private_key")).toBe(
       FileTypeCategory.ONEDRIVE_PFX_FILE
@@ -87,5 +91,16 @@ describe("OneDrive connector metadata", () => {
         users: [],
       })
     ).resolves.toEqual([]);
+  });
+
+  it("links SharePoint personal-site guidance to OneDrive docs", () => {
+    const sitesField = connectorConfigs[ValidSources.Sharepoint].values[0];
+    if (!sitesField) {
+      throw new Error("SharePoint sites field is required");
+    }
+
+    expect(sitesField.description).toContain(
+      "[OneDrive connector](https://docs.onyx.app/admins/connectors/official/onedrive)"
+    );
   });
 });

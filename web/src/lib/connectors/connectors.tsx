@@ -926,6 +926,7 @@ export const connectorConfigs: Record<
         description: `• If no sites are specified, all sites in your organization will be indexed (Sites.Read.All permission required).
 • Specifying 'https://onyxai.sharepoint.com/sites/support' for example only indexes this site.
 • Specifying 'https://onyxai.sharepoint.com/sites/support/subfolder' for example only indexes this folder.
+• To index users' personal sites, use the [OneDrive connector](${DOCS_ADMINS_PATH}/connectors/official/onedrive).
 • Specifying sites currently works for SharePoint instances using English, Spanish, or German. Contact the Onyx team if you need another language supported.
 `,
       },
