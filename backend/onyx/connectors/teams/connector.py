@@ -556,8 +556,8 @@ class TeamsConnector(
     def _meeting_record(
         self, organizer: Organizer, transcript: Transcript
     ) -> MeetingRecord | None:
-        """The meeting's name and people. A refused record leaves the transcript
-        readable by its organizer alone, anything else fails the attempt."""
+        """The meeting's name and link. A refused record leaves the transcript
+        without them, anything else fails the attempt."""
         assert self.graph_client is not None
         try:
             return fetch_meeting(self.graph_client, organizer.id, transcript.meeting_id)
@@ -565,8 +565,8 @@ class TeamsConnector(
             if not _is_permanent(e):
                 raise
             logger.warning(
-                "Meeting %s of %s is not readable, its transcript is shared with "
-                "the organizer alone: %s",
+                "Meeting %s of %s is not readable, its transcript is indexed "
+                "without a subject or link: %s",
                 transcript.meeting_id,
                 organizer.email,
                 _transcript_refusal(e),
@@ -620,7 +620,7 @@ class TeamsConnector(
                 ),
                 "speakers": "attributed" if attributed else "unattributed",
             },
-            external_access=transcript_access(organizer, meeting),
+            external_access=transcript_access(organizer),
         )
 
     def _validate_transcript_access(self) -> None:
@@ -1010,9 +1010,8 @@ class TeamsConnector(
         for organizer in fetch_organizers(
             self.graph_client, self.transcript_organizers, before_page=stop_check
         ):
-            # An organizer can hold pages of transcripts, each with a meeting
-            # record to read, so a stop is honored before every read and
-            # progress is reported per organizer, not only per full batch.
+            # An organizer can hold many pages of transcripts, so progress is
+            # reported per organizer, not only per full batch.
             _raise_if_stopped(callback)
             if callback:
                 callback.progress("retrieve_all_slim_docs_perm_sync", 1)
@@ -1020,12 +1019,9 @@ class TeamsConnector(
                 for transcript in fetch_transcripts(
                     self.graph_client, organizer.id, None, None, before_page=stop_check
                 ):
-                    _raise_if_stopped(callback)
                     yield SlimDocument(
                         id=transcript_document_id(transcript.id),
-                        external_access=transcript_access(
-                            organizer, self._meeting_record(organizer, transcript)
-                        ),
+                        external_access=transcript_access(organizer),
                         doc_created_at=transcript.created,
                     )
             except requests.HTTPError as e:

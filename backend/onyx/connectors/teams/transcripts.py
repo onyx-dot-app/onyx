@@ -2,7 +2,7 @@
 (never channel meetings), behind the OnlineMeetingTranscript.Read.All grant, the
 tenant's transcript API access setting and an application access policy that
 names the app for the organizer. Each transcript is a document of its own,
-readable by the organizer and the people the meeting record lists."""
+readable by its organizer."""
 
 import re
 from collections.abc import Callable, Generator
@@ -89,27 +89,19 @@ class Transcript(BaseModel):
 
 
 class MeetingRecord(BaseModel):
-    """What the meeting itself tells: its name and who was in it."""
+    """What the meeting itself tells: its name, start and join link."""
 
     subject: str | None
     start: datetime | None
     join_web_url: str | None
-    participant_emails: set[str]
 
     @classmethod
     def from_graph(cls, row: dict[str, Any]) -> "MeetingRecord":
-        participants = row.get("participants") or {}
-        people = [
-            participants.get("organizer") or {},
-            *(participants.get("attendees") or []),
-        ]
-        emails = {upn.lower() for person in people if (upn := person.get("upn"))}
         start = row.get("startDateTime")
         return cls(
             subject=row.get("subject") or None,
             start=datetime.fromisoformat(start) if start else None,
             join_web_url=row.get("joinWebUrl") or None,
-            participant_emails=emails,
         )
 
 
@@ -241,7 +233,7 @@ def fetch_meeting(
         _retry(
             graph_client,
             f"users/{organizer_id}/onlineMeetings/{meeting_id}"
-            "?$select=subject,startDateTime,joinWebUrl,participants",
+            "?$select=subject,startDateTime,joinWebUrl",
         )
     )
 
@@ -297,15 +289,10 @@ def _plain_speech(content: str) -> list[str]:
     return speech
 
 
-def transcript_access(
-    organizer: Organizer, meeting: MeetingRecord | None
-) -> ExternalAccess:
-    """The organizer and everyone the meeting record lists. They were in the
-    room, and Graph does not expose an organizer's narrower viewing setting.
-    Without the record, the organizer alone."""
+def transcript_access(organizer: Organizer) -> ExternalAccess:
+    """The organizer alone. An organizer can narrow who views a transcript and
+    Graph does not expose that setting, so no attendee is confirmed a reader."""
     emails = {organizer.email.lower()} if organizer.email else set()
-    if meeting is not None:
-        emails |= meeting.participant_emails
     return ExternalAccess(
         external_user_emails=emails, external_user_group_ids=set(), is_public=False
     )

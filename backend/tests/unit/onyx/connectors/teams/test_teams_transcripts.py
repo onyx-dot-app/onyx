@@ -44,8 +44,7 @@ START = 1_700_000_000
 WINDOW = "startDateTime=2023-11-14T22:13:20Z,endDateTime=2023-11-14T22:13:21Z"
 CONTENT_ROUTE = "users/user-1/onlineMeetings/meeting-1/transcripts/t1/content"
 MEETING_URL = (
-    "users/user-1/onlineMeetings/meeting-1"
-    "?$select=subject,startDateTime,joinWebUrl,participants"
+    "users/user-1/onlineMeetings/meeting-1?$select=subject,startDateTime,joinWebUrl"
 )
 JOIN_URL = "https://teams.microsoft.com/l/meetup-join/abc"
 
@@ -94,10 +93,6 @@ def _meeting(subject: str | None = "Planning") -> dict[str, Any]:
         "subject": subject,
         "startDateTime": "2024-01-15T09:00:00Z",
         "joinWebUrl": JOIN_URL,
-        "participants": {
-            "organizer": {"upn": "Ada@Example.com"},
-            "attendees": [{"upn": "Bob@Example.com"}, {"identity": {}}],
-        },
     }
 
 
@@ -165,10 +160,7 @@ def test_transcripts_follow_the_channels_one_organizer_per_step() -> None:
     assert [section.text for section in document.sections] == ["Ada: hello\n\nBob: hi"]
     assert document.sections[0].link == JOIN_URL
     assert document.external_access is not None
-    assert document.external_access.external_user_emails == {
-        "ada@example.com",
-        "bob@example.com",
-    }
+    assert document.external_access.external_user_emails == {"ada@example.com"}
     assert document.external_access.is_public is False
     assert [owner.email for owner in document.primary_owners or []] == [
         "ada@example.com"
@@ -220,7 +212,7 @@ def test_a_tenant_without_speaker_attribution_gets_the_plain_transcript() -> Non
     assert document.metadata["speakers"] == "unattributed"
 
 
-def test_a_refused_meeting_record_leaves_the_organizer_alone() -> None:
+def test_a_refused_meeting_record_leaves_the_title_and_link_out() -> None:
     routes = _routes(_transcript())
     routes.pop(MEETING_URL)
     client = graph_client(
@@ -324,11 +316,10 @@ def test_a_listing_outage_fails_the_attempt() -> None:
         _walk_transcripts(connector(client, include_meeting_transcripts=True))
 
 
-def test_the_slim_walk_lists_transcripts_with_their_readers() -> None:
+def test_the_slim_walk_lists_transcripts_readable_by_their_organizer() -> None:
     routes = {
         ALL_USERS_URL: {"value": [ADA]},
         _transcripts_url("user-1", None): {"value": [_transcript()]},
-        MEETING_URL: _meeting(),
     }
     client = graph_client(routes)
 
@@ -344,9 +335,9 @@ def test_the_slim_walk_lists_transcripts_with_their_readers() -> None:
         if isinstance(doc, SlimDocument)
     ]
 
-    assert slim == [
-        (transcript_document_id("t1"), {"ada@example.com", "bob@example.com"})
-    ]
+    assert slim == [(transcript_document_id("t1"), {"ada@example.com"})]
+    requested = [c.args[0] for c in client.execute_request_direct.call_args_list]
+    assert MEETING_URL not in requested
 
 
 @pytest.mark.parametrize("refused_page", ["first", "later"])
@@ -461,10 +452,9 @@ def test_the_slim_walk_honors_a_stop_between_organizers() -> None:
         _transcripts_url("user-1", None): {"value": [_transcript()]},
         MEETING_URL: _meeting(),
     }
-    # User page, first organizer, its first page, its one transcript, then the
-    # second organizer.
+    # User page, first organizer, its first page, then the second organizer.
     stop_after_first = MagicMock()
-    stop_after_first.should_stop.side_effect = [False, False, False, False, True]
+    stop_after_first.should_stop.side_effect = [False, False, False, True]
     client = graph_client(routes)
     walk = connector(
         client, include_meeting_transcripts=True
@@ -475,34 +465,6 @@ def test_the_slim_walk_honors_a_stop_between_organizers() -> None:
     requested = [c.args[0] for c in client.execute_request_direct.call_args_list]
     assert _transcripts_url("user-1", None) in requested
     assert _transcripts_url("user-2", None) not in requested
-
-
-def test_the_slim_walk_honors_a_stop_between_transcripts() -> None:
-    second_meeting = (
-        "users/user-1/onlineMeetings/meeting-2"
-        "?$select=subject,startDateTime,joinWebUrl,participants"
-    )
-    routes = {
-        ALL_USERS_URL: {"value": [ADA]},
-        _transcripts_url("user-1", None): {
-            "value": [_transcript(), _transcript("t2", "meeting-2")]
-        },
-        MEETING_URL: _meeting(),
-        second_meeting: _meeting("Retro"),
-    }
-    # User page, organizer, first page, first transcript, then the second transcript.
-    stop_before_second = MagicMock()
-    stop_before_second.should_stop.side_effect = [False, False, False, False, True]
-    client = graph_client(routes)
-    walk = connector(
-        client, include_meeting_transcripts=True
-    ).retrieve_all_slim_docs_perm_sync(callback=stop_before_second)
-
-    with pytest.raises(RuntimeError, match="Stop signal"):
-        list(walk)
-    requested = [c.args[0] for c in client.execute_request_direct.call_args_list]
-    assert MEETING_URL in requested
-    assert second_meeting not in requested
 
 
 def test_the_slim_walk_honors_a_stop_before_the_next_page() -> None:
@@ -517,9 +479,9 @@ def test_the_slim_walk_honors_a_stop_before_the_next_page() -> None:
         second_page: {"value": [_transcript("t2", "meeting-2")]},
         MEETING_URL: _meeting(),
     }
-    # User page, organizer, first page, first transcript, then the second page.
+    # User page, organizer, first page, then the second page.
     stop_before_page_two = MagicMock()
-    stop_before_page_two.should_stop.side_effect = [False, False, False, False, True]
+    stop_before_page_two.should_stop.side_effect = [False, False, False, True]
     client = graph_client(routes)
     walk = connector(
         client, include_meeting_transcripts=True
