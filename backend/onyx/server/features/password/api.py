@@ -3,10 +3,20 @@ from fastapi_users.exceptions import InvalidPasswordException
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import User, UserManager, get_user_manager
+from onyx.auth.users import (
+    User,
+    UserManager,
+    _invalidate_license_cache_after_seat_change,
+    _upgrade_will_add_seat,
+    enforce_seat_limit_locked,
+    get_user_manager,
+)
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import Permission
-from onyx.db.users import get_user_by_email
+from onyx.db.enums import AccountType, Permission
+from onyx.db.users import (
+    assign_user_to_default_groups__no_commit,
+    get_user_by_email,
+)
 from onyx.server.features.password.models import (
     ChangePasswordRequest,
     UserResetRequest,
@@ -52,6 +62,21 @@ async def admin_reset_user_password(
     user = get_user_by_email(user_reset_request.user_email, db_session)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    # If the user is an external permission placeholder, promote them to a standard web login
+    if user.account_type == AccountType.EXT_PERM_USER:
+        seat_added = False
+        if _upgrade_will_add_seat(user, will_become_active=True):
+            enforce_seat_limit_locked(db_session, seats_needed=1)
+            seat_added = True
+        user.account_type = AccountType.STANDARD
+        user.is_active = True
+        user.is_verified = True
+        assign_user_to_default_groups__no_commit(db_session, user)
+        db_session.commit()
+        if seat_added:
+            _invalidate_license_cache_after_seat_change()
+
     new_password = await user_manager.reset_password_as_admin(user.id)
     return UserResetResponse(
         user_id=str(user.id),
