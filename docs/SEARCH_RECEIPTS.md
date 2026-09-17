@@ -25,18 +25,75 @@ sees the original search result string unchanged.
 
 ## What the model sees
 
-The receipt is appended after the full, unchanged search result:
+The receipt is appended after the full, unchanged search result. This is a real
+receipt from a dev-stack turn against three ingested test documents, where the model
+asked for the Zephyr launch lead and date. The search tool ran seven lanes: the raw
+user question, the rephrased semantic query, the three model-written queries, and two
+keyword lanes at alpha 0.2. All three documents came back in every lane, and the model
+cited one of them.
 
 ```text
-<original search result>
+{"results": [{"document": 1, "title": "Onyx Receipt Test: Zephyr Launch Plan", ...}]}
 
 SEARCH RECEIPT (retrieval metadata, not source evidence):
-{"executed_queries": [{"query": "...", "hybrid_alpha": null, "returned_documents": 12, "new_documents_this_task": 12}, ...],
- "retrieved_documents": 31, "new_candidate_documents": 31, "repeated_candidate_documents": 0,
- "after_merge_cap": 25, "returned_evidence_documents": 6,
- "scope": {"user_filters": null, "persona_document_sets": [], "acl_enforced": true},
- "coverage": "Ranked, capped retrieval; not an exhaustive corpus scan.",
- "interpretation": "Overlap is not answer confidence. Repeated or empty results do not prove the information is absent. Use observed queries and missing facts to choose a complementary follow-up when needed."}
+{
+  "executed_queries": [
+    {
+      "query": "Who is the launch lead for the Zephyr project and when does it launch?",
+      "hybrid_alpha": null,
+      "returned_documents": 3,
+      "new_documents_this_task": 3
+    },
+    {
+      "query": "Zephyr project launch lead internal document",
+      "hybrid_alpha": null,
+      "returned_documents": 3,
+      "new_documents_this_task": 3
+    },
+    {
+      "query": "Zephyr project launch date internal document",
+      "hybrid_alpha": null,
+      "returned_documents": 3,
+      "new_documents_this_task": 3
+    },
+    {
+      "query": "Zephyr project launch lead and launch date Zephyr internal",
+      "hybrid_alpha": null,
+      "returned_documents": 3,
+      "new_documents_this_task": 3
+    },
+    {
+      "query": "Who is the launch lead for the Zephyr project and when does it launch? Use internal documents.",
+      "hybrid_alpha": null,
+      "returned_documents": 3,
+      "new_documents_this_task": 3
+    },
+    {
+      "query": "Zephyr launch lead",
+      "hybrid_alpha": 0.2,
+      "returned_documents": 3,
+      "new_documents_this_task": 3
+    },
+    {
+      "query": "Zephyr launch date",
+      "hybrid_alpha": 0.2,
+      "returned_documents": 3,
+      "new_documents_this_task": 3
+    }
+  ],
+  "retrieved_documents": 3,
+  "new_candidate_documents": 3,
+  "repeated_candidate_documents": 0,
+  "after_merge_cap": 3,
+  "returned_evidence_documents": 1,
+  "scope": {
+    "user_filters": null,
+    "persona_document_sets": [],
+    "acl_enforced": true
+  },
+  "coverage": "Ranked, capped retrieval; not an exhaustive corpus scan.",
+  "interpretation": "Overlap is not answer confidence. Repeated or empty results do not prove the information is absent. Use observed queries and missing facts to choose a complementary follow-up when needed."
+}
 ```
 
 Field meanings:
