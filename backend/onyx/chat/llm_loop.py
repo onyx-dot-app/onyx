@@ -389,8 +389,12 @@ def count_message_replay_tokens(
     image_files_replayed_as_markers: bool = False,
     token_counter: Callable[[str], int] | None = None,
 ) -> int:
-    if not image_files_replayed_as_markers:
+    if not msg.image_files:
         return msg.token_count
+    if not image_files_replayed_as_markers:
+        return max(0, msg.token_count - msg.image_token_count) + sum(
+            image.token_count for image in msg.image_files
+        )
     # Include images whose stored cost is zero, such as project images.
     num_images = sum(
         1 for f in msg.image_files or [] if f.file_type == ChatFileType.IMAGE
@@ -775,10 +779,11 @@ def _create_context_files_message(
     documents_json = json.dumps({"documents": documents_list}, indent=2)
     message_content = f"Here are some documents provided for context, they may not all be relevant:\n{documents_json}"
 
-    # Use pre-calculated token count from context_files
+    # Images are counted on the user message that carries them.
     return ChatMessageSimple(
         message=message_content,
-        token_count=context_files.total_token_count,
+        token_count=context_files.total_token_count
+        - sum(image.token_count for image in context_files.image_files),
         message_type=MessageType.USER,
     )
 
@@ -1108,16 +1113,36 @@ def run_llm_loop(
                 available_tool_names={tool.name for tool in final_tools},
             )
 
-            max_output_tokens = token_budget.output_allowance(
-                estimated_input_tokens=tool_token_budget
-                + sum(
+            replay_costs = [
+                (
+                    msg,
                     count_message_replay_tokens(
                         msg,
                         image_files_replayed_as_markers=image_files_replayed_as_markers,
                         token_counter=token_counter,
-                    )
-                    for msg in truncated_message_history
-                ),
+                    ),
+                )
+                for msg in truncated_message_history
+            ]
+            source_message_ids = {id(msg) for msg in simple_chat_history}
+            reserved_input_tokens = tool_token_budget
+            # DB history counts message text and tool arguments. Reserve the
+            # rendered input it does not count, including attachment payloads.
+            for msg, replay_tokens in replay_costs:
+                if (
+                    id(msg) not in source_message_ids
+                    or msg.file_id is not None
+                    or msg.message_type == MessageType.TOOL_CALL_RESPONSE
+                ):
+                    reserved_input_tokens += replay_tokens
+                elif msg.image_files:
+                    text_tokens = max(0, msg.token_count - msg.image_token_count)
+                    reserved_input_tokens += max(0, replay_tokens - text_tokens)
+            state_container.set_reserved_input_tokens(reserved_input_tokens)
+
+            max_output_tokens = token_budget.output_allowance(
+                estimated_input_tokens=tool_token_budget
+                + sum(tokens for _, tokens in replay_costs),
             )
 
             # This calls the LLM, yields packets (reasoning, answers, etc.) and returns the result

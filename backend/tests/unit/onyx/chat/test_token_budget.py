@@ -38,29 +38,33 @@ def llm() -> Mock:
         (
             (922_000, 128_000, 1_050_000),
             (922_000, 0.05, 875_900, 46_100),
-            {875_900: 128_000, 900_000: 103_900},
+            {875_900: 32_768, 900_000: 32_768},
         ),
         (
             (200_000, 64_000, None),
-            (200_000, 0.05, 190_000, 10_000),
-            {120_000: 64_000, 180_000: 10_000},
+            (200_000, 0.05, 158_870, 8_362),
+            {120_000: 32_768, 158_870: 32_768, 180_000: 11_638},
         ),
-        ((200_000, 64_000, None), (8_000, 0.05, 7_600, 400), {7_600: 64_000}),
-        ((100_000, 10_000, "100000"), (1_000_000, 0, 1_000_000, 0), {98_000: 2_000}),
+        ((200_000, 64_000, None), (8_000, 0.05, 7_600, 400), {7_600: 32_768}),
+        ((200_000, 8_000, None), (200_000, 0.05, 182_400, 9_600), {182_400: 8_000}),
+        ((100_000, 10_000, "100000"), (1_000_000, 0, 90_000, 0), {98_000: 2_000}),
         (
             (100_000, 10_000, 50_000),
-            (1_000_000, 0, 1_000_000, 0),
+            (1_000_000, 0, 40_000, 0),
             {40_000: 10_000, 48_000: 2_000},
         ),
-        ((4_000, 4_000, None), (4_000, 0.05, 3_800, 200), {2_000: 1_800}),
+        ((4_000, 4_000, None), (4_000, 0.05, 3_800, 200), {2_000: None}),
+        ((32_000, 64_000, None), (32_000, 0.05, 30_400, 1_600), {2_000: None}),
     ],
     ids=[
         "separate-limits",
         "shared-context",
         "operator-cap",
+        "smaller-output-limit",
         "invalid-context",
         "smaller-context",
         "large-output",
+        "reserve-exceeds-context",
     ],
 )
 def test_model_budget(
@@ -69,7 +73,7 @@ def test_model_budget(
     monkeypatch: pytest.MonkeyPatch,
     limits: tuple[object, object, object],
     input_config: tuple[int, float, int, int],
-    outputs: dict[int, int],
+    outputs: dict[int, int | None],
 ) -> None:
     model_map["openai/model"] = {
         "max_input_tokens": limits[0],
@@ -122,7 +126,7 @@ def test_deployment_alias(model_map: ModelMap, llm: Mock) -> None:
         "max_output_tokens": 16_000,
     }
     assert resolve_chat_token_budget(llm) == ChatTokenBudget(
-        950_000, 16_000, 128_000, 50_000
+        106_400, 16_000, 128_000, 5_600
     )
 
 
@@ -140,27 +144,33 @@ def test_provider_precedes_bare_model(
             "model": {"max_input_tokens": 200_000, "max_output_tokens": 20_000},
         }
     )
-    assert resolve_chat_token_budget(llm) == ChatTokenBudget(
-        1_000_000, 10_000, 100_000, 0
-    )
+    assert resolve_chat_token_budget(llm) == ChatTokenBudget(90_000, 10_000, 100_000, 0)
 
 
-def test_partial_metadata_uses_complete_alias(
+@pytest.mark.parametrize("model_output", [None, 100_000, 200_000])
+@pytest.mark.parametrize("input_cap", [100_000, 1_000_000])
+def test_unusable_metadata_uses_complete_alias(
     model_map: ModelMap,
     llm: Mock,
     monkeypatch: pytest.MonkeyPatch,
+    model_output: int | None,
+    input_cap: int,
 ) -> None:
     monkeypatch.setattr("onyx.chat.token_budget.GEN_AI_INPUT_TOKEN_SAFETY_MARGIN", 0)
     llm.config.deployment_name = "alias"
-    llm.config.max_input_tokens = 100_000
+    llm.config.max_input_tokens = input_cap
     model_map.update(
         {
-            "openai/model": {"max_input_tokens": 100_000},
+            "openai/model": {
+                "max_input_tokens": 100_000,
+                "max_output_tokens": model_output,
+                "max_context_tokens": 16_384,
+            },
             "openai/alias": {"max_input_tokens": 200_000, "max_output_tokens": 20_000},
         }
     )
     assert resolve_chat_token_budget(llm) == ChatTokenBudget(
-        100_000, 20_000, 200_000, 0
+        min(input_cap, 180_000), 20_000, 200_000, 0
     )
 
 

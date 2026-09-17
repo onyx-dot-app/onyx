@@ -86,22 +86,20 @@ def calculate_total_history_tokens(chat_history: list[ChatMessage]) -> int:
 
 
 def get_compression_params(
-    max_input_tokens: int,
+    input_token_budget: int,
     current_history_tokens: int,
-    reserved_tokens: int,
 ) -> CompressionParams:
     """
-    Calculate compression parameters based on model's context window.
+    Calculate compression parameters based on usable input budget.
 
     Args:
-        max_input_tokens: The maximum input tokens for the LLM
+        input_token_budget: Output-reserved input tokens for the LLM.
         current_history_tokens: Current total tokens in chat history
-        reserved_tokens: Tokens reserved for system prompt, tools, files, etc.
 
     Returns:
         CompressionParams indicating whether to compress and token budgets
     """
-    available = max_input_tokens - reserved_tokens
+    available = max(0, input_token_budget)
 
     # Check trigger threshold
     trigger_threshold = int(available * COMPRESSION_TRIGGER_RATIO)
@@ -109,9 +107,12 @@ def get_compression_params(
     if current_history_tokens <= trigger_threshold:
         return CompressionParams(should_compress=False)
 
-    # Calculate token budget for recent messages as a percentage of current history
-    # This ensures we always have messages to summarize when compression triggers
-    tokens_for_recent = int(current_history_tokens * RECENT_MESSAGES_RATIO)
+    # Keep a bounded recent tail so compression can reduce history below the
+    # trigger even when the current history is far above the input budget.
+    tokens_for_recent = min(
+        current_history_tokens,
+        max(1, int(available * RECENT_MESSAGES_RATIO)),
+    )
 
     return CompressionParams(
         should_compress=True,
