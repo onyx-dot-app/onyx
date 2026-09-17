@@ -9,8 +9,7 @@ from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import ToolResult
 from onyx.tools.interface import ToolContext
-from onyx.tools.models import ToolCallException
-from onyx.tools.progress import MemoryOperation, MemoryUpdated
+from onyx.tools.models import MemoryOperation, MemoryUpdated, ToolCallException
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_runner import bind_tool
 

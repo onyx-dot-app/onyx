@@ -44,7 +44,7 @@ export const CollapsedStreamingContent = memo(
         <TimelineSurface className="px-8 pb-8" roundedBottom>
           <TimelineRendererComponent
             key={`${step.key}-compact`}
-            packets={step.packets}
+            items={step.items}
             chatState={chatState}
             animate
             stopPacketSeen={false}

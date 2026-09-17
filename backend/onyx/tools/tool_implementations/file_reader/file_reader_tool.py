@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
-from onyx.agents.tools import ToolInvocation, ToolProgress
+from onyx.agents.tools import ToolInvocation
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.user_file import get_user_file_by_id
@@ -19,8 +19,7 @@ from onyx.tools.interface import (
     ToolContext,
     parse_tool_arguments,
 )
-from onyx.tools.models import ToolCallException
-from onyx.tools.progress import FileReadResult, FileReadStarted
+from onyx.tools.models import FileReadResult, ToolCallException
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -142,7 +141,6 @@ class FileReaderTool(Tool):
         return load_chat_file_by_id(str(file_id))
 
     def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        invocation.update(ToolProgress(details=FileReadStarted()))
         if FILE_ID_FIELD not in invocation.arguments:
             raise ToolCallException(
                 message=f"Missing required '{FILE_ID_FIELD}' parameter",
@@ -215,8 +213,6 @@ class FileReaderTool(Tool):
             preview_start=preview_start,
             preview_end=preview_end,
         )
-
-        invocation.update(ToolProgress(details=summary))
 
         has_more = end_char < total_chars
         header = (

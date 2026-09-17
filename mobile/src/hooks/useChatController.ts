@@ -31,11 +31,7 @@ import {
   SYSTEM_NODE_ID,
   upsertMessages,
 } from "@/chat/messageTree";
-import {
-  Packet,
-  PacketType,
-  buildUserCancelledStopPacket,
-} from "@/chat/streamingModels";
+import { Packet, buildUserCancelledStopPacket } from "@/chat/streamingModels";
 import { useChatSessionStore } from "@/state/chatSessionStore";
 import { useSession } from "@/state/session";
 
@@ -67,7 +63,7 @@ function appendUserCancelledStop(sessionId: string, nodeId: number): void {
   const store = useChatSessionStore.getState();
   const node = store.sessions.get(sessionId)?.messageTree.get(nodeId);
   if (!node || node.type !== "assistant") return;
-  if (node.packets.some((p) => p.obj.type === PacketType.STOP)) return;
+  if (node.packets.some((p) => p.obj.type === "stop")) return;
   store.patchNode(sessionId, nodeId, {
     packets: [...node.packets, buildUserCancelledStopPacket(node.packets)],
   });

@@ -1,12 +1,12 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import { fireEvent, render, screen } from "@testing-library/react-native";
 
-import { makePacket, makePlacedPacket } from "@/chat/__tests__/fixtures";
+import { makePacket, makeItem, packetForItem } from "@/chat/__tests__/fixtures";
 import { createInitialState, processPackets } from "@/chat/messageProcessor";
 import { StopReason, type Packet } from "@/chat/streamingModels";
 import {
   groupStepsByTurn,
-  transformPacketGroups,
+  transformItemGroups,
 } from "@/chat/timeline/transformers";
 import { AgentTimeline } from "@/components/chat/AgentTimeline";
 import type { FullChatState } from "@/components/chat/renderers/timelineContract";
@@ -35,10 +35,21 @@ jest.mock("@/components/avatars/AgentAvatar", () => ({
 const chatState: FullChatState = { agent: null };
 
 const reasoningStart = (turn = 0) =>
-  makePacket({ type: "reasoning_start" }, turn);
-const reasoningDelta = (reasoning: string, turn = 0) =>
-  makePacket({ type: "reasoning_delta", reasoning }, turn);
-const sectionEnd = (turn = 0) => makePacket({ type: "section_end" }, turn);
+  packetForItem(
+    makeItem(
+      { kind: "reasoning", text: "", status: "running" },
+      { turn_index: turn },
+      `reasoning-${turn}`,
+    ),
+  );
+const reasoningDelta = (text: string, turn = 0): Packet => ({
+  ...reasoningStart(turn),
+  obj: { type: "item_delta", delta: { kind: "text", text, citations: [] } },
+});
+const completeRun = (): Packet => ({
+  ...reasoningStart(),
+  obj: { type: "run_update", status: "complete" },
+});
 const overallStop = (stopReason?: StopReason) =>
   makePacket({ type: "stop", stop_reason: stopReason });
 
@@ -46,7 +57,7 @@ const overallStop = (stopReason?: StopReason) =>
 function turnGroupsFor(packets: Packet[]) {
   const state = processPackets(createInitialState(1), packets);
   return {
-    turnGroups: groupStepsByTurn(transformPacketGroups(state.toolGroups)),
+    turnGroups: groupStepsByTurn(transformItemGroups(state.toolGroups)),
     state,
   };
 }
@@ -82,7 +93,7 @@ describe("AgentTimeline", () => {
     const { turnGroups } = turnGroupsFor([
       reasoningStart(),
       reasoningDelta("done thinking"),
-      sectionEnd(),
+      completeRun(),
       overallStop(),
     ]);
 
@@ -104,7 +115,8 @@ describe("AgentTimeline", () => {
   it("falls back to 'Thought for some time' with no backend duration", () => {
     const { turnGroups } = turnGroupsFor([
       reasoningStart(),
-      sectionEnd(),
+      reasoningDelta("Thinking"),
+      completeRun(),
       overallStop(),
     ]);
     render(
@@ -122,7 +134,7 @@ describe("AgentTimeline", () => {
     const { turnGroups } = turnGroupsFor([
       reasoningStart(),
       reasoningDelta("the hidden reasoning"),
-      sectionEnd(),
+      completeRun(),
       overallStop(),
     ]);
     render(
@@ -144,9 +156,11 @@ describe("AgentTimeline", () => {
   it("pluralizes the step count across turns", () => {
     const { turnGroups } = turnGroupsFor([
       reasoningStart(0),
-      sectionEnd(0),
+      reasoningDelta("First", 0),
+      completeRun(),
       reasoningStart(1),
-      sectionEnd(1),
+      reasoningDelta("Second", 1),
+      completeRun(),
       overallStop(),
     ]);
     render(
@@ -196,26 +210,48 @@ describe("AgentTimeline", () => {
   });
 
   describe("parallel turns", () => {
-    const parallelPackets = [
-      makePlacedPacket({ type: "reasoning_start" }, { tab_index: 0 }),
-      makePlacedPacket(
-        { type: "reasoning_delta", reasoning: "branch one thinking" },
-        { tab_index: 0 },
-      ),
-      makePlacedPacket(
-        { type: "search_tool_start", is_internet_search: true },
-        { tab_index: 1 },
-      ),
-    ];
+    const parallelGroups = groupStepsByTurn(
+      transformItemGroups([
+        {
+          turn_index: 0,
+          tab_index: 0,
+          items: [
+            makeItem({
+              kind: "reasoning",
+              text: "branch one thinking",
+              status: "running",
+            }),
+          ],
+        },
+        {
+          turn_index: 0,
+          tab_index: 1,
+          items: [
+            makeItem(
+              {
+                kind: "tool",
+                name: "web_search",
+                arguments: {},
+                status: "running",
+                output: "",
+                metadata: null,
+              },
+              { tab_index: 1 },
+              "search",
+            ),
+          ],
+        },
+      ]),
+    );
 
     it("is detected as a parallel turn group", () => {
-      const { turnGroups } = turnGroupsFor(parallelPackets);
+      const turnGroups = parallelGroups;
       expect(turnGroups[0]?.isParallel).toBe(true);
       expect(turnGroups[0]?.steps).toHaveLength(2);
     });
 
     it("shows a pill tab per branch in the streaming header", () => {
-      const { turnGroups } = turnGroupsFor(parallelPackets);
+      const turnGroups = parallelGroups;
       render(<AgentTimeline turnGroups={turnGroups} chatState={chatState} />);
 
       // "Thinking" also appears as the collapsed preview's status, so assert on the unique label.
@@ -224,7 +260,7 @@ describe("AgentTimeline", () => {
     });
 
     it("shows the branch tab strip in the expanded body", () => {
-      const { turnGroups } = turnGroupsFor([...parallelPackets, overallStop()]);
+      const turnGroups = parallelGroups;
       render(
         <AgentTimeline
           turnGroups={turnGroups}
@@ -244,7 +280,7 @@ describe("AgentTimeline", () => {
     });
 
     it("swaps the rendered branch when another tab is selected", () => {
-      const { turnGroups } = turnGroupsFor([...parallelPackets, overallStop()]);
+      const turnGroups = parallelGroups;
       render(
         <AgentTimeline
           turnGroups={turnGroups}

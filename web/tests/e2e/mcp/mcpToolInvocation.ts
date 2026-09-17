@@ -1,26 +1,19 @@
-/**
- * Helpers for asserting whether an MCP tool actually runs when invoked from
- * chat. Wraps the chat-stream capture + packet-count utilities with the
- * forced-tool plumbing the MCP specs use.
- */
+/** Verify MCP execution through the public tool-item lifecycle. */
 
 import { type Page, expect } from "@playwright/test";
 import {
-  getToolPacketCounts,
+  getToolInvocationCounts,
   sendMessageAndCaptureStreamPackets,
+  type ToolInvocationCounts,
 } from "@tests/e2e/utils/chatStream";
 import { addMockLlmConversation, mockLlmNonce } from "@tests/e2e/utils/mockLlm";
 
-/**
- * Send a chat message that forces the given MCP tool to be called and return
- * the per-tool invocation packet counts (start / delta / debug). The mock LLM
- * calls the tool only when the request offers it.
- */
+/** Force a tool call and count distinct started and finished executions. */
 export async function sendForcedMcpToolCall(
   page: Page,
   toolName: string,
   forcedToolId?: number | null
-): Promise<{ start: number; delta: number; debug: number }> {
+): Promise<ToolInvocationCounts> {
   const nonce = mockLlmNonce();
   const callId = `call-${nonce}`;
   await addMockLlmConversation({
@@ -51,19 +44,18 @@ export async function sendForcedMcpToolCall(
     waitForAiMessage: false,
   });
 
-  return getToolPacketCounts(packets, toolName);
+  return getToolInvocationCounts(packets, toolName);
 }
 
-/** Assert the tool ran (start / delta / debug packets were all emitted). */
+/** Assert that each started invocation reaches a terminal state. */
 export async function expectMcpToolInvoked(
   page: Page,
   toolName: string,
   forcedToolId?: number | null
 ): Promise<void> {
   const counts = await sendForcedMcpToolCall(page, toolName, forcedToolId);
-  expect(counts.start).toBeGreaterThan(0);
-  expect(counts.delta).toBeGreaterThan(0);
-  expect(counts.debug).toBeGreaterThan(0);
+  expect(counts.started).toBeGreaterThan(0);
+  expect(counts.finished).toBe(counts.started);
 }
 
 /** Assert the tool did NOT run (e.g. because it was disabled for the agent). */
@@ -73,7 +65,6 @@ export async function expectMcpToolNotInvoked(
   forcedToolId?: number | null
 ): Promise<void> {
   const counts = await sendForcedMcpToolCall(page, toolName, forcedToolId);
-  expect(counts.start).toBe(0);
-  expect(counts.delta).toBe(0);
-  expect(counts.debug).toBe(0);
+  expect(counts.started).toBe(0);
+  expect(counts.finished).toBe(0);
 }

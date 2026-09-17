@@ -4,7 +4,7 @@
 
 import { useMemo } from "react";
 
-import { isMemoryToolPackets } from "@/chat/timeline/packetHelpers";
+import { isMemoryToolItems } from "@/chat/timeline/itemHelpers";
 import { TurnGroup } from "@/chat/timeline/transformers";
 
 export interface MemoryStepState {
@@ -23,7 +23,7 @@ export function useTimelineStepState(turnGroups: TurnGroup[]): MemoryStepState {
     for (const tg of turnGroups) {
       for (const step of tg.steps) {
         totalSteps++;
-        if (!isMemoryToolPackets(step.packets)) {
+        if (!isMemoryToolItems(step.items)) {
           allMemory = false;
         }
       }

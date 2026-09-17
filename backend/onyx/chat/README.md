@@ -239,9 +239,8 @@ tool calls and returns that to the LLM Loop to execute.
 
 ## Things to know
 
-- Packets are labeled with a "turn_index" field as part of the Placement of the packet. This is not the same as the backend
-  concept of a turn. The turn_index for the frontend is which block does this packet belong to. So while a reasoning + tool call
-  comes from the same LLM inference (same backend LLM step), they are 2 turns to the frontend because that's how it's rendered.
+- Chat packets carry content, execution identity, and model routing. The frontend derives timeline positions.
+  See the [chat stream contract](../agents/README.md#chat-stream) for item and update types.
 
 - There are 3 representations of a message, each scoped to a different layer:
   1. **ChatMessage** — The database model. Should be converted into ChatMessageSimple early and never passed deep into the flow.

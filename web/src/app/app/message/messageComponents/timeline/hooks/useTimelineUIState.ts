@@ -1,12 +1,15 @@
 import { useMemo } from "react";
-import { TurnGroup, TransformedStep } from "../transformers";
+import {
+  TurnGroup,
+  TransformedStep,
+} from "@/app/app/message/messageComponents/timeline/transformers";
 
 // =============================================================================
 // Timeline UI State Machine
 // =============================================================================
 
 export enum TimelineUIState {
-  /** No packets yet, showing shimmer */
+  /** No items yet, showing shimmer */
   EMPTY = "EMPTY",
   /** Final message only, no timeline */
   DISPLAY_CONTENT_ONLY = "DISPLAY_CONTENT_ONLY",
@@ -25,7 +28,7 @@ export enum TimelineUIState {
 export interface TimelineUIStateInput {
   /** Whether the stop packet has been seen */
   stopPacketSeen: boolean;
-  /** Whether there are any packets in the timeline */
+  /** Whether there are any items in the timeline */
   hasPackets: boolean;
   /** Whether there is display content after timeline */
   hasDisplayContent: boolean;
@@ -49,7 +52,7 @@ export interface TimelineUIStateInput {
   parallelActiveStepHasCollapsedContent: boolean;
   /** Whether image generation is in progress */
   isGeneratingImage: boolean;
-  /** Whether final answer is coming (MESSAGE_START received) */
+  /** Whether final answer is coming (an answer item exists) */
   finalAnswerComing: boolean;
 }
 
@@ -166,7 +169,7 @@ export function useTimelineUIState(
       parallelActiveStepHasCollapsedContent;
 
     // Done step: shown when expanded and completed (either normally or with display content)
-    // Also shown when finalAnswerComing is true (MESSAGE_START received)
+    // Also shown when finalAnswerComing is true (an answer item exists)
     const showDoneStep =
       (stopPacketSeen || finalAnswerComing) &&
       isExpanded &&

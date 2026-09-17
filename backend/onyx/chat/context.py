@@ -21,7 +21,7 @@ from onyx.llm.models import (
 from onyx.prompts.prompt_utils import substitute_user_placeholders
 from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES
 from onyx.tools.interface import Tool
-from onyx.tools.models import PythonToolRichResponse
+from onyx.tools.models import LlmPythonExecutionResult
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
@@ -67,7 +67,7 @@ class ChatReminders:
             or context.has_context_documents,
             include_file_reminder=any(
                 result.tool_name == PythonTool.NAME
-                and isinstance(result.details, PythonToolRichResponse)
+                and isinstance(result.details, LlmPythonExecutionResult)
                 and result.details.generated_files
                 for result in results
             ),

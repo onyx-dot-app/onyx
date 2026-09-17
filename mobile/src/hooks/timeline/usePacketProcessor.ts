@@ -3,7 +3,7 @@
 // Restructured from web (which mutates a state ref during render): mobile's react-hooks/refs lint
 // forbids that, so processPackets runs as a full useMemo recompute per flush — O(n)/flush, fine at
 // chat scale, re-optimizable to incremental later behind the same API. renderComplete/forceShowAnswer
-// are the only true UI state; everything else derives from the packets.
+// are the only true UI state; everything else derives from the items.
 
 import { useCallback, useMemo, useState } from "react";
 
@@ -13,7 +13,7 @@ import {
   StreamingCitation,
 } from "@/chat/contracts/documents";
 import {
-  GroupedPacket,
+  GroupedItem,
   ProcessedMessageState,
   createInitialState,
   processPackets,
@@ -22,15 +22,15 @@ import { Packet, StopReason } from "@/chat/streamingModels";
 import {
   TurnGroup,
   groupStepsByTurn,
-  transformPacketGroups,
+  transformItemGroups,
 } from "@/chat/timeline/transformers";
 
 export interface UsePacketProcessorResult {
   // The raw reducer output, exposed because `selectSources` and the full-text reader want the whole
   // state; deriving it in a second hook would reduce every packet twice per flush.
   processed: ProcessedMessageState;
-  toolGroups: GroupedPacket[];
-  displayGroups: GroupedPacket[];
+  toolGroups: GroupedItem[];
+  displayGroups: GroupedItem[];
   toolTurnGroups: TurnGroup[];
   citations: StreamingCitation[];
   citationMap: CitationMap;
@@ -94,7 +94,7 @@ export function usePacketProcessor(
   ]);
 
   const toolTurnGroups = useMemo(
-    () => groupStepsByTurn(transformPacketGroups(state.toolGroups)),
+    () => groupStepsByTurn(transformItemGroups(state.toolGroups)),
     [state.toolGroups],
   );
 

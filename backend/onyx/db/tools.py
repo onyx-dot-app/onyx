@@ -2,12 +2,13 @@ from collections.abc import Collection
 from typing import Any, Type, cast
 from uuid import UUID
 
-from pydantic import TypeAdapter, ValidationError
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import InstrumentedAttribute, Session, selectinload
 
 from onyx.auth.permissions import has_permission
-from onyx.context.search.models import PersonaSearchInfo, SearchDocsResponse
+from onyx.coding_agent.models import CodingAgentCallResult
+from onyx.context.search.models import PersonaSearchInfo, SearchDoc, SearchDocsResponse
 from onyx.db.chat import (
     session_descendants,
     translate_db_search_doc_to_saved_search_doc,
@@ -24,16 +25,27 @@ from onyx.db.models import (
     ToolCall,
     User,
 )
+from onyx.deep_research.models import ResearchAgentCallResult
+from onyx.deep_research.tool_definitions import RESEARCH_AGENT_IN_CODE_ID
 from onyx.llm.models import ToolResultMessage
 from onyx.server.features.tool.models import Header
 from onyx.tools.built_in_tools import BUILT_IN_TOOL_TYPES
 from onyx.tools.models import (
     CustomToolCallSummary,
     CustomToolUserFileSnapshot,
+    FileReadResult,
+    GeneratedImage,
+    LlmBashExecutionResult,
+    LlmPythonExecutionResult,
+    MemoryUpdated,
     PersonaToolConfiguration,
+    PythonExecutionFile,
     ToolConfiguration,
 )
-from onyx.tools.progress import FileReadResult, GeneratedImage, MemoryUpdated
+from onyx.tools.tool_implementations.bash.bash_tool import BashTool
+from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
+    CodingAgentTool,
+)
 from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReaderTool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
@@ -41,6 +53,7 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.utils.headers import HeaderItemDict
@@ -398,25 +411,97 @@ def get_response_tool_records(
     )
 
 
+class _SavedToolMetadata(BaseModel):
+    type: str | None = None
+
+
+def _has_metadata_type(saved_output: str, expected_type: str | None = None) -> bool:
+    try:
+        metadata_type = _SavedToolMetadata.model_validate_json(saved_output).type
+        return (
+            metadata_type == expected_type
+            if expected_type is not None
+            else metadata_type is not None
+        )
+    except ValidationError:
+        return False
+
+
+class _SavedPythonFile(BaseModel):
+    filename: str = ""
+    file_link: str
+
+
+class _SavedPythonResult(BaseModel):
+    stdout: str = ""
+    stderr: str = ""
+    generated_files: list[_SavedPythonFile] = Field(default_factory=list)
+    exit_code: int | None = None
+    timed_out: bool = False
+    error: str | None = None
+    staging_notice: str | None = None
+
+
+def _restore_search_output(record: ToolCall, saved_output: str) -> SearchDocsResponse:
+    documents: list[SearchDoc] = [
+        translate_db_search_doc_to_saved_search_doc(doc) for doc in record.search_docs
+    ]
+    try:
+        search = SearchDocsResponse.model_validate_json(saved_output or "")
+    except ValidationError:
+        if _has_metadata_type(saved_output, "search_result"):
+            raise
+        logger.debug("Saved search result has no structured metadata")
+        search = SearchDocsResponse(
+            search_docs=[],
+            citation_mapping={},
+            queries=TypeAdapter(list[str]).validate_python(
+                (record.tool_call_arguments or {}).get("queries", [])
+            ),
+        )
+    search.search_docs = documents
+    return search
+
+
+def _restore_python_output(saved_output: str) -> LlmPythonExecutionResult:
+    if _has_metadata_type(saved_output, "python_execution"):
+        return LlmPythonExecutionResult.model_validate_json(saved_output)
+    try:
+        saved_python = _SavedPythonResult.model_validate_json(saved_output or "")
+    except ValidationError:
+        logger.debug("Saved Python response uses plain text")
+        saved_python = _SavedPythonResult(stdout=saved_output or "")
+    return LlmPythonExecutionResult(
+        stdout=saved_python.stdout,
+        stderr=saved_python.stderr,
+        exit_code=saved_python.exit_code,
+        timed_out=saved_python.timed_out,
+        generated_files=[
+            PythonExecutionFile(
+                filename=file.filename or file.file_link.rsplit("/", 1)[-1],
+                file_link=file.file_link,
+            )
+            for file in saved_python.generated_files
+        ],
+        error=saved_python.error,
+        staging_notice=saved_python.staging_notice,
+    )
+
+
 def restore_tool_result(
     result: ToolResultMessage, record: ToolCall, tool: Tool | None
 ) -> ToolResultMessage:
     """Attach saved application artifacts to a canonical completed tool result."""
     restored = result.model_copy(deep=True)
-    if result.is_error or tool is None:
+    saved_output = record.legacy_response or record.tool_call_response
+    if tool is None or (result.is_error and not _has_metadata_type(saved_output)):
         return restored
     if tool.in_code_tool_id in {
         SearchTool.__name__,
         WebSearchTool.__name__,
         OpenURLTool.__name__,
     }:
-        restored.details = SearchDocsResponse(
-            search_docs=[
-                translate_db_search_doc_to_saved_search_doc(doc)
-                for doc in record.search_docs
-            ],
-            citation_mapping={},
-        )
+        restored.details = _restore_search_output(record, saved_output)
     elif tool.in_code_tool_id == ImageGenerationTool.__name__:
         restored.details = FinalImageGenerationResponse(
             generated_images=[
@@ -425,19 +510,52 @@ def restore_tool_result(
             ]
         )
     elif tool.in_code_tool_id == FileReaderTool.__name__:
-        restored.details = FileReadResult.model_validate_json(
-            _SAVED_TOOL_TEXT.validate_python(record.tool_call_response)
-        )
+        try:
+            restored.details = FileReadResult.model_validate_json(saved_output or "")
+        except ValidationError:
+            if _has_metadata_type(saved_output, "file_read_result"):
+                raise
+            logger.debug("Saved file-reader result has no structured metadata")
     elif tool.in_code_tool_id == MemoryTool.__name__:
         restored.details = MemoryUpdated.model_validate_json(
-            _SAVED_TOOL_TEXT.validate_python(record.tool_call_response)
+            _SAVED_TOOL_TEXT.validate_python(saved_output)
         )
+    elif tool.in_code_tool_id == PythonTool.__name__:
+        restored.details = _restore_python_output(saved_output)
+    elif tool.in_code_tool_id == BashTool.__name__:
+        restored.details = LlmBashExecutionResult.model_validate_json(
+            saved_output or ""
+        )
+    elif tool.in_code_tool_id == CodingAgentTool.__name__:
+        try:
+            restored.details = CodingAgentCallResult.model_validate_json(
+                saved_output or ""
+            )
+        except ValidationError:
+            if _has_metadata_type(saved_output, "coding_result"):
+                raise
+            logger.debug("Saved coding response uses plain text")
+            restored.details = CodingAgentCallResult(answer=saved_output or "")
+    elif tool.in_code_tool_id == RESEARCH_AGENT_IN_CODE_ID:
+        try:
+            restored.details = ResearchAgentCallResult.model_validate_json(
+                saved_output or ""
+            )
+        except ValidationError:
+            if _has_metadata_type(saved_output, "research_result"):
+                raise
+            logger.debug("Saved research response uses plain text")
+            restored.details = ResearchAgentCallResult(
+                intermediate_report=saved_output or "", citation_mapping={}
+            )
     elif tool.in_code_tool_id is None:
         try:
             summary = CustomToolCallSummary.model_validate_json(
-                _SAVED_TOOL_TEXT.validate_python(record.tool_call_response)
+                _SAVED_TOOL_TEXT.validate_python(saved_output)
             )
         except ValidationError:
+            if _has_metadata_type(saved_output, "custom_tool_result"):
+                raise
             logger.debug("Tool result has no structured custom output")
             return restored
         if summary.response_type in {"image", "csv"}:

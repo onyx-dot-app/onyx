@@ -1,4 +1,4 @@
-"""Bash execution preserves output, failure details, and operation progress."""
+"""Bash execution preserves output, failure details, and typed tool results."""
 
 import json
 from collections.abc import Iterator
@@ -15,8 +15,7 @@ from onyx.configs.app_configs import (
 )
 from onyx.llm.cancellation import CancellationSignal
 from onyx.tools.interface import ToolContext
-from onyx.tools.models import ToolCallException
-from onyx.tools.progress import BashOutput, BashStarted
+from onyx.tools.models import LlmBashExecutionResult, ToolCallException
 from onyx.tools.tool_implementations.bash.bash_tool import (
     CMD_FIELD,
     BashTool,
@@ -105,7 +104,7 @@ def test_tool_definition_shape() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_happy_path_returns_serialized_result_and_emits_packets() -> None:
+def test_happy_path_returns_serialized_result_and_metadata() -> None:
     tool, emitter = _make_tool()
     client = MagicMock()
     client.execute_bash_in_session.return_value = _make_response(
@@ -134,18 +133,8 @@ def test_happy_path_returns_serialized_result_and_emits_packets() -> None:
     assert payload["exit_code"] == 0
     assert payload["timed_out"] is False
     assert payload["error"] is None  # exit_code == 0
-    assert response.details is None
-
-    # Two packets emitted: start (with cmd) then delta (with stdout/stderr)
-    assert emitter.call_count == 2
-    start_packet = emitter.call_args_list[0].args[0]
-    delta_packet = emitter.call_args_list[1].args[0]
-    assert isinstance(start_packet.details, BashStarted)
-    assert start_packet.details.cmd == "echo hello"
-    assert isinstance(delta_packet.details, BashOutput)
-    assert delta_packet.details.stdout == "hello\n"
-    assert delta_packet.details.exit_code == 0
-    assert delta_packet.details.timed_out is False
+    assert isinstance(response.details, LlmBashExecutionResult)
+    assert response.details.model_dump() == payload
 
 
 # ---------------------------------------------------------------------------
@@ -190,7 +179,7 @@ def test_non_string_cmd_raises_tool_call_exception(bad_cmd: JsonValue) -> None:
     assert CMD_FIELD in excinfo.value.llm_facing_message
     assert type(bad_cmd).__name__ in excinfo.value.llm_facing_message
 
-    # No packets emitted — failure is at validation, before BashStarted
+    # Validation fails before any external execution.
     emitter.assert_not_called()
 
 
@@ -199,7 +188,7 @@ def test_non_string_cmd_raises_tool_call_exception(bad_cmd: JsonValue) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_client_exception_returns_error_result_and_emits_error_delta() -> None:
+def test_client_exception_returns_error_result() -> None:
     tool, emitter = _make_tool()
     client = MagicMock()
     client.execute_bash_in_session.side_effect = RuntimeError("connection refused")
@@ -219,20 +208,11 @@ def test_client_exception_returns_error_result_and_emits_error_delta() -> None:
     assert payload["timed_out"] is False
     assert "connection refused" in payload["error"]
 
-    # Start + error-delta both emitted (still two packets)
-    assert emitter.call_count == 2
-    delta_packet = emitter.call_args_list[1].args[0]
-    assert isinstance(delta_packet.details, BashOutput)
-    assert delta_packet.details.exit_code == -1
-    assert "connection refused" in delta_packet.details.stderr
+    assert isinstance(response.details, LlmBashExecutionResult)
+    assert response.details.error == payload["error"]
 
 
-def test_client_constructor_failure_still_emits_closing_delta() -> None:
-    """Regression: a ``CodeInterpreterClient()`` constructor failure (e.g.
-    ``CODE_INTERPRETER_BASE_URL`` unset, raising ``ValueError`` in __init__)
-    must NOT escape past the try/except. Without the fix, ``BashStarted``
-    would already be on the wire and no closing ``BashOutput`` would
-    follow — leaving the frontend timeline stuck."""
+def test_client_constructor_failure_returns_error_result() -> None:
     tool, emitter = _make_tool()
 
     with patch(
@@ -249,13 +229,8 @@ def test_client_constructor_failure_still_emits_closing_delta() -> None:
     assert payload["exit_code"] == -1
     assert "CODE_INTERPRETER_BASE_URL" in payload["error"]
 
-    # Critically: both Start AND closing Delta were emitted, in that order
-    assert emitter.call_count == 2
-    start_packet = emitter.call_args_list[0].args[0]
-    delta_packet = emitter.call_args_list[1].args[0]
-    assert isinstance(start_packet.details, BashStarted)
-    assert isinstance(delta_packet.details, BashOutput)
-    assert delta_packet.details.exit_code == -1
+    assert isinstance(response.details, LlmBashExecutionResult)
+    assert response.details.exit_code == -1
 
 
 # ---------------------------------------------------------------------------
@@ -352,16 +327,6 @@ def test_zero_exit_code_with_stderr_does_not_set_error() -> None:
     assert payload["exit_code"] == 0
     assert payload["stderr"] == "warning: deprecated"
     assert payload["error"] is None
-
-
-# ---------------------------------------------------------------------------
-# emit_start is a deliberate no-op
-# ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
-# Timed-out command surfaces as timed_out=True
-# ---------------------------------------------------------------------------
 
 
 # ---------------------------------------------------------------------------
@@ -490,6 +455,5 @@ def test_timed_out_response_is_propagated() -> None:
     payload = json.loads(response.text)
     assert payload["timed_out"] is True
     assert payload["exit_code"] is None
-    delta_packet = emitter.call_args_list[1].args[0]
-    assert isinstance(delta_packet.details, BashOutput)
-    assert delta_packet.details.timed_out is True
+    assert isinstance(response.details, LlmBashExecutionResult)
+    assert response.details.timed_out is True

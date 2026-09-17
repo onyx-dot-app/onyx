@@ -1,19 +1,21 @@
 import re
 from datetime import datetime
 
+import pytest
 from sqlalchemy.orm import Session
 
-from onyx.chat.models import AnswerStreamPart, StreamingError
 from onyx.chat.process_message import handle_stream_message_objects
 from onyx.db.chat import create_chat_session
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.server.query_and_chat.models import MessageResponseIDInfo, SendMessageRequest
-from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
+from tests.external_dependency_unit.answer.stream_test_utils import final_answer
 from tests.external_dependency_unit.conftest import create_test_user
+from tests.utils.secret_names import TestSecret
 
 
+@pytest.mark.secrets(TestSecret.OPENAI_API_KEY)
 def test_stream_chat_current_date_response(
     db_session: Session,
     full_deployment_setup: None,  # noqa: ARG001
@@ -49,24 +51,9 @@ def test_stream_chat_current_date_response(
         user=test_user,
     )
 
-    raw: list[AnswerStreamPart] = []
-    content = ""
-    had_error = False
-
-    for pkt in gen:
-        raw.append(pkt)
-        if hasattr(pkt, "obj") and isinstance(pkt.obj, AgentResponseDelta):
-            if pkt.obj.content:
-                content += pkt.obj.content
-        if hasattr(pkt, "obj") and isinstance(pkt.obj, StreamingError):
-            had_error = True
-            break
-
-    assert not had_error, "Should not error when answering current date"
-    assert any(isinstance(p, MessageResponseIDInfo) for p in raw), (
-        "Should yield a message ID"
-    )
-    assert len(content) > 0, "Should stream some assistant content"
+    raw = list(gen)
+    content = final_answer(raw)
+    assert any(isinstance(part, MessageResponseIDInfo) for part in raw)
 
     # Validate the response contains a properly formatted current date string
     match = re.search(r"[A-Za-z]+ [A-Za-z]+ \d{1,2}, \d{4}", content)

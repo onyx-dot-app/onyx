@@ -1,9 +1,6 @@
 import { useMemo } from "react";
-import {
-  CustomToolDelta,
-  Packet,
-  PacketType,
-} from "@/app/app/services/streamingModels";
+import { Packet } from "@/app/app/services/streamingModels";
+import { responseItems } from "@/app/app/services/packetUtils";
 
 interface AuthError {
   toolName: string;
@@ -13,34 +10,32 @@ interface AuthError {
 export function useAuthErrors(rawPackets: Packet[]): AuthError[] {
   // Keyed on the packet array so re-renders between packet batches reuse
   // the same result identity instead of rescanning.
-  return useMemo(() => computeAuthErrors(rawPackets), [rawPackets]);
+  return useMemo(
+    () => computeAuthErrors(rawPackets),
+    [rawPackets, rawPackets.length]
+  );
 }
 
 function computeAuthErrors(rawPackets: Packet[]): AuthError[] {
   const errors: AuthError[] = [];
 
-  for (const packet of rawPackets) {
-    if (packet.obj.type !== PacketType.CUSTOM_TOOL_DELTA) {
+  for (const item of responseItems(rawPackets)) {
+    const tool = item.content;
+    if (
+      tool.kind !== "tool" ||
+      tool.metadata?.type !== "custom_tool_result" ||
+      !tool.metadata.error?.is_auth_error
+    )
       continue;
-    }
-
-    const delta = packet.obj as CustomToolDelta;
-    if (!delta.error?.is_auth_error) {
+    if (
+      errors.some((error) =>
+        tool.tool_id != null
+          ? error.toolId === tool.tool_id
+          : error.toolName === tool.name
+      )
+    )
       continue;
-    }
-
-    const alreadyPresent = errors.some(
-      (error) =>
-        (delta.tool_id != null && error.toolId === delta.tool_id) ||
-        (delta.tool_id == null && error.toolName === delta.tool_name)
-    );
-
-    if (!alreadyPresent) {
-      errors.push({
-        toolName: delta.tool_name,
-        toolId: delta.tool_id ?? null,
-      });
-    }
+    errors.push({ toolName: tool.name, toolId: tool.tool_id ?? null });
   }
 
   return errors;

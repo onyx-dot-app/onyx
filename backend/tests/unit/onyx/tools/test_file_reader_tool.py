@@ -16,10 +16,8 @@ import pytest
 from onyx.agents.tools import ToolInvocation
 from onyx.file_store.models import ChatFileType, InMemoryChatFile
 from onyx.llm.cancellation import CancellationSignal
-from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.interface import ToolContext
-from onyx.tools.models import ToolCallException
-from onyx.tools.progress import FileReadResult
+from onyx.tools.models import FileReadResult, ToolCallException
 from onyx.tools.tool_implementations.file_reader.file_reader_tool import (
     FILE_ID_FIELD,
     MAX_NUM_CHARS,
@@ -29,7 +27,6 @@ from onyx.tools.tool_implementations.file_reader.file_reader_tool import (
 )
 
 TOOL_MODULE = "onyx.tools.tool_implementations.file_reader.file_reader_tool"
-_PLACEMENT = Placement(turn_index=0)
 
 
 def _make_tool(

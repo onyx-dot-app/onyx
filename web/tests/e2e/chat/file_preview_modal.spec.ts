@@ -3,72 +3,7 @@ import { loginAsRandomUser } from "../utils/auth";
 import * as fs from "fs";
 import * as path from "path";
 
-/**
- * Builds a newline-delimited JSON stream body matching the packet
- * format that useChatController expects:
- *
- * 1. MessageResponseIDInfo — identifies the user/assistant messages
- * 2. Packet-wrapped streaming objects ({placement, obj}) — the actual content
- * 3. BackendMessage — the final completed message
- *
- * Each line is a raw JSON object parsed by handleSSEStream.
- */
-function buildMockStream(messageContent: string): string {
-  const packets = [
-    // 1. Message ID info — tells the frontend the message IDs
-    JSON.stringify({
-      user_message_id: 1,
-      reserved_assistant_message_id: 2,
-    }),
-    // 2. Streaming content packets wrapped in {placement, obj}
-    JSON.stringify({
-      placement: { turn_index: 0 },
-      obj: {
-        type: "message_start",
-        id: "mock-message-id",
-        content: "",
-        final_documents: null,
-      },
-    }),
-    JSON.stringify({
-      placement: { turn_index: 0 },
-      obj: {
-        type: "message_delta",
-        content: messageContent,
-      },
-    }),
-    JSON.stringify({
-      placement: { turn_index: 0 },
-      obj: {
-        type: "message_end",
-      },
-    }),
-    JSON.stringify({
-      placement: { turn_index: 0 },
-      obj: {
-        type: "stop",
-        stop_reason: "finished",
-      },
-    }),
-    // 3. Final BackendMessage — the completed message record
-    JSON.stringify({
-      message_id: 2,
-      message_type: "assistant",
-      research_type: null,
-      parent_message: 1,
-      latest_child_message: null,
-      message: messageContent,
-      rephrased_query: null,
-      context_docs: null,
-      time_sent: new Date().toISOString(),
-      citations: {},
-      files: [],
-      tool_call: null,
-      overridden_model: null,
-    }),
-  ];
-  return packets.join("\n") + "\n";
-}
+import { buildMockStream } from "@tests/e2e/utils/chatMock";
 
 /**
  * Sends a message while intercepting the backend response with

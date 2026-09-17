@@ -3,6 +3,7 @@
 import asyncio
 import queue
 import threading
+from datetime import datetime, timezone
 from functools import partial
 
 import pytest
@@ -133,6 +134,11 @@ def test_chat_preserves_parallel_tool_history_forcing_and_packets(
         "hello",
         "hello",
     ]
+    assert [
+        message.text
+        for message in messages_from_items(snapshot.response.items)
+        if message.role == "tool_result"
+    ] == ["hello", "hello"]
     if observer_fails:
         runtime_snapshot = runs[-1].snapshot()
         assert runtime_snapshot is not None and runs[-1].delivery_failed
@@ -144,6 +150,75 @@ def test_chat_preserves_parallel_tool_history_forcing_and_packets(
     packets = [output.get_nowait() for _ in range(output.qsize())]
     assert isinstance(packets[-1], Packet)
     assert isinstance(packets[-1].obj, OverallStop)
+
+
+def test_chat_preserves_search_filters_in_accepted_result_and_projection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    search = SearchDocsResponse(
+        queries=["expanded query", "another query"],
+        sources=["confluence"],
+        time_filter_start=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        time_filter_end=datetime(2026, 2, 1, tzinfo=timezone.utc),
+        search_docs=[],
+        citation_mapping={},
+    )
+    monkeypatch.setattr(
+        "tests.unit.onyx.agents.fakes.EchoTool.run",
+        lambda *_args, **_kwargs: ToolResult(details=search, content="No documents"),
+    )
+    llm = ScriptedLLM(
+        [
+            Delta(
+                tool_calls=[
+                    ChatCompletionDeltaToolCall(
+                        id="search",
+                        index=0,
+                        function=FunctionCall(
+                            name="echo", arguments='{"value":"query"}'
+                        ),
+                    )
+                ]
+            ),
+            Delta(content="No matching documents."),
+        ]
+    )
+    agent = ChatAgent(
+        messages=[],
+        tools=[EchoTool()],
+        custom_agent_prompt=None,
+        base_system_prompt="",
+        context_files=ExtractedContextFiles(
+            file_texts=[],
+            image_files=[],
+            use_as_search_filter=False,
+            total_token_count=0,
+            file_metadata=[],
+            uncapped_token_count=None,
+        ),
+        persona=None,
+        user_memory_context=None,
+        llm=llm,
+        token_counter=len,
+    )
+    runs: list[Run] = []
+    run_agent(
+        agent.agent,
+        runs=runs,
+        messages=[UserMessage(content="Find documents")],
+        max_steps=2,
+    )
+    accepted = next(
+        message
+        for message in agent.agent.context.messages
+        if isinstance(message, ToolResultMessage)
+    )
+    assert isinstance(accepted.details, SearchDocsResponse)
+    assert accepted.details.model_dump(exclude={"staged_files"}) == search.model_dump()
+    projected = project_response(
+        runs[-1].snapshot(), response_id=42, tool_ids={"echo": 1}
+    )
+    assert projected.tool_calls[0].result_metadata == search
 
 
 def test_source_file_staging_does_not_block_cancelled_snapshot(

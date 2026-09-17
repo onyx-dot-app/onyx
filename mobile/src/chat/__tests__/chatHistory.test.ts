@@ -3,7 +3,7 @@ import { describe, expect, it } from "@jest/globals";
 import { processRawChatHistory } from "@/chat/chatHistory";
 import { BackendMessage } from "@/chat/interfaces";
 import { getLatestMessageChain } from "@/chat/messageTree";
-import { MessageDelta, Packet } from "@/chat/streamingModels";
+import { Packet } from "@/chat/streamingModels";
 
 function bm(
   partial: Pick<
@@ -24,9 +24,30 @@ function bm(
 
 function packet(content: string): Packet {
   return {
-    placement: { turn_index: 0 },
-    obj: { type: "message_delta", content } as MessageDelta,
+    identity: {
+      response_id: 1,
+      run_id: "root",
+      message_id: content,
+      part_id: "text",
+    },
+    obj: {
+      type: "item_update",
+      item: {
+        kind: "text",
+        text: content,
+        purpose: "answer",
+        status: "complete",
+        documents: [],
+        citations: [],
+      },
+    },
   };
+}
+
+function packetText(packet: Packet): string {
+  return packet.obj.type === "item_update" && packet.obj.item.kind === "text"
+    ? packet.obj.item.text
+    : "";
 }
 
 describe("processRawChatHistory", () => {
@@ -73,8 +94,8 @@ describe("processRawChatHistory", () => {
 
   it("aligns packet lists to assistant messages by ordinal", () => {
     const tree = processRawChatHistory(raw, packets);
-    expect((tree.get(2)!.packets[0]!.obj as MessageDelta).content).toBe("a0");
-    expect((tree.get(4)!.packets[0]!.obj as MessageDelta).content).toBe("a1");
+    expect(packetText(tree.get(2)!.packets[0]!)).toBe("a0");
+    expect(packetText(tree.get(4)!.packets[0]!)).toBe("a1");
   });
 
   it("maps an errored message to the error type", () => {
@@ -133,9 +154,7 @@ describe("processRawChatHistory", () => {
       1001, 1002,
     ]);
     // assistant alignment survives the leading non-assistant rows
-    expect((tree.get(1002)!.packets[0]!.obj as MessageDelta).content).toBe(
-      "a0",
-    );
+    expect(packetText(tree.get(1002)!.packets[0]!)).toBe("a0");
   });
 
   it("tolerates missing packets for a message", () => {

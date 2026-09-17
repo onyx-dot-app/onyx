@@ -38,10 +38,11 @@ from onyx.llm.request_context import reset_llm_mock_response, set_llm_mock_respo
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.server.query_and_chat.models import MessageResponseIDInfo, SendMessageRequest
 from onyx.server.query_and_chat.streaming_models import (
-    AgentResponseDelta,
-    AgentResponseStart,
     CitationInfo,
+    ItemUpdate,
     Packet,
+    TextItem,
+    TextPurpose,
 )
 from onyx.server.utils import get_json_line
 from onyx.utils.logger import setup_logger
@@ -265,16 +266,16 @@ def gather_stream(
 
     for packet in packets:
         if isinstance(packet, Packet):
-            if isinstance(packet.obj, AgentResponseStart):
-                if packet.obj.final_documents:
-                    top_documents = packet.obj.final_documents
-            elif isinstance(packet.obj, AgentResponseDelta):
-                if answer is None:
-                    answer = ""
-                if packet.obj.content:
-                    answer += packet.obj.content
-            elif isinstance(packet.obj, CitationInfo):
-                citations.append(packet.obj)
+            if (
+                isinstance(packet.obj, ItemUpdate)
+                and isinstance(packet.obj.item, TextItem)
+                and packet.obj.item.purpose == TextPurpose.ANSWER
+                and (packet.identity is None or packet.identity.parent_run_id is None)
+            ):
+                item = packet.obj.item
+                answer = item.text
+                top_documents = item.documents
+                citations = item.citations
         elif isinstance(packet, StreamingError):
             error_msg = packet.error
         elif isinstance(packet, MessageResponseIDInfo):

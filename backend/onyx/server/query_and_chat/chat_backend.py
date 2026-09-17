@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from onyx.access.access import user_can_access_chat_file
+from onyx.agents.transcript import RunStatus
 from onyx.auth.api_key import get_hashed_api_key_from_request
 from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.permissions import require_permission
@@ -432,9 +433,18 @@ def get_chat_session(
 
     current_run: CurrentRunInfo | None = None
     try:
-        processing_key = get_processing_key(session_id, get_cache_backend())
-        if processing_key is not None:
-            current_run = CurrentRunInfo(run_id=processing_key)
+        cache = get_cache_backend()
+        processing_key = get_processing_key(session_id, cache)
+        has_saved_outcome = any(
+            message.id == processing_key
+            and message.response_status not in (None, RunStatus.RUNNING)
+            for message in session_messages
+        )
+        if processing_key is not None and not has_saved_outcome:
+            current_run = CurrentRunInfo(
+                run_id=processing_key,
+                is_running=is_chat_session_processing(session_id, cache),
+            )
     except Exception:
         logger.exception(
             "An error occurred while checking if the chat session is processing"
@@ -1328,8 +1338,8 @@ def resume_chat_stream(
         require_permission(Permission.READ_CHAT, allow_anonymous=True)
     ),
 ) -> StreamingResponse:
-    """Replay an in-flight run's buffered stream from ``cursor`` and tail it
-    live until the run completes. Serves any pod: the buffer lives in the
+    """Replay buffered output from ``cursor`` and tail it while its worker is live.
+    Serves any pod: the buffer lives in the
     shared cache. 404 when the session has no resumable run — the client
     falls back to refetching the session."""
     # Short-lived session: a Depends(get_session) would stay checked out (idle

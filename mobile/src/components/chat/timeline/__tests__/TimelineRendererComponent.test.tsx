@@ -10,14 +10,14 @@ import {
   type TimelineRendererResult,
 } from "@/components/chat/renderers/timelineContract";
 import { TimelineRendererComponent } from "@/components/chat/timeline/TimelineRendererComponent";
-import type { Packet } from "@/chat/streamingModels";
+import type { ResponseItem } from "@/chat/streamingModels";
 
 jest.mock("@/components/chat/renderers/findRenderer", () => ({
   findRenderer: jest.fn(),
 }));
 
 const mockFindRenderer = findRenderer as unknown as Mock<
-  (packets: Packet[]) => DispatchRenderer | null
+  (items: ResponseItem[]) => DispatchRenderer | null
 >;
 
 // Stub renderer emitting one result. The RenderType it received surfaces as the enhanced result's
@@ -43,7 +43,7 @@ function renderTimeline(
   let captured: TimelineRendererResult[] | null = null;
   render(
     <TimelineRendererComponent
-      packets={[]}
+      items={[]}
       chatState={{ agent: null }}
       animate={false}
       stopPacketSeen={false}

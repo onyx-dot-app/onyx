@@ -2,7 +2,7 @@
 
 import pytest
 
-from onyx.agents.events import AgentEndEvent, AgentEvent, MessageUpdateEvent
+from onyx.agents.events import AgentEndEvent, AgentEvent
 from onyx.agents.items import (
     ResponseGeneration,
     ResponseText,
@@ -46,18 +46,6 @@ def test_harness_selects_answer_and_item_ids_survive_restore() -> None:
         TextPurpose.COMMENTARY,
         TextPurpose.ANSWER,
     ]
-    live_items = [
-        item
-        for event in events
-        if isinstance(event, MessageUpdateEvent)
-        for item in event.items
-    ]
-    assert {item.id for item in live_items} == {item.id for item in snapshot.items}
-    assert all(
-        item.content.purpose == TextPurpose.COMMENTARY
-        for item in live_items
-        if isinstance(item.content, ResponseText)
-    )
     terminal = next(event for event in events if isinstance(event, AgentEndEvent))
     answer = snapshot.messages[1]
     assert isinstance(answer, AssistantMessage)

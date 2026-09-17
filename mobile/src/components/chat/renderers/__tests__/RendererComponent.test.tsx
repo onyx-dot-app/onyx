@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { render } from "@testing-library/react-native";
 import { Fragment } from "react";
 
-import { makePacket } from "@/chat/__tests__/fixtures";
+import { makeItem } from "@/chat/__tests__/fixtures";
 
 import { RendererComponent } from "../RendererComponent";
 import { type RendererOutput } from "../timelineContract";
@@ -30,17 +30,18 @@ describe("RendererComponent", () => {
     mockMarkdownContent = null;
   });
 
-  it("dispatches chat packets to the final-answer renderer", () => {
+  it("dispatches chat items to the final-answer renderer", () => {
     render(
       <RendererComponent
-        packets={[
-          makePacket({
-            type: "message_start",
-            id: "m",
-            content: "Hello ",
-            final_documents: null,
+        items={[
+          makeItem({
+            kind: "text",
+            text: "Hello world",
+            status: "complete",
+            purpose: "answer",
+            documents: [],
+            citations: [],
           }),
-          makePacket({ type: "message_delta", content: "world" }),
         ]}
         chatState={{ agent: null }}
         onComplete={() => {}}
@@ -57,7 +58,7 @@ describe("RendererComponent", () => {
     let captured: RendererOutput | null = null;
     render(
       <RendererComponent
-        packets={[]}
+        items={[]}
         chatState={{ agent: null }}
         onComplete={() => {}}
         animate={false}

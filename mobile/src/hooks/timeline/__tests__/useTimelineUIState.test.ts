@@ -1,21 +1,18 @@
 import { describe, expect, it } from "@jest/globals";
 import { renderHook } from "@testing-library/react-native";
 
-import { PacketType } from "@/chat/streamingModels";
 import {
   TimelineUIState,
   TimelineUIStateInput,
   useTimelineUIState,
 } from "@/hooks/timeline/useTimelineUIState";
 
-import { makePacket, makeStep, makeTurn } from "./testHelpers";
+import { makeItem, makeStep, makeTurn } from "./testHelpers";
 
-const sequentialTurn = makeTurn(0, [
-  makeStep(0, 0, [makePacket(PacketType.REASONING_START)]),
-]);
+const sequentialTurn = makeTurn(0, [makeStep(0, 0, [makeItem("reasoning")])]);
 const parallelTurn = makeTurn(0, [
-  makeStep(0, 0, [makePacket(PacketType.SEARCH_TOOL_START)]),
-  makeStep(0, 1, [makePacket(PacketType.PYTHON_TOOL_START)]),
+  makeStep(0, 0, [makeItem("internal_search")]),
+  makeStep(0, 1, [makeItem("run_python")]),
 ]);
 
 function baseInput(

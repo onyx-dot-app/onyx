@@ -1,17 +1,6 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-
-import {
-  PacketType,
-  ReasoningDelta,
-  ReasoningPacket,
-} from "@/app/app/services/streamingModels";
+import { ResponseItem } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
   FullChatState,
@@ -23,6 +12,7 @@ import {
   collapsedMarkdownComponents,
 } from "@/app/app/message/messageComponents/timeline/renderers/sharedMarkdownComponents";
 import { SvgCircle } from "@opal/icons";
+import { isComplete as itemsComplete } from "@/app/app/services/responseItems";
 
 const THINKING_MIN_DURATION_MS = 500; // 0.5 second minimum for "Thinking" state
 
@@ -64,22 +54,12 @@ function extractFirstParagraph(content: string): {
   return { title: cleanTitle, remainingContent };
 }
 
-function constructCurrentReasoningState(packets: ReasoningPacket[]) {
-  const hasStart = packets.some(
-    (p) => p.obj.type === PacketType.REASONING_START
-  );
-  const hasEnd = packets.some(
-    (p) =>
-      p.obj.type === PacketType.SECTION_END ||
-      p.obj.type === PacketType.ERROR ||
-      // Support reasoning_done from backend
-      (p.obj as any).type === PacketType.REASONING_DONE
-  );
-  const deltas = packets
-    .filter((p) => p.obj.type === PacketType.REASONING_DELTA)
-    .map((p) => p.obj as ReasoningDelta);
-
-  const content = deltas.map((d) => d.reasoning).join("");
+function constructCurrentReasoningState(items: ResponseItem[]) {
+  const hasStart = items.length > 0;
+  const hasEnd = itemsComplete(items);
+  const content = items
+    .map((item) => (item.content.kind === "reasoning" ? item.content.text : ""))
+    .join("");
 
   return {
     hasStart,
@@ -89,15 +69,15 @@ function constructCurrentReasoningState(packets: ReasoningPacket[]) {
 }
 
 export const ReasoningRenderer: MessageRenderer<
-  ReasoningPacket,
+  ResponseItem,
   FullChatState
-> = ({ packets, onComplete, animate, children }) => {
+> = ({ items, onComplete, animate, children }) => {
   const t = useTranslations("chat.messages.timeline");
   const thinkingStatus = t("reasoning.thinking.status");
 
   const { hasStart, hasEnd, content } = useMemo(
-    () => constructCurrentReasoningState(packets),
-    [packets]
+    () => constructCurrentReasoningState(items),
+    [items]
   );
 
   const { title, remainingContent } = useMemo(

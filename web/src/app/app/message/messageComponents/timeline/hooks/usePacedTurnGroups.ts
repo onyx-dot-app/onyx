@@ -1,40 +1,21 @@
 import { useRef, useState, useEffect, useCallback, useMemo } from "react";
-import { PacketType } from "@/app/app/services/streamingModels";
-import { GroupedPacket } from "./packetProcessor";
-import { TurnGroup, TransformedStep } from "../transformers";
+import { GroupedItem } from "@/app/app/message/messageComponents/timeline/hooks/packetProcessor";
+import {
+  TurnGroup,
+  TransformedStep,
+} from "@/app/app/message/messageComponents/timeline/transformers";
 
 // Delay between steps (ms)
 const PACING_DELAY_MS = 200;
 
-/**
- * Tool START packet types used for categorizing steps
- * These determine the "type" of a step for pacing purposes
- */
-const TOOL_START_PACKET_TYPES = new Set<PacketType>([
-  PacketType.SEARCH_TOOL_START,
-  PacketType.FETCH_TOOL_START,
-  PacketType.PYTHON_TOOL_START,
-  PacketType.CUSTOM_TOOL_START,
-  PacketType.FILE_READER_START,
-  PacketType.REASONING_START,
-  PacketType.IMAGE_GENERATION_TOOL_START,
-  PacketType.DEEP_RESEARCH_PLAN_START,
-  PacketType.RESEARCH_AGENT_START,
-  PacketType.MEMORY_TOOL_START,
-  PacketType.MEMORY_TOOL_NO_ACCESS,
-]);
-
-/**
- * Get the primary packet type from a step's packets (first START packet)
- * Used to determine if a type transition occurred
- */
-function getStepPacketType(step: TransformedStep): PacketType | null {
-  for (const packet of step.packets) {
-    if (TOOL_START_PACKET_TYPES.has(packet.obj.type as PacketType)) {
-      return packet.obj.type as PacketType;
-    }
-  }
-  return null;
+function getStepType(step: TransformedStep): string | null {
+  const item = step.items[0]?.content;
+  if (!item) return null;
+  return item.kind === "tool"
+    ? item.name
+    : item.kind === "text"
+      ? item.purpose
+      : item.kind;
 }
 
 /**
@@ -43,7 +24,7 @@ function getStepPacketType(step: TransformedStep): PacketType | null {
 interface PacingState {
   // Tracking revealed content
   revealedStepKeys: Set<string>;
-  lastRevealedPacketType: PacketType | null;
+  lastRevealedType: string | null;
 
   // Queued content
   pendingSteps: TransformedStep[];
@@ -62,7 +43,7 @@ interface PacingState {
 function createInitialPacingState(nodeId: string): PacingState {
   return {
     revealedStepKeys: new Set(),
-    lastRevealedPacketType: null,
+    lastRevealedType: null,
     pendingSteps: [],
     pacingTimer: null,
     toolPacingComplete: false,
@@ -81,20 +62,21 @@ function createInitialPacingState(nodeId: string): PacingState {
  * - Timer-based delays: 200ms between all steps
  *
  * @param toolTurnGroups - Turn groups from packet processor
- * @param displayGroups - Display content groups (MESSAGE_START/DELTA)
+ * @param displayGroups - Display content groups (answer and image items)
  * @param stopPacketSeen - Whether STOP packet has been received
  * @param nodeId - Message node ID for reset detection
  * @param finalAnswerComing - Whether message content is streaming
  */
 export function usePacedTurnGroups(
   toolTurnGroups: TurnGroup[],
-  displayGroups: GroupedPacket[],
+  displayGroups: GroupedItem[],
   stopPacketSeen: boolean,
   nodeId: number,
-  finalAnswerComing: boolean
+  finalAnswerComing: boolean,
+  skipPacing = false
 ): {
   pacedTurnGroups: TurnGroup[];
-  pacedDisplayGroups: GroupedPacket[];
+  pacedDisplayGroups: GroupedItem[];
   pacedFinalAnswerComing: boolean;
 } {
   // Stable nodeId string for comparison
@@ -121,12 +103,12 @@ export function usePacedTurnGroups(
   const hasNodeChanged = stateRef.current.nodeId !== nodeIdStr;
   const state = hasNodeChanged ? resetState : stateRef.current;
 
-  // Bypass pacing for completed messages (old messages loaded from history)
-  // If stopPacketSeen is true on first render, return everything immediately
+  // Restored output should appear immediately, even when execution is still active.
   const shouldBypassPacing =
-    stopPacketSeen &&
-    state.revealedStepKeys.size === 0 &&
-    toolTurnGroups.length > 0;
+    skipPacing ||
+    (stopPacketSeen &&
+      state.revealedStepKeys.size === 0 &&
+      toolTurnGroups.length > 0);
 
   // Handle revealing the next pending step
   // Reveals ONE step per timer fire, always with delay between steps
@@ -136,7 +118,7 @@ export function usePacedTurnGroups(
     if (state.pendingSteps.length > 0) {
       const stepToReveal = state.pendingSteps.shift()!;
       state.revealedStepKeys.add(stepToReveal.key);
-      state.lastRevealedPacketType = getStepPacketType(stepToReveal);
+      state.lastRevealedType = getStepType(stepToReveal);
 
       // Schedule next step if more pending (always delay, regardless of type)
       if (state.pendingSteps.length > 0) {
@@ -275,7 +257,7 @@ export function usePacedTurnGroups(
 
     // Process new steps
     for (const step of newSteps) {
-      const stepType = getStepPacketType(step);
+      const stepType = getStepType(step);
 
       // First step ever - reveal immediately
       if (
@@ -283,7 +265,7 @@ export function usePacedTurnGroups(
         state.pendingSteps.length === 0
       ) {
         state.revealedStepKeys.add(step.key);
-        state.lastRevealedPacketType = stepType;
+        state.lastRevealedType = stepType;
         setRevealTrigger((t) => t + 1);
         continue;
       }
@@ -348,7 +330,10 @@ export function usePacedTurnGroups(
           oldGroup.steps.every(
             (s, j) =>
               s.key === newGroup.steps[j]!.key &&
-              s.packets.length === newGroup.steps[j]!.packets.length
+              s.items.length === newGroup.steps[j]!.items.length &&
+              s.items.every(
+                (item, index) => item === newGroup.steps[j]!.items[index]
+              )
           )
         ) {
           // Reuse old object reference for this group

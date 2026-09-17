@@ -15,7 +15,7 @@ from onyx.chat.presentation import ResponsePresenter, project_response
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.models import AssistantMessage, ToolCall, ToolResult
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.tools.models import PythonExecutionFile, PythonToolRichResponse
+from onyx.tools.models import LlmPythonExecutionResult, PythonExecutionFile
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
 
@@ -33,7 +33,13 @@ def test_stop_preserves_accepted_file_and_unfinished_parent(
     def write(_invocation: ToolInvocation) -> ToolResult:
         return ToolResult(
             content="Created result.csv",
-            details=PythonToolRichResponse(generated_files=[generated]),
+            details=LlmPythonExecutionResult(
+                stdout="",
+                stderr="",
+                exit_code=0,
+                timed_out=False,
+                generated_files=[generated],
+            ),
         )
 
     def wait(invocation: ToolInvocation) -> ToolResult:
@@ -133,6 +139,8 @@ def test_stop_preserves_accepted_file_and_unfinished_parent(
         )
         assert file_record.generated_files == [generated]
         assert file_record.tool_call_response == "Created result.csv"
+        assert isinstance(file_record.result_metadata, LlmPythonExecutionResult)
+        assert file_record.result_metadata.generated_files == [generated]
         if child_run:
             parent = next(
                 record

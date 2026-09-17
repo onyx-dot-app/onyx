@@ -1,10 +1,10 @@
-// Picks the renderer for a group's packets, invokes it at FULL, and forwards its `RendererResult[]` to
+// Picks the renderer for a group's items, invokes it at FULL, and forwards its `RendererResult[]` to
 // `children` (web `renderMessageComponent`). Memoized on packet identity so parent streaming re-renders
-// don't churn the answer subtree unless these packets grew.
+// don't churn the answer subtree unless these items grew.
 import { memo } from "react";
 import type { ComponentProps, ReactElement } from "react";
 
-import { Packet, StopReason } from "@/chat/streamingModels";
+import { ResponseItem, StopReason } from "@/chat/streamingModels";
 
 import { findRenderer } from "./findRenderer";
 import { RenderType } from "./timelineContract";
@@ -24,7 +24,7 @@ function DispatchedRenderer({
 }
 
 interface RendererComponentProps {
-  packets: Packet[];
+  items: ResponseItem[];
   chatState: FullChatState;
   messageNodeId?: number;
   hasTimelineThinking?: boolean;
@@ -36,7 +36,7 @@ interface RendererComponentProps {
 }
 
 function RendererComponentImpl({
-  packets,
+  items,
   chatState,
   messageNodeId,
   hasTimelineThinking,
@@ -48,7 +48,7 @@ function RendererComponentImpl({
 }: RendererComponentProps) {
   // 9e: web splits mixed chat+image groups via a MixedContentHandler. No image renderer yet, so mixed
   // groups fall through to the chat renderer (image dropped) until then.
-  const RendererFn = findRenderer(packets);
+  const RendererFn = findRenderer(items);
 
   if (!RendererFn) {
     return children([{ icon: null, status: null, content: <></> }]);
@@ -57,7 +57,7 @@ function RendererComponentImpl({
   return (
     <DispatchedRenderer
       renderer={RendererFn}
-      packets={packets}
+      items={items}
       state={chatState}
       messageNodeId={messageNodeId}
       hasTimelineThinking={hasTimelineThinking}
@@ -79,7 +79,7 @@ function areRendererPropsEqual(
   next: RendererComponentProps,
 ): boolean {
   return (
-    prev.packets === next.packets &&
+    prev.items === next.items &&
     prev.stopPacketSeen === next.stopPacketSeen &&
     prev.stopReason === next.stopReason &&
     prev.animate === next.animate &&
