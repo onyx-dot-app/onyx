@@ -76,7 +76,7 @@ class PostHogFeatureFlagProvider(FeatureFlagProvider):
             "email": user.email if user else "anonymous@onyx.app",
         }
         try:
-            posthog.set(distinct_id=distinct_id, properties=properties)
+            posthog.set(distinct_id=str(distinct_id), properties=properties)
             is_enabled = posthog.feature_enabled(
                 flag_key,
                 str(distinct_id),

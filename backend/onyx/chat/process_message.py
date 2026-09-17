@@ -1203,8 +1203,10 @@ def _run_models(
 
     # Workspace toggle: infer source/time filters from the query (default on).
     auto_detect_search_filters = load_settings().auto_detect_search_filters is not False
+    deep_research = n_models == 1 and setup.new_msg_req.deep_research
     # Evaluated once per message so every model in the turn sees the same answer.
-    search_receipts = search_receipts_enabled(user)
+    # The deep research loop does not take receipts, so skip the flag lookup there.
+    search_receipts = False if deep_research else search_receipts_enabled(user)
 
     merged_queue: queue.Queue[tuple[int, Packet | Exception | object]] = queue.Queue()
 
@@ -1390,7 +1392,7 @@ def _run_models(
                 )
 
             # Per-thread copy: run_llm_loop mutates simple_chat_history in-place.
-            if n_models == 1 and setup.new_msg_req.deep_research:
+            if deep_research:
                 if setup.chat_session_project_id:
                     raise RuntimeError("Deep research is not supported for projects")
                 run_deep_research_llm_loop(
