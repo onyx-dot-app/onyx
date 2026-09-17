@@ -47,15 +47,16 @@ from tests.unit.onyx.connectors.teams.helpers import (
 FOLDER_URL = f"teams/{TEAM_ID}/channels/{CHANNEL_ID}/filesFolder"
 DRIVE = "drive-1"
 FOLDER_ID = "folder-1"
-SITE_ID = "tenant.sharepoint.example,site-1"
 SITE_URL = "https://tenant.sharepoint.example/sites/T"
+DRIVE_URL = f"drives/{DRIVE}?$select=name,sharePointIds"
+# The shape a live tenant answers with: the files folder names its drive and
+# leaves its site id empty, and the drive names the site.
 LIBRARY_ROUTES: dict[str, dict[str, Any]] = {
     FOLDER_URL: {
         "id": FOLDER_ID,
-        "parentReference": {"driveId": DRIVE, "siteId": SITE_ID},
+        "parentReference": {"driveId": DRIVE, "siteId": None},
     },
-    f"sites/{SITE_ID}": {"webUrl": SITE_URL},
-    f"drives/{DRIVE}": {"name": "Documents"},
+    DRIVE_URL: {"name": "Documents", "sharePointIds": {"siteUrl": SITE_URL}},
 }
 MEMBERS = {MEMBERS_URL: {"value": [member("Ada", "ada@example.com", "u1")]}}
 CHANNEL_READERS = ExternalAccess(
@@ -307,8 +308,8 @@ def test_a_library_outage_fails_the_attempt(
 ) -> None:
     monkeypatch.setattr("onyx.connectors.teams.utils.time.sleep", lambda _: None)
     routes = _channel_routes(message("m1", "Plan"))
-    routes.pop(f"drives/{DRIVE}")
-    client = graph_client(routes, refused={f"drives/{DRIVE}": 503})
+    routes.pop(DRIVE_URL)
+    client = graph_client(routes, refused={DRIVE_URL: 503})
 
     with pytest.raises(GraphRetriesExhausted):
         walk_channel(connector(client, include_attachments=True))
@@ -405,7 +406,7 @@ def test_channel_site_urls_are_distinct_and_a_refused_channel_fails_the_sync(
         **LIBRARY_ROUTES,
         private_folder: {
             "id": "folder-2",
-            "parentReference": {"driveId": DRIVE, "siteId": SITE_ID},
+            "parentReference": {"driveId": DRIVE, "siteId": None},
         },
     }
     client = graph_client(routes, refused={refused_folder: 403})
@@ -551,36 +552,62 @@ def test_validation_probes_the_channel_site_over_sharepoint_rest(
 
 @pytest.mark.usefixtures("library")
 @pytest.mark.parametrize("status", [401, 403])
-def test_a_site_that_refuses_the_certificate_app_names_the_grant(
+def test_a_site_that_refuses_its_role_assignments_names_full_control(
     monkeypatch: pytest.MonkeyPatch, status: int
 ) -> None:
     _rest_answering(monkeypatch, status)
     teams_connector, teams = _validation_connector(monkeypatch, LIBRARY_ROUTES)
 
-    with pytest.raises(InsufficientPermissionsError, match="Sites.Read.All"):
+    # A read grant on SharePoint reaches this refusal, so the message names the
+    # grant that reads role assignments and not the one the app already holds.
+    with pytest.raises(
+        InsufficientPermissionsError, match="Sites.FullControl.All"
+    ) as refusal:
         teams_connector._validate_attachment_access(teams)
+    assert "Sites.Read.All" not in str(refusal.value)
 
 
-def test_a_files_folder_without_a_site_keeps_the_pair_active(
+def test_the_site_comes_from_the_drive_not_the_files_folder(
+    library: dict[str, Any],
+) -> None:
+    library["files"] = [_item("item-1", "Plan.pdf")]
+    client = graph_client(_channel_routes(message("m1", "Plan")))
+
+    items = walk_channel(connector(client, include_attachments=True))
+
+    # The files folder of LIBRARY_ROUTES carries no site id, as a live tenant's
+    # does, and the file still indexes with SharePoint REST on the drive's site.
+    assert file_document_id("item-1") in _document_ids(items)
+    assert _rest_context_calls() == [(SITE_URL,)]
+
+
+def test_a_library_that_names_no_site_keeps_the_pair_active(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    routes = {
-        **LIBRARY_ROUTES,
-        FOLDER_URL: {"id": FOLDER_ID, "parentReference": {"driveId": DRIVE}},
-    }
+    routes = {**LIBRARY_ROUTES, DRIVE_URL: {"name": "Documents"}}
     teams_connector, teams = _validation_connector(monkeypatch, routes)
 
-    with pytest.raises(UnexpectedValidationError, match="names no site"):
+    with pytest.raises(UnexpectedValidationError, match="without its name or its site"):
         teams_connector._validate_attachment_access(teams)
 
 
-def test_a_files_folder_without_a_site_is_one_channel_failure(
+def test_a_files_folder_that_names_no_library_keeps_the_pair_active(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    routes = {**LIBRARY_ROUTES, FOLDER_URL: {"id": FOLDER_ID, "parentReference": {}}}
+    teams_connector, teams = _validation_connector(monkeypatch, routes)
+
+    with pytest.raises(UnexpectedValidationError, match="names no document library"):
+        teams_connector._validate_attachment_access(teams)
+
+
+def test_a_library_that_names_no_site_is_one_channel_failure(
     library: dict[str, Any],
 ) -> None:
     library["files"] = [_item("item-1", "Plan.pdf")]
     routes = {
         **_channel_routes(message("m1", "Plan")),
-        FOLDER_URL: {"id": FOLDER_ID, "parentReference": {"driveId": DRIVE}},
+        DRIVE_URL: {"name": "Documents"},
     }
 
     items = walk_channel(connector(graph_client(routes), include_attachments=True))
@@ -592,7 +619,7 @@ def test_a_files_folder_without_a_site_is_one_channel_failure(
     assert len(failures) == 1
     assert failures[0].failed_entity is not None
     assert failures[0].failed_entity.entity_id == CHANNEL_ID
-    assert "names no site" in failures[0].failure_message
+    assert "without its name or its site" in failures[0].failure_message
 
 
 def test_a_refused_files_folder_names_the_grant(
