@@ -1,6 +1,6 @@
 import pytest
 
-from onyx.connectors.zoom.recordings.vtt import parse_vtt_transcript
+from onyx.file_processing.webvtt import parse_vtt_transcript
 
 # A real Zoom audio_transcript.vtt shape, not an invented one.
 _ZOOM_VTT = """WEBVTT
@@ -16,6 +16,20 @@ Sarah Chen: that I can't tell if I'm building the right thing.
 3
 00:00:09.760 --> 00:00:11.200
 Marcus Webb: Yeah.
+"""
+
+# The shape Microsoft Graph exports for a Teams meeting: the speaker lives in
+# a voice span, not in the text.
+_TEAMS_VTT = """WEBVTT
+
+00:00:03.120 --> 00:00:06.480
+<v Sarah Chen>So the thing I keep coming back to is</v>
+
+00:00:06.480 --> 00:00:09.760
+<v Sarah Chen>that I can't tell if I'm building the right thing.</v>
+
+00:00:09.760 --> 00:00:11.200
+<v Marcus Webb>Yeah.</v>
 """
 
 
@@ -163,3 +177,90 @@ class TestParseVttKeepsCuesNamedLikeReservedWords:
             "1\n00:00:01.000 --> 00:00:02.000\nJane: kept\n"
         )
         assert parse_vtt_transcript(vtt) == "Jane: kept"
+
+
+class TestParseVttKeepsSpeakers:
+    """Teams names the speaker in a voice span, so dropping the markup drops
+    who said it. The mode is opt-in so Zoom's output stays as it was."""
+
+    def test_voice_spans_become_speaker_prefixes(self) -> None:
+        assert parse_vtt_transcript(_TEAMS_VTT, keep_speakers=True) == (
+            "Sarah Chen: So the thing I keep coming back to is\n\n"
+            "Sarah Chen: that I can't tell if I'm building the right thing.\n\n"
+            "Marcus Webb: Yeah."
+        )
+
+    def test_zoom_output_is_unchanged_with_speakers_on(self) -> None:
+        assert parse_vtt_transcript(_ZOOM_VTT, keep_speakers=True) == (
+            parse_vtt_transcript(_ZOOM_VTT)
+        )
+
+    def test_speaker_is_off_by_default(self) -> None:
+        assert parse_vtt_transcript(_TEAMS_VTT).startswith("So the thing")
+
+    def test_voice_span_classes_are_not_part_of_the_name(self) -> None:
+        vtt = (
+            "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n"
+            "<v.loud.fast Jane Doe>hello <i>there</i></v>\n"
+        )
+        assert parse_vtt_transcript(vtt, keep_speakers=True) == "Jane Doe: hello there"
+
+    def test_multiline_cue_names_its_speaker_once(self) -> None:
+        vtt = (
+            "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n"
+            "<v Jane Doe>This sentence wraps\n"
+            "across two lines.</v>\n"
+        )
+        assert (
+            parse_vtt_transcript(vtt, keep_speakers=True)
+            == "Jane Doe: This sentence wraps across two lines."
+        )
+
+    def test_speaker_name_is_decoded_like_speech(self) -> None:
+        vtt = (
+            "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n"
+            "<v Jane&nbsp;O&#39;Brien>hello</v>\n"
+        )
+        assert parse_vtt_transcript(vtt, keep_speakers=True) == "Jane O'Brien: hello"
+
+    def test_a_non_breaking_space_in_a_class_is_not_the_separator(self) -> None:
+        vtt = (
+            "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n<v.loud\xa0fast Jane>hello</v>\n"
+        )
+        assert parse_vtt_transcript(vtt, keep_speakers=True) == "Jane: hello"
+
+    def test_two_speakers_in_one_cue_keep_both_names(self) -> None:
+        vtt = (
+            "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n"
+            "<v Jane>Hello</v> <v John>Hi</v>\n"
+        )
+        assert (
+            parse_vtt_transcript(vtt, keep_speakers=True) == "Jane: Hello\n\nJohn: Hi"
+        )
+
+    def test_speech_before_the_first_span_has_no_name(self) -> None:
+        vtt = "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n[laughter] <v Jane>hello</v>\n"
+        assert (
+            parse_vtt_transcript(vtt, keep_speakers=True) == "[laughter]\n\nJane: hello"
+        )
+
+    def test_speech_between_spans_belongs_to_nobody(self) -> None:
+        vtt = (
+            "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n"
+            "<v Jane>Hello</v> [laughter] <v John>Hi</v> [applause]\n"
+        )
+        assert parse_vtt_transcript(vtt, keep_speakers=True) == (
+            "Jane: Hello\n\n[laughter]\n\nJohn: Hi\n\n[applause]"
+        )
+
+    def test_an_unclosed_span_names_its_speaker(self) -> None:
+        vtt = "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n<v Jane>hello\n"
+        assert parse_vtt_transcript(vtt, keep_speakers=True) == "Jane: hello"
+
+    def test_a_cue_without_a_voice_span_has_no_prefix(self) -> None:
+        vtt = "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nhello there\n"
+        assert parse_vtt_transcript(vtt, keep_speakers=True) == "hello there"
+
+    def test_escaped_voice_span_is_speech_not_a_speaker(self) -> None:
+        vtt = "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n&lt;v Jane&gt;hello&lt;/v&gt;\n"
+        assert parse_vtt_transcript(vtt, keep_speakers=True) == "<v Jane>hello</v>"
