@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode
 from uuid import UUID
@@ -17,7 +18,6 @@ from fastapi import (
 )
 from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi_users.authentication.strategy.base import Strategy
-from fastapi_users.manager import BaseUserManager
 from starlette.websockets import WebSocketState
 from websockets.asyncio.client import ClientConnection
 from websockets.asyncio.client import connect as websocket_connect
@@ -33,9 +33,12 @@ from onyx.auth.users import (
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
+from onyx.db.auth import get_user_db
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
+from onyx.db.engine.sql_engine import is_valid_schema_name
 from onyx.db.enums import Permission, SharingScope
 from onyx.db.models import User
+from onyx.redis.redis_pool import retrieve_auth_token_data
 from onyx.server.features.build.db.build_session import (
     get_webapp_access_async,
     get_webapp_target_async,
@@ -43,6 +46,8 @@ from onyx.server.features.build.db.build_session import (
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.nextjs_dev import webapp_base_path
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
 
@@ -269,9 +274,8 @@ def _webapp_hmr_websocket_url(
 
 async def _current_webapp_websocket_user(
     websocket: WebSocket,
-    user_manager: BaseUserManager[User, UUID] = Depends(get_user_manager),
     strategy: Strategy[User, UUID] = Depends(auth_backend.get_strategy),
-) -> User:
+) -> AsyncGenerator[User, None]:
     # CSWSH guard: WebSockets are exempt from the same-origin policy and
     # cookie auth is attached automatically. Browsers always send Origin on
     # WebSocket upgrades, so a missing header is rejected too.
@@ -279,12 +283,36 @@ async def _current_webapp_websocket_user(
     if origin is None or not is_same_origin(origin, WEB_DOMAIN):
         raise WebSocketException(code=1008)
     token = websocket.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
-    user = await strategy.read_token(token, user_manager)
-    if user is None or not user.is_active:
+    if not token:
         raise WebSocketException(code=1008)
-    if Permission.BASIC_ACCESS not in get_effective_permissions(user):
-        raise WebSocketException(code=1008)
-    return user
+
+    # The tenant middleware only runs for HTTP requests, so resolve the tenant
+    # from the session token here (same source the middleware uses) and keep it
+    # set for the connection: the user lookup and the route handler open DB
+    # sessions that route by the tenant contextvar.
+    if MULTI_TENANT:
+        token_data = await retrieve_auth_token_data(token)
+        tenant_id = token_data.get("tenant_id") if token_data else None
+        if not isinstance(tenant_id, str) or not is_valid_schema_name(tenant_id):
+            raise WebSocketException(code=1008)
+    else:
+        tenant_id = POSTGRES_DEFAULT_SCHEMA
+
+    context_token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+    try:
+        get_user_db_context = asynccontextmanager(get_user_db)
+        get_user_manager_context = asynccontextmanager(get_user_manager)
+        async with get_async_session_context_manager() as db_session:
+            async with get_user_db_context(db_session) as user_db:
+                async with get_user_manager_context(user_db) as user_manager:
+                    user = await strategy.read_token(token, user_manager)
+        if user is None or not user.is_active:
+            raise WebSocketException(code=1008)
+        if Permission.BASIC_ACCESS not in get_effective_permissions(user):
+            raise WebSocketException(code=1008)
+        yield user
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(context_token)
 
 
 _current_webapp_websocket_user._is_websocket_auth_dependency = True  # ty: ignore[unresolved-attribute]
