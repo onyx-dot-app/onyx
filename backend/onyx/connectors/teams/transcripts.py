@@ -41,9 +41,9 @@ SPEAKER_ATTRIBUTION_DISABLED_CODE = "SpeakerAttributionNotAllowed"
 ACCESS_POLICY_MESSAGE = "application access policy"
 
 TRANSCRIPT_PAGE_SIZE = 50
-# Graph pages the listing in month-sized slices, newest first, and serves about
-# 13 of them: a window reaching further back answers 404 on the next page. With
-# no window it lists this same year, so an older start asks for nothing more.
+# Graph walks the listing newest first in slices of about 35 days and serves the
+# 13 nearest to now: further back answers 404, even for a window that ends there.
+# With no window it lists about this same year, the widest span seen to end well.
 TRANSCRIPT_LOOKBACK_S = 365 * 24 * 60 * 60
 # A page of organizers rides in the indexing checkpoint, so pages stay small.
 USER_PAGE_SIZE = 100
@@ -224,11 +224,13 @@ def fetch_transcripts(
     before_page: Callable[[], None] | None = None,
 ) -> Generator[Transcript]:
     """The transcripts of the meetings this user organized, created inside the
-    window when one is given. Graph pages the listing itself, ``before_page``
-    runs ahead of each page request."""
+    window when one is given and no further back than Graph serves. Graph pages
+    the listing itself, ``before_page`` runs ahead of each page request."""
+    floor = time.time() - TRANSCRIPT_LOOKBACK_S
+    if end is not None and end <= floor:
+        return
     parameters = [f"meetingOrganizerUserId='{organizer_id}'"]
     if start is not None:
-        floor = (end if end is not None else time.time()) - TRANSCRIPT_LOOKBACK_S
         parameters.append(f"startDateTime={_graph_timestamp(max(start, floor))}")
     if end is not None:
         parameters.append(f"endDateTime={_graph_timestamp(end)}")

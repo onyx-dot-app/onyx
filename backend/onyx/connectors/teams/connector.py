@@ -118,7 +118,7 @@ from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import run_with_timeout
+from onyx.utils.threadpool_concurrency import parallel_yield, run_with_timeout
 
 logger = setup_logger()
 
@@ -132,10 +132,15 @@ _SLIM_WALK = "teams_slim_walk"
 # REST token outliving its hour.
 _REST_CTX_MAX_AGE_S = 30 * 60
 
-# Graph scans every meeting of an organizer when the listing has no window, 20
-# seconds or more for one user. A refusal answers the same inside a window, so
-# the setup check asks for recent transcripts only and stays inside the UI wait.
+# A year of listing is 11 slices at about 2 seconds each, 20 seconds or more for
+# one user. A refusal answers the same inside a window, so the setup check asks
+# for recent transcripts only and stays inside the connector form's wait.
 _TRANSCRIPT_PROBE_WINDOW_S = 30 * 24 * 60 * 60
+
+# Graph lists transcripts per organizer and the slices cost the same with or
+# without transcripts, so a tenant is walked several organizers at a time. Eight
+# measured 7 times faster with no throttling, sixteen only 9 with slower calls.
+_TRANSCRIPT_ORGANIZER_WORKERS = 8
 
 # Channel files are documents of their own. The prefix keeps them apart from a
 # SharePoint connector indexing the same library, which uses the bare item id.
@@ -496,8 +501,13 @@ class TeamsConnector(
                 len(checkpoint.todo_team_ids),
             )
         elif self.include_meeting_transcripts and checkpoint.todo_organizers:
-            yield from self._index_transcripts(
-                checkpoint.todo_organizers.pop(), start, end
+            # The Graph client is shared: a direct request builds its own options
+            # and the hooks only touch that request, so threads do not collide.
+            organizers = checkpoint.todo_organizers[-_TRANSCRIPT_ORGANIZER_WORKERS:]
+            del checkpoint.todo_organizers[-_TRANSCRIPT_ORGANIZER_WORKERS:]
+            yield from parallel_yield(
+                [self._index_transcripts(o, start, end) for o in organizers],
+                max_workers=_TRANSCRIPT_ORGANIZER_WORKERS,
             )
         elif self.include_meeting_transcripts and (
             checkpoint.todo_organizers is None or checkpoint.next_organizers_url
@@ -655,8 +665,8 @@ class TeamsConnector(
         )
 
     def _validate_transcript_access(self) -> None:
-        """Lists one organizer's transcripts and, when there is one, reads its
-        meeting and its content: the three grants, the tenant setting and the
+        """Lists one organizer's last 30 days and, when there is a transcript,
+        reads its meeting and its content: the three grants, the tenant setting and the
         access policy all answer on these calls. An empty listing proves the
         listing grant alone, which is enough to run."""
         assert self.graph_client is not None
@@ -1064,49 +1074,70 @@ class TeamsConnector(
     def _slim_transcripts(
         self, callback: IndexingHeartbeatInterface | None, with_readers: bool
     ) -> Iterator[SlimDocument]:
-        """Every transcript of every organizer, with the readers the indexing
-        walk gives it when the caller needs those. A refused organizer becomes a
-        gap, which holds back the deletions this walk feeds: its transcripts are
-        hidden, not gone."""
+        """Every transcript of every organizer, several organizers at a time, with
+        the readers the indexing walk gives it when the caller needs those."""
         assert self.graph_client is not None
-        stop_check = lambda: _raise_if_stopped(callback)  # noqa: E731
-        for organizer in iter_organizers(
-            self.graph_client, self.transcript_organizers, before_page=stop_check
-        ):
-            # An organizer can hold pages of transcripts, so a stop is honored
-            # before every read and progress is reported per organizer, not only
-            # per full batch.
+        organizers = iter_organizers(
+            self.graph_client,
+            self.transcript_organizers,
+            before_page=lambda: _raise_if_stopped(callback),
+        )
+        for batch in batch_generator(organizers, _TRANSCRIPT_ORGANIZER_WORKERS):
+            # A stop is honored before every read and progress is reported per
+            # organizer, since one can hold pages of transcripts.
             _raise_if_stopped(callback)
             if callback:
-                callback.progress(_SLIM_WALK, 1)
-            try:
-                for transcript in fetch_transcripts(
-                    self.graph_client, organizer.id, None, None, before_page=stop_check
-                ):
-                    _raise_if_stopped(callback)
-                    yield SlimDocument(
-                        id=transcript_document_id(organizer.id, transcript.id),
-                        external_access=(
-                            transcript_access(
-                                organizer, self._meeting_record(organizer, transcript)
-                            )
-                            if with_readers
-                            else None
-                        ),
-                        doc_created_at=transcript.created,
-                    )
-            except requests.HTTPError as e:
-                if transcripts_disabled(e):
-                    raise ConnectorValidationError(_TRANSCRIPTS_DISABLED) from e
-                if not _is_permanent(e):
-                    raise
-                self._unlisted_entity_ids.append(organizer.id)
-                logger.warning(
-                    "Could not list the transcripts of %s, so their indexed "
-                    "transcripts are kept as they are: %s",
-                    organizer.email,
-                    _transcript_refusal(e),
+                callback.progress(_SLIM_WALK, len(batch))
+            yield from parallel_yield(
+                [
+                    self._slim_organizer_transcripts(organizer, callback, with_readers)
+                    for organizer in batch
+                ],
+                max_workers=_TRANSCRIPT_ORGANIZER_WORKERS,
+            )
+
+    def _slim_organizer_transcripts(
+        self,
+        organizer: Organizer,
+        callback: IndexingHeartbeatInterface | None,
+        with_readers: bool,
+    ) -> Iterator[SlimDocument]:
+        """One organizer's transcripts. A refused organizer becomes a gap, which
+        holds back the deletions this walk feeds: its transcripts are hidden,
+        not gone."""
+        assert self.graph_client is not None
+        try:
+            for transcript in fetch_transcripts(
+                self.graph_client,
+                organizer.id,
+                None,
+                None,
+                before_page=lambda: _raise_if_stopped(callback),
+            ):
+                _raise_if_stopped(callback)
+                yield SlimDocument(
+                    id=transcript_document_id(organizer.id, transcript.id),
+                    external_access=(
+                        transcript_access(
+                            organizer, self._meeting_record(organizer, transcript)
+                        )
+                        if with_readers
+                        else None
+                    ),
+                    doc_created_at=transcript.created,
                 )
+        except requests.HTTPError as e:
+            if transcripts_disabled(e):
+                raise ConnectorValidationError(_TRANSCRIPTS_DISABLED) from e
+            if not _is_permanent(e):
+                raise
+            self._unlisted_entity_ids.append(organizer.id)
+            logger.warning(
+                "Could not list the transcripts of %s, so their indexed "
+                "transcripts are kept as they are: %s",
+                organizer.email,
+                _transcript_refusal(e),
+            )
 
     def _slim_channel_files(
         self, channel: ChannelRef, with_readers: bool

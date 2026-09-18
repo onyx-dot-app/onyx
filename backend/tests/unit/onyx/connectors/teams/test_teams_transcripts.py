@@ -2,6 +2,7 @@
 them, and what each Graph refusal means for the walk and for validation."""
 
 import logging
+import threading
 from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock
@@ -45,10 +46,10 @@ ADA = {
 BOB = {"id": "user-2", "userPrincipalName": "bob@example.com", "mail": None}
 START = 1_700_000_000
 WINDOW = "startDateTime=2023-11-14T22:13:20Z,endDateTime=2023-11-14T22:13:21Z"
-# The setup check lists the last 30 days only: Graph takes 20 seconds or more to
-# scan an organizer with no window, longer than the connector form waits.
-PROBE_NOW = 1_700_000_000.0
-PROBE_WINDOW = "startDateTime=2023-10-15T22:13:20Z"
+# The clock every test runs at, the end of WINDOW. The setup check lists the 30
+# days before it, and nothing is asked of Graph further back than a year.
+NOW = START + 1
+PROBE_WINDOW = "startDateTime=2023-10-15T22:13:21Z"
 CONTENT_ROUTE = "users/user-1/onlineMeetings/meeting-1/transcripts/t1/content"
 MEETING_URL = (
     "users/user-1/onlineMeetings/meeting-1"
@@ -72,6 +73,13 @@ UNATTRIBUTED_TEXT = (
     "00:00:01.500 --> 00:00:04.000 \n\nHello, thanks for joining. \n\n"
     "00:00:04.000 --> 00:00:07.200 \n\nGlad to be here. \n"
 )
+
+
+@pytest.fixture(autouse=True)
+def _frozen_clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The connector and the listing both read time.time, for the probe window
+    # and for how far back Graph serves.
+    monkeypatch.setattr("time.time", lambda: float(NOW))
 
 
 def _transcripts_url(organizer_id: str, window: str | None, top: int = 50) -> str:
@@ -185,7 +193,20 @@ def test_a_transcript_becomes_a_document_with_its_meeting_and_readers() -> None:
     assert document.doc_updated_at == datetime(2024, 1, 15, 10, tzinfo=timezone.utc)
 
 
-def test_each_step_indexes_one_organizer() -> None:
+@pytest.mark.parametrize(
+    ("workers", "steps"),
+    [
+        # Each step sheds one batch from the checkpoint, so a resumed attempt
+        # repeats one batch at most.
+        (1, [["teams-transcript:user-2:t2"], ["teams-transcript:user-1:t1"]]),
+        # A batch is walked at once, in whatever order its organizers answer.
+        (8, [["teams-transcript:user-1:t1", "teams-transcript:user-2:t2"]]),
+    ],
+)
+def test_each_step_indexes_a_batch_of_organizers(
+    monkeypatch: pytest.MonkeyPatch, workers: int, steps: list[list[str]]
+) -> None:
+    monkeypatch.setattr(connector_module, "_TRANSCRIPT_ORGANIZER_WORKERS", workers)
     bobs_content = "users/user-2/onlineMeetings/meeting-2/transcripts/t2/content"
     bobs_transcript = {
         "id": "t2",
@@ -212,14 +233,9 @@ def test_each_step_indexes_one_organizer() -> None:
     per_step: list[list[str]] = []
     while checkpoint.has_more and len(per_step) < 8:
         page, checkpoint = step(teams_connector, checkpoint, start=START)
-        per_step.append([item.id for item in page if isinstance(item, Document)])
+        per_step.append(sorted(i.id for i in page if isinstance(i, Document)))
 
-    # Two organizers on one listed page still take a step each, so a resumed
-    # attempt loses one organizer at most.
-    assert [ids for ids in per_step if ids] == [
-        [transcript_document_id("user-2", "t2")],
-        [transcript_document_id("user-1", "t1")],
-    ]
+    assert [ids for ids in per_step if ids] == steps
 
 
 def test_the_inner_error_code_wins_and_the_outer_one_is_the_fallback() -> None:
@@ -355,6 +371,9 @@ def test_a_refused_organizer_is_one_recorded_failure(
     assert items[0].failed_entity is not None
     assert items[0].failed_entity.entity_id == "user-1"
     assert named in items[0].failure_message
+    # A refusal the connector cannot name still carries Graph's own words.
+    if refusal == PLAIN_403:
+        assert "Graph said: Forbidden, Forbidden" in items[0].failure_message
 
 
 def test_documents_flow_before_a_later_listing_page_is_refused() -> None:
@@ -677,11 +696,10 @@ def test_the_slim_walk_honors_a_stop_before_the_next_user_page() -> None:
         second_users_page: {"value": [BOB]},
         _transcripts_url("user-1", None): {"value": []},
     }
-    # User page, organizer, its transcripts page, then the second user page. The
-    # last one is the page hook, which the per-organizer check would mask if the
-    # first organizer had no transcripts route to reach.
+    # A batch of organizers fills from the user listing before any of them is
+    # read, so the second check is the page hook ahead of the second user page.
     stop_before_page_two = MagicMock()
-    stop_before_page_two.should_stop.side_effect = [False, False, False, True]
+    stop_before_page_two.should_stop.side_effect = [False, True]
     client = graph_client(routes)
     walk = connector(
         client, include_meeting_transcripts=True
@@ -717,18 +735,58 @@ def test_plain_speech_shaped_like_a_timing_line_is_kept() -> None:
 def test_a_first_index_asks_graph_for_the_year_it_serves() -> None:
     # The first attempt starts at the epoch. Graph answers 404 on a later page
     # of a window that old, so the listing starts a year before its end.
-    end = 1_700_000_000.0
-    clamped = "startDateTime=2022-11-14T22:13:20Z,endDateTime=2023-11-14T22:13:20Z"
+    end = float(START)
+    clamped = "startDateTime=2022-11-14T22:13:21Z,endDateTime=2023-11-14T22:13:20Z"
     client = graph_client({_transcripts_url("user-1", clamped): {"value": []}})
 
     assert list(fetch_transcripts(client, "user-1", 0, end)) == []
 
 
-class TestValidation:
-    @pytest.fixture(autouse=True)
-    def _frozen_clock(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(connector_module.time, "time", lambda: PROBE_NOW)
+def _two_organizers_whose_listings_meet(window: str | None) -> MagicMock:
+    """A client whose two transcript listings each wait for the other, so a walk
+    that takes organizers one at a time breaks the barrier."""
+    routes = {
+        ALL_USERS_URL: {"value": [ADA, BOB]},
+        _transcripts_url("user-1", window): {"value": []},
+        _transcripts_url("user-2", window): {"value": []},
+    }
+    client = graph_client(routes)
+    answer = client.execute_request_direct.side_effect
+    both_in_flight = threading.Barrier(2, timeout=5)
 
+    def meet(url: str) -> Any:
+        if "getAllTranscripts" in url:
+            both_in_flight.wait()
+        return answer(url)
+
+    client.execute_request_direct.side_effect = meet
+    return client
+
+
+def test_indexing_lists_a_batch_of_organizers_at_the_same_time() -> None:
+    client = _two_organizers_whose_listings_meet(WINDOW)
+
+    items, _ = _walk_transcripts(connector(client, include_meeting_transcripts=True))
+
+    assert items == []
+
+
+def test_the_slim_walk_lists_a_batch_of_organizers_at_the_same_time() -> None:
+    client = _two_organizers_whose_listings_meet(None)
+    teams_connector = connector(client, include_meeting_transcripts=True)
+
+    assert list(teams_connector.retrieve_all_slim_docs()) == []
+
+
+def test_a_window_older_than_graph_serves_asks_for_nothing() -> None:
+    client = graph_client({})
+    two_years = 2 * 365 * 24 * 60 * 60
+
+    assert list(fetch_transcripts(client, "user-1", 0, NOW - two_years)) == []
+    assert client.execute_request_direct.call_count == 0
+
+
+class TestValidation:
     def _connector(
         self,
         routes: dict[str, Any],
