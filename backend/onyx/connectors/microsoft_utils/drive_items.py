@@ -648,14 +648,19 @@ def iter_drive_items_paged(
     start: datetime | None = None,
     end: datetime | None = None,
     page_size: int = 200,
+    folder_id: str | None = None,
 ) -> Generator[DriveItemData, None, None]:
     """Yield DriveItemData for every file in a drive via the Graph API.
 
     Performs BFS folder traversal manually, fetching one page of children
     at a time so that memory usage stays bounded regardless of drive size.
+    The walk starts at ``folder_id`` when given (a folder Graph handed out
+    without its path, such as a Teams channel's), else at ``folder_path``.
     """
     base = f"{client.graph_api_base}/drives/{drive_id}"
-    if folder_path:
+    if folder_id:
+        start_url = f"{base}/items/{folder_id}/children"
+    elif folder_path:
         encoded_path = quote(folder_path, safe="/")
         start_url = f"{base}/root:/{encoded_path}:/children"
     else:
