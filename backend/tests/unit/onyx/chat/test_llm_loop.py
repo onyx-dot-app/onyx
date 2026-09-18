@@ -806,7 +806,7 @@ class TestNonVisionImageBudgeting:
 
     @pytest.mark.parametrize("stored_image_tokens", [0, 20000])
     @pytest.mark.parametrize("configured_input_limit", [8000, 24000])
-    def test_output_allowance_uses_image_replay_cost(
+    def test_output_allowance_uses_prepared_request_estimate(
         self,
         stored_image_tokens: int,
         configured_input_limit: int,
@@ -870,14 +870,13 @@ class TestNonVisionImageBudgeting:
 
         if configured_input_limit == 8000:
             assert step.call_args.kwargs["history"] == [older_answer, image_msg]
-            assert step.call_args.kwargs["max_tokens"] == 16000
         else:
             assert step.call_args.kwargs["history"] == [
                 older_user,
                 older_answer,
                 image_msg,
             ]
-            assert step.call_args.kwargs["max_tokens"] == 2780
+        assert step.call_args.kwargs["max_tokens"] == 16000
         assert (
             count_message_replay_tokens(
                 image_msg,

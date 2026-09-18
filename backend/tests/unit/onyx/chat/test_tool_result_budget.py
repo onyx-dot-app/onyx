@@ -367,6 +367,34 @@ def test_json_escape_expansion_keeps_a_feasible_followup_request() -> None:
     assert state_container.get_tool_calls()[0].tool_call_response == result
 
 
+def test_output_budget_uses_prepared_request_size_for_escaped_tool_result() -> None:
+    max_input_tokens = 8_000
+    result = "\\" * 24_350
+    llm = _make_llm(max_input_tokens)
+    token_counter = get_llm_token_counter(llm)
+
+    with patch(
+        "onyx.chat.token_budget.get_model_map",
+        return_value={
+            "openai/gpt-3.5-turbo": {
+                "max_input_tokens": 8_000,
+                "max_output_tokens": 8_000,
+                "max_context_tokens": 8_000,
+            }
+        },
+    ):
+        requests, _ = _run_scripted_loop(
+            results={"escapes": result},
+            max_input_tokens=max_input_tokens,
+        )
+
+    followup = requests[1]
+    prepared_input_tokens = _request_text_tokens(followup, token_counter)
+    assert prepared_input_tokens == 5_698
+    assert followup["max_tokens"] == 1_902
+    assert prepared_input_tokens + followup["max_tokens"] == 7_600
+
+
 def test_repeated_tool_cycles_recompute_the_shared_budget() -> None:
     max_input_tokens = 32_000
     results: dict[str, str] = {
