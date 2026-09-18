@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 import requests
 
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
 from onyx.connectors.models import ConnectorFailure, Document
 from onyx.connectors.teams.connector import TeamsCheckpoint, TeamsConnector
 from onyx.connectors.teams.models import ChannelRef
@@ -91,9 +92,16 @@ def message(
     }
 
 
-def connector(client: MagicMock) -> TeamsConnector:
-    teams_connector = TeamsConnector()
+def connector(client: MagicMock, include_attachments: bool = False) -> TeamsConnector:
+    teams_connector = TeamsConnector(include_attachments=include_attachments)
     teams_connector.graph_client = client
+    teams_connector.msal_app = MagicMock()
+    teams_connector._acquire_token = lambda: {"access_token": "token"}
+    teams_connector._auth_method = (
+        MicrosoftAuthMethod.CERTIFICATE
+        if include_attachments
+        else MicrosoftAuthMethod.CLIENT_SECRET
+    )
     return teams_connector
 
 
