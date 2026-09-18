@@ -1197,17 +1197,25 @@ def update_docs_content_hash__no_commit(
         doc.content_hash = ids_to_new_hash[doc.id]
 
 
-def mark_document_as_modified(
+def mark_document_as_modified__no_commit(
     document_id: str,
     db_session: Session,
-) -> None:
+) -> datetime:
     stmt = select(DbDocument).where(DbDocument.id == document_id)
     doc = db_session.scalar(stmt)
     if doc is None:
         raise ValueError(f"No document with ID: {document_id}")
 
-    # update last_synced
-    doc.last_modified = datetime.now(timezone.utc)
+    modified_at = datetime.now(timezone.utc)
+    doc.last_modified = modified_at
+    return modified_at
+
+
+def mark_document_as_modified(
+    document_id: str,
+    db_session: Session,
+) -> None:
+    mark_document_as_modified__no_commit(document_id, db_session)
     db_session.commit()
 
 
@@ -1595,6 +1603,14 @@ def get_document(
     stmt = select(DbDocument).where(DbDocument.id == document_id)
     doc: DbDocument | None = db_session.execute(stmt).scalar_one_or_none()
     return doc
+
+
+def get_document_for_update(
+    document_id: str,
+    db_session: Session,
+) -> DbDocument | None:
+    stmt = select(DbDocument).where(DbDocument.id == document_id).with_for_update()
+    return db_session.scalar(stmt)
 
 
 def get_cc_pairs_for_document(
