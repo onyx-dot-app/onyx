@@ -38,7 +38,7 @@ from onyx.db.engine.sql_engine import (
 from onyx.db.engine.tenant_utils import get_all_tenant_ids
 from onyx.db.models import SlackBot
 from onyx.db.search_settings import get_current_search_settings
-from onyx.db.slack_bot import fetch_slack_bot, fetch_slack_bots
+from onyx.db.slack_bot import fetch_slack_bot_or_none, fetch_slack_bots
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.natural_language_processing.search_nlp_models import (
     EmbeddingModel,
@@ -483,6 +483,10 @@ class SlackbotHandler:
                                 self.redis_locks.pop(tenant_id, None)
                     else:
                         # Manage or reconnect Slack bot sockets
+                        self._close_bot_clients(
+                            tenant_id=tenant_id,
+                            live_bot_ids={bot.id for bot in bots},
+                        )
                         for bot in bots:
                             self._manage_clients_per_tenant(
                                 db_session=db_session,
@@ -492,27 +496,47 @@ class SlackbotHandler:
             finally:
                 CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
+    def _close_bot_clients(self, tenant_id: str, live_bot_ids: set[int]) -> None:
+        """
+        Drop this tenant's socket clients for every bot outside `live_bot_ids`.
+
+        A deleted bot leaves its socket open, and Slack still routes a share of
+        the app's events to it. Those events are acked before the bot row is
+        read, so they are lost rather than retried on a live connection.
+        """
+        stale_bot_ids = {
+            bot_id
+            for (t_id, bot_id) in list(self.socket_clients)
+            + list(self.slack_bot_tokens)
+            if t_id == tenant_id and bot_id not in live_bot_ids
+        }
+        for bot_id in stale_bot_ids:
+            self.slack_bot_tokens.pop((tenant_id, bot_id), None)
+            client = self.socket_clients.pop((tenant_id, bot_id), None)
+            # Forget the client before closing, so a failed close cannot leave it
+            # holding a share of the tenant's events.
+            if client is not None:
+                try:
+                    client.close()
+                except Exception:
+                    logger.exception(
+                        "Error closing SocketModeClient: tenant_id=%r slack_bot_id=%r",
+                        tenant_id,
+                        bot_id,
+                    )
+            logger.info(
+                "Dropped SocketModeClient: tenant_id=%r slack_bot_id=%r",
+                tenant_id,
+                bot_id,
+            )
+
     def _remove_tenant(self, tenant_id: str) -> None:
         """
         Helper to remove a tenant from `self.tenant_ids` and close any socket clients.
         (Lock release now happens in `acquire_tenants()`, not here.)
         """
-        socket_client_list = list(self.socket_clients.items())
-        # Close all socket clients for this tenant
-        for (t_id, slack_bot_id), client in socket_client_list:
-            if t_id == tenant_id:
-                client.close()
-                del self.socket_clients[(t_id, slack_bot_id)]
-                del self.slack_bot_tokens[(t_id, slack_bot_id)]
-                logger.info(
-                    "Stopped SocketModeClient for tenant: %s, app: %s",
-                    t_id,
-                    slack_bot_id,
-                )
-
-        # Remove from active set
-        if tenant_id in self.tenant_ids:
-            self.tenant_ids.remove(tenant_id)
+        self._close_bot_clients(tenant_id, live_bot_ids=set())
+        self.tenant_ids.discard(tenant_id)
 
     @staticmethod
     def send_heartbeats(pod_id: str, tenant_ids: set[str]) -> None:
@@ -706,11 +730,13 @@ def prefilter_requests(req: SocketModeRequest, client: TenantSocketModeClient) -
     )
 
     with get_session_with_current_tenant() as db_session:
-        slack_bot = fetch_slack_bot(
+        slack_bot = fetch_slack_bot_or_none(
             db_session=db_session, slack_bot_id=client.slack_bot_id
         )
-        if not slack_bot:
-            logger.error(
+        if slack_bot is None:
+            # A deleted bot's socket stays open until the next acquisition cycle
+            # closes it, so it can still deliver events.
+            logger.warning(
                 "Slack bot with ID '%s' not found. Skipping request.",
                 client.slack_bot_id,
             )
