@@ -66,11 +66,14 @@ class ZoomEndpoint(BaseModel):
         return self.describes.format(identifier=identifier)
 
 
-MEETING_TRANSCRIPT = ZoomEndpoint(
-    path="/meetings/{identifier}/transcript",
-    tier=ZoomRateLimitTier.MEDIUM,
-    describes="the transcript for {identifier}",
-    operation="GetMeetingTranscript",
+# Not /meetings/{id}/transcript. That one serves AI Companion transcripts and
+# answers 404 for a session whose VTT is sitting in recording_files, so the
+# connector indexed nothing on every discovery path.
+MEETING_RECORDINGS = ZoomEndpoint(
+    path="/meetings/{identifier}/recordings",
+    tier=ZoomRateLimitTier.LIGHT,
+    describes="the recording files for {identifier}",
+    operation="recordingGet",
 )
 
 PAST_MEETING_DETAILS = ZoomEndpoint(

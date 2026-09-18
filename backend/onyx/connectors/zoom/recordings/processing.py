@@ -68,7 +68,7 @@ def process_occurrence(
     occurrence_uuid = work.occurrence_uuid
 
     try:
-        transcript = client.get_meeting_transcript(occurrence_uuid)
+        transcript = client.get_transcript(occurrence_uuid)
     except Exception as e:
         if fails_the_whole_run(e):
             raise
@@ -96,9 +96,17 @@ def process_occurrence(
             exception=e,
         )
 
+    if transcript is None:
+        logger.info(
+            "Zoom recorded session %s occurrence %s but never transcribed it; skipping",
+            work.session_id,
+            occurrence_uuid,
+        )
+        return None
+
     download_url = transcript.download_url
     if not transcript.is_downloadable or not download_url:
-        if transcript.download_restriction_reason == "NOT_READY":
+        if not transcript.is_ready:
             logger.info(
                 "Zoom transcript for session %s occurrence %s isn't ready yet; "
                 "will pick it up on a future sync",
@@ -107,13 +115,10 @@ def process_occurrence(
             )
         else:
             logger.warning(
-                "Zoom transcript for session %s occurrence %s can't be downloaded "
-                "(restriction=%s, can_download=%s, has_url=%s); skipping",
+                "Zoom transcript for session %s occurrence %s has no download URL; "
+                "skipping",
                 work.session_id,
                 occurrence_uuid,
-                transcript.download_restriction_reason,
-                transcript.can_download,
-                bool(download_url),
             )
         return None
 
