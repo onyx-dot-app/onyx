@@ -1,8 +1,7 @@
 # OneDrive daily test
 
-This test uses the fixed `danswerai` tenant corpus. The provision script owns only
-the `Onyx OneDrive Daily Tests` subtree in two test drives. The command-line
-script keeps `Onyx OneDrive Connector Tests` as its separate default corpus.
+This test uses the fixed `danswerai` tenant corpus. Its fixture utility owns only
+the `Onyx OneDrive Daily Tests` subtree in two test drives.
 
 The test uses these existing certificate-app variables:
 
@@ -21,6 +20,3 @@ uv run --env-file .vscode/.env pytest \
 The test resets the daily corpus before mutation coverage. It resets the same
 corpus during teardown, even when a mutation assertion fails. Do not point the
 owner variables at drives where this subtree contains user data.
-
-The provision script command-line interface manages the separate default spike
-corpus. It does not manage the daily corpus.

@@ -16,11 +16,6 @@ from tests.integration.common_utils.managers.llm_provider import LLMProviderMana
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.reset import reset_all
 from tests.integration.common_utils.test_models import DATestCCPair, DATestUser
-from tests.utils.pytest_secrets import (
-    pytest_collection_modifyitems as pytest_collection_modifyitems,
-)
-from tests.utils.pytest_secrets import pytest_configure as pytest_configure
-from tests.utils.pytest_secrets import test_secrets as test_secrets
 from tests.utils.onedrive_fixture import (
     FIXTURE_EXCLUDED_PATHS,
     FixtureState,
@@ -28,6 +23,11 @@ from tests.utils.onedrive_fixture import (
     build_integration_fixture_config,
     build_provisioner,
 )
+from tests.utils.pytest_secrets import (
+    pytest_collection_modifyitems as pytest_collection_modifyitems,
+)
+from tests.utils.pytest_secrets import pytest_configure as pytest_configure
+from tests.utils.pytest_secrets import test_secrets as test_secrets
 from tests.utils.secret_names import TestSecret
 
 ADMIN_EMAIL = "admin@onyx.app"
