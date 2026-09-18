@@ -43,8 +43,15 @@ _ASYNC_ENGINES: dict[str, AsyncEngine] = {}
 _ASYNC_ENGINES_LOCK = threading.Lock()
 
 
+def _snapshot_async_engines() -> list[tuple[str, AsyncEngine]]:
+    # Under the engines lock: a consistent snapshot without relying on the
+    # GIL making dict iteration atomic.
+    with _ASYNC_ENGINES_LOCK:
+        return list(_ASYNC_ENGINES.items())
+
+
 async_engine_hooks: EngineCreationHooks[AsyncEngine] = EngineCreationHooks(
-    lambda: list(_ASYNC_ENGINES.items())
+    _snapshot_async_engines
 )
 
 

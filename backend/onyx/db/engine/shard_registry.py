@@ -300,8 +300,15 @@ class EngineCreationHooks(Generic[EngineT]):
                 logger.exception("engine callback failed for shard %s", shard_name)
 
 
+def _snapshot_shard_engines() -> list[tuple[str, Engine]]:
+    # Under the registry lock: a consistent snapshot without relying on the
+    # GIL making dict iteration atomic.
+    with ShardRegistry._lock:
+        return list(ShardRegistry._engines.items())
+
+
 shard_engine_hooks: EngineCreationHooks[Engine] = EngineCreationHooks(
-    lambda: list(ShardRegistry._engines.items())
+    _snapshot_shard_engines
 )
 
 
