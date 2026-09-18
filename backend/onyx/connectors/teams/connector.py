@@ -88,6 +88,8 @@ from onyx.connectors.teams.transcripts import (
     fetch_organizer_page,
     fetch_transcript_text,
     fetch_transcripts,
+    graph_error_message,
+    graph_inner_error_code,
     iter_organizers,
     organizer_expert,
     organizer_id_prefix,
@@ -129,6 +131,11 @@ _SLIM_WALK = "teams_slim_walk"
 # Rebuilt on the SharePoint connector's schedule, a hedge against a cached
 # REST token outliving its hour.
 _REST_CTX_MAX_AGE_S = 30 * 60
+
+# Graph scans every meeting of an organizer when the listing has no window, 20
+# seconds or more for one user. A refusal answers the same inside a window, so
+# the setup check asks for recent transcripts only and stays inside the UI wait.
+_TRANSCRIPT_PROBE_WINDOW_S = 30 * 24 * 60 * 60
 
 # Channel files are documents of their own. The prefix keeps them apart from a
 # SharePoint connector indexing the same library, which uses the bare item id.
@@ -688,8 +695,11 @@ class TeamsConnector(
             )
         organizer = organizers[0]
         try:
+            probe_start = time.time() - _TRANSCRIPT_PROBE_WINDOW_S
             transcript = next(
-                fetch_transcripts(self.graph_client, organizer.id, None, None, 1),
+                fetch_transcripts(
+                    self.graph_client, organizer.id, probe_start, None, 1
+                ),
                 None,
             )
             if transcript is None:
@@ -1626,12 +1636,18 @@ def _transcript_refusal(error: requests.HTTPError) -> str:
             "An application access policy naming this app must be granted to the "
             "organizer (or the whole tenant) for meeting transcripts."
         )
+    # Graph's own words ride along: a refusal this connector cannot name is
+    # otherwise unreadable, and the grants are only its most common cause.
+    graph_said = (
+        f"Graph said: {graph_inner_error_code(error) or 'no code'}, "
+        f"{graph_error_message(error) or 'no message'}"
+    )
     if _status(error) == 403:
         return (
             "Include Meeting Transcripts needs the OnlineMeetingTranscript.Read.All "
-            "and OnlineMeetings.Read.All application permissions."
+            f"and OnlineMeetings.Read.All application permissions. {graph_said}"
         )
-    return f"Graph answered {_status(error)}."
+    return f"Graph answered {_status(error)}. {graph_said}"
 
 
 def _status(error: requests.RequestException) -> int | None:

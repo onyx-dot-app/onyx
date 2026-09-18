@@ -5,6 +5,7 @@ names the app for the organizer. Each transcript is a document of its own,
 readable by the organizer and the people the meeting record lists."""
 
 import re
+import time
 from collections.abc import Callable, Generator
 from datetime import datetime, timezone
 from typing import Any
@@ -40,6 +41,10 @@ SPEAKER_ATTRIBUTION_DISABLED_CODE = "SpeakerAttributionNotAllowed"
 ACCESS_POLICY_MESSAGE = "application access policy"
 
 TRANSCRIPT_PAGE_SIZE = 50
+# Graph pages the listing in month-sized slices, newest first, and serves about
+# 13 of them: a window reaching further back answers 404 on the next page. With
+# no window it lists this same year, so an older start asks for nothing more.
+TRANSCRIPT_LOOKBACK_S = 365 * 24 * 60 * 60
 # A page of organizers rides in the indexing checkpoint, so pages stay small.
 USER_PAGE_SIZE = 100
 ORGANIZERS_URL = (
@@ -223,7 +228,8 @@ def fetch_transcripts(
     runs ahead of each page request."""
     parameters = [f"meetingOrganizerUserId='{organizer_id}'"]
     if start is not None:
-        parameters.append(f"startDateTime={_graph_timestamp(start)}")
+        floor = (end if end is not None else time.time()) - TRANSCRIPT_LOOKBACK_S
+        parameters.append(f"startDateTime={_graph_timestamp(max(start, floor))}")
     if end is not None:
         parameters.append(f"endDateTime={_graph_timestamp(end)}")
     url = (

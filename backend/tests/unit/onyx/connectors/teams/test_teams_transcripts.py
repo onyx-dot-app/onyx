@@ -20,6 +20,7 @@ from onyx.connectors.teams.connector import TeamsCheckpoint
 from onyx.connectors.teams.transcripts import (
     ATTRIBUTED_FORMAT,
     UNATTRIBUTED_FORMAT,
+    fetch_transcripts,
     graph_inner_error_code,
     transcript_document_id,
     transcript_text,
@@ -44,6 +45,10 @@ ADA = {
 BOB = {"id": "user-2", "userPrincipalName": "bob@example.com", "mail": None}
 START = 1_700_000_000
 WINDOW = "startDateTime=2023-11-14T22:13:20Z,endDateTime=2023-11-14T22:13:21Z"
+# The setup check lists the last 30 days only: Graph takes 20 seconds or more to
+# scan an organizer with no window, longer than the connector form waits.
+PROBE_NOW = 1_700_000_000.0
+PROBE_WINDOW = "startDateTime=2023-10-15T22:13:20Z"
 CONTENT_ROUTE = "users/user-1/onlineMeetings/meeting-1/transcripts/t1/content"
 MEETING_URL = (
     "users/user-1/onlineMeetings/meeting-1"
@@ -709,7 +714,21 @@ def test_plain_speech_shaped_like_a_timing_line_is_kept() -> None:
     )
 
 
+def test_a_first_index_asks_graph_for_the_year_it_serves() -> None:
+    # The first attempt starts at the epoch. Graph answers 404 on a later page
+    # of a window that old, so the listing starts a year before its end.
+    end = 1_700_000_000.0
+    clamped = "startDateTime=2022-11-14T22:13:20Z,endDateTime=2023-11-14T22:13:20Z"
+    client = graph_client({_transcripts_url("user-1", clamped): {"value": []}})
+
+    assert list(fetch_transcripts(client, "user-1", 0, end)) == []
+
+
 class TestValidation:
+    @pytest.fixture(autouse=True)
+    def _frozen_clock(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(connector_module.time, "time", lambda: PROBE_NOW)
+
     def _connector(
         self,
         routes: dict[str, Any],
@@ -726,7 +745,7 @@ class TestValidation:
     def test_an_empty_listing_proves_the_grant_and_passes(self) -> None:
         routes = {
             ALL_USERS_URL: {"value": [ADA]},
-            _transcripts_url("user-1", None, 1): {"value": []},
+            _transcripts_url("user-1", PROBE_WINDOW, 1): {"value": []},
         }
 
         self._connector(routes)._validate_transcript_access()
@@ -736,7 +755,7 @@ class TestValidation:
     ) -> None:
         routes = {
             ALL_USERS_URL: {"value": [ADA]},
-            _transcripts_url("user-1", None, 1): {"value": []},
+            _transcripts_url("user-1", PROBE_WINDOW, 1): {"value": []},
         }
 
         with caplog.at_level(logging.WARNING):
@@ -749,7 +768,7 @@ class TestValidation:
     ) -> None:
         routes = {
             f"users('ada@example.com')?{SELECT_USERS}": ADA,
-            _transcripts_url("user-1", None, 1): {"value": []},
+            _transcripts_url("user-1", PROBE_WINDOW, 1): {"value": []},
         }
 
         with caplog.at_level(logging.WARNING):
@@ -762,7 +781,7 @@ class TestValidation:
     def test_a_transcript_is_read_end_to_end(self) -> None:
         routes = {
             ALL_USERS_URL: {"value": [ADA]},
-            _transcripts_url("user-1", None, 1): {"value": [_transcript()]},
+            _transcripts_url("user-1", PROBE_WINDOW, 1): {"value": [_transcript()]},
             MEETING_URL: _meeting(),
         }
 
@@ -783,7 +802,7 @@ class TestValidation:
         self, refusal: Refusal, error: type[Exception], named: str
     ) -> None:
         routes = {ALL_USERS_URL: {"value": [ADA]}}
-        refused = {_transcripts_url("user-1", None, 1): refusal}
+        refused = {_transcripts_url("user-1", PROBE_WINDOW, 1): refusal}
 
         with pytest.raises(error, match=named):
             self._connector(routes, refused=refused)._validate_transcript_access()
@@ -791,7 +810,7 @@ class TestValidation:
     def test_a_refused_meeting_record_names_the_grant(self) -> None:
         routes = {
             ALL_USERS_URL: {"value": [ADA]},
-            _transcripts_url("user-1", None, 1): {"value": [_transcript()]},
+            _transcripts_url("user-1", PROBE_WINDOW, 1): {"value": [_transcript()]},
         }
 
         with pytest.raises(
@@ -810,7 +829,7 @@ class TestValidation:
     def test_every_configured_organizer_is_resolved(self) -> None:
         routes = {
             f"users('ada@example.com')?{SELECT_USERS}": ADA,
-            _transcripts_url("user-1", None, 1): {"value": []},
+            _transcripts_url("user-1", PROBE_WINDOW, 1): {"value": []},
         }
 
         with pytest.raises(ConnectorValidationError, match="No user matches"):
