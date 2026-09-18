@@ -7,6 +7,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+import requests
 
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -351,6 +352,28 @@ def test_the_slim_walk_lists_transcripts_with_their_readers() -> None:
     ]
 
 
+def test_the_pruning_walk_lists_transcripts_without_reading_their_meetings() -> None:
+    routes = {
+        ALL_USERS_URL: {"value": [ADA]},
+        _transcripts_url("user-1", None): {"value": [_transcript()]},
+    }
+    client = graph_client(routes)
+
+    slim = [
+        (doc.id, doc.external_access)
+        for batch in connector(
+            client, include_meeting_transcripts=True
+        ).retrieve_all_slim_docs()
+        for doc in batch
+        if isinstance(doc, SlimDocument)
+    ]
+
+    assert slim == [(transcript_document_id("user-1", "t1"), None)]
+    # A meeting read per transcript buys readers the pruning walk discards.
+    requested = [c.args[0] for c in client.execute_request_direct.call_args_list]
+    assert MEETING_URL not in requested
+
+
 @pytest.mark.parametrize("refused_page", ["first", "later"])
 def test_a_refused_organizer_is_a_gap_and_the_slim_walk_goes_on(
     refused_page: str,
@@ -447,6 +470,32 @@ def test_a_rejected_organizer_page_lists_the_organizers_again() -> None:
     ]
     assert checkpoint.next_organizers_url is None
     assert checkpoint.has_more is True
+
+
+def test_a_second_rejected_organizer_page_fails_the_attempt() -> None:
+    stale_page = "users?$skiptoken=stale"
+    routes = _routes()
+    routes[ALL_USERS_URL] = {
+        "value": [ADA],
+        "@odata.nextLink": f"{SERVICE_ROOT}/{stale_page}",
+    }
+    client = graph_client(routes, refused={stale_page: 400})
+    teams_connector = connector(client, include_meeting_transcripts=True)
+    checkpoint = TeamsCheckpoint(
+        has_more=True,
+        todo_team_ids=[],
+        todo_organizers=[],
+        next_organizers_url=stale_page,
+    )
+
+    # The first rejection lists the organizers again, which hands back the same
+    # page url. Restarting on that one too would walk page one for ever.
+    _, checkpoint = step(teams_connector, checkpoint, start=START)
+    checkpoint.todo_organizers = []
+    checkpoint.next_organizers_url = stale_page
+
+    with pytest.raises(requests.HTTPError):
+        step(teams_connector, checkpoint, start=START)
 
 
 def test_an_apostrophe_in_a_configured_organizer_is_doubled_for_odata() -> None:

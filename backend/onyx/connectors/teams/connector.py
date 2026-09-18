@@ -204,6 +204,8 @@ class TeamsConnector(
         # Channels walked again from their first page in this attempt: a saved
         # page url Graph rejects recovers once per attempt and can never loop.
         self._restarted_channel_ids: set[str] = set()
+        # The same recovery for the organizer listing, and the same one shot.
+        self._restarted_organizer_listing = False
         # The current channel's readers and library, read once per channel per
         # attempt. The cache dies with the process, so a resumed attempt re-reads.
         self._channel_state: dict[str, _ChannelState] = {}
@@ -516,8 +518,15 @@ class TeamsConnector(
             )
         except requests.HTTPError as e:
             # Graph answers a skip token it no longer honors with 400 or 410.
-            if page_url is None or _status(e) not in (400, 410):
+            # Once per attempt, or a token it always rejects would walk the
+            # first page for ever and the later organizers would never be read.
+            if (
+                page_url is None
+                or self._restarted_organizer_listing
+                or _status(e) not in (400, 410)
+            ):
                 raise
+            self._restarted_organizer_listing = True
             logger.warning(
                 "The saved organizer page is no longer honored, listing the "
                 "organizers from the start: %s",
@@ -1016,7 +1025,7 @@ class TeamsConnector(
 
         if self.include_meeting_transcripts:
             yield from batch_generator(
-                self._slim_transcripts(callback),
+                self._slim_transcripts(callback, with_readers),
                 _SLIM_DOC_BATCH_SIZE,
                 pre_batch_yield=lambda _: self._slim_batch_signals(callback),
             )
@@ -1040,19 +1049,20 @@ class TeamsConnector(
         ]
 
     def _slim_transcripts(
-        self, callback: IndexingHeartbeatInterface | None
+        self, callback: IndexingHeartbeatInterface | None, with_readers: bool
     ) -> Iterator[SlimDocument]:
-        """Every transcript of every organizer with the readers the indexing walk
-        gives it. A refused organizer becomes a gap, which holds back the
-        deletions this walk feeds: its transcripts are hidden, not gone."""
+        """Every transcript of every organizer, with the readers the indexing
+        walk gives it when the caller needs those. A refused organizer becomes a
+        gap, which holds back the deletions this walk feeds: its transcripts are
+        hidden, not gone."""
         assert self.graph_client is not None
         stop_check = lambda: _raise_if_stopped(callback)  # noqa: E731
         for organizer in iter_organizers(
             self.graph_client, self.transcript_organizers, before_page=stop_check
         ):
-            # An organizer can hold pages of transcripts, each with a meeting
-            # record to read, so a stop is honored before every read and
-            # progress is reported per organizer, not only per full batch.
+            # An organizer can hold pages of transcripts, so a stop is honored
+            # before every read and progress is reported per organizer, not only
+            # per full batch.
             _raise_if_stopped(callback)
             if callback:
                 callback.progress("retrieve_all_slim_docs_perm_sync", 1)
@@ -1063,8 +1073,12 @@ class TeamsConnector(
                     _raise_if_stopped(callback)
                     yield SlimDocument(
                         id=transcript_document_id(organizer.id, transcript.id),
-                        external_access=transcript_access(
-                            organizer, self._meeting_record(organizer, transcript)
+                        external_access=(
+                            transcript_access(
+                                organizer, self._meeting_record(organizer, transcript)
+                            )
+                            if with_readers
+                            else None
                         ),
                         doc_created_at=transcript.created,
                     )
