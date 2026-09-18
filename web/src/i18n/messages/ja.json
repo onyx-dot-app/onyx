@@ -912,6 +912,9 @@
         "onedrive": {
           "description": "Microsoft クラウド ストレージ"
         },
+        "zoom": {
+          "description": "会議とウェビナーの録画"
+        },
         "teams": {
           "description": "Microsoft のチームチャット"
         },

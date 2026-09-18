@@ -912,6 +912,9 @@
         "onedrive": {
           "description": "Armazenamento em nuvem da Microsoft"
         },
+        "zoom": {
+          "description": "Gravações de reuniões e webinars"
+        },
         "teams": {
           "description": "Chats de equipe da Microsoft"
         },

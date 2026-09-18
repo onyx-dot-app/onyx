@@ -254,6 +254,12 @@ export interface FirefliesCredentialJson {
   fireflies_api_key: string;
 }
 
+export interface ZoomCredentialJson {
+  zoom_account_id: string;
+  zoom_client_id: string;
+  zoom_client_secret: string;
+}
+
 export interface BraintrustCredentialJson {
   braintrust_api_key: string;
 }

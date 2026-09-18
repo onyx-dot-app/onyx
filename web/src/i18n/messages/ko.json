@@ -912,6 +912,9 @@
         "onedrive": {
           "description": "Microsoft 클라우드 저장소"
         },
+        "zoom": {
+          "description": "회의 및 웨비나 녹화"
+        },
         "teams": {
           "description": "Microsoft 팀 채팅"
         },
