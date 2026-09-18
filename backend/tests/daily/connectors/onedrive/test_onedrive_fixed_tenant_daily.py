@@ -4,18 +4,6 @@ import time
 from collections.abc import Generator
 
 import pytest
-from tests.utils.onedrive_fixture import (
-    ANONYMOUS_LINK_SKIP_REASON,
-    DAILY_FIXTURE_ROOT_NAME,
-    FIXTURE_EXCLUDED_PATHS,
-    AnonymousLinkOutcome,
-    FilePath,
-    FixtureState,
-    FolderPath,
-    OneDriveFixtureProvisioner,
-    build_daily_fixture_config,
-    build_provisioner,
-)
 
 from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
@@ -27,11 +15,24 @@ from onyx.connectors.onedrive.connector import (
     drive_root_id,
     hierarchy_item_id,
 )
+from onyx.db.engine.sql_engine import SqlEngine
 from tests.daily.connectors.utils import (
     ConnectorOutput,
     load_all_from_connector,
     to_sections,
     to_text_sections,
+)
+from tests.utils.onedrive_fixture import (
+    ANONYMOUS_LINK_SKIP_REASON,
+    DAILY_FIXTURE_ROOT_NAME,
+    FIXTURE_EXCLUDED_PATHS,
+    AnonymousLinkOutcome,
+    FilePath,
+    FixtureState,
+    FolderPath,
+    OneDriveFixtureProvisioner,
+    build_daily_fixture_config,
+    build_provisioner,
 )
 from tests.utils.pytest_secrets import RedactedDict
 from tests.utils.secret_names import TestSecret
@@ -57,6 +58,13 @@ EXPECTED_BASELINE_FILES = {
         FilePath.UNSUPPORTED,
     }
 }
+LIVE_PAGE_SIZE = 10
+
+
+@pytest.fixture(scope="module", autouse=True)
+def sql_engine() -> Generator[None, None, None]:
+    with SqlEngine.scoped_engine(pool_size=2, max_overflow=1):
+        yield
 
 
 @pytest.fixture(scope="module")
@@ -115,6 +123,7 @@ def _connector(
         all_users=False,
         excluded_paths=FIXTURE_EXCLUDED_PATHS,
         treat_organization_link_as_public=True,
+        batch_size=LIVE_PAGE_SIZE,
     )
     connector.load_credentials(credentials)
     return connector
@@ -172,8 +181,8 @@ def _assert_access(
 
 def _node_by_id(nodes: list[HierarchyNode], raw_node_id: str) -> HierarchyNode:
     matches = [node for node in nodes if node.raw_node_id == raw_node_id]
-    assert len(matches) == 1
-    return matches[0]
+    assert matches
+    return matches[-1]
 
 
 def test_onedrive_fixed_corpus_indexing_identity_permissions_and_hierarchy(

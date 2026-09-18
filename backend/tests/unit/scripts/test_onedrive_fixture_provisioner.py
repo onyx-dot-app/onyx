@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock
 
 import pytest
+
 import tests.utils.onedrive_fixture as fixture_module
 from tests.utils.onedrive_fixture import (
     DAILY_FIXTURE_ROOT_NAME,
@@ -126,6 +127,42 @@ def test_group_member_read_retries_graph_fixture_404(
 
     assert provisioner._get_group_member_ids("group-id") == {"member-id"}
     sleep.assert_called_once_with(fixture_module.GROUP_PROVISION_POLL_SECONDS)
+
+
+def test_invite_retries_transient_invalid_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provisioner, graph = _provisioner()
+    graph.post.side_effect = [
+        GraphFixtureError(
+            "POST", "drives/drive/items/item/invite", 400, "invalidRequest"
+        ),
+        None,
+    ]
+    sleep = MagicMock()
+    monkeypatch.setattr(fixture_module.time, "sleep", sleep)
+
+    provisioner._invite("drive", "item", "principal")
+
+    assert graph.post.call_count == 2
+    sleep.assert_called_once_with(fixture_module.INVITE_PROVISION_POLL_SECONDS)
+
+
+def test_idempotent_graph_write_retries_network_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = FixtureGraphClient(lambda: "token", "https://graph.microsoft.com")
+    response = MagicMock(status_code=200, ok=True)
+    request = MagicMock(
+        side_effect=[fixture_module.requests.ReadTimeout("timeout"), response]
+    )
+    sleep = MagicMock()
+    monkeypatch.setattr(fixture_module.requests, "request", request)
+    monkeypatch.setattr(fixture_module.time, "sleep", sleep)
+
+    assert client._request("PUT", "drives/drive/items/item/content") is response
+    assert request.call_count == 2
+    sleep.assert_called_once()
 
 
 def test_only_known_anonymous_link_policy_error_is_optional() -> None:

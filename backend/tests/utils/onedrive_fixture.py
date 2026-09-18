@@ -65,9 +65,13 @@ DELETE_POLL_ATTEMPTS = 10
 DELETE_POLL_SECONDS = 1
 GROUP_PROVISION_ATTEMPTS = 10
 GROUP_PROVISION_POLL_SECONDS = 2
+INVITE_PROVISION_ATTEMPTS = 3
+INVITE_PROVISION_POLL_SECONDS = 2
+INVITE_RETRY_ERROR = (400, "invalidRequest")
 MUTATION_VISIBILITY_ATTEMPTS = 15
 MUTATION_VISIBILITY_POLL_SECONDS = 2
 ANONYMOUS_LINK_POLICY_ERROR = (403, "accessDenied")
+RETRYABLE_REQUEST_METHODS = frozenset({"GET", "PUT", "PATCH", "DELETE"})
 ANONYMOUS_LINK_SKIP_REASON = (
     "The Microsoft 365 tenant policy rejected anonymous link creation."
 )
@@ -475,15 +479,24 @@ class FixtureGraphClient(GraphApiClient):
                 "Authorization": f"Bearer {self._get_access_token()}",
                 **(headers or {}),
             }
-            response = requests.request(
-                method,
-                url,
-                params=params,
-                json=json,
-                data=data,
-                headers=request_headers,
-                timeout=REQUEST_TIMEOUT_SECONDS,
-            )
+            try:
+                response = requests.request(
+                    method,
+                    url,
+                    params=params,
+                    json=json,
+                    data=data,
+                    headers=request_headers,
+                    timeout=REQUEST_TIMEOUT_SECONDS,
+                )
+            except requests.RequestException:
+                if (
+                    method not in RETRYABLE_REQUEST_METHODS
+                    or attempt == GRAPH_API_MAX_RETRIES
+                ):
+                    raise
+                time.sleep(backoff_seconds(attempt, None))
+                continue
             if allow_missing and response.status_code == 404:
                 return response
             if (
@@ -876,16 +889,25 @@ class OneDriveFixtureProvisioner:
         return anonymous_outcome
 
     def _invite(self, drive_id: str, item_id: str, principal_id: str) -> None:
-        self.graph.post(
-            f"drives/{drive_id}/items/{item_id}/invite",
-            {
-                "recipients": [{"objectId": principal_id}],
-                "requireSignIn": True,
-                "sendInvitation": False,
-                "roles": [SHARING_ROLE_READ],
-                "retainInheritedPermissions": True,
-            },
-        )
+        path = f"drives/{drive_id}/items/{item_id}/invite"
+        body = {
+            "recipients": [{"objectId": principal_id}],
+            "requireSignIn": True,
+            "sendInvitation": False,
+            "roles": [SHARING_ROLE_READ],
+            "retainInheritedPermissions": True,
+        }
+        for attempt in range(INVITE_PROVISION_ATTEMPTS):
+            try:
+                self.graph.post(path, body)
+                return
+            except GraphFixtureError as error:
+                if (
+                    error.status_code,
+                    error.code,
+                ) != INVITE_RETRY_ERROR or attempt == INVITE_PROVISION_ATTEMPTS - 1:
+                    raise
+                time.sleep(INVITE_PROVISION_POLL_SECONDS)
 
     def _create_link(
         self, drive_id: str, item_id: str, scope: LinkScope
