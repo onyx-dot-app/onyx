@@ -1,6 +1,13 @@
 """Test the OData filtering for MS Teams with special character handling."""
 
+import json
+from functools import partial
+from typing import Any
 from unittest.mock import MagicMock
+
+import pytest
+import requests
+from office365.graph_client import GraphClient
 
 from onyx.connectors.teams.connector import _collect_all_teams
 
@@ -96,3 +103,91 @@ def test_helper_functions() -> None:
     assert can_use
     assert "Normal Team" in safe
     assert "R&D Team" in problematic
+
+
+def _team(team_id: str, name: str, properties: dict | None = None) -> MagicMock:
+    team = MagicMock()
+    team.id = team_id
+    team.display_name = name
+    team.properties = properties or {}
+    return team
+
+
+def _page(teams: list[MagicMock], next_url: str | None) -> MagicMock:
+    page = MagicMock()
+    page.has_next = next_url is not None
+    page._next_request_url = next_url
+    page.__iter__ = lambda self: iter(teams)  # noqa: ARG005
+    return page
+
+
+def test_no_configured_teams_lists_every_team_to_the_last_page() -> None:
+    # The connector form promises that an empty Teams list indexes every team.
+    pages = [
+        _page([_team("t1", "Support")], "https://graph.example/teams?$skiptoken=2"),
+        _page(
+            [
+                _team("t2", "Research & Development"),
+                _team("t3", "Gone", {"deletedDateTime": "2026-01-01T00:00:00Z"}),
+            ],
+            None,
+        ),
+    ]
+    query = MagicMock()
+    graph_client = MagicMock()
+    graph_client.teams.get.return_value.top.return_value = query
+
+    for no_names in ([], None):
+        query.execute_query.side_effect = list(pages)
+        found = _collect_all_teams(graph_client, no_names)
+        assert [team.id for team in found] == ["t1", "t2"]
+    # The second page is asked for by the link the first one carried.
+    next_urls = [
+        call.args[0].keywords["next_url"]
+        for call in query.before_execute.call_args_list
+        if isinstance(call.args[0], partial)
+    ]
+    assert set(next_urls) == {"https://graph.example/teams?$skiptoken=2"}
+
+
+def _graph_answer(status: int, payload: dict[str, Any], url: str) -> requests.Response:
+    answer = requests.Response()
+    answer.status_code = status
+    answer._content = json.dumps(payload).encode()
+    answer.headers["Content-Type"] = "application/json"
+    answer.url = url
+    return answer
+
+
+def test_a_throttled_page_of_teams_is_asked_for_again(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The real SDK over fake HTTP: it drops a query once sent, so a retry that
+    # reuses the object sends nothing and the listing ends a page early.
+    second_page = "https://graph.microsoft.com/v1.0/teams?$skiptoken=2"
+    answers = [
+        (
+            200,
+            {
+                "value": [{"id": "t1", "displayName": "One"}],
+                "@odata.nextLink": second_page,
+            },
+        ),
+        (429, {}),
+        (200, {"value": [{"id": "t2", "displayName": "Two"}]}),
+    ]
+    requested: list[str] = []
+
+    def fake_get(url: str, **_: Any) -> requests.Response:
+        requested.append(url)
+        status, payload = answers.pop(0)
+        return _graph_answer(status, payload, url)
+
+    monkeypatch.setattr("requests.get", fake_get)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    client = GraphClient(lambda: {"token_type": "Bearer", "access_token": "x"})
+
+    teams = _collect_all_teams(client, [])
+
+    assert [team.id for team in teams] == ["t1", "t2"]
+    assert requested[1:] == [second_page, second_page]
