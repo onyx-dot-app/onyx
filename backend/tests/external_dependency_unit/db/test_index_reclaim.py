@@ -26,9 +26,14 @@ import pytest
 from sqlalchemy.orm import Session
 
 import onyx.server.manage.search_settings as search_settings_api
+from onyx.configs.constants import NotificationType
 from onyx.context.search.models import (
     SavedSearchSettings,
     SearchSettingsCreationRequest,
+)
+from onyx.db.connector_alerts import (
+    clear_connector_alerts__no_commit,
+    connector_alert_additional_data,
 )
 from onyx.db.connector_credential_pair import (
     compute_wont_port_cc_pair_ids,
@@ -41,7 +46,8 @@ from onyx.db.enums import (
     IndexReclaimStatus,
     SwitchoverType,
 )
-from onyx.db.models import ConnectorCredentialPair, SearchSettings
+from onyx.db.models import ConnectorCredentialPair, Notification, SearchSettings
+from onyx.db.notification import batch_create_notifications
 from onyx.db.search_settings import (
     advance_to_soaking__no_commit,
     clear_reclaim_intent__no_commit,
@@ -55,6 +61,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.natural_language_processing.search_nlp_models import clean_model_name
 from shared_configs.configs import ALT_INDEX_SUFFIX
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
     make_cc_pair,
@@ -204,6 +211,64 @@ def test_mark_deleting_transitions_only_still_wont_port(
     finally:
         for pair in (invalid, paused, reactivated):
             cleanup_cc_pair(db_session, pair)
+
+
+def _connector_alert_count(db_session: Session, cc_pair_id: int) -> int:
+    return (
+        db_session.query(Notification)
+        .filter(
+            Notification.notif_type == NotificationType.CONNECTOR_INVALID,
+            Notification.additional_data == connector_alert_additional_data(cc_pair_id),
+        )
+        .count()
+    )
+
+
+def test_mark_deleting_clears_the_invalid_alert_for_transitioned_pairs(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """Reclaim deletes the connector, but a notification points at its cc_pair through
+    additional_data rather than a foreign key, so nothing cascades. Without an explicit
+    clear the admin keeps an INVALID alert for a connector that no longer exists."""
+    admin = create_test_user(db_session, "reclaim_alert", is_admin=True)
+    transitioned = _make_cc_pair_with_status(
+        db_session, ConnectorCredentialPairStatus.INVALID
+    )
+    spared = _make_cc_pair_with_status(db_session, ConnectorCredentialPairStatus.ACTIVE)
+    try:
+        for pair in (transitioned, spared):
+            batch_create_notifications(
+                user_ids=[admin.id],
+                notif_type=NotificationType.CONNECTOR_INVALID,
+                db_session=db_session,
+                title="Connector is invalid",
+                additional_data=connector_alert_additional_data(pair.id),
+            )
+        assert _connector_alert_count(db_session, transitioned.id) == 1
+        assert _connector_alert_count(db_session, spared.id) == 1
+
+        marked = mark_cc_pairs_deleting_if_still_wont_port__no_commit(
+            db_session, [transitioned.id, spared.id]
+        )
+        db_session.commit()
+
+        assert marked == [transitioned.id]
+        assert _connector_alert_count(db_session, transitioned.id) == 0
+        # The ACTIVE pair never transitioned, so its alert has to survive.
+        assert _connector_alert_count(db_session, spared.id) == 1
+    finally:
+        for pair in (transitioned, spared):
+            clear_connector_alerts__no_commit(
+                db_session=db_session,
+                cc_pair_id=pair.id,
+                notif_type=NotificationType.CONNECTOR_INVALID,
+            )
+        db_session.commit()
+        for pair in (transitioned, spared):
+            cleanup_cc_pair(db_session, pair)
+        delete_test_user(db_session, admin)
+        db_session.commit()
 
 
 # --- transitions ----------------------------------------------------------------
@@ -359,24 +424,77 @@ def test_cancel_keeps_reclaim_intent_a_newer_reindex_stamped(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
     present_search_settings: SearchSettings,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Cancel commits the FUTURE to PAST before it clears intent, so a reindex submitted in
     that window stamps its own intent on the same row and must not have it wiped."""
     present = present_search_settings
-    newer_future = _make_settings(db_session, None, status=IndexModelStatus.FUTURE)
-    set_reclaim_intent_on_current__no_commit(db_session, [101, 202])
+    # The shared test database already holds a FUTURE row. Leave it in place and that
+    # stray row spares the intent on its own, so this test passes without exercising
+    # the race at all.
+    parked = [
+        ss
+        for ss in db_session.query(SearchSettings)
+        .filter(SearchSettings.status == IndexModelStatus.FUTURE)
+        .all()
+    ]
+    for ss in parked:
+        ss.status = IndexModelStatus.PAST
     db_session.commit()
+
+    canceled_reindex_intent = [1, 2]
+    newer_reindex_intent = [101, 202]
+
+    canceled_future = _make_settings(db_session, None, status=IndexModelStatus.FUTURE)
+    set_reclaim_intent_on_current__no_commit(db_session, canceled_reindex_intent)
+    db_session.commit()
+
+    newer_futures: list[SearchSettings] = []
+    real_update_status = search_settings_api.update_search_settings_status
+
+    # This runs after cancel retires its own FUTURE and before it re-reads the secondary,
+    # which is the exact window a newer reindex has to land in for the race to happen.
+    def _submit_newer_reindex_mid_cancel(
+        search_settings: SearchSettings,
+        new_status: IndexModelStatus,
+        db_session: Session,
+    ) -> None:
+        real_update_status(
+            search_settings=search_settings,
+            new_status=new_status,
+            db_session=db_session,
+        )
+        if newer_futures:
+            return
+        newer_futures.append(
+            _make_settings(db_session, None, status=IndexModelStatus.FUTURE)
+        )
+        set_reclaim_intent_on_current__no_commit(db_session, newer_reindex_intent)
+        db_session.commit()
+
+    monkeypatch.setattr(
+        search_settings_api,
+        "update_search_settings_status",
+        _submit_newer_reindex_mid_cancel,
+    )
     try:
         search_settings_api.cancel_new_embedding(_=MagicMock(), db_session=db_session)
 
+        assert newer_futures, (
+            "the newer reindex never landed; the race wasn't exercised"
+        )
         db_session.refresh(present)
         assert present.reclaim_status == IndexReclaimStatus.PENDING
-        assert present.pending_cc_pair_deletions == [101, 202]
+        assert present.pending_cc_pair_deletions == newer_reindex_intent
     finally:
         db_session.rollback()
         clear_reclaim_intent__no_commit(db_session, present.id)
         db_session.commit()
-        db_session.delete(newer_future)
+        for ss in [*newer_futures, canceled_future]:
+            db_session.delete(ss)
+        db_session.commit()
+        for ss in parked:
+            ss.status = IndexModelStatus.FUTURE
         db_session.commit()
 
 
@@ -434,7 +552,8 @@ def test_guard_conflicts_while_index_unreclaimed(
     try:
         with pytest.raises(OnyxError) as exc:
             search_settings_api._guard_index_name_reuse(db_session, name)
-        assert exc.value.error_code == OnyxErrorCode.CONFLICT
+        # Distinct from a plain CONFLICT so a caller can tell this one is worth retrying.
+        assert exc.value.error_code == OnyxErrorCode.INDEX_NAME_RECLAIMING
         assert "earlier re-index" in exc.value.detail
         db_session.refresh(ss)
         assert ss.reclaim_status == IndexReclaimStatus.DELETING  # pulled into reclaim
