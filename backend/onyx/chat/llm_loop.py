@@ -87,7 +87,6 @@ from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.tool_runner import run_tool_calls
-from onyx.tools.utils import compute_all_tool_tokens
 from onyx.tracing.framework.create import ChatTraceMetadata, trace
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_incognito_record_mode
@@ -1182,7 +1181,6 @@ def run_llm_loop(
                 else None
             )
 
-            tool_token_budget = compute_all_tool_tokens(final_tools, token_counter)
             tool_defs = [tool.tool_definition() for tool in final_tools]
             request_overhead_tokens = estimate_request_tokens(
                 [], tool_defs, token_counter
@@ -1218,16 +1216,12 @@ def run_llm_loop(
                 available_tool_names={tool.name for tool in final_tools},
             )
 
+            estimated_input_tokens = (
+                request_token_counter(truncated_message_history)
+                + request_overhead_tokens
+            )
             max_output_tokens = token_budget.output_allowance(
-                estimated_input_tokens=tool_token_budget
-                + sum(
-                    count_message_replay_tokens(
-                        msg,
-                        image_files_replayed_as_markers=image_files_replayed_as_markers,
-                        token_counter=token_counter,
-                    )
-                    for msg in truncated_message_history
-                ),
+                estimated_input_tokens=estimated_input_tokens,
             )
 
             # This calls the LLM, yields packets (reasoning, answers, etc.) and returns the result
