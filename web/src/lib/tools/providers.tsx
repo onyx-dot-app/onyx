@@ -1,17 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useMemo } from "react";
 import { createSharedHook } from "@opal/hooks";
-
 import { MinimalAgent } from "@/lib/agents/types";
-import { isAssistant } from "@/lib/agents/utils";
 import { useAvailableSources } from "@/lib/connectors/hooks";
-import { SourceMetadata } from "@/lib/search/interfaces";
+import {
+  agentDeclaresOwnSources,
+  effectiveAvailableSourcesFor,
+  toggleSourceSelection,
+} from "@/lib/searchFilters/utils";
 import { getConfiguredSources } from "@/lib/sources";
-import { useProjectsContext } from "@/lib/projects/providers";
-import { useSourcePreferences } from "@/lib/searchFilters/hooks";
-import { useSharedSearchFilters } from "@/lib/searchFilters/providers";
-import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { ValidSources } from "@/lib/types";
 
@@ -41,17 +39,10 @@ export interface ToolsPopoverValue extends ToolsPopoverInputs {
   /** How many of {@link configuredSources} are on, and how many there are. */
   sourceCounts: { enabled: number; total: number };
   isSourceEnabled: (uniqueKey: string) => boolean;
-  /**
-   * Pins a tool for the next message, or releases it. Pinning internal search
-   * widens the sources, since a pin with nothing selected finds nothing.
-   */
+  /** Pins a tool for the next message, or releases it. */
   toggleForced: (toolId: number) => void;
-  /**
-   * Switches a tool off for this chat, or back on. Internal search parks its
-   * sources on the way off and restores them on the way back.
-   */
+  /** Switches a tool off for this chat, or back on. */
   toggleEnabled: (toolId: number) => void;
-  /** Picking a source is a statement about search, so it pins search too. */
   toggleSource: (uniqueKey: string) => void;
   enableAllSources: () => void;
   disableAllSources: () => void;
@@ -67,6 +58,12 @@ export interface ToolsPopoverValue extends ToolsPopoverInputs {
  * own (permissions, the configured tools, the connectors) stays a hook call in
  * the row.
  *
+ * The tool states and the source selection are orthogonal axes: forcing,
+ * enabling or disabling a tool never changes which sources are selected, and
+ * picking sources never changes any tool's state. Both live on the chat's
+ * {@link ToolConfigurationHandle}, where a new chat starts untouched — every
+ * source on.
+ *
  * Mirrors mobile's `useComposerToolsState`, which solves the same problem for
  * the same feature.
  */
@@ -76,197 +73,77 @@ function useToolsPopoverState({
   openSources,
   close,
 }: ToolsPopoverInputs): ToolsPopoverValue {
-  const {
-    availableSources,
-    isLoading: sourcesLoading,
-    error: sourcesError,
-  } = useAvailableSources();
-  const { selectedSources, setSelectedSources } = useSharedSearchFilters();
-  const { currentProjectId } = useProjectsContext();
-  const inProject = currentProjectId != null;
+  const { availableSources, settled } = useAvailableSources();
+  // Source edits materialise and normalize against the configured roster, so
+  // they wait for it to be complete (stale allowed): an edit against a
+  // half-fetched list would freeze a partial selection into the chat. An
+  // agent declaring its own knowledge_sources carries its complete roster
+  // and never waits on the workspace connector fetch.
+  const sourcesSettled = settled || agentDeclaresOwnSources(agent);
 
-  // A partial list must not become the user's persisted choice, but it is
-  // still worth showing. Only initialisation waits for the fetch to settle.
-  //
-  // An agent that declares its own knowledge_sources never reads the fetch,
-  // so waiting on it would leave those sources unselected for as long as the
-  // connector request is in flight, or forever if it fails.
-  const declaresOwnSources =
-    !isAssistant(agent) && (agent.knowledge_sources?.length ?? 0) > 0;
-  const sourcesReady = declaresOwnSources || (!sourcesLoading && !sourcesError);
-
-  const hasSearchTool = agent.tools.some(
-    (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
+  const effectiveAvailableSources = useMemo<ValidSources[]>(
+    () => effectiveAvailableSourcesFor(agent, availableSources),
+    [agent, availableSources]
   );
-
-  // `knowledge_sources` is the complete set this agent can search over. Empty
-  // on a searching agent means "everything accessible", not "nothing".
-  const effectiveAvailableSources = useMemo<ValidSources[]>(() => {
-    if (isAssistant(agent)) return availableSources;
-    const declared = agent.knowledge_sources ?? [];
-    if (declared.length === 0 && hasSearchTool) return availableSources;
-    return declared as ValidSources[];
-  }, [agent, availableSources, hasSearchTool]);
-
-  const {
-    sourcesInitialized,
-    enableSources,
-    enableAllSources: baseEnableAllSources,
-    disableAllSources: baseDisableAllSources,
-    toggleSource: baseToggleSource,
-    isSourceEnabled,
-  } = useSourcePreferences({
-    availableSources: effectiveAvailableSources,
-    selectedSources,
-    setSelectedSources,
-    ready: sourcesReady,
-  });
 
   const configuredSources = useMemo(
     () => getConfiguredSources(effectiveAvailableSources),
     [effectiveAvailableSources]
   );
 
+  const { filters, setFilters } = toolConfiguration;
+
+  const isSourceEnabled = useCallback(
+    (uniqueKey: string) =>
+      filters.selectedSources === null ||
+      filters.selectedSources.includes(uniqueKey),
+    [filters.selectedSources]
+  );
+
   const enabledSourceCount = configuredSources.filter((source) =>
     isSourceEnabled(source.uniqueKey)
   ).length;
 
-  const searchToolId =
-    agent.tools.find(
-      (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID && !tool.mcp_server_id
-    )?.id ?? null;
-
-  const setSearchToolEnabled = useCallback(
-    (enabled: boolean) => {
-      if (searchToolId === null) return;
-      // Enabling only lifts the disabled flag. Writing null here would erase
-      // a "forced" pin, since this runs again on every configuration change.
-      toolConfiguration.setToolState(searchToolId, (current) =>
-        enabled ? (current === "disabled" ? null : current) : "disabled"
-      );
-    },
-    [searchToolId, toolConfiguration]
-  );
-
-  // Searching nothing returns nothing, so the search tool follows whether any
-  // source is selected.
-  useEffect(() => {
-    if (searchToolId === null || !sourcesInitialized) return;
-    // Inside a project the tool searches that project's files, so the
-    // connector sources say nothing about whether it should be on.
-    if (inProject) return;
-    setSearchToolEnabled(enabledSourceCount > 0);
-  }, [
-    searchToolId,
-    enabledSourceCount,
-    sourcesInitialized,
-    setSearchToolEnabled,
-    inProject,
-  ]);
-
   const toggleForced = useCallback(
-    (toolId: number) => {
-      const wasForced = toolConfiguration.forcedToolId === toolId;
-      if (!wasForced && toolId === searchToolId) {
-        setSelectedSources(configuredSources);
-      }
-      toolConfiguration.toggleToolState(toolId, "forced");
-    },
-    [configuredSources, searchToolId, setSelectedSources, toolConfiguration]
+    (toolId: number) => toolConfiguration.toggleToolState(toolId, "forced"),
+    [toolConfiguration]
   );
-
-  // Restored when search returns, so the round trip does not widen a partial
-  // pick back out to everything.
-  const parkedSources = useRef<SourceMetadata[]>([]);
 
   const toggleEnabled = useCallback(
-    (toolId: number) => {
-      const wasDisabled = toolConfiguration.disabledToolIds.includes(toolId);
-      toolConfiguration.toggleToolState(toolId, "disabled");
-      if (toolId !== searchToolId) return;
-
-      if (wasDisabled) {
-        if (parkedSources.current.length > 0) {
-          enableSources(parkedSources.current);
-        } else {
-          baseEnableAllSources();
-        }
-        parkedSources.current = [];
-      } else {
-        parkedSources.current = [...selectedSources];
-        baseDisableAllSources();
-      }
-    },
-    [
-      baseDisableAllSources,
-      baseEnableAllSources,
-      enableSources,
-      searchToolId,
-      selectedSources,
-      toolConfiguration,
-    ]
+    (toolId: number) => toolConfiguration.toggleToolState(toolId, "disabled"),
+    [toolConfiguration]
   );
-
-  const pinSearch = useCallback(() => {
-    if (searchToolId === null) return;
-    // Toggling the already-pinned tool would release it, so only fire when it
-    // is not the pinned one.
-    if (toolConfiguration.forcedToolId !== searchToolId) {
-      toolConfiguration.toggleToolState(searchToolId, "forced");
-    }
-  }, [searchToolId, toolConfiguration]);
-
-  const releaseSearch = useCallback(() => {
-    if (
-      searchToolId !== null &&
-      toolConfiguration.forcedToolId === searchToolId
-    ) {
-      toolConfiguration.clearForcedTool();
-    }
-  }, [searchToolId, toolConfiguration]);
-
-  const enableAllSources = useCallback(() => {
-    // Through the preferences hook, so the choice persists the way
-    // disabling all already does.
-    baseEnableAllSources();
-    setSearchToolEnabled(true);
-    pinSearch();
-  }, [baseEnableAllSources, pinSearch, setSearchToolEnabled]);
-
-  const disableAllSources = useCallback(() => {
-    baseDisableAllSources();
-    setSearchToolEnabled(false);
-    releaseSearch();
-  }, [baseDisableAllSources, releaseSearch, setSearchToolEnabled]);
 
   const toggleSource = useCallback(
     (uniqueKey: string) => {
-      const wasEnabled = isSourceEnabled(uniqueKey);
-      baseToggleSource(uniqueKey);
-      setSearchToolEnabled(enabledSourceCount + (wasEnabled ? -1 : 1) > 0);
-
-      if (!wasEnabled) {
-        pinSearch();
-        return;
-      }
-      // The last source going off leaves nothing to search, so the pin goes
-      // with it.
-      const stillOn = configuredSources.some(
-        (source) =>
-          source.uniqueKey !== uniqueKey && isSourceEnabled(source.uniqueKey)
-      );
-      if (!stillOn) releaseSearch();
+      if (!sourcesSettled) return;
+      setFilters((current) => ({
+        ...current,
+        selectedSources: toggleSourceSelection(
+          current.selectedSources,
+          uniqueKey,
+          configuredSources.map((source) => source.uniqueKey)
+        ),
+      }));
     },
-    [
-      baseToggleSource,
-      configuredSources,
-      enabledSourceCount,
-      isSourceEnabled,
-      pinSearch,
-      releaseSearch,
-      setSearchToolEnabled,
-    ]
+    [sourcesSettled, configuredSources, setFilters]
   );
+
+  // Back to the untouched default rather than a frozen full roster, so a
+  // connector added later is on, the same as in a chat never edited.
+  const enableAllSources = useCallback(() => {
+    if (!sourcesSettled) return;
+    setFilters((current) =>
+      current.selectedSources === null
+        ? current
+        : { ...current, selectedSources: null }
+    );
+  }, [sourcesSettled, setFilters]);
+
+  const disableAllSources = useCallback(() => {
+    if (!sourcesSettled) return;
+    setFilters((current) => ({ ...current, selectedSources: [] }));
+  }, [sourcesSettled, setFilters]);
 
   return useMemo(
     () => ({

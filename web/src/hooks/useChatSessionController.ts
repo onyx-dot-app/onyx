@@ -35,7 +35,6 @@ import {
   getProjectFilesForSession,
 } from "@/lib/projects/svc";
 import { AppInputBarHandle } from "@/sections/input/AppInputBar";
-import { useSharedSearchFilters } from "@/lib/searchFilters/providers";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 
 // Runs currently being re-attached; module-level so effect re-runs (incl.
@@ -89,7 +88,6 @@ export default function useChatSessionController({
   refreshChatSessions,
   onSubmit,
 }: UseChatSessionControllerProps) {
-  const searchFilters = useSharedSearchFilters();
   const [currentSessionFileTokenCount, setCurrentSessionFileTokenCount] =
     useState<number>(0);
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
@@ -145,12 +143,11 @@ export default function useChatSessionController({
       setCurrentMessageFiles([]);
     }
 
-    // Only reset filters/selections when switching between existing sessions
+    // Only reset selections when switching between existing sessions. The
+    // search filters need no reset: they live on the chat's tool
+    // configuration, so the next chat reads its own.
     if (isSwitchingBetweenSessions) {
       setSelectedDocuments([]);
-      searchFilters.setSelectedDocumentSets([]);
-      searchFilters.setSelectedTags([]);
-      searchFilters.setTimeRange(null);
 
       // Remove uploaded files
       setCurrentMessageFiles([]);
