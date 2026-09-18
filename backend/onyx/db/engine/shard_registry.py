@@ -275,7 +275,9 @@ class EngineCreationHooks(Generic[EngineT]):
     Shard engines are created on first tenant access, so a one-time sweep at
     startup would miss them. Subscribing replays engines that already exist and
     covers each engine built later; a subscriber racing a build can see an
-    engine twice, so callbacks must tolerate repeats.
+    engine twice, so callbacks must tolerate repeats. Builders notify before
+    they publish, under their registry lock — callbacks must not create
+    engines.
     """
 
     def __init__(self, snapshot: Callable[[], list[tuple[str, EngineT]]]) -> None:
@@ -299,8 +301,15 @@ class EngineCreationHooks(Generic[EngineT]):
                 logger.exception("engine callback failed for shard %s", shard_name)
 
 
+def _snapshot_shard_engines() -> list[tuple[str, Engine]]:
+    # Under the registry lock, so a snapshot cannot interleave with a build's
+    # notify-then-publish sequence and miss the engine entirely.
+    with ShardRegistry._lock:
+        return list(ShardRegistry._engines.items())
+
+
 shard_engine_hooks: EngineCreationHooks[Engine] = EngineCreationHooks(
-    lambda: list(ShardRegistry._engines.items())
+    _snapshot_shard_engines
 )
 
 
@@ -342,10 +351,13 @@ class ShardRegistry:
                 )
 
             engine = cls._build_engine(spec)
+            # Notify before publishing: the lock-free fast path above must only
+            # ever see fully instrumented engines. Callbacks run under this
+            # lock and must not create engines.
+            shard_engine_hooks.notify(shard_name, engine)
             cls._engines[shard_name] = engine
             logger.info("Created engine for shard %s", spec)
-        shard_engine_hooks.notify(shard_name, engine)
-        return engine
+            return engine
 
     @classmethod
     def _build_engine(cls, spec: ShardSpec) -> Engine:

@@ -45,8 +45,16 @@ logger = setup_logger()
 _ASYNC_ENGINES: dict[str, AsyncEngine] = {}
 _ASYNC_ENGINES_LOCK = threading.Lock()
 
+
+def _snapshot_async_engines() -> list[tuple[str, AsyncEngine]]:
+    # Under the engines lock, so a snapshot cannot interleave with a build's
+    # notify-then-publish sequence and miss the engine entirely.
+    with _ASYNC_ENGINES_LOCK:
+        return list(_ASYNC_ENGINES.items())
+
+
 async_engine_hooks: EngineCreationHooks[AsyncEngine] = EngineCreationHooks(
-    lambda: list(_ASYNC_ENGINES.items())
+    _snapshot_async_engines
 )
 
 
@@ -119,9 +127,12 @@ def get_async_engine_for_shard(shard_name: str) -> AsyncEngine:
             return engine
 
         engine = _build_async_engine(get_shard_spec(shard_name))
+        # Notify before publishing: the lock-free fast path above must only
+        # ever see fully instrumented engines. Callbacks run under this lock
+        # and must not create engines.
+        async_engine_hooks.notify(shard_name, engine)
         _ASYNC_ENGINES[shard_name] = engine
-    async_engine_hooks.notify(shard_name, engine)
-    return engine
+        return engine
 
 
 async def get_async_engine_for_tenant(tenant_id: str) -> AsyncEngine:
