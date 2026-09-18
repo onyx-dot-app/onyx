@@ -1,5 +1,5 @@
 import { ValidSources } from "../types";
-import { OnyxDocument } from "./interfaces";
+import { OnyxDocument } from "./types";
 import {
   countDocumentsBySource,
   documentMatchesAnySource,
