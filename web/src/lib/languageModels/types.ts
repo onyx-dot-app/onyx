@@ -68,6 +68,7 @@ export enum LLMProviderName {
   OPENAI_COMPATIBLE = "openai_compatible",
   NEBIUS_TOKENFACTORY = "nebius_tokenfactory",
   PORTKEY = "portkey",
+  OCI = "oci",
   CUSTOM = "custom",
 }
 

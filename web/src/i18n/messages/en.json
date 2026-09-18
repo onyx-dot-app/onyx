@@ -5477,6 +5477,40 @@
             "description": "Paste your API key from [Nebius TokenFactory](https://tokenfactory.nebius.com/) to load the available models."
           }
         },
+        "oci": {
+          "compartmentIdField": {
+            "description": "OCID of the compartment that Generative AI requests are made in.",
+            "title": "Compartment OCID"
+          },
+          "fingerprintField": {
+            "description": "Fingerprint of the API signing key, as shown in the OCI Console.",
+            "title": "API Key Fingerprint"
+          },
+          "privateKeyField": {
+            "description": "Attach the PEM private key that pairs with the fingerprint above.",
+            "title": "API Signing Private Key"
+          },
+          "regionField": {
+            "description": "OCI region that hosts the Generative AI endpoint, for example us-chicago-1.",
+            "title": "Region"
+          },
+          "tenancyField": {
+            "description": "OCID of your tenancy.",
+            "title": "Tenancy OCID"
+          },
+          "userField": {
+            "description": "OCID of the user the API signing key belongs to.",
+            "title": "User OCID"
+          },
+          "validation": {
+            "compartmentIdRequired": "Compartment OCID is required",
+            "fingerprintRequired": "API key fingerprint is required",
+            "privateKeyRequired": "Private key is required",
+            "regionRequired": "Region is required",
+            "tenancyRequired": "Tenancy OCID is required",
+            "userRequired": "User OCID is required"
+          }
+        },
         "ollama": {
           "apiBaseField": {
             "description": "The base URL for your Ollama instance.",

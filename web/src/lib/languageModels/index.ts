@@ -18,6 +18,7 @@ import {
   SvgGoogle,
   SvgNebius,
   SvgPortkey,
+  SvgOracle,
 } from "@opal/logos";
 import { ZAIIcon } from "@/components/icons/icons";
 import {
@@ -39,6 +40,7 @@ import BifrostModal from "@/sections/modals/languageModels/BifrostModal";
 import OpenAICompatibleModal from "@/sections/modals/languageModels/OpenAICompatibleModal";
 import NebiusTokenfactoryModal from "@/sections/modals/languageModels/NebiusTokenfactoryModal";
 import PortkeyModal from "@/sections/modals/languageModels/PortkeyModal";
+import OCIModal from "@/sections/modals/languageModels/OCIModal";
 
 // ─── Text (LLM) providers ────────────────────────────────────────────────────
 
@@ -134,6 +136,12 @@ const PROVIDERS: Record<string, ProviderEntry> = {
     companyName: "Portkey",
     Modal: PortkeyModal,
   },
+  [LLMProviderName.OCI]: {
+    icon: SvgOracle,
+    productName: "OCI Generative AI",
+    companyName: "Oracle Cloud Infrastructure",
+    Modal: OCIModal,
+  },
   [LLMProviderName.CUSTOM]: {
     icon: SvgServer,
     productName: "Custom Models",
@@ -197,6 +205,7 @@ export const AGGREGATOR_PROVIDERS = new Set([
   LLMProviderName.OPENAI_COMPATIBLE,
   LLMProviderName.NEBIUS_TOKENFACTORY,
   LLMProviderName.PORTKEY,
+  LLMProviderName.OCI,
   LLMProviderName.VERTEX_AI,
 ]);
 
@@ -215,6 +224,7 @@ const MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
   [LLMProviderName.OPENAI_COMPATIBLE]: SvgPlug,
   [LLMProviderName.NEBIUS_TOKENFACTORY]: SvgNebius,
   [LLMProviderName.PORTKEY]: SvgPortkey,
+  [LLMProviderName.OCI]: SvgOracle,
 
   amazon: SvgAws,
   gpt: SvgOpenai,

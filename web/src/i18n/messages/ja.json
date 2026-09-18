@@ -5477,6 +5477,40 @@
             "description": "利用可能なモデルを読み込むには、[Nebius TokenFactory](https://tokenfactory.nebius.com/) の API キーを貼り付けてください。"
           }
         },
+        "oci": {
+          "compartmentIdField": {
+            "description": "Generative AI リクエストを実行するコンパートメントの OCID です。",
+            "title": "コンパートメント OCID"
+          },
+          "fingerprintField": {
+            "description": "OCI コンソールに表示される API 署名キーのフィンガープリントです。",
+            "title": "API キーのフィンガープリント"
+          },
+          "privateKeyField": {
+            "description": "上記のフィンガープリントに対応する PEM 形式の秘密キーを添付してください。",
+            "title": "API 署名秘密キー"
+          },
+          "regionField": {
+            "description": "Generative AI エンドポイントをホストする OCI リージョンです（例: us-chicago-1）。",
+            "title": "リージョン"
+          },
+          "tenancyField": {
+            "description": "テナンシの OCID です。",
+            "title": "テナンシ OCID"
+          },
+          "userField": {
+            "description": "API 署名キーが属するユーザーの OCID です。",
+            "title": "ユーザー OCID"
+          },
+          "validation": {
+            "compartmentIdRequired": "コンパートメント OCID は必須です",
+            "fingerprintRequired": "API キーのフィンガープリントは必須です",
+            "privateKeyRequired": "秘密キーは必須です",
+            "regionRequired": "リージョンは必須です",
+            "tenancyRequired": "テナンシ OCID は必須です",
+            "userRequired": "ユーザー OCID は必須です"
+          }
+        },
         "ollama": {
           "apiBaseField": {
             "description": "Ollama インスタンスのベース URL です。",

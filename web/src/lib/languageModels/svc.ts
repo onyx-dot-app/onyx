@@ -150,6 +150,7 @@ export const AGGREGATOR_PROVIDERS = new Set([
   "litellm_proxy",
   "bifrost",
   "openai_compatible",
+  "oci",
   "vertex_ai",
 ]);
 

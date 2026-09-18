@@ -26,6 +26,7 @@ from onyx.llm.well_known_providers.constants import (
     LITELLM_PROXY_PROVIDER_NAME,
     LM_STUDIO_PROVIDER_NAME,
     NEBIUS_TOKENFACTORY_PROVIDER_NAME,
+    OCI_PROVIDER_NAME,
     OLLAMA_PROVIDER_NAME,
     OPENAI_COMPATIBLE_PROVIDER_NAME,
     OPENAI_PROVIDER_NAME,
@@ -65,6 +66,7 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
         OPENAI_COMPATIBLE_PROVIDER_NAME: [],  # Dynamic - fetched from OpenAI-compatible API
         NEBIUS_TOKENFACTORY_PROVIDER_NAME: [],  # Dynamic - fetched from /v1/models
         PORTKEY_PROVIDER_NAME: [],  # Dynamic - fetched from the Portkey gateway
+        OCI_PROVIDER_NAME: get_oci_model_names(),
     }
 
 
@@ -259,6 +261,22 @@ def get_vertexai_model_names() -> list[str]:
     )
 
 
+def get_oci_model_names() -> list[str]:
+    """Get OCI Generative AI chat model names from litellm model_cost.
+
+    LiteLLM keys them as `oci/<vendor>.<model>`; the same catalog also lists
+    embedding models, which are filtered out here.
+    """
+    import litellm
+
+    prefix = f"{OCI_PROVIDER_NAME}/"
+    return sorted(
+        key.removeprefix(prefix)
+        for key, info in litellm.model_cost.items()
+        if key.startswith(prefix) and info.get("mode") == "chat"
+    )
+
+
 def model_configurations_for_provider(
     provider_name: str, llm_recommendations: LLMRecommendations
 ) -> list[ModelConfigurationView]:
@@ -281,9 +299,9 @@ def model_configurations_for_provider(
         seen_model_names.add(model_name)
         model_names.append(model_name)
 
-    # Vertex model list can be large and mixed-vendor; alphabetical ordering
-    # makes model discovery easier in admin selection UIs.
-    if provider_name == VERTEXAI_PROVIDER_NAME:
+    # Vertex and OCI model lists can be large and mixed-vendor; alphabetical
+    # ordering makes model discovery easier in admin selection UIs.
+    if provider_name in (VERTEXAI_PROVIDER_NAME, OCI_PROVIDER_NAME):
         model_names = sorted(model_names, key=str.lower)
 
     return [
@@ -367,6 +385,7 @@ def get_provider_display_name(provider_name: str) -> str:
         OPENAI_COMPATIBLE_PROVIDER_NAME: "OpenAI-Compatible",
         NEBIUS_TOKENFACTORY_PROVIDER_NAME: "Nebius TokenFactory",
         PORTKEY_PROVIDER_NAME: "Portkey",
+        OCI_PROVIDER_NAME: "OCI Generative AI",
     }
 
     if provider_name in _ONYX_PROVIDER_DISPLAY_NAMES:
