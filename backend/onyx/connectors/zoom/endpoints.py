@@ -35,6 +35,12 @@ ENTITLEMENT_HINTS: dict[ZoomEntitlement, str] = {
 }
 
 
+def normalize_session_id(identifier: str) -> str:
+    """Zoom shows meeting and webinar numbers as `857 9609 3688`, and admins
+    paste them that way."""
+    return "".join(identifier.split())
+
+
 def encode_identifier(identifier: str) -> str:
     """Zoom requires a UUID to be encoded twice when it starts with "/" or
     contains "//". User and group ids never contain a slash, so this is safe

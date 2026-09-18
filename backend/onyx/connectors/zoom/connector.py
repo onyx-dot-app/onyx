@@ -55,6 +55,7 @@ from onyx.connectors.zoom.recordings.processing import (
     process_occurrence,
 )
 from onyx.connectors.zoom.recordings.session_types import get_session_type_handler
+from onyx.connectors.zoom.validation import probe_zoom
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -179,6 +180,10 @@ class ZoomConnector(
         self._sources = build_discovery_sources(
             meeting_ids, webinar_ids, host_emails, group_id
         )
+        self._meeting_ids = meeting_ids
+        self._webinar_ids = webinar_ids
+        self._host_emails = host_emails
+        self._group_id = group_id
         self.plan_tier = plan_tier
         self.rate_limit_percent = rate_limit_percent
         self.client: ZoomClient | None = None
@@ -215,6 +220,16 @@ class ZoomConnector(
             parse_rate_limit_percent(self.rate_limit_percent)
         except ValueError as e:
             raise ConnectorValidationError(str(e)) from e
+
+        if self.client is None:
+            raise ConnectorMissingCredentialError("Zoom")
+        probe_zoom(
+            self.client,
+            meeting_ids=self._meeting_ids,
+            webinar_ids=self._webinar_ids,
+            host_emails=self._host_emails,
+            group_id=self._group_id,
+        )
 
     def build_dummy_checkpoint(self) -> ZoomConnectorCheckpoint:
         return ZoomConnectorCheckpoint(has_more=True)

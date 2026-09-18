@@ -24,6 +24,7 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorFailure, EntityFailure
 from onyx.connectors.zoom.client import ZoomClient
+from onyx.connectors.zoom.endpoints import normalize_session_id
 from onyx.connectors.zoom.models import ZoomRecordingEntry, ZoomSessionOccurrence
 from onyx.connectors.zoom.recordings.models import (
     OccurrenceWork,
@@ -191,15 +192,25 @@ class _AllowlistCursor(BaseModel):
     offset: int = 0
 
 
+def session_ids(values: list[str] | None) -> list[str]:
+    """Deduplicated, because Zoom shows one id both spaced and unspaced and an
+    allowlist holding both forms would crawl that session twice."""
+    cleaned = (normalize_session_id(value) for value in values or [] if value)
+    return list(dict.fromkeys(value for value in cleaned if value))
+
+
 class IdAllowlistSource(DiscoverySource):
     def __init__(
         self, meeting_ids: list[str], webinar_ids: list[str] | None = None
     ) -> None:
         self._refs: list[tuple[ZoomSessionType, str]] = [
-            *((ZoomSessionType.MEETING, meeting_id) for meeting_id in meeting_ids),
+            *(
+                (ZoomSessionType.MEETING, meeting_id)
+                for meeting_id in session_ids(meeting_ids)
+            ),
             *(
                 (ZoomSessionType.WEBINAR, webinar_id)
-                for webinar_id in webinar_ids or []
+                for webinar_id in session_ids(webinar_ids)
             ),
         ]
 
@@ -726,7 +737,7 @@ def build_discovery_sources(
     group_id: str | None = None,
 ) -> list[DiscoverySource]:
     sources: list[DiscoverySource] = []
-    if meeting_ids or webinar_ids:
+    if session_ids(meeting_ids) or session_ids(webinar_ids):
         sources.append(IdAllowlistSource(meeting_ids or [], webinar_ids or []))
     if host_emails and any(email.strip() for email in host_emails):
         sources.append(HostAllowlistSource(host_emails))
