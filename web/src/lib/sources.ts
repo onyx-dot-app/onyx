@@ -58,6 +58,7 @@ import {
   SvgWikipedia,
   SvgXenforo,
   SvgZendesk,
+  SvgZoom,
   SvgZulip,
 } from "@opal/logos";
 
@@ -328,6 +329,11 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Outlook",
     category: SourceCategory.Messaging,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/outlook`,
+  },
+  zoom: {
+    icon: SvgZoom,
+    displayName: "Zoom",
+    category: SourceCategory.Messaging,
   },
   gmail: {
     icon: SvgGmail,
