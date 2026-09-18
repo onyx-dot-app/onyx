@@ -721,7 +721,7 @@ def fetch_document_ids_by_links(
     return {link: doc_id for link, doc_id in rows if link}
 
 
-def get_indexable_document_sources(
+def get_document_source_types(
     db_session: Session,
     document_ids: list[str],
 ) -> dict[str, tuple[DocumentSource, ...]]:
@@ -731,21 +731,10 @@ def get_indexable_document_sources(
     rows = db_session.execute(
         select(DocumentByConnectorCredentialPair.id, Connector.source)
         .join(
-            ConnectorCredentialPair,
-            and_(
-                DocumentByConnectorCredentialPair.connector_id
-                == ConnectorCredentialPair.connector_id,
-                DocumentByConnectorCredentialPair.credential_id
-                == ConnectorCredentialPair.credential_id,
-            ),
+            Connector,
+            DocumentByConnectorCredentialPair.connector_id == Connector.id,
         )
-        .join(Connector, ConnectorCredentialPair.connector_id == Connector.id)
-        .where(
-            DocumentByConnectorCredentialPair.id.in_(document_ids),
-            ConnectorCredentialPair.status.in_(
-                ConnectorCredentialPairStatus.indexable_statuses()
-            ),
-        )
+        .where(DocumentByConnectorCredentialPair.id.in_(document_ids))
         .distinct()
     ).all()
 
@@ -758,7 +747,7 @@ def get_indexable_document_sources(
     }
 
 
-def get_indexable_document_sources_after_cc_pair_removal(
+def get_document_source_types_after_cc_pair_removal(
     db_session: Session,
     document_id: str,
     connector_id: int,
@@ -768,20 +757,11 @@ def get_indexable_document_sources_after_cc_pair_removal(
         select(Connector.source)
         .select_from(DocumentByConnectorCredentialPair)
         .join(
-            ConnectorCredentialPair,
-            and_(
-                DocumentByConnectorCredentialPair.connector_id
-                == ConnectorCredentialPair.connector_id,
-                DocumentByConnectorCredentialPair.credential_id
-                == ConnectorCredentialPair.credential_id,
-            ),
+            Connector,
+            DocumentByConnectorCredentialPair.connector_id == Connector.id,
         )
-        .join(Connector, ConnectorCredentialPair.connector_id == Connector.id)
         .where(
             DocumentByConnectorCredentialPair.id == document_id,
-            ConnectorCredentialPair.status.in_(
-                ConnectorCredentialPairStatus.indexable_statuses()
-            ),
             ~and_(
                 DocumentByConnectorCredentialPair.connector_id == connector_id,
                 DocumentByConnectorCredentialPair.credential_id == credential_id,

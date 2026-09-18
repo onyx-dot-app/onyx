@@ -20,7 +20,7 @@ from onyx.db.document import (
     fetch_chunk_count_for_document,
     get_document,
     get_document_connector_count,
-    get_indexable_document_sources_after_cc_pair_removal,
+    get_document_source_types_after_cc_pair_removal,
     mark_document_as_modified,
     mark_document_as_synced,
 )
@@ -184,7 +184,7 @@ def document_by_cc_pair_cleanup_task(
                 )
 
                 doc_sets = fetch_document_sets_for_document(document_id, db_session)
-                source_types = get_indexable_document_sources_after_cc_pair_removal(
+                source_types = get_document_source_types_after_cc_pair_removal(
                     db_session=db_session,
                     document_id=document_id,
                     connector_id=connector_id,

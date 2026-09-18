@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
 from onyx.db.document import (
-    get_indexable_document_sources,
-    get_indexable_document_sources_after_cc_pair_removal,
+    get_document_source_types,
+    get_document_source_types_after_cc_pair_removal,
     upsert_document_by_connector_credential_pair,
 )
 from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
@@ -57,7 +57,7 @@ def _add_cc_pair(
     return cc_pair
 
 
-def test_indexable_sources_aggregate_and_relationship_add_marks_stale(
+def test_document_sources_follow_relationship_rows_and_add_marks_stale(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
@@ -111,18 +111,22 @@ def test_indexable_sources_aggregate_and_relationship_add_marks_stale(
     db_session.commit()
 
     try:
-        assert get_indexable_document_sources(db_session, [document_id]) == {
+        assert get_document_source_types(db_session, [document_id]) == {
             document_id: (
+                DocumentSource.GOOGLE_DRIVE,
                 DocumentSource.SHAREPOINT,
                 DocumentSource.WEB,
             )
         }
-        assert get_indexable_document_sources_after_cc_pair_removal(
+        assert get_document_source_types_after_cc_pair_removal(
             db_session,
             document_id,
             cc_pairs[0].connector_id,
             cc_pairs[0].credential_id,
-        ) == (DocumentSource.SHAREPOINT,)
+        ) == (
+            DocumentSource.GOOGLE_DRIVE,
+            DocumentSource.SHAREPOINT,
+        )
 
         upsert_document_by_connector_credential_pair(
             db_session,
@@ -134,7 +138,7 @@ def test_indexable_sources_aggregate_and_relationship_add_marks_stale(
 
         assert document.last_modified is not None
         assert document.last_modified > old_modified
-        assert get_indexable_document_sources(db_session, [document_id]) == {
+        assert get_document_source_types(db_session, [document_id]) == {
             document_id: (
                 DocumentSource.GOOGLE_DRIVE,
                 DocumentSource.SHAREPOINT,
