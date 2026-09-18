@@ -28,16 +28,16 @@ from onyx.auth.session_tokens import build_session_token_value
 from onyx.auth.users import current_user_from_websocket_cookie, get_redis_strategy
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX, WEB_DOMAIN
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
-from onyx.db.engine.async_sql_engine import (
-    abandon_async_engines,
-    reset_sqlalchemy_async_engine,
-)
+from onyx.db.engine.async_sql_engine import abandon_async_engines
 from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.server.features.build.webapp_proxy import public_build_router
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import (
     CURRENT_TENANT_ID_CONTEXTVAR,
     CURRENT_USER_ID_CONTEXTVAR,
+)
+from tests.external_dependency_unit.async_client_utils import (
+    dispose_loop_async_clients,
 )
 from tests.external_dependency_unit.conftest import delete_test_user
 from tests.external_dependency_unit.craft.db_helpers import make_user
@@ -83,13 +83,6 @@ async def _seed_session_token(user_id: UUID, expires_at: datetime) -> str:
         ex=600,
     )
     return token
-
-
-async def _dispose_async_clients() -> None:
-    """Close loop-bound clients before asyncio.run tears the loop down."""
-    await reset_sqlalchemy_async_engine()
-    redis = await get_async_redis_connection()
-    await redis.aclose()
 
 
 def _simulate_multi_tenant(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -149,7 +142,7 @@ def test_cookie_websocket_auth_sets_tenant_from_session_token(
             assert CURRENT_TENANT_ID_CONTEXTVAR.get() is None
             assert CURRENT_USER_ID_CONTEXTVAR.get() is None
         finally:
-            await _dispose_async_clients()
+            await dispose_loop_async_clients()
 
     try:
         _run_with_unset_tenant(_run)
@@ -185,7 +178,7 @@ def test_cookie_websocket_auth_rejects_expired_session(
             assert exc_info.value.code == 1008
             assert CURRENT_TENANT_ID_CONTEXTVAR.get() is None
         finally:
-            await _dispose_async_clients()
+            await dispose_loop_async_clients()
 
     try:
         _run_with_unset_tenant(_run)

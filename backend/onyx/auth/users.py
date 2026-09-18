@@ -2293,6 +2293,28 @@ async def optional_user(
         user,
         user_manager,
     )
+    # End the auth read transaction here so its DB connection is not held for
+    # the whole turn: FastAPI closes this session only after the response
+    # finishes, and streaming chat responses can run for minutes.
+    # is_active is False when a best-effort write above (e.g. the OAuth token
+    # refresh) failed and left the transaction needing rollback. Auth must not
+    # fail on that, so leave that cleanup — and any commit failure here — to
+    # the dependency teardown.
+    if (
+        async_db_session.in_transaction()
+        and async_db_session.is_active
+        and not (
+            async_db_session.new or async_db_session.dirty or async_db_session.deleted
+        )
+    ):
+        try:
+            await async_db_session.commit()
+        except Exception:
+            logger.warning(
+                "Early release of the auth DB connection failed; "
+                "it is released at request teardown instead.",
+                exc_info=True,
+            )
     token = CURRENT_USER_ID_CONTEXTVAR.set(str(user.id) if user is not None else None)
     credential_token = CURRENT_USAGE_CREDENTIAL_CONTEXTVAR.set(
         getattr(request.state, "usage_credential", None)  # ods: ignore[getattr]
