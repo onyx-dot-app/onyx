@@ -18,7 +18,10 @@ from onyx.background.celery.celery_redis import (
     celery_get_queued_task_ids,
     celery_get_unacked_task_ids,
 )
-from onyx.background.celery.celery_utils import extract_ids_from_runnable_connector
+from onyx.background.celery.celery_utils import (
+    extract_ids_from_runnable_connector,
+    prunable_document_ids,
+)
 from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
 from onyx.background.celery.tasks.docprocessing.utils import IndexingCallbackBase
 from onyx.configs.app_configs import ALLOW_SIMULTANEOUS_PRUNING, JOB_TIMEOUT
@@ -687,8 +690,8 @@ def connector_pruning_generator_task(
                 }
 
                 # generate list of docs to remove (no longer in the source)
-                doc_ids_to_remove = list(
-                    all_indexed_document_ids - all_connector_doc_ids.keys()
+                doc_ids_to_remove = prunable_document_ids(
+                    all_indexed_document_ids, extraction_result
                 )
 
                 task_logger.info(

@@ -83,13 +83,13 @@ def test_helper_functions() -> None:
     """Test the helper functions for team name processing."""
     from onyx.connectors.teams.connector import (
         _can_use_odata_filter,
-        _escape_odata_string,
         _has_odata_incompatible_chars,
     )
+    from onyx.connectors.teams.utils import escape_odata_string
 
     # Test OData string escaping
-    assert _escape_odata_string("Team's Group") == "Team''s Group"
-    assert _escape_odata_string("Normal Team") == "Normal Team"
+    assert escape_odata_string("Team's Group") == "Team''s Group"
+    assert escape_odata_string("Normal Team") == "Normal Team"
 
     # Test special character detection
     assert _has_odata_incompatible_chars(["R&D Team"])

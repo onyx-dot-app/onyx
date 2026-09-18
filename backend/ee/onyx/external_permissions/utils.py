@@ -9,7 +9,12 @@ from onyx.access.models import (
     NodeExternalAccess,
 )
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch, SlimConnectorWithPermSync
+from onyx.connectors.interfaces import (
+    SecondsSinceUnixEpoch,
+    SlimConnectorWithPermSync,
+    documents_outside_gaps,
+    inventory_gaps,
+)
 from onyx.connectors.models import HierarchyNode
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -100,6 +105,14 @@ def generic_doc_sync(
 
     missing_doc_ids = set(existing_doc_ids) - newly_fetched_doc_ids
 
+    if not missing_doc_ids:
+        return
+
+    # A document behind a gap is missing from this fetch without being gone, so
+    # its access is left as it is instead of being emptied.
+    missing_doc_ids = documents_outside_gaps(
+        missing_doc_ids, inventory_gaps(slim_connector)
+    )
     if not missing_doc_ids:
         return
 

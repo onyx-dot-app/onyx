@@ -7,6 +7,7 @@ from typing import Any
 
 import requests
 from office365.graph_client import GraphClient
+from office365.runtime.http.request_options import RequestOptions
 from office365.runtime.queries.client_query import ClientQuery
 
 from onyx.access.models import ExternalAccess
@@ -22,6 +23,12 @@ from onyx.connectors.teams.models import ChannelFilesFolder, ChannelMember, Mess
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def escape_odata_string(name: str) -> str:
+    """An OData string literal doubles its apostrophes. Other characters that
+    break Graph's OData parser are handled by filtering on the client instead."""
+    return name.replace("'", "''")
 
 
 def execute_query_with_retry(
@@ -74,6 +81,31 @@ def _retry(
     graph_client: GraphClient,
     request_url: str,
 ) -> dict:
+    json = request_with_retry(graph_client, request_url).json()
+    if not isinstance(json, dict):
+        raise RuntimeError(f"Expected a JSON object, instead got {json=}")
+    return json
+
+
+def _execute(
+    graph_client: GraphClient, request_url: str, accept: str | None
+) -> requests.Response:
+    """The SDK's direct request, with an Accept header when the route serves
+    more than one format. The SDK adds the bearer token to both shapes."""
+    if accept is None:
+        return graph_client.execute_request_direct(request_url)
+    request = RequestOptions(f"{graph_client.service_root_url()}/{request_url}")
+    request.headers["Accept"] = accept
+    return graph_client.pending_request().execute_request_direct(request)
+
+
+def request_with_retry(
+    graph_client: GraphClient,
+    request_url: str,
+    accept: str | None = None,
+) -> requests.Response:
+    """One Graph request under Teams' retry policy, as a raw response rather
+    than parsed JSON."""
     MAX_RETRIES = 10
     retry_number = 0
 
@@ -81,17 +113,13 @@ def _retry(
         # The SDK raises on every non-2xx status, so the response is taken from
         # the exception to apply one retry policy to raised and returned errors.
         try:
-            response = graph_client.execute_request_direct(request_url)
+            response = _execute(graph_client, request_url, accept)
         except requests.HTTPError as e:
             if e.response is None:
                 raise
             response = e.response
         if response.ok:
-            json = response.json()
-            if not isinstance(json, dict):
-                raise RuntimeError(f"Expected a JSON object, instead got {json=}")
-
-            return json
+            return response
 
         # Transient Graph errors (rate limits + 5xx gateway/server hiccups) are
         # retried with backoff; any other status is surfaced immediately.
@@ -143,11 +171,16 @@ def _get_next_url(
 
 
 def _iter_values(
-    graph_client: GraphClient, request_url: str
+    graph_client: GraphClient,
+    request_url: str,
+    before_page: Callable[[], None] | None = None,
 ) -> Generator[dict[str, Any]]:
-    """Every row of a paged Graph collection."""
+    """Every row of a paged Graph collection. ``before_page`` runs ahead of
+    each page request, so a walk can honor a stop between pages."""
     url: str | None = request_url
     while url:
+        if before_page is not None:
+            before_page()
         json_response = _retry(graph_client=graph_client, request_url=url)
         for value in json_response.get("value", []):
             if isinstance(value, dict):

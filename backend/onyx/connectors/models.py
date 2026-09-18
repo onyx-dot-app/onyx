@@ -462,6 +462,15 @@ class SlimDocument(BaseModel):
     doc_created_at: datetime | None = None
 
 
+class InventoryGap(BaseModel):
+    """A group of documents a slim walk could not list, and the document id
+    prefix that group lives under. Whoever deletes what the walk leaves out
+    spares the ids under that prefix, and treats the rest of the walk as whole."""
+
+    entity_id: str
+    document_id_prefix: str
+
+
 class HierarchyNode(BaseModel):
     """
     Hierarchy node yielded by connectors.
