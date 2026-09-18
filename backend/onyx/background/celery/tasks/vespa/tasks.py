@@ -36,6 +36,7 @@ from onyx.configs.constants import (
 from onyx.db.document import (
     document_has_indexable_cc_pair,
     get_document,
+    get_document_source_types,
     mark_document_as_synced,
     mark_document_synced_secondary_pending,
 )
@@ -511,6 +512,10 @@ def document_index_metadata_sync_task(
                 doc_access = get_access_for_document(
                     document_id=document_id, db_session=db_session
                 )
+                source_types = get_document_source_types(
+                    db_session=db_session,
+                    document_ids=[document_id],
+                ).get(document_id)
 
                 update_request = MetadataUpdateRequest(
                     document_ids=[document_id],
@@ -523,6 +528,7 @@ def document_index_metadata_sync_task(
                     document_sets=update_doc_sets,
                     boost=doc.boost,
                     hidden=doc.hidden,
+                    source_types=source_types,
                     created_at=doc.doc_created_at,
                 )
 
