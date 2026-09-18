@@ -20,6 +20,7 @@ from onyx.connectors.zoom.endpoints import (
     ZoomEntitlement,
 )
 from onyx.connectors.zoom.models import (
+    ZOOM_MISSING_SCOPE_CODE,
     ZOOM_NOT_ENTITLED_CODE,
     ZoomAccessToken,
     ZoomInvitee,
@@ -96,16 +97,55 @@ def _reject_non_zoom_download_url(download_url: str) -> None:
         raise ValueError(f"Unsafe Zoom transcript download URL: {e}") from e
 
 
-def _not_entitled_message(response: requests.Response) -> str | None:
+def _zoom_body(response: requests.Response) -> dict[str, Any] | None:
     try:
         body = response.json()
     except ValueError:
         return None
-    if not isinstance(body, dict):
-        return None
-    if str(body.get("code")) != ZOOM_NOT_ENTITLED_CODE:
+    return body if isinstance(body, dict) else None
+
+
+def _not_entitled_message(response: requests.Response) -> str | None:
+    body = _zoom_body(response)
+    if body is None or str(body.get("code")) != ZOOM_NOT_ENTITLED_CODE:
         return None
     return str(body.get("message") or "no permission")
+
+
+def _registration_not_enabled(error: requests.HTTPError) -> bool:
+    """Zoom answers a session that never had registration switched on with a
+    400 and its generic code 300, not with an empty list, so only the message
+    tells this apart from a malformed id."""
+    response = error.response
+    if response is None or response.status_code != 400:
+        return False
+    body = _zoom_body(response)
+    if body is None or str(body.get("code")) != "300":
+        return False
+    return "registration has not been enabled" in str(body.get("message", "")).lower()
+
+
+def _missing_scope_message(response: requests.Response) -> str | None:
+    body = _zoom_body(response)
+    if body is None or str(body.get("code")) != ZOOM_MISSING_SCOPE_CODE:
+        return None
+    return str(body.get("message") or "the token does not carry the scope")
+
+
+def _zoom_explanation(response: requests.Response) -> str:
+    """The API answers `{"code", "message"}`; the OAuth token endpoint answers
+    `{"error", "reason"}`. Either way this is the text the admin has to read."""
+    try:
+        body = response.json()
+    except ValueError:
+        return ""
+    if not isinstance(body, dict):
+        return ""
+    if body.get("message"):
+        return f"{body['message']} (Zoom code {body.get('code')})"
+    if body.get("reason"):
+        return f"{body['reason']} ({body.get('error')})"
+    return ""
 
 
 def _raise_for_zoom_error(response: requests.Response, description: str) -> None:
@@ -115,17 +155,38 @@ def _raise_for_zoom_error(response: requests.Response, description: str) -> None
     if response.ok:
         return
 
-    try:
-        body = response.json()
-    except ValueError:
-        body = None
-
-    detail = ""
-    if isinstance(body, dict) and body.get("message"):
-        detail = f": {body['message']} (Zoom code {body.get('code')})"
+    detail = _zoom_explanation(response)
+    if detail:
+        detail = f": {detail}"
 
     raise requests.HTTPError(
         f"{response.status_code} from {description}{detail}", response=response
+    )
+
+
+# Zoom answers a wrong secret, a wrong account id and a deactivated app all
+# with 400. Only the reason text tells them apart, and only the disabled app
+# is fixed somewhere other than the credential form.
+_APP_DISABLED_REASONS = ("disabled", "not activated", "deactivated")
+
+
+def _raise_for_token_refusal(response: requests.Response) -> None:
+    detail = _zoom_explanation(response)
+    suffix = f": {detail}" if detail else ""
+    reason = detail.lower()
+
+    if any(marker in reason for marker in _APP_DISABLED_REASONS):
+        raise InsufficientPermissionsError(
+            "Zoom refused to issue a token because the Server-to-Server OAuth "
+            f"app is not activated. Activate it in the Zoom Marketplace{suffix}"
+        )
+    if "bad request" in reason or "invalid_request" in reason:
+        raise CredentialInvalidError(
+            "Zoom rejected the token request. This usually means the Account ID "
+            f"is wrong{suffix}"
+        )
+    raise CredentialInvalidError(
+        f"Zoom rejected the Server-to-Server OAuth client credentials{suffix}"
     )
 
 
@@ -171,12 +232,10 @@ class ZoomClient:
                 timeout=REQUEST_TIMEOUT_SECONDS,
             ),
         )
-        # A Server-to-Server client secret never expires, so this 401 is invalid,
-        # not expired. The 401 in _send_authorized is a real token expiry.
-        if response.status_code == 401:
-            raise CredentialInvalidError(
-                "Zoom rejected the Server-to-Server OAuth client credentials"
-            )
+        # A Server-to-Server client secret never expires, so a refusal here is
+        # invalid, not expired. The 401 in _send_authorized is a real expiry.
+        if response.status_code in (400, 401):
+            _raise_for_token_refusal(response)
         if response.status_code == 403:
             raise InsufficientPermissionsError(
                 "Zoom refused to issue a token for this app — check that it is "
@@ -229,6 +288,15 @@ class ZoomClient:
             )
         if response.status_code == 403:
             raise self._entitlement_aware_denial(endpoint, description)
+        # Zoom reports a missing scope as a 400, not a 403, so without this it
+        # would read as a bad request and never reach the admin as a scope fix.
+        if response.status_code == 400:
+            missing = _missing_scope_message(response)
+            if missing is not None:
+                raise InsufficientPermissionsError(
+                    f"Zoom denied {description}: {missing}. Grant the scope on the "
+                    "Server-to-Server OAuth app in the Zoom Marketplace."
+                )
         return response
 
     @staticmethod
@@ -293,11 +361,7 @@ class ZoomClient:
         extra_params: dict[str, Any] | None = None,
     ) -> list[_AccessRecordT]:
         """Zoom's next_page_token expires 15 minutes after it is issued, so the
-        whole list is drained here rather than resumed from the checkpoint.
-
-        An empty page is a normal answer: Zoom returns no records for a session
-        where registration was never turned on.
-        """
+        whole list is drained here rather than resumed from the checkpoint."""
         records: list[_AccessRecordT] = []
         page_token: str | None = None
         seen_tokens: set[str] = set()
@@ -412,8 +476,10 @@ class ZoomClient:
         )
 
     def list_users(self, page_token: str | None = None) -> ZoomUserPage:
-        """Zoom never documents that the `{userId}` path parameter accepts an email
-        address, so a host allowlist is matched against this listing instead."""
+        """Host emails are matched against this listing to get the user ids the
+        recordings listing is called with. TODO(subash): that listing documents
+        its `userId` as "ID or email address", so discovery could pass the email
+        and drop this call and its `user:read:list_users:admin` scope."""
         params: dict[str, Any] = {"page_size": _MAX_PAGE_SIZE}
         if page_token:
             params["next_page_token"] = page_token
@@ -471,29 +537,33 @@ class ZoomClient:
             ZoomParticipant.model_validate,
         )
 
+    def _list_registrants(
+        self, endpoint: ZoomEndpoint, identifier: str, status: str | None
+    ) -> list[ZoomRegistrant]:
+        try:
+            return self._paginate(
+                endpoint,
+                identifier,
+                "registrants",
+                ZoomRegistrant.model_validate,
+                extra_params={"status": status} if status else None,
+            )
+        except requests.HTTPError as e:
+            if _registration_not_enabled(e):
+                return []
+            raise
+
     def list_meeting_registrants(
         self, meeting_id: str, status: str | None = None
     ) -> list[ZoomRegistrant]:
         """Registrants belong to the scheduled meeting, not to one occurrence, so
         a recurring series returns the same list for every run."""
-        return self._paginate(
-            endpoints.MEETING_REGISTRANTS,
-            meeting_id,
-            "registrants",
-            ZoomRegistrant.model_validate,
-            extra_params={"status": status} if status else None,
-        )
+        return self._list_registrants(endpoints.MEETING_REGISTRANTS, meeting_id, status)
 
     def list_webinar_registrants(
         self, webinar_id: str, status: str | None = None
     ) -> list[ZoomRegistrant]:
-        return self._paginate(
-            endpoints.WEBINAR_REGISTRANTS,
-            webinar_id,
-            "registrants",
-            ZoomRegistrant.model_validate,
-            extra_params={"status": status} if status else None,
-        )
+        return self._list_registrants(endpoints.WEBINAR_REGISTRANTS, webinar_id, status)
 
     def list_meeting_invitees(self, meeting_id: str) -> list[ZoomInvitee]:
         """Who was invited, which is not the same as who turned up. The list

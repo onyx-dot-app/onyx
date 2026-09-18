@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from datetime import date, datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -10,6 +11,7 @@ from requests.adapters import HTTPAdapter
 
 from onyx.connectors.cross_connector_utils import rate_limit_wrapper
 from onyx.connectors.exceptions import (
+    ConnectorValidationError,
     CredentialExpiredError,
     CredentialInvalidError,
     InsufficientPermissionsError,
@@ -39,6 +41,7 @@ from onyx.connectors.zoom.endpoints import (
 from onyx.connectors.zoom.models import (
     ZoomRecordingEntry,
     ZoomRecordingFile,
+    ZoomRegistrant,
 )
 from onyx.connectors.zoom.rate_limit import (
     _MAX_NO_ANSWER_SLEEPS,
@@ -330,6 +333,55 @@ class TestAccessToken:
         with pytest.raises(expected):
             client._get_access_token()
 
+    # Zoom's token endpoint answers 400 for a wrong secret, a wrong account id
+    # and a deactivated app alike. Only the OAuth-style body tells them apart.
+    @pytest.mark.parametrize(
+        "body, expected, fragment",
+        [
+            (
+                {
+                    "error": "invalid_client",
+                    "reason": "Invalid client_id or client_secret",
+                },
+                CredentialInvalidError,
+                "Invalid client_id or client_secret",
+            ),
+            (
+                {"error": "invalid_client", "reason": "The application is disabled"},
+                InsufficientPermissionsError,
+                "not activated",
+            ),
+            (
+                {"error": "invalid_request", "reason": "Bad Request"},
+                CredentialInvalidError,
+                "Account ID",
+            ),
+            ({}, CredentialInvalidError, "client credentials"),
+        ],
+    )
+    def test_a_400_from_the_token_endpoint_is_read_from_its_reason(
+        self, body: dict[str, str], expected: type[Exception], fragment: str
+    ) -> None:
+        client = ZoomClient(account_id="a", client_id="c", client_secret="s")
+        client._session = MagicMock()
+        client._session.post.return_value = _response(400, body)
+
+        with pytest.raises(expected) as exc:
+            client._get_access_token()
+
+        assert fragment in str(exc.value)
+
+    def test_a_token_endpoint_outage_is_not_typed_as_a_bad_credential(self) -> None:
+        client = ZoomClient(account_id="a", client_id="c", client_secret="s")
+        client._session = MagicMock()
+        client._session.post.return_value = _response(503, {"reason": "down"})
+
+        with pytest.raises(requests.HTTPError) as exc:
+            client._get_access_token()
+
+        assert not isinstance(exc.value, ConnectorValidationError)
+        assert "down" in str(exc.value)
+
 
 class TestStaleTokenIsRetried:
     """Delete the retry and a stale token starts reporting itself as a bad
@@ -419,6 +471,24 @@ class TestRetryPolicy:
 
 
 class TestRequestErrorMapping:
+    def test_a_missing_scope_arrives_as_a_400_and_is_typed(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            400,
+            {
+                "code": 4711,
+                "message": "Invalid access token, does not contain scopes:"
+                "[user:read:list_users:admin].",
+            },
+        )
+
+        with pytest.raises(InsufficientPermissionsError) as exc:
+            client.list_users()
+
+        assert "user:read:list_users:admin" in str(exc.value)
+        assert "Marketplace" in str(exc.value)
+
     def test_forbidden_raises_insufficient_permissions(self) -> None:
         client = _client()
         client._session = MagicMock()
@@ -1362,6 +1432,40 @@ class TestListRegistrants:
         client._session.request.return_value = _response(200, {"registrants": []})
 
         assert client.list_meeting_registrants("111") == []
+
+    @pytest.mark.parametrize(
+        "method, kind",
+        [
+            (ZoomClient.list_meeting_registrants, "meeting"),
+            (ZoomClient.list_webinar_registrants, "webinar"),
+        ],
+    )
+    def test_registration_never_enabled_reads_as_no_registrants(
+        self, method: Callable[[ZoomClient, str], list[ZoomRegistrant]], kind: str
+    ) -> None:
+        # Zoom's real answer is a 400, and it used to fail the whole document.
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            400,
+            {
+                "code": 300,
+                "message": f"Registration has not been enabled for this {kind}: 111.",
+            },
+        )
+
+        assert method(client, "111") == []
+
+    def test_another_code_300_is_still_an_error(self) -> None:
+        # 300 is Zoom's generic bad-request code; only the message is specific.
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            400, {"code": 300, "message": "Invalid meeting id."}
+        )
+
+        with pytest.raises(requests.HTTPError):
+            client.list_meeting_registrants("111")
 
 
 class TestListMeetingInvitees:
