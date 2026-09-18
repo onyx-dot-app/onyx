@@ -404,6 +404,9 @@ class TestBuildDiscoverySources:
     def test_blank_host_emails_and_group_id_are_not_configuration(self) -> None:
         assert build_discovery_sources(None, None, ["  "], "  ") == []
 
+    def test_blank_ids_are_not_configuration_either(self) -> None:
+        assert build_discovery_sources(["  "], [" "], None, None) == []
+
     def test_host_emails_alone_yield_a_host_source(self) -> None:
         sources = build_discovery_sources(None, None, ["host@example.com"])
         assert len(sources) == 1
@@ -500,6 +503,30 @@ class TestIdAllowlistWebinars:
         assert work.session_type == ZoomSessionType.WEBINAR
         assert work.session_id == "222"
         assert work.occurrence_uuid == "w-1"
+
+    def test_an_id_pasted_with_spaces_reaches_zoom_without_them(self) -> None:
+        # Zoom's own UI shows numbers grouped with spaces, and a space in the
+        # URL path is an invalid id to Zoom.
+        source = IdAllowlistSource([], ["857 9609 3688"])
+        client = self._client_with_webinar_occurrences(
+            [ZoomSessionOccurrence(uuid="w-1", start_time="2026-01-15T10:00:00Z")]
+        )
+
+        result = source.discover_step(client, _START, _END, None)
+
+        client.list_past_webinar_occurrences.assert_called_once_with("85796093688")
+        assert result.work[0].session_id == "85796093688"
+
+    def test_the_same_id_in_both_forms_is_crawled_once(self) -> None:
+        source = IdAllowlistSource([], ["857 9609 3688", "85796093688"])
+        client = self._client_with_webinar_occurrences(
+            [ZoomSessionOccurrence(uuid="w-1", start_time="2026-01-15T10:00:00Z")]
+        )
+
+        result = source.discover_step(client, _START, _END, None)
+
+        client.list_past_webinar_occurrences.assert_called_once_with("85796093688")
+        assert len(result.work) == 1
 
     def test_meetings_run_before_webinars_in_one_cursor_walk(self) -> None:
         source = IdAllowlistSource(["111"], ["222"])

@@ -382,6 +382,25 @@ class TestAccessToken:
         assert not isinstance(exc.value, ConnectorValidationError)
         assert "down" in str(exc.value)
 
+    def test_check_credentials_asks_zoom_even_with_a_token_cached(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.post.return_value = _response(
+            200, {"access_token": "t2", "expires_in": 3600}
+        )
+
+        client.check_credentials()
+
+        assert client._session.post.call_count == 1
+
+    def test_check_credentials_reports_a_wrong_secret(self) -> None:
+        client = ZoomClient(account_id="a", client_id="c", client_secret="s")
+        client._session = MagicMock()
+        client._session.post.return_value = _response(401)
+
+        with pytest.raises(CredentialInvalidError):
+            client.check_credentials()
+
 
 class TestStaleTokenIsRetried:
     """Delete the retry and a stale token starts reporting itself as a bad
