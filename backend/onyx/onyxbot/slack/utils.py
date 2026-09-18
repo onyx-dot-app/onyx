@@ -252,13 +252,13 @@ def respond_in_thread_or_channel(
     receiver_ids: list[str] | None = None,
     metadata: Metadata | None = None,
     unfurl: bool = True,
-    send_as_ephemeral: bool | None = True,  # noqa: ARG001
+    send_as_ephemeral: bool | None = True,
 ) -> list[str]:
     if not text and not blocks:
         raise ValueError("One of `text` or `blocks` must be provided")
 
     message_ids: list[str] = []
-    if not receiver_ids:
+    if not receiver_ids or not send_as_ephemeral:
         try:
             response = client.chat_postMessage(
                 channel=channel,
