@@ -1043,7 +1043,8 @@ export const connectorConfigs: Record<
         false,
         "Index the files in each channel's Files tab as their own documents, " +
           "with the readers SharePoint grants them. Needs a certificate " +
-          "credential and the Sites.Read.All application permission."
+          "credential and read access to the channel sites, through " +
+          "Sites.Read.All or a Sites.Selected grant on each channel site."
       ),
     ],
     advanced_values: [

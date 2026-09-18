@@ -57,6 +57,11 @@ def _sanitize_message_user_display_name(value: dict) -> dict:
     return value
 
 
+class ChannelFilesUnavailable(RuntimeError):
+    """A channel whose files Graph describes without the site they live in, so
+    there is no library to open and nothing to grant."""
+
+
 class GraphRetriesExhausted(RuntimeError):
     """Graph kept answering with a retryable status for every attempt."""
 
@@ -279,7 +284,9 @@ def fetch_channel_files_folder(
     parent = json_data.get("parentReference") or {}
     # Measured on every channel kind, but Graph's reference example omits it.
     if not parent.get("siteId"):
-        raise ValueError(f"The files folder of channel {channel_id} names no site")
+        raise ChannelFilesUnavailable(
+            f"The files folder of channel {channel_id} names no site"
+        )
     return ChannelFilesFolder(
         site_id=parent["siteId"], drive_id=parent["driveId"], id=json_data["id"]
     )
