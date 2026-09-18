@@ -1677,7 +1677,7 @@ class TestPacing:
         monkeypatch.setattr(
             zoom_rate_limit,
             "_PLAN_CALLS_PER_SECOND",
-            {plan: {tier: 1 for tier in ZoomRateLimitTier} for plan in ZoomPlanTier},
+            {plan: dict.fromkeys(ZoomRateLimitTier, 1) for plan in ZoomPlanTier},
         )
 
         client = _client(ZoomRateLimitSettings(share=1.0))
@@ -1700,7 +1700,7 @@ class TestPacing:
         monkeypatch.setattr(
             zoom_rate_limit,
             "_PLAN_CALLS_PER_SECOND",
-            {plan: {tier: 1 for tier in ZoomRateLimitTier} for plan in ZoomPlanTier},
+            {plan: dict.fromkeys(ZoomRateLimitTier, 1) for plan in ZoomPlanTier},
         )
 
         client = _client(ZoomRateLimitSettings(share=1.0))
@@ -1723,7 +1723,7 @@ class TestPacing:
         monkeypatch.setattr(
             zoom_rate_limit,
             "_PLAN_CALLS_PER_SECOND",
-            {plan: {tier: 1 for tier in ZoomRateLimitTier} for plan in ZoomPlanTier},
+            {plan: dict.fromkeys(ZoomRateLimitTier, 1) for plan in ZoomPlanTier},
         )
 
         client = _client(ZoomRateLimitSettings(share=1.0))
@@ -1751,7 +1751,7 @@ class TestPacing:
         monkeypatch.setattr(
             zoom_rate_limit,
             "_PLAN_CALLS_PER_SECOND",
-            {plan: {tier: 1 for tier in ZoomRateLimitTier} for plan in ZoomPlanTier},
+            {plan: dict.fromkeys(ZoomRateLimitTier, 1) for plan in ZoomPlanTier},
         )
 
         client = _client(ZoomRateLimitSettings(share=1.0))
@@ -1815,8 +1815,8 @@ class TestPlanTier:
             zoom_rate_limit,
             "_PLAN_CALLS_PER_SECOND",
             {
-                ZoomPlanTier.PRO: {tier: 1 for tier in ZoomRateLimitTier},
-                ZoomPlanTier.BUSINESS_PLUS: {tier: 2 for tier in ZoomRateLimitTier},
+                ZoomPlanTier.PRO: dict.fromkeys(ZoomRateLimitTier, 1),
+                ZoomPlanTier.BUSINESS_PLUS: dict.fromkeys(ZoomRateLimitTier, 2),
             },
         )
 
@@ -1870,7 +1870,7 @@ class TestRateLimitPercent:
         monkeypatch.setattr(
             zoom_rate_limit,
             "_PLAN_CALLS_PER_SECOND",
-            {plan: {tier: 2 for tier in ZoomRateLimitTier} for plan in ZoomPlanTier},
+            {plan: dict.fromkeys(ZoomRateLimitTier, 2) for plan in ZoomPlanTier},
         )
 
         # A full share would allow both calls; this connector's own share cuts
