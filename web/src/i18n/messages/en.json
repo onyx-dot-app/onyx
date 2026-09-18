@@ -7961,6 +7961,9 @@
         "title": "Permissions have changed"
       },
       "resetPasswordModal": {
+        "copyButton": {
+          "label": "Copy password"
+        },
         "description": "This will generate a new random password for <strong>{email}</strong>. Their current password will stop working immediately.",
         "doneButton": {
           "label": "Done"

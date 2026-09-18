@@ -7931,6 +7931,9 @@
         "title": "권한이 변경되었습니다"
       },
       "resetPasswordModal": {
+        "copyButton": {
+          "label": "비밀번호 복사"
+        },
         "description": "<strong>{email}</strong>의 새 임의 비밀번호를 생성합니다. 현재 비밀번호는 즉시 사용할 수 없게 됩니다.",
         "doneButton": {
           "label": "완료"

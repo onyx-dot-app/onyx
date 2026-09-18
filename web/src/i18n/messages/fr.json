@@ -7931,6 +7931,9 @@
         "title": "Les autorisations ont changé"
       },
       "resetPasswordModal": {
+        "copyButton": {
+          "label": "Copier le mot de passe"
+        },
         "description": "Cette action générera un nouveau mot de passe aléatoire pour <strong>{email}</strong>. Son mot de passe actuel cessera de fonctionner immédiatement.",
         "doneButton": {
           "label": "Terminé"

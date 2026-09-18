@@ -7931,6 +7931,9 @@
         "title": "Die Berechtigungen haben sich geändert"
       },
       "resetPasswordModal": {
+        "copyButton": {
+          "label": "Passwort kopieren"
+        },
         "description": "Dadurch wird ein neues zufälliges Passwort für <strong>{email}</strong> erzeugt. Das aktuelle Passwort funktioniert sofort nicht mehr.",
         "doneButton": {
           "label": "Fertig"

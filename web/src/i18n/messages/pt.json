@@ -7931,6 +7931,9 @@
         "title": "As permissões mudaram"
       },
       "resetPasswordModal": {
+        "copyButton": {
+          "label": "Copiar senha"
+        },
         "description": "Isto vai gerar uma nova senha aleatória para <strong>{email}</strong>. A senha atual vai parar de funcionar imediatamente.",
         "doneButton": {
           "label": "Concluído"

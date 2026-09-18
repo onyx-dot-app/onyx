@@ -7931,6 +7931,9 @@
         "title": "Los permisos han cambiado"
       },
       "resetPasswordModal": {
+        "copyButton": {
+          "label": "Copiar contraseña"
+        },
         "description": "Esto generará una nueva contraseña aleatoria para <strong>{email}</strong>. Su contraseña actual dejará de funcionar de inmediato.",
         "doneButton": {
           "label": "Listo"
