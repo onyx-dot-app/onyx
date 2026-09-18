@@ -29,6 +29,7 @@ from sqlalchemy.pool import ConnectionPoolEntry, PoolProxiedConnection, QueuePoo
 from onyx.db.engine.async_sql_engine import async_engine_hooks
 from onyx.db.engine.shard_registry import is_default_shard, shard_engine_hooks
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import (
     CURRENT_ENDPOINT_CONTEXTVAR,
     CURRENT_TENANT_ID_CONTEXTVAR,
@@ -169,7 +170,12 @@ def _register_pool_events(engine: Engine, label: str) -> None:
         conn_proxy: PoolProxiedConnection,  # noqa: ARG001
     ) -> None:
         handler = CURRENT_ENDPOINT_CONTEXTVAR.get() or "unknown"
-        tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get() or "unknown"
+        # One label value across all tenants on multi-tenant deployments —
+        # a per-tenant label would create tens of thousands of series.
+        if MULTI_TENANT:
+            tenant_id = "all"
+        else:
+            tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get() or "unknown"
         conn_record.info["_metrics_endpoint"] = handler
         conn_record.info["_metrics_tenant_id"] = tenant_id
         conn_record.info["_metrics_checkout_time"] = time.monotonic()
@@ -242,17 +248,20 @@ def _register_engine_pool(label: str, engine: Engine | AsyncEngine) -> None:
 
     sync_engine = engine.sync_engine if isinstance(engine, AsyncEngine) else engine
     pool = sync_engine.pool
-    if not isinstance(pool, QueuePool):
+
+    # Lifecycle events fire for every pool class. Under NullPool (external
+    # pooler deployments) they are the only app-side connection metrics.
+    _register_pool_events(sync_engine, label)
+
+    if isinstance(pool, QueuePool):
+        _collector.add_pool(label, pool)
+        logger.info("Registered pool metrics for engine '%s'", label)
+    else:
         logger.info(
-            "Skipping pool metrics for engine '%s' (%s — no pool state)",
+            "Registered pool lifecycle metrics for engine '%s' (%s has no pool state)",
             label,
             type(pool).__name__,
         )
-        return
-
-    _collector.add_pool(label, pool)
-    _register_pool_events(sync_engine, label)
-    logger.info("Registered pool metrics for engine '%s'", label)
 
 
 def setup_postgres_connection_pool_metrics(

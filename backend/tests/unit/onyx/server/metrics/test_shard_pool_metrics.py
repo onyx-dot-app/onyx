@@ -13,7 +13,7 @@ from prometheus_client.core import GaugeMetricFamily
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import AsyncEngine
-from sqlalchemy.pool import QueuePool
+from sqlalchemy.pool import NullPool, QueuePool
 
 import onyx.db.engine.async_sql_engine as async_sql_engine
 import onyx.db.engine.shard_registry as shard_registry
@@ -103,3 +103,26 @@ def test_default_async_shard_keeps_its_historical_label(
     async_sql_engine.async_engine_hooks.notify("s3", _make_async_engine())
 
     assert _gauge_labels("onyx_db_pool_checked_out") == {"async", "async_s3"}
+
+
+@pytest.mark.usefixtures("clean_metrics_state")
+def test_nullpool_engine_gets_lifecycle_events_but_no_state_gauges() -> None:
+    """External-pooler deployments run NullPool; lifecycle counters are the
+    only app-side connection metrics there and must still register."""
+    engine = create_engine("sqlite://", poolclass=NullPool)
+    pool_metrics.setup_postgres_connection_pool_metrics(engines={"sync": engine})
+
+    assert _gauge_labels("onyx_db_pool_checked_out") == set()
+
+    def checkouts() -> float:
+        return (
+            pool_metrics.REGISTRY.get_sample_value(
+                "onyx_db_pool_checkout_total", {"engine": "sync"}
+            )
+            or 0.0
+        )
+
+    before = checkouts()
+    with engine.connect():
+        pass
+    assert checkouts() == before + 1
