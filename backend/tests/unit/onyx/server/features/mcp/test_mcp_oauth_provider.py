@@ -338,10 +338,16 @@ def test_invalid_token_response_is_safe_and_not_persisted(
     assert storage.tokens is None
     assert storage.persisted_client_information is None
     invalid_response_record = next(
-        record
-        for record in caplog.records
-        if record.getMessage()
-        == "mcp_oauth.authorization_code_exchange.invalid_response"
+        (
+            record
+            for record in caplog.records
+            if record.getMessage()
+            == "mcp_oauth.authorization_code_exchange.invalid_response"
+        ),
+        None,
+    )
+    assert invalid_response_record is not None, (
+        "Expected an invalid authorization-code token-response diagnostic log record"
     )
     assert getattr(invalid_response_record, "mcp_server_id") == 42  # noqa: B009  # ods: ignore[getattr]
     assert getattr(invalid_response_record, "token_endpoint_hostname") == (  # noqa: B009  # ods: ignore[getattr]
