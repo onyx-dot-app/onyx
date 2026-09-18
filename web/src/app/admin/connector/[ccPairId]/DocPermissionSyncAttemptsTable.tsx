@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   createTableColumns,
   EmptyMessageCard,
@@ -49,7 +49,8 @@ interface ColumnHeaders {
 
 function buildColumns(
   onErrorClick: (errorMessage: string) => void,
-  headers: ColumnHeaders
+  headers: ColumnHeaders,
+  locale: string
 ) {
   return [
     tc.column("time_started", {
@@ -58,7 +59,7 @@ function buildColumns(
       enableSorting: false,
       cell: (value) => (
         <Text as="span" font="main-ui-body" color="text-04">
-          {value ? localizeAndPrettify(value) : "-"}
+          {value ? localizeAndPrettify(value, locale) : "-"}
         </Text>
       ),
     }),
@@ -171,6 +172,7 @@ export function DocPermissionSyncAttemptsTable({
   onPageChange,
 }: DocPermissionSyncAttemptsTableProps) {
   const t = useTranslations("admin.connector");
+  const locale = useLocale();
   const [openErrorMessage, setOpenErrorMessage] = useState<string | null>(null);
   const handleErrorClick = useCallback(
     (errorMessage: string) => setOpenErrorMessage(errorMessage),
@@ -178,14 +180,18 @@ export function DocPermissionSyncAttemptsTable({
   );
   const columns = useMemo(
     () =>
-      buildColumns(handleErrorClick, {
-        timeStarted: t("docPermissionsTable.columns.timeStarted"),
-        status: t("docPermissionsTable.columns.status"),
-        docsSynced: t("docPermissionsTable.columns.docsSynced"),
-        permissionErrors: t("docPermissionsTable.columns.permissionErrors"),
-        errorMessage: t("docPermissionsTable.columns.errorMessage"),
-      }),
-    [handleErrorClick, t]
+      buildColumns(
+        handleErrorClick,
+        {
+          timeStarted: t("docPermissionsTable.columns.timeStarted"),
+          status: t("docPermissionsTable.columns.status"),
+          docsSynced: t("docPermissionsTable.columns.docsSynced"),
+          permissionErrors: t("docPermissionsTable.columns.permissionErrors"),
+          errorMessage: t("docPermissionsTable.columns.errorMessage"),
+        },
+        locale
+      ),
+    [handleErrorClick, t, locale]
   );
 
   if (!attempts.length) {

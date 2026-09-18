@@ -22,6 +22,7 @@ import {
 import { ReadonlyURLSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "./searchParams";
 import { Packet } from "./streamingModels";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 
 export async function updateLlmOverrideForChatSession(
   chatSessionId: string,
@@ -74,6 +75,12 @@ export async function updateReasoningEffortForChatSession(
   return response;
 }
 
+// Mirrors backend `CreateChatSessionID`. Older servers omit `incognito`.
+interface CreateChatSessionResponse {
+  chat_session_id: string;
+  incognito?: boolean;
+}
+
 export async function createChatSession(
   personaId: number,
   description: string | null,
@@ -103,7 +110,8 @@ export async function createChatSession(
     );
     throw Error("Failed to create chat session");
   }
-  const chatSessionResponseJson = await createChatSessionResponse.json();
+  const chatSessionResponseJson: CreateChatSessionResponse =
+    await createChatSessionResponse.json();
   // A server that omits the echo (e.g. an old pod mid-deploy) did not pin the
   // mode, so proceeding would silently persist a believed-incognito chat.
   if (incognito && chatSessionResponseJson.incognito !== true) {
@@ -234,7 +242,9 @@ export async function* sendMessage({
   });
 
   if (!response.ok) {
-    const data = await response.json().catch(() => ({}));
+    const data: ErrorResponseBody & RateLimitDetails = await response
+      .json()
+      .catch(() => ({}));
 
     // Surface the usage rate-limit (429) as a structured StreamingError packet
     // so the chat UI can render the dedicated usage-limit banner. Throwing a
@@ -293,7 +303,7 @@ export async function* resumeStream(
   );
 
   if (!response.ok) {
-    const data = await response.json().catch(() => ({}));
+    const data: ErrorResponseBody = await response.json().catch(() => ({}));
     throw new Error(data.detail ?? `HTTP error! status: ${response.status}`);
   }
 
@@ -426,7 +436,7 @@ export async function getAvailableContextTokens(
   if (!response.ok) {
     return null;
   }
-  const data = (await response.json()) as { available_tokens: number };
+  const data: { available_tokens: number } = await response.json();
   return data?.available_tokens ?? null;
 }
 
@@ -471,18 +481,6 @@ export function processRawChatHistory(
         messageInfo.alternate_assistant_id !== null
           ? Number(messageInfo.alternate_assistant_id)
           : null,
-      // only include these fields if this is an agent message so that
-      // this is identical to what is computed at streaming time
-      ...(messageInfo.message_type === "assistant"
-        ? {
-            retrievalType: retrievalType,
-            researchType: messageInfo.research_type as ResearchType | undefined,
-            query: messageInfo.rephrased_query,
-            documents: messageInfo?.context_docs || [],
-            citations: messageInfo?.citations || {},
-            processingDurationSeconds: messageInfo.processing_duration_seconds,
-          }
-        : {}),
       toolCall: messageInfo.tool_call,
       parentNodeId: messageInfo.parent_message,
       childrenNodeIds: [],
@@ -494,6 +492,20 @@ export function processRawChatHistory(
       preferredResponseId: messageInfo.preferred_response_id ?? null,
       modelDisplayName: messageInfo.model_display_name ?? null,
     };
+
+    // Only agent messages carry these fields, so that a reloaded message is
+    // identical to what is computed at streaming time.
+    if (messageInfo.message_type === "assistant") {
+      message.retrievalType = retrievalType;
+      message.researchType = messageInfo.research_type as
+        | ResearchType
+        | undefined;
+      message.query = messageInfo.rephrased_query;
+      message.documents = messageInfo?.context_docs || [];
+      message.citations = messageInfo?.citations || {};
+      message.processingDurationSeconds =
+        messageInfo.processing_duration_seconds;
+    }
 
     messages.set(messageInfo.message_id, message);
 
@@ -567,24 +579,4 @@ export function buildChatUrl(
   }
 
   return `/${search ? "search" : "app"}`;
-}
-
-export async function uploadFilesForChat(
-  files: File[]
-): Promise<[FileDescriptor[], string | null]> {
-  const formData = new FormData();
-  files.forEach((file) => {
-    formData.append("files", file);
-  });
-
-  const response = await fetch("/api/chat/file", {
-    method: "POST",
-    body: formData,
-  });
-  if (!response.ok) {
-    return [[], `Failed to upload files - ${(await response.json()).detail}`];
-  }
-  const responseJson = await response.json();
-
-  return [responseJson.files as FileDescriptor[], null];
 }

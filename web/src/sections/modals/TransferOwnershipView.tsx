@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import InputComboBox from "@/refresh-components/inputs/InputComboBox";
+import { InputComboBox } from "@opal/components";
 import { MinimalUserGroupSnapshot } from "@/hooks/useShareableGroups";
 import { PersonaOwnerGroup } from "@/lib/agents/types";
 import { MinimalUserSnapshot } from "@/lib/types";

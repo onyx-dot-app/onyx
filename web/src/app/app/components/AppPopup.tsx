@@ -5,7 +5,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { FormField } from "@/refresh-components/form/FormField";
-import { Checkbox } from "@opal/components";
+import { InputCheckbox } from "@opal/components";
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -130,7 +130,7 @@ export function AppPopup() {
               >
                 <div className="flex items-center gap-1">
                   <FormField.Control>
-                    <Checkbox
+                    <InputCheckbox
                       aria-label={t("consentCheckbox.label")}
                       checked={consentChecked}
                       onCheckedChange={(checked) => {

@@ -1,9 +1,7 @@
 "use client";
 
 import { useField } from "formik";
-import InputComboBox, {
-  InputComboBoxProps,
-} from "@/refresh-components/inputs/InputComboBox";
+import { InputComboBox, type InputComboBoxProps } from "@opal/components";
 import { useOnChangeEvent, useOnChangeValue } from "@/hooks/formHooks";
 
 /**

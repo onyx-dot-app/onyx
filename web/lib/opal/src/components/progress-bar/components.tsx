@@ -1,5 +1,8 @@
+"use client";
+
 import "@opal/components/progress-bar/styles.css";
 import { cn } from "@opal/utils";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -20,7 +23,7 @@ interface ProgressBarProps {
   max?: number;
   /** @default "blue" */
   color?: ProgressBarColor;
-  /** Accessible label. @default "Progress" */
+  /** Accessible label. Defaults to the Opal progress label. */
   "aria-label"?: string;
   ref?: React.Ref<HTMLDivElement>;
 }
@@ -34,9 +37,10 @@ function ProgressBar({
   value,
   max = 100,
   color = "blue",
-  "aria-label": ariaLabel = "Progress",
+  "aria-label": ariaLabel,
   ref,
 }: ProgressBarProps) {
+  const strings = useOpalStrings();
   const fraction = max > 0 ? Math.min(1, Math.max(0, value / max)) : 0;
 
   return (
@@ -44,7 +48,7 @@ function ProgressBar({
       ref={ref}
       className="opal-progress-bar bg-background-tint-00"
       role="progressbar"
-      aria-label={ariaLabel}
+      aria-label={ariaLabel ?? strings.progress}
       aria-valuenow={value}
       aria-valuemin={0}
       aria-valuemax={max}

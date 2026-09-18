@@ -484,9 +484,11 @@ export default function WebSearchPage() {
                   CONTENT_PROVIDER_DETAILS[provider.provider_type]?.label ||
                   provider.provider_type;
 
-                const subtitle =
-                  CONTENT_PROVIDER_DETAILS[provider.provider_type]?.subtitle ||
-                  provider.provider_type;
+                const subtitleKey =
+                  CONTENT_PROVIDER_DETAILS[provider.provider_type]?.subtitleKey;
+                const subtitle = subtitleKey
+                  ? t(subtitleKey)
+                  : provider.provider_type;
 
                 const providerId = provider.id;
                 const isConfigured = isContentProviderConfigured(

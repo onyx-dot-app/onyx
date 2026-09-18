@@ -14,6 +14,11 @@ All access controls are managed within the main Onyx application.
 Provide an Onyx Personal Access Token or API Key in the `Authorization` header as a Bearer token.
 The MCP server quickly validates and passes through the token on every request.
 
+A token scoped to `read:search` covers the document-search tool, including the listings of indexed
+sources and document sets that a search may be filtered by. Add
+`read:chat` or `write:chat` only if the client needs the chat surfaces. An unscoped token carries
+the user's full access, so prefer a scoped one.
+
 Depending on usage, the MCP Server may support OAuth and stdio in the future.
 
 ### Default Configuration
@@ -89,6 +94,8 @@ Search the user's private knowledge base indexed in Onyx. Returns ranked documen
 Pass `agent` with an agent name to run the search as that Onyx agent. The search then applies the agent's knowledge scope (document sets, attached documents, start date) and its configured model. An unresolvable name returns an error listing the agents available to the user, so no lookup call is needed first.
 
 `agent` and `document_set_names` are mutually exclusive. Explicit document sets replace an agent's knowledge scope rather than narrowing it, so passing both is rejected instead of silently returning out-of-scope results.
+
+Filter values resolve on the search call, so clients do not need a lookup call first. `agent`, `source_types` and `document_set_names` are all validated: a value that does not resolve returns an error naming close matches, or the available values when there are few of them, rather than being dropped. A dropped filter would return a wider result set that looks correctly scoped, so these fail instead.
 
 2. `search_web`
 Search the public internet for current events and general knowledge. Returns web search results with titles, URLs, and snippets.

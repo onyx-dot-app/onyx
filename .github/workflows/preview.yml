@@ -9,20 +9,25 @@ name: Preview Deployment
 #
 # The server does not watch this repo: it deploys only what this workflow
 # hands it, so a commit that never runs this job never gets a preview.
+# Previews are keyed to pull requests, not to branches. On `push` this built
+# for every branch anyone pushed, whether or not a PR existed and whether or
+# not a preview would ever be opened — and a preview is not free: each distinct
+# backend clones its own ~1.7 GB Postgres database on the server, on top of the
+# artifacts it stores. That volume is what filled the server's data volume on
+# 2026-09-16 and took every preview deploy down with it (ENG-4338).
+#
+# A PR is the point at which someone intends others to look at the change, so
+# it is the right unit to spend a preview on. `synchronize` covers each
+# subsequent push, so an open PR still gets a preview per commit.
 on:
-  push:
-    branches-ignore:
-      - main
-      # The merge queue pushes to these short-lived branches on its way to
-      # main. Their commits are about to land there anyway, and the deploy
-      # would only hold a server slot a real branch could use.
-      - "gh-readonly-queue/**"
+  pull_request:
+    types: [opened, synchronize, reopened]
     paths:
       - "web/**"
       - "backend/**"
-  # Redeploy a branch without pushing to it — for a preview lost to a server
-  # rebuild, or a commit whose only changes fell outside the paths above.
-  # Path filters do not apply to a dispatch, so this always builds.
+  # Redeploy without pushing — for a preview lost to a server rebuild, or a
+  # commit whose only changes fell outside the paths above. Path filters do
+  # not apply to a dispatch, so this always builds.
   #
   # GitHub resolves dispatchable workflows from the default branch, so this
   # appears in the Actions tab only once this file is on main; the ref picker
@@ -32,8 +37,13 @@ on:
 # One deploy per branch at a time. Without this, two commits deploying
 # together can finish out of order and leave the PR comment on the older
 # commit's URL. Cancelling the older run also frees the server sooner.
+#
+# Keyed on the branch, not github.ref, because ref differs by event:
+# `refs/pull/<n>/merge` for a pull_request against `refs/heads/<branch>` for a
+# dispatch. Keying on ref would put a manual redeploy and the PR's own run in
+# separate groups — which is the out-of-order case this block exists to stop.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 permissions:
@@ -41,7 +51,25 @@ permissions:
 
 jobs:
   Deploy-Preview:
-    if: ${{ vars.PREVIEW_URL != '' }}
+    # A dispatch carries no PR and is always honoured. For pull_request:
+    #
+    # - Forks are excluded. GitHub hands a fork's workflow a read-only token
+    #   whatever the permissions block says, so minting the OIDC token and
+    #   writing the PR comment would both fail. Beyond that, previews run
+    #   against a seeded st-dev snapshot, so deploying a fork's code is not
+    #   something to hand an untrusted contributor. `push` never fired for
+    #   forks either, so this keeps the existing boundary rather than widening
+    #   it.
+    # - Bot-authored PRs land without anyone opening a preview of them, so they
+    #   only cost server capacity. Keyed on the PR *author*: github.actor is
+    #   whoever triggered the event, so on synchronize/reopened a maintainer
+    #   touching a bot's PR would otherwise deploy it.
+    if: >-
+      ${{ vars.PREVIEW_URL != ''
+      && (github.event_name == 'workflow_dispatch'
+      || (github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.user.login != 'dependabot[bot]'
+      && github.event.pull_request.user.login != 'onyx-cherry-pick[bot]')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -54,10 +82,19 @@ jobs:
       # server URL). The CLI would default to exactly this; naming it keeps
       # the two ends visibly pinned to each other.
       PREVIEW_GITHUB_OIDC_AUDIENCE: ${{ vars.PREVIEW_URL }}
+      # On `pull_request`, github.sha is the *merge* commit — a commit nobody
+      # pushed and nobody wants a preview of. The PR's head commit is the one
+      # to build, upload under, and report. A dispatch has no PR, so it falls
+      # back to the dispatched ref.
+      PREVIEW_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
+          # Same reason as PREVIEW_SHA: without this, `pull_request` checks out
+          # the merge commit and the preview would not match the PR's tip.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2
@@ -124,7 +161,7 @@ jobs:
         run: |
           # Without pipefail the tee below would mask a failed upload.
           set -o pipefail
-          preview upload frontend upload "$GITHUB_SHA" \
+          preview upload frontend upload "$PREVIEW_SHA" \
             --repo onyx --server "$PREVIEW_URL" --oidc --deploy | tee out.txt
           URL=$(sed -n 's/^ready: //p' out.txt)
           echo "url=$URL" >> "$GITHUB_OUTPUT"
@@ -135,9 +172,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PREVIEW_DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
         run: |
-          PR_NUMBER=$(gh pr list --head "$GITHUB_REF_NAME" --json number --jq '.[0].number')
+          # On pull_request the number is handed to us. A dispatch has no PR,
+          # and GITHUB_REF_NAME is the branch there, so the lookup still works.
           if [ -z "$PR_NUMBER" ]; then
-            echo "No open PR found for branch $GITHUB_REF_NAME, skipping comment."
+            PR_NUMBER=$(gh pr list --head "$GITHUB_REF_NAME" --json number --jq '.[0].number')
+          fi
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No open PR found for $GITHUB_REF_NAME, skipping comment."
             exit 0
           fi
 
@@ -147,7 +188,7 @@ jobs:
 
           | Status | Preview | Commit | Updated |
           | --- | --- | --- | --- |
-          | ✅ | $PREVIEW_DEPLOYMENT_URL | \`${GITHUB_SHA::7}\` | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |"
+          | ✅ | $PREVIEW_DEPLOYMENT_URL | \`${PREVIEW_SHA::7}\` | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |"
 
           # --paginate: on a long PR the marker can sit past the first page.
           EXISTING_COMMENT_ID=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \

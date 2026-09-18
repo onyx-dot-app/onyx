@@ -29,7 +29,7 @@ import { useToolsPopover } from "@/lib/tools/providers";
 import { ToolSnapshot } from "@/lib/tools/types";
 import { getAdminConfigureInfo, getToolTooltip } from "@/lib/tools/utils";
 import { Permission } from "@/lib/types";
-import EnabledCount from "@/refresh-components/EnabledCount";
+import EnabledCount from "@/lib/tools/components/EnabledCount";
 import { useUser } from "@/providers/UserProvider";
 
 // Names the hover group that swaps the source count for the disable button.
@@ -153,7 +153,7 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
   const authStatus = getToolAuthStatus(tool);
   const connectorsLabel = needsConnectors
     ? t("actionLineItem.addConnectors.label")
-    : t("actionLineItem.configureConnectors.label");
+    : t("actionLineItem.selectSearchSources.label");
 
   function handleClick() {
     if (isUnavailable) {

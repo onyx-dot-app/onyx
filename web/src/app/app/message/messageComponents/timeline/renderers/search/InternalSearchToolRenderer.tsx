@@ -1,4 +1,4 @@
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { SvgSearch, SvgSearchMenu } from "@opal/icons";
 import { SearchToolPacket } from "@/app/app/services/streamingModels";
 import {
@@ -63,6 +63,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
   children,
 }) => {
   const t = useTranslations("chat.messages.timeline");
+  const locale = useLocale();
   const searchState = constructCurrentSearchState(packets);
   const { queries, results, sourceFilters, timeFilter, isComplete } =
     searchState;
@@ -73,7 +74,12 @@ export const InternalSearchToolRenderer: MessageRenderer<
 
   const hasResults = results.length > 0;
 
-  const queriesHeader = formatSearchHeader(sourceFilters, timeFilter);
+  const queriesHeader = formatSearchHeader(
+    sourceFilters,
+    timeFilter,
+    t,
+    locale
+  );
 
   if (queries.length === 0) {
     return children([

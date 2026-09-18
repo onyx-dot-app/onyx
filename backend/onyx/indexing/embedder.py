@@ -176,12 +176,7 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
                 request_id=request_id,
             )
             title_embed_dict.update(
-                {
-                    title: vector
-                    for title, vector in zip(
-                        chunk_titles_list, title_embeddings, strict=True
-                    )
-                }
+                dict(zip(chunk_titles_list, title_embeddings, strict=True))
             )
 
         # Mapping embeddings to chunks

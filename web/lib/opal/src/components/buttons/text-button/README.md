@@ -20,7 +20,7 @@ Interactive.Stateless              <- always variant="default" / prominence="ter
 ```
 
 - **No separate surface component.** `Button` needs `Interactive.Container` because it
-  has to *discover* `href`/`disabled`/etc. from Radix `Slot`-injected props (it's a
+  has to _discover_ `href`/`disabled`/etc. from Radix `Slot`-injected props (it's a
   generic primitive reused by many callers). `TextButton` already has `href`/`target`/
   `disabled` in scope as its own props, so it renders `<Link>`/`<button>` directly as
   `Interactive.Stateless`'s single child. Radix `Slot` auto-merges `className` (joins
@@ -41,14 +41,14 @@ Interactive.Stateless              <- always variant="default" / prominence="ter
 
 ## Props
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `font` | `TextFont` | `"main-ui-body"` | Font preset, same as `Text`'s `font` prop |
-| `nowrap` | `boolean` | `true` | Prevent text wrapping (defaults `true`, unlike `Text`, since buttons don't usually wrap) |
-| `children` | `string \| RichStr` | — | Label text (required) |
-| `href` | `string` | — | URL; renders as a link |
-| `target` | `string` | — | Anchor target (e.g. `"_blank"`). Only meaningful with `href` |
-| `disabled` | `boolean` | `false` | Applies disabled styling + suppresses clicks/navigation |
+| Prop       | Type                | Default          | Description                                                                              |
+| ---------- | ------------------- | ---------------- | ---------------------------------------------------------------------------------------- |
+| `font`     | `TextFont`          | `"main-ui-body"` | Font preset, same as `Text`'s `font` prop                                                |
+| `nowrap`   | `boolean`           | `true`           | Prevent text wrapping (defaults `true`, unlike `Text`, since buttons don't usually wrap) |
+| `children` | `string \| RichStr` | —                | Label text (required)                                                                    |
+| `href`     | `string`            | —                | URL; renders as a link                                                                   |
+| `target`   | `string`            | —                | Anchor target (e.g. `"_blank"`). Only meaningful with `href`                             |
+| `disabled` | `boolean`           | `false`          | Applies disabled styling + suppresses clicks/navigation                                  |
 
 ## Usage
 

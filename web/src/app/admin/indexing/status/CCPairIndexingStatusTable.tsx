@@ -1,5 +1,5 @@
 import React from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   Table,
   TableRow,
@@ -18,7 +18,6 @@ import {
   ConnectorIndexingStatusLite,
   FederatedConnectorStatus,
 } from "@/lib/types";
-import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import Truncated from "@/refresh-components/texts/Truncated";
 import {
@@ -47,13 +46,13 @@ import { can } from "@/lib/permissions/resource-actions";
 // row to not navigate as expected.
 function navigateWithModifier(
   e: React.MouseEvent,
-  url: string,
+  url: `/admin/connector/${number}` | `/admin/federated/${number}`,
   router: ReturnType<typeof useRouter>
 ) {
   if (e.metaKey || e.ctrlKey) {
     window.open(url, "_blank");
   } else {
-    router.push(url as Route);
+    router.push(url);
   }
 }
 
@@ -78,6 +77,7 @@ function SummaryRow({
   onToggle: () => void;
 }) {
   const t = useTranslations("admin.indexing");
+  const locale = useLocale();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
 
   return (
@@ -86,8 +86,9 @@ function SummaryRow({
       className="border-border dark:hover:bg-neutral-800 dark:border-neutral-700 group hover:bg-background-settings-hover/20 bg-background-sidebar py-4 rounded-xs border! cursor-pointer"
     >
       <TableCell>
-        <div className="text-xl flex items-center truncate ellipsis gap-x-2 font-semibold">
-          <div className="cursor-pointer">
+        {/* raw-ok: 20px/600 falls between the heading-h3 and heading-h2 TextFont presets */}
+        <div className="text-xl flex items-center gap-x-2 font-semibold">
+          <div className="cursor-pointer shrink-0">
             {isOpen ? (
               <FiChevronDown size={20} />
             ) : (
@@ -95,7 +96,8 @@ function SummaryRow({
             )}
           </div>
           <SourceIcon iconSize={20} sourceType={source} />
-          {getSourceDisplayName(source)}
+          {/* Only the name truncates, so the icon keeps its width. */}
+          <span className="truncate">{getSourceDisplayName(source)}</span>
         </div>
       </TableCell>
 
@@ -103,7 +105,9 @@ function SummaryRow({
         <div className="text-sm text-neutral-500 dark:text-neutral-300">
           {t("status.summary.totalConnectors.label")}
         </div>
-        <div className="text-xl font-semibold">{summary.total_connectors}</div>
+        <div className="text-xl font-semibold">
+          {summary.total_connectors.toLocaleString(locale)}
+        </div>
       </TableCell>
 
       <TableCell>
@@ -111,7 +115,8 @@ function SummaryRow({
           {t("status.summary.activeConnectors.label")}
         </div>
         <p className="flex text-xl mx-auto font-semibold items-center text-lg mt-1">
-          {summary.active_connectors}/{summary.total_connectors}
+          {summary.active_connectors.toLocaleString(locale)}/
+          {summary.total_connectors.toLocaleString(locale)}
         </p>
       </TableCell>
 
@@ -121,7 +126,8 @@ function SummaryRow({
             {t("status.summary.publicConnectors.label")}
           </div>
           <p className="flex text-xl mx-auto font-semibold items-center text-lg mt-1">
-            {summary.public_connectors}/{summary.total_connectors}
+            {summary.public_connectors.toLocaleString(locale)}/
+            {summary.total_connectors.toLocaleString(locale)}
           </p>
         </TableCell>
       )}
@@ -131,7 +137,7 @@ function SummaryRow({
           {t("status.summary.totalDocsIndexed.label")}
         </div>
         <div className="text-xl font-semibold">
-          {summary.total_docs_indexed.toLocaleString()}
+          {summary.total_docs_indexed.toLocaleString(locale)}
         </div>
       </TableCell>
 
@@ -150,31 +156,32 @@ function ConnectorRow({
   isEditable: boolean;
 }) {
   const t = useTranslations("admin.indexing");
+  const locale = useLocale();
   const router = useRouter();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
 
-  const connectorUrl = `/admin/connector/${ccPairsIndexingStatus.cc_pair_id}`;
+  const connectorUrl: `/admin/connector/${number}` = `/admin/connector/${ccPairsIndexingStatus.cc_pair_id}`;
 
-  const handleRowClick = (e: React.MouseEvent) => {
-    navigateWithModifier(e, connectorUrl, router);
-  };
+  const handleRowClick = isEditable
+    ? (e: React.MouseEvent) => navigateWithModifier(e, connectorUrl, router)
+    : undefined;
 
   return (
     <TableRow
       className={`
   border border-border dark:border-neutral-700
-          hover:bg-accent-background ${
+          ${isEditable ? "hover:bg-accent-background cursor-pointer" : ""} ${
             invisible
               ? "invisible h-0! -mb-10! border-none!"
               : "border! border-border dark:border-neutral-700"
-          }  w-full cursor-pointer relative `}
+          }  w-full relative `}
       onClick={handleRowClick}
     >
       <TableCell className="">
         <Truncated>{ccPairsIndexingStatus.name}</Truncated>
       </TableCell>
       <TableCell>
-        {timeAgo(ccPairsIndexingStatus?.last_success) || "-"}
+        {timeAgo(ccPairsIndexingStatus?.last_success, locale) || "-"}
       </TableCell>
       <TableCell>
         <CCPairStatus
@@ -212,7 +219,9 @@ function ConnectorRow({
           )}
         </TableCell>
       )}
-      <TableCell>{ccPairsIndexingStatus.docs_indexed}</TableCell>
+      <TableCell>
+        {ccPairsIndexingStatus.docs_indexed.toLocaleString(locale)}
+      </TableCell>
       <TableCell>
         {isEditable && (
           <Tooltip tooltip={t("status.manageConnector.tooltip")}>
@@ -235,7 +244,7 @@ function FederatedConnectorRow({
   const router = useRouter();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
 
-  const federatedUrl = `/admin/federated/${federatedConnector.id}`;
+  const federatedUrl: `/admin/federated/${number}` = `/admin/federated/${federatedConnector.id}`;
 
   const handleRowClick = (e: React.MouseEvent) => {
     navigateWithModifier(e, federatedUrl, router);

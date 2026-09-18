@@ -23,6 +23,7 @@ import { InputTextArea, InputTypeIn } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
 import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
+import { findProviderOwningModelConfig } from "@/lib/languageModels/utils";
 import {
   SvgAddLines,
   SvgActions,
@@ -66,7 +67,7 @@ import {
 } from "@opal/components";
 import { Modal } from "@opal/components";
 import GenericConfirmModal from "@/sections/modals/GenericConfirmModal";
-import { Switch } from "@opal/components";
+import { InputSwitch } from "@opal/components";
 import { useMcpServers } from "@/lib/tools/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { getActionIcon } from "@/lib/tools/utils";
@@ -142,7 +143,7 @@ function MCPServerCard({
                   withLabel
                 >
                   <Tooltip tooltip={authTooltip} side="top">
-                    <Switch
+                    <InputSwitch
                       checked={isToolEnabled(tool.id)}
                       onCheckedChange={(checked) =>
                         onToggleTool(tool.id, checked)
@@ -192,7 +193,7 @@ function MCPServerCard({
             padding={0}
             rightChildren={
               <Tooltip tooltip={authTooltip} side="top">
-                <Switch
+                <InputSwitch
                   checked={serverEnabled}
                   onCheckedChange={(checked) =>
                     onToggleTools(allToolIds, checked)
@@ -699,12 +700,15 @@ export default function ChatPreferencesPage() {
   const handleChatNamingModelChange = useCallback(
     async ({
       modelName,
-      providerName,
+      modelConfigurationId,
     }: {
       modelName: string;
-      providerName: string | null;
+      modelConfigurationId: number | null | undefined;
     }) => {
-      const provider = llmProviders?.find((p) => p.name === providerName);
+      const provider = findProviderOwningModelConfig(
+        llmProviders,
+        modelConfigurationId
+      );
       if (!provider) {
         toast.error(t("toasts.providerResolveFailed"));
         return;
@@ -964,7 +968,7 @@ export default function ChatPreferencesPage() {
                   disabled={!businessTier || uniqueSources.length === 0}
                   withLabel
                 >
-                  <Switch
+                  <InputSwitch
                     checked={
                       businessTier ? (s.search_ui_enabled ?? true) : false
                     }
@@ -980,7 +984,7 @@ export default function ChatPreferencesPage() {
                 description={t("autoDetectFilters.description")}
                 withLabel
               >
-                <Switch
+                <InputSwitch
                   checked={s.auto_detect_search_filters ?? true}
                   onCheckedChange={(checked) => {
                     void saveSettings({ auto_detect_search_filters: checked });
@@ -993,7 +997,7 @@ export default function ChatPreferencesPage() {
                 description={t("multiModel.description")}
                 withLabel
               >
-                <Switch
+                <InputSwitch
                   checked={s.multi_model_chat_enabled ?? true}
                   onCheckedChange={(checked) => {
                     void saveSettings({ multi_model_chat_enabled: checked });
@@ -1005,7 +1009,7 @@ export default function ChatPreferencesPage() {
                 description={t("deepResearch.description")}
                 withLabel
               >
-                <Switch
+                <InputSwitch
                   checked={s.deep_research_enabled ?? true}
                   onCheckedChange={(checked) => {
                     void saveSettings({ deep_research_enabled: checked });
@@ -1017,7 +1021,7 @@ export default function ChatPreferencesPage() {
                 description={t("autoScroll.description")}
                 withLabel
               >
-                <Switch
+                <InputSwitch
                   checked={s.auto_scroll ?? false}
                   onCheckedChange={(checked) => {
                     void saveSettings({ auto_scroll: checked });
@@ -1029,7 +1033,7 @@ export default function ChatPreferencesPage() {
                 description={t("temperature.description")}
                 withLabel
               >
-                <Switch
+                <InputSwitch
                   checked={s.temperature_override_enabled ?? true}
                   onCheckedChange={(checked) => {
                     void saveSettings({
@@ -1043,7 +1047,7 @@ export default function ChatPreferencesPage() {
                 description={t("reasoning.description")}
                 withLabel
               >
-                <Switch
+                <InputSwitch
                   id="reasoning_override_enabled"
                   checked={s.reasoning_override_enabled ?? true}
                   onCheckedChange={(checked) => {
@@ -1073,7 +1077,7 @@ export default function ChatPreferencesPage() {
                     onChange={(opt) =>
                       void handleChatNamingModelChange({
                         modelName: opt.modelName,
-                        providerName: opt.name,
+                        modelConfigurationId: opt.modelConfigurationId,
                       })
                     }
                   />
@@ -1218,7 +1222,7 @@ export default function ChatPreferencesPage() {
                             description={t("tools.internalSearch.description")}
                             withLabel
                           >
-                            <Switch
+                            <InputSwitch
                               checked={isToolEnabled(searchTool.id)}
                               onCheckedChange={(checked) =>
                                 void toggleTool(searchTool.id, checked)
@@ -1239,7 +1243,7 @@ export default function ChatPreferencesPage() {
                             disabled={!imageGenTool}
                             withLabel
                           >
-                            <Switch
+                            <InputSwitch
                               checked={
                                 imageGenTool
                                   ? isToolEnabled(imageGenTool.id)
@@ -1263,7 +1267,7 @@ export default function ChatPreferencesPage() {
                             disabled={!webSearchTool}
                             withLabel
                           >
-                            <Switch
+                            <InputSwitch
                               checked={
                                 webSearchTool
                                   ? isToolEnabled(webSearchTool.id)
@@ -1287,7 +1291,7 @@ export default function ChatPreferencesPage() {
                             disabled={!openURLTool}
                             withLabel
                           >
-                            <Switch
+                            <InputSwitch
                               checked={
                                 openURLTool
                                   ? isToolEnabled(openURLTool.id)
@@ -1311,7 +1315,7 @@ export default function ChatPreferencesPage() {
                             disabled={!codeInterpreterTool}
                             withLabel
                           >
-                            <Switch
+                            <InputSwitch
                               checked={
                                 codeInterpreterTool
                                   ? isToolEnabled(codeInterpreterTool.id)
@@ -1335,7 +1339,7 @@ export default function ChatPreferencesPage() {
                             disabled={!codingAgentTool}
                             withLabel
                           >
-                            <Switch
+                            <InputSwitch
                               checked={
                                 codingAgentTool
                                   ? isToolEnabled(codingAgentTool.id)
@@ -1378,7 +1382,7 @@ export default function ChatPreferencesPage() {
                             description={tool.description}
                             withLabel
                           >
-                            <Switch
+                            <InputSwitch
                               checked={isToolEnabled(tool.id)}
                               onCheckedChange={(checked) =>
                                 toggleTool(tool.id, checked)
@@ -1517,7 +1521,7 @@ export default function ChatPreferencesPage() {
                       description={t("anonymousUsers.description")}
                       withLabel
                     >
-                      <Switch
+                      <InputSwitch
                         checked={s.anonymous_user_enabled ?? false}
                         onCheckedChange={(checked) => {
                           void saveSettings({
@@ -1532,7 +1536,7 @@ export default function ChatPreferencesPage() {
                       description={t("disableDefaultChat.description")}
                       withLabel
                     >
-                      <Switch
+                      <InputSwitch
                         id="disable_default_assistant"
                         checked={s.disable_default_assistant ?? false}
                         onCheckedChange={(checked) => {

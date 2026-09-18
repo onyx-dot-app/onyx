@@ -473,18 +473,16 @@ class TestMCPPassThroughOAuth:
         # (code should work identically for Google OAuth and OIDC)
         assert mcp_tool._user_oauth_token == oidc_access_token
 
-    def test_pt_oauth_uses_first_oauth_account(self, db_session: Session) -> None:
+    def test_pt_oauth_uses_latest_oauth_account(self, db_session: Session) -> None:
         """
-        Test that PT_OAUTH uses the first OAuth account when user has multiple.
-
-        Users might have OAuth accounts from multiple providers (unlikely but possible).
-        The code should consistently use the first one.
+        Test that PT_OAUTH forwards the most recently issued token when a user
+        holds several OAuth accounts, whatever order the rows come back in.
         """
         user = create_test_user(db_session, "multi_oauth_user")
         first_token = "first_oauth_token_123"
         second_token = "second_oauth_token_456"
 
-        # Add first OAuth account (Google)
+        # The first row holds the older token.
         oauth_account_1 = OAuthAccount(
             user_id=user.id,
             oauth_name="google",
@@ -492,11 +490,12 @@ class TestMCPPassThroughOAuth:
             account_email=user.email,
             access_token=first_token,
             refresh_token="",
+            expires_at=1_000,
         )
         db_session.add(oauth_account_1)
         db_session.commit()
 
-        # Add second OAuth account (OIDC)
+        # The second row holds the newer token.
         oauth_account_2 = OAuthAccount(
             user_id=user.id,
             oauth_name="openid",
@@ -504,6 +503,7 @@ class TestMCPPassThroughOAuth:
             account_email=user.email,
             access_token=second_token,
             refresh_token="",
+            expires_at=2_000,
         )
         db_session.add(oauth_account_2)
         db_session.commit()
@@ -549,5 +549,5 @@ class TestMCPPassThroughOAuth:
         mcp_tool = tool_dict[mcp_tool_db.id][0]
         assert isinstance(mcp_tool, MCPTool)
 
-        # Should use the first OAuth account's token
-        assert mcp_tool._user_oauth_token == first_token
+        # The later expiry wins over row order.
+        assert mcp_tool._user_oauth_token == second_token

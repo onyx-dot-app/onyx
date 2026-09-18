@@ -2,9 +2,10 @@
 
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
-import { DateRangePicker } from "@/refresh-components/DateRangePicker";
+import { InputDateRangePicker } from "@opal/components";
 import { useTimeRange } from "@/lib/usage/hooks";
 import PerUserUsagePanel from "@/views/admin/PerUserUsagePanel";
+import SystemUsagePanel from "@/views/admin/SystemUsagePanel";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Divider } from "@opal/components";
 import { SettingsLayouts } from "@opal/layouts";
@@ -25,15 +26,23 @@ export default function UsagePage() {
         description={t("page.description")}
         divider
         rightChildren={
-          <DateRangePicker
+          <InputDateRangePicker
             value={timeRange}
-            onValueChange={(value) => setTimeRange(value as any)}
+            onValueChange={(value) => {
+              if (!value) return;
+              setTimeRange((previous) => ({
+                ...value,
+                selectValue: previous.selectValue,
+              }));
+            }}
             size="sm"
           />
         }
       />
       <SettingsLayouts.Body>
         <PerUserUsagePanel timeRange={timeRange} />
+        <Divider />
+        <SystemUsagePanel timeRange={timeRange} />
         <Divider />
         <TokenRateLimitsPanel embedded />
       </SettingsLayouts.Body>

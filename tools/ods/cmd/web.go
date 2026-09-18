@@ -54,20 +54,7 @@ func runWebScript(args []string) {
 		log.Fatalf("Failed to find web directory: %v", err)
 	}
 
-	if needsInstall, reason := nodeModulesNeedsInstall(webDir); needsInstall {
-		log.Infof("%s, running bun install --frozen-lockfile...", reason)
-		installCmd := exec.Command("bun", "install", "--frozen-lockfile")
-		installCmd.Dir = webDir
-		installCmd.Stdout = os.Stdout
-		installCmd.Stderr = os.Stderr
-		installCmd.Stdin = os.Stdin
-		if err := installCmd.Run(); err != nil {
-			log.Fatalf("Failed to run bun install: %v", err)
-		}
-		writeLockStamp(webDir)
-	}
-
-	ensureWorkspaceLibsBuilt(webDir)
+	prepareWebDir(webDir)
 
 	scriptName := args[0]
 	scriptArgs := args[1:]
@@ -100,6 +87,25 @@ func runWebScript(args []string) {
 		}
 		log.Fatalf("Failed to run bun: %v", err)
 	}
+}
+
+// prepareWebDir installs dependencies and builds the workspace libraries when
+// they are missing or stale, so a bun script can run.
+func prepareWebDir(webDir string) {
+	if needsInstall, reason := nodeModulesNeedsInstall(webDir); needsInstall {
+		log.Infof("%s, running bun install --frozen-lockfile...", reason)
+		installCmd := exec.Command("bun", "install", "--frozen-lockfile")
+		installCmd.Dir = webDir
+		installCmd.Stdout = os.Stdout
+		installCmd.Stderr = os.Stderr
+		installCmd.Stdin = os.Stdin
+		if err := installCmd.Run(); err != nil {
+			log.Fatalf("Failed to run bun install: %v", err)
+		}
+		writeLockStamp(webDir)
+	}
+
+	ensureWorkspaceLibsBuilt(webDir)
 }
 
 // lockStampName is the file inside node_modules recording the sha256 of the

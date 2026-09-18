@@ -366,8 +366,7 @@ def llm_from_provider(
     )
     max_input_tokens = (
         configured_max_input_tokens
-        if configured_max_input_tokens
-        else get_max_input_tokens_from_llm_provider(
+        or get_max_input_tokens_from_llm_provider(
             llm_provider=llm_provider, model_name=model_name
         )
     )

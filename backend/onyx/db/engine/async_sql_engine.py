@@ -192,16 +192,16 @@ async def get_async_session(
             yield session
         return
 
-    # Create connection with schema translation to handle querying the right schema
+    # Apply the schema translation through an engine view, not a dedicated
+    # Connection: a connection-bound session pins one pooled connection for the
+    # dependency's whole lifetime, which on streaming endpoints is the entire
+    # response.
     schema_translate_map = {None: tenant_id}
-    async with engine.connect() as connection:
-        connection = await connection.execution_options(
-            schema_translate_map=schema_translate_map
-        )
-        async with AsyncSession(
-            bind=connection, expire_on_commit=False
-        ) as async_session:
-            yield async_session
+    tenant_engine = engine.execution_options(schema_translate_map=schema_translate_map)
+    async with AsyncSession(
+        bind=tenant_engine, expire_on_commit=False
+    ) as async_session:
+        yield async_session
 
 
 def get_async_session_context_manager(

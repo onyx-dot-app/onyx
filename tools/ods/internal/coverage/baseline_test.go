@@ -25,7 +25,7 @@ func TestNewBaseline_isSelfConsistent(t *testing.T) {
 		"internal/empty": {0, 0},
 	})
 
-	report := Compare(profile, NewBaseline(profile), 0)
+	report := Compare(profile, NewBaseline(profile).Reference(), 0)
 
 	if got := len(report.Regressions()); got != 0 {
 		t.Fatalf("a fresh baseline must not fail its own run, got %d regressions", got)
@@ -36,7 +36,7 @@ func TestBaseline_saveAndLoadRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), BaselineFile)
 	original := NewBaseline(profileOf(map[string][2]int{"cmd": {1, 4}, "internal/audit": {1, 2}}))
 
-	if err := original.Save(path); err != nil {
+	if err := original.Save(path, GoTests); err != nil {
 		t.Fatalf("failed to save the baseline: %v", err)
 	}
 	loaded, err := LoadBaseline(path)
@@ -65,10 +65,10 @@ func TestBaseline_saveIsDeterministic(t *testing.T) {
 
 	first := filepath.Join(dir, "first.yaml")
 	second := filepath.Join(dir, "second.yaml")
-	if err := baseline.Save(first); err != nil {
+	if err := baseline.Save(first, GoTests); err != nil {
 		t.Fatalf("failed to save the baseline: %v", err)
 	}
-	if err := baseline.Save(second); err != nil {
+	if err := baseline.Save(second, GoTests); err != nil {
 		t.Fatalf("failed to save the baseline: %v", err)
 	}
 
@@ -80,6 +80,23 @@ func TestBaseline_saveIsDeterministic(t *testing.T) {
 	}
 	if !strings.Contains(firstData, "# Minimum statement coverage") {
 		t.Fatalf("expected the explanatory header, got:\n%s", firstData)
+	}
+}
+
+func TestBaseline_saveUsesTheKindHeader(t *testing.T) {
+	path := filepath.Join(t.TempDir(), TypeBaselineFile)
+	baseline := NewBaseline(profileOf(map[string][2]int{"src/app": {1, 2}}))
+
+	if err := baseline.Save(path, TypeScript); err != nil {
+		t.Fatalf("failed to save the baseline: %v", err)
+	}
+
+	data := readFile(t, path)
+	if !strings.HasPrefix(data, "# Minimum TypeScript type coverage per directory") {
+		t.Fatalf("expected the TypeScript header, got:\n%s", data)
+	}
+	if _, err := LoadBaseline(path); err != nil {
+		t.Fatalf("failed to load the baseline: %v", err)
 	}
 }
 
@@ -127,4 +144,38 @@ func readFile(t *testing.T, path string) string {
 		t.Fatalf("failed to read %s: %v", path, err)
 	}
 	return string(data)
+}
+
+// A baseline with only a total still gates, and a nil baseline gates nothing.
+func TestLoadBaseline_withoutPackages(t *testing.T) {
+	path := filepath.Join(t.TempDir(), BaselineFile)
+	if err := os.WriteFile(path, []byte("total: 40\n"), 0644); err != nil {
+		t.Fatalf("failed to write the fixture: %v", err)
+	}
+
+	baseline, err := LoadBaseline(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reference := baseline.Reference()
+	if reference.Total != 40 || reference.Packages == nil || len(reference.Packages) != 0 {
+		t.Fatalf("expected a 40%% total and no package floors, got %+v", reference)
+	}
+	if (*Baseline)(nil).Reference() != nil {
+		t.Fatal("expected no reference from a nil baseline")
+	}
+}
+
+func TestBaseline_saveFailsUnderAFile(t *testing.T) {
+	blocker := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(blocker, nil, 0644); err != nil {
+		t.Fatal(err)
+	}
+	baseline := &Baseline{Total: 1, Packages: map[string]float64{}}
+
+	path := filepath.Join(blocker, BaselineFile)
+	err := baseline.Save(path, GoTests)
+	if err == nil || !strings.HasPrefix(err.Error(), "write "+path+": ") {
+		t.Fatalf("expected a write error naming %s, got %v", path, err)
+	}
 }
