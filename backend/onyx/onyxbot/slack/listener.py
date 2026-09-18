@@ -269,9 +269,11 @@ class SlackbotHandler:
 
             self.slack_bot_tokens[tenant_bot_pair] = slack_bot_tokens
 
-            # Close any existing connection first
-            if tenant_bot_pair in self.socket_clients:
-                self.socket_clients[tenant_bot_pair].close()
+            # Drop the old connection first. Leaving it mapped would read as a
+            # live client next cycle and suppress the retry if this start fails.
+            existing_client = self.socket_clients.pop(tenant_bot_pair, None)
+            if existing_client is not None:
+                self._discard_client(existing_client, tenant_id, bot.id)
 
             socket_client = self.start_socket_client(
                 bot.id, tenant_id, slack_bot_tokens
@@ -500,14 +502,27 @@ class SlackbotHandler:
                 CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
     @staticmethod
-    def _stop_client_workers(client: TenantSocketModeClient) -> None:
+    def _discard_client(
+        client: TenantSocketModeClient, tenant_id: str, slack_bot_id: int
+    ) -> None:
         """
-        Stop the threads of a client whose `close()` raised part way through.
+        Close a client and make sure its threads stop.
 
-        `close()` disconnects before it stops these threads, so a raised
-        disconnect leaves them running. They keep reading and acking events that
-        nothing answers, which is the loss this teardown exists to prevent.
+        `SocketModeClient.__init__` starts worker threads, so every client that
+        is dropped has to come through here or it leaks them. `close()`
+        disconnects before it stops those threads, so a raised disconnect would
+        otherwise leave them reading and acking events that nothing answers.
         """
+        try:
+            client.close()
+            return
+        except Exception:
+            logger.exception(
+                "Error closing SocketModeClient: tenant_id=%r slack_bot_id=%r",
+                tenant_id,
+                slack_bot_id,
+            )
+
         for stop_worker in (
             client.current_app_monitor.shutdown,
             client.message_processor.shutdown,
@@ -540,15 +555,7 @@ class SlackbotHandler:
             # Forget the client before closing, so a failed close cannot leave it
             # holding a share of the tenant's events.
             if client is not None:
-                try:
-                    client.close()
-                except Exception:
-                    logger.exception(
-                        "Error closing SocketModeClient: tenant_id=%r slack_bot_id=%r",
-                        tenant_id,
-                        bot_id,
-                    )
-                    self._stop_client_workers(client)
+                self._discard_client(client, tenant_id, bot_id)
             logger.info(
                 "Dropped SocketModeClient: tenant_id=%r slack_bot_id=%r",
                 tenant_id,
@@ -616,6 +623,7 @@ class SlackbotHandler:
                     slack_bot_id,
                     e,
                 )
+                SlackbotHandler._discard_client(socket_client, tenant_id, slack_bot_id)
                 return None
 
             # Log other Slack API errors but continue
@@ -655,6 +663,7 @@ class SlackbotHandler:
                 slack_bot_id,
                 e,
             )
+            SlackbotHandler._discard_client(socket_client, tenant_id, slack_bot_id)
             return None
 
         return socket_client
