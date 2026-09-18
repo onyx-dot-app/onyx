@@ -43,6 +43,14 @@ class SlackMessageInfo(BaseModel):
     is_bot_dm: bool  # User is direct messaging to OnyxBot
     slack_context: SlackContext | None = None
 
+    @property
+    def is_addressed_to_bot(self) -> bool:
+        """The sender tagged the bot, used its slash command, or messaged it directly.
+
+        Answer filters exist for messages the bot only overhears, so they skip these.
+        """
+        return self.bypass_filters or self.is_bot_dm
+
 
 # Models used to encode the relevant data for the ephemeral message actions
 class ActionValuesEphemeralMessageMessageInfo(BaseModel):

@@ -1,4 +1,6 @@
+import ast
 import copy
+import json
 import re
 from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING, Any
@@ -115,6 +117,51 @@ def _unwrap_nested_exception(error: Exception) -> Exception:
     return current
 
 
+# Bounds the parse below. This runs inside error handling, so it must stay cheap.
+_MAX_UPSTREAM_BODY_CHARS = 20_000
+
+
+def _extract_upstream_message(error_text: str) -> str | None:
+    """Return `error.message` from the response body LiteLLM embeds in its error text, or None.
+
+    Best effort on untrusted text. No input may raise here, since a failure would
+    replace the error being reported.
+    """
+    text = error_text[:_MAX_UPSTREAM_BODY_CHARS]
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end < start:
+        return None
+
+    try:
+        body: str = text[start : end + 1]
+        # LiteLLM often passes the raw response bytes, so the body is a bytes repr.
+        quote = text[start - 1 : start]
+        if (
+            text[start - 2 : start - 1] == "b"
+            and quote
+            and text[end + 1 : end + 2] == quote
+        ):
+            literal = ast.literal_eval(text[start - 2 : end + 2])
+            if not isinstance(literal, bytes):
+                return None
+            body = literal.decode("utf-8")
+
+        try:
+            parsed = json.loads(body)
+        except ValueError:
+            # The OpenAI SDK embeds a Python dict repr, not JSON.
+            parsed = ast.literal_eval(body)
+        # Only the error's own message counts. A body can echo user input under other keys.
+        error = parsed.get("error") if isinstance(parsed, dict) else None
+        upstream_message = error.get("message") if isinstance(error, dict) else None
+        if not isinstance(upstream_message, str):
+            return None
+        return upstream_message.strip() or None
+    except Exception:
+        return None
+
+
 def litellm_exception_to_error_msg(
     e: Exception,
     llm: LLM | None,
@@ -151,6 +198,11 @@ def litellm_exception_to_error_msg(
     error_msg = str(core_exception)
     error_code = "UNKNOWN_ERROR"
     is_retryable = True
+    provider_name: str = (
+        llm.config.model_provider
+        if llm is not None and llm.config.model_provider
+        else "The LLM provider"
+    )
 
     # This is raised by us in cases where we already have computed the stuff we
     # normally pull out of litellm errors. Just send it through.
@@ -190,9 +242,16 @@ def litellm_exception_to_error_msg(
         error_code = "CONTENT_POLICY"
         is_retryable = False
     elif isinstance(core_exception, BadRequestError):
-        error_msg = f"Bad request: {str(core_exception)}"
-        error_code = "BAD_REQUEST"
-        is_retryable = True
+        upstream_message: str | None = _extract_upstream_message(error_msg)
+        # Anthropic reports an empty credit balance as a 400, not as a quota error.
+        if upstream_message and "credit balance is too low" in upstream_message.lower():
+            error_msg = f"{provider_name} quota exceeded: {upstream_message}"
+            error_code = "BUDGET_EXCEEDED"
+            is_retryable = False
+        else:
+            error_msg = f"Bad request: {upstream_message or str(core_exception)}"
+            error_code = "BAD_REQUEST"
+            is_retryable = True
     elif isinstance(core_exception, AuthenticationError):
         error_msg = "Authentication failed: Please check your API key and credentials."
         error_code = "AUTH_ERROR"
@@ -213,16 +272,10 @@ def litellm_exception_to_error_msg(
         error_code = "UNPROCESSABLE_ENTITY"
         is_retryable = True
     elif isinstance(core_exception, RateLimitError):
-        provider_name = (
-            llm.config.model_provider
-            if llm is not None and llm.config.model_provider
-            else "The LLM provider"
-        )
-        upstream_detail: str | None = None
-        message_attr = getattr(core_exception, "message", None)  # ods: ignore[getattr]
-        if message_attr:
-            upstream_detail = str(message_attr)
-        elif hasattr(core_exception, "api_error"):
+        # The provider's own message, or a fixed sentence. Never the raw exception
+        # text, since a proxy can put internal detail in it.
+        upstream_detail: str | None = _extract_upstream_message(error_msg)
+        if upstream_detail is None and hasattr(core_exception, "api_error"):
             api_error = core_exception.api_error
             if isinstance(api_error, dict):
                 detail_value = (
@@ -231,18 +284,12 @@ def litellm_exception_to_error_msg(
                     or api_error.get("error")
                 )
                 if detail_value:
-                    upstream_detail = str(detail_value)
-        if not upstream_detail:
-            upstream_detail = str(core_exception)
-        upstream_detail = str(upstream_detail).strip()
-        if ":" in upstream_detail and upstream_detail.lower().startswith(
-            "ratelimiterror"
-        ):
-            upstream_detail = upstream_detail.split(":", 1)[1].strip()
-        upstream_detail_lower = upstream_detail.lower()
+                    upstream_detail = str(detail_value).strip() or None
+
+        raw_error_lower = error_msg.lower()
         if (
-            "insufficient_quota" in upstream_detail_lower
-            or "exceeded your current quota" in upstream_detail_lower
+            "insufficient_quota" in raw_error_lower
+            or "exceeded your current quota" in raw_error_lower
         ):
             error_msg = (
                 f"{provider_name} quota exceeded: {upstream_detail}"
@@ -260,11 +307,6 @@ def litellm_exception_to_error_msg(
             error_code = "RATE_LIMIT"
             is_retryable = True
     elif isinstance(core_exception, ServiceUnavailableError):
-        provider_name = (
-            llm.config.model_provider
-            if llm is not None and llm.config.model_provider
-            else "The LLM provider"
-        )
         # Check if this is specifically the Bedrock "Too many connections" error
         if "Too many connections" in error_msg or "BedrockException" in error_msg:
             error_msg = (

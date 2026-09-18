@@ -7,10 +7,12 @@ from uuid import uuid4
 import pytest
 from slack_sdk.errors import SlackApiError
 
-from onyx.chat.models import ChatBasicResponse
+from onyx.chat.models import ChatBasicResponse, ChatStreamError
 from onyx.context.search.models import Tag
 from onyx.onyxbot.slack.constants import SLACK_CHANNEL_REF_PATTERN
 from onyx.onyxbot.slack.handlers.handle_regular_answer import (
+    SLACK_ANSWER_FAILED_MESSAGE,
+    SLACK_NO_ANSWER_MESSAGE,
     SLACK_PERSONA_ACCESS_DENIED_MESSAGE,
     handle_regular_answer,
     resolve_channel_references,
@@ -21,6 +23,7 @@ from onyx.onyxbot.slack.models import (
     SlackMessageInfo,
     ThreadMessage,
 )
+from onyx.onyxbot.slack.utils import update_emote_react
 from shared_configs.contextvars import get_current_user_id
 
 _HANDLE_REGULAR_ANSWER = "onyx.onyxbot.slack.handlers.handle_regular_answer"
@@ -658,3 +661,345 @@ def test_search_tool_forced_only_when_usable(
 
     stream_call_kwargs = mock_handle_stream_message_objects.call_args.kwargs
     assert stream_call_kwargs["new_msg_req"].forced_tool_id == expected_forced_id
+
+
+# ---------------------------------------------------------------------------
+# Failure and no-answer notices
+# ---------------------------------------------------------------------------
+
+
+def _answer(
+    error_msg: str | None = None,
+    error_code: str | None = None,
+    answer: str = "answer",
+) -> ChatBasicResponse:
+    return ChatBasicResponse(
+        answer=answer,
+        answer_citationless=answer,
+        top_documents=[],
+        error_msg=error_msg,
+        error_code=error_code,
+        message_id=1,
+        citation_info=[],
+    )
+
+
+def _run_regular_answer(
+    gather_stream: Callable[[object], ChatBasicResponse],
+    slack_channel_config: MagicMock | None = None,
+    message_info: SlackMessageInfo | None = None,
+    respond_side_effect: Exception | list[Exception | None] | None = None,
+    react_side_effect: Exception | None = None,
+    receiver_ids: list[str] | None = None,
+    **handler_kwargs: bool,
+) -> tuple[bool, MagicMock, MagicMock]:
+    """Run the handler with its collaborators patched. Return the result, the reply mock and the react mock."""
+    with (
+        patch(f"{_HANDLE_REGULAR_ANSWER}.get_user_by_email", return_value=MagicMock()),
+        patch(f"{_HANDLE_REGULAR_ANSWER}.get_anonymous_user", return_value=MagicMock()),
+        patch(
+            f"{_HANDLE_REGULAR_ANSWER}.get_persona_by_id",
+            return_value=_make_slack_channel_config().persona,
+        ),
+        patch(f"{_HANDLE_REGULAR_ANSWER}.rate_limits", side_effect=_identity_decorator),
+        patch(
+            f"{_HANDLE_REGULAR_ANSWER}.retry_builder", side_effect=_identity_decorator
+        ),
+        patch(
+            f"{_HANDLE_REGULAR_ANSWER}.get_channel_name_from_id",
+            return_value=("some-channel", False),
+        ),
+        patch(f"{_HANDLE_REGULAR_ANSWER}.gather_stream", side_effect=gather_stream),
+        patch(f"{_HANDLE_REGULAR_ANSWER}.build_slack_response_blocks", return_value=[]),
+        patch(
+            f"{_HANDLE_REGULAR_ANSWER}.handle_stream_message_objects",
+            return_value=iter(()),
+        ),
+        patch(
+            f"{_HANDLE_REGULAR_ANSWER}.respond_in_thread_or_channel",
+            side_effect=respond_side_effect,
+        ) as mock_respond,
+        patch(
+            f"{_HANDLE_REGULAR_ANSWER}.update_emote_react",
+            side_effect=react_side_effect,
+        ) as mock_update_react,
+    ):
+        result = handle_regular_answer(
+            message_info=message_info
+            or _make_slack_message_info(ChannelType.PRIVATE_CHANNEL),
+            slack_channel_config=slack_channel_config or _make_slack_channel_config(),
+            receiver_ids=receiver_ids,
+            client=MagicMock(),
+            channel="C123",
+            logger=_mock_logger(),
+            db_session=MagicMock(),
+            feedback_reminder_id=None,
+            **handler_kwargs,
+        )
+    return result, mock_respond, mock_update_react
+
+
+def _overheard_message_info() -> SlackMessageInfo:
+    message_info = _make_slack_message_info(ChannelType.PRIVATE_CHANNEL)
+    message_info.bypass_filters = False
+    return message_info
+
+
+def _citation_filter_config() -> MagicMock:
+    config = _make_slack_channel_config()
+    config.channel_config = {
+        "is_ephemeral": False,
+        "answer_filters": ["well_answered_postfilter"],
+    }
+    return config
+
+
+_CREDIT_ERROR = "anthropic quota exceeded: Your credit balance is too low to access the Anthropic API."
+
+
+def test_classified_provider_error_is_stated_to_the_user() -> None:
+    result, mock_respond, mock_update_react = _run_regular_answer(
+        lambda _: _answer(_CREDIT_ERROR, "BUDGET_EXCEEDED", answer=""),
+        should_respond_with_error_msgs=False,
+    )
+
+    assert result is True
+    mock_respond.assert_called_once()
+    assert _CREDIT_ERROR in mock_respond.call_args.kwargs["text"]
+    assert "Onyx administrator" in mock_respond.call_args.kwargs["text"]
+    assert mock_respond.call_args.kwargs["thread_ts"] == "111.222"
+    assert mock_update_react.call_args.kwargs["remove"] is True
+
+
+@pytest.mark.parametrize("error_code", ["UNKNOWN_ERROR", "VALIDATION_ERROR", None])
+def test_unclassified_pipeline_error_text_does_not_reach_slack(
+    error_code: str | None,
+) -> None:
+    """The pipeline forwards the raw exception text for these, which can name internals."""
+    _, mock_respond, _ = _run_regular_answer(
+        lambda _: _answer(
+            'relation "tenant_abc.tool" does not exist', error_code, answer=""
+        ),
+        should_respond_with_error_msgs=False,
+    )
+
+    mock_respond.assert_called_once()
+    assert mock_respond.call_args.kwargs["text"] == SLACK_ANSWER_FAILED_MESSAGE
+
+
+def test_unexpected_error_gets_the_generic_notice() -> None:
+    def _boom(_: object) -> ChatBasicResponse:
+        raise ValueError("internal detail")
+
+    result, mock_respond, _ = _run_regular_answer(
+        _boom, should_respond_with_error_msgs=False
+    )
+
+    assert result is True
+    mock_respond.assert_called_once()
+    assert mock_respond.call_args.kwargs["text"] == SLACK_ANSWER_FAILED_MESSAGE
+
+
+def test_debug_flag_shows_the_raw_exception() -> None:
+    def _boom(_: object) -> ChatBasicResponse:
+        raise ValueError("internal detail")
+
+    _, mock_respond, _ = _run_regular_answer(_boom, should_respond_with_error_msgs=True)
+
+    assert "internal detail" in mock_respond.call_args.kwargs["text"]
+
+
+def test_notice_that_cannot_be_sent_does_not_stop_the_cleanup() -> None:
+    result, _, mock_update_react = _run_regular_answer(
+        lambda _: _answer(_CREDIT_ERROR, "BUDGET_EXCEEDED", answer=""),
+        respond_side_effect=SlackApiError("channel_not_found", response=MagicMock()),
+        should_respond_with_error_msgs=False,
+    )
+
+    assert result is True
+    assert mock_update_react.call_args.kwargs["remove"] is True
+
+
+def test_reaction_cleanup_cannot_raise() -> None:
+    """It runs after the user has their outcome. An escaped error would reach the
+    listener, which would report a second failure."""
+    client = MagicMock()
+    client.reactions_remove.side_effect = TimeoutError("slack did not respond")
+
+    update_emote_react(
+        emoji="eyes", channel="C123", message_ts="111.222", remove=True, client=client
+    )
+
+    client.reactions_remove.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "error_code,error_text",
+    [
+        (
+            "INSUFFICIENT_PERMISSIONS",
+            "User does not have access to document sets: ['Docs']",
+        ),
+        ("LLM_NOT_CONFIGURED", "No default LLM model found"),
+    ],
+)
+def test_setup_error_raised_by_gather_stream_is_stated(
+    error_code: str, error_text: str
+) -> None:
+    """These come before the message ID exists, so gather_stream raises them."""
+
+    def _raise(_: object) -> ChatBasicResponse:
+        raise ChatStreamError(error_text, error_code)
+
+    _, mock_respond, _ = _run_regular_answer(
+        _raise, should_respond_with_error_msgs=False
+    )
+
+    mock_respond.assert_called_once()
+    assert error_text in mock_respond.call_args.kwargs["text"]
+
+
+@pytest.mark.parametrize(
+    "error_code",
+    ["BAD_REQUEST", "SERVICE_UNAVAILABLE", "NOT_FOUND", "PERMISSION_DENIED"],
+)
+def test_codes_whose_text_carries_the_raw_exception_are_not_stated(
+    error_code: str,
+) -> None:
+    _, mock_respond, _ = _run_regular_answer(
+        lambda _: _answer(
+            "Bad request: {'input': 'system prompt and retrieved text'}",
+            error_code,
+            answer="",
+        ),
+        should_respond_with_error_msgs=False,
+    )
+
+    assert mock_respond.call_args.kwargs["text"] == SLACK_ANSWER_FAILED_MESSAGE
+
+
+def test_rejected_answer_post_falls_back_to_a_plain_text_notice() -> None:
+    result, mock_respond, _ = _run_regular_answer(
+        lambda _: _answer(),
+        respond_side_effect=[
+            SlackApiError("invalid_blocks", response={"error": "invalid_blocks"}),
+            None,
+        ],
+        should_respond_with_error_msgs=False,
+    )
+
+    assert result is True
+    assert mock_respond.call_count == 2
+    assert mock_respond.call_args.kwargs["text"] == SLACK_ANSWER_FAILED_MESSAGE
+    assert "blocks" not in mock_respond.call_args.kwargs
+
+
+def test_timed_out_answer_post_gets_no_failure_notice() -> None:
+    """Slack can accept a post and the client can still time out reading the reply,
+    so only a rejection from Slack proves that nothing was delivered."""
+    _, mock_respond, _ = _run_regular_answer(
+        lambda _: _answer(),
+        respond_side_effect=TimeoutError("slack did not respond"),
+        should_respond_with_error_msgs=False,
+    )
+
+    mock_respond.assert_called_once()
+
+
+def test_partly_delivered_answer_gets_no_failure_notice() -> None:
+    """With several receivers, one can have the answer before a later post fails."""
+    _, mock_respond, _ = _run_regular_answer(
+        lambda _: _answer(),
+        respond_side_effect=SlackApiError(
+            "invalid_blocks", response={"error": "invalid_blocks"}
+        ),
+        receiver_ids=["U1", "U2"],
+        should_respond_with_error_msgs=False,
+    )
+
+    mock_respond.assert_called_once()
+
+
+def test_empty_answer_is_stated_when_the_sender_addressed_the_bot() -> None:
+    result, mock_respond, _ = _run_regular_answer(
+        lambda _: _answer(answer=""),
+        should_respond_with_error_msgs=False,
+        disable_docs_only_answer=True,
+    )
+
+    assert result is True
+    mock_respond.assert_called_once()
+    assert mock_respond.call_args.kwargs["text"] == SLACK_NO_ANSWER_MESSAGE
+
+
+def test_empty_answer_stays_quiet_for_an_overheard_message() -> None:
+    result, mock_respond, _ = _run_regular_answer(
+        lambda _: _answer(answer=""),
+        message_info=_overheard_message_info(),
+        should_respond_with_error_msgs=False,
+        disable_docs_only_answer=True,
+    )
+
+    assert result is True
+    mock_respond.assert_not_called()
+
+
+def test_citation_filter_drops_an_overheard_answer_quietly() -> None:
+    result, mock_respond, _ = _run_regular_answer(
+        lambda _: _answer(),
+        slack_channel_config=_citation_filter_config(),
+        message_info=_overheard_message_info(),
+        should_respond_with_error_msgs=False,
+    )
+
+    assert result is True
+    mock_respond.assert_not_called()
+
+
+def test_citation_filter_does_not_apply_to_a_dm() -> None:
+    """A DM is addressed to the bot as much as a tag is, and tags skip the filters."""
+    message_info = _make_slack_message_info(ChannelType.IM, is_bot_dm=True)
+    message_info.bypass_filters = False
+
+    result, mock_respond, _ = _run_regular_answer(
+        lambda _: _answer(),
+        slack_channel_config=_citation_filter_config(),
+        message_info=message_info,
+        should_respond_with_error_msgs=False,
+    )
+
+    assert result is False
+    mock_respond.assert_called_once()
+    assert mock_respond.call_args.kwargs["blocks"] == []
+
+
+def test_stated_error_is_shown_literally_in_slack() -> None:
+    """Slack reads message text as mrkdwn. An error's own characters must not
+    become a mention, a link or formatting."""
+    hostile = "See <!channel> and <https://evil.test|this> & _that_ *now* ```x```"
+
+    _, mock_respond, _ = _run_regular_answer(
+        lambda _: _answer(hostile, "BUDGET_EXCEEDED", answer=""),
+        should_respond_with_error_msgs=False,
+    )
+
+    text: str = mock_respond.call_args.kwargs["text"]
+    assert "<!channel>" not in text
+    assert "&lt;!channel&gt;" in text
+    assert "&amp; _that_ *now*" in text
+    # One code block, which the error's own backticks cannot close early.
+    assert text.count("```") == 2
+
+
+def test_rejection_that_is_not_about_the_payload_gets_no_failure_notice() -> None:
+    """The post helper retries and raises only its last error. An earlier attempt
+    can have been delivered, and a rate limit on a later one does not disprove it."""
+    _, mock_respond, _ = _run_regular_answer(
+        lambda _: _answer(),
+        respond_side_effect=SlackApiError(
+            "ratelimited", response={"error": "ratelimited"}
+        ),
+        should_respond_with_error_msgs=False,
+    )
+
+    mock_respond.assert_called_once()

@@ -22,12 +22,6 @@ ONYX_BOT_FOLLOWUP_EMOJI = os.environ.get("ONYX_BOT_FOLLOWUP_EMOJI") or "sos"
 ONYX_BOT_FEEDBACK_VISIBILITY = (
     os.environ.get("ONYX_BOT_FEEDBACK_VISIBILITY") or "private"
 )
-# Should OnyxBot send an apology message if it's not able to find an answer
-# That way the user isn't confused as to why OnyxBot reacted but then said nothing
-# Off by default to be less intrusive (don't want to give a notif that just says we couldnt help)
-NOTIFY_SLACKBOT_NO_ANSWER = (
-    os.environ.get("NOTIFY_SLACKBOT_NO_ANSWER", "").lower() == "true"
-)
 # Mostly for debugging purposes but it's for explaining what went wrong
 # if OnyxBot couldn't find an answer
 ONYX_BOT_DISPLAY_ERROR_MSGS = os.environ.get(

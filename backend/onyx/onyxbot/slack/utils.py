@@ -178,7 +178,8 @@ def update_emote_react(
                 channel=channel,
                 timestamp=message_ts,
             )
-        except SlackApiError as e:
+        # Runs after the user has their outcome, so no error here may fail the request.
+        except Exception as e:
             logger.error("Failed to remove Reaction due to: %s", e)
 
         return

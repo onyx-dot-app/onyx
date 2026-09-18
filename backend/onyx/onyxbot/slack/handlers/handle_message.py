@@ -118,10 +118,17 @@ def remove_scheduled_feedback_reminder(
         )
         logger.info("Scheduled feedback reminder deleted")
     except SlackApiError as e:
-        if e.response["error"] == "invalid_scheduled_message_id":
+        # `.get`, since a non-JSON reply has no `error` key and an error raised in
+        # this handler would skip the catch-all below.
+        if e.response.get("error") == "invalid_scheduled_message_id":
             logger.info(
                 "Unable to delete the scheduled message. It must have already been posted"
             )
+        else:
+            logger.warning("Unable to delete the scheduled feedback reminder: %s", e)
+    # Runs after the user has their outcome, so no error here may fail the request.
+    except Exception:
+        logger.exception("Unable to delete the scheduled feedback reminder")
 
 
 def _resolve_allowlist_user_ids(
@@ -150,12 +157,10 @@ def handle_message(
     client: WebClient,
     feedback_reminder_id: str | None,
 ) -> bool:
-    """Potentially respond to the user message depending on filters and if an answer was generated
+    """Respond to the message if its filters allow it and an answer can be generated.
 
-    Returns True if need to respond with an additional message to the user(s) after this
-    function is finished. True indicates an unexpected failure that needs to be communicated
-    Query thrown out by filters due to config does not count as a failure that should be notified
-    Onyx failing to answer/retrieve docs does count and should be notified
+    Returns True if an answer was attempted and not delivered. The user has their notice
+    by then. A message that a configured filter drops is not a failure and returns False.
     """
     channel = message_info.channel_to_respond
 
@@ -225,7 +230,7 @@ def handle_message(
     respond_tag_only = False
 
     if channel_conf:
-        if not bypass_filters and "answer_filters" in channel_conf:
+        if not message_info.is_addressed_to_bot and "answer_filters" in channel_conf:
             if (
                 "questionmark_prefilter" in channel_conf["answer_filters"]
                 and "?" not in messages[-1].message

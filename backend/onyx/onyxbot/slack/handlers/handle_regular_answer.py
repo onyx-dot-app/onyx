@@ -3,10 +3,11 @@ from collections.abc import Callable
 from typing import Any, Optional, TypeVar
 
 from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import get_anonymous_user
-from onyx.chat.models import ChatBasicResponse
+from onyx.chat.models import ChatBasicResponse, ChatStreamError
 from onyx.chat.process_message import gather_stream, handle_stream_message_objects
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.configs.onyxbot_configs import (
@@ -19,8 +20,10 @@ from onyx.context.search.models import BaseFilters, Tag
 from onyx.db.models import SlackChannelConfig, User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.users import get_or_create_slack_service_account, get_user_by_email
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.onyxbot.slack.blocks import build_slack_response_blocks
 from onyx.onyxbot.slack.constants import SLACK_CHANNEL_REF_PATTERN
+from onyx.onyxbot.slack.formatting import escape_slack_specials
 from onyx.onyxbot.slack.models import SlackMessageInfo, ThreadMessage
 from onyx.onyxbot.slack.utils import (
     SlackRateLimiter,
@@ -45,6 +48,77 @@ srl = SlackRateLimiter()
 RT = TypeVar("RT")  # return type
 
 SLACK_PERSONA_ACCESS_DENIED_MESSAGE = "You don't have access to the Agent that the bot is configured with in this channel."
+SLACK_ANSWER_FAILED_MESSAGE = (
+    "Sorry, an error occurred and I could not answer. Try again. "
+    "If the error occurs again, contact your Onyx administrator."
+)
+SLACK_NO_ANSWER_MESSAGE = "Sorry, I could not find anything relevant to answer this."
+
+# Pipeline error codes whose text is written for a user and never carries a raw
+# exception. Any other code gets the generic notice, so a new code is quiet by default.
+_STATED_ERROR_CODES = frozenset(
+    {
+        # Written by `litellm_exception_to_error_msg`
+        "AUTH_ERROR",
+        "BUDGET_EXCEEDED",
+        "CONNECTION_ERROR",
+        "CONTENT_POLICY",
+        "CONTEXT_TOO_LONG",
+        "CUSTOM_ERROR",
+        "RATE_LIMIT",
+        "REQUEST_TOO_LARGE",
+        "UNPROCESSABLE_ENTITY",
+        # `OnyxError` details, which are written for the API client
+        OnyxErrorCode.INSUFFICIENT_PERMISSIONS.code,
+        OnyxErrorCode.LLM_NOT_CONFIGURED.code,
+        OnyxErrorCode.QUERY_REJECTED.code,
+    }
+)
+
+
+def send_failure_notice(
+    client: WebClient,
+    channel: str,
+    thread_ts: str | None,
+    text: str,
+    logger: OnyxLoggingAdapter,
+    receiver_ids: list[str] | None = None,
+) -> None:
+    """Best effort. A notice that cannot be sent must not hide the failure it reports."""
+    try:
+        respond_in_thread_or_channel(
+            client=client,
+            channel=channel,
+            receiver_ids=receiver_ids,
+            text=text,
+            thread_ts=thread_ts,
+        )
+    except Exception:
+        logger.exception("Unable to send Slack failure notice")
+
+
+def _as_slack_code_block(text: str) -> str:
+    """Show text literally. Slack reads message text as mrkdwn, so an error's own
+    `<`, `_` or `*` would otherwise become a mention, a link or formatting."""
+    literal = escape_slack_specials(text).replace("```", "'''")
+    return f"```{literal}```"
+
+
+# Slack errors that reject the message content itself. The same content fails the
+# same way on every retry, so none of the attempts can have delivered the answer.
+_PAYLOAD_REJECTED_ERRORS = frozenset(
+    {"invalid_blocks", "invalid_blocks_format", "msg_blocks_too_long", "msg_too_long"}
+)
+
+
+def _slack_rejected_the_payload(error: Exception) -> bool:
+    """True if the answer cannot have been delivered. The post helper retries and
+    raises only its last error, so a timeout or a rate limit proves nothing: an
+    earlier attempt can have reached Slack."""
+    return (
+        isinstance(error, SlackApiError)
+        and error.response.get("error") in _PAYLOAD_REJECTED_ERRORS
+    )
 
 
 def resolve_channel_references(
@@ -322,7 +396,7 @@ def handle_regular_answer(
             CURRENT_USER_ID_CONTEXTVAR.reset(token)
 
         if answer.error_msg:
-            raise RuntimeError(answer.error_msg)
+            raise ChatStreamError(answer.error_msg, answer.error_code)
 
         return answer
 
@@ -388,17 +462,26 @@ def handle_regular_answer(
             "Unable to process message - did not successfully answer in %s attempts",
             num_retries,
         )
-        # Optionally, respond in thread with the error message, Used primarily
-        # for debugging purposes
+        # The bot took this message on, so it always says why no answer came.
+        error_text: str = SLACK_ANSWER_FAILED_MESSAGE
         if should_respond_with_error_msgs:
-            respond_in_thread_or_channel(
-                client=client,
-                channel=channel,
-                receiver_ids=target_receiver_ids,
-                text=f"Encountered exception when trying to answer: \n\n```{e}```",
-                thread_ts=target_thread_ts,
-                send_as_ephemeral=send_as_ephemeral,
+            error_text = (
+                "Encountered exception when trying to answer: \n\n"
+                f"{_as_slack_code_block(str(e))}"
             )
+        elif isinstance(e, ChatStreamError) and e.error_code in _STATED_ERROR_CODES:
+            error_text = (
+                f"Sorry, I could not answer.\n{_as_slack_code_block(str(e))}\n"
+                "If you cannot fix this, contact your Onyx administrator."
+            )
+        send_failure_notice(
+            client=client,
+            channel=channel,
+            thread_ts=target_thread_ts,
+            text=error_text,
+            logger=logger,
+            receiver_ids=target_receiver_ids,
+        )
 
         # In case of failures, don't keep the reaction there permanently
         update_emote_react(
@@ -425,6 +508,16 @@ def handle_regular_answer(
         logger.notice(
             "Unable to find answer - not responding since the `ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER` env variable is set"
         )
+        # Staying quiet is for messages the bot only overheard.
+        if message_info.is_addressed_to_bot:
+            send_failure_notice(
+                client=client,
+                channel=channel,
+                thread_ts=target_thread_ts,
+                text=SLACK_NO_ANSWER_MESSAGE,
+                logger=logger,
+                receiver_ids=target_receiver_ids,
+            )
         return True
 
     only_respond_if_citations = (
@@ -435,7 +528,7 @@ def handle_regular_answer(
     if (
         only_respond_if_citations
         and not answer.citation_info
-        and not message_info.bypass_filters
+        and not message_info.is_addressed_to_bot
         and not channel_tags
     ):
         logger.error(
@@ -494,9 +587,21 @@ def handle_regular_answer(
 
         return False
 
-    except Exception:
+    except Exception as e:
         logger.exception(
             "Unable to process message - could not respond in slack in %s attempts",
             num_retries,
         )
+        # Slack can reject the blocks and still accept plain text. With several
+        # receivers some can have the answer already, so they get no notice.
+        single_target: bool = not target_receiver_ids or len(target_receiver_ids) == 1
+        if single_target and _slack_rejected_the_payload(e):
+            send_failure_notice(
+                client=client,
+                channel=channel,
+                thread_ts=target_thread_ts,
+                text=SLACK_ANSWER_FAILED_MESSAGE,
+                logger=logger,
+                receiver_ids=target_receiver_ids,
+            )
         return True

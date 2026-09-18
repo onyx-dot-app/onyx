@@ -30,6 +30,14 @@ class StreamingError(BaseModel):
     details: dict | None = None  # Additional context (tool name, model name, etc.)
 
 
+class ChatStreamError(Exception):
+    """A `StreamingError` from the chat pipeline, for a caller that gathers the stream."""
+
+    def __init__(self, error: str, error_code: str | None) -> None:
+        super().__init__(error)
+        self.error_code = error_code
+
+
 class CustomToolResponse(BaseModel):
     response: ToolResultType
     tool_name: str
@@ -75,6 +83,8 @@ class ChatBasicResponse(BaseModel):
     error_msg: str | None
     message_id: int
     citation_info: list[CitationInfo]
+    # Tells a classified provider error, whose text is safe to show, from a raw one
+    error_code: str | None = None
 
 
 class ChatFullResponse(BaseModel):

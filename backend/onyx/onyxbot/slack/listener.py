@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DEV_MODE, POD_NAME, POD_NAMESPACE
 from onyx.configs.constants import MessageType, OnyxRedisLocks
-from onyx.configs.onyxbot_configs import NOTIFY_SLACKBOT_NO_ANSWER
+from onyx.configs.onyxbot_configs import ONYX_BOT_REACT_EMOJI
 from onyx.connectors.slack.utils import expert_info_from_slack_id
 from onyx.db.engine.sql_engine import (
     SqlEngine,
@@ -77,6 +77,10 @@ from onyx.onyxbot.slack.handlers.handle_message import (
     remove_scheduled_feedback_reminder,
     schedule_feedback_reminder,
 )
+from onyx.onyxbot.slack.handlers.handle_regular_answer import (
+    SLACK_ANSWER_FAILED_MESSAGE,
+    send_failure_notice,
+)
 from onyx.onyxbot.slack.models import SlackContext, SlackMessageInfo, ThreadMessage
 from onyx.onyxbot.slack.utils import (
     TenantSocketModeClient,
@@ -89,6 +93,7 @@ from onyx.onyxbot.slack.utils import (
     read_slack_thread,
     remove_onyx_bot_tag,
     respond_in_thread_or_channel,
+    update_emote_react,
 )
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.manage.models import SlackBotTokens
@@ -1127,22 +1132,100 @@ def build_request_details(
     raise RuntimeError("Programming fault, this should never happen.")
 
 
-def apologize_for_fail(
-    details: SlackMessageInfo,
-    client: TenantSocketModeClient,
+def _notify_sender_of_failure(
+    req: SocketModeRequest, client: TenantSocketModeClient
 ) -> None:
-    respond_in_thread_or_channel(
-        client=client.web_client,
-        channel=details.channel_to_respond,
-        thread_ts=details.msg_to_respond,
-        text="Sorry, we weren't able to find anything relevant :cold_sweat:",
+    """Tell a sender who addressed the bot that it failed. Read from the raw request,
+    since the failure can come before the request details exist.
+
+    A failure on a message the bot only overheard stays quiet, so the bot never posts
+    into a conversation that nobody addressed to it. A tag in a channel arrives as an
+    `app_mention`, since `prefilter_requests` drops its `message` twin.
+    """
+    if req.type == "slash_commands":
+        # Slash command responses are ephemeral, and so is this one.
+        send_failure_notice(
+            client=client.web_client,
+            channel=req.payload["channel_id"],
+            thread_ts=None,
+            text=SLACK_ANSWER_FAILED_MESSAGE,
+            logger=logger,
+            receiver_ids=[req.payload["user_id"]],
+        )
+        return
+    if req.type != "events_api":
+        return
+
+    event = cast(dict[str, Any], req.payload.get("event", {}))
+    is_addressed: bool = (
+        event.get("type") == "app_mention" or event.get("channel_type") == "im"
     )
+    channel = cast(str | None, event.get("channel"))
+    if not is_addressed or not channel:
+        return
+    send_failure_notice(
+        client=client.web_client,
+        channel=channel,
+        thread_ts=event.get("thread_ts") or event.get("ts"),
+        text=SLACK_ANSWER_FAILED_MESSAGE,
+        logger=logger,
+    )
+    # The failure can come after the bot reacted, and a reaction that stays reads as
+    # still working.
+    update_emote_react(
+        emoji=ONYX_BOT_REACT_EMOJI,
+        channel=channel,
+        message_ts=event.get("ts"),
+        remove=True,
+        client=client.web_client,
+    )
+
+
+def _handle_request(details: SlackMessageInfo, client: TenantSocketModeClient) -> bool:
+    """Returns True if an answer was attempted and not delivered."""
+    channel_name, _ = get_channel_name_from_id(
+        client=client.web_client, channel_id=details.channel_to_respond
+    )
+
+    with get_session_with_current_tenant() as db_session:
+        slack_channel_config = get_slack_channel_config_for_bot_and_channel(
+            db_session=db_session,
+            slack_bot_id=client.slack_bot_id,
+            channel_name=channel_name,
+        )
+
+        follow_up = bool(
+            slack_channel_config.channel_config
+            and slack_channel_config.channel_config.get("follow_up_tags") is not None
+        )
+
+        feedback_reminder_id = schedule_feedback_reminder(
+            details=details, client=client.web_client, include_followup=follow_up
+        )
+
+        # An exception is a failed answer too, so the reminder must not outlive it.
+        failed: bool = True
+        try:
+            failed = handle_message(
+                message_info=details,
+                slack_channel_config=slack_channel_config,
+                client=client.web_client,
+                feedback_reminder_id=feedback_reminder_id,
+            )
+        finally:
+            if failed and feedback_reminder_id:
+                remove_scheduled_feedback_reminder(
+                    client=client.web_client,
+                    channel=details.sender_id,
+                    msg_id=feedback_reminder_id,
+                )
+
+    return failed
 
 
 def process_message(
     req: SocketModeRequest,
     client: TenantSocketModeClient,
-    notify_no_answer: bool = NOTIFY_SLACKBOT_NO_ANSWER,
 ) -> None:
     tenant_id = get_current_tenant_id()
     if req.type == "events_api":
@@ -1173,45 +1256,12 @@ def process_message(
         )
         return
 
-    details = build_request_details(req, client)
-    channel = details.channel_to_respond
-    channel_name, is_dm = get_channel_name_from_id(
-        client=client.web_client, channel_id=channel
-    )
-
-    with get_session_with_current_tenant() as db_session:
-        slack_channel_config = get_slack_channel_config_for_bot_and_channel(
-            db_session=db_session,
-            slack_bot_id=client.slack_bot_id,
-            channel_name=channel_name,
-        )
-
-        follow_up = bool(
-            slack_channel_config.channel_config
-            and slack_channel_config.channel_config.get("follow_up_tags") is not None
-        )
-
-        feedback_reminder_id = schedule_feedback_reminder(
-            details=details, client=client.web_client, include_followup=follow_up
-        )
-
-        failed = handle_message(
-            message_info=details,
-            slack_channel_config=slack_channel_config,
-            client=client.web_client,
-            feedback_reminder_id=feedback_reminder_id,
-        )
-
-        if failed:
-            if feedback_reminder_id:
-                remove_scheduled_feedback_reminder(
-                    client=client.web_client,
-                    channel=details.sender_id,
-                    msg_id=feedback_reminder_id,
-                )
-            # Skipping answering due to pre-filtering is not considered a failure
-            if notify_no_answer:
-                apologize_for_fail(details, client)
+    try:
+        details = build_request_details(req, client)
+        failed: bool = _handle_request(details, client)
+    except Exception:
+        _notify_sender_of_failure(req, client)
+        raise
 
     logger.info(
         "process_message finished: success=%s tenant_id=%r req.type=%r req.envelope_id=%r",

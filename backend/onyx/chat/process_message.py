@@ -57,6 +57,7 @@ from onyx.chat.models import (
     ChatFullResponse,
     ChatLoadedFile,
     ChatMessageSimple,
+    ChatStreamError,
     ContextFileMetadata,
     CreateChatSessionID,
     ExtractedContextFiles,
@@ -708,13 +709,18 @@ def build_chat_turn(
         incognito_llm_request_policy, chat_session.incognito_record_mode
     )
     for override in selected_overrides:
-        llm = get_llm_for_persona(
-            persona=persona,
-            user=user,
-            llm_override=override,
-            additional_headers=litellm_additional_headers,
-            policy_fn=incognito_policy_fn,
-        )
+        try:
+            llm = get_llm_for_persona(
+                persona=persona,
+                user=user,
+                llm_override=override,
+                additional_headers=litellm_additional_headers,
+                policy_fn=incognito_policy_fn,
+            )
+        except ValueError as e:
+            # The factory's ValueErrors name a missing LLM setup, which an admin can
+            # fix. A bare ValueError would reach the user as an unclassified error.
+            raise OnyxError(OnyxErrorCode.LLM_NOT_CONFIGURED, str(e)) from e
         check_llm_cost_limit_for_provider(
             db_session=db_session,
             tenant_id=tenant_id,
@@ -2171,6 +2177,7 @@ def gather_stream(
     answer: str | None = None
     citations: list[CitationInfo] = []
     error_msg: str | None = None
+    error_code: str | None = None
     message_id: int | None = None
     top_documents: list[SearchDoc] = []
 
@@ -2192,10 +2199,15 @@ def gather_stream(
                 citations.append(packet.obj)
         elif isinstance(packet, StreamingError):
             error_msg = packet.error
+            error_code = packet.error_code
         elif isinstance(packet, MessageResponseIDInfo):
             message_id = packet.reserved_assistant_message_id
 
     if message_id is None:
+        # The turn can fail before the message ID is reserved. That error is the
+        # cause, so it must not be replaced by the missing ID.
+        if error_msg is not None:
+            raise ChatStreamError(error_msg, error_code)
         raise ValueError("Message ID is required")
 
     if answer is None:
@@ -2211,6 +2223,7 @@ def gather_stream(
         citation_info=citations,
         message_id=message_id,
         error_msg=error_msg,
+        error_code=error_code,
         top_documents=top_documents,
     )
 

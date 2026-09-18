@@ -9,6 +9,7 @@ import pytest
 from onyx.db.enums import AccountType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.onyxbot.slack.models import SlackMessageInfo, ThreadMessage
 from onyx.server.settings.models import ApplicationStatus
 
 # ---------------------------------------------------------------------------
@@ -727,3 +728,57 @@ class TestHandleMessageInvocationAllowlist:
         assert result is False
         mock_usage_report.assert_not_called()
         mock_add_user.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Answer filters apply to overheard messages only
+# ---------------------------------------------------------------------------
+
+
+def _question_mark_filter_config() -> MagicMock:
+    config = _make_channel_config()
+    config.channel_config = {"answer_filters": ["questionmark_prefilter"]}
+    return config
+
+
+def _real_message_info(is_bot_dm: bool) -> SlackMessageInfo:
+    """A real model, since a mock would answer `is_addressed_to_bot` with a truthy mock."""
+    return SlackMessageInfo(
+        thread_messages=[ThreadMessage(message="no question mark here")],
+        channel_to_respond="C123",
+        msg_to_respond="1234.5678",
+        thread_to_respond="1234.5678",
+        sender_id="U123",
+        email="user@test.com",
+        bypass_filters=False,
+        is_slash_command=False,
+        is_bot_dm=is_bot_dm,
+    )
+
+
+@pytest.mark.usefixtures("db_session")
+@pytest.mark.parametrize(
+    "is_bot_dm,expect_answer_attempt",
+    [(True, True), (False, False)],
+    ids=["dm-skips-the-filter", "overheard-is-filtered"],
+)
+def test_question_mark_filter_only_drops_overheard_messages(
+    is_bot_dm: bool, expect_answer_attempt: bool
+) -> None:
+    from onyx.onyxbot.slack.handlers.handle_message import handle_message
+
+    with (
+        patch(f"{_HANDLE_MSG}.handle_regular_answer", return_value=False) as regular,
+        patch(f"{_HANDLE_MSG}.handle_standard_answers", return_value=False),
+        patch(f"{_HANDLE_MSG}.add_slack_user_if_not_exists"),
+        patch(f"{_HANDLE_MSG}.get_user_by_email", return_value=MagicMock()),
+        patch(f"{_HANDLE_MSG}.slack_usage_report"),
+    ):
+        handle_message(
+            message_info=_real_message_info(is_bot_dm),
+            slack_channel_config=_question_mark_filter_config(),
+            client=MagicMock(),
+            feedback_reminder_id=None,
+        )
+
+    assert regular.called is expect_answer_attempt
