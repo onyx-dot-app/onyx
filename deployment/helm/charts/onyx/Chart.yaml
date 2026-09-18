@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.8.28
+version: 0.8.29
 appVersion: latest
 annotations:
   category: Productivity
@@ -20,9 +20,14 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: changed
-      description: Add download size limits for Airtable attachments and Dropbox files,
-        and protect temporary Zulip credentials.
+    - kind: fixed
+      description: Fix the docfetching ScaledObject's cpu/memory triggers, which
+        nested the metric type under metadata (metadata.type) instead of the
+        top-level metricType field every other ScaledObject template uses. KEDA's
+        admission webhook rejects metadata.type, so any release with
+        celery_worker_docfetching.autoscaling.targetCPUUtilizationPercentage or
+        targetMemoryUtilizationPercentage set failed to reconcile the
+        ScaledObject.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it
