@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { mutate } from "swr";
 import { PageLoader } from "@opal/layouts";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
 import type { ConnectorIndexingStatusLite } from "@/lib/types";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
@@ -26,7 +27,7 @@ import {
   MessageCard,
   SelectCard,
   Spacer,
-  Switch,
+  InputSwitch,
   Tabs,
   Text,
 } from "@opal/components";
@@ -66,6 +67,7 @@ import {
   CLOUD_BASED_PROVIDERS,
   CUSTOM_PROVIDER,
   SELF_HOSTED_PROVIDERS,
+  embeddingModelDescription,
   findProvider,
   findRegistryModel,
   isCloudBased,
@@ -89,6 +91,7 @@ import { ContentAction } from "@opal/layouts";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { useSettings } from "@/lib/settings/hooks";
 import { Settings, toSettings } from "@/lib/settings/types";
+import { findProviderOwningModelConfig } from "@/lib/languageModels/utils";
 import {
   useConfiguredEmbeddingProviders,
   useCurrentEmbeddingModel,
@@ -584,7 +587,7 @@ function EmbeddingModelCard({
           <Content
             icon={provider.icon}
             title={model.modelName}
-            description={model.description}
+            description={embeddingModelDescription(model, t)}
             sizePreset="main-ui"
             variant="section"
           />
@@ -717,7 +720,6 @@ export default function IndexSettingsPage() {
       normalize: currentEmbeddingModel.normalize,
       queryPrefix: currentEmbeddingModel.query_prefix,
       passagePrefix: currentEmbeddingModel.passage_prefix,
-      description: "",
     };
   }, [currentEmbeddingModel]);
 
@@ -806,12 +808,15 @@ export default function IndexSettingsPage() {
   const handleCaptioningModelChange = useCallback(
     async ({
       modelName,
-      providerName,
+      modelConfigurationId,
     }: {
       modelName: string;
-      providerName: string | null;
+      modelConfigurationId: number | null | undefined;
     }) => {
-      const provider = llmProviders?.find((p) => p.name === providerName);
+      const provider = findProviderOwningModelConfig(
+        llmProviders,
+        modelConfigurationId
+      );
       if (!provider) {
         toast.error(t("toasts.providerResolveFailed"));
         return;
@@ -841,17 +846,18 @@ export default function IndexSettingsPage() {
     [llmProviders, t]
   );
 
-  // Resolve defaultVision (name-based) to a model_configuration_id for ModelSelector
+  // Resolve defaultVision to a model_configuration_id for ModelSelector. Keyed on
+  // providerId: display names are not unique, so a name match can land on a
+  // provider that does not own this model.
   const captioningModelConfigId = useMemo(() => {
     if (!defaultVision?.modelName || !llmProviders) return null;
-    for (const p of llmProviders) {
-      if (p.name !== defaultVision.providerName) continue;
-      const mc = p.model_configurations.find(
-        (m) => m.name === defaultVision.modelName
-      );
-      if (mc?.id != null) return mc.id;
-    }
-    return null;
+    const provider = llmProviders.find(
+      (p) => p.id === defaultVision.providerId
+    );
+    const mc = provider?.model_configurations.find(
+      (m) => m.name === defaultVision.modelName
+    );
+    return mc?.id ?? null;
   }, [llmProviders, defaultVision]);
 
   const savedSelection = useMemo(
@@ -1021,7 +1027,7 @@ export default function IndexSettingsPage() {
                 // reload; a generic failure would lose that.
                 const detail = await response
                   .json()
-                  .then((body) => body?.detail as string | undefined)
+                  .then((body: ErrorResponseBody) => body?.detail)
                   .catch((parseError) => {
                     console.error(
                       "Failed to parse set-new-search-settings error response",
@@ -1665,11 +1671,12 @@ export default function IndexSettingsPage() {
                                           currentProvider?.icon ?? SvgServer
                                         }
                                         title={currentEmbeddingModel.model_name}
-                                        description={
+                                        description={embeddingModelDescription(
                                           findRegistryModel(
                                             currentEmbeddingModel.model_name
-                                          )?.description
-                                        }
+                                          ),
+                                          t
+                                        )}
                                         sizePreset="main-ui"
                                         variant="section"
                                       />
@@ -1760,7 +1767,7 @@ export default function IndexSettingsPage() {
                               }}
                               withLabel
                             >
-                              <Switch
+                              <InputSwitch
                                 checked={
                                   searchSettings?.multipass_indexing ?? false
                                 }
@@ -1870,7 +1877,7 @@ export default function IndexSettingsPage() {
                                 description={t("imageExtraction.description")}
                                 withLabel
                               >
-                                <Switch
+                                <InputSwitch
                                   checked={imageProcessingEnabled}
                                   onCheckedChange={(checked) => {
                                     void saveSettings({
@@ -1902,7 +1909,8 @@ export default function IndexSettingsPage() {
                                     onChange={(opt) =>
                                       void handleCaptioningModelChange({
                                         modelName: opt.modelName,
-                                        providerName: opt.name,
+                                        modelConfigurationId:
+                                          opt.modelConfigurationId,
                                       })
                                     }
                                   />

@@ -4,8 +4,12 @@ from onyx.llm.api_surfaces import LlmApiSurface
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_capabilities import (
     ReasoningParamStyle,
+    anthropic_identity_is_always_thinking,
+    anthropic_thinking_is_always_on,
     is_openai_registry_model_name,
+    openai_chat_tools_require_reasoning_none,
     parse_anthropic_model_version,
+    parse_openai_gpt_version,
     resolve_reasoning_param_style,
     supported_reasoning_efforts,
 )
@@ -81,6 +85,57 @@ def test_parse_anthropic_model_version(
 )
 def test_is_openai_registry_model_name(model_name: str, expected: bool) -> None:
     assert is_openai_registry_model_name(model_name) is expected
+
+
+@pytest.mark.parametrize(
+    "model_name, expected",
+    [
+        ("gpt-5.6-sol", (5, 6)),
+        ("gpt-5.4-mini", (5, 4)),
+        ("gpt-5", (5, 0)),
+        ("gpt-4o", (4, 0)),
+        ("gpt-4.1-mini", (4, 1)),
+        # Gateway vendor prefixes and Azure deployment aliases
+        ("azure/gpt-5.6-sol", (5, 6)),
+        ("bedrock_mantle/openai.gpt-5.6-luna", (5, 6)),
+        ("gpt-5.6-sol-01-ptu", (5, 6)),
+        # Azure spells GPT-3.5 without the dot
+        ("gpt-35-turbo", (3, 5)),
+        ("gpt-35-turbo-16k", (3, 5)),
+        # "gpt-" glued to another word, or with no version after it, is not GPT
+        ("chatgpt-4o-latest", None),
+        ("gpt-oss-120b", None),
+        ("claude-sonnet-5", None),
+        ("o3", None),
+    ],
+)
+def test_parse_openai_gpt_version(
+    model_name: str, expected: tuple[int, int] | None
+) -> None:
+    assert parse_openai_gpt_version(model_name) == expected
+
+
+@pytest.mark.parametrize(
+    "model_name, expected",
+    [
+        # gpt-5.4 is the first release to reject tools alongside reasoning
+        # over chat completions. Its -mini and -nano variants do too.
+        ("gpt-5.4", True),
+        ("gpt-5.4-mini", True),
+        ("gpt-5.4-nano", True),
+        ("gpt-5.5", True),
+        ("gpt-5.6-sol", True),
+        ("gpt-5.2", False),
+        ("gpt-5", False),
+        ("gpt-4.1", False),
+        ("gpt-35-turbo", False),
+        ("claude-sonnet-5", False),
+    ],
+)
+def test_openai_chat_tools_require_reasoning_none(
+    model_name: str, expected: bool
+) -> None:
+    assert openai_chat_tools_require_reasoning_none(model_name) is expected
 
 
 @pytest.mark.parametrize(
@@ -210,6 +265,56 @@ def test_supported_reasoning_efforts(
         ReasoningEffort.HIGH,
     ]
     assert (ReasoningEffort.XHIGH in efforts) is xhigh_supported
+
+
+@pytest.mark.parametrize(
+    "model_name, always_on",
+    [
+        ("claude-fable-5", True),
+        ("claude-fable-5-1", True),
+        ("claude-5-mythos", True),
+        ("claude-opus-5", False),
+        ("claude-sonnet-5", False),
+        ("claude-opus-4-7", False),
+        # Pre-adaptive Claude only thinks when the param asks for it.
+        ("claude-3-7-sonnet", False),
+        # The leading tier word decides, whichever the tier list names first.
+        ("claude-opus-4-7-mythos", False),
+        ("claude-mythos-5-opus", True),
+        ("fable-writer-v2", False),
+    ],
+)
+def test_anthropic_thinking_is_always_on(model_name: str, always_on: bool) -> None:
+    assert anthropic_thinking_is_always_on(model_name) is always_on
+
+
+@pytest.mark.parametrize(
+    "model_names, always_on",
+    [
+        (["claude-fable-5"], True),
+        # The deployment alias reaches the provider, so it decides.
+        (["claude-fable-5", "claude-opus-5"], False),
+        (["claude-opus-5", "claude-fable-5"], True),
+        (["my-deployment", "claude-mythos-5-1"], True),
+        # An alias that names no Claude version leaves the model name to decide.
+        (["claude-fable-5", "prod-claude-alias"], True),
+    ],
+)
+def test_anthropic_identity_is_always_thinking(
+    model_names: list[str], always_on: bool
+) -> None:
+    assert anthropic_identity_is_always_thinking(model_names) is always_on
+
+
+@pytest.mark.parametrize("model_name", ["claude-fable-5", "claude-mythos-5-1"])
+def test_always_thinking_models_offer_no_off(model_name: str) -> None:
+    """Off would promise a saving these models never honor: they reject
+    thinking.type=disabled, so the request builder cannot turn reasoning off."""
+    efforts = supported_reasoning_efforts(
+        LlmProviderNames.ANTHROPIC, [model_name], None
+    )
+    assert ReasoningEffort.OFF not in efforts
+    assert efforts[0] is ReasoningEffort.LOW
 
 
 @pytest.mark.parametrize("model_name", ["o1-mini", "o1-preview", "o1-mini-2024-09-12"])

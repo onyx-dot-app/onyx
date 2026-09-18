@@ -5,8 +5,8 @@ import { useTranslations } from "next-intl";
 import * as Yup from "yup";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
-import { InputTypeIn, PasswordInputTypeIn } from "@opal/components";
-import InputComboBox from "@/refresh-components/inputs/InputComboBox";
+import { InputTypeIn, InputPasswordTypeIn } from "@opal/components";
+import { InputComboBox } from "@opal/components";
 import { ImageGenFormWrapper } from "@/views/admin/ImageGenerationPage/forms/ImageGenFormWrapper";
 import {
   ImageGenFormBaseProps,
@@ -117,7 +117,7 @@ function AzureFormFields(props: ImageGenFormChildProps<AzureFormValues>) {
                   isError={apiStatus === "error"}
                 />
               ) : (
-                <PasswordInputTypeIn
+                <InputPasswordTypeIn
                   {...field}
                   onChange={(e) => {
                     field.onChange(e);

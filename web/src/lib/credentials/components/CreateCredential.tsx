@@ -205,17 +205,15 @@ export default function CreateCredential({
     templateWithAuth?.authMethods?.[0]?.value || undefined;
 
   return (
-    <Formik
-      initialValues={
-        {
-          name: "",
-          is_public: isGlobalHolder || !businessTier,
-          groups: [],
-          ...(initialAuthMethod && {
-            authentication_method: initialAuthMethod,
-          }),
-        } as CreateCredentialFormValues
-      }
+    <Formik<CreateCredentialFormValues>
+      initialValues={{
+        name: "",
+        is_public: isGlobalHolder || !businessTier,
+        groups: [],
+        ...(initialAuthMethod && {
+          authentication_method: initialAuthMethod,
+        }),
+      }}
       validationSchema={validationSchema}
       onSubmit={() => {}} // This will be overridden by our custom submit handlers
     >

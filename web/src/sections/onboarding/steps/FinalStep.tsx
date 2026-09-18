@@ -2,7 +2,6 @@
 
 import React from "react";
 import Link from "next/link";
-import type { Route } from "next";
 import { useTranslations } from "next-intl";
 import { Button, Card } from "@opal/components";
 import { FINAL_SETUP_CONFIG } from "@/sections/onboarding/constants";
@@ -25,7 +24,7 @@ const FinalStepItem = React.memo(
       : {};
 
     return (
-      <Card background="none" border="solid" padding={1} rounding={4}>
+      <Card color="transparent" border="solid" padding={1} rounding={4}>
         <Section alignItems="start" height="fit">
           <ContentAction
             icon={Icon}
@@ -35,7 +34,7 @@ const FinalStepItem = React.memo(
             variant="section"
             padding={1}
             rightChildren={
-              <Link href={buttonHref as Route} {...linkProps}>
+              <Link href={buttonHref} {...linkProps}>
                 <Button prominence="tertiary" rightIcon={SvgExternalLink}>
                   {buttonText}
                 </Button>

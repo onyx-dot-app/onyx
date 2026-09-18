@@ -7,13 +7,13 @@ import {
   Divider,
   InputTextArea,
   InputTypeIn,
-  Switch,
+  InputSwitch,
   Tabs,
   Tag,
 } from "@opal/components";
 import Preview from "@/app/ee/admin/theme/Preview";
 import CharacterCount from "@/refresh-components/CharacterCount";
-import InputImage from "@/refresh-components/inputs/InputImage";
+import { InputImage } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { useFormikContext } from "formik";
 import {
@@ -594,7 +594,7 @@ export const AppearanceThemeSettings = forwardRef<
               )}
             </FormField.Label>
             <FormField.Control>
-              <Switch
+              <InputSwitch
                 aria-label={t("branding.label")}
                 data-label="hide-onyx-branding-toggle"
                 checked={values.hide_onyx_branding}
@@ -618,7 +618,7 @@ export const AppearanceThemeSettings = forwardRef<
           <div className="flex justify-between items-center">
             <FormField.Label>{t("firstVisit.label")}</FormField.Label>
             <FormField.Control>
-              <Switch
+              <InputSwitch
                 aria-label={t("firstVisit.label")}
                 data-label="first-visit-notice-toggle"
                 checked={values.show_first_visit_notice}
@@ -698,7 +698,7 @@ export const AppearanceThemeSettings = forwardRef<
               <div className="flex justify-between items-center">
                 <FormField.Label>{t("consent.label")}</FormField.Label>
                 <FormField.Control>
-                  <Switch
+                  <InputSwitch
                     aria-label={t("consent.label")}
                     data-label="require-consent-toggle"
                     checked={values.enable_consent_screen}
@@ -755,7 +755,7 @@ export const AppearanceThemeSettings = forwardRef<
           <div className="flex justify-between items-center">
             <FormField.Label>{t("announcement.label")}</FormField.Label>
             <FormField.Control>
-              <Switch
+              <InputSwitch
                 aria-label={t("announcement.label")}
                 data-label="system-announcement-toggle"
                 checked={values.system_announcement_enabled}
@@ -850,7 +850,7 @@ export const AppearanceThemeSettings = forwardRef<
                   {t("announcementPopup.label")}
                 </FormField.Label>
                 <FormField.Control>
-                  <Switch
+                  <InputSwitch
                     aria-label={t("announcementPopup.label")}
                     data-label="system-announcement-popup-toggle"
                     checked={values.system_announcement_show_as_popup}

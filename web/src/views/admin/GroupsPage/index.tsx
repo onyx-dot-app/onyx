@@ -1,6 +1,5 @@
 "use client";
 
-import type { Route } from "next";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -86,7 +85,7 @@ function GroupsPage() {
           emptyStateText={t("list.empty.text")}
           onAction={
             canCreateGroup
-              ? () => router.push("/admin/groups/create" as Route)
+              ? () => router.push("/admin/groups/create")
               : undefined
           }
           actionLabel={canCreateGroup ? t("list.newGroup.label") : undefined}

@@ -18,12 +18,14 @@ from onyx.chat.models import (
     LlmStepResult,
     ToolCallSimple,
 )
+from onyx.chat.prompt_utils import build_language_section, with_language_section
 from onyx.configs.chat_configs import (
     DR_REPORT_LLM_TIMEOUT_S,
     SKIP_DEEP_RESEARCH_CLARIFICATION,
 )
 from onyx.configs.constants import MessageType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import SupportedLanguage
 from onyx.db.tools import get_tool_by_name
 from onyx.deep_research.dr_mock_tools import (
     RESEARCH_AGENT_TOOL_NAME,
@@ -110,6 +112,7 @@ def generate_final_report(
     turn_index: int,
     citation_mapping: CitationMapping,
     user_identity: LLMUserIdentity | None,
+    language_section: str,
     reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
     saved_reasoning: str | None = None,
     pre_answer_processing_time: float | None = None,
@@ -123,8 +126,11 @@ def generate_final_report(
     """
     with function_span("generate_report") as span:
         span.span_data.input = f"history_length={len(history)}, turn_index={turn_index}"
-        final_report_prompt = FINAL_REPORT_PROMPT.format(
-            current_datetime=get_current_llm_day_time(full_sentence=False),
+        final_report_prompt = with_language_section(
+            FINAL_REPORT_PROMPT.format(
+                current_datetime=get_current_llm_day_time(full_sentence=False),
+            ),
+            language_section,
         )
         system_prompt = ChatMessageSimple(
             message=final_report_prompt,
@@ -145,6 +151,8 @@ def generate_final_report(
             context_files=None,
             available_tokens=llm.config.max_input_tokens,
             all_injected_file_metadata=all_injected_file_metadata,
+            # The final report runs with no tools at all.
+            available_tool_names=set(),
         )
 
         citation_processor = DynamicCitationProcessor()
@@ -184,7 +192,7 @@ def generate_final_report(
             # but we'd still want to capture the reasoning from the think_tool of theprevious turn.
             state_container.set_reasoning_tokens(saved_reasoning)
 
-        span.span_data.output = final_report if final_report else None
+        span.span_data.output = final_report or None
         return has_reasoned
 
 
@@ -205,6 +213,7 @@ def run_deep_research_llm_loop(
     custom_agent_prompt: str | None,  # noqa: ARG001
     llm: LLM,
     token_counter: Callable[[str], int],
+    user_language: SupportedLanguage | None,
     reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
     skip_clarification: bool = False,
     user_identity: LLMUserIdentity | None = None,
@@ -236,6 +245,12 @@ def run_deep_research_llm_loop(
 
         available_tokens = llm.config.max_input_tokens
 
+        # The clarification, the research-agent reports and the final report reach the
+        # user, so they carry the reply-language line. The plan and the research tasks
+        # keep the query's language so the searches stay in it.
+        language_section = build_language_section(user_language)
+        language_tokens = token_counter(language_section)
+
         llm_step_result: LlmStepResult | None = None
 
         # Filter tools to only allow web search, internal search, and open URL
@@ -254,13 +269,17 @@ def run_deep_research_llm_loop(
         )
         if not SKIP_DEEP_RESEARCH_CLARIFICATION and not skip_clarification:
             with function_span("clarification_step") as span:
-                clarification_prompt = CLARIFICATION_PROMPT.format(
-                    current_datetime=get_current_llm_day_time(full_sentence=False),
-                    internal_search_clarification_guidance=internal_search_clarification_guidance,
+                clarification_prompt = with_language_section(
+                    CLARIFICATION_PROMPT.format(
+                        current_datetime=get_current_llm_day_time(full_sentence=False),
+                        internal_search_clarification_guidance=internal_search_clarification_guidance,
+                    ),
+                    language_section,
                 )
                 system_prompt = ChatMessageSimple(
                     message=clarification_prompt,
-                    token_count=300,  # Skips the exact token count but has enough leeway
+                    # Skips the exact token count but has enough leeway
+                    token_count=300 + language_tokens,
                     message_type=MessageType.SYSTEM,
                 )
 
@@ -273,6 +292,8 @@ def run_deep_research_llm_loop(
                     available_tokens=available_tokens,
                     last_n_user_messages=MAX_USER_MESSAGES_FOR_CONTEXT,
                     all_injected_file_metadata=all_injected_file_metadata,
+                    # These steps expose only mock control tools.
+                    available_tool_names=set(),
                 )
 
                 # Calculate tool processing duration for clarification step
@@ -338,6 +359,8 @@ def run_deep_research_llm_loop(
                 available_tokens=available_tokens,
                 last_n_user_messages=MAX_USER_MESSAGES_FOR_CONTEXT + 1,
                 all_injected_file_metadata=all_injected_file_metadata,
+                # Plan generation runs with no tools.
+                available_tool_names=set(),
             )
 
             research_plan_generator = run_llm_step_pkt_generator(
@@ -395,7 +418,7 @@ def run_deep_research_llm_loop(
             research_plan = llm_step_result.answer
             if research_plan is None:
                 raise RuntimeError("Deep Research failed to generate a research plan")
-            span.span_data.output = research_plan if research_plan else None
+            span.span_data.output = research_plan or None
 
         #########################################################
         # RESEARCH EXECUTION STEP
@@ -463,6 +486,7 @@ def run_deep_research_llm_loop(
                         citation_mapping=citation_mapping,
                         user_identity=user_identity,
                         reasoning_effort=reasoning_effort,
+                        language_section=language_section,
                         pre_answer_processing_time=elapsed_seconds,
                         all_injected_file_metadata=all_injected_file_metadata,
                     )
@@ -503,6 +527,8 @@ def run_deep_research_llm_loop(
                     available_tokens=available_tokens,
                     last_n_user_messages=MAX_USER_MESSAGES_FOR_CONTEXT,
                     all_injected_file_metadata=all_injected_file_metadata,
+                    # These steps expose only mock control tools.
+                    available_tool_names=set(),
                 )
 
                 # Use think tool processor for non-reasoning models to convert
@@ -568,6 +594,7 @@ def run_deep_research_llm_loop(
                         citation_mapping=citation_mapping,
                         user_identity=user_identity,
                         reasoning_effort=reasoning_effort,
+                        language_section=language_section,
                         pre_answer_processing_time=time.monotonic()
                         - processing_start_time,
                         all_injected_file_metadata=all_injected_file_metadata,
@@ -590,6 +617,7 @@ def run_deep_research_llm_loop(
                         citation_mapping=citation_mapping,
                         user_identity=user_identity,
                         reasoning_effort=reasoning_effort,
+                        language_section=language_section,
                         saved_reasoning=most_recent_reasoning,
                         pre_answer_processing_time=time.monotonic()
                         - processing_start_time,
@@ -665,6 +693,7 @@ def run_deep_research_llm_loop(
                             citation_mapping=citation_mapping,
                             user_identity=user_identity,
                             reasoning_effort=reasoning_effort,
+                            language_section=language_section,
                             pre_answer_processing_time=time.monotonic()
                             - processing_start_time,
                             all_injected_file_metadata=all_injected_file_metadata,
@@ -701,6 +730,7 @@ def run_deep_research_llm_loop(
                         is_reasoning_model=is_reasoning_model,
                         token_counter=token_counter,
                         citation_mapping=citation_mapping,
+                        language_section=language_section,
                         user_identity=user_identity,
                         # Session override wins in sub-agents. AUTO keeps the tuned LOW default.
                         reasoning_effort=(

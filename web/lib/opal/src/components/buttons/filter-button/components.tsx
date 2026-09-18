@@ -1,3 +1,5 @@
+"use client";
+
 import {
   Interactive,
   type InteractiveStatefulInteraction,
@@ -8,6 +10,7 @@ import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { SvgX } from "@opal/icons";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
 import { ChevronIcon } from "@opal/components/buttons/chevron";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -50,6 +53,7 @@ function FilterButton({
   interaction,
   ...statefulProps
 }: FilterButtonProps) {
+  const strings = useOpalStrings();
   // Derive open state: explicit prop > Radix data-state (injected via Slot chain)
   const dataState = (statefulProps as Record<string, unknown>)["data-state"] as
     | string
@@ -91,7 +95,7 @@ function FilterButton({
             icon={SvgX}
             size="2xs"
             prominence="tertiary"
-            tooltip="Clear filter"
+            tooltip={strings.clearFilter}
             interaction="hover"
             onClick={(e) => {
               e.stopPropagation();

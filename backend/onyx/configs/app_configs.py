@@ -985,6 +985,18 @@ REDIS_HEALTH_CHECK_INTERVAL = int(os.environ.get("REDIS_HEALTH_CHECK_INTERVAL", 
 # our redis client only, not celery's
 REDIS_POOL_MAX_CONNECTIONS = int(os.environ.get("REDIS_POOL_MAX_CONNECTIONS", 128))
 
+# Per-recv and connect deadlines in seconds for our redis client, not celery's.
+# A peer that keeps the TCP session open without replying raises after this
+# instead of holding the thread until restart. The read value caps BLPOP too.
+REDIS_SOCKET_CONNECT_TIMEOUT = float(
+    os.environ.get("REDIS_SOCKET_CONNECT_TIMEOUT") or 10
+)
+REDIS_SOCKET_TIMEOUT = float(os.environ.get("REDIS_SOCKET_TIMEOUT") or 30)
+REDIS_SOCKET_TIMEOUT_KWARGS: dict[str, float] = {
+    "socket_connect_timeout": REDIS_SOCKET_CONNECT_TIMEOUT,
+    "socket_timeout": REDIS_SOCKET_TIMEOUT,
+}
+
 # https://docs.celeryq.dev/en/stable/userguide/configuration.html#redis-backend-settings
 # should be one of "required", "optional", or "none"
 REDIS_SSL_CERT_REQS = os.getenv("REDIS_SSL_CERT_REQS", "none")
@@ -1350,6 +1362,11 @@ SHAREPOINT_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("SHAREPOINT_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
+# Largest mail attachment the Outlook connector downloads and extracts.
+OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD = int(
+    os.environ.get("OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD", 20 * 1024 * 1024)
+)
+
 # When True, group sync enumerates every Azure AD group in the tenant (expensive).
 # When False (default), only groups found in site role assignments are synced.
 # Can be overridden per-connector via the "exhaustive_ad_enumeration" key in
@@ -1358,12 +1375,20 @@ SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION = (
     os.environ.get("SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION", "").lower() == "true"
 )
 
+AIRTABLE_ATTACHMENT_SIZE_THRESHOLD = int(
+    os.environ.get("AIRTABLE_ATTACHMENT_SIZE_THRESHOLD", 10 * 1024 * 1024)
+)
+
 BLOB_STORAGE_SIZE_THRESHOLD = int(
     os.environ.get("BLOB_STORAGE_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
 BOX_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("BOX_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
+)
+
+DROPBOX_CONNECTOR_SIZE_THRESHOLD = int(
+    os.environ.get("DROPBOX_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
 JIRA_CONNECTOR_LABELS_TO_SKIP = [
@@ -1378,6 +1403,16 @@ JIRA_CONNECTOR_MAX_TICKET_SIZE = int(
 JIRA_SLIM_PAGE_SIZE = int(os.environ.get("JIRA_SLIM_PAGE_SIZE", 500))
 
 GONG_CONNECTOR_START_TIME = os.environ.get("GONG_CONNECTOR_START_TIME")
+
+# An occurrence is picked up by when the meeting ran, but its transcript
+# lands later, so each poll reaches back this far to catch ones that were
+# still processing. Zoom publishes no maximum for that lag, so raise this if
+# a deployment sees transcripts arrive later than the default covers.
+# Clamped at zero: a negative value would narrow the poll window instead of
+# widening it, quietly skipping occurrences the connector should have indexed.
+ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS = max(
+    0, int(os.environ.get("ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS") or 72)
+)
 
 GITHUB_CONNECTOR_BASE_URL = os.environ.get("GITHUB_CONNECTOR_BASE_URL") or None
 
@@ -1956,9 +1991,7 @@ SIGNUP_RATE_LIMIT_ENABLED = (
 MOCK_CONNECTOR_FILE_PATH = os.environ.get("MOCK_CONNECTOR_FILE_PATH")
 
 # Set to true to mock LLM responses for testing purposes
-MOCK_LLM_RESPONSE = (
-    os.environ.get("MOCK_LLM_RESPONSE") if os.environ.get("MOCK_LLM_RESPONSE") else None
-)
+MOCK_LLM_RESPONSE = os.environ.get("MOCK_LLM_RESPONSE") or None
 
 
 DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB = 20

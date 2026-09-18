@@ -12,71 +12,18 @@ not create — the new-model replacement for the old ``GLOBAL_CURATOR``
 coverage.
 """
 
-import io
-import json
 import os
 
-import httpx
 import pytest
 
 from onyx.db.enums import AccessType, Permission
 from onyx.server.documents.models import DocumentSource
-from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
+from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.user import DATestUser, UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
-
-
-def _upload_connector_file(
-    *,
-    user_performing_action: DATestUser,
-    file_name: str,
-    content: bytes,
-) -> tuple[str, str]:
-    headers = user_performing_action.headers.copy()
-    headers.pop("Content-Type", None)
-
-    response = client.post(
-        f"{API_SERVER_URL}/manage/admin/connector/file/upload",
-        files=[("files", (file_name, io.BytesIO(content), "text/plain"))],
-        headers=headers,
-    )
-    response.raise_for_status()
-    payload = response.json()
-    return payload["file_paths"][0], payload["file_names"][0]
-
-
-def _list_connector_files(
-    *,
-    connector_id: int,
-    user_performing_action: DATestUser,
-) -> httpx.Response:
-    return client.get(
-        f"{API_SERVER_URL}/manage/admin/connector/{connector_id}/files",
-        headers=user_performing_action.headers,
-    )
-
-
-def _update_connector_files(
-    *,
-    connector_id: int,
-    user_performing_action: DATestUser,
-    file_ids_to_remove: list[str],
-    new_file_name: str,
-    new_file_content: bytes,
-) -> httpx.Response:
-    headers = user_performing_action.headers.copy()
-    headers.pop("Content-Type", None)
-
-    return client.post(
-        f"{API_SERVER_URL}/manage/admin/connector/{connector_id}/files/update",
-        data={"file_ids_to_remove": json.dumps(file_ids_to_remove)},
-        files=[("files", (new_file_name, io.BytesIO(new_file_content), "text/plain"))],
-        headers=headers,
-    )
 
 
 def _create_connector_managers_group(
@@ -121,11 +68,10 @@ def test_manage_connectors_user_can_edit_public_file_connector() -> None:
     )
 
     # Admin owns a public file connector + cc-pair
-    initial_file_id, initial_file_name = _upload_connector_file(
-        user_performing_action=admin_user,
-        file_name="initial-file.txt",
-        content=b"initial file content",
+    upload = FileManager.upload_connector_file(
+        "initial-file.txt", b"initial file content", admin_user
     )
+    initial_file_id, initial_file_name = upload.file_paths[0], upload.file_names[0]
     connector = ConnectorManager.create(
         user_performing_action=admin_user,
         name="public_file_connector",
@@ -155,22 +101,18 @@ def test_manage_connectors_user_can_edit_public_file_connector() -> None:
     )
 
     # Editor can list files even without owning the cc-pair
-    list_response = _list_connector_files(
-        connector_id=connector.id,
-        user_performing_action=editor,
-    )
+    list_response = FileManager.list_connector_files(connector.id, editor)
     list_response.raise_for_status()
     assert any(f["file_id"] == initial_file_id for f in list_response.json()["files"])
 
     # Editor can update files on the public cc-pair — `_add_user_filters`
     # returns the cc-pair lookup unfiltered for any user holding
     # MANAGE_CONNECTORS (see onyx/db/connector_credential_pair.py:55).
-    update_response = _update_connector_files(
-        connector_id=connector.id,
-        user_performing_action=editor,
+    update_response = FileManager.update_connector_files(
+        connector.id,
+        editor,
         file_ids_to_remove=[initial_file_id],
-        new_file_name="editor-file.txt",
-        new_file_content=b"editor updated file",
+        files=[("editor-file.txt", b"editor updated file")],
     )
     update_response.raise_for_status()
     payload = update_response.json()

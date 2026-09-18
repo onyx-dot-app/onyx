@@ -11,6 +11,7 @@ import { Button, Divider, LineItemButton, Tag } from "@opal/components";
 import { useTableSize } from "@opal/components/table/TableSizeContext";
 import { SvgColumn, SvgCheck } from "@opal/icons";
 import { Popover } from "@opal/components/popover/components";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Popover UI
@@ -26,6 +27,7 @@ function ColumnVisibilityPopover<TData extends RowData>({
   columnVisibility,
 }: ColumnVisibilityPopoverProps<TData>) {
   const size = useTableSize();
+  const strings = useOpalStrings();
   const [open, setOpen] = useState(false);
 
   // User-defined columns only (exclude internal qualifier/actions)
@@ -47,12 +49,12 @@ function ColumnVisibilityPopover<TData extends RowData>({
           interaction={open ? "hover" : "rest"}
           size={size === "md" ? "sm" : "md"}
           prominence="tertiary"
-          tooltip="Columns"
+          tooltip={strings.columns}
         />
       </Popover.Trigger>
 
       <Popover.Content width="lg" align="end" side="bottom">
-        <Divider title="Shown Columns" />
+        <Divider title={strings.shownColumns} />
         <Popover.Menu>
           {dataColumns.map((column) => {
             const canHide = column.getCanHide();
@@ -72,7 +74,7 @@ function ColumnVisibilityPopover<TData extends RowData>({
                 rightChildren={
                   !canHide ? (
                     <div className="flex items-center">
-                      <Tag title="Always Shown" color="blue" />
+                      <Tag title={strings.alwaysShown} color="blue" />
                     </div>
                   ) : isVisible ? (
                     <SvgCheck size={16} className="text-action-selection-05" />

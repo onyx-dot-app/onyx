@@ -74,7 +74,7 @@ test.describe("Users page — layout", () => {
       "Groups",
       "Account Type",
       "Status",
-      "Last Updated",
+      "Last Active",
     ]) {
       await expect(
         usersPage.table.locator("th").filter({ hasText: header })

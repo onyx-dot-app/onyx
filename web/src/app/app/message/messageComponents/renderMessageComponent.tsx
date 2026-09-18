@@ -309,7 +309,7 @@ export const RendererComponent = memo(function RendererComponent({
 
   return (
     <RendererFn
-      packets={packets as any}
+      packets={packets}
       state={chatState}
       messageNodeId={messageNodeId}
       hasTimelineThinking={hasTimelineThinking}

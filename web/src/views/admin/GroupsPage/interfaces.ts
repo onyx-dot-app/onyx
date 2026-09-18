@@ -1,7 +1,4 @@
-import type {
-  UserGroupInfo,
-  UserRow,
-} from "@/views/admin/UsersPage/interfaces";
+import type { UserGroupInfo, UserRow } from "@/views/admin/UsersPage/types";
 
 export interface ApiKeyDescriptor {
   api_key_id: number;

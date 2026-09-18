@@ -3,13 +3,12 @@
 import { useState, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import type { Route } from "next";
 import { useSessionWatcher } from "@/lib/auth/hooks";
 import { getExtensionContext } from "@/lib/extension/utils";
 import { Modal } from "@opal/components";
 import { Button, Text } from "@opal/components";
 import { SvgLogOut, SvgCheckCircle, SvgXCircle } from "@opal/icons";
-import { SessionEndReason } from "@/lib/auth/types";
+import { SessionEndReason, type FastApiUsersErrorBody } from "@/lib/auth/types";
 import { SvgGoogle } from "@opal/logos";
 import { useCaptcha } from "@/lib/hooks/useCaptcha";
 import { verifyCaptchaForOAuth } from "@/lib/auth/svc";
@@ -19,6 +18,7 @@ import * as Yup from "yup";
 import { requestEmailVerification } from "@/lib/auth/svc";
 import Link from "next/link";
 import { useUser } from "@/providers/UserProvider";
+import { LOGIN_PATH, loginPath } from "@/lib/auth/paths";
 import {
   validateInternalRedirect,
   passwordHasUppercase,
@@ -52,7 +52,7 @@ export function AuthenticationShell({ children }: AuthenticationShellProps) {
     const { isExtension } = getExtensionContext();
     if (isExtension) {
       window.open(
-        window.location.origin + "/auth/login",
+        window.location.origin + LOGIN_PATH,
         "_blank",
         "noopener,noreferrer"
       );
@@ -60,13 +60,13 @@ export function AuthenticationShell({ children }: AuthenticationShellProps) {
     }
     // Round-trip the current location through login (OAuth `next` / SAML
     // RelayState) so the post-login redirect lands back here.
-    const returnTo = validateInternalRedirect(
-      window.location.pathname + window.location.search + window.location.hash
-    );
     router.push(
-      returnTo
-        ? (`/auth/login?next=${encodeURIComponent(returnTo)}` as Route)
-        : "/auth/login"
+      loginPath({
+        next:
+          window.location.pathname +
+          window.location.search +
+          window.location.hash,
+      })
     );
   }
 
@@ -364,7 +364,9 @@ export function EmailPasswordForm({
       );
 
       if (!response.ok) {
-        const errorBody: any = await response.json().catch(() => ({}));
+        const errorBody: FastApiUsersErrorBody = await response
+          .json()
+          .catch(() => ({}));
         const errorDetail = errorBody.detail;
         let errorMsg = tCommon("errors.unknown.message");
         if (response.status === 429) {
@@ -406,7 +408,9 @@ export function EmailPasswordForm({
         validatedNextUrl ??
         `/app${isSignup && !isJoin ? "?new_team=true" : ""}`;
     } else {
-      const errorBody: any = await loginResponse.json().catch(() => ({}));
+      const errorBody: FastApiUsersErrorBody = await loginResponse
+        .json()
+        .catch(() => ({}));
       const errorDetail = errorBody.detail;
       let errorMsg = tCommon("errors.unknown.message");
       if (loginResponse.status === 429) {

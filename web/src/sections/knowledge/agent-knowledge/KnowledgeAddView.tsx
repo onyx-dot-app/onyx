@@ -3,11 +3,11 @@
 import { memo } from "react";
 import { useTranslations } from "next-intl";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/texts/Text";
 import { getSourceMetadata } from "@/lib/sources";
 import type { ConnectedSource } from "@/lib/hierarchy/interfaces";
 import type { ValidSources } from "@/lib/types";
+import { LineItemButton } from "@opal/components";
 import { SvgFiles, SvgFolder } from "@opal/icons";
 
 interface KnowledgeAddViewProps {
@@ -49,10 +49,17 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
         wrap
       >
         {vectorDbEnabled && (
-          <LineItem
+          <LineItemButton
+            sizePreset="main-ui"
+            variant="section"
             icon={SvgFolder}
+            title={t("addView.documentSets.label")}
             onClick={onNavigateToDocumentSets}
-            emphasized={selectedDocumentSetIds.length > 0}
+            selectVariant={
+              selectedDocumentSetIds.length > 0
+                ? "select-heavy"
+                : "select-light"
+            }
             aria-label="knowledge-add-document-sets"
             rightChildren={
               selectedDocumentSetIds.length > 0 ? (
@@ -61,16 +68,19 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
                 </Text>
               ) : undefined
             }
-          >
-            {t("addView.documentSets.label")}
-          </LineItem>
+          />
         )}
 
-        <LineItem
+        <LineItemButton
+          sizePreset="main-ui"
+          variant="section"
           icon={SvgFiles}
+          title={t("addView.yourFiles.label")}
           description={t("addView.yourFiles.description")}
           onClick={onNavigateToRecent}
-          emphasized={selectedFileIds.length > 0}
+          selectVariant={
+            selectedFileIds.length > 0 ? "select-heavy" : "select-light"
+          }
           aria-label="knowledge-add-files"
           rightChildren={
             selectedFileIds.length > 0 ? (
@@ -79,9 +89,7 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
               </Text>
             ) : undefined
           }
-        >
-          {t("addView.yourFiles.label")}
-        </LineItem>
+        />
       </GeneralLayouts.Section>
 
       {vectorDbEnabled && connectedSources.length > 0 && (
@@ -95,12 +103,18 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
             const selectionCount =
               sourceSelectionCounts.get(connectedSource.source) ?? 0;
             return (
-              <LineItem
+              <LineItemButton
                 key={connectedSource.source}
+                sizePreset="main-ui"
+                variant="section"
                 icon={sourceMetadata.icon}
-                strokeIcon={false}
+                title={sourceMetadata.displayName}
                 onClick={() => onNavigateToSource(connectedSource.source)}
-                emphasized={isSelected || selectionCount > 0}
+                selectVariant={
+                  isSelected || selectionCount > 0
+                    ? "select-heavy"
+                    : "select-light"
+                }
                 aria-label={`knowledge-add-source-${connectedSource.source}`}
                 rightChildren={
                   selectionCount > 0 ? (
@@ -109,9 +123,7 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
                     </Text>
                   ) : undefined
                 }
-              >
-                {sourceMetadata.displayName}
-              </LineItem>
+              />
             );
           })}
         </>

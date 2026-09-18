@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@opal/utils";
-import { FieldContext } from "./FieldContext";
+import { FieldContext } from "@opal/form";
 import {
   ControlProps,
   DescriptionProps,
@@ -13,10 +13,10 @@ import {
 } from "./types";
 import React, { useId, useMemo } from "react";
 import { useTranslations } from "next-intl";
-import { useFieldContext } from "./FieldContext";
+import { useFieldContext } from "@opal/form";
 import { Slot } from "@radix-ui/react-slot";
 import Text from "../texts/Text";
-import { FieldMessage } from "../messages/FieldMessage";
+import { FieldMessage } from "@opal/form";
 
 export const FormFieldRoot: React.FC<FormFieldRootProps> = ({
   id,

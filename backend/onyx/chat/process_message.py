@@ -67,10 +67,11 @@ from onyx.chat.models import (
 )
 from onyx.chat.prompt_utils import calculate_reserved_tokens
 from onyx.chat.save_chat import save_chat_turn
+from onyx.chat.search_receipts import search_receipts_enabled
 from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
 from onyx.chat.stop_signal_checker import reset_cancel_status
 from onyx.chat.stream_buffer import StreamBufferWriter
-from onyx.configs.app_configs import DISABLE_VECTOR_DB, INTEGRATION_TESTS_MODE
+from onyx.configs.app_configs import DEV_MODE, DISABLE_VECTOR_DB, INTEGRATION_TESTS_MODE
 from onyx.configs.chat_configs import CHAT_HEARTBEAT_INTERVAL_S
 from onyx.configs.constants import (
     DEFAULT_PERSONA_ID,
@@ -151,7 +152,7 @@ from onyx.tools.tool_constructor import (
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
-from onyx.utils.timing import log_function_time
+from onyx.utils.timing import log_function_time, log_generator_function_time
 from shared_configs.contextvars import (
     CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR,
     CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR,
@@ -517,12 +518,20 @@ def _build_tool_metadata(user_file: UserFile) -> FileToolMetadata:
     Delegates to ``build_file_context`` so that the file ID exposed to the
     LLM is always consistent with what FileReaderTool expects.
     """
-    return build_file_context(
+    file_type = mime_type_to_chat_file_type(user_file.file_type)
+    metadata = build_file_context(
         tool_file_id=str(user_file.id),
         filename=user_file.name,
-        file_type=mime_type_to_chat_file_type(user_file.file_type),
+        file_type=file_type,
         approx_char_count=(user_file.token_count or 0) * APPROX_CHARS_PER_TOKEN,
     ).tool_metadata
+    # `_load_context_user_files_for_tools` only loads metadata-only files into
+    # `chat_files_for_tools`, so those are the only context files PythonTool
+    # ever receives. The rest are listed for the LLM but never staged — only
+    # read_file can fetch them.
+    return metadata.model_copy(
+        update={"staged_for_tools": file_type.use_metadata_only()}
+    )
 
 
 def determine_search_params(
@@ -842,6 +851,10 @@ def build_chat_turn(
                     # We don't know the exact size without loading the file,
                     # but 0 signals "unknown" to the LLM.
                     approx_char_count=0,
+                    # These messages are filtered out of chat_history just
+                    # below, so load_all_chat_files never sees them and the
+                    # bytes never reach chat_files_for_tools.
+                    staged_for_tools=False,
                 )
         # Filter chat_history to only messages after the cutoff
         chat_history = [m for m in chat_history if m.id > cutoff_id]
@@ -928,6 +941,12 @@ def build_chat_turn(
         and search_tool_id is not None
         and forced_tool_id == search_tool_id
     ):
+        forced_tool_id = None
+
+    # construct_tools skips disabled tools, and a forced id it did not build fails
+    # the whole message. Callers name the forced tool from the persona's attached
+    # tools, which stay attached when an admin disables one.
+    if forced_tool_id in {tool.id for tool in all_tools if not tool.enabled}:
         forced_tool_id = None
 
     # TODO(nmgarza5): Once summarization is done, we don't need to load all files from the beginning.
@@ -1184,6 +1203,10 @@ def _run_models(
 
     # Workspace toggle: infer source/time filters from the query (default on).
     auto_detect_search_filters = load_settings().auto_detect_search_filters is not False
+    deep_research = n_models == 1 and setup.new_msg_req.deep_research
+    # Evaluated once per message so every model in the turn sees the same answer.
+    # The deep research loop does not take receipts, so skip the flag lookup there.
+    search_receipts = False if deep_research else search_receipts_enabled(user)
 
     merged_queue: queue.Queue[tuple[int, Packet | Exception | object]] = queue.Queue()
 
@@ -1369,7 +1392,7 @@ def _run_models(
                 )
 
             # Per-thread copy: run_llm_loop mutates simple_chat_history in-place.
-            if n_models == 1 and setup.new_msg_req.deep_research:
+            if deep_research:
                 if setup.chat_session_project_id:
                     raise RuntimeError("Deep research is not supported for projects")
                 run_deep_research_llm_loop(
@@ -1385,6 +1408,7 @@ def _run_models(
                     user_identity=setup.user_identity,
                     chat_session_id=str(setup.chat_session_id),
                     all_injected_file_metadata=setup.all_injected_file_metadata,
+                    user_language=setup.user_memory_context.user_info.language,
                 )
             else:
                 run_llm_loop(
@@ -1406,6 +1430,7 @@ def _run_models(
                     include_citations=setup.new_msg_req.include_citations,
                     all_injected_file_metadata=setup.all_injected_file_metadata,
                     inject_memories_in_prompt=user.use_memories,
+                    enable_search_receipts=search_receipts,
                 )
 
             model_succeeded[model_idx] = True
@@ -1551,7 +1576,7 @@ def _run_models(
                     _publish(
                         StreamingError(
                             error=error_msg,
-                            stack_trace=stack_trace,
+                            stack_trace=stack_trace if DEV_MODE else None,
                             error_code=info.error_code,
                             is_retryable=info.is_retryable,
                             details=_model_error_details(item, model_llm, model_idx),
@@ -1819,7 +1844,7 @@ def _stream_chat_turn(
         )
         yield StreamingError(
             error=e.client_error_msg,
-            stack_trace=stack_trace,
+            stack_trace=stack_trace if DEV_MODE else None,
             error_code=e.error_code,
             is_retryable=e.is_retryable,
             details={
@@ -1843,7 +1868,7 @@ def _stream_chat_turn(
             )
             yield StreamingError(
                 error=error_info.message,
-                stack_trace=stack_trace,
+                stack_trace=stack_trace if DEV_MODE else None,
                 error_code=error_info.error_code,
                 is_retryable=error_info.is_retryable,
                 details={
@@ -1854,7 +1879,7 @@ def _stream_chat_turn(
         else:
             yield StreamingError(
                 error="Failed to initialize the chat. Please check your configuration and try again.",
-                stack_trace=stack_trace,
+                stack_trace=stack_trace if DEV_MODE else None,
                 error_code="INIT_FAILED",
                 is_retryable=True,
             )
@@ -1878,6 +1903,7 @@ def _stream_chat_turn(
             logger.exception("Error in setting processing status")
 
 
+@log_generator_function_time()
 def handle_stream_message_objects(
     new_msg_req: SendMessageRequest,
     user: User,
@@ -1889,7 +1915,12 @@ def handle_stream_message_objects(
     slack_context: SlackContext | None = None,
     external_state_container: ChatStateContainer | None = None,
 ) -> AnswerStream:
-    """Single-model streaming entrypoint. For multi-model comparison, use ``handle_multi_model_stream``."""
+    """Single-model streaming entrypoint. For multi-model comparison, use ``handle_multi_model_stream``.
+
+    Emits a ``latency`` telemetry record for the whole turn once the stream is
+    exhausted or closed. Callers must pass ``user`` as a keyword argument so the
+    record carries the user id.
+    """
     yield from _stream_chat_turn(
         new_msg_req=new_msg_req,
         user=user,
@@ -1918,6 +1949,7 @@ def _build_model_display_name(override: LLMOverride | None, llm: LLM) -> str:
     return llm.config.model_name
 
 
+@log_generator_function_time()
 def handle_multi_model_stream(
     new_msg_req: SendMessageRequest,
     user: User,

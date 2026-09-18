@@ -67,9 +67,9 @@ def upsert_staging_entity(
         )
         .on_conflict_do_update(
             index_elements=["id_name"],
-            set_=dict(
-                occurrences=KGEntityExtractionStaging.occurrences + occurrences,
-            ),
+            set_={
+                "occurrences": KGEntityExtractionStaging.occurrences + occurrences,
+            },
         )
         .returning(KGEntityExtractionStaging)
     )
@@ -123,16 +123,16 @@ def transfer_entity(
         )
         .on_conflict_do_update(
             index_elements=["name", "entity_type_id_name", "document_id"],
-            set_=dict(
-                occurrences=KGEntity.occurrences + entity.occurrences,
-                attributes=KGEntity.attributes.op("||")(
+            set_={
+                "occurrences": KGEntity.occurrences + entity.occurrences,
+                "attributes": KGEntity.attributes.op("||")(
                     literal(entity.attributes, JSONB)
                 ),
-                entity_key=func.coalesce(KGEntity.entity_key, entity.entity_key),
-                parent_key=func.coalesce(KGEntity.parent_key, entity.parent_key),
-                event_time=entity.event_time,
-                time_updated=datetime.now(),
-            ),
+                "entity_key": func.coalesce(KGEntity.entity_key, entity.entity_key),
+                "parent_key": func.coalesce(KGEntity.parent_key, entity.parent_key),
+                "event_time": entity.event_time,
+                "time_updated": datetime.now(),
+            },
         )
         .returning(KGEntity)
     )

@@ -7,12 +7,12 @@ ARG BASE_IMAGE_REGISTRY=docker.io
 # no extra registry access. CI overrides both with the matching Docker Hardened Images from
 # dhi.io, which need a Docker account with DHI catalog access.
 # Refresh a digest with: docker buildx imagetools inspect <image reference>
-ARG NODE_BUILDER_IMAGE=${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:0711b541c1c33a8a530ac4f0d391baa9a15b3d804695b1b24a47daa5fb60e74d
-ARG NODE_RUNTIME_IMAGE=${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:0711b541c1c33a8a530ac4f0d391baa9a15b3d804695b1b24a47daa5fb60e74d
+ARG NODE_BUILDER_IMAGE=${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:50c3b2f6988dfc307b86e5301d69611af31f4789bdf232863b07d3b02fe55ae0
+ARG NODE_RUNTIME_IMAGE=${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:50c3b2f6988dfc307b86e5301d69611af31f4789bdf232863b07d3b02fe55ae0
 
 # bun binary source, in its own stage because buildx only expands the registry ARG in a FROM,
 # not in `COPY --from=`. Use the glibc (Debian) build so it runs on the glibc node images.
-FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS bun_source
+FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1@sha256:9114c058aeae42162ee16dd5084b95fe9473970bb6bcb5b232ab1630f0546895 AS bun_source
 
 # Build stage. Needs a root user plus a shell and npm/npx, which both the default slim image
 # and the DHI "-dev" variant provide.

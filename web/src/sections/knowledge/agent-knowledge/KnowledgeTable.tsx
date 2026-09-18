@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import Text from "@/refresh-components/texts/Text";
-import { Checkbox, Divider, InputTypeIn, Spacer } from "@opal/components";
+import { InputCheckbox, Divider, InputTypeIn, Spacer } from "@opal/components";
 import { SvgFilter } from "@opal/icons";
 
 export interface KnowledgeTableColumn<T> {
@@ -117,7 +117,7 @@ export function KnowledgeTable<T>({
                 }
               >
                 <TableLayouts.CheckboxCell>
-                  <Checkbox
+                  <InputCheckbox
                     checked={isSelected}
                     onCheckedChange={() => onToggleItem(id)}
                   />

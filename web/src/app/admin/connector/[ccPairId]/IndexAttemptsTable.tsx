@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   Table,
   TableHead,
@@ -38,6 +38,7 @@ export function IndexAttemptsTable({
   onPageChange,
 }: IndexingAttemptsTableProps) {
   const t = useTranslations("admin.connector");
+  const locale = useLocale();
   const [indexAttemptTracePopupId, setIndexAttemptTracePopupId] = useState<
     number | null
   >(null);
@@ -120,7 +121,7 @@ export function IndexAttemptsTable({
               >
                 <TableCell>
                   {indexAttempt.time_started
-                    ? localizeAndPrettify(indexAttempt.time_started)
+                    ? localizeAndPrettify(indexAttempt.time_started, locale)
                     : "-"}
                 </TableCell>
                 <TableCell>

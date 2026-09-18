@@ -191,9 +191,9 @@ def cloud_beat_task_generator(
 
             self.app.send_task(
                 task_name,
-                kwargs=dict(
-                    tenant_id=tenant_id,
-                ),
+                kwargs={
+                    "tenant_id": tenant_id,
+                },
                 queue=queue,
                 priority=priority,
                 expires=expires,

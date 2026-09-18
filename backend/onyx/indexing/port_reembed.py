@@ -59,10 +59,15 @@ from onyx.indexing.chunker import (
 )
 from onyx.indexing.embedder import IndexingEmbedder
 from onyx.indexing.models import DocAwareChunk, IndexChunk
+from onyx.tracing.framework.create import ensure_trace
+from onyx.tracing.framework.traces import TraceContentMode
 
 if TYPE_CHECKING:
     from onyx.llm.interfaces import LLM
     from onyx.natural_language_processing.utils import BaseTokenizer
+
+
+CONTEXTUAL_RAG_REEMBED_TRACE_NAME = "contextual_rag_reembed"
 
 
 class ReembedStrategy(enum.Enum):
@@ -430,12 +435,16 @@ def _augmentation_reembed(
         from onyx.indexing.indexing_pipeline import add_contextual_summaries
 
         # Groups by source_document.id internally, so the mixed-doc input is fine.
-        add_contextual_summaries(
-            chunks=doc_aware_chunks,
-            llm=ctx.llm,
-            tokenizer=ctx.tokenizer,
-            chunk_token_limit=ctx.chunk_token_limit,
-        )
+        with ensure_trace(
+            CONTEXTUAL_RAG_REEMBED_TRACE_NAME,
+            content_mode=TraceContentMode.METADATA_ONLY,
+        ):
+            add_contextual_summaries(
+                chunks=doc_aware_chunks,
+                llm=ctx.llm,
+                tokenizer=ctx.tokenizer,
+                chunk_token_limit=ctx.chunk_token_limit,
+            )
 
     embedded = embedder.embed_chunks(doc_aware_chunks)
     # Pair each stored chunk with its OWN vector by identity, not list position.

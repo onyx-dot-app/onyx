@@ -200,3 +200,31 @@ def test_validate_salesforce_access_blurb_update() -> None:
     assert len(filtered_chunks) == 1
     assert len(filtered_chunks[0].blurb) <= BLURB_SIZE
     assert filtered_chunks[0].blurb.startswith(section)
+
+
+def test_censored_chunk_removes_derived_text() -> None:
+    allowed = "Allowed record. "
+    denied = "Private record."
+    chunk = create_test_chunk(
+        "doc1",
+        1,
+        allowed + denied,
+        {
+            0: "https://salesforce.com/allowed",
+            len(allowed): "https://salesforce.com/denied",
+        },
+    )
+    chunk.match_highlights = [denied]
+    chunk.doc_summary = denied
+    chunk.chunk_context = denied
+
+    result = censor_salesforce_chunks(
+        [chunk], "test@example.com", access_map={"allowed": True, "denied": False}
+    )
+
+    assert len(result) == 1
+    assert result[0].content.strip() == allowed.strip()
+    assert result[0].match_highlights == []
+    assert result[0].doc_summary == ""
+    assert result[0].chunk_context == ""
+    assert chunk.doc_summary == denied

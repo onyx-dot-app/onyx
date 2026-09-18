@@ -25,7 +25,7 @@ export const FILE_TYPE_DEFINITIONS: Record<
       allowedExtensions: [".pfx"],
     },
     description:
-      "Please upload a .pfx file containing the private key for SharePoint. The file size must be under 10KB.",
+      "Please upload the .pfx file containing the private key of the app registration. The file size must be under 10KB.",
   },
 };
 
@@ -105,7 +105,7 @@ export function createTypedFile(
 
 export function isTypedFileField(fieldKey: string): boolean {
   // Define which fields should be typed files
-  const typedFileFields = new Set(["sp_private_key"]);
+  const typedFileFields = new Set(["sp_private_key", "outlook_private_key"]);
   return typedFileFields.has(fieldKey);
 }
 
@@ -115,6 +115,8 @@ export function getFileTypeDefinitionForField(
 ): FileTypeCategory | null {
   const fieldToTypeMap: Record<string, FileTypeCategory> = {
     sp_private_key: FileTypeCategory.SHAREPOINT_PFX_FILE,
+    // The same PFX bundle rules apply to every Microsoft app registration.
+    outlook_private_key: FileTypeCategory.SHAREPOINT_PFX_FILE,
   };
 
   return fieldToTypeMap[fieldKey] || null;

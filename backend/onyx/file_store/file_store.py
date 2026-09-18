@@ -5,9 +5,7 @@ from abc import ABC, abstractmethod
 from io import BytesIO
 from typing import IO, TYPE_CHECKING, Any, NotRequired, TypedDict, cast
 
-import boto3
 import puremagic
-from botocore.config import Config
 from botocore.exceptions import ClientError
 from sqlalchemy.orm import Session
 
@@ -222,6 +220,10 @@ class S3BackedFileStore(FileStore):
         """Initialize S3 client if not already done"""
         if self._s3_client is None:
             try:
+                # Imported here: boto3 costs ~16 MB and most workers never build an S3 client.
+                import boto3
+                from botocore.config import Config
+
                 client_kwargs: dict[str, Any] = {
                     "service_name": "s3",
                     "region_name": self._aws_region_name,

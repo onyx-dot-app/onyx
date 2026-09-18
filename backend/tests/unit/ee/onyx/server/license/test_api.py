@@ -1,11 +1,20 @@
 """Tests for license API utilities."""
 
+import inspect
 from datetime import datetime, timedelta, timezone
+from types import FunctionType
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ee.onyx.server.license.api import claim_license
+from ee.onyx.server.license.api import (
+    claim_license,
+    delete_license,
+    get_license_status,
+    get_seat_usage,
+    refresh_license_cache_endpoint,
+    upload_license,
+)
 from ee.onyx.server.license.models import LicensePayload, PlanType
 from ee.onyx.utils.license import (
     LicenseNotStoredError,
@@ -106,11 +115,10 @@ class TestClaimLicenseBustsBillingCache:
     """The cached snapshot feeds the plan, period end and status the page
     renders, so a claim that leaves it cached shows the pre-change plan."""
 
-    @pytest.mark.asyncio
     @patch("ee.onyx.server.license.api.invalidate_billing_info_cache")
     @patch("ee.onyx.server.license.api.reclaim_license_from_control_plane")
     @patch("ee.onyx.server.license.api.MULTI_TENANT", False)
-    async def test_reclaim_busts_the_billing_snapshot(
+    def test_reclaim_busts_the_billing_snapshot(
         self,
         mock_reclaim: MagicMock,
         mock_invalidate: MagicMock,
@@ -129,15 +137,14 @@ class TestClaimLicenseBustsBillingCache:
             plan_type=PlanType.MONTHLY,
         )
 
-        await claim_license(_=MagicMock(), db_session=MagicMock())
+        claim_license(_=MagicMock(), db_session=MagicMock())
 
         mock_invalidate.assert_called_once()
 
-    @pytest.mark.asyncio
     @patch("ee.onyx.server.license.api.invalidate_billing_info_cache")
     @patch("ee.onyx.server.license.api.reclaim_license_from_control_plane")
     @patch("ee.onyx.server.license.api.MULTI_TENANT", False)
-    async def test_a_failed_claim_leaves_the_snapshot_alone(
+    def test_a_failed_claim_leaves_the_snapshot_alone(
         self,
         mock_reclaim: MagicMock,
         mock_invalidate: MagicMock,
@@ -148,7 +155,7 @@ class TestClaimLicenseBustsBillingCache:
         mock_reclaim.side_effect = LicenseNotStoredError("nothing stored")
 
         with pytest.raises(OnyxError):
-            await claim_license(_=MagicMock(), db_session=MagicMock())
+            claim_license(_=MagicMock(), db_session=MagicMock())
 
         mock_invalidate.assert_not_called()
 
@@ -158,11 +165,10 @@ class TestClaimSurfacesWhyItFailed:
     Collapsing them into one message points an admin whose license was refused
     at a checkout that is not their problem."""
 
-    @pytest.mark.asyncio
     @patch("ee.onyx.server.license.api.invalidate_billing_info_cache")
     @patch("ee.onyx.server.license.api.reclaim_license_from_control_plane")
     @patch("ee.onyx.server.license.api.MULTI_TENANT", False)
-    async def test_a_rejection_reports_the_upstream_reason(
+    def test_a_rejection_reports_the_upstream_reason(
         self, mock_reclaim: MagicMock, _mock_invalidate: MagicMock
     ) -> None:
         mock_reclaim.side_effect = LicenseRejectedError(
@@ -170,21 +176,99 @@ class TestClaimSurfacesWhyItFailed:
         )
 
         with pytest.raises(OnyxError) as exc:
-            await claim_license(_=MagicMock(), db_session=MagicMock())
+            claim_license(_=MagicMock(), db_session=MagicMock())
 
         assert "Invalid license" in str(exc.value.detail)
         assert "session_id" not in str(exc.value.detail)
 
-    @pytest.mark.asyncio
     @patch("ee.onyx.server.license.api.invalidate_billing_info_cache")
     @patch("ee.onyx.server.license.api.reclaim_license_from_control_plane")
     @patch("ee.onyx.server.license.api.MULTI_TENANT", False)
-    async def test_nothing_stored_still_points_at_checkout(
+    def test_nothing_stored_still_points_at_checkout(
         self, mock_reclaim: MagicMock, _mock_invalidate: MagicMock
     ) -> None:
         mock_reclaim.side_effect = LicenseNotStoredError("nothing stored")
 
         with pytest.raises(OnyxError) as exc:
-            await claim_license(_=MagicMock(), db_session=MagicMock())
+            claim_license(_=MagicMock(), db_session=MagicMock())
 
         assert "session_id" in str(exc.value.detail)
+
+
+class TestClaimUsesTheCheckoutSession:
+    """The session_id branch is how a fresh Stripe checkout becomes a license.
+    It is also the branch that makes the 30s control-plane call."""
+
+    @patch("ee.onyx.server.license.api.invalidate_billing_info_cache")
+    @patch("ee.onyx.server.license.api.verify_and_store_license")
+    @patch("ee.onyx.server.license.api.license_from_control_plane_response")
+    @patch("ee.onyx.server.license.api.requests.post")
+    @patch("ee.onyx.server.license.api.MULTI_TENANT", False)
+    def test_a_checkout_session_is_exchanged_for_a_license(
+        self,
+        mock_post: MagicMock,
+        mock_from_response: MagicMock,
+        mock_store: MagicMock,
+        mock_invalidate: MagicMock,
+    ) -> None:
+        now = datetime.now(timezone.utc)
+        mock_store.return_value = LicensePayload(
+            version="1.0",
+            tenant_id="tenant_123",
+            organization_name="Test Org",
+            issued_at=now,
+            expires_at=now + timedelta(days=30),
+            seats=10,
+            plan_type=PlanType.MONTHLY,
+        )
+
+        result = claim_license(
+            session_id="cs_test_123", _=MagicMock(), db_session=MagicMock()
+        )
+
+        assert result.success
+        mock_post.return_value.raise_for_status.assert_called_once()
+        mock_from_response.assert_called_once_with(mock_post.return_value)
+        # The checkout id is attacker-supplied, so the stored tenant must win.
+        assert mock_store.call_args.kwargs["keep_stored_tenant"] is True
+        mock_invalidate.assert_called_once()
+
+    @patch("ee.onyx.server.license.api.reclaim_license_from_control_plane")
+    @patch("ee.onyx.server.license.api.requests.post")
+    @patch("ee.onyx.server.license.api.MULTI_TENANT", False)
+    def test_without_a_session_id_it_reclaims_instead(
+        self, mock_post: MagicMock, mock_reclaim: MagicMock
+    ) -> None:
+        """Guards the branch split: no checkout call on the reclaim path."""
+        mock_reclaim.side_effect = LicenseNotStoredError("nothing stored")
+
+        with pytest.raises(OnyxError):
+            claim_license(_=MagicMock(), db_session=MagicMock())
+
+        mock_post.assert_not_called()
+
+
+class TestLicenseHandlersStayOffTheEventLoop:
+    """Every handler blocks: control-plane HTTP, sync SQLAlchemy, RSA verify
+    that reads a key off disk, Redis. Declared `async def` they run on the
+    event loop and stall the whole worker. Ruff's ASYNC210 only catches the one
+    that calls `requests` by hand, so the rest are guarded here."""
+
+    @pytest.mark.parametrize(
+        "handler",
+        [
+            get_license_status,
+            get_seat_usage,
+            claim_license,
+            upload_license,
+            refresh_license_cache_endpoint,
+            delete_license,
+        ],
+    )
+    def test_the_handler_is_not_a_coroutine_function(
+        self, handler: FunctionType
+    ) -> None:
+        assert not inspect.iscoroutinefunction(handler), (
+            f"{handler.__name__} must stay sync `def` so FastAPI runs it in the "
+            "threadpool; see the module docstring."
+        )

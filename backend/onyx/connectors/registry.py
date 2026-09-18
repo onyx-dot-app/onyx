@@ -132,6 +132,10 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.teams.connector",
         class_name="TeamsConnector",
     ),
+    DocumentSource.OUTLOOK: ConnectorMapping(
+        module_path="onyx.connectors.outlook.connector",
+        class_name="OutlookConnector",
+    ),
     DocumentSource.SALESFORCE: ConnectorMapping(
         module_path="onyx.connectors.salesforce.connector",
         class_name="SalesforceConnector",
@@ -191,6 +195,10 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.FIREFLIES: ConnectorMapping(
         module_path="onyx.connectors.fireflies.connector",
         class_name="FirefliesConnector",
+    ),
+    DocumentSource.ZOOM: ConnectorMapping(
+        module_path="onyx.connectors.zoom.connector",
+        class_name="ZoomConnector",
     ),
     DocumentSource.EGNYTE: ConnectorMapping(
         module_path="onyx.connectors.egnyte.connector",

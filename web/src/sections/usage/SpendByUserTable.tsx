@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
-  InputSelect,
+  InputSingleSelect,
   InputTypeIn,
   Table,
   Text,
@@ -240,40 +240,40 @@ export default function SpendByUserTable({
         <div className="flex w-full flex-col gap-2 sm:ms-auto sm:w-auto sm:flex-row">
           {models.length > 0 && (
             <div className="w-full sm:w-44">
-              <InputSelect value={model} onValueChange={setModel}>
-                <InputSelect.Trigger
+              <InputSingleSelect value={model} onValueChange={setModel}>
+                <InputSingleSelect.Trigger
                   placeholder={t("spendByUser.filters.allModels.label")}
                 />
-                <InputSelect.Content>
-                  <InputSelect.Item value={ALL}>
+                <InputSingleSelect.Content>
+                  <InputSingleSelect.Item value={ALL}>
                     {t("spendByUser.filters.allModels.label")}
-                  </InputSelect.Item>
+                  </InputSingleSelect.Item>
                   {models.map((option) => (
-                    <InputSelect.Item key={option} value={option}>
+                    <InputSingleSelect.Item key={option} value={option}>
                       {option}
-                    </InputSelect.Item>
+                    </InputSingleSelect.Item>
                   ))}
-                </InputSelect.Content>
-              </InputSelect>
+                </InputSingleSelect.Content>
+              </InputSingleSelect>
             </div>
           )}
           {flows.length > 0 && (
             <div className="w-full sm:w-40">
-              <InputSelect value={flow} onValueChange={setFlow}>
-                <InputSelect.Trigger
+              <InputSingleSelect value={flow} onValueChange={setFlow}>
+                <InputSingleSelect.Trigger
                   placeholder={t("spendByUser.filters.allFlows.label")}
                 />
-                <InputSelect.Content>
-                  <InputSelect.Item value={ALL}>
+                <InputSingleSelect.Content>
+                  <InputSingleSelect.Item value={ALL}>
                     {t("spendByUser.filters.allFlows.label")}
-                  </InputSelect.Item>
+                  </InputSingleSelect.Item>
                   {flows.map((option) => (
-                    <InputSelect.Item key={option} value={option}>
+                    <InputSingleSelect.Item key={option} value={option}>
                       {option}
-                    </InputSelect.Item>
+                    </InputSingleSelect.Item>
                   ))}
-                </InputSelect.Content>
-              </InputSelect>
+                </InputSingleSelect.Content>
+              </InputSingleSelect>
             </div>
           )}
         </div>

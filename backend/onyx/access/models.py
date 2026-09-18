@@ -217,12 +217,12 @@ class DocumentAccess(ExternalAccess):
         object.__setattr__(
             obj,
             "external_user_emails",
-            {external_email for external_email in external_user_emails},
+            set(external_user_emails),
         )
         object.__setattr__(
             obj,
             "external_user_group_ids",
-            {external_group_id for external_group_id in external_user_group_ids},
+            set(external_user_group_ids),
         )
         object.__setattr__(obj, "is_public", is_public)
 
