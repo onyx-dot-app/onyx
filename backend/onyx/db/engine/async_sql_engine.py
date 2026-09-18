@@ -1,6 +1,6 @@
 import asyncio
 import threading
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from typing import Any, AsyncContextManager
 
@@ -33,13 +33,41 @@ from onyx.db.engine.sql_engine import (
     build_connection_string,
     is_valid_schema_name,
 )
+from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import get_current_tenant_id
+
+logger = setup_logger()
 
 # One async engine per shard, created lazily. With no sharding configured this holds
 # exactly one entry and behaves as the previous process-global singleton did.
 _ASYNC_ENGINES: dict[str, AsyncEngine] = {}
 _ASYNC_ENGINES_LOCK = threading.Lock()
+
+_async_engine_callbacks: list[Callable[[str, AsyncEngine], None]] = []
+
+
+def on_async_engine_created(callback: Callable[[str, AsyncEngine], None]) -> None:
+    """Invoke ``callback(shard_name, engine)`` for every async shard engine.
+
+    The callback runs for engines that already exist and for each engine built
+    later. Shard engines are created lazily on first tenant access, so a
+    one-time sweep at startup would miss them; pool metrics use this hook to
+    cover every shard.
+    """
+    with _ASYNC_ENGINES_LOCK:
+        _async_engine_callbacks.append(callback)
+        existing = list(_ASYNC_ENGINES.items())
+    for shard_name, engine in existing:
+        callback(shard_name, engine)
+
+
+def _notify_async_engine_created(shard_name: str, engine: AsyncEngine) -> None:
+    for callback in _async_engine_callbacks:
+        try:
+            callback(shard_name, engine)
+        except Exception:
+            logger.exception("async engine callback failed for shard %s", shard_name)
 
 
 def _build_async_engine(spec: ShardSpec) -> AsyncEngine:
@@ -112,7 +140,8 @@ def get_async_engine_for_shard(shard_name: str) -> AsyncEngine:
 
         engine = _build_async_engine(get_shard_spec(shard_name))
         _ASYNC_ENGINES[shard_name] = engine
-        return engine
+    _notify_async_engine_created(shard_name, engine)
+    return engine
 
 
 async def get_async_engine_for_tenant(tenant_id: str) -> AsyncEngine:

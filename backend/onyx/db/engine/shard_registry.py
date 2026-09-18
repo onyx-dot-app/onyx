@@ -21,6 +21,7 @@ one shard costs another shard nothing.
 import json
 import threading
 import urllib.parse
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -265,6 +266,32 @@ def get_new_tenant_shard_name() -> str:
     return ONYX_DB_NEW_TENANT_SHARD
 
 
+_shard_engine_callbacks: list[Callable[[str, Engine], None]] = []
+
+
+def on_shard_engine_created(callback: Callable[[str, Engine], None]) -> None:
+    """Invoke ``callback(shard_name, engine)`` for every non-default shard engine.
+
+    The callback runs for engines that already exist and for each engine the
+    registry builds later. Shard engines are created lazily on first tenant
+    access, so a one-time sweep at startup would miss them; pool metrics use
+    this hook to cover every shard.
+    """
+    with ShardRegistry._lock:
+        _shard_engine_callbacks.append(callback)
+        existing = list(ShardRegistry._engines.items())
+    for shard_name, engine in existing:
+        callback(shard_name, engine)
+
+
+def _notify_shard_engine_created(shard_name: str, engine: Engine) -> None:
+    for callback in _shard_engine_callbacks:
+        try:
+            callback(shard_name, engine)
+        except Exception:
+            logger.exception("shard engine callback failed for shard %s", shard_name)
+
+
 class ShardRegistry:
     """Lazily-created engines for non-default shards.
 
@@ -305,7 +332,8 @@ class ShardRegistry:
             engine = cls._build_engine(spec)
             cls._engines[shard_name] = engine
             logger.info("Created engine for shard %s", spec)
-            return engine
+        _notify_shard_engine_created(shard_name, engine)
+        return engine
 
     @classmethod
     def _build_engine(cls, spec: ShardSpec) -> Engine:

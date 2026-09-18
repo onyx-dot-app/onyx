@@ -12,6 +12,7 @@ Metrics are collected via two mechanisms:
    counters, histograms, and attribution
 """
 
+import threading
 import time
 
 from fastapi import Request
@@ -25,6 +26,8 @@ from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.pool import ConnectionPoolEntry, PoolProxiedConnection, QueuePool
 
+from onyx.db.engine.async_sql_engine import on_async_engine_created
+from onyx.db.engine.shard_registry import is_default_shard, on_shard_engine_created
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import (
     CURRENT_ENDPOINT_CONTEXTVAR,
@@ -105,9 +108,12 @@ class PoolStateCollector(Collector):
 
     def __init__(self) -> None:
         self._pools: list[tuple[str, QueuePool]] = []
+        self._lock = threading.Lock()
 
     def add_pool(self, label: str, pool: QueuePool) -> None:
-        self._pools.append((label, pool))
+        # Shard engines register from request threads while scrapes iterate.
+        with self._lock:
+            self._pools.append((label, pool))
 
     def collect(self) -> list[GaugeMetricFamily]:
         checked_out = GaugeMetricFamily(
@@ -131,7 +137,9 @@ class PoolStateCollector(Collector):
             labels=["engine"],
         )
 
-        for label, pool in self._pools:
+        with self._lock:
+            pools = list(self._pools)
+        for label, pool in pools:
             checked_out.add_metric([label], pool.checkedout())
             checked_in.add_metric([label], pool.checkedin())
             overflow.add_metric([label], pool.overflow())
@@ -216,35 +224,64 @@ def _register_pool_events(engine: Engine, label: str) -> None:
             )
 
 
+_collector = PoolStateCollector()
+_registered_labels: set[str] = set()
+_registration_lock = threading.Lock()
+
+
+def _register_engine_pool(label: str, engine: Engine | AsyncEngine) -> None:
+    """Register one engine's pool with the shared collector, once per label.
+
+    Engines using NullPool are skipped (no pool state to monitor).
+    For AsyncEngine, events are registered on the underlying sync_engine.
+    """
+    with _registration_lock:
+        if label in _registered_labels:
+            return
+        _registered_labels.add(label)
+
+    sync_engine = engine.sync_engine if isinstance(engine, AsyncEngine) else engine
+    pool = sync_engine.pool
+    if not isinstance(pool, QueuePool):
+        logger.info(
+            "Skipping pool metrics for engine '%s' (%s — no pool state)",
+            label,
+            type(pool).__name__,
+        )
+        return
+
+    _collector.add_pool(label, pool)
+    _register_pool_events(sync_engine, label)
+    logger.info("Registered pool metrics for engine '%s'", label)
+
+
 def setup_postgres_connection_pool_metrics(
     engines: dict[str, Engine | AsyncEngine],
 ) -> None:
-    """Register pool metrics for all provided engines.
+    """Register pool metrics for the provided engines and all shard engines.
 
     Args:
         engines: Mapping of engine label to Engine or AsyncEngine.
             Example: {"sync": sync_engine, "async": async_engine, "readonly": ro_engine}
 
-    Engines using NullPool are skipped (no pool state to monitor).
-    For AsyncEngine, events are registered on the underlying sync_engine.
+    Shard engines are created lazily on first tenant access, so they register
+    through the engine-creation hooks: existing shard engines register now, and
+    later ones register when they are built. The default shard keeps its
+    historical labels through ``engines``; the hooks label shard engines
+    ``sync_<shard>`` / ``async_<shard>``.
     """
-    collector = PoolStateCollector()
-
     for label, engine in engines.items():
-        # Resolve async engines to their underlying sync engine
-        sync_engine = engine.sync_engine if isinstance(engine, AsyncEngine) else engine
+        _register_engine_pool(label, engine)
 
-        pool = sync_engine.pool
-        if not isinstance(pool, QueuePool):
-            logger.info(
-                "Skipping pool metrics for engine '%s' (%s — no pool state)",
-                label,
-                type(pool).__name__,
-            )
-            continue
+    on_shard_engine_created(
+        lambda shard, engine: _register_engine_pool(f"sync_{shard}", engine)
+    )
+    on_async_engine_created(
+        lambda shard, engine: (
+            None
+            if is_default_shard(shard)
+            else _register_engine_pool(f"async_{shard}", engine)
+        )
+    )
 
-        collector.add_pool(label, pool)
-        _register_pool_events(sync_engine, label)
-        logger.info("Registered pool metrics for engine '%s'", label)
-
-    REGISTRY.register(collector)
+    REGISTRY.register(_collector)
