@@ -16,7 +16,7 @@ from onyx.connectors.microsoft_utils.graph_client import (
     sleep_and_retry,
 )
 from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.teams.models import ChannelMember, Message
+from onyx.connectors.teams.models import ChannelFilesFolder, ChannelMember, Message
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -55,6 +55,11 @@ def _sanitize_message_user_display_name(value: dict) -> dict:
     except (AttributeError, TypeError, KeyError):
         pass
     return value
+
+
+class ChannelFilesUnavailable(RuntimeError):
+    """A channel whose files Graph describes without the site they live in, so
+    there is no library to open and nothing to grant."""
 
 
 class GraphRetriesExhausted(RuntimeError):
@@ -266,6 +271,35 @@ def fetch_messages(
         graph_client, message_delta_url(team_id, channel_id, start)
     ):
         yield Message(**_sanitize_message_user_display_name(value))
+
+
+def fetch_channel_files_folder(
+    graph_client: GraphClient, team_id: str, channel_id: str
+) -> ChannelFilesFolder:
+    """Needs Files.Read.All or Sites.Read.All on Graph."""
+    json_data = _retry(
+        graph_client=graph_client,
+        request_url=f"teams/{team_id}/channels/{channel_id}/filesFolder",
+    )
+    parent = json_data.get("parentReference") or {}
+    # Measured on every channel kind, but Graph's reference example omits it.
+    if not parent.get("siteId"):
+        raise ChannelFilesUnavailable(
+            f"The files folder of channel {channel_id} names no site"
+        )
+    return ChannelFilesFolder(
+        site_id=parent["siteId"], drive_id=parent["driveId"], id=json_data["id"]
+    )
+
+
+def fetch_site_url(graph_client: GraphClient, site_id: str) -> str:
+    """The SharePoint site behind a channel's files, for its REST surface."""
+    return _retry(graph_client=graph_client, request_url=f"sites/{site_id}")["webUrl"]
+
+
+def fetch_drive_name(graph_client: GraphClient, drive_id: str) -> str:
+    """The document library name SharePoint REST looks the list up by."""
+    return _retry(graph_client=graph_client, request_url=f"drives/{drive_id}")["name"]
 
 
 def fetch_replies(
