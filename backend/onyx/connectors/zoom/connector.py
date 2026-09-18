@@ -43,7 +43,11 @@ from onyx.connectors.zoom.recordings.access import (
     is_plan_denial,
     permanently_unavailable,
 )
-from onyx.connectors.zoom.recordings.discovery import build_discovery_sources
+from onyx.connectors.zoom.recordings.discovery import (
+    GroupSource,
+    HostAllowlistSource,
+    build_discovery_sources,
+)
 from onyx.connectors.zoom.recordings.models import (
     OccurrenceWork,
     RecordingsState,
@@ -79,6 +83,25 @@ def parse_plan_tier(value: Any) -> ZoomPlanTier:
     except ValueError as e:
         known = ", ".join(plan.value for plan in ZoomPlanTier)
         raise ValueError(f"Unknown Zoom plan {value!r}. Use one of: {known}") from e
+
+
+def parse_session_types(
+    include_meetings: Any, include_webinars: Any
+) -> frozenset[ZoomSessionType]:
+    """Blank means included, which is what every connector saved before these
+    two checkboxes existed has to keep doing."""
+    chosen: set[ZoomSessionType] = set()
+    for value, session_type, name in (
+        (include_meetings, ZoomSessionType.MEETING, "include_meetings"),
+        (include_webinars, ZoomSessionType.WEBINAR, "include_webinars"),
+    ):
+        if value is None:
+            value = True
+        if not isinstance(value, bool):
+            raise ValueError(f"Zoom {name} must be true or false, got {value!r}")
+        if value:
+            chosen.add(session_type)
+    return frozenset(chosen)
 
 
 def parse_rate_limit_percent(value: Any) -> float:
@@ -176,9 +199,12 @@ class ZoomConnector(
         group_id: str | None = None,
         plan_tier: str | None = None,
         rate_limit_percent: int | float | None = None,
+        include_meetings: bool | None = None,
+        include_webinars: bool | None = None,
     ) -> None:
+        self._session_types = parse_session_types(include_meetings, include_webinars)
         self._sources = build_discovery_sources(
-            meeting_ids, webinar_ids, host_emails, group_id
+            meeting_ids, webinar_ids, host_emails, group_id, self._session_types
         )
         self._meeting_ids = meeting_ids
         self._webinar_ids = webinar_ids
@@ -213,6 +239,17 @@ class ZoomConnector(
         if not self._sources:
             raise ConnectorValidationError(
                 "At least one Zoom Discovery mechanism must be configured"
+            )
+
+        # The ID lists say which type each ID is, so only a host or a Group can
+        # be left with nothing to index by unticking both.
+        scoped_by_type = any(
+            isinstance(source, (HostAllowlistSource, GroupSource))
+            for source in self._sources
+        )
+        if scoped_by_type and not self._session_types:
+            raise ConnectorValidationError(
+                "Host Emails and Zoom Group need meetings, webinars, or both included"
             )
 
         try:
