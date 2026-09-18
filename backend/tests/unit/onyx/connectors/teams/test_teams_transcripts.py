@@ -130,7 +130,8 @@ def _walk_transcripts(
     teams_connector: connector_module.TeamsConnector,
 ) -> tuple[list[Document | ConnectorFailure], list[bool]]:
     """From a fresh checkpoint with no teams: list teams, list organizers,
-    then one organizer per step. Returns the items and has_more per step."""
+    then one batch of organizers per step. Returns the items and has_more per
+    step."""
     checkpoint = TeamsCheckpoint(has_more=True)
     items: list[Document | ConnectorFailure] = []
     flags: list[bool] = []
@@ -609,14 +610,18 @@ def test_a_saved_organizer_is_not_indexed_once_the_option_is_off() -> None:
     ]
 
 
-def test_the_slim_walk_honors_a_stop_between_organizers() -> None:
+def test_the_slim_walk_honors_a_stop_between_organizers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # One organizer per batch, so the order of the checks is not a thread race.
+    monkeypatch.setattr(connector_module, "_TRANSCRIPT_ORGANIZER_WORKERS", 1)
     routes = {
         ALL_USERS_URL: {"value": [ADA, BOB]},
         _transcripts_url("user-1", None): {"value": [_transcript()]},
         MEETING_URL: _meeting(),
     }
-    # User page, first organizer, its first page, its one transcript, then the
-    # second organizer.
+    # User page, first batch, its first page, its one transcript, then the
+    # second batch.
     stop_after_first = MagicMock()
     stop_after_first.should_stop.side_effect = [False, False, False, False, True]
     client = graph_client(routes)
@@ -734,7 +739,7 @@ def test_plain_speech_shaped_like_a_timing_line_is_kept() -> None:
 
 def test_a_first_index_asks_graph_for_the_year_it_serves() -> None:
     # The first attempt starts at the epoch. Graph answers 404 on a later page
-    # of a window that old, so the listing starts a year before its end.
+    # of a window that old, so the listing starts a year before now.
     end = float(START)
     clamped = "startDateTime=2022-11-14T22:13:21Z,endDateTime=2023-11-14T22:13:20Z"
     client = graph_client({_transcripts_url("user-1", clamped): {"value": []}})
@@ -769,6 +774,9 @@ def test_indexing_lists_a_batch_of_organizers_at_the_same_time() -> None:
     items, _ = _walk_transcripts(connector(client, include_meeting_transcripts=True))
 
     assert items == []
+    requested = [c.args[0] for c in client.execute_request_direct.call_args_list]
+    assert _transcripts_url("user-1", WINDOW) in requested
+    assert _transcripts_url("user-2", WINDOW) in requested
 
 
 def test_the_slim_walk_lists_a_batch_of_organizers_at_the_same_time() -> None:

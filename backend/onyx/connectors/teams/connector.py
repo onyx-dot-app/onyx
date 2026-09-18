@@ -1083,8 +1083,8 @@ class TeamsConnector(
             before_page=lambda: _raise_if_stopped(callback),
         )
         for batch in batch_generator(organizers, _TRANSCRIPT_ORGANIZER_WORKERS):
-            # A stop is honored before every read and progress is reported per
-            # organizer, since one can hold pages of transcripts.
+            # One stop check and one progress report per batch. Each organizer's
+            # own walk honors a stop before every page and every transcript.
             _raise_if_stopped(callback)
             if callback:
                 callback.progress(_SLIM_WALK, len(batch))
