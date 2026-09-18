@@ -1,4 +1,4 @@
-import { ComboBoxOption } from "../types";
+import { SelectOption } from "../types";
 
 /**
  * Sanitizes a value for use in HTML element IDs.
@@ -14,7 +14,7 @@ interface BuildAriaAttributesProps {
   isValid: boolean;
   highlightedIndex: number;
   fieldId: string;
-  allVisibleOptions: ComboBoxOption[];
+  allVisibleOptions: SelectOption[];
   placeholder: string;
 }
 

@@ -5364,7 +5364,6 @@
             "title": "モデル"
           },
           "providerField": {
-            "createPrefix": "使用",
             "description": "対応する LLM プロバイダーの全一覧は [LiteLLM](https://docs.litellm.ai/docs/providers) を参照してください。",
             "placeholder": "LiteLLM に表示されるプロバイダー ID 文字列",
             "title": "プロバイダー"
@@ -5814,36 +5813,66 @@
         "contextualRagDocumentSummary": {
           "label": "コンテキスト RAG ドキュメント要約"
         },
-        "imageSummarization": { "label": "画像要約" },
-        "kgDeepExtraction": { "label": "ナレッジグラフ抽出" },
+        "imageSummarization": {
+          "label": "画像要約"
+        },
+        "kgDeepExtraction": {
+          "label": "ナレッジグラフ抽出"
+        },
         "kgDocumentClassification": {
           "label": "ナレッジグラフ分類"
         },
-        "other": { "label": "その他" },
-        "unattributed": { "label": "未帰属" }
+        "other": {
+          "label": "その他"
+        },
+        "unattributed": {
+          "label": "未帰属"
+        }
       },
       "filters": {
-        "allModels": { "label": "すべてのモデル" },
-        "allProviders": { "label": "すべてのプロバイダー" }
+        "allModels": {
+          "label": "すべてのモデル"
+        },
+        "allProviders": {
+          "label": "すべてのプロバイダー"
+        }
       },
       "panel": {
         "description": "{start} – {end} · システム使用状況とは、特定のユーザー向けではなく、Onyx がバックグラウンドで実行する LLM 処理です。例として、画像要約、コンテキスト RAG 処理、ナレッジグラフ抽出があります。",
         "emptyDescription": "システム使用状況とは、特定のユーザー向けではなく、Onyx がバックグラウンドで実行する LLM 処理です。例として、画像要約、コンテキスト RAG 処理、ナレッジグラフ抽出があります。",
-        "error": { "title": "この期間のシステム使用状況を読み込めませんでした。" },
+        "error": {
+          "title": "この期間のシステム使用状況を読み込めませんでした。"
+        },
         "title": "システム使用状況"
       },
       "summary": {
-        "spend": { "label": "システム費用" },
-        "tokens": { "label": "合計トークン" },
-        "unattributed": { "label": "未帰属の費用" }
+        "spend": {
+          "label": "システム費用"
+        },
+        "tokens": {
+          "label": "合計トークン"
+        },
+        "unattributed": {
+          "label": "未帰属の費用"
+        }
       },
       "table": {
         "columns": {
-          "category": { "header": "カテゴリー" },
-          "input": { "header": "入力" },
-          "output": { "header": "出力" },
-          "spend": { "header": "費用" },
-          "tokens": { "header": "トークン" }
+          "category": {
+            "header": "カテゴリー"
+          },
+          "input": {
+            "header": "入力"
+          },
+          "output": {
+            "header": "出力"
+          },
+          "spend": {
+            "header": "費用"
+          },
+          "tokens": {
+            "header": "トークン"
+          }
         },
         "empty": {
           "description": "現在のフィルターに一致するシステム使用状況はありません。"
@@ -12848,6 +12877,10 @@
       "nextPage": "次のページ",
       "previousPage": "前のページ",
       "rangeOfTotal": "<range></range> / <total></total>"
+    },
+    "select": {
+      "emptySet": "項目が見つかりません",
+      "invalidOption": "リストから有効なオプションを選択してください"
     },
     "table": {
       "alwaysShown": "常に表示",

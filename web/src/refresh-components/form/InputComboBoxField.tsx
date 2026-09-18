@@ -1,20 +1,26 @@
 "use client";
 
 import { useField } from "formik";
-import { InputComboBox, type InputComboBoxProps } from "@opal/components";
+import {
+  InputSingleSelect,
+  type InputSingleSelectProps,
+} from "@opal/components";
+import type { DistributiveOmit } from "@opal/types";
 import { useOnChangeEvent, useOnChangeValue } from "@/hooks/formHooks";
 
 /**
- * Formik-bound version of `InputComboBox`. Use this inside a `<Formik>` form
+ * Formik-bound version of `InputSingleSelect`. Use this inside a `<Formik>` form
  * when you need a combo box (free-text input with dropdown suggestions).
- * For a plain combo box without Formik binding, use `InputComboBox` directly.
+ * For a plain combo box without Formik binding, use `InputSingleSelect` directly.
  */
-export interface InputComboBoxFieldProps extends Omit<
-  InputComboBoxProps,
+// DistributiveOmit keeps the mode/options union arms intact — a plain Omit
+// (or interface extends) would collapse them and un-enforce the pairing.
+export type InputComboBoxFieldProps = DistributiveOmit<
+  InputSingleSelectProps,
   "value"
-> {
+> & {
   name: string;
-}
+};
 
 export default function InputComboBoxField({
   name,
@@ -28,7 +34,7 @@ export default function InputComboBoxField({
   const hasError = meta.touched && meta.error;
 
   return (
-    <InputComboBox
+    <InputSingleSelect
       {...inputProps}
       name={name}
       value={field.value ?? ""}
