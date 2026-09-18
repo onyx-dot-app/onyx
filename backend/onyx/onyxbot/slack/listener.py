@@ -247,14 +247,17 @@ class SlackbotHandler:
         tokens_changed = (
             tokens_exist and slack_bot_tokens != self.slack_bot_tokens[tenant_bot_pair]
         )
-        if not tokens_exist or tokens_changed:
-            if tokens_exist:
+        # Tokens are stored before the client starts, so an entry with no client
+        # means the last start failed and this cycle retries it.
+        start_failed: bool = tokens_exist and tenant_bot_pair not in self.socket_clients
+        if not tokens_exist or tokens_changed or start_failed:
+            if tokens_changed:
                 logger.info(
                     "Slack Bot tokens changed for tenant=%s, bot %s; reconnecting",
                     tenant_id,
                     bot.id,
                 )
-            else:
+            if not tokens_exist:
                 # Warm up the model if needed
                 search_settings = get_current_search_settings(db_session)
                 embedding_model = EmbeddingModel.from_db_model(
@@ -496,6 +499,25 @@ class SlackbotHandler:
             finally:
                 CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
+    @staticmethod
+    def _stop_client_workers(client: TenantSocketModeClient) -> None:
+        """
+        Stop the threads of a client whose `close()` raised part way through.
+
+        `close()` disconnects before it stops these threads, so a raised
+        disconnect leaves them running. They keep reading and acking events that
+        nothing answers, which is the loss this teardown exists to prevent.
+        """
+        for stop_worker in (
+            client.current_app_monitor.shutdown,
+            client.message_processor.shutdown,
+            client.message_workers.shutdown,
+        ):
+            try:
+                stop_worker()
+            except Exception:
+                logger.exception("Error stopping SocketModeClient worker")
+
     def _close_bot_clients(self, tenant_id: str, live_bot_ids: set[int]) -> None:
         """
         Drop this tenant's socket clients for every bot outside `live_bot_ids`.
@@ -504,7 +526,7 @@ class SlackbotHandler:
         the app's events to it. Those events are acked before the bot row is
         read, so they are lost rather than retried on a live connection.
         """
-        stale_bot_ids = {
+        stale_bot_ids: set[int] = {
             bot_id
             for (t_id, bot_id) in list(self.socket_clients)
             + list(self.slack_bot_tokens)
@@ -512,7 +534,9 @@ class SlackbotHandler:
         }
         for bot_id in stale_bot_ids:
             self.slack_bot_tokens.pop((tenant_id, bot_id), None)
-            client = self.socket_clients.pop((tenant_id, bot_id), None)
+            client: TenantSocketModeClient | None = self.socket_clients.pop(
+                (tenant_id, bot_id), None
+            )
             # Forget the client before closing, so a failed close cannot leave it
             # holding a share of the tenant's events.
             if client is not None:
@@ -524,6 +548,7 @@ class SlackbotHandler:
                         tenant_id,
                         bot_id,
                     )
+                    self._stop_client_workers(client)
             logger.info(
                 "Dropped SocketModeClient: tenant_id=%r slack_bot_id=%r",
                 tenant_id,

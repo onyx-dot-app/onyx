@@ -5,6 +5,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 from onyx.onyxbot.slack.listener import SlackbotHandler, prefilter_requests
+from onyx.server.manage.models import SlackBotTokens
 
 _LISTENER = "onyx.onyxbot.slack.listener"
 
@@ -53,15 +54,32 @@ def test_leaves_other_tenants_alone() -> None:
     clients[(_OTHER_TENANT, 3)].close.assert_not_called()
 
 
-def test_forgets_client_even_if_close_fails() -> None:
+def test_forgets_client_and_stops_its_workers_if_close_fails() -> None:
     handler, clients = _make_handler([(_TENANT, 3)])
-    clients[(_TENANT, 3)].close.side_effect = RuntimeError("socket already gone")
+    client = clients[(_TENANT, 3)]
+    client.close.side_effect = RuntimeError("socket already gone")
 
     handler._close_bot_clients(tenant_id=_TENANT, live_bot_ids={4})
 
     # A close that fails must not leave the client behind to keep taking events.
     assert handler.socket_clients == {}
     assert handler.slack_bot_tokens == {}
+    # close() stops these after disconnecting, so a raised disconnect skips them.
+    client.current_app_monitor.shutdown.assert_called_once()
+    client.message_processor.shutdown.assert_called_once()
+    client.message_workers.shutdown.assert_called_once()
+
+
+def test_worker_shutdown_failure_does_not_escape() -> None:
+    handler, clients = _make_handler([(_TENANT, 3)])
+    client = clients[(_TENANT, 3)]
+    client.close.side_effect = RuntimeError("socket already gone")
+    client.message_processor.shutdown.side_effect = RuntimeError("thread already dead")
+
+    handler._close_bot_clients(tenant_id=_TENANT, live_bot_ids={4})
+
+    assert handler.socket_clients == {}
+    client.message_workers.shutdown.assert_called_once()
 
 
 def test_drops_tokens_left_without_a_client() -> None:
@@ -86,6 +104,27 @@ def test_remove_tenant_closes_every_client_and_forgets_the_tenant() -> None:
     assert handler.slack_bot_tokens == {}
     assert _TENANT not in handler.tenant_ids
     clients[(_TENANT, 4)].close.assert_called_once()
+
+
+def test_retries_start_when_a_live_bot_has_tokens_but_no_client() -> None:
+    """Tokens are stored before the client starts, so a failed start must retry."""
+    handler, _ = _make_handler([])
+    handler.slack_bot_tokens[(_TENANT, 4)] = SlackBotTokens(
+        bot_token="xoxb-t", app_token="xapp-t"
+    )
+
+    bot = MagicMock()
+    bot.id = 4
+    bot.bot_token.get_value.return_value = "xoxb-t"
+    bot.app_token.get_value.return_value = "xapp-t"
+    started = MagicMock()
+
+    with patch.object(SlackbotHandler, "start_socket_client", return_value=started):
+        handler._manage_clients_per_tenant(
+            db_session=MagicMock(), tenant_id=_TENANT, bot=bot
+        )
+
+    assert handler.socket_clients[(_TENANT, 4)] is started
 
 
 def test_prefilter_skips_request_when_bot_row_is_gone() -> None:
