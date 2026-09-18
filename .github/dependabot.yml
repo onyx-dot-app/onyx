@@ -14,8 +14,6 @@ updates:
     cooldown:
       default-days: 7
     open-pull-requests-limit: 3
-    assignees:
-      - "jmelahman"
     labels:
       - "dependabot:actions"
   - package-ecosystem: "uv"
@@ -25,8 +23,6 @@ updates:
     cooldown:
       default-days: 7
     open-pull-requests-limit: 3
-    assignees:
-      - "jmelahman"
     labels:
       - "dependabot:python"
     ignore:
@@ -38,8 +34,6 @@ updates:
     cooldown:
       default-days: 7
     open-pull-requests-limit: 3
-    assignees:
-      - "jmelahman"
     labels:
       - "dependabot:javascript"
   - package-ecosystem: "bun"
@@ -49,8 +43,6 @@ updates:
     cooldown:
       default-days: 7
     open-pull-requests-limit: 3
-    assignees:
-      - "jmelahman"
     labels:
       - "dependabot:javascript"
   - package-ecosystem: "bun"
