@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { Button, CopyButton, InputTextArea } from "@opal/components";
+import { Button, Code, CopyButton } from "@opal/components";
 import { SvgUserPlus, SvgUserX, SvgXCircle, SvgKey } from "@opal/icons";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
@@ -325,20 +325,15 @@ export function ResetPasswordModal({
               strong: emailTag,
             })}
           </Text>
-          <div className="font-main-ui-mono break-all">
-            <InputTextArea
-              value={newPassword}
-              variant="readOnly"
-              rows={1}
-              autoResize
-              resizable={false}
-              rightSection={
-                <CopyButton
-                  getCopyText={() => newPassword}
-                  tooltip={t("resetPasswordModal.copyButton.label")}
-                  aria-label={t("resetPasswordModal.copyButton.label")}
-                />
-              }
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <Code showCopyButton={false}>{newPassword}</Code>
+            </div>
+            <CopyButton
+              size="sm"
+              getCopyText={() => newPassword}
+              tooltip={t("resetPasswordModal.copyButton.label")}
+              aria-label={t("resetPasswordModal.copyButton.label")}
             />
           </div>
         </div>
