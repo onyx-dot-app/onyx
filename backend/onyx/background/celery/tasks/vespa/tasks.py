@@ -36,7 +36,7 @@ from onyx.configs.constants import (
 from onyx.db.document import (
     document_has_indexable_cc_pair,
     get_document,
-    get_indexable_document_sources,
+    get_document_source_types,
     mark_document_as_synced,
     mark_document_synced_secondary_pending,
 )
@@ -512,7 +512,7 @@ def document_index_metadata_sync_task(
                 doc_access = get_access_for_document(
                     document_id=document_id, db_session=db_session
                 )
-                source_types = get_indexable_document_sources(
+                source_types = get_document_source_types(
                     db_session=db_session,
                     document_ids=[document_id],
                 ).get(document_id)
