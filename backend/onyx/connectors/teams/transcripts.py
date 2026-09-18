@@ -25,9 +25,6 @@ from onyx.connectors.teams.utils import (
     request_with_retry,
 )
 from onyx.file_processing.webvtt import is_timing_line, parse_vtt_transcript
-from onyx.utils.logger import setup_logger
-
-logger = setup_logger()
 
 TRANSCRIPT_DOCUMENT_ID_PREFIX = "teams-transcript:"
 
@@ -192,8 +189,9 @@ def fetch_organizer_page(
 def _resolve_organizers(
     graph_client: GraphClient, principal_names: list[str]
 ) -> list[Organizer]:
-    # A user principal name goes into an OData string literal, so its
-    # apostrophes double before url encoding.
+    # Eager on purpose: every configured name is resolved even when the caller
+    # wants one, so a misspelled name fails at setup and not at index time. A
+    # name goes into an OData string literal, so its apostrophes double.
     return [
         Organizer.from_graph(
             _retry(

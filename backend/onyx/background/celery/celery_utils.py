@@ -60,7 +60,7 @@ class SlimConnectorExtractionResult(BaseModel):
     id_to_created_at: dict[str, datetime]
     # Groups of documents the walk could not list, so their absence from the
     # enumeration says nothing about whether they still exist.
-    gaps: list[InventoryGap] = []
+    gaps: list[InventoryGap]
 
 
 def prunable_document_ids(

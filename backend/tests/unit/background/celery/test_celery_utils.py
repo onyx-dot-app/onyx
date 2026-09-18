@@ -1,4 +1,5 @@
-"""Unit tests for extract_ids_from_runnable_connector metrics instrumentation."""
+"""Unit tests for extract_ids_from_runnable_connector: its metrics, and what it
+and the prune decision do with the gaps a slim walk reports."""
 
 from collections.abc import Iterator
 from typing import Any

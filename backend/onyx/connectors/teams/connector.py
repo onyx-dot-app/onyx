@@ -122,6 +122,10 @@ logger = setup_logger()
 
 _SLIM_DOC_BATCH_SIZE = 5000
 
+# Pruning and permission sync both run the slim walk, so its signals name the
+# walk and not either caller.
+_SLIM_WALK = "teams_slim_walk"
+
 # Rebuilt on the SharePoint connector's schedule, a hedge against a cached
 # REST token outliving its hour.
 _REST_CTX_MAX_AGE_S = 30 * 60
@@ -183,7 +187,8 @@ class TeamsConnector(
         # Off by default: every pasted image is a download and a vision call.
         include_inline_images: bool = False,
         # Off by default: transcripts need three more grants, a tenant setting
-        # and an application access policy. Empty organizers means every user.
+        # and an application access policy. Empty organizers means every
+        # enabled user.
         include_meeting_transcripts: bool = False,
         transcript_organizers: list[str] | None = None,
     ) -> None:
@@ -657,13 +662,12 @@ class TeamsConnector(
                 "cover them all, or list the organizers it covers."
             )
         try:
-            # Every configured name is resolved on purpose: a misspelled one is a
-            # misconfiguration the admin should see now, not at index time.
-            listing = iter_organizers(self.graph_client, self.transcript_organizers)
-            organizers = (
-                list(listing)
-                if self.transcript_organizers
-                else list(islice(listing, 1))
+            # One organizer is enough to probe with. Configured names are all
+            # resolved on the way, since resolving them is not lazy.
+            organizers = list(
+                islice(
+                    iter_organizers(self.graph_client, self.transcript_organizers), 1
+                )
             )
         except requests.HTTPError as e:
             if _status(e) == 404 and self.transcript_organizers:
@@ -685,7 +689,7 @@ class TeamsConnector(
         organizer = organizers[0]
         try:
             transcript = next(
-                iter(fetch_transcripts(self.graph_client, organizer.id, None, None, 1)),
+                fetch_transcripts(self.graph_client, organizer.id, None, None, 1),
                 None,
             )
             if transcript is None:
@@ -1013,9 +1017,9 @@ class TeamsConnector(
                         if callback:
                             if callback.should_stop():
                                 raise RuntimeError(
-                                    "retrieve_all_slim_docs_perm_sync: Stop signal detected"
+                                    f"{_SLIM_WALK}: Stop signal detected"
                                 )
-                            callback.progress("retrieve_all_slim_docs_perm_sync", 1)
+                            callback.progress(_SLIM_WALK, 1)
                         yield slim_doc_buffer
                         slim_doc_buffer = []
 
@@ -1031,11 +1035,10 @@ class TeamsConnector(
             )
 
     def _slim_batch_signals(self, callback: IndexingHeartbeatInterface | None) -> None:
-        """The stop and progress signals the channel loop gives the runner
-        before every full batch."""
+        """The stop and progress signals the runner gets before every batch."""
         _raise_if_stopped(callback)
         if callback:
-            callback.progress("retrieve_all_slim_docs_perm_sync", 1)
+            callback.progress(_SLIM_WALK, 1)
 
     def inventory_gaps(self) -> list[InventoryGap]:
         """One gap per organizer whose transcripts were refused. Everything else
@@ -1065,7 +1068,7 @@ class TeamsConnector(
             # per full batch.
             _raise_if_stopped(callback)
             if callback:
-                callback.progress("retrieve_all_slim_docs_perm_sync", 1)
+                callback.progress(_SLIM_WALK, 1)
             try:
                 for transcript in fetch_transcripts(
                     self.graph_client, organizer.id, None, None, before_page=stop_check
@@ -1089,8 +1092,8 @@ class TeamsConnector(
                     raise
                 self._unlisted_entity_ids.append(organizer.id)
                 logger.warning(
-                    "Could not list the transcripts of %s, so nothing this walk "
-                    "feeds is deleted: %s",
+                    "Could not list the transcripts of %s, so their indexed "
+                    "transcripts are kept as they are: %s",
                     organizer.email,
                     _transcript_refusal(e),
                 )
@@ -1604,7 +1607,7 @@ def _indexable_file(item: DriveItemData) -> bool:
 
 def _raise_if_stopped(callback: IndexingHeartbeatInterface | None) -> None:
     if callback and callback.should_stop():
-        raise RuntimeError("retrieve_all_slim_docs_perm_sync: Stop signal detected")
+        raise RuntimeError(f"{_SLIM_WALK}: Stop signal detected")
 
 
 _TRANSCRIPTS_DISABLED = (

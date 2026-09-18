@@ -49,9 +49,17 @@ def _refuse(refusal: Refusal) -> requests.HTTPError:
     status, code, message = (
         (refusal, str(refusal), str(refusal)) if isinstance(refusal, int) else refusal
     )
+    # Graph puts the general code outside and the cause inside, so the outer
+    # one is never the code a caller branches on.
     resp = response(
         status,
-        {"error": {"code": code, "message": message, "innerError": {"code": code}}},
+        {
+            "error": {
+                "code": "Forbidden",
+                "message": message,
+                "innerError": {"code": code},
+            }
+        },
     )
     return requests.HTTPError(str(status), response=resp)
 

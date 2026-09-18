@@ -1081,7 +1081,7 @@ export const connectorConfigs: Record<
         optional: true,
         description:
           "User principal names of the organizers whose meeting transcripts " +
-          "to index. Leave empty to include every user in the tenant.",
+          "to index. Leave empty to include every enabled user in the tenant.",
       },
     ],
     advanced_values: [

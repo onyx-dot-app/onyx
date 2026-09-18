@@ -20,6 +20,7 @@ from onyx.connectors.teams.connector import TeamsCheckpoint
 from onyx.connectors.teams.transcripts import (
     ATTRIBUTED_FORMAT,
     UNATTRIBUTED_FORMAT,
+    graph_inner_error_code,
     transcript_document_id,
     transcript_text,
 )
@@ -146,7 +147,7 @@ def test_transcripts_are_off_by_default() -> None:
     ]
 
 
-def test_transcripts_follow_the_channels_one_organizer_per_step() -> None:
+def test_a_transcript_becomes_a_document_with_its_meeting_and_readers() -> None:
     client = graph_client(
         _routes(_transcript()),
         contents={(CONTENT_ROUTE, ATTRIBUTED_FORMAT): ATTRIBUTED_VTT},
@@ -177,6 +178,62 @@ def test_transcripts_follow_the_channels_one_organizer_per_step() -> None:
     assert document.metadata["speakers"] == "attributed"
     assert document.metadata["meeting_start"] == "2024-01-15T09:00:00+00:00"
     assert document.doc_updated_at == datetime(2024, 1, 15, 10, tzinfo=timezone.utc)
+
+
+def test_each_step_indexes_one_organizer() -> None:
+    bobs_content = "users/user-2/onlineMeetings/meeting-2/transcripts/t2/content"
+    bobs_transcript = {
+        "id": "t2",
+        "meetingId": "meeting-2",
+        "createdDateTime": "2024-01-16T10:00:00Z",
+        "transcriptContentUrl": f"{SERVICE_ROOT}/{bobs_content}",
+    }
+    routes = _routes(_transcript())
+    routes[ALL_USERS_URL] = {"value": [ADA, BOB]}
+    routes[_transcripts_url("user-2", WINDOW)] = {"value": [bobs_transcript]}
+    routes[
+        MEETING_URL.replace("user-1", "user-2").replace("meeting-1", "meeting-2")
+    ] = _meeting("Retro")
+    client = graph_client(
+        routes,
+        contents={
+            (CONTENT_ROUTE, ATTRIBUTED_FORMAT): ATTRIBUTED_VTT,
+            (bobs_content, ATTRIBUTED_FORMAT): ATTRIBUTED_VTT,
+        },
+    )
+    teams_connector = connector(client, include_meeting_transcripts=True)
+
+    checkpoint = TeamsCheckpoint(has_more=True)
+    per_step: list[list[str]] = []
+    while checkpoint.has_more and len(per_step) < 8:
+        page, checkpoint = step(teams_connector, checkpoint, start=START)
+        per_step.append([item.id for item in page if isinstance(item, Document)])
+
+    # Two organizers on one listed page still take a step each, so a resumed
+    # attempt loses one organizer at most.
+    assert [ids for ids in per_step if ids] == [
+        [transcript_document_id("user-2", "t2")],
+        [transcript_document_id("user-1", "t1")],
+    ]
+
+
+def test_the_inner_error_code_wins_and_the_outer_one_is_the_fallback() -> None:
+    def refused(body: Any) -> requests.HTTPError:
+        answer = MagicMock()
+        answer.json.return_value = body
+        return requests.HTTPError("403", response=answer)
+
+    inner = {"code": "GraphAccessToTranscriptsDisabled"}
+    assert (
+        graph_inner_error_code(
+            refused({"error": {"code": "Forbidden", "innerError": inner}})
+        )
+        == "GraphAccessToTranscriptsDisabled"
+    )
+    assert graph_inner_error_code(refused({"error": {"code": "Forbidden"}})) == (
+        "Forbidden"
+    )
+    assert graph_inner_error_code(refused(["not an object"])) == ""
 
 
 def test_configured_organizers_are_resolved_by_name() -> None:
@@ -328,11 +385,7 @@ def test_a_listing_outage_fails_the_attempt() -> None:
 
 
 def test_the_slim_walk_lists_transcripts_with_their_readers() -> None:
-    routes = {
-        ALL_USERS_URL: {"value": [ADA]},
-        _transcripts_url("user-1", None): {"value": [_transcript()]},
-        MEETING_URL: _meeting(),
-    }
+    routes = _routes(_transcript(), window=None)
     client = graph_client(routes)
 
     slim = [
@@ -617,10 +670,13 @@ def test_the_slim_walk_honors_a_stop_before_the_next_user_page() -> None:
             "@odata.nextLink": f"{SERVICE_ROOT}/{second_users_page}",
         },
         second_users_page: {"value": [BOB]},
+        _transcripts_url("user-1", None): {"value": []},
     }
-    # The first user page, then the second user page request.
+    # User page, organizer, its transcripts page, then the second user page. The
+    # last one is the page hook, which the per-organizer check would mask if the
+    # first organizer had no transcripts route to reach.
     stop_before_page_two = MagicMock()
-    stop_before_page_two.should_stop.side_effect = [False, True]
+    stop_before_page_two.should_stop.side_effect = [False, False, False, True]
     client = graph_client(routes)
     walk = connector(
         client, include_meeting_transcripts=True
