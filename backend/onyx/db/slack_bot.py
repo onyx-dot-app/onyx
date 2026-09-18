@@ -36,7 +36,9 @@ def update_slack_bot(
     app_token: str,
     user_token: str | None = None,
 ) -> SlackBot:
-    slack_bot = fetch_slack_bot(db_session=db_session, slack_bot_id=slack_bot_id)
+    slack_bot: SlackBot = fetch_slack_bot(
+        db_session=db_session, slack_bot_id=slack_bot_id
+    )
 
     # update the app
     slack_bot.name = name
@@ -61,7 +63,7 @@ def fetch_slack_bot(
     db_session: Session,
     slack_bot_id: int,
 ) -> SlackBot:
-    slack_bot = fetch_slack_bot_or_none(
+    slack_bot: SlackBot | None = fetch_slack_bot_or_none(
         db_session=db_session, slack_bot_id=slack_bot_id
     )
     if slack_bot is None:

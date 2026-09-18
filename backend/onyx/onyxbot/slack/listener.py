@@ -660,6 +660,15 @@ class SlackbotHandler:
             )
             SlackbotHandler._discard_client(socket_client, tenant_id, slack_bot_id)
             return None
+        except Exception:
+            # Returned, not raised, so one bot's failure does not end the pass.
+            logger.exception(
+                "Unexpected error opening Slack socket connection: tenant_id=%r slack_bot_id=%r",
+                tenant_id,
+                slack_bot_id,
+            )
+            SlackbotHandler._discard_client(socket_client, tenant_id, slack_bot_id)
+            return None
 
         return socket_client
 
@@ -673,7 +682,7 @@ class SlackbotHandler:
         x = 0
         for (tenant_id, slack_bot_id), client in socket_client_list:
             x += 1
-            client.close()
+            SlackbotHandler._discard_client(client, tenant_id, slack_bot_id)
             logger.info(
                 "Stopped SocketModeClient %s/%s: pod_id=%r tenant_id=%r slack_bot_id=%r",
                 x,
@@ -749,17 +758,8 @@ def prefilter_requests(req: SocketModeRequest, client: TenantSocketModeClient) -
     # skip cases where the bot is disabled in the web UI
     tenant_id = get_current_tenant_id()
 
-    bot_token_user_id, bot_token_bot_id = get_onyx_bot_auth_ids(
-        tenant_id, client.slack_bot_id, client.web_client
-    )
-    logger.info(
-        "prefilter_requests: bot_token_user_id=%r bot_token_bot_id=%r",
-        bot_token_user_id,
-        bot_token_bot_id,
-    )
-
     with get_session_with_current_tenant() as db_session:
-        slack_bot = fetch_slack_bot_or_none(
+        slack_bot: SlackBot | None = fetch_slack_bot_or_none(
             db_session=db_session, slack_bot_id=client.slack_bot_id
         )
         if slack_bot is None:
@@ -777,6 +777,16 @@ def prefilter_requests(req: SocketModeRequest, client: TenantSocketModeClient) -
                 client.slack_bot_id,
             )
             return False
+
+    # Resolved after the row checks, since a cache miss calls Slack.
+    bot_token_user_id, bot_token_bot_id = get_onyx_bot_auth_ids(
+        tenant_id, client.slack_bot_id, client.web_client
+    )
+    logger.info(
+        "prefilter_requests: bot_token_user_id=%r bot_token_bot_id=%r",
+        bot_token_user_id,
+        bot_token_bot_id,
+    )
 
     if req.type == "events_api":
         # Verify channel is valid

@@ -234,6 +234,34 @@ def test_failed_connect_closes_the_client_it_built() -> None:
     built.close.assert_called_once()
 
 
+def test_unexpected_connect_error_closes_the_client_and_lets_the_pass_continue() -> (
+    None
+):
+    built = MagicMock()
+    built.web_client.auth_test.return_value = {"ok": False}
+    built.connect.side_effect = OSError("network unreachable")
+
+    with patch(f"{_LISTENER}._get_socket_client", return_value=built):
+        result = SlackbotHandler.start_socket_client(
+            slack_bot_id=4,
+            tenant_id=_TENANT,
+            slack_bot_tokens=SlackBotTokens(bot_token="xoxb-t", app_token="xapp-t"),
+        )
+
+    assert result is None
+    built.close.assert_called_once()
+
+
+def test_shutdown_closes_every_client_after_one_close_fails() -> None:
+    """The caller releases the Redis locks next, so the loop has to finish."""
+    _, clients = _make_handler([(_TENANT, 3), (_OTHER_TENANT, 4)])
+    clients[(_TENANT, 3)].close.side_effect = RuntimeError("socket already gone")
+
+    SlackbotHandler.stop_socket_clients("pod-1", dict(clients))
+
+    clients[(_OTHER_TENANT, 4)].close.assert_called_once()
+
+
 def test_prefilter_skips_request_when_bot_row_is_gone() -> None:
     """A deleted bot's socket can still deliver events, so prefilter skips them."""
     client = MagicMock()
@@ -244,8 +272,11 @@ def test_prefilter_skips_request_when_bot_row_is_gone() -> None:
 
     with (
         patch(f"{_LISTENER}.get_current_tenant_id", return_value=_TENANT),
-        patch(f"{_LISTENER}.get_onyx_bot_auth_ids", return_value=("U123", "B123")),
+        patch(f"{_LISTENER}.get_onyx_bot_auth_ids") as resolve_auth_ids,
         patch(f"{_LISTENER}.get_session_with_current_tenant", _fake_session),
         patch(f"{_LISTENER}.fetch_slack_bot_or_none", return_value=None),
     ):
         assert prefilter_requests(req, client) is False
+
+    # A cache miss there calls Slack with the deleted bot's tokens.
+    resolve_auth_ids.assert_not_called()
