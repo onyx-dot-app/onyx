@@ -81,6 +81,9 @@
       },
       "projectSearch": {
         "label": "项目搜索"
+      },
+      "selectSearchSources": {
+        "label": "选择搜索来源"
       }
     },
     "addMcpModal": {

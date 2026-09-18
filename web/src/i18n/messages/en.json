@@ -81,6 +81,9 @@
       },
       "projectSearch": {
         "label": "Project Search"
+      },
+      "selectSearchSources": {
+        "label": "Select Search Sources"
       }
     },
     "addMcpModal": {
