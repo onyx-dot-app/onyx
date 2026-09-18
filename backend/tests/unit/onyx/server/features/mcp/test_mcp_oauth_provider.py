@@ -2,7 +2,7 @@ import asyncio
 import base64
 import hashlib
 from typing import Any, Literal
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
 import pytest
@@ -231,6 +231,44 @@ def test_authorization_code_exchange_honors_client_auth_method_and_persists(
     assert parse_qs(token_request.content.decode()) == expected_body
 
 
+def test_authorization_code_exchange_accepts_form_encoded_token_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    storage = _RecordingAuthorizationStorage()
+
+    def handle_token_request(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=urlencode(
+                {
+                    "access_token": "new-access-token",
+                    "refresh_token": "new-refresh-token",
+                    "token_type": "Bearer",
+                    "expires_in": "3600",
+                    "refresh_token_expires_in": "28800",
+                }
+            ).encode(),
+            headers={"content-type": "application/x-www-form-urlencoded"},
+            request=request,
+        )
+
+    monkeypatch.setattr(
+        oauth,
+        "mcp_ssrf_httpx_client_factory",
+        lambda **_kwargs: httpx.AsyncClient(
+            transport=httpx.MockTransport(handle_token_request)
+        ),
+    )
+
+    tokens = asyncio.run(
+        _provider(storage).complete_authorization_code_exchange("auth-code", "v" * 128)
+    )
+
+    assert tokens.access_token == "new-access-token"
+    assert tokens.refresh_token == "new-refresh-token"
+    assert storage.tokens == tokens
+
+
 def test_failed_token_exchange_does_not_persist_authorization(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -268,6 +306,7 @@ def test_failed_token_exchange_does_not_persist_authorization(
 
 def test_invalid_token_response_is_safe_and_not_persisted(
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     storage = _RecordingAuthorizationStorage()
 
@@ -298,6 +337,23 @@ def test_invalid_token_response_is_safe_and_not_persisted(
     assert "provider-secret" not in exc_info.value.detail
     assert storage.tokens is None
     assert storage.persisted_client_information is None
+    invalid_response_record = next(
+        record
+        for record in caplog.records
+        if record.getMessage()
+        == "mcp_oauth.authorization_code_exchange.invalid_response"
+    )
+    assert getattr(invalid_response_record, "mcp_server_id") == 42  # noqa: B009  # ods: ignore[getattr]
+    assert getattr(invalid_response_record, "token_endpoint_hostname") == (  # noqa: B009  # ods: ignore[getattr]
+        "accounts.example.com"
+    )
+    assert getattr(invalid_response_record, "http_status") == 200  # noqa: B009  # ods: ignore[getattr]
+    assert getattr(invalid_response_record, "response_body_format") == "unknown"  # noqa: B009  # ods: ignore[getattr]
+    assert getattr(invalid_response_record, "response_body_bytes") == len(  # noqa: B009  # ods: ignore[getattr]
+        b"provider-secret: must-not-leak"
+    )
+    assert getattr(invalid_response_record, "response_field_names") == []  # noqa: B009  # ods: ignore[getattr]
+    assert "provider-secret" not in caplog.text
 
 
 @pytest.mark.parametrize(

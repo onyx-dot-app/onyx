@@ -15,9 +15,8 @@ from uuid import uuid4
 
 import httpx
 from mcp.client.auth import OAuthClientProvider, PKCEParameters, TokenStorage
-from mcp.client.auth.exceptions import OAuthFlowError, OAuthTokenError
+from mcp.client.auth.exceptions import OAuthFlowError
 from mcp.client.auth.oauth2 import OAuthContext
-from mcp.client.auth.utils import handle_token_response_scopes
 from mcp.shared.auth import (
     OAuthClientInformationFull,
     OAuthClientMetadata,
@@ -169,6 +168,32 @@ def _oauth_token_from_response(body: bytes) -> OAuthToken:
             return OAuthToken.model_validate(payload)
         except ValidationError:
             raise json_error from None
+
+
+def _oauth_token_response_diagnostics(
+    body: bytes, content_type: str | None
+) -> dict[str, Any]:
+    """Describe a rejected token response without emitting credential material."""
+    oauth_error, body_format = _oauth_error_from_response(body, content_type)
+    response_field_names: list[str] = []
+    try:
+        payload = json.loads(body)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        if body_format == "form":
+            response_field_names = sorted(
+                str(key) for key in parse_qs(body.decode("utf-8", errors="replace"))
+            )[:20]
+    else:
+        if isinstance(payload, dict):
+            response_field_names = sorted(str(key) for key in payload)[:20]
+
+    return {
+        "response_content_type": content_type,
+        "response_body_format": body_format,
+        "response_body_bytes": len(body),
+        "response_field_names": response_field_names,
+        "oauth_error": oauth_error,
+    }
 
 
 def _token_dict_with_preserved_refresh(
@@ -806,9 +831,26 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
                 detail,
             )
 
+        body = await response.aread()
         try:
-            tokens = await handle_token_response_scopes(response)
-        except OAuthTokenError as error:
+            # GitHub's OAuth endpoint returns the standard form-encoded token
+            # response. The MCP SDK helper accepts JSON only, while our refresh
+            # path already supports both OAuth response formats.
+            tokens = _oauth_token_from_response(body)
+        except ValidationError as error:
+            logger.warning(
+                "mcp_oauth.authorization_code_exchange.invalid_response",
+                extra={
+                    **self.refresh_log_context,
+                    "request_id": ONYX_REQUEST_ID_CONTEXTVAR.get(),
+                    "token_endpoint_hostname": _response_request_hostname(response),
+                    "http_status": response.status_code,
+                    "provider_request_id": response.headers.get("x-github-request-id"),
+                    **_oauth_token_response_diagnostics(
+                        body, response.headers.get("content-type")
+                    ),
+                },
+            )
             raise OnyxError(
                 OnyxErrorCode.BAD_GATEWAY,
                 "MCP OAuth token endpoint returned an invalid token response.",
