@@ -46,8 +46,10 @@ def clean_metrics_state(
 ) -> Generator[None, None, None]:
     monkeypatch.setattr(pool_metrics, "_collector", pool_metrics.PoolStateCollector())
     monkeypatch.setattr(pool_metrics, "_registered_labels", set())
-    monkeypatch.setattr(shard_registry, "_shard_engine_callbacks", [])
-    monkeypatch.setattr(async_sql_engine, "_async_engine_callbacks", [])
+    # The hooks are stable singletons imported by value elsewhere; isolate by
+    # clearing their subscriber lists, never by replacing the objects.
+    monkeypatch.setattr(shard_registry.shard_engine_hooks, "_callbacks", [])
+    monkeypatch.setattr(async_sql_engine.async_engine_hooks, "_callbacks", [])
     # setup() registers the collector with the global REGISTRY; undo after.
     yield
     try:
@@ -80,7 +82,7 @@ def test_shard_engines_created_later_register_too(
     )
     assert _gauge_labels("onyx_db_pool_checked_out") == {"sync"}
 
-    shard_registry._notify_shard_engine_created("s2", _make_engine())
+    shard_registry.shard_engine_hooks.notify("s2", _make_engine())
 
     assert _gauge_labels("onyx_db_pool_checked_out") == {"sync", "sync_s2"}
 
@@ -97,7 +99,7 @@ def test_default_async_shard_keeps_its_historical_label(
     default = shard_registry.get_default_shard_name()
     # The default async engine registers under "async" via setup(); the
     # creation hook must not add a duplicate "async_<default>" series.
-    async_sql_engine._notify_async_engine_created(default, _make_async_engine())
-    async_sql_engine._notify_async_engine_created("s3", _make_async_engine())
+    async_sql_engine.async_engine_hooks.notify(default, _make_async_engine())
+    async_sql_engine.async_engine_hooks.notify("s3", _make_async_engine())
 
     assert _gauge_labels("onyx_db_pool_checked_out") == {"async", "async_s3"}

@@ -26,8 +26,8 @@ from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.pool import ConnectionPoolEntry, PoolProxiedConnection, QueuePool
 
-from onyx.db.engine.async_sql_engine import on_async_engine_created
-from onyx.db.engine.shard_registry import is_default_shard, on_shard_engine_created
+from onyx.db.engine.async_sql_engine import async_engine_hooks
+from onyx.db.engine.shard_registry import is_default_shard, shard_engine_hooks
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import (
     CURRENT_ENDPOINT_CONTEXTVAR,
@@ -260,28 +260,22 @@ def setup_postgres_connection_pool_metrics(
 ) -> None:
     """Register pool metrics for the provided engines and all shard engines.
 
-    Args:
-        engines: Mapping of engine label to Engine or AsyncEngine.
-            Example: {"sync": sync_engine, "async": async_engine, "readonly": ro_engine}
-
-    Shard engines are created lazily on first tenant access, so they register
-    through the engine-creation hooks: existing shard engines register now, and
-    later ones register when they are built. The default shard keeps its
-    historical labels through ``engines``; the hooks label shard engines
-    ``sync_<shard>`` / ``async_<shard>``.
+    ``engines`` maps labels to the default shard's engines (e.g. ``sync``,
+    ``async``, ``readonly``). Lazily-created shard engines register through the
+    engine-creation hooks under ``sync_<shard>`` / ``async_<shard>``.
     """
+
+    def register_async_shard(shard: str, engine: AsyncEngine) -> None:
+        # The default async engine registers above under its historical label.
+        if not is_default_shard(shard):
+            _register_engine_pool(f"async_{shard}", engine)
+
     for label, engine in engines.items():
         _register_engine_pool(label, engine)
 
-    on_shard_engine_created(
+    shard_engine_hooks.subscribe(
         lambda shard, engine: _register_engine_pool(f"sync_{shard}", engine)
     )
-    on_async_engine_created(
-        lambda shard, engine: (
-            None
-            if is_default_shard(shard)
-            else _register_engine_pool(f"async_{shard}", engine)
-        )
-    )
+    async_engine_hooks.subscribe(register_async_shard)
 
     REGISTRY.register(_collector)

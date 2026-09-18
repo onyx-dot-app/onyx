@@ -23,7 +23,7 @@ import threading
 import urllib.parse
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Generic, TypeVar
 
 from sqlalchemy import event
 from sqlalchemy.engine import Engine, create_engine
@@ -266,30 +266,42 @@ def get_new_tenant_shard_name() -> str:
     return ONYX_DB_NEW_TENANT_SHARD
 
 
-_shard_engine_callbacks: list[Callable[[str, Engine], None]] = []
+EngineT = TypeVar("EngineT")
 
 
-def on_shard_engine_created(callback: Callable[[str, Engine], None]) -> None:
-    """Invoke ``callback(shard_name, engine)`` for every non-default shard engine.
+class EngineCreationHooks(Generic[EngineT]):
+    """Callbacks invoked for each engine a lazy registry builds.
 
-    The callback runs for engines that already exist and for each engine the
-    registry builds later. Shard engines are created lazily on first tenant
-    access, so a one-time sweep at startup would miss them; pool metrics use
-    this hook to cover every shard.
+    Shard engines are created on first tenant access, so a one-time sweep at
+    startup would miss them. Subscribing replays engines that already exist and
+    covers each engine built later; a subscriber racing a build can see an
+    engine twice, so callbacks must tolerate repeats.
     """
-    with ShardRegistry._lock:
-        _shard_engine_callbacks.append(callback)
-        existing = list(ShardRegistry._engines.items())
-    for shard_name, engine in existing:
-        callback(shard_name, engine)
 
+    def __init__(self, snapshot: Callable[[], list[tuple[str, EngineT]]]) -> None:
+        self._callbacks: list[Callable[[str, EngineT], None]] = []
+        self._lock = threading.Lock()
+        self._snapshot = snapshot
 
-def _notify_shard_engine_created(shard_name: str, engine: Engine) -> None:
-    for callback in _shard_engine_callbacks:
-        try:
+    def subscribe(self, callback: Callable[[str, EngineT], None]) -> None:
+        with self._lock:
+            self._callbacks.append(callback)
+        for shard_name, engine in self._snapshot():
             callback(shard_name, engine)
-        except Exception:
-            logger.exception("shard engine callback failed for shard %s", shard_name)
+
+    def notify(self, shard_name: str, engine: EngineT) -> None:
+        with self._lock:
+            callbacks = list(self._callbacks)
+        for callback in callbacks:
+            try:
+                callback(shard_name, engine)
+            except Exception:
+                logger.exception("engine callback failed for shard %s", shard_name)
+
+
+shard_engine_hooks: EngineCreationHooks[Engine] = EngineCreationHooks(
+    lambda: list(ShardRegistry._engines.items())
+)
 
 
 class ShardRegistry:
@@ -332,7 +344,7 @@ class ShardRegistry:
             engine = cls._build_engine(spec)
             cls._engines[shard_name] = engine
             logger.info("Created engine for shard %s", spec)
-        _notify_shard_engine_created(shard_name, engine)
+        shard_engine_hooks.notify(shard_name, engine)
         return engine
 
     @classmethod

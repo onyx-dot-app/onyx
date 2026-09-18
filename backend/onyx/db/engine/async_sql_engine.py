@@ -1,6 +1,6 @@
 import asyncio
 import threading
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any, AsyncContextManager
 
@@ -18,6 +18,7 @@ from onyx.configs.app_configs import (
 from onyx.db.engine.iam_auth import make_provide_iam_token_async
 from onyx.db.engine.pg_ssl import create_pg_ssl_context
 from onyx.db.engine.shard_registry import (
+    EngineCreationHooks,
     ShardSpec,
     get_default_shard_name,
     get_shard_spec,
@@ -44,30 +45,9 @@ logger = setup_logger()
 _ASYNC_ENGINES: dict[str, AsyncEngine] = {}
 _ASYNC_ENGINES_LOCK = threading.Lock()
 
-_async_engine_callbacks: list[Callable[[str, AsyncEngine], None]] = []
-
-
-def on_async_engine_created(callback: Callable[[str, AsyncEngine], None]) -> None:
-    """Invoke ``callback(shard_name, engine)`` for every async shard engine.
-
-    The callback runs for engines that already exist and for each engine built
-    later. Shard engines are created lazily on first tenant access, so a
-    one-time sweep at startup would miss them; pool metrics use this hook to
-    cover every shard.
-    """
-    with _ASYNC_ENGINES_LOCK:
-        _async_engine_callbacks.append(callback)
-        existing = list(_ASYNC_ENGINES.items())
-    for shard_name, engine in existing:
-        callback(shard_name, engine)
-
-
-def _notify_async_engine_created(shard_name: str, engine: AsyncEngine) -> None:
-    for callback in _async_engine_callbacks:
-        try:
-            callback(shard_name, engine)
-        except Exception:
-            logger.exception("async engine callback failed for shard %s", shard_name)
+async_engine_hooks: EngineCreationHooks[AsyncEngine] = EngineCreationHooks(
+    lambda: list(_ASYNC_ENGINES.items())
+)
 
 
 def _build_async_engine(spec: ShardSpec) -> AsyncEngine:
@@ -140,7 +120,7 @@ def get_async_engine_for_shard(shard_name: str) -> AsyncEngine:
 
         engine = _build_async_engine(get_shard_spec(shard_name))
         _ASYNC_ENGINES[shard_name] = engine
-    _notify_async_engine_created(shard_name, engine)
+    async_engine_hooks.notify(shard_name, engine)
     return engine
 
 
