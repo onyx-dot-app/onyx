@@ -874,6 +874,9 @@ class VespaDocumentIndex(DocumentIndex):
             for chunk_request in chunk_requests
         ]
 
+        if self._multitenant:
+            filters = filters.model_copy(update={"tenant_id": self._tenant_id})
+
         if batch_retrieval:
             return cleanup_content_for_chunks(
                 batch_search_api_retrieval(
