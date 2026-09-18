@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { Button } from "@opal/components";
+import { Button, Code, CopyButton } from "@opal/components";
 import { SvgUserPlus, SvgUserX, SvgXCircle, SvgKey } from "@opal/icons";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
@@ -325,9 +325,12 @@ export function ResetPasswordModal({
               strong: emailTag,
             })}
           </Text>
-          <code className="rounded-xs bg-background-neutral-02 px-3 py-2 text-sm select-all">
-            {newPassword}
-          </code>
+          <Code showCopyButton={false}>{newPassword}</Code>
+          <div className="flex justify-end">
+            <CopyButton prominence="secondary" getCopyText={() => newPassword}>
+              {t("resetPasswordModal.copyButton.label")}
+            </CopyButton>
+          </div>
         </div>
       ) : (
         <Text as="p" text03>

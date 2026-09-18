@@ -7931,6 +7931,9 @@
         "title": "تغيّرت الأذونات"
       },
       "resetPasswordModal": {
+        "copyButton": {
+          "label": "نسخ كلمة المرور"
+        },
         "description": "سيولّد هذا كلمة مرور عشوائية جديدة لـ <strong>{email}</strong>. ستتوقف كلمة مروره الحالية عن العمل فورًا.",
         "doneButton": {
           "label": "تم"

@@ -7931,6 +7931,9 @@
         "title": "权限已变更"
       },
       "resetPasswordModal": {
+        "copyButton": {
+          "label": "复制密码"
+        },
         "description": "这将为 <strong>{email}</strong> 生成一个新的随机密码。该用户当前的密码将立即失效。",
         "doneButton": {
           "label": "完成"
