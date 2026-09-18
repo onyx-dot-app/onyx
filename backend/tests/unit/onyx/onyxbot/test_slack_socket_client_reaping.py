@@ -1,7 +1,7 @@
-"""Tests for closing Slack socket clients whose bot row was deleted."""
+"""Tests for the lifecycle of Slack socket clients: stale bots, failed starts, prefilter."""
 
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 from slack_sdk.errors import SlackApiError
@@ -15,6 +15,11 @@ _TENANT = "tenant_aaaaaaaa-0000-0000-0000-000000000000"
 _OTHER_TENANT = "tenant_bbbbbbbb-0000-0000-0000-000000000000"
 
 
+@contextmanager
+def _fake_session() -> Iterator[MagicMock]:
+    yield MagicMock()
+
+
 def _make_handler(
     pairs: list[tuple[str, int]],
 ) -> tuple[SlackbotHandler, dict[tuple[str, int], MagicMock]]:
@@ -23,6 +28,7 @@ def _make_handler(
     handler.tenant_ids = {tenant_id for tenant_id, _ in pairs}
     handler.socket_clients = {}
     handler.slack_bot_tokens = {}
+    handler.redis_locks = {}
 
     clients: dict[tuple[str, int], MagicMock] = {}
     for pair in pairs:
@@ -33,10 +39,42 @@ def _make_handler(
     return handler, clients
 
 
-def test_closes_client_for_deleted_bot_and_keeps_live_one() -> None:
+def _bot_with_tokens(bot_token: str, app_token: str) -> MagicMock:
+    bot = MagicMock()
+    bot.id = 4
+    bot.bot_token.get_value.return_value = bot_token
+    bot.app_token.get_value.return_value = app_token
+    return bot
+
+
+def test_acquire_tenants_drops_the_client_of_a_deleted_bot() -> None:
+    """The tenant still has a bot, so `_remove_tenant` never runs for it."""
+    handler, clients = _make_handler([(_TENANT, 3), (_TENANT, 4)])
+    live_bot = MagicMock()
+    live_bot.id = 4
+
+    with (
+        patch(
+            f"{_LISTENER}.fetch_ee_implementation_or_noop", return_value=lambda: set()
+        ),
+        patch(f"{_LISTENER}.get_all_tenant_ids", return_value=[_TENANT]),
+        patch(f"{_LISTENER}.get_redis_client"),
+        patch(f"{_LISTENER}.get_session_with_current_tenant", _fake_session),
+        patch(f"{_LISTENER}.fetch_slack_bots", return_value=[live_bot]),
+        patch.object(SlackbotHandler, "_manage_clients_per_tenant"),
+    ):
+        handler.acquire_tenants()
+
+    clients[(_TENANT, 3)].close.assert_called_once()
+    assert (_TENANT, 3) not in handler.socket_clients
+    assert (_TENANT, 4) in handler.socket_clients
+    assert _TENANT in handler.tenant_ids
+
+
+def test_drops_deleted_bot_and_keeps_live_one() -> None:
     handler, clients = _make_handler([(_TENANT, 3), (_TENANT, 4)])
 
-    handler._close_bot_clients(tenant_id=_TENANT, live_bot_ids={4})
+    handler._drop_stale_bots(tenant_id=_TENANT, live_bot_ids={4})
 
     assert (_TENANT, 3) not in handler.socket_clients
     assert (_TENANT, 3) not in handler.slack_bot_tokens
@@ -50,20 +88,19 @@ def test_closes_client_for_deleted_bot_and_keeps_live_one() -> None:
 def test_leaves_other_tenants_alone() -> None:
     handler, clients = _make_handler([(_TENANT, 3), (_OTHER_TENANT, 3)])
 
-    handler._close_bot_clients(tenant_id=_TENANT, live_bot_ids=set())
+    handler._drop_stale_bots(tenant_id=_TENANT, live_bot_ids=set())
 
     assert (_OTHER_TENANT, 3) in handler.socket_clients
     clients[(_OTHER_TENANT, 3)].close.assert_not_called()
 
 
-def test_forgets_client_and_stops_its_workers_if_close_fails() -> None:
+def test_failed_close_stops_the_workers_close_would_have_stopped() -> None:
     handler, clients = _make_handler([(_TENANT, 3)])
     client = clients[(_TENANT, 3)]
     client.close.side_effect = RuntimeError("socket already gone")
 
-    handler._close_bot_clients(tenant_id=_TENANT, live_bot_ids={4})
+    handler._drop_stale_bots(tenant_id=_TENANT, live_bot_ids={4})
 
-    # A close that fails must not leave the client behind to keep taking events.
     assert handler.socket_clients == {}
     assert handler.slack_bot_tokens == {}
     # close() stops these after disconnecting, so a raised disconnect skips them.
@@ -78,7 +115,7 @@ def test_worker_shutdown_failure_does_not_escape() -> None:
     client.close.side_effect = RuntimeError("socket already gone")
     client.message_processor.shutdown.side_effect = RuntimeError("thread already dead")
 
-    handler._close_bot_clients(tenant_id=_TENANT, live_bot_ids={4})
+    handler._drop_stale_bots(tenant_id=_TENANT, live_bot_ids={4})
 
     assert handler.socket_clients == {}
     client.message_workers.shutdown.assert_called_once()
@@ -86,11 +123,10 @@ def test_worker_shutdown_failure_does_not_escape() -> None:
 
 def test_drops_tokens_left_without_a_client() -> None:
     handler, _ = _make_handler([])
-    handler.tenant_ids = {_TENANT}
     # start_socket_client can fail after the tokens entry is written.
     handler.slack_bot_tokens[(_TENANT, 3)] = MagicMock()
 
-    handler._close_bot_clients(tenant_id=_TENANT, live_bot_ids=set())
+    handler._drop_stale_bots(tenant_id=_TENANT, live_bot_ids=set())
 
     assert handler.slack_bot_tokens == {}
 
@@ -108,59 +144,64 @@ def test_remove_tenant_closes_every_client_and_forgets_the_tenant() -> None:
     clients[(_TENANT, 4)].close.assert_called_once()
 
 
-def test_retries_start_when_a_live_bot_has_tokens_but_no_client() -> None:
-    """Tokens are stored before the client starts, so a failed start must retry."""
+def test_bot_without_tokens_is_dropped() -> None:
+    handler, clients = _make_handler([(_TENANT, 4)])
+    bot = MagicMock()
+    bot.id = 4
+    bot.bot_token = None
+
+    handler._manage_clients_per_tenant(
+        db_session=MagicMock(), tenant_id=_TENANT, bot=bot
+    )
+
+    clients[(_TENANT, 4)].close.assert_called_once()
+    assert handler.socket_clients == {}
+    assert handler.slack_bot_tokens == {}
+
+
+def test_failed_start_waits_for_a_token_change() -> None:
+    """A retry every cycle costs a Slack API call and a client build per failing bot."""
     handler, _ = _make_handler([])
     handler.slack_bot_tokens[(_TENANT, 4)] = SlackBotTokens(
         bot_token="xoxb-t", app_token="xapp-t"
     )
 
-    bot = MagicMock()
-    bot.id = 4
-    bot.bot_token.get_value.return_value = "xoxb-t"
-    bot.app_token.get_value.return_value = "xapp-t"
-    started = MagicMock()
-
-    with patch.object(SlackbotHandler, "start_socket_client", return_value=started):
+    with patch.object(SlackbotHandler, "start_socket_client") as start:
         handler._manage_clients_per_tenant(
-            db_session=MagicMock(), tenant_id=_TENANT, bot=bot
+            db_session=MagicMock(),
+            tenant_id=_TENANT,
+            bot=_bot_with_tokens("xoxb-t", "xapp-t"),
         )
+        start.assert_not_called()
 
-    assert handler.socket_clients[(_TENANT, 4)] is started
+        start.return_value = MagicMock()
+        handler._manage_clients_per_tenant(
+            db_session=MagicMock(),
+            tenant_id=_TENANT,
+            bot=_bot_with_tokens("xoxb-new", "xapp-new"),
+        )
+        start.assert_called_once()
 
 
-def test_failed_reconnect_leaves_the_bot_eligible_for_retry() -> None:
-    """A stale mapping would read as a live client and suppress the next retry."""
+def test_failed_reconnect_does_not_leave_the_closed_client_mapped() -> None:
     handler, clients = _make_handler([(_TENANT, 4)])
     handler.slack_bot_tokens[(_TENANT, 4)] = SlackBotTokens(
         bot_token="xoxb-old", app_token="xapp-old"
     )
 
-    bot = MagicMock()
-    bot.id = 4
-    bot.bot_token.get_value.return_value = "xoxb-new"
-    bot.app_token.get_value.return_value = "xapp-new"
-
     with patch.object(SlackbotHandler, "start_socket_client", return_value=None):
         handler._manage_clients_per_tenant(
-            db_session=MagicMock(), tenant_id=_TENANT, bot=bot
+            db_session=MagicMock(),
+            tenant_id=_TENANT,
+            bot=_bot_with_tokens("xoxb-new", "xapp-new"),
         )
 
     clients[(_TENANT, 4)].close.assert_called_once()
     assert (_TENANT, 4) not in handler.socket_clients
 
-    # Next cycle sees tokens with no client, so it retries the start.
-    started = MagicMock()
-    with patch.object(SlackbotHandler, "start_socket_client", return_value=started):
-        handler._manage_clients_per_tenant(
-            db_session=MagicMock(), tenant_id=_TENANT, bot=bot
-        )
 
-    assert handler.socket_clients[(_TENANT, 4)] is started
-
-
-def test_failed_start_closes_the_client_it_built() -> None:
-    """__init__ starts worker threads, so a retried start must not leak them."""
+def test_failed_auth_closes_the_client_it_built() -> None:
+    """__init__ starts worker threads, so a client that is dropped needs a close."""
     built = MagicMock()
     built.web_client.auth_test.side_effect = SlackApiError(
         "invalid_auth", response=MagicMock()
@@ -195,11 +236,6 @@ def test_failed_connect_closes_the_client_it_built() -> None:
 
 def test_prefilter_skips_request_when_bot_row_is_gone() -> None:
     """A deleted bot's socket can still deliver events, so prefilter skips them."""
-
-    @contextmanager
-    def _fake_session() -> Any:
-        yield MagicMock()
-
     client = MagicMock()
     client.slack_bot_id = 3
     req = MagicMock()
