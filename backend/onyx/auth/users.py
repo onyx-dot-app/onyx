@@ -22,6 +22,7 @@ from fastapi import (
     Request,
     Response,
     WebSocket,
+    WebSocketException,
     status,
 )
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -78,7 +79,7 @@ from onyx.auth.mobile_sso.sso_completion import (
 )
 from onyx.auth.oidc_client import log_token_exchange_failure
 from onyx.auth.pat import get_hashed_pat_from_request
-from onyx.auth.permissions import has_global_permission
+from onyx.auth.permissions import get_effective_permissions, has_global_permission
 from onyx.auth.pkce import generate_pkce_pair
 from onyx.auth.schemas import AuthBackend, UserCreate
 from onyx.auth.session_tokens import (
@@ -132,6 +133,7 @@ from onyx.db.engine.async_sql_engine import (
 from onyx.db.engine.sql_engine import (
     get_session_with_current_tenant,
     get_session_with_tenant,
+    is_valid_schema_name,
 )
 from onyx.db.enums import AccountType, PatType, Permission
 from onyx.db.models import AccessToken, OAuthAccount, User
@@ -152,7 +154,11 @@ from onyx.error_handling.exceptions import (
     log_onyx_error,
     onyx_error_to_json_response,
 )
-from onyx.redis.redis_pool import get_async_redis_connection, retrieve_ws_token_data
+from onyx.redis.redis_pool import (
+    get_async_redis_connection,
+    retrieve_auth_token_data,
+    retrieve_ws_token_data,
+)
 from onyx.server.security.store import get_security_settings
 from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
@@ -2426,19 +2432,58 @@ def is_same_origin(actual: str, expected: str) -> bool:
     operator, so port differences carry no security significance — the
     CSWSH threat is remote origins, not local ones.
     """
-    a = urlparse(actual.rstrip("/"))
-    e = urlparse(expected.rstrip("/"))
+    # The actual origin is attacker-controlled. Accessing hostname/port raises
+    # ValueError on malformed input (bad port, invalid IPv6); read that as a
+    # mismatch rather than letting the handshake 500.
+    try:
+        a = urlparse(actual.rstrip("/"))
+        e = urlparse(expected.rstrip("/"))
 
-    if a.scheme != e.scheme or a.hostname != e.hostname:
+        if a.scheme != e.scheme or a.hostname != e.hostname:
+            return False
+
+        if a.hostname in _LOOPBACK_HOSTNAMES:
+            return True
+
+        actual_port = a.port or (443 if a.scheme == "https" else 80)
+        expected_port = e.port or (443 if e.scheme == "https" else 80)
+
+        return actual_port == expected_port
+    except ValueError:
         return False
 
-    if a.hostname in _LOOPBACK_HOSTNAMES:
-        return True
 
-    actual_port = a.port or (443 if a.scheme == "https" else 80)
-    expected_port = e.port or (443 if e.scheme == "https" else 80)
+def _check_websocket_origin(websocket: WebSocket) -> None:
+    """CSWSH guard: WebSockets are exempt from the same-origin policy and
+    cookie auth is attached automatically. Browsers always send Origin on
+    WebSocket upgrades, so a missing header is rejected too."""
+    origin = websocket.headers.get("origin")
+    if not origin:
+        logger.warning("WS auth: missing Origin header")
+        raise WebSocketException(code=1008)
+    if not is_same_origin(origin, WEB_DOMAIN):
+        logger.warning(
+            "WS auth: origin mismatch. Expected %s, got %s", WEB_DOMAIN, origin
+        )
+        raise WebSocketException(code=1008)
 
-    return actual_port == expected_port
+
+def _websocket_tenant_id(token_data: dict | None) -> str | None:
+    """Tenant a websocket connection runs against, from its auth token data.
+
+    The tenant middleware only runs for HTTP requests, so every websocket auth
+    dependency resolves the tenant itself and keeps the contextvar set for the
+    connection's lifetime. Returns None when the token names no usable tenant.
+    """
+    if not MULTI_TENANT:
+        # Single-tenant deployments always run on the default schema.
+        return POSTGRES_DEFAULT_SCHEMA
+    if token_data is None:
+        return None
+    tenant_id = token_data.get("tenant_id")
+    if not isinstance(tenant_id, str) or not is_valid_schema_name(tenant_id):
+        return None
+    return tenant_id
 
 
 async def current_user_from_websocket(
@@ -2449,7 +2494,7 @@ async def current_user_from_websocket(
     WebSocket authentication dependency using query parameter.
 
     Validates the WS token from query param and yields the User.
-    Raises BasicAuthenticationError if authentication fails.
+    Raises WebSocketException if authentication fails.
 
     The token must be obtained from POST /voice/ws-token before connecting.
     Tokens are single-use and expire after 60 seconds.
@@ -2460,61 +2505,38 @@ async def current_user_from_websocket(
 
     This applies the same auth checks as current_user() for HTTP endpoints.
     """
-    # Check Origin header to prevent Cross-Site WebSocket Hijacking (CSWSH).
-    # Browsers always send Origin on WebSocket connections.
-    origin = websocket.headers.get("origin")
-    if not origin:
-        logger.warning("WS auth: missing Origin header")
-        raise BasicAuthenticationError(detail="Access denied. Missing origin.")
-
-    if not is_same_origin(origin, WEB_DOMAIN):
-        logger.warning(
-            "WS auth: origin mismatch. Expected %s, got %s", WEB_DOMAIN, origin
-        )
-        raise BasicAuthenticationError(detail="Access denied. Invalid origin.")
+    _check_websocket_origin(websocket)
 
     # Validate WS token in Redis (single-use, deleted after retrieval)
     try:
         token_data = await retrieve_ws_token_data(token)
-        if token_data is None:
-            raise BasicAuthenticationError(
-                detail="Access denied. Invalid or expired authentication token."
-            )
-    except BasicAuthenticationError:
-        raise
     except Exception as e:
         logger.error("WS auth: error during token validation: %s", e)
-        raise BasicAuthenticationError(
-            detail="Authentication verification failed."
-        ) from e
+        raise WebSocketException(code=1008) from e
+    if token_data is None:
+        logger.warning("WS auth: invalid or expired websocket token")
+        raise WebSocketException(code=1008)
 
-    if MULTI_TENANT:
-        token_tenant_id = token_data.get("tenant_id")
-        if not isinstance(token_tenant_id, str):
-            logger.warning("WS auth: token missing tenant_id")
-            raise BasicAuthenticationError(
-                detail="Access denied. Invalid authentication token."
-            )
-    else:
-        # Single-tenant deployments always run on the default schema.
-        token_tenant_id = POSTGRES_DEFAULT_SCHEMA
+    token_tenant_id = _websocket_tenant_id(token_data)
+    if token_tenant_id is None:
+        logger.warning("WS auth: token missing tenant_id")
+        raise WebSocketException(code=1008)
 
     tenant_context_token = CURRENT_TENANT_ID_CONTEXTVAR.set(token_tenant_id)
     try:
         user = await _get_user_from_token_data(token_data)
         if user is None:
             logger.warning("WS auth: user not found for id=%s", token_data.get("sub"))
-            raise BasicAuthenticationError(
-                detail="Access denied. User not found or inactive."
-            )
+            raise WebSocketException(code=1008)
 
-        user = await double_check_user(user)
+        try:
+            user = await double_check_user(user)
+        except BasicAuthenticationError as e:
+            raise WebSocketException(code=1008) from e
 
         if is_limited_user(user):
             logger.warning("WS auth: user %s is limited", user.email)
-            raise BasicAuthenticationError(
-                detail="Access denied. User has limited permissions.",
-            )
+            raise WebSocketException(code=1008)
 
         logger.debug("WS auth: authenticated %s", user.email)
         user_context_token = CURRENT_USER_ID_CONTEXTVAR.set(str(user.id))
@@ -2524,6 +2546,75 @@ async def current_user_from_websocket(
             CURRENT_USER_ID_CONTEXTVAR.reset(user_context_token)
     finally:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(tenant_context_token)
+
+
+async def current_user_from_websocket_cookie(
+    websocket: WebSocket,
+    strategy: Strategy[User, uuid.UUID] = Depends(auth_backend.get_strategy),
+) -> AsyncGenerator[User, None]:
+    """WebSocket authentication dependency using the session cookie.
+
+    For same-origin browser flows where the page's session carries over to a
+    websocket (e.g. the craft webapp HMR proxy). Validates the session cookie
+    and yields the User. Raises WebSocketException if authentication fails.
+    """
+    _check_websocket_origin(websocket)
+
+    token = websocket.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
+    if not token:
+        raise WebSocketException(code=1008)
+
+    # The single-tenant session token can be a JWT with no Redis entry, so only
+    # consult Redis when the tenant is actually needed. Multi-tenant requires
+    # the Redis session backend — the HTTP tenant middleware resolves tenants
+    # from the same Redis lookup (see _get_tenant_id_from_request).
+    if MULTI_TENANT:
+        try:
+            token_data = await retrieve_auth_token_data(token)
+        except Exception as e:
+            logger.error("WS auth: error during token validation: %s", e)
+            raise WebSocketException(code=1008) from e
+    else:
+        token_data = None
+    tenant_id = _websocket_tenant_id(token_data)
+    if tenant_id is None:
+        logger.warning("WS auth: session token missing tenant_id")
+        raise WebSocketException(code=1008)
+
+    tenant_context_token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+    try:
+        # Build the user manager inside the tenant scope. As a route-level
+        # Depends it would open its DB session before the tenant is set.
+        get_user_db_context = asynccontextmanager(get_user_db)
+        get_user_manager_context = asynccontextmanager(get_user_manager)
+        async with get_async_session_context_manager() as db_session:
+            async with get_user_db_context(db_session) as user_db:
+                async with get_user_manager_context(user_db) as user_manager:
+                    user = await strategy.read_token(token, user_manager)
+
+        if user is None or not user.is_active:
+            raise WebSocketException(code=1008)
+
+        try:
+            user = await double_check_user(user)
+        except BasicAuthenticationError as e:
+            raise WebSocketException(code=1008) from e
+
+        if Permission.BASIC_ACCESS not in get_effective_permissions(user):
+            logger.warning("WS auth: user %s lacks basic access", user.email)
+            raise WebSocketException(code=1008)
+
+        logger.debug("WS auth: authenticated %s", user.email)
+        user_context_token = CURRENT_USER_ID_CONTEXTVAR.set(str(user.id))
+        try:
+            yield user
+        finally:
+            CURRENT_USER_ID_CONTEXTVAR.reset(user_context_token)
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(tenant_context_token)
+
+
+current_user_from_websocket_cookie._is_websocket_auth_dependency = True  # ty: ignore[unresolved-attribute]
 
 
 def get_default_admin_user_emails_() -> list[str]:
