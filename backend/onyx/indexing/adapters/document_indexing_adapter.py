@@ -11,7 +11,7 @@ from onyx.connectors.models import Document, IndexAttemptMetadata
 from onyx.db.chunk import update_chunk_boost_components__no_commit
 from onyx.db.document import (
     fetch_chunk_counts_for_documents,
-    get_indexable_document_sources,
+    get_document_source_types,
     mark_document_as_indexed_for_cc_pair__no_commit,
     prepare_to_modify_documents,
     update_docs_chunk_count__no_commit,
@@ -149,7 +149,7 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
             doc_id_to_ancestor_ids=self._get_ancestor_ids_for_documents(
                 context.updatable_docs, tenant_id, db_session
             ),
-            doc_id_to_source_types=get_indexable_document_sources(
+            doc_id_to_source_types=get_document_source_types(
                 db_session=db_session,
                 document_ids=updatable_ids,
             ),
