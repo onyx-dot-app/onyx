@@ -1,7 +1,5 @@
 """Typed Microsoft Graph drive delta pages and checkpoint-safe fetching."""
 
-from __future__ import annotations
-
 from datetime import datetime
 from typing import Any
 from urllib.parse import urljoin, urlsplit
