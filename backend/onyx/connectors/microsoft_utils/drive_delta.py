@@ -214,16 +214,17 @@ def build_drive_delta_full_resync_url(
     )
 
 
-def build_onedrive_delta_start_url(
+def build_drive_delta_start_url(
     graph_api_base: str,
     drive_id: str,
     *,
     start: datetime | None = None,
     page_size: int = 200,
+    select_fields: str = DRIVE_DELTA_SELECT_FIELDS,
 ) -> str:
     params = [
         f"$top={page_size}",
-        f"$select={DRIVE_DELTA_SELECT_FIELDS}",
+        f"$select={select_fields}",
     ]
     if start is not None and start > _EPOCH:
         params.append(f"token={quote(start.isoformat(timespec='seconds'))}")

@@ -7,10 +7,10 @@ from onyx.connectors.capability_checks.models import (
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
-    UnexpectedValidationError,
 )
 from onyx.connectors.microsoft_utils.drive_delta import (
-    build_onedrive_delta_start_url,
+    DRIVE_DELTA_SELECT_FIELDS,
+    build_drive_delta_start_url,
 )
 from onyx.connectors.microsoft_utils.graph_env import DEFAULT_GRAPH_API_HOST
 from onyx.connectors.onedrive.errors import (
@@ -22,15 +22,16 @@ from onyx.connectors.onedrive.errors import (
 from onyx.connectors.onedrive.models import OneDriveDrive, OneDriveUser
 from onyx.connectors.onedrive.scope import normalize_configured_users
 from onyx.connectors.onedrive.source_operations import (
+    CONFIG_ALL_USERS,
     CONFIG_GRAPH_API_HOST,
     CONFIG_USERS,
     GRAPH_API_VERSION,
+    USERS_PAGE_SIZE,
     OneDriveSourceOperations,
 )
 
 _DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/onedrive"
-_PROBE_PAGE_SIZE = 1
-_MAX_DISCOVERY_PAGES = 20
+_DELTA_PROBE_PAGE_SIZE = 1
 
 
 def _gateway(context: CapabilityCheckContext) -> OneDriveSourceOperations:
@@ -44,8 +45,17 @@ def _configured_users(context: CapabilityCheckContext) -> list[str]:
     return normalize_configured_users(raw_users if isinstance(raw_users, list) else [])
 
 
+def _uses_all_users(context: CapabilityCheckContext) -> bool:
+    config = context.connector_specific_config or {}
+    return config.get(CONFIG_ALL_USERS, True) is True
+
+
 def _is_transient(error: OneDriveGraphError) -> bool:
     return error.status is None or error.status == 429 or error.status >= 500
+
+
+def _is_user_unavailable(error: OneDriveGraphError) -> bool:
+    return error.status in {403, 404}
 
 
 def _candidate_users(
@@ -53,12 +63,16 @@ def _candidate_users(
 ) -> Generator[OneDriveUser, None, None]:
     gateway = _gateway(context)
     configured = _configured_users(context)
-    if configured:
+    if not _uses_all_users(context):
+        if not configured:
+            raise ConnectorValidationError(
+                "Select all users or list at least one user."
+            )
         for identifier in configured:
             try:
                 user = gateway.get_user(identifier=identifier)
             except OneDriveGraphError as error:
-                if _is_transient(error):
+                if not _is_user_unavailable(error):
                     raise
                 continue
             if user is not None:
@@ -66,20 +80,15 @@ def _candidate_users(
         return
 
     next_link: str | None = None
-    for _ in range(_MAX_DISCOVERY_PAGES):
+    while True:
         page = gateway.list_users(
-            page_size=_PROBE_PAGE_SIZE,
+            page_size=USERS_PAGE_SIZE,
             next_link=next_link,
         )
-        if page.users:
-            yield page.users[0]
-            yield from page.users[1:]
+        yield from page.users
         next_link = page.next_link
         if next_link is None:
             return
-    raise UnexpectedValidationError(
-        f"No readable drive found within {_MAX_DISCOVERY_PAGES} user pages."
-    )
 
 
 def _candidate_drives(
@@ -90,7 +99,7 @@ def _candidate_drives(
         try:
             drive = gateway.get_default_drive(user_id=user.id)
         except OneDriveGraphError as error:
-            if _is_transient(error):
+            if not _is_user_unavailable(error):
                 raise
             continue
         if drive is not None:
@@ -130,7 +139,7 @@ class _UsersCheck(CapabilityCheck):
 
     def run(self, context: CapabilityCheckContext) -> None:
         try:
-            _gateway(context).list_users(page_size=_PROBE_PAGE_SIZE)
+            _gateway(context).list_users(page_size=_DELTA_PROBE_PAGE_SIZE)
         except OneDriveGraphError as error:
             raise_for_graph_error(error, "The app cannot list tenant users.")
 
@@ -201,12 +210,13 @@ class _DeltaCheck(CapabilityCheck):
                 try:
                     gateway.get_delta_page(
                         drive_id=drive.id,
-                        page_url=build_onedrive_delta_start_url(
+                        page_url=build_drive_delta_start_url(
                             f"{host}/{GRAPH_API_VERSION}",
                             drive.id,
-                            page_size=_PROBE_PAGE_SIZE,
+                            page_size=_DELTA_PROBE_PAGE_SIZE,
+                            select_fields=DRIVE_DELTA_SELECT_FIELDS,
                         ),
-                        page_size=_PROBE_PAGE_SIZE,
+                        page_size=_DELTA_PROBE_PAGE_SIZE,
                     )
                 except OneDriveGraphError as error:
                     if _is_transient(error):

@@ -61,6 +61,7 @@ USERS_PAGE_SIZE = 999
 USER_SELECT = "id,userPrincipalName,mail,displayName,userType,accountEnabled"
 CONFIG_AUTHORITY_HOST = "authority_host"
 CONFIG_GRAPH_API_HOST = "graph_api_host"
+CONFIG_ALL_USERS = "all_users"
 CONFIG_USERS = "users"
 _MSAL_STATUS_RE = re.compile(r"HTTP (?:status|Error): (\d{3})")
 
@@ -80,10 +81,14 @@ def _msal_status(error: BaseException) -> int | None:
     return None
 
 
+def _is_transient_status(status: int | None) -> bool:
+    return status == 429 or status is not None and status >= 500
+
+
 def _graph_error(error: Exception) -> OneDriveGraphError:
     response = error.response if isinstance(error, requests.RequestException) else None
     if response is None:
-        return OneDriveGraphError(None, type(error).__name__, str(error))
+        return OneDriveGraphError(_msal_status(error), type(error).__name__, str(error))
     try:
         payload = response.json()
     except ValueError:
@@ -158,7 +163,8 @@ class OneDriveSourceOperations(SourceOperations):
                 certificate_password=credential.onedrive_certificate_password,
             )
         except ValueError as error:
-            if any(
+            status = _msal_status(error)
+            if _is_transient_status(status) or any(
                 isinstance(item, json.JSONDecodeError)
                 for item in _exception_chain(error)
             ):

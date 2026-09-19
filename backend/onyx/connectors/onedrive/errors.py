@@ -32,7 +32,7 @@ def raise_for_auth_error(error: OneDriveAuthError) -> NoReturn:
         ) from error
     if error.code in {MISSING_CREDENTIAL_CODE, INVALID_AUTHORITY_CODE}:
         raise CredentialInvalidError(
-            f"OneDrive credential is invalid: {error}"
+            "OneDrive credential is invalid; check all required fields."
         ) from error
     if error.code == "invalid_client":
         raise CredentialInvalidError(
