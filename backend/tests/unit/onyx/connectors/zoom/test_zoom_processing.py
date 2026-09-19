@@ -118,8 +118,7 @@ class TestProcessOccurrence:
         client.download_transcript_vtt.assert_not_called()
 
     def test_a_recording_without_a_transcript_is_skipped(self) -> None:
-        # Zoom recorded the session but put no VTT in its file list, which it
-        # reports as a recording with nothing to read rather than as an error.
+        # Zoom reports this as a recording with nothing to read, not an error.
         client = _client_with_transcript()
         client.get_transcript.return_value = None
 
@@ -136,8 +135,7 @@ class TestProcessOccurrence:
         client.download_transcript_vtt.assert_not_called()
 
     def test_a_transcript_still_processing_is_skipped_even_with_a_url(self) -> None:
-        # Zoom fills in the download URL before the file is finished, so the URL
-        # on its own is not enough to go on.
+        # Zoom fills in the download URL before the file is finished.
         client = _client_with_transcript()
         client.get_transcript.return_value = transcript(
             download_url="https://zoom.example/t.vtt",
@@ -153,7 +151,14 @@ class TestProcessOccurrence:
             download_url="https://zoom.example/t.vtt"
         )
 
-        assert len(_run(client, occurrence_work())) == 1
+        items = _run(client, occurrence_work())
+
+        # A ConnectorFailure is also one item, so the type has to be asserted.
+        assert len(items) == 1
+        assert isinstance(items[0], Document)
+        client.download_transcript_vtt.assert_called_once_with(
+            "https://zoom.example/t.vtt"
+        )
 
     def test_missing_download_url_is_skipped(self) -> None:
         client = _client_with_transcript()

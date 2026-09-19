@@ -23,8 +23,8 @@ from onyx.connectors.zoom.models import (
 
 
 def transcript(**overrides: Any) -> ZoomTranscript:
-    """Zoom never sends this shape, so there is nothing to default. It is built
-    from a recording file, which `recording_file` below stands in for.
+    """Zoom never sends this shape. `recording_file` below is the payload it
+    really answers with.
     """
     fields: dict[str, Any] = {"download_url": "https://zoom.example/transcript.vtt"}
     return ZoomTranscript(**(fields | overrides))

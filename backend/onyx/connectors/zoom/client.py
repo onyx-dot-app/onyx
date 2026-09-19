@@ -330,14 +330,13 @@ class ZoomClient:
 
     def get_transcript(self, meeting_identifier: str) -> ZoomTranscript | None:
         """Takes a meeting ID, a webinar ID, or one occurrence's UUID. Webinars
-        come through here because Zoom has no webinar equivalent.
+        come here too because Zoom has no webinar equivalent of this endpoint.
 
         None means Zoom recorded the session but never transcribed it. A session
-        with no cloud recording at all answers 404, which raises here. Whether
-        that is a skip or a failure is the caller's call, not this client's.
+        with no cloud recording at all answers 404, which raises.
 
         Do not switch this to `GET /meetings/{meetingId}/transcript`. Against a
-        live account it answered 404 for a session whose VTT was sitting in
+        live account that answered 404 for a session whose VTT was sitting in
         `recording_files`.
         """
         response = self._get(endpoints.MEETING_RECORDINGS, meeting_identifier)
@@ -553,6 +552,6 @@ class ZoomClient:
                 ) from e
 
         _raise_for_zoom_error(response, description)
-        # WebVTT is UTF-8 by specification. The storage host sends no charset,
-        # and requests then guesses Latin-1, which turns "…" into "â€¦".
+        # The storage host sends no charset, so requests guesses Latin-1 and an
+        # ellipsis arrives as "â€¦". WebVTT is UTF-8 by specification.
         return response.content.decode("utf-8", errors="replace")
