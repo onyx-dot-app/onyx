@@ -814,8 +814,8 @@ def sleep_sandbox(
     tenant_id: str,
     session_creation_lock: RedisLock,
 ) -> None:
-    """Snapshot an idle ``RUNNING`` sandbox, terminate its pod, and mark it
-    ``SLEEPING``. Commits on success; on abort the sandbox stays ``RUNNING``.
+    """Snapshot an idle ``RUNNING`` or ``FAILED`` sandbox, terminate its pod,
+    and mark it ``SLEEPING``. Commits on success; on abort its status is unchanged.
 
     Invariant: snapshot before terminate, fail-closed — a snapshot failure on
     a reachable pod aborts the reap so the next sweep retries, while an
@@ -894,10 +894,10 @@ def sleep_sandbox(
     logger.info("Putting sandbox %s to sleep", sandbox_id)
 
     # Fail-closed: terminating with an unsnapshotted workspace loses it
-    # (restore falls back to a fresh template). Keep the sandbox RUNNING to
+    # (restore falls back to a fresh template). Keep the sandbox sweepable to
     # retry next cycle — unless the pod is unreachable, where snapshots can
-    # never succeed and the workspace is already gone, so don't pin it
-    # RUNNING forever.
+    # never succeed and the workspace is already gone, so don't pin it in a
+    # sweepable state forever.
     pod_unreachable = False
     if snapshot_failed:
         if sandbox_manager.health_check(
@@ -905,7 +905,7 @@ def sleep_sandbox(
         ):
             logger.error(
                 "Snapshot failed for sandbox %s; "
-                "leaving it RUNNING to retry next cycle",
+                "leaving it unchanged to retry next cycle",
                 sandbox_id,
             )
             return
@@ -946,9 +946,10 @@ def sleep_sandbox(
         # Snapshotting above can take minutes; re-check idleness right before
         # the kill and capture the attempt number the sleep must still match.
         db_session.refresh(sandbox)
-        if sandbox.status != SandboxStatus.RUNNING or not is_sandbox_idle(
-            sandbox, datetime.now(timezone.utc)
-        ):
+        if sandbox.status not in {
+            SandboxStatus.RUNNING,
+            SandboxStatus.FAILED,
+        } or not is_sandbox_idle(sandbox, datetime.now(timezone.utc)):
             logger.info("Sandbox %s went active mid-sweep; skipping reap", sandbox_id)
             return
         sleep_attempt_number = sandbox.provisioning_attempt_number
