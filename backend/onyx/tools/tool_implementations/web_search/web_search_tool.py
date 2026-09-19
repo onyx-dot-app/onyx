@@ -345,7 +345,7 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
             docs_str, citation_mapping = convert_inference_sections_to_llm_string(
                 top_sections=inference_sections,
                 citation_start=override_kwargs.starting_citation_num,
-                limit=None,  # Already truncated
+                limit=override_kwargs.max_llm_chunks,
                 include_source_type=False,
                 include_link=True,
             )
