@@ -1,0 +1,10 @@
+# Build requirements for the Go CLI wheels, shared by cli, tools/ods and
+# tools/ods-audit. Must stay identical to `[build-system] requires` in all three
+# pyproject.toml files; the build-constraints-drift pre-commit hook enforces that.
+#
+# Compiled into build-constraints.txt, which the release workflows pass as
+# UV_BUILD_CONSTRAINT with UV_REQUIRE_HASHES so every wheel builds against the
+# same verified closure.
+hatchling==1.29.0
+go-bin==1.27.1
+manygo==0.2.0

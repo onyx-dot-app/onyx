@@ -24,13 +24,14 @@ export function externalAppContextFromSearchParams({
 }: ExternalAppSearchParams): ExternalAppContext {
   const parsedAppId =
     typeof externalAppId === "string" ? Number(externalAppId) : undefined;
-  return {
-    ...(Number.isInteger(parsedAppId) &&
+  const hasAppId =
     parsedAppId !== undefined &&
-    parsedAppId > 0
-      ? { externalAppId: parsedAppId }
-      : {}),
-    ...(typeof externalAppName === "string" ? { externalAppName } : {}),
+    Number.isInteger(parsedAppId) &&
+    parsedAppId > 0;
+  return {
+    externalAppId: hasAppId ? parsedAppId : undefined,
+    externalAppName:
+      typeof externalAppName === "string" ? externalAppName : undefined,
   };
 }
 

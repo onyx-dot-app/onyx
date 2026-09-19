@@ -599,7 +599,7 @@ class ConfluenceConnector(
                 metadata=metadata,
                 doc_updated_at=datetime_from_string(page["version"]["when"]),
                 doc_created_at=datetime_from_string(page["history"]["createdDate"]),
-                primary_owners=primary_owners if primary_owners else None,
+                primary_owners=primary_owners or None,
                 parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
             )
         except Exception as e:

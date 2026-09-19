@@ -1,6 +1,7 @@
 import json
 import time
 from collections.abc import Callable
+from functools import partial
 from typing import Any, Literal
 
 from onyx.chat.chat_state import ChatStateContainer
@@ -34,10 +35,11 @@ from onyx.chat.prompt_utils import (
     get_default_base_system_prompt,
     process_prompt_template,
 )
+from onyx.chat.search_receipts import maybe_append_search_receipt
+from onyx.chat.token_budget import resolve_chat_token_budget
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
 from onyx.configs.constants import DocumentSource, MessageType
-from onyx.configs.model_configs import GEN_AI_INPUT_TOKEN_SAFETY_MARGIN
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.memory import UserMemoryContext, add_memory, update_memory_at_index
@@ -63,6 +65,7 @@ from onyx.server.query_and_chat.streaming_models import (
     TopLevelBranching,
 )
 from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES, STOPPING_TOOLS_NAMES
+from onyx.tools.constants import FILE_READER_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
     ChatFile,
@@ -352,13 +355,14 @@ def _build_context_file_citation_mapping(
 def _build_project_message(
     context_files: ExtractedContextFiles | None,
     token_counter: Callable[[str], int] | None,
+    available_tool_names: set[str] | None = None,
 ) -> list[ChatMessageSimple]:
     """Build messages for context-injected / tool-backed files.
 
     Returns up to two messages:
     1. The full-text files message (if file_texts is populated).
-    2. A lightweight metadata message for files the LLM should access via the
-       FileReaderTool (e.g. oversized files that don't fit in context).
+    2. A lightweight metadata message for oversized files, naming whichever
+       retrieval tool this request actually received.
     """
     if not context_files:
         return []
@@ -371,10 +375,35 @@ def _build_project_message(
     if context_files.file_metadata_for_tool and token_counter:
         messages.append(
             _create_file_tool_metadata_message(
-                context_files.file_metadata_for_tool, token_counter
+                context_files.file_metadata_for_tool,
+                token_counter,
+                available_tool_names,
             )
         )
     return messages
+
+
+def count_message_replay_tokens(
+    msg: ChatMessageSimple,
+    *,
+    image_files_replayed_as_markers: bool = False,
+    token_counter: Callable[[str], int] | None = None,
+) -> int:
+    if not image_files_replayed_as_markers:
+        return msg.token_count
+    # Include images whose stored cost is zero, such as project images.
+    num_images = sum(
+        1 for f in msg.image_files or [] if f.file_type == ChatFileType.IMAGE
+    )
+    if not num_images:
+        return msg.token_count
+    sample_marker = NON_VISION_IMAGE_MARKER.format(file_id="0" * 36)
+    marker_tokens = (
+        token_counter(sample_marker)
+        if token_counter
+        else _NON_VISION_MARKER_TOKEN_FALLBACK
+    )
+    return max(0, msg.token_count - msg.image_token_count) + num_images * marker_tokens
 
 
 def construct_message_history(
@@ -388,6 +417,11 @@ def construct_message_history(
     token_counter: Callable[[str], int] | None = None,
     all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
     image_files_replayed_as_markers: bool = False,
+    # Tool names this step offers the model. Only the retrieval tools
+    # (read_file, internal_search) are consulted, so the out-of-context file
+    # notice never names one the model cannot call. Steps exposing neither pass
+    # an empty set; leaving it unset also names no tool.
+    available_tool_names: set[str] | None = None,
 ) -> list[ChatMessageSimple]:
     if last_n_user_messages is not None:
         if last_n_user_messages <= 0:
@@ -395,37 +429,17 @@ def construct_message_history(
                 "filtering chat history by last N user messages must be a value greater than 0"
             )
 
-    # Budget each message at its replay cost: when the model takes no image
-    # input, translate_history_to_llm_format sends short text markers instead
-    # of the images, so charging the stored image token cost would evict
-    # history that actually fits.
-    marker_tokens = 0
-    if image_files_replayed_as_markers:
-        sample_marker = NON_VISION_IMAGE_MARKER.format(file_id="0" * 36)
-        marker_tokens = (
-            token_counter(sample_marker)
-            if token_counter
-            else _NON_VISION_MARKER_TOKEN_FALLBACK
-        )
-
-    def _replay_token_count(msg: ChatMessageSimple) -> int:
-        if not image_files_replayed_as_markers:
-            return msg.token_count
-        # Charge markers for every IMAGE entry, including ones whose stored
-        # token contribution is zero (project/context images are never
-        # counted) — the marker text is still sent for them.
-        num_images = sum(
-            1 for f in msg.image_files or [] if f.file_type == ChatFileType.IMAGE
-        )
-        if not num_images:
-            return msg.token_count
-        return (
-            max(0, msg.token_count - msg.image_token_count) + num_images * marker_tokens
-        )
+    _replay_token_count = partial(
+        count_message_replay_tokens,
+        image_files_replayed_as_markers=image_files_replayed_as_markers,
+        token_counter=token_counter,
+    )
 
     # Build the project / file-metadata messages up front so we can use their
     # actual token counts for the budget.
-    project_messages = _build_project_message(context_files, token_counter)
+    project_messages = _build_project_message(
+        context_files, token_counter, available_tool_names
+    )
     project_messages_tokens = sum(m.token_count for m in project_messages)
 
     history_token_budget = available_tokens
@@ -563,7 +577,7 @@ def construct_message_history(
                 [(m.file_id, m.filename) for m in forgotten_meta],
             )
             forgotten_files_message = _create_file_tool_metadata_message(
-                forgotten_meta, token_counter
+                forgotten_meta, token_counter, available_tool_names
             )
             # Shrink the remaining budget. If the metadata message doesn't
             # fit we may need to drop more history messages.
@@ -581,7 +595,7 @@ def construct_message_history(
                     forgotten_meta.append(all_injected_file_metadata[evicted.file_id])
                     # Rebuild the message with the new entry
                     forgotten_files_message = _create_file_tool_metadata_message(
-                        forgotten_meta, token_counter
+                        forgotten_meta, token_counter, available_tool_names
                     )
 
     # Build the final message list according to README ordering:
@@ -653,22 +667,79 @@ def _drop_orphaned_tool_call_responses(
 def _create_file_tool_metadata_message(
     file_metadata: list[FileToolMetadata],
     token_counter: Callable[[str], int],
+    available_tool_names: set[str] | None = None,
 ) -> ChatMessageSimple:
-    """Build a lightweight metadata-only message listing files available via FileReaderTool.
+    """Build a lightweight metadata-only message listing files not held in context.
 
-    Used when files are too large to fit in context and the vector DB is
-    disabled, so the LLM must use ``read_file`` to inspect them.
+    Name only a tool this step actually received. FileReaderTool is attached
+    only when the vector DB is disabled, and internal search can be absent even
+    when it is enabled (persona, ``allowed_tool_ids``, or a disabled search
+    usage setting). Naming a tool the model was never given makes it invent
+    workarounds — it searches the web for the document or guesses the contents.
+
+    Preference order is read_file, then internal search, then the python tool.
+    read_file pages through a file directly; search retrieves from the indexed
+    copy; the python tool is handed the files themselves, so prompt truncation
+    does not take them away from it.
+
+    The python tier applies only when every listed file actually reached
+    ``chat_files_for_tools`` (see ``FileToolMetadata.staged_for_tools``) —
+    summary-truncated files are listed for the LLM but never staged, so naming
+    python for them would send the model after bytes it does not have. The
+    notice also stops short of promising a path, because PythonTool normalizes
+    and de-duplicates filenames at staging time and applies its own count and
+    byte caps.
+
+    An unreported tool set names no tool. Steps that offer none are common (a
+    deep-research final report runs with no tools), and under-promising is the
+    safe direction to fail in.
     """
-    lines = [
-        "You have access to the following files. Use the read_file tool to "
-        "read sections of any file. You MUST pass the file_id UUID (not the "
-        "filename) to read_file:"
-    ]
+    offered: set[str] = available_tool_names or set()
+    if FILE_READER_TOOL_NAME in offered:
+        lines: list[str] = [
+            "You have access to the following files. Use the read_file tool to "
+            "read sections of any file. You MUST pass the file_id UUID (not the "
+            "filename) to read_file:"
+        ]
+        # The UUID is only meaningful to read_file, so it is listed only here.
+        lines.extend(
+            f'- file_id="{meta.file_id}" filename="{meta.filename}" (~{meta.approx_char_count:,} chars)'
+            for meta in file_metadata
+        )
+        return _finalize_file_metadata_message(lines, token_counter)
+
+    if SearchTool.NAME in offered:
+        lines = [
+            "These files are attached but too large to include in full. Their "
+            "contents are indexed — use internal search to find the relevant "
+            "passages. Do not guess them or search the web for them:"
+        ]
+    elif PythonTool.NAME in offered and all(
+        meta.staged_for_tools for meta in file_metadata
+    ):
+        lines = [
+            "These files are attached but too large to include in full. The "
+            "python tool receives them — read them there, listing the working "
+            "directory if a name does not resolve. Do not guess their contents "
+            "or search the web for them:"
+        ]
+    else:
+        lines = [
+            "These files are attached but too large to include in full, and no "
+            "tool here can read them. Do not guess their contents or search the "
+            "web for them — say they are too large to read in this conversation:"
+        ]
     lines.extend(
-        f'- file_id="{meta.file_id}" filename="{meta.filename}" (~{meta.approx_char_count:,} chars)'
+        f'- filename="{meta.filename}" (~{meta.approx_char_count:,} chars)'
         for meta in file_metadata
     )
+    return _finalize_file_metadata_message(lines, token_counter)
 
+
+def _finalize_file_metadata_message(
+    lines: list[str],
+    token_counter: Callable[[str], int],
+) -> ChatMessageSimple:
     message_content = "\n".join(lines)
     return ChatMessageSimple(
         message=message_content,
@@ -759,6 +830,8 @@ def run_llm_loop(
     include_citations: bool = True,
     all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
     inject_memories_in_prompt: bool = True,
+    # Append retrieval receipts to internal search responses (see onyx.chat.search_receipts).
+    enable_search_receipts: bool = False,
 ) -> None:
     with trace(
         "run_llm_loop",
@@ -808,11 +881,8 @@ def run_llm_loop(
             finish_reason=None,
         )
 
-        # Hold back a margin below max_input_tokens: our tiktoken estimate can
-        # undercount the provider's tokenizer and overflow the context window.
-        available_tokens = int(
-            llm.config.max_input_tokens * (1 - GEN_AI_INPUT_TOKEN_SAFETY_MARGIN)
-        )
+        token_budget = resolve_chat_token_budget(llm)
+        available_tokens = token_budget.input_tokens
         # When the model takes no image input, history images are replayed as
         # short text markers (translate_history_to_llm_format) — budget them
         # as markers too, not at their stored image token cost.
@@ -841,6 +911,9 @@ def run_llm_loop(
         has_called_search_tool: bool = False
         code_interpreter_file_generated: bool = False
         fallback_extraction_attempted: bool = False
+        # Candidate document ids seen by earlier searches in this user turn; receipts
+        # report new vs repeated candidates against it. Never shared across turns.
+        seen_search_document_ids: set[str] = set()
         citation_mapping: dict[int, str] = {}  # Maps citation_num -> document_id/URL
 
         # Fetch this in a short-lived session so the long-running stream loop does
@@ -1032,6 +1105,19 @@ def run_llm_loop(
                 token_counter=token_counter,
                 all_injected_file_metadata=all_injected_file_metadata,
                 image_files_replayed_as_markers=image_files_replayed_as_markers,
+                available_tool_names={tool.name for tool in final_tools},
+            )
+
+            max_output_tokens = token_budget.output_allowance(
+                estimated_input_tokens=tool_token_budget
+                + sum(
+                    count_message_replay_tokens(
+                        msg,
+                        image_files_replayed_as_markers=image_files_replayed_as_markers,
+                        token_counter=token_counter,
+                    )
+                    for msg in truncated_message_history
+                ),
             )
 
             # This calls the LLM, yields packets (reasoning, answers, etc.) and returns the result
@@ -1058,6 +1144,7 @@ def run_llm_loop(
                 user_identity=user_identity,
                 pre_answer_processing_time=pre_answer_processing_time,
                 reasoning_effort=reasoning_effort,
+                max_tokens=max_output_tokens,
             )
             if has_reasoned:
                 reasoning_cycles += 1
@@ -1126,6 +1213,7 @@ def run_llm_loop(
                 chat_files=chat_files,
                 url_snippet_map=extract_url_snippet_map(gathered_documents or []),
                 inject_memories_in_prompt=inject_memories_in_prompt,
+                include_search_retrieval_candidates=enable_search_receipts,
             )
             tool_responses = parallel_tool_call_results.tool_responses
             citation_mapping = parallel_tool_call_results.updated_citation_mapping
@@ -1171,6 +1259,15 @@ def run_llm_loop(
                 if not tool:
                     raise ValueError(
                         f"Tool '{tool_call.tool_name}' not found in tools list"
+                    )
+
+                # Responses are enriched in this sequential order, so an earlier
+                # sibling in the same batch counts as already seen. This runs before
+                # the response is persisted or added to history.
+                if enable_search_receipts and isinstance(tool, SearchTool):
+                    maybe_append_search_receipt(
+                        tool_response=tool_response,
+                        seen_document_ids=seen_search_document_ids,
                     )
 
                 # Extract search_docs if this is a search tool response

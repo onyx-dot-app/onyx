@@ -533,13 +533,9 @@ def get_max_input_tokens_from_llm_provider(
     for model_configuration in llm_provider.model_configurations:
         if model_configuration.name == model_name:
             max_input_tokens = model_configuration.max_input_tokens
-    return (
-        max_input_tokens
-        if max_input_tokens
-        else get_max_input_tokens(
-            model_provider=llm_provider.provider,
-            model_name=model_name,
-        )
+    return max_input_tokens or get_max_input_tokens(
+        model_provider=llm_provider.provider,
+        model_name=model_name,
     )
 
 

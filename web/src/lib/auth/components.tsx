@@ -18,6 +18,7 @@ import * as Yup from "yup";
 import { requestEmailVerification } from "@/lib/auth/svc";
 import Link from "next/link";
 import { useUser } from "@/providers/UserProvider";
+import { LOGIN_PATH, loginPath } from "@/lib/auth/paths";
 import {
   validateInternalRedirect,
   passwordHasUppercase,
@@ -51,7 +52,7 @@ export function AuthenticationShell({ children }: AuthenticationShellProps) {
     const { isExtension } = getExtensionContext();
     if (isExtension) {
       window.open(
-        window.location.origin + "/auth/login",
+        window.location.origin + LOGIN_PATH,
         "_blank",
         "noopener,noreferrer"
       );
@@ -59,13 +60,13 @@ export function AuthenticationShell({ children }: AuthenticationShellProps) {
     }
     // Round-trip the current location through login (OAuth `next` / SAML
     // RelayState) so the post-login redirect lands back here.
-    const returnTo = validateInternalRedirect(
-      window.location.pathname + window.location.search + window.location.hash
-    );
     router.push(
-      returnTo
-        ? `/auth/login?next=${encodeURIComponent(returnTo)}`
-        : "/auth/login"
+      loginPath({
+        next:
+          window.location.pathname +
+          window.location.search +
+          window.location.hash,
+      })
     );
   }
 

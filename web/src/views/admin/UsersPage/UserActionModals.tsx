@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { Button } from "@opal/components";
+import { Button, CopyButton, InputTypeIn } from "@opal/components";
 import { SvgUserPlus, SvgUserX, SvgXCircle, SvgKey } from "@opal/icons";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
@@ -325,9 +325,18 @@ export function ResetPasswordModal({
               strong: emailTag,
             })}
           </Text>
-          <code className="rounded-xs bg-background-neutral-02 px-3 py-2 text-sm select-all">
-            {newPassword}
-          </code>
+          <div className="font-main-ui-mono relative">
+            <InputTypeIn value={newPassword} variant="readOnly" />
+            {/* The field has no right slot, so the button sits over it. */}
+            <div className="absolute inset-y-0 end-1 flex items-center">
+              <CopyButton
+                size="sm"
+                getCopyText={() => newPassword}
+                tooltip={t("resetPasswordModal.copyButton.label")}
+                aria-label={t("resetPasswordModal.copyButton.label")}
+              />
+            </div>
+          </div>
         </div>
       ) : (
         <Text as="p" text03>

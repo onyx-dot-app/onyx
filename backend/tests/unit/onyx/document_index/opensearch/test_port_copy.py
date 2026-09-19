@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 
 from pydantic import BaseModel
 
+from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.port_copy import copy_present_chunks_to_future
 from onyx.indexing.port_reembed import ReembedStrategy
 
@@ -45,6 +46,7 @@ def test_copier_drops_docs_deleted_mid_batch(mock_reembed: MagicMock) -> None:
         strategy=ReembedStrategy.MODEL_ONLY,
         embedder=MagicMock(),
         present_tokenizer=MagicMock(),
+        tenant_state=TenantState(tenant_id="public", multitenant=False),
         surviving_doc_ids=lambda: {"doc_a"},  # doc_b deleted mid-batch
     )
 
@@ -68,6 +70,7 @@ def test_copier_skips_write_when_whole_batch_deleted(mock_reembed: MagicMock) ->
         strategy=ReembedStrategy.MODEL_ONLY,
         embedder=MagicMock(),
         present_tokenizer=MagicMock(),
+        tenant_state=TenantState(tenant_id="public", multitenant=False),
         surviving_doc_ids=lambda: set(),  # everything deleted
     )
 
@@ -99,6 +102,7 @@ def test_copier_rechecks_survival_before_each_sub_page(mock_reembed: MagicMock) 
         strategy=ReembedStrategy.MODEL_ONLY,
         embedder=MagicMock(),
         present_tokenizer=MagicMock(),
+        tenant_state=TenantState(tenant_id="public", multitenant=False),
         surviving_doc_ids=surviving,
     )
 
@@ -131,6 +135,7 @@ def test_copier_aborts_write_when_cancelled_mid_batch(mock_reembed: MagicMock) -
         strategy=ReembedStrategy.MODEL_ONLY,
         embedder=MagicMock(),
         present_tokenizer=MagicMock(),
+        tenant_state=TenantState(tenant_id="public", multitenant=False),
         should_abort=lambda: next(aborts),
     )
 
@@ -180,6 +185,7 @@ def test_rag_on_augmentation_reembeds_one_page_per_document(
         strategy=ReembedStrategy.AUGMENTATION,
         embedder=MagicMock(),
         present_tokenizer=MagicMock(),
+        tenant_state=TenantState(tenant_id="public", multitenant=False),
         augmentation_ctx=_aug_ctx(rag_on=True),
         should_abort=_should_abort,
     )
@@ -216,6 +222,7 @@ def test_rag_off_augmentation_streams_per_pit_page(mock_reembed: MagicMock) -> N
         strategy=ReembedStrategy.AUGMENTATION,
         embedder=MagicMock(),
         present_tokenizer=MagicMock(),
+        tenant_state=TenantState(tenant_id="public", multitenant=False),
         augmentation_ctx=_aug_ctx(rag_on=False),
     )
 
@@ -243,6 +250,7 @@ def test_copier_writes_all_without_filter(mock_reembed: MagicMock) -> None:
         strategy=ReembedStrategy.MODEL_ONLY,
         embedder=MagicMock(),
         present_tokenizer=MagicMock(),
+        tenant_state=TenantState(tenant_id="public", multitenant=False),
     )
 
     assert written == 2

@@ -24,7 +24,7 @@ from onyx.utils.variable_functionality import (
 
 
 def _build_persona_name(channel_name: str | None) -> str:
-    return f"{SLACK_BOT_PERSONA_PREFIX}{channel_name if channel_name else DEFAULT_PERSONA_SLACK_CHANNEL_NAME}"
+    return f"{SLACK_BOT_PERSONA_PREFIX}{channel_name or DEFAULT_PERSONA_SLACK_CHANNEL_NAME}"
 
 
 def _cleanup_relationships(db_session: Session, persona_id: int) -> None:

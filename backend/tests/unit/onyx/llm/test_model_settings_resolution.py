@@ -237,11 +237,14 @@ class TestEffortReachesTheProvider:
         llm = _make_llm()
         assert _effort_sent(_sent_kwargs(llm, ReasoningEffort.HIGH)) == "high"
 
-    def test_off_cap_omits_reasoning_entirely(self) -> None:
-        """OFF is the one level that drops the parameter rather than lowering it."""
+    def test_off_cap_sends_explicit_none(self) -> None:
+        """OFF is the one level that turns reasoning off rather than lowering
+        it. gpt-5.1 supports the explicit "none", which beats omitting the
+        parameter for the models that default to medium."""
         llm = _make_llm(reasoning_effort_max=ReasoningEffort.OFF)
         kwargs = _sent_kwargs(llm, ReasoningEffort.XHIGH)
-        for key in ("reasoning", "thinking", "output_config", "reasoning_effort"):
+        assert kwargs["reasoning"] == {"effort": "none"}
+        for key in ("thinking", "output_config", "reasoning_effort"):
             assert key not in kwargs
 
 

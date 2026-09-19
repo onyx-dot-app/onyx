@@ -6,6 +6,10 @@
  * sanitization happen here. Consumers never touch Record<string, unknown>.
  */
 
+// Every `unknown` parameter in this file is the decode boundary itself: no
+// caller can hand these functions an already-parsed type.
+/* oxlint-disable anti-slop/no-unknown-parameters */
+
 import { stripSessionPrefix, sanitizePathsInText } from "./pathSanitizer";
 import {
   getRawInput,

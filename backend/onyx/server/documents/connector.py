@@ -423,9 +423,10 @@ def _fetch_and_check_file_connector_cc_pair_permissions(
     ):
         return cc_pair
 
-    raise HTTPException(
-        status_code=403,
-        detail="Access denied. User cannot manage files for this connector.",
+    raise OnyxError(
+        OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+        "Group managers can only act on private resources "
+        "within the groups they manage.",
     )
 
 
@@ -433,15 +434,21 @@ def _fetch_and_check_file_connector_cc_pair_permissions(
 def upload_files_api(
     files: list[UploadFile],
     unzip: bool = True,
-    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    _: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
 ) -> FileUploadResponse:
+    # No GATE 2: there is no resource to scope yet, since this only stores bytes and
+    # returns ids. The manager is held to their groups when the credential is associated.
     return upload_files(files, FileOrigin.CONNECTOR_FILE_UPLOAD, unzip=unzip)
 
 
 @router.get("/admin/connector/{connector_id}/files", tags=PUBLIC_API_TAGS)
 def list_connector_files(
     connector_id: int,
-    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> ConnectorFilesResponse:
     """List all files in a file connector."""
@@ -454,11 +461,13 @@ def list_connector_files(
             status_code=400, detail="This endpoint only works with file connectors"
         )
 
+    # require_editable=False is the obvious choice for a read, but its filter passes
+    # any public connector, which would hand a manager file names outside their groups.
     _ = _fetch_and_check_file_connector_cc_pair_permissions(
         connector_id=connector_id,
         user=user,
         db_session=db_session,
-        require_editable=False,
+        require_editable=True,
     )
 
     file_locations = connector.connector_specific_config.get("file_locations", [])
@@ -560,7 +569,9 @@ def update_connector_files(
     connector_id: int,
     files: list[UploadFile] | None = File(None),
     file_ids_to_remove: str = Form("[]"),
-    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> FileUploadResponse:
     """
@@ -1439,6 +1450,25 @@ def _apply_federated_connector_status_filters(
     return filtered_statuses
 
 
+# Zoom caps its recording listing at a month per request, so with no start date it
+# asks for every month back to 1970, per host, against an account-wide rate limit.
+_SOURCES_REQUIRING_INDEXING_START = {DocumentSource.ZOOM}
+
+
+# Creation only: update_connector leaves the stored column alone, so demanding a date
+# on an update would reject callers over a value the endpoint then throws away.
+def _validate_indexing_start(connector_data: ConnectorBase) -> None:
+    if (
+        connector_data.source in _SOURCES_REQUIRING_INDEXING_START
+        and connector_data.indexing_start is None
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"The {connector_data.source.value} connector needs an indexing start "
+            "date. Set one so it knows how far back to look.",
+        )
+
+
 def _validate_connector_allowed(source: DocumentSource) -> None:
     valid_connectors = [
         x for x in ENABLED_CONNECTOR_TYPES.replace("_", "").split(",") if x
@@ -1468,6 +1498,7 @@ def create_connector_from_model(
 
     try:
         _validate_connector_allowed(connector_data.source)
+        _validate_indexing_start(connector_data)
 
         connector_base = connector_data.to_connector_base()
         connector_response = create_connector(
@@ -1517,6 +1548,7 @@ def create_connector_with_mock_credential(
 
     try:
         _validate_connector_allowed(connector_data.source)
+        _validate_indexing_start(connector_data)
         connector_response = create_connector(
             db_session=db_session,
             connector_data=connector_data,

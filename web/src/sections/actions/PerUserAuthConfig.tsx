@@ -20,7 +20,7 @@ interface PerUserAuthConfigProps {
   values: MCPAuthFormValues;
   setFieldValue: (
     field: keyof MCPAuthFormValues | string,
-    value: unknown
+    value: MCPAuthFormValues[keyof MCPAuthFormValues] | string[]
   ) => void;
   mode?: "per-user" | "shared";
 }

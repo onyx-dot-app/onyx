@@ -3,7 +3,6 @@
 import { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { ToolSnapshot } from "@/lib/tools/types";
-import { initiateOAuthFlow } from "@/lib/oauth/api";
 import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
 import { SvgArrowExchange } from "@opal/icons";
 import { Button, MessageCard } from "@opal/components";
@@ -22,7 +21,7 @@ function CustomToolAuthCard({
   agentId,
 }: CustomToolAuthCardProps) {
   const t = useTranslations("chat.messages");
-  const { getToolAuthStatus } = useToolOAuthStatus(agentId);
+  const { getToolAuthStatus, authenticateTool } = useToolOAuthStatus(agentId);
   const matchedTool = useMemo(() => {
     if (toolId == null) return null;
     return tools.find((t) => t.id === toolId) ?? null;
@@ -42,10 +41,7 @@ function CustomToolAuthCard({
   }
 
   const handleAuthenticate = () => {
-    initiateOAuthFlow(
-      oauthConfigId,
-      window.location.pathname + window.location.search
-    );
+    if (matchedTool) void authenticateTool(matchedTool);
   };
 
   return (

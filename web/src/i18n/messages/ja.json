@@ -81,6 +81,9 @@
       },
       "projectSearch": {
         "label": "プロジェクト検索"
+      },
+      "selectSearchSources": {
+        "label": "検索ソースを選択"
       }
     },
     "addMcpModal": {
@@ -7928,6 +7931,9 @@
         "title": "権限が変更されました"
       },
       "resetPasswordModal": {
+        "copyButton": {
+          "label": "パスワードをコピー"
+        },
         "description": "<strong>{email}</strong> の新しいランダムなパスワードを生成します。現在のパスワードは直ちに使用できなくなります。",
         "doneButton": {
           "label": "完了"
@@ -8026,8 +8032,8 @@
           "groups": {
             "header": "グループ"
           },
-          "lastUpdated": {
-            "header": "最終更新"
+          "lastActive": {
+            "header": "最終アクティブ"
           },
           "name": {
             "header": "名前"
@@ -8099,6 +8105,9 @@
         "elevenlabsTts": {
           "subtitle": "ElevenLabs のテキスト読み上げ API。"
         },
+        "zoomScribe": {
+          "subtitle": "Zoom Scribe のリアルタイム音声テキスト変換 API。"
+        },
         "tts1": {
           "subtitle": "速度に最適化された OpenAI のテキスト読み上げモデル。"
         },
@@ -8115,6 +8124,12 @@
           "label": "API キー",
           "placeholder": "API キー",
           "required": "API キーは必須です"
+        },
+        "apiSecret": {
+          "description": "Scribe にアクセスするには、{provider} の [API シークレット]({url}) を貼り付けてください。",
+          "label": "API シークレット",
+          "placeholder": "API シークレット",
+          "required": "API シークレットは必須です"
         },
         "cancelButton": {
           "label": "キャンセル"
@@ -8143,6 +8158,12 @@
           "invalid": "en-US, fr-FR のようにロケールをカンマ区切りで入力してください（1 言語につき 1 つ）",
           "label": "音声言語",
           "selfHostedCapExceeded": "セルフホストのエンドポイントは音声言語を最大 {cap} 個までサポートします（開始時に検出）"
+        },
+        "sttLanguage": {
+          "description": "Zoom Scribe がリアルタイム文字起こしに使用するロケールを選択してください。[対応ロケール]({docsUrl}) を参照してください。",
+          "invalid": "対応している音声言語を選択してください",
+          "label": "音声言語",
+          "required": "音声言語は必須です"
         },
         "sttModel": {
           "label": "STT モデル"
@@ -8996,6 +9017,9 @@
       "ssoMissingAuthUrl": {
         "error": "サインインの応答に認可 URL が含まれていませんでした"
       },
+      "ssoRedirecting": {
+        "text": "サインインのため {provider} に移動しています…"
+      },
       "ssoSignInButton": {
         "label": "SSO でサインイン"
       },
@@ -9574,6 +9598,9 @@
         },
         "startRecording": {
           "ariaLabel": "録音を開始"
+        },
+        "startingRecording": {
+          "ariaLabel": "録音を開始しています"
         },
         "stopRecording": {
           "ariaLabel": "録音を停止"

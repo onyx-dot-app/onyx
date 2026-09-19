@@ -232,10 +232,13 @@ The CLI is distributed as a Python package via [PyPI](https://pypi.org/project/o
 
 ### CI release (recommended)
 
-Tag a release and push — the `release-cli.yml` workflow builds wheels for all platforms and publishes to PyPI automatically:
+Tag a release and push — the `release-cli.yml` workflow builds wheels for all platforms and publishes to PyPI automatically. `ods release cli` calculates and pushes the next tag for you:
 
 ```shell
-tag --prefix cli
+ods release cli              # bumps the patch version
+ods release cli --bump minor
+ods release cli --version 1.5.0
+ods release cli --dry-run    # computes the version, tags nothing
 ```
 
 To do this manually:
@@ -244,6 +247,11 @@ To do this manually:
 git tag cli/v0.1.0
 git push origin cli/v0.1.0
 ```
+
+> [!IMPORTANT]
+> `ods release` tags **`HEAD`**, not `main`, and does not check which branch you
+> are on. Compare `git rev-parse HEAD` with `git rev-parse origin/main` first.
+> Tagging from a stale branch publishes that branch under the new version.
 
 The workflow builds wheels for:
 
@@ -275,6 +283,35 @@ GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
 # Upload to PyPI
 uv publish
 ```
+
+### Build constraints
+
+The release workflows build every wheel against
+`tools/requirements/build-constraints.txt`, shared by `cli`, `tools/ods` and
+`tools/ods-audit`. They pass it as `UV_BUILD_CONSTRAINT` with
+`UV_REQUIRE_HASHES`, so the build environment (hatchling, `go-bin`, manygo and
+their dependencies) is pinned and verified.
+
+A plain local `uv build` resolves those dependencies freely. Set the same
+variables to build against the pinned closure:
+
+```shell
+UV_BUILD_CONSTRAINT="$(git rev-parse --show-toplevel)/tools/requirements/build-constraints.txt" \
+  UV_REQUIRE_HASHES=true GOTOOLCHAIN=local \
+  uv build --wheel
+```
+
+`tools/requirements/build-constraints.txt` is compiled from its `.in` by the
+`pip-compile` pre-commit hook, so a plain `pre-commit run pip-compile` refreshes
+it. To upgrade a pinned build dependency, edit `build-constraints.in` and the
+matching `[build-system] requires` in all three `pyproject.toml` files; the
+`build-constraints-drift` hook fails if they disagree.
+
+`go-bin` ships the Go toolchain used to compile the binary. Bumping Go means
+moving it everywhere at once: the `go` directive in `go.mod`, `cli/Dockerfile`,
+the `setup-go` and `GO_VERSION` pins across `.github/workflows/`,
+`.devcontainer/Dockerfile`, the `go-bin` pin in all three `pyproject.toml` files
+and in `tools/requirements/build-constraints.in`, and the compiled `build-constraints.txt`.
 
 ### Versioning
 

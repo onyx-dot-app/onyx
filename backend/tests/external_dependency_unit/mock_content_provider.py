@@ -46,9 +46,7 @@ class MockContentProvider(WebContentProvider, ContentProviderController):
             filter(lambda web_content: web_content.url in urls, self._contents)
         )
 
-        return list(
-            map(lambda web_content: web_content.to_web_content(), filtered_contents)
-        )
+        return [web_content.to_web_content() for web_content in filtered_contents]
 
 
 @contextmanager

@@ -1,9 +1,13 @@
-import type { Credential } from "@/lib/connectors/credentials";
+import {
+  credentialTemplates,
+  type Credential,
+} from "@/lib/connectors/credentials";
 import { ValidSources } from "@/lib/types";
 
 import {
   canEditCredentialWithForm,
   createInitialValues,
+  createValidationSchema,
   getEditableCredentialFields,
 } from "@/lib/credentials/utils";
 
@@ -84,5 +88,88 @@ describe("credential edit helpers", () => {
     expect(canEditCredentialWithForm(credential, ValidSources.Linear)).toBe(
       false
     );
+  });
+});
+
+describe("createValidationSchema", () => {
+  const schema = createValidationSchema(
+    credentialTemplates[ValidSources.Outlook]
+  );
+  const ids = {
+    outlook_client_id: "client-id",
+    outlook_directory_id: "directory-id",
+  };
+
+  it("requires the fields both auth methods share under each of them", () => {
+    expect(
+      schema.isValidSync({
+        authentication_method: "client_secret",
+        outlook_client_secret: "secret",
+      })
+    ).toBe(false);
+    expect(
+      schema.isValidSync({
+        authentication_method: "certificate",
+        outlook_certificate_password: "pass",
+        outlook_private_key: {},
+      })
+    ).toBe(false);
+  });
+
+  it("accepts a complete form without the other method's fields", () => {
+    expect(
+      schema.isValidSync({
+        ...ids,
+        authentication_method: "client_secret",
+        outlook_client_secret: "secret",
+      })
+    ).toBe(true);
+    expect(
+      schema.isValidSync({
+        ...ids,
+        authentication_method: "certificate",
+        outlook_certificate_password: "pass",
+        outlook_private_key: {},
+      })
+    ).toBe(true);
+  });
+
+  it("requires the SharePoint app ids under both of its methods", () => {
+    const sharepointSchema = createValidationSchema(
+      credentialTemplates[ValidSources.Sharepoint]
+    );
+    const sharepointIds = {
+      sp_client_id: "client-id",
+      sp_directory_id: "directory-id",
+    };
+
+    expect(
+      sharepointSchema.isValidSync({
+        authentication_method: "client_secret",
+        sp_client_secret: "secret",
+      })
+    ).toBe(false);
+    expect(
+      sharepointSchema.isValidSync({
+        authentication_method: "certificate",
+        sp_certificate_password: "pass",
+        sp_private_key: {},
+      })
+    ).toBe(false);
+    expect(
+      sharepointSchema.isValidSync({
+        ...sharepointIds,
+        authentication_method: "client_secret",
+        sp_client_secret: "secret",
+      })
+    ).toBe(true);
+    expect(
+      sharepointSchema.isValidSync({
+        ...sharepointIds,
+        authentication_method: "certificate",
+        sp_certificate_password: "pass",
+        sp_private_key: {},
+      })
+    ).toBe(true);
   });
 });

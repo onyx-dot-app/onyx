@@ -219,7 +219,7 @@ export default function HookFormModal({
                   name: values.name,
                   hook_point: spec.hook_point,
                   endpoint_url: values.endpoint_url,
-                  ...(values.api_key ? { api_key: values.api_key } : {}),
+                  api_key: values.api_key || undefined,
                   fail_strategy: values.fail_strategy,
                   timeout_seconds: parseFloat(values.timeout_seconds),
                 });

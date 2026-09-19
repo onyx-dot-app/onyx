@@ -59,6 +59,7 @@ _SOURCE_IMAGE_FILENAMES: Mapping[DocumentSource, str] = {
     DocumentSource.HIGHSPOT: "Highspot.png",
     DocumentSource.DRUPAL_WIKI: "Drupal.png",
     DocumentSource.IMAP: "Mail.png",
+    DocumentSource.OUTLOOK: "Mail.png",
     DocumentSource.BITBUCKET: "Bitbucket.png",
     DocumentSource.TESTRAIL: "Testrail.png",
     DocumentSource.BRAINTRUST: "Braintrust.png",

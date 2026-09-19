@@ -630,6 +630,7 @@ export enum ValidSources {
   Salesforce = "salesforce",
   Sharepoint = "sharepoint",
   Teams = "teams",
+  Outlook = "outlook",
   Zendesk = "zendesk",
   Discourse = "discourse",
   Axero = "axero",
@@ -684,6 +685,7 @@ export const validAutoSyncSources = [
   ValidSources.GitHub,
   ValidSources.Sharepoint,
   ValidSources.Teams,
+  ValidSources.Outlook,
   ValidSources.Canvas,
   ValidSources.Box,
 ] as const;

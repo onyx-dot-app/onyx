@@ -123,9 +123,7 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
         _enrich_start = time.monotonic()
         updatable_ids = [doc.id for doc in context.updatable_docs]
 
-        doc_id_to_new_chunk_cnt: dict[str, int] = {
-            doc_id: 0 for doc_id in updatable_ids
-        }
+        doc_id_to_new_chunk_cnt: dict[str, int] = dict.fromkeys(updatable_ids, 0)
         for chunk in chunks:
             if chunk.source_document.id in doc_id_to_new_chunk_cnt:
                 doc_id_to_new_chunk_cnt[chunk.source_document.id] += 1
@@ -142,23 +140,21 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
             doc_id_to_access_info=get_access_for_documents(
                 document_ids=updatable_ids, db_session=db_session
             ),
-            doc_id_to_document_set={
-                document_id: document_sets
-                for document_id, document_sets in fetch_document_sets_for_documents(
+            doc_id_to_document_set=dict(
+                fetch_document_sets_for_documents(
                     document_ids=updatable_ids, db_session=db_session
                 )
-            },
+            ),
             doc_id_to_ancestor_ids=self._get_ancestor_ids_for_documents(
                 context.updatable_docs, tenant_id, db_session
             ),
             id_to_boost_map=context.id_to_boost_map,
-            doc_id_to_previous_chunk_cnt={
-                document_id: chunk_count
-                for document_id, chunk_count in fetch_chunk_counts_for_documents(
+            doc_id_to_previous_chunk_cnt=dict(
+                fetch_chunk_counts_for_documents(
                     document_ids=updatable_ids,
                     db_session=db_session,
                 )
-            },
+            ),
             doc_id_to_new_chunk_cnt=dict(doc_id_to_new_chunk_cnt),
             no_access=no_access,
             tenant_id=tenant_id,

@@ -155,9 +155,7 @@ export default function CreateCustomAppModal({
           upstream_url_patterns: upstreamPatterns,
           auth_template: toRecord(headers),
           organization_credentials: toRecord(orgCredentials),
-          ...(associationDirty
-            ? { associated_skill_ids: selectedSkillIds }
-            : {}),
+          associated_skill_ids: associationDirty ? selectedSkillIds : undefined,
         });
         onSaved();
         onClose();

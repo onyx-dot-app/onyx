@@ -11,6 +11,9 @@ from ee.onyx.external_permissions.sharepoint.permission_utils import (
 )
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.microsoft_utils.drive_items import download_via_graph_api
+from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
+from onyx.connectors.microsoft_utils.graph_client import sleep_and_retry
 from onyx.connectors.models import (
     ConnectorFailure,
     Document,
@@ -18,12 +21,7 @@ from onyx.connectors.models import (
     HierarchyNode,
     ImageSection,
 )
-from onyx.connectors.sharepoint.connector import (
-    SharepointAuthMethod,
-    SharepointConnector,
-    _download_via_graph_api,
-    sleep_and_retry,
-)
+from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.db.enums import HierarchyNodeType
 from tests.daily.connectors.utils import load_all_from_connector
 from tests.utils.pytest_secrets import RedactedDict
@@ -233,7 +231,7 @@ def test_sharepoint_connector_all_sites__docs_only(
     sharepoint_credentials: dict[str, str],
 ) -> None:
     with patch(
-        "onyx.connectors.sharepoint.connector.store_image_and_create_section",
+        "onyx.connectors.microsoft_utils.drive_items.store_image_and_create_section",
         mock_store_image,
     ):
         connector = SharepointConnector(
@@ -261,7 +259,7 @@ def test_sharepoint_connector_all_sites__pages_only(
     sharepoint_credentials: dict[str, str],
 ) -> None:
     with patch(
-        "onyx.connectors.sharepoint.connector.store_image_and_create_section",
+        "onyx.connectors.microsoft_utils.drive_items.store_image_and_create_section",
         mock_store_image,
     ):
         connector = SharepointConnector(
@@ -289,7 +287,7 @@ def test_sharepoint_connector_specific_folder(
     sharepoint_credentials: dict[str, str],
 ) -> None:
     with patch(
-        "onyx.connectors.sharepoint.connector.store_image_and_create_section",
+        "onyx.connectors.microsoft_utils.drive_items.store_image_and_create_section",
         mock_store_image,
     ):
         # Initialize connector with the test site URL and specific folder
@@ -331,7 +329,7 @@ def test_sharepoint_connector_root_folder__docs_only(
     sharepoint_credentials: dict[str, str],
 ) -> None:
     with patch(
-        "onyx.connectors.sharepoint.connector.store_image_and_create_section",
+        "onyx.connectors.microsoft_utils.drive_items.store_image_and_create_section",
         mock_store_image,
     ):
         # Initialize connector with the base site URL
@@ -367,7 +365,7 @@ def test_sharepoint_connector_other_library(
     sharepoint_credentials: dict[str, str],
 ) -> None:
     with patch(
-        "onyx.connectors.sharepoint.connector.store_image_and_create_section",
+        "onyx.connectors.microsoft_utils.drive_items.store_image_and_create_section",
         mock_store_image,
     ):
         # Initialize connector with the other library
@@ -409,7 +407,7 @@ def test_sharepoint_connector_poll(
     sharepoint_credentials: dict[str, str],
 ) -> None:
     with patch(
-        "onyx.connectors.sharepoint.connector.store_image_and_create_section",
+        "onyx.connectors.microsoft_utils.drive_items.store_image_and_create_section",
         mock_store_image,
     ):
         # Initialize connector with the base site URL
@@ -451,7 +449,7 @@ def test_sharepoint_connector_pages(
     sharepoint_credentials: dict[str, str],
 ) -> None:
     with patch(
-        "onyx.connectors.sharepoint.connector.store_image_and_create_section",
+        "onyx.connectors.microsoft_utils.drive_items.store_image_and_create_section",
         mock_store_image,
     ):
         connector = SharepointConnector(
@@ -553,7 +551,7 @@ def test_sharepoint_connector_hierarchy_nodes(
 ) -> None:
     """Test that the SharePoint connector yields proper hierarchy nodes."""
     with patch(
-        "onyx.connectors.sharepoint.connector.store_image_and_create_section",
+        "onyx.connectors.microsoft_utils.drive_items.store_image_and_create_section",
         mock_store_image,
     ):
         site_url = os.environ["SHAREPOINT_SITE"]
@@ -609,7 +607,7 @@ def sharepoint_cert_credentials(
 ) -> RedactedDict[str, str]:
     return RedactedDict(
         {
-            "authentication_method": SharepointAuthMethod.CERTIFICATE.value,
+            "authentication_method": MicrosoftAuthMethod.CERTIFICATE.value,
             "sp_client_id": test_secrets[TestSecret.PERM_SYNC_SHAREPOINT_CLIENT_ID],
             "sp_private_key": test_secrets[TestSecret.PERM_SYNC_SHAREPOINT_PRIVATE_KEY],
             "sp_certificate_password": test_secrets[
@@ -638,7 +636,7 @@ def test_sharepoint_connector_hierarchy_node_permissions(
 
     with (
         patch(
-            "onyx.connectors.sharepoint.connector.store_image_and_create_section",
+            "onyx.connectors.microsoft_utils.drive_items.store_image_and_create_section",
             mock_store_image,
         ),
         patch(
@@ -646,8 +644,8 @@ def test_sharepoint_connector_hierarchy_node_permissions(
             wraps=sleep_and_retry,
         ) as mock_permission_retry,
         patch(
-            "onyx.connectors.sharepoint.connector._download_via_graph_api",
-            wraps=_download_via_graph_api,
+            "onyx.connectors.microsoft_utils.drive_items.download_via_graph_api",
+            wraps=download_via_graph_api,
         ) as mock_graph_content_download,
     ):
         result = load_all_from_connector(
@@ -701,7 +699,7 @@ def test_permission_sync_site_hierarchy_node_permissions(
     )
     connector.load_credentials(sharepoint_cert_credentials)
     with patch(
-        "onyx.connectors.sharepoint.connector.store_image_and_create_section",
+        "onyx.connectors.microsoft_utils.drive_items.store_image_and_create_section",
         mock_store_image,
     ):
         result = load_all_from_connector(
@@ -813,7 +811,7 @@ def test_sharepoint_connector_reindex_drive_items(
 ) -> None:
     """reindex re-fetches failed drive items across libraries from their links."""
     with patch(
-        "onyx.connectors.sharepoint.connector.store_image_and_create_section",
+        "onyx.connectors.microsoft_utils.drive_items.store_image_and_create_section",
         mock_store_image,
     ):
         found = _crawl_site(
@@ -852,7 +850,7 @@ def test_sharepoint_connector_reindex_site_page(
 ) -> None:
     """reindex round-trips a site-page target through the site-page path."""
     with patch(
-        "onyx.connectors.sharepoint.connector.store_image_and_create_section",
+        "onyx.connectors.microsoft_utils.drive_items.store_image_and_create_section",
         mock_store_image,
     ):
         found = _crawl_site(
@@ -916,7 +914,7 @@ def test_sharepoint_connector_reindex_denylist_excluded(
     """A target excluded by the path denylist yields an informative failure
     rather than being silently dropped."""
     with patch(
-        "onyx.connectors.sharepoint.connector.store_image_and_create_section",
+        "onyx.connectors.microsoft_utils.drive_items.store_image_and_create_section",
         mock_store_image,
     ):
         found = _crawl_site(
