@@ -19,9 +19,9 @@ from tests.integration.common_utils.test_models import DATestCCPair, DATestUser
 from tests.utils.onedrive_fixture import (
     FIXTURE_EXCLUDED_PATHS,
     FixtureState,
-    OneDriveFixtureProvisioner,
+    OneDriveFixtureReader,
+    build_fixture_reader,
     build_integration_fixture_config,
-    build_provisioner,
 )
 from tests.utils.pytest_secrets import (
     pytest_collection_modifyitems as pytest_collection_modifyitems,
@@ -40,7 +40,6 @@ logger = logging.getLogger(__name__)
 class OneDriveIntegrationEnvironment(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    provisioner: OneDriveFixtureProvisioner
     state: FixtureState
     admin_user: DATestUser
     owner_user: DATestUser
@@ -126,16 +125,12 @@ def _wait_for_initial_jobs(
     )
 
 
-@pytest.fixture(scope="module")
-def onedrive_integration_environment(
+def _integration_environment(
     test_secrets: dict[TestSecret, str],
+    state: FixtureState,
 ) -> Generator[OneDriveIntegrationEnvironment, None, None]:
-    provisioner = build_provisioner(build_integration_fixture_config())
-    corpus_setup_started = False
     try:
         reset_all()
-        corpus_setup_started = True
-        state = provisioner.setup()
 
         admin_user = UserManager.create(email=ADMIN_EMAIL)
         owner_user = UserManager.create(email=state.owner.user_principal_name)
@@ -191,7 +186,6 @@ def onedrive_integration_environment(
         _wait_for_initial_jobs(sharepoint_cc_pair, admin_user, sharepoint_started_at)
 
         yield OneDriveIntegrationEnvironment(
-            provisioner=provisioner,
             state=state,
             admin_user=admin_user,
             owner_user=owner_user,
@@ -203,18 +197,19 @@ def onedrive_integration_environment(
             sharepoint_cc_pair=sharepoint_cc_pair,
         )
     finally:
-        cleanup_errors: list[Exception] = []
         try:
-            if corpus_setup_started:
-                provisioner.setup()
-        except Exception as error:
-            logger.exception("Failed to restore the OneDrive integration corpus")
-            cleanup_errors.append(error)
-        finally:
-            try:
-                reset_all()
-            except Exception as error:
-                logger.exception("Failed to reset integration test state")
-                cleanup_errors.append(error)
-        if cleanup_errors:
-            raise ExceptionGroup("OneDrive integration cleanup failed", cleanup_errors)
+            reset_all()
+        except Exception:
+            logger.exception("Failed to reset integration test state")
+            raise
+
+
+@pytest.fixture(scope="module")
+def onedrive_integration_environment(
+    test_secrets: dict[TestSecret, str],
+) -> Generator[OneDriveIntegrationEnvironment, None, None]:
+    fixture_reader: OneDriveFixtureReader = build_fixture_reader(
+        build_integration_fixture_config()
+    )
+    state = fixture_reader.load_state()
+    yield from _integration_environment(test_secrets, state)
