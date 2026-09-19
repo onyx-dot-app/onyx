@@ -19,6 +19,10 @@ from onyx.utils.object_size_check import deep_getsizeof
 
 logger = setup_logger()
 
+# Connectors should keep their serialized checkpoint under this. Enforced as a
+# warning, not an error; see check_checkpoint_size.
+CHECKPOINT_SIZE_BUDGET_BYTES = 200_000_000
+
 _NUM_RECENT_ATTEMPTS_TO_CONSIDER = 50
 
 
@@ -208,9 +212,19 @@ def cleanup_checkpoint(db_session: Session, index_attempt_id: int) -> None:
 
 
 def check_checkpoint_size(checkpoint: ConnectorCheckpoint) -> None:
-    """Check if the checkpoint content size exceeds the limit (200MB)"""
+    """Warn when the checkpoint content size exceeds the budget.
+
+    This used to raise, which killed the whole index attempt. An oversized
+    checkpoint is almost always per-document dedup state, and a connector that
+    outgrows the budget should shed that state and re-yield instead: duplicates
+    are cheap because the indexing pipeline drops them on `doc_updated_at`, while
+    a dead sync leaves the source unindexed.
+    """
     content_size = deep_getsizeof(checkpoint.model_dump())
-    if content_size > 200_000_000:  # 200MB in bytes
-        raise ValueError(
-            f"Checkpoint content size ({content_size} bytes) exceeds 200MB limit"
+    if content_size > CHECKPOINT_SIZE_BUDGET_BYTES:
+        logger.warning(
+            "Checkpoint content size (%s bytes) exceeds the %s byte budget. "
+            "The connector should be shedding per-document state at this size.",
+            content_size,
+            CHECKPOINT_SIZE_BUDGET_BYTES,
         )
