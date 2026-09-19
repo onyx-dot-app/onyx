@@ -23,10 +23,10 @@ import (
 )
 
 const (
-	gitrelForkPRJSON = `{"number":7353,"title":"feat: from a fork","headRefName":"feature","headRepository":{"name":"onyx"},"headRepositoryOwner":{"login":"alice"},"baseRefName":"main","isCrossRepository":true}`
-	gitrelPRViewArm  = `"pr view 7353 --json number,title,headRefName,headRepository,headRepositoryOwner,baseRefName,isCrossRepository") echo '` + gitrelForkPRJSON + `' ;;`
-	gitrelNoCIPRArm  = `"pr list --head run-ci/7353 --state open --json url") echo '[]' ;;`
-	gitrelCIPRArm    = `"pr list --head run-ci/7353 --state open --json url") echo '[{"url":"https://github.com/onyx-dot-app/onyx/pull/8000"}]' ;;`
+	gitrelForkPRJSON = `{"number":7353,"title":"feat: from a fork","body":"PR body","headRefName":"feature","headRepository":{"name":"onyx"},"headRepositoryOwner":{"login":"alice"},"baseRefName":"main","isCrossRepository":true}`
+	gitrelPRViewArm  = `"pr view 7353 --json number,title,body,headRefName,headRepository,headRepositoryOwner,baseRefName,isCrossRepository") echo '` + gitrelForkPRJSON + `' ;;`
+	gitrelNoCIPRArm  = `"pr list --head run-ci/7353 --state open --limit 1 --json url") echo '[]' ;;`
+	gitrelCIPRArm    = `"pr list --head run-ci/7353 --state open --limit 1 --json url") echo '[{"url":"https://github.com/onyx-dot-app/onyx/pull/8000"}]' ;;`
 	gitrelCIPRCreate = `"pr create "*) echo https://github.com/onyx-dot-app/onyx/pull/9002 ;;`
 )
 
