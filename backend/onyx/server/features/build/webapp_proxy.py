@@ -1,7 +1,7 @@
 import asyncio
 from collections.abc import AsyncGenerator
 from pathlib import Path
-from urllib.parse import parse_qsl, urlencode
+from urllib.parse import parse_qsl, unquote, urlencode, urljoin
 from uuid import UUID
 
 import httpx
@@ -47,7 +47,7 @@ def _get_proxy_client() -> httpx.AsyncClient:
     if _ASYNC_PROXY_CLIENT is None:
         _ASYNC_PROXY_CLIENT = httpx.AsyncClient(
             timeout=30.0,
-            follow_redirects=True,
+            follow_redirects=False,
             limits=httpx.Limits(max_keepalive_connections=50, max_connections=200),
         )
     return _ASYNC_PROXY_CLIENT
@@ -207,6 +207,29 @@ async def _proxy_request(
             for key, value in response.headers.items()
             if key.lower() not in EXCLUDED_HEADERS
         }
+
+        location = response_headers.pop("location", None)
+        if location is not None:
+            base_path = webapp_base_path(session_id)
+            location_path = unquote(location.split("?", 1)[0].split("#", 1)[0])
+            current_path = f"/{upstream_path}"
+            if request.url.path.endswith("/") and not current_path.endswith("/"):
+                current_path += "/"
+            try:
+                resolved_location = urljoin(current_path, location)
+            except ValueError:
+                resolved_location = ""
+            redirect_path = unquote(resolved_location.split("?", 1)[0].split("#", 1)[0])
+            if (
+                (
+                    redirect_path == base_path
+                    or redirect_path.startswith(f"{base_path}/")
+                )
+                and "\\" not in location_path
+                and not any(part in (".", "..") for part in location_path.split("/"))
+                and not any(ord(char) < 32 or ord(char) == 127 for char in location)
+            ):
+                response_headers["location"] = location
 
         # Only /_next/static/media/* is content-hashed (safe forever). Dev chunk/CSS
         # URLs are stable but mutable, so immutable would serve stale code after edits.
