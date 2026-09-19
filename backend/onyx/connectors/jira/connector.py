@@ -533,7 +533,7 @@ class JiraConnector(
         document_source: DocumentSource = DocumentSource.JIRA,
     ) -> None:
         self.batch_size = batch_size
-        self.document_source = document_source
+        self.document_source: DocumentSource = document_source
 
         # dealing with scoped tokens is a bit tricky becasue we need to hit api.atlassian.net
         # when making jira requests but still want correct links to issues in the UI.
