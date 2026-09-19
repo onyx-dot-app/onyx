@@ -42,13 +42,8 @@ from onyx.connectors.zoom.recordings.models import (
 )
 from onyx.db.enums import AccessType
 from onyx.db.models import User
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents import connector as connector_router
-from onyx.server.documents.connector import (
-    create_connector_from_model,
-    create_connector_with_mock_credential,
-)
+from onyx.server.documents.connector import create_connector_from_model
 from onyx.server.documents.models import (
     ConnectorBase,
     ConnectorUpdateRequest,
@@ -215,14 +210,12 @@ class TestPruningDrivesTheConnectorFromTheEpoch:
         assert [d.id for d in documents] == ["ZOOM_MEETING_uuid-111"]
 
 
-class TestIndexingStartIsRequiredAtConfigTime:
-    """Enforced where the connector cannot: the class above is why a start date
-    cannot be demanded at index time. These drive the endpoints an admin posts to
-    rather than the check itself, which an endpoint could quietly stop calling.
+class TestIndexingStartAtConfigTime:
+    """These drive the endpoints an admin posts to rather than any check itself,
+    so an endpoint that quietly stops forwarding the date is still caught.
     """
 
     _START = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    _ENDPOINTS = [create_connector_from_model, create_connector_with_mock_credential]
 
     @staticmethod
     def _admin() -> User:
@@ -266,16 +259,13 @@ class TestIndexingStartIsRequiredAtConfigTime:
             db_session=cast(Session, MagicMock(spec=Session)),
         )
 
-    @pytest.mark.parametrize("endpoint", _ENDPOINTS, ids=["connector", "mock-cred"])
-    def test_zoom_without_a_start_date_never_reaches_the_row(
-        self, endpoint: Callable[..., Any]
-    ) -> None:
+    def test_zoom_creates_without_a_start_date(self) -> None:
+        """Zoom used to be refused here. The crawl now floors itself at Zoom's
+        launch instead, so a missing date costs calls rather than the connector."""
         with self._rows_written() as written:
-            with pytest.raises(OnyxError) as raised:
-                self._post(endpoint)
+            self._post(create_connector_from_model)
 
-        assert raised.value.error_code is OnyxErrorCode.INVALID_INPUT
-        assert written == []
+        assert [row.indexing_start for row in written] == [None]
 
     # Only the plain endpoint: the mock-credential one carries on into credential
     # creation and a Celery dispatch that a stubbed session cannot answer for.
@@ -287,7 +277,7 @@ class TestIndexingStartIsRequiredAtConfigTime:
 
         assert [row.indexing_start for row in written] == [self._START]
 
-    def test_another_source_still_creates_without_one(self) -> None:
+    def test_another_source_also_creates_without_one(self) -> None:
         with self._rows_written() as written:
             self._post(create_connector_from_model, source=DocumentSource.CONFLUENCE)
 
