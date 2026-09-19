@@ -421,6 +421,15 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [
       {
+        type: "text",
+        query: "Enter the branch to index repository code from:",
+        label: "Branch",
+        name: "branch",
+        optional: true,
+        description:
+          "Branch to index repository code from (e.g. feature/docs). Leave blank to use the repository's default branch. Applies only to repository code indexing.",
+      },
+      {
         type: "checkbox",
         query: "Include merge requests?",
         label: "Include MRs",
@@ -2245,6 +2254,7 @@ export interface GitlabConfig {
   project_name: string;
   include_mrs: boolean;
   include_issues: boolean;
+  branch?: string;
 }
 
 export interface LumAppsConfig {
