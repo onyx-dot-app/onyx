@@ -1667,6 +1667,8 @@ configMap:
   NOTIFY_SLACKBOT_NO_ANSWER: ""
   DISCORD_BOT_TOKEN: ""
   DISCORD_BOT_INVOKE_CHAR: ""
+  # Experimental configuration API only; Teams messages are not handled yet.
+  ENABLE_TEAMS_BOT: "false"
   # Logging
   # Optional Telemetry, please keep it on (nothing sensitive is collected)? <3
   DISABLE_TELEMETRY: ""

@@ -4522,6 +4522,25 @@ class SlackBot(Base):
     )
 
 
+class TeamsBotConfig(Base):
+    __tablename__ = "teams_bot_config"
+
+    id: Mapped[int] = mapped_column(primary_key=True, default=1)
+    app_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    directory_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    client_secret: Mapped[SensitiveValue[str]] = mapped_column(
+        EncryptedString(), nullable=False
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), nullable=False
+    )
+    persona_id: Mapped[int | None] = mapped_column(
+        ForeignKey("persona.id", ondelete="SET NULL"), nullable=True
+    )
+
+    __table_args__ = (CheckConstraint("id = 1", name="ck_teams_bot_singleton"),)
+
+
 class DiscordBotConfig(Base):
     """Global Discord bot configuration (one per tenant).
 
