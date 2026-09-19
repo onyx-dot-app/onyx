@@ -9503,6 +9503,16 @@
         "downloadButton": {
           "tooltip": "Download"
         },
+        "indexButton": {
+          "doneTooltip": "Saved for later",
+          "error": {
+            "toast": "Could not save this image"
+          },
+          "success": {
+            "toast": "Image saved. You can use it in later chats."
+          },
+          "tooltip": "Save for later"
+        },
         "image": {
           "alt": "Chat attachment"
         },

@@ -26,6 +26,7 @@ class LLMFlow(StrEnum):
     CLASSIFY_SECTION_RELEVANCE = "classify_section_relevance"
     SELECT_SECTIONS_FOR_EXPANSION = "select_sections_for_expansion"
     CHAT_SESSION_NAMING = "chat_session_naming"
+    IMAGE_FILE_NAMING = "image_file_naming"
     MEMORY_UPDATE = "memory_update"
 
     # Build session (assistants)

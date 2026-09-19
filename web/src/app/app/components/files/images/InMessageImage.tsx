@@ -1,10 +1,17 @@
 import { memo, useState } from "react";
-import { SvgDownload } from "@opal/icons";
+import {
+  SvgCheck,
+  SvgDownload,
+  SvgFolderPlus,
+  SvgSimpleLoader,
+} from "@opal/icons";
 import { ImageShape } from "@/app/app/services/streamingModels";
 import { FullImageModal } from "@/app/app/components/files/images/FullImageModal";
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
+import { useProjectsContext } from "@/lib/projects/providers";
 import { Button } from "@opal/components";
 import { Hoverable } from "@opal/core";
+import { toast } from "@opal/layouts";
 import { cn, clickOnKeyDown } from "@opal/utils";
 import { useTranslations } from "next-intl";
 
@@ -33,16 +40,21 @@ interface InMessageImageProps {
   fileId: string;
   fileName?: string;
   shape?: ImageShape;
+  canIndex?: boolean;
 }
 
 export const InMessageImage = memo(function InMessageImage({
   fileId,
   fileName,
   shape = DEFAULT_SHAPE,
+  canIndex = false,
 }: InMessageImageProps) {
   const t = useTranslations("chat.files");
+  const { indexFile } = useProjectsContext();
   const [fullImageShowing, setFullImageShowing] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(loadedImages.has(fileId));
+  const [isIndexing, setIsIndexing] = useState(false);
+  const [isIndexed, setIsIndexed] = useState(false);
 
   const normalizedShape = SHAPE_CLASSES[shape] ? shape : DEFAULT_SHAPE;
   const { container: shapeContainerClasses, image: shapeImageClasses } =
@@ -68,6 +80,25 @@ export const InMessageImage = memo(function InMessageImage({
       document.body.removeChild(a);
     } catch (error) {
       console.error("Failed to download image:", error);
+    }
+  };
+
+  const handleIndex = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isIndexing || isIndexed) {
+      return;
+    }
+
+    setIsIndexing(true);
+    try {
+      await indexFile(fileId, fileName);
+      setIsIndexed(true);
+      toast.success(t("inMessageImage.indexButton.success.toast"));
+    } catch (error) {
+      console.error("Failed to index image:", error);
+      toast.error(t("inMessageImage.indexButton.error.toast"));
+    } finally {
+      setIsIndexing(false);
     }
   };
 
@@ -111,8 +142,27 @@ export const InMessageImage = memo(function InMessageImage({
             loading="lazy"
           />
 
-          {/* Download button - appears on hover */}
-          <div className="absolute bottom-2 end-2 z-10">
+          <div className="absolute bottom-2 end-2 z-10 flex gap-1">
+            {canIndex && (
+              <Hoverable.Item group="messageImage" variant="appear-on-hover">
+                <Button
+                  icon={
+                    isIndexing
+                      ? SvgSimpleLoader
+                      : isIndexed
+                        ? SvgCheck
+                        : SvgFolderPlus
+                  }
+                  tooltip={
+                    isIndexed
+                      ? t("inMessageImage.indexButton.doneTooltip")
+                      : t("inMessageImage.indexButton.tooltip")
+                  }
+                  disabled={isIndexing}
+                  onClick={handleIndex}
+                />
+              </Hoverable.Item>
+            )}
             <Hoverable.Item group="messageImage" variant="appear-on-hover">
               <Button
                 icon={SvgDownload}

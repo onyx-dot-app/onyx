@@ -9473,6 +9473,16 @@
         "downloadButton": {
           "tooltip": "Herunterladen"
         },
+        "indexButton": {
+          "doneTooltip": "Gespeichert",
+          "error": {
+            "toast": "Dieses Bild konnte nicht gespeichert werden"
+          },
+          "success": {
+            "toast": "Bild gespeichert. Sie können es in späteren Chats verwenden."
+          },
+          "tooltip": "Bild speichern"
+        },
         "image": {
           "alt": "Chat-Anhang"
         },

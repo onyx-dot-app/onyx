@@ -65,6 +65,21 @@ export async function uploadFiles(
   return response.json();
 }
 
+export async function indexFile(
+  fileId: string,
+  name?: string
+): Promise<ProjectFile> {
+  const response = await fetch("/api/user/projects/file/index", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ file_id: fileId, name: name ?? null }),
+  });
+  if (!response.ok) {
+    handleRequestError("Index file", response);
+  }
+  return response.json();
+}
+
 export async function getRecentFiles(): Promise<ProjectFile[]> {
   const response = await fetch(`/api/user/files/recent`);
   if (!response.ok) {
