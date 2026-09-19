@@ -10,12 +10,31 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+# TODO(bo): root-cause and properly fix why heartbeat_counter can stall for the
+# full watchdog timeout (~30m) while the worker is alive. The corroboration in
+# validate_active_indexing_attempts (completed-batch progress + Celery
+# worker-liveness ping) stops us destroying live attempts, but it is a
+# mitigation, not a root fix. Candidate mechanisms, none yet confirmed from logs:
+#   - this heartbeat write starving on the shared worker DB pool (pool_size =
+#     concurrency + 8) while task threads block on a saturated embedder;
+#   - row-lock contention on the index_attempt row (no lock_timeout is set);
+#   - CPU/GIL starvation of the docprocessing pod's daemon threads.
+# The escalated ERROR logging below is the diagnostic hook to tell these apart.
+
+# After this many consecutive failed beats we escalate WARNING -> ERROR. A
+# stalled heartbeat is dangerous: the stall watchdog reads the counter as a
+# liveness signal, so a silently-wedged heartbeat (e.g. the write starving for a
+# DB connection against the shared worker pool) can get a live attempt
+# invalidated. Surfacing sustained failures loudly lets operators catch it.
+_HEARTBEAT_FAILURE_ESCALATION_THRESHOLD = 3
+
 
 def start_heartbeat(index_attempt_id: int) -> tuple[threading.Thread, threading.Event]:
     """Start a heartbeat thread for the given index attempt"""
     stop_event = threading.Event()
 
     def heartbeat_loop() -> None:
+        consecutive_failures = 0
         while not stop_event.wait(INDEXING_WORKER_HEARTBEAT_INTERVAL):
             try:
                 with get_session_with_current_tenant() as db_session:
@@ -25,11 +44,37 @@ def start_heartbeat(index_attempt_id: int) -> tuple[threading.Thread, threading.
                         .values(heartbeat_counter=IndexAttempt.heartbeat_counter + 1)
                     )
                     db_session.commit()
+                if consecutive_failures:
+                    logger.info(
+                        "Heartbeat for index attempt %s recovered after %s "
+                        "consecutive failures",
+                        index_attempt_id,
+                        consecutive_failures,
+                    )
+                consecutive_failures = 0
             except Exception:
-                logger.exception(
-                    "Failed to update heartbeat counter for index attempt %s",
-                    index_attempt_id,
-                )
+                consecutive_failures += 1
+                # A single miss is tolerable; sustained misses mean the counter
+                # is stalling while the worker may well be alive, which can lead
+                # the watchdog to misclassify a healthy attempt as crashed.
+                if consecutive_failures >= _HEARTBEAT_FAILURE_ESCALATION_THRESHOLD:
+                    logger.error(
+                        "Heartbeat for index attempt %s has failed %s consecutive "
+                        "times (~%ss stalled) — the stall watchdog may misread this "
+                        "attempt as crashed",
+                        index_attempt_id,
+                        consecutive_failures,
+                        consecutive_failures * INDEXING_WORKER_HEARTBEAT_INTERVAL,
+                        exc_info=True,
+                    )
+                else:
+                    logger.warning(
+                        "Failed to update heartbeat counter for index attempt %s "
+                        "(consecutive_failures=%s)",
+                        index_attempt_id,
+                        consecutive_failures,
+                        exc_info=True,
+                    )
 
     # Ensure contextvars from the outer context are available in the thread
     context = contextvars.copy_context()
