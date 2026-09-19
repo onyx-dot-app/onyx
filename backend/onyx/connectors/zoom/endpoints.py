@@ -66,9 +66,9 @@ class ZoomEndpoint(BaseModel):
         return self.describes.format(identifier=identifier)
 
 
-# Not /meetings/{id}/transcript. That one serves AI Companion transcripts and
-# answers 404 for a session whose VTT is sitting in recording_files, so the
-# connector indexed nothing on every discovery path.
+# Not /meetings/{id}/transcript. Against a live account that one answered 404
+# for a session whose VTT was sitting in recording_files, so the connector
+# indexed nothing on every discovery path.
 MEETING_RECORDINGS = ZoomEndpoint(
     path="/meetings/{identifier}/recordings",
     tier=ZoomRateLimitTier.LIGHT,

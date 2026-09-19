@@ -336,9 +336,9 @@ class ZoomClient:
         with no cloud recording at all answers 404, which raises here. Whether
         that is a skip or a failure is the caller's call, not this client's.
 
-        Do not switch this to `GET /meetings/{meetingId}/transcript`. That
-        endpoint serves AI Companion transcripts, not cloud recording ones, and
-        answers 404 for a session whose VTT is sitting in `recording_files`.
+        Do not switch this to `GET /meetings/{meetingId}/transcript`. Against a
+        live account it answered 404 for a session whose VTT was sitting in
+        `recording_files`.
         """
         response = self._get(endpoints.MEETING_RECORDINGS, meeting_identifier)
         return ZoomRecordingEntry.model_validate(response.json()).transcript
