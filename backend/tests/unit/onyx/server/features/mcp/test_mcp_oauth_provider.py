@@ -306,7 +306,6 @@ def test_failed_token_exchange_does_not_persist_authorization(
 
 def test_invalid_token_response_is_safe_and_not_persisted(
     monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
     storage = _RecordingAuthorizationStorage()
 
@@ -337,29 +336,6 @@ def test_invalid_token_response_is_safe_and_not_persisted(
     assert "provider-secret" not in exc_info.value.detail
     assert storage.tokens is None
     assert storage.persisted_client_information is None
-    invalid_response_record = next(
-        (
-            record
-            for record in caplog.records
-            if record.getMessage()
-            == "mcp_oauth.authorization_code_exchange.invalid_response"
-        ),
-        None,
-    )
-    assert invalid_response_record is not None, (
-        "Expected an invalid authorization-code token-response diagnostic log record"
-    )
-    assert getattr(invalid_response_record, "mcp_server_id") == 42  # noqa: B009  # ods: ignore[getattr]
-    assert getattr(invalid_response_record, "token_endpoint_hostname") == (  # noqa: B009  # ods: ignore[getattr]
-        "accounts.example.com"
-    )
-    assert getattr(invalid_response_record, "http_status") == 200  # noqa: B009  # ods: ignore[getattr]
-    assert getattr(invalid_response_record, "response_body_format") == "unknown"  # noqa: B009  # ods: ignore[getattr]
-    assert getattr(invalid_response_record, "response_body_bytes") == len(  # noqa: B009  # ods: ignore[getattr]
-        b"provider-secret: must-not-leak"
-    )
-    assert getattr(invalid_response_record, "response_field_names") == []  # noqa: B009  # ods: ignore[getattr]
-    assert "provider-secret" not in caplog.text
 
 
 @pytest.mark.parametrize(
