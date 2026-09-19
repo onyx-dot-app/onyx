@@ -351,6 +351,7 @@ def process_jira_issue(
     comment_email_blacklist: tuple[str, ...] = (),
     labels_to_skip: set[str] | None = None,
     parent_hierarchy_raw_node_id: str | None = None,
+    document_source: DocumentSource = DocumentSource.JIRA,
 ) -> Document | None:
     issue_key: str = _issue_key(issue)
     issue_labels: list[str] = get_issue_field(issue, _FIELD_LABELS) or []
@@ -441,7 +442,7 @@ def process_jira_issue(
     return Document(
         id=page_url,
         sections=[TextSection(link=page_url, text=ticket_content)],
-        source=DocumentSource.JIRA,
+        source=document_source,
         semantic_identifier=f"{issue_key}: {summary}",
         title=f"{issue_key} {summary}",
         doc_updated_at=time_str_to_utc(get_issue_field(issue, _FIELD_UPDATED)),
@@ -486,8 +487,10 @@ class JiraConnector(
         # Custom JQL query to filter Jira issues
         jql_query: str | None = None,
         scoped_token: bool = False,
+        document_source: DocumentSource = DocumentSource.JIRA,
     ) -> None:
         self.batch_size = batch_size
+        self.document_source = document_source
 
         # dealing with scoped tokens is a bit tricky becasue we need to hit api.atlassian.net
         # when making jira requests but still want correct links to issues in the UI.
@@ -809,6 +812,7 @@ class JiraConnector(
             comment_email_blacklist=self.comment_email_blacklist,
             labels_to_skip=self.labels_to_skip,
             parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+            document_source=self.document_source,
         ):
             # Add permission information to the document if requested
             if include_permissions:
