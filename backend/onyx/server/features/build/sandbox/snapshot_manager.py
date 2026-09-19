@@ -15,6 +15,7 @@ logger = setup_logger()
 SNAPSHOT_FILE_TYPE = "application/gzip"
 _SNAPSHOT_COPY_CHUNK_BYTES = 8 * 1024 * 1024
 _OPENCODE_HISTORY_FILE_NAME = "opencode-history.tar.gz"
+_MAX_SNAPSHOT_ARCHIVE_BYTES = 512 * 1024 * 1024
 
 
 def _copy_snapshot_stream(
@@ -27,6 +28,10 @@ def _copy_snapshot_stream(
         if not chunk:
             break
         size_bytes += len(chunk)
+        if size_bytes > _MAX_SNAPSHOT_ARCHIVE_BYTES:
+            raise RuntimeError(
+                f"snapshot archive exceeds {_MAX_SNAPSHOT_ARCHIVE_BYTES} byte limit"
+            )
         target.write(chunk)
     return size_bytes
 

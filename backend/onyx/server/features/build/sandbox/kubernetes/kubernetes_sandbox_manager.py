@@ -64,6 +64,7 @@ from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.db.enums import SandboxStatus
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import (
+    MAX_DOWNLOAD_FILE_SIZE_BYTES,
     ONYX_SERVER_URL,
     OPENCODE_SERVE_PORT,
     OPENCODE_SERVER_PASSWORD,
@@ -77,6 +78,7 @@ from onyx.server.features.build.configs import (
 )
 from onyx.server.features.build.sandbox.base import (
     SandboxManager,
+    enforce_read_file_size_limit,
 )
 from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     PUSH_DAEMON_PORT,
@@ -2075,7 +2077,7 @@ fi
         exec_command = [
             "/bin/sh",
             "-c",
-            f"if [ -f {quoted_path} ]; then base64 {quoted_path}; else echo 'ERROR_NOT_FOUND'; fi",
+            f"if [ -f {quoted_path} ]; then /usr/bin/head -c {MAX_DOWNLOAD_FILE_SIZE_BYTES + 1} {quoted_path} | /usr/bin/base64; else echo 'ERROR_NOT_FOUND'; fi",
         ]
 
         try:
@@ -2096,7 +2098,7 @@ fi
 
             # Decode base64 content
             try:
-                content = base64.b64decode(resp.strip())
+                content = enforce_read_file_size_limit(base64.b64decode(resp.strip()))
             except binascii.Error as e:
                 logger.error("Failed to decode base64 content: %s", e)
                 raise RuntimeError(f"Failed to decode file content: {e}") from e

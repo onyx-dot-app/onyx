@@ -20,7 +20,20 @@ from graphql import parse as parse_graphql
 from graphql.language import SelectionSetNode
 
 
+class GraphQLParsingLimitError(ValueError):
+    pass
+
+
 def parse_invocations(body: bytes | None) -> list[tuple[str, str]]:
+    try:
+        return _parse_invocations(body)
+    except RecursionError as exc:
+        raise GraphQLParsingLimitError(
+            "GraphQL request exceeds the parsing depth limit"
+        ) from exc
+
+
+def _parse_invocations(body: bytes | None) -> list[tuple[str, str]]:
     """``(operation_type, root_field)`` pairs invoked by a GraphQL request body.
 
     Handles a single GraphQL POST body or a batched array of them. Returns an
