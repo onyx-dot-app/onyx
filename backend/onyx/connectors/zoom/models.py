@@ -23,10 +23,8 @@ class ZoomAccessToken(BaseModel):
 
 
 class ZoomTranscript(BaseModel):
-    """A session's transcript, read from the TRANSCRIPT entry of its recording.
-
-    Zoom never sends this shape. It is the one model here that is built rather
-    than validated, by `ZoomRecordingEntry.transcript` below.
+    """A session's transcript. Zoom never sends this shape;
+    `ZoomRecordingEntry.transcript` builds it from the recording's file list.
     """
 
     download_url: str | None = None
@@ -171,34 +169,13 @@ _COMPLETED_FILE_STATUS = "completed"
 
 
 class ZoomRecordingFile(BaseModel):
-    """Every documented field of one entry in a recording's `recording_files`
-    array.
+    """One entry of a recording's `recording_files` array, cut to the fields
+    this connector reads."""
 
-    Almost everything is optional because one array holds every file type the
-    recording produced, and the odd ones out are validated alongside the
-    transcript. Zoom's own text says a CC or TIMELINE entry leaves out `id`,
-    `status`, `file_size`, `recording_type` and `play_url`, and a real TIMELINE
-    entry arrives without `file_extension` too. Requiring any of those would
-    fail the whole recording over a file nothing here reads.
-    """
-
-    meeting_id: str
-    recording_start: str
     file_type: str
 
-    id: str | None = None
-    file_extension: str | None = None
-    file_size: int | None = None
-    recording_end: str | None = None
-    recording_type: str | None = None
     status: str | None = None
-    play_url: str | None = None
-    # Zoom sends no download_url to an on-premise account. It sends file_path
-    # instead, which names a file on the customer's own server.
     download_url: str | None = None
-    file_path: str | None = None
-    # Only the trash listing carries this.
-    deleted_time: str | None = None
 
     @property
     def is_transcript(self) -> bool:
@@ -206,24 +183,13 @@ class ZoomRecordingFile(BaseModel):
 
     @property
     def is_ready(self) -> bool:
-        # A CC or TIMELINE entry carries no status at all, so a missing one
-        # cannot mean unfinished.
         return self.status is None or self.status.lower() == _COMPLETED_FILE_STATUS
 
 
 class ZoomRecordingEntry(BaseModel):
-    """Every scalar field of one recording. It arrives as an entry in the
-    `meetings` array of `GET /users/{userId}/recordings`, and as the whole body
-    of `GET /meetings/{meetingId}/recordings`.
-
-    The per-meeting call also answers with `download_access_token` and
-    `password`, both left off on purpose: they are credentials, and a model
-    that holds them puts them in every log line that dumps it. Zoom's
-    `participant_audio_files` array is left off because nothing reads it.
-
-    Only the fields the recordings listing documents as always sent are
-    required. The rest are conditional, and the per-meeting call is the only
-    one that sends several of them at all.
+    """One recording. Zoom sends it as an entry in the `meetings` array of
+    `GET /users/{userId}/recordings`, and as the whole body of
+    `GET /meetings/{meetingId}/recordings`.
     """
 
     uuid: str
@@ -242,14 +208,6 @@ class ZoomRecordingEntry(BaseModel):
     recording_play_passcode: str | None = None
     auto_delete: bool | None = None
     auto_delete_date: str | None = None
-    service_name: str | None = None
-    external_storage_addr: str | None = None
-
-    # Zoom fills these four in for recording-connector meetings only.
-    instance_id: str | None = None
-    rc_meeting_zone_name: str | None = None
-    rc_zone: str | None = None
-    zone_instance_id: str | None = None
 
     recording_files: list[ZoomRecordingFile] = Field(default_factory=list)
 

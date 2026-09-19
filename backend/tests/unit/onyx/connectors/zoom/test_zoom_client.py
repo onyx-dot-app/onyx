@@ -59,9 +59,7 @@ from onyx.connectors.zoom.recordings.models import fails_the_whole_run
 
 _ZOOM_DOWNLOAD_URL = "https://zoom.us/rec/download/abc.vtt"
 
-# Two entries of Zoom's documented `recording_files` example. file_path and
-# deleted_time are left off because only an on-premise account and the trash
-# listing ever send them.
+# Zoom's own `recording_files` example, so the tests run on a real payload.
 _DOCUMENTED_MP4_FILE = {
     "id": "01fc4b9b-a1b2-4c3d-9e5f-6a7b8c9d0e1f",
     "meeting_id": "uaFkQyFCSwya8iNYtkAw3A==",
@@ -90,8 +88,8 @@ _DOCUMENTED_TRANSCRIPT_FILE = {
     "recording_type": "audio_transcript",
 }
 
-# Every scalar field of Zoom's documented `GET /meetings/{meetingId}/recordings`
-# example that ZoomRecordingEntry declares.
+# Zoom's documented `GET /meetings/{meetingId}/recordings` example. It carries
+# more than the models read, on purpose.
 _DOCUMENTED_RECORDING = {
     "uuid": "uaFkQyFCSwya8iNYtkAw3A==",
     "id": 84614775995,
@@ -505,17 +503,44 @@ class TestGetMeetingTranscript:
         assert transcript is not None
         assert transcript.meeting_topic == "My Personal Meeting"
 
-    def test_keeps_every_documented_field(self) -> None:
-        # Nothing reads a file's id, size or timestamps yet, so without this
-        # test they look like dead fields someone can safely delete.
-        entry = ZoomRecordingEntry.model_validate(_DOCUMENTED_RECORDING)
+    def test_files_it_does_not_read_cannot_fail_the_recording(self) -> None:
+        # The model keeps three of Zoom's thirteen documented file fields, so
+        # the other ten have to validate and be ignored.
+        entry = ZoomRecordingEntry.model_validate(
+            _DOCUMENTED_RECORDING
+            | {
+                "recording_files": [
+                    _DOCUMENTED_MP4_FILE,
+                    _DOCUMENTED_TRANSCRIPT_FILE | {"a_field_zoom_added_later": 1},
+                ]
+            }
+        )
 
-        assert entry.model_dump(exclude_none=True) == _DOCUMENTED_RECORDING
+        assert [f.file_type for f in entry.recording_files] == ["MP4", "TRANSCRIPT"]
+        assert entry.transcript is not None
+        assert entry.transcript.download_url == "https://zoom.example/t.vtt"
+
+    def test_a_transcript_entry_stripped_to_its_bones_still_reads(self) -> None:
+        # A CC or TIMELINE entry arrives without id, status, file_size,
+        # recording_type or play_url.
+        entry = ZoomRecordingEntry.model_validate(
+            _DOCUMENTED_RECORDING
+            | {
+                "recording_files": [
+                    {
+                        "file_type": "TRANSCRIPT",
+                        "download_url": "https://zoom.example/t.vtt",
+                    }
+                ]
+            }
+        )
+
+        assert entry.transcript is not None
+        assert entry.transcript.is_downloadable
 
     def test_404_is_reported_for_the_caller_to_read_as_a_skip(self) -> None:
         # Zoom answers 404 rather than an empty list for a session it holds no
-        # cloud recording for. Processing turns that into a skip; the client
-        # does not decide it here.
+        # cloud recording for.
         client = _client()
         client._session = MagicMock()
         client._session.request.return_value = _response(404)
@@ -1021,8 +1046,7 @@ class TestDownloadTranscriptVtt:
         self,
         ssrf: MagicMock,  # noqa: ARG002
     ) -> None:
-        # Seen live: an ellipsis indexed as "â€¦" because the download carried
-        # no charset and requests fell back to Latin-1 for `.text`.
+        # Seen live: the download carries no charset, so `.text` is Latin-1.
         client = _client()
         client._session = MagicMock()
         response = _response(200)
