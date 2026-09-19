@@ -3,9 +3,15 @@ from fastapi_users.exceptions import InvalidPasswordException
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import User, UserManager, get_user_manager
+from onyx.auth.users import (
+    User,
+    UserManager,
+    _invalidate_license_cache_after_seat_change,
+    _upgrade_placeholder_to_web_login__no_commit,
+    get_user_manager,
+)
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import Permission
+from onyx.db.enums import AccountType, Permission
 from onyx.db.users import get_user_by_email
 from onyx.server.features.password.models import (
     ChangePasswordRequest,
@@ -52,7 +58,22 @@ async def admin_reset_user_password(
     user = get_user_by_email(user_reset_request.user_email, db_session)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    new_password = await user_manager.reset_password_as_admin(user.id)
+
+    # If the user is an external permission placeholder, promote them to a standard web login
+    seat_added = False
+    if user.account_type == AccountType.EXT_PERM_USER:
+        seat_added = _upgrade_placeholder_to_web_login__no_commit(
+            user.id, is_verified_by_default=True, db_session=db_session
+        )
+
+    try:
+        new_password = await user_manager.reset_password_as_admin(user.id)
+        db_session.commit()
+        if seat_added:
+            _invalidate_license_cache_after_seat_change()
+    except Exception:
+        db_session.rollback()
+        raise
     return UserResetResponse(
         user_id=str(user.id),
         new_password=new_password,
