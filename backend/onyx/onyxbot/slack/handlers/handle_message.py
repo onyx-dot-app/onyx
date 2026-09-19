@@ -134,7 +134,17 @@ def _resolve_allowlist_user_ids(
     when no allowlist is configured, meaning the bot has no invocation gate or
     response-visibility scope for the channel.
     """
-    allowlist = (channel_conf or {}).get("respond_member_group_list") or None
+    raw_allowlist = (channel_conf or {}).get("respond_member_group_list") or None
+    # Drop blank / whitespace-only entries. A `respond_member_group_list` that
+    # contains only blanks (e.g. `[""]`, which is easy to produce by leaving the
+    # members field empty in the UI) must be treated as "no allowlist
+    # configured", not as an allowlist that resolves to zero users - the latter
+    # silences OnyxBot for everyone in the channel.
+    allowlist = (
+        [entry for entry in raw_allowlist if entry and entry.strip()]
+        if raw_allowlist
+        else None
+    )
     if not allowlist:
         return None, []
 
