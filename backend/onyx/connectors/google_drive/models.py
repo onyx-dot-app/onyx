@@ -61,6 +61,84 @@ class DriveRetrievalStage(str, Enum):
     FOLDER_FILES = "folder_files"
 
 
+class DriveRetrievalPhase(str, Enum):
+    """Phases of the redesigned retrieval, run once for the whole connector.
+
+    This replaces the per-user DriveRetrievalStage loop, where every user walked
+    every stage independently. One phase is active at a time, so a phase can be
+    closed and its state dropped once it finishes.
+
+    Shared drives run before My Drives on purpose: once the shared drive phase
+    is done, later phases can discard any file whose driveId was already
+    covered, which kills the shortcut duplication path with a check against a
+    list of drive ids rather than a set of file ids.
+    """
+
+    INVENTORY = "inventory"
+    SHARED_DRIVES = "shared_drives"
+    MY_DRIVES = "my_drives"
+    REQUESTED_TARGETS = "requested_targets"
+    EXTERNAL_SHARES = "external_shares"
+    DONE = "done"
+
+
+# Order the connector advances through. INVENTORY collects the partition keys
+# the later phases walk, so it has to come first.
+PHASE_ORDER = (
+    DriveRetrievalPhase.INVENTORY,
+    DriveRetrievalPhase.SHARED_DRIVES,
+    DriveRetrievalPhase.MY_DRIVES,
+    DriveRetrievalPhase.REQUESTED_TARGETS,
+    DriveRetrievalPhase.EXTERNAL_SHARES,
+    DriveRetrievalPhase.DONE,
+)
+
+
+def next_phase(phase: DriveRetrievalPhase) -> DriveRetrievalPhase:
+    if phase is DriveRetrievalPhase.DONE:
+        return DriveRetrievalPhase.DONE
+    return PHASE_ORDER[PHASE_ORDER.index(phase) + 1]
+
+
+class PhaseProgress(BaseModel):
+    """Position inside one phase: which partition, and where inside it.
+
+    Every item belongs to exactly one partition (a drive id, or an owner email),
+    so resuming needs only an index into a stable key list plus a page token.
+    That is what keeps the checkpoint proportional to drives and users instead
+    of to documents.
+    """
+
+    phase: DriveRetrievalPhase
+    # Stable order. Built once when the phase starts so a resumed run walks the
+    # same partitions in the same sequence.
+    partition_keys: list[str] = []
+    partition_index: int = 0
+    next_page_token: str | None = None
+    # Frontier within the current partition, reset when the partition changes.
+    completed_until: SecondsSinceUnixEpoch = 0
+
+    @property
+    def current_partition(self) -> str | None:
+        if self.partition_index >= len(self.partition_keys):
+            return None
+        return self.partition_keys[self.partition_index]
+
+    @property
+    def is_complete(self) -> bool:
+        return self.partition_index >= len(self.partition_keys)
+
+    @property
+    def remaining_partitions(self) -> list[str]:
+        return self.partition_keys[self.partition_index :]
+
+    def advance_partition(self) -> None:
+        """Finish the current partition and reset the within-partition cursor."""
+        self.partition_index += 1
+        self.next_page_token = None
+        self.completed_until = 0
+
+
 class StageCompletion(BaseModel):
     """
     Describes the point in the retrieval+indexing process that the
@@ -145,6 +223,21 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
 
     # cached user emails
     user_emails: list[str] | None = None
+
+    # --- Phased retrieval state. Not yet driving retrieval; the phase PRs wire
+    # it in. Held as flat values so the persisted checkpoint stays easy to
+    # migrate.
+
+    phase_progress: PhaseProgress | None = None
+
+    # Drive id -> the email to impersonate for that drive. Sized by drives, not
+    # by documents.
+    organizer_email_by_drive_id: dict[str, str] = {}
+
+    # Drives listed by someone who is not an organizer, so limited-access
+    # folders may be missing. Pruning must not delete documents for a drive in
+    # here on the basis of absence.
+    incomplete_drive_ids: set[str] = set()
 
     # Hierarchy node raw IDs that have already been yielded.
     # Used to avoid yielding duplicate hierarchy nodes across checkpoints.
