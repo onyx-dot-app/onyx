@@ -21,6 +21,7 @@ from tests.utils.onedrive_fixture import (
     FixtureState,
     OneDriveFixtureProvisioner,
     build_integration_fixture_config,
+    build_integration_mutation_fixture_config,
     build_provisioner,
 )
 from tests.utils.pytest_secrets import (
@@ -126,16 +127,13 @@ def _wait_for_initial_jobs(
     )
 
 
-@pytest.fixture(scope="module")
-def onedrive_integration_environment(
+def _integration_environment(
     test_secrets: dict[TestSecret, str],
+    provisioner: OneDriveFixtureProvisioner,
+    state: FixtureState,
 ) -> Generator[OneDriveIntegrationEnvironment, None, None]:
-    provisioner = build_provisioner(build_integration_fixture_config())
-    corpus_setup_started = False
     try:
         reset_all()
-        corpus_setup_started = True
-        state = provisioner.setup()
 
         admin_user = UserManager.create(email=ADMIN_EMAIL)
         owner_user = UserManager.create(email=state.owner.user_principal_name)
@@ -203,18 +201,29 @@ def onedrive_integration_environment(
             sharepoint_cc_pair=sharepoint_cc_pair,
         )
     finally:
-        cleanup_errors: list[Exception] = []
         try:
-            if corpus_setup_started:
-                provisioner.setup()
-        except Exception as error:
-            logger.exception("Failed to restore the OneDrive integration corpus")
-            cleanup_errors.append(error)
-        finally:
-            try:
-                reset_all()
-            except Exception as error:
-                logger.exception("Failed to reset integration test state")
-                cleanup_errors.append(error)
-        if cleanup_errors:
-            raise ExceptionGroup("OneDrive integration cleanup failed", cleanup_errors)
+            reset_all()
+        except Exception:
+            logger.exception("Failed to reset integration test state")
+            raise
+
+
+@pytest.fixture(scope="module")
+def onedrive_integration_environment(
+    test_secrets: dict[TestSecret, str],
+) -> Generator[OneDriveIntegrationEnvironment, None, None]:
+    provisioner = build_provisioner(build_integration_fixture_config())
+    state = provisioner.load_state()
+    yield from _integration_environment(test_secrets, provisioner, state)
+
+
+@pytest.fixture(scope="module")
+def onedrive_mutation_environment(
+    test_secrets: dict[TestSecret, str],
+) -> Generator[OneDriveIntegrationEnvironment, None, None]:
+    provisioner = build_provisioner(build_integration_mutation_fixture_config())
+    state = provisioner.setup()
+    try:
+        yield from _integration_environment(test_secrets, provisioner, state)
+    finally:
+        provisioner.setup()

@@ -26,13 +26,16 @@ from tests.utils.onedrive_fixture import (
     ANONYMOUS_LINK_SKIP_REASON,
     DAILY_FIXTURE_ROOT_NAME,
     FIXTURE_EXCLUDED_PATHS,
+    ONEDRIVE_WRITE_TEST_SKIP_REASON,
     AnonymousLinkOutcome,
     FilePath,
     FixtureState,
     FolderPath,
     OneDriveFixtureProvisioner,
     build_daily_fixture_config,
+    build_daily_mutation_fixture_config,
     build_provisioner,
+    onedrive_write_tests_enabled,
 )
 from tests.utils.pytest_secrets import RedactedDict
 from tests.utils.secret_names import TestSecret
@@ -96,19 +99,24 @@ def provisioner() -> OneDriveFixtureProvisioner:
 
 
 @pytest.fixture(scope="module")
+def mutation_provisioner() -> OneDriveFixtureProvisioner:
+    return build_provisioner(build_daily_mutation_fixture_config())
+
+
+@pytest.fixture(scope="module")
 def baseline_state(provisioner: OneDriveFixtureProvisioner) -> FixtureState:
-    return provisioner.setup()
+    return provisioner.load_state()
 
 
 @pytest.fixture
 def mutation_state(
-    provisioner: OneDriveFixtureProvisioner,
+    mutation_provisioner: OneDriveFixtureProvisioner,
 ) -> Generator[FixtureState, None, None]:
-    state = provisioner.setup()
+    state = mutation_provisioner.setup()
     try:
         yield state
     finally:
-        provisioner.setup()
+        mutation_provisioner.setup()
 
 
 def _connector(
@@ -143,12 +151,11 @@ def _load_corpus(
     )
 
 
-def _corpus_documents(output: ConnectorOutput) -> list[Document]:
-    return [
-        document
-        for document in output.documents
-        if _metadata_path(document).startswith(DAILY_FIXTURE_ROOT_NAME)
-    ]
+def _corpus_documents(output: ConnectorOutput, state: FixtureState) -> list[Document]:
+    fixture_ids = {item.id for item in state.files.values()} | {
+        state.second_drive_duplicate.id
+    }
+    return [document for document in output.documents if document.id in fixture_ids]
 
 
 def _metadata_path(document: Document) -> str:
@@ -161,8 +168,10 @@ def _document_text(document: Document) -> str:
     return "\n".join(to_text_sections(to_sections([document])))
 
 
-def _documents_by_id(output: ConnectorOutput) -> dict[str, Document]:
-    return {document.id: document for document in _corpus_documents(output)}
+def _documents_by_id(
+    output: ConnectorOutput, state: FixtureState
+) -> dict[str, Document]:
+    return {document.id: document for document in _corpus_documents(output, state)}
 
 
 def _assert_access(
@@ -190,8 +199,8 @@ def test_onedrive_fixed_corpus_indexing_identity_permissions_and_hierarchy(
     onedrive_credentials: dict[str, str],
 ) -> None:
     output = _load_corpus(baseline_state, onedrive_credentials)
-    documents = _corpus_documents(output)
-    documents_by_id = _documents_by_id(output)
+    documents = _corpus_documents(output, baseline_state)
+    documents_by_id = _documents_by_id(output, baseline_state)
     owner_email = baseline_state.owner.user_principal_name
     primary_email = baseline_state.primary_user.user_principal_name
     alternate_email = baseline_state.alternate_user.user_principal_name
@@ -315,9 +324,9 @@ def test_onedrive_anonymous_link_when_tenant_policy_allows_it(
     ):
         pytest.skip(ANONYMOUS_LINK_SKIP_REASON)
 
-    document = _documents_by_id(_load_corpus(baseline_state, onedrive_credentials))[
-        baseline_state.files[FilePath.ANONYMOUS_LINK].id
-    ]
+    document = _documents_by_id(
+        _load_corpus(baseline_state, onedrive_credentials), baseline_state
+    )[baseline_state.files[FilePath.ANONYMOUS_LINK].id]
     _assert_access(
         document,
         emails={baseline_state.owner.user_principal_name},
@@ -325,21 +334,27 @@ def test_onedrive_anonymous_link_when_tenant_policy_allows_it(
     )
 
 
-def test_onedrive_fixed_corpus_incremental_mutations_restore_baseline(
+@pytest.mark.skipif(
+    not onedrive_write_tests_enabled(),
+    reason=ONEDRIVE_WRITE_TEST_SKIP_REASON,
+)
+def test_onedrive_local_mutation_corpus_incremental_changes(
     mutation_state: FixtureState,
-    provisioner: OneDriveFixtureProvisioner,
+    mutation_provisioner: OneDriveFixtureProvisioner,
     onedrive_credentials: dict[str, str],
 ) -> None:
     mutation_start = time.time()
-    provisioner.mutate()
-    provisioner.wait_for_mutations()
+    mutation_provisioner.mutate()
+    mutation_provisioner.wait_for_mutations()
 
     incremental = _load_corpus(
         mutation_state,
         onedrive_credentials,
         start=mutation_start,
     )
-    changed_ids = {document.id for document in _corpus_documents(incremental)}
+    changed_ids = {
+        document.id for document in _corpus_documents(incremental, mutation_state)
+    }
     expected_changed_ids = {
         mutation_state.files[path].id
         for path in (
@@ -352,7 +367,7 @@ def test_onedrive_fixed_corpus_incremental_mutations_restore_baseline(
     assert expected_changed_ids.issubset(changed_ids)
 
     mutated = _load_corpus(mutation_state, onedrive_credentials)
-    documents_by_id = _documents_by_id(mutated)
+    documents_by_id = _documents_by_id(mutated, mutation_state)
     owner_email = mutation_state.owner.user_principal_name
     primary_email = mutation_state.primary_user.user_principal_name
     alternate_email = mutation_state.alternate_user.user_principal_name

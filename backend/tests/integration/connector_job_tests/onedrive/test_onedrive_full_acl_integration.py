@@ -18,8 +18,10 @@ from tests.integration.connector_job_tests.onedrive.conftest import (
 )
 from tests.utils.onedrive_fixture import (
     ANONYMOUS_LINK_SKIP_REASON,
+    ONEDRIVE_WRITE_TEST_SKIP_REASON,
     AnonymousLinkOutcome,
     FilePath,
+    onedrive_write_tests_enabled,
 )
 from tests.utils.secret_names import TestSecret
 
@@ -298,17 +300,27 @@ def test_anonymous_link_acl_when_tenant_policy_allows_it(
     assert anonymous_id in _accessible_ids(onedrive_integration_environment)["outsider"]
 
 
-def test_onedrive_full_acl_mutations_and_multi_source_overlap(
+def test_onedrive_full_acl_and_multi_source_overlap(
     onedrive_integration_environment: OneDriveIntegrationEnvironment,
-    vespa_client: vespa_fixture,
 ) -> None:
     _assert_baseline_acl(onedrive_integration_environment)
     _assert_multi_source_overlap(onedrive_integration_environment)
-    _run_mutation_jobs(onedrive_integration_environment)
-    _assert_mutated_acl(onedrive_integration_environment)
-    _assert_indexed_mutated_acl(onedrive_integration_environment, vespa_client)
-    _assert_content_mutation(onedrive_integration_environment, vespa_client)
-    _prune_deleted_item(onedrive_integration_environment)
     _delete_onedrive_source_and_assert_sharepoint_overlap(
         onedrive_integration_environment
     )
+
+
+@pytest.mark.skipif(
+    not onedrive_write_tests_enabled(),
+    reason=ONEDRIVE_WRITE_TEST_SKIP_REASON,
+)
+def test_onedrive_local_fixture_mutations(
+    onedrive_mutation_environment: OneDriveIntegrationEnvironment,
+    vespa_client: vespa_fixture,
+) -> None:
+    _assert_baseline_acl(onedrive_mutation_environment)
+    _run_mutation_jobs(onedrive_mutation_environment)
+    _assert_mutated_acl(onedrive_mutation_environment)
+    _assert_indexed_mutated_acl(onedrive_mutation_environment, vespa_client)
+    _assert_content_mutation(onedrive_mutation_environment, vespa_client)
+    _prune_deleted_item(onedrive_mutation_environment)

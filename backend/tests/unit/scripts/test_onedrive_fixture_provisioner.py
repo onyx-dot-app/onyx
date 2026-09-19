@@ -7,14 +7,23 @@ import pytest
 import tests.utils.onedrive_fixture as fixture_module
 from tests.utils.onedrive_fixture import (
     DAILY_FIXTURE_ROOT_NAME,
+    DAILY_MUTATION_FIXTURE_ROOT_NAME,
     INTEGRATION_FIXTURE_ROOT_NAME,
+    INTEGRATION_MUTATION_FIXTURE_ROOT_NAME,
     AnonymousLinkOutcome,
     FixtureGraphClient,
+    GraphDrive,
     GraphFixtureError,
+    GraphItem,
+    GraphSite,
+    GraphUser,
     LinkScope,
     OneDriveFixtureProvisioner,
+    SharePointIds,
     build_daily_fixture_config,
+    build_daily_mutation_fixture_config,
     build_integration_fixture_config,
+    build_integration_mutation_fixture_config,
     load_fixture_config,
 )
 
@@ -34,34 +43,20 @@ def test_suite_configs_use_distinct_owned_external_identities() -> None:
     default = load_fixture_config().corpus
     daily = build_daily_fixture_config().corpus
     integration = build_integration_fixture_config().corpus
+    daily_mutation = build_daily_mutation_fixture_config().corpus
+    integration_mutation = build_integration_mutation_fixture_config().corpus
+    corpora = (default, daily, integration, daily_mutation, integration_mutation)
 
-    assert len({default.root_name, daily.root_name, integration.root_name}) == 3
+    assert len({corpus.root_name for corpus in corpora}) == len(corpora)
     assert daily.root_name == DAILY_FIXTURE_ROOT_NAME
     assert integration.root_name == INTEGRATION_FIXTURE_ROOT_NAME
-    assert (
-        len(
-            {
-                default.visible_group.mail_nickname,
-                daily.visible_group.mail_nickname,
-                integration.visible_group.mail_nickname,
-            }
-        )
-        == 3
+    assert daily_mutation.root_name == DAILY_MUTATION_FIXTURE_ROOT_NAME
+    assert integration_mutation.root_name == INTEGRATION_MUTATION_FIXTURE_ROOT_NAME
+    assert len({corpus.visible_group.mail_nickname for corpus in corpora}) == len(
+        corpora
     )
-    assert all(
-        "-v1" in corpus.visible_group.mail_nickname
-        for corpus in (default, daily, integration)
-    )
-    assert (
-        len(
-            {
-                default.ownership_description,
-                daily.ownership_description,
-                integration.ownership_description,
-            }
-        )
-        == 3
-    )
+    assert all("-v1" in corpus.visible_group.mail_nickname for corpus in corpora)
+    assert len({corpus.ownership_description for corpus in corpora}) == len(corpora)
 
 
 def test_fixture_configs_are_immutable() -> None:
@@ -69,6 +64,75 @@ def test_fixture_configs_are_immutable() -> None:
 
     assert config.model_config.get("frozen") is True
     assert config.corpus.model_config.get("frozen") is True
+
+
+def test_load_state_only_reads_existing_fixture() -> None:
+    provisioner, graph = _provisioner()
+    user_ids = iter(("owner", "second-owner", "primary", "alternate"))
+    users = [
+        GraphUser.model_validate(
+            {"id": user_id, "userPrincipalName": f"{user_id}@example.com"}
+        )
+        for user_id in user_ids
+    ]
+    drives = [
+        GraphDrive.model_validate(
+            {
+                "id": drive_id,
+                "name": drive_id,
+                "webUrl": f"https://example.test/{drive_id}",
+                "driveType": "business",
+                "sharepointIds": {"siteId": "site"},
+            }
+        )
+        for drive_id in ("drive", "second-drive")
+    ]
+    graph.get_model.side_effect = [
+        *users,
+        *drives,
+        GraphSite.model_validate({"id": "site", "webUrl": "https://example.test/site"}),
+    ]
+    graph.get_optional_item.side_effect = lambda path: GraphItem.model_validate(
+        {
+            "id": path,
+            "name": path.rsplit("/", 1)[-1],
+            "webUrl": f"https://example.test/{path}",
+            "sharepointIds": SharePointIds.model_validate(
+                {"siteId": "site"}
+            ).model_dump(by_alias=True),
+        }
+    )
+    corpus = provisioner.config.corpus
+    graph.get_collection.side_effect = [
+        [],
+        [
+            {
+                "id": "visible",
+                "displayName": corpus.visible_group.display_name,
+                "mailNickname": corpus.visible_group.mail_nickname,
+                "description": corpus.ownership_description,
+                "visibility": corpus.visible_group.visibility.value,
+            }
+        ],
+        [
+            {
+                "id": "hidden",
+                "displayName": corpus.hidden_group.display_name,
+                "mailNickname": corpus.hidden_group.mail_nickname,
+                "description": corpus.ownership_description,
+                "visibility": corpus.hidden_group.visibility.value,
+            }
+        ],
+    ]
+
+    state = provisioner.load_state()
+
+    assert state.drive.id == "drive"
+    graph.post.assert_not_called()
+    graph.patch.assert_not_called()
+    graph.put_item.assert_not_called()
+    graph.patch_item.assert_not_called()
+    graph.delete.assert_not_called()
 
 
 def test_existing_unowned_group_is_not_modified() -> None:

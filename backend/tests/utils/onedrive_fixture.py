@@ -49,8 +49,17 @@ GROUP_OWNERSHIP_MARKER_PREFIX = "onyx-fixture-owner:"
 DEFAULT_FIXTURE_OWNER = "onedrive-spike-v1"
 DAILY_FIXTURE_OWNER = "onedrive-daily-v1"
 INTEGRATION_FIXTURE_OWNER = "onedrive-integration-v1"
+DAILY_MUTATION_FIXTURE_OWNER = "onedrive-daily-mutation-v1"
+INTEGRATION_MUTATION_FIXTURE_OWNER = "onedrive-integration-mutation-v1"
 DAILY_FIXTURE_ROOT_NAME = "Onyx OneDrive Daily Tests"
 INTEGRATION_FIXTURE_ROOT_NAME = "Onyx OneDrive Integration Tests"
+DAILY_MUTATION_FIXTURE_ROOT_NAME = "Onyx OneDrive Daily Mutation Tests"
+INTEGRATION_MUTATION_FIXTURE_ROOT_NAME = "Onyx OneDrive Integration Mutation Tests"
+ONEDRIVE_WRITE_TESTS_ENV = "RUN_ONEDRIVE_WRITE_TESTS"
+ONEDRIVE_WRITE_TEST_SKIP_REASON = (
+    f"Requires fixture-writer credentials; set {ONEDRIVE_WRITE_TESTS_ENV}=true "
+    "for local runs."
+)
 DEFAULT_OWNER_UPN = "test@danswerai.onmicrosoft.com"
 DEFAULT_PRIMARY_UPN = "subash@onyx.app"
 DEFAULT_SECOND_OWNER_UPN = DEFAULT_PRIMARY_UPN
@@ -215,12 +224,17 @@ class GraphIdentitySet(BaseModel):
     group: GraphIdentity | None = None
 
 
+class GraphSharingLink(BaseModel):
+    scope: LinkScope
+
+
 class GraphPermission(BaseModel):
     id: str
     granted_to_v2: GraphIdentitySet | None = Field(default=None, alias="grantedToV2")
     granted_to_identities_v2: list[GraphIdentitySet] = Field(
         default_factory=list, alias="grantedToIdentitiesV2"
     )
+    link: GraphSharingLink | None = None
 
     def grants_principal(self, principal_id: str) -> bool:
         identities = [self.granted_to_v2, *self.granted_to_identities_v2]
@@ -296,6 +310,16 @@ INTEGRATION_CORPUS_CONFIG = _fixture_corpus_config(
     root_name=INTEGRATION_FIXTURE_ROOT_NAME,
     owner_marker=INTEGRATION_FIXTURE_OWNER,
     group_name_suffix=" (Integration)",
+)
+DAILY_MUTATION_CORPUS_CONFIG = _fixture_corpus_config(
+    root_name=DAILY_MUTATION_FIXTURE_ROOT_NAME,
+    owner_marker=DAILY_MUTATION_FIXTURE_OWNER,
+    group_name_suffix=" (Daily Mutation)",
+)
+INTEGRATION_MUTATION_CORPUS_CONFIG = _fixture_corpus_config(
+    root_name=INTEGRATION_MUTATION_FIXTURE_ROOT_NAME,
+    owner_marker=INTEGRATION_MUTATION_FIXTURE_OWNER,
+    group_name_suffix=" (Integration Mutation)",
 )
 
 
@@ -579,6 +603,55 @@ class OneDriveFixtureProvisioner:
             state.anonymous_link_skip_reason = ANONYMOUS_LINK_SKIP_REASON
         return state
 
+    def load_state(self) -> FixtureState:
+        """Load the immutable corpus without changing tenant state."""
+        validate_fixture_paths(self.config.corpus.root_name)
+        owner = self._get_user(self.config.owner_upn)
+        second_owner = self._get_user(self.config.second_owner_upn)
+        primary_user = self._get_user(self.config.primary_upn)
+        alternate_user = self._get_user(self.config.alternate_upn)
+        drive = self._get_drive(owner.id)
+        second_drive = self._get_drive(second_owner.id)
+        site = self._get_drive_site(drive)
+        root_item = self._require_item_by_relative_path(
+            drive.id, self.config.corpus.root_name
+        )
+        folders = {
+            path: self._require_item_by_path(drive.id, path) for path in FolderPath
+        }
+        files = {
+            path: self._require_item_by_path(drive.id, path)
+            for path in FilePath
+            if path is not FilePath.MOVE_DESTINATION
+        }
+        second_drive_duplicate = self._require_item_by_path(
+            second_drive.id, FilePath.IDENTITY
+        )
+        anonymous_outcome = self._anonymous_link_outcome(
+            drive.id, files[FilePath.ANONYMOUS_LINK].id
+        )
+        return FixtureState(
+            owner=owner,
+            second_owner=second_owner,
+            primary_user=primary_user,
+            alternate_user=alternate_user,
+            drive=drive,
+            second_drive=second_drive,
+            site=site,
+            root_item=root_item,
+            folders=folders,
+            files=files,
+            visible_group=self._load_group(self.config.corpus.visible_group),
+            hidden_group=self._load_group(self.config.corpus.hidden_group),
+            second_drive_duplicate=second_drive_duplicate,
+            anonymous_link_outcome=anonymous_outcome,
+            anonymous_link_skip_reason=(
+                ANONYMOUS_LINK_SKIP_REASON
+                if anonymous_outcome is AnonymousLinkOutcome.REJECTED_BY_TENANT_POLICY
+                else None
+            ),
+        )
+
     def mutate(self) -> None:
         owner = self._get_user(self.config.owner_upn)
         primary_user = self._get_user(self.config.primary_upn)
@@ -783,6 +856,30 @@ class OneDriveFixtureProvisioner:
         self._set_exact_group_members(group.id, member_ids)
         return group
 
+    def _load_group(self, group_config: FixtureGroupConfig) -> GraphGroup:
+        escaped_alias = group_config.mail_nickname.replace("'", "''")
+        matches = self.graph.get_collection(
+            "groups",
+            {
+                "$filter": f"mailNickname eq '{escaped_alias}'",
+                "$select": "id,displayName,mailNickname,description,visibility",
+            },
+        )
+        if len(matches) != 1:
+            raise RuntimeError(
+                f"Expected one fixture group with alias {group_config.mail_nickname}"
+            )
+        group = GraphGroup.model_validate(matches[0])
+        if group.description != self.config.corpus.ownership_description:
+            raise RuntimeError(
+                f"Unexpected fixture group: {group_config.mail_nickname}"
+            )
+        if group.visibility != group_config.visibility.value:
+            raise RuntimeError(
+                f"Unexpected fixture group visibility: {group_config.mail_nickname}"
+            )
+        return group
+
     def _set_exact_group_members(
         self, group_id: str, expected_member_ids: set[str]
     ) -> None:
@@ -927,6 +1024,22 @@ class OneDriveFixtureProvisioner:
             return AnonymousLinkOutcome.REJECTED_BY_TENANT_POLICY
         return AnonymousLinkOutcome.CREATED
 
+    def _anonymous_link_outcome(
+        self, drive_id: str, item_id: str
+    ) -> AnonymousLinkOutcome:
+        permissions = [
+            GraphPermission.model_validate(value)
+            for value in self.graph.get_collection(
+                f"drives/{drive_id}/items/{item_id}/permissions"
+            )
+        ]
+        if any(
+            permission.link is not None and permission.link.scope is LinkScope.ANONYMOUS
+            for permission in permissions
+        ):
+            return AnonymousLinkOutcome.CREATED
+        return AnonymousLinkOutcome.REJECTED_BY_TENANT_POLICY
+
     def _set_unique_access(
         self,
         site_url: str,
@@ -1004,6 +1117,14 @@ class OneDriveFixtureProvisioner:
             raise RuntimeError(f"Missing fixture item: {path.value}")
         return item
 
+    def _require_item_by_relative_path(
+        self, drive_id: str, relative_path: str
+    ) -> GraphItem:
+        item = self._get_item_by_relative_path(drive_id, relative_path)
+        if item is None:
+            raise RuntimeError(f"Missing fixture item: {relative_path}")
+        return item
+
     def _get_item_by_relative_path(
         self, drive_id: str, relative_path: str
     ) -> GraphItem | None:
@@ -1031,6 +1152,18 @@ def build_daily_fixture_config() -> FixtureConfig:
 
 def build_integration_fixture_config() -> FixtureConfig:
     return load_fixture_config(INTEGRATION_CORPUS_CONFIG)
+
+
+def build_daily_mutation_fixture_config() -> FixtureConfig:
+    return load_fixture_config(DAILY_MUTATION_CORPUS_CONFIG)
+
+
+def build_integration_mutation_fixture_config() -> FixtureConfig:
+    return load_fixture_config(INTEGRATION_MUTATION_CORPUS_CONFIG)
+
+
+def onedrive_write_tests_enabled() -> bool:
+    return os.environ.get(ONEDRIVE_WRITE_TESTS_ENV, "").lower() == "true"
 
 
 def load_certificate_credentials() -> CertificateAppCredentials:
