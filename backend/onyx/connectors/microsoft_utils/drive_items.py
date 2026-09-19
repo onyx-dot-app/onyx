@@ -29,6 +29,10 @@ from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     extract_and_stage_tabular_file,
     is_tabular_file,
 )
+from onyx.connectors.microsoft_utils.drive_delta import (
+    DriveDeltaPage,
+    fetch_drive_delta_checkpoint_page,
+)
 from onyx.connectors.microsoft_utils.graph_client import (
     TRANSIENT_TRANSPORT_EXCEPTIONS,
     GraphApiClient,
@@ -630,15 +634,18 @@ def extract_drive_item_content(
     return DriveItemContent(sections=sections, staged_file_id=staged_file_id)
 
 
-def _delta_item_is_indexable(
-    item: dict[str, Any],
+def _iter_delta_page_files(
+    page: DriveDeltaPage,
     start: datetime | None,
     end: datetime | None,
-) -> bool:
-    """Folders and tombstones carry no content, so only files in window index."""
-    if DRIVE_ITEM_FOLDER_PROPERTY in item or DRIVE_ITEM_DELETED_PROPERTY in item:
-        return False
-    return drive_item_in_time_window(item, start, end)
+) -> Generator[DriveItemData, None, None]:
+    for item in page.items:
+        if item.is_folder or item.is_tombstone:
+            continue
+        graph_json = item.to_graph_json()
+        if not drive_item_in_time_window(graph_json, start, end):
+            continue
+        yield DriveItemData.from_graph_json(graph_json)
 
 
 def iter_drive_items_paged(
@@ -750,39 +757,21 @@ def iter_delta_pages(
     }
 
     while page_url:
-        try:
-            data = client.get_json(page_url, params)
-        except requests.HTTPError as e:
-            # 410 means the delta token expired, so we need to fall back to full enumeration
-            if e.response is not None and e.response.status_code == 410:
-                if not allow_full_resync:
-                    raise
-                logger.warning(
-                    "Delta token expired (410 Gone) for drive '%s'. Falling back to full delta enumeration.",
-                    drive_id,
-                )
-                yield from iter_delta_pages(
-                    client,
-                    initial_url=f"{client.graph_api_base}/drives/{drive_id}/root/delta",
-                    drive_id=drive_id,
-                    start=start,
-                    end=end,
-                    page_size=page_size,
-                    allow_full_resync=False,
-                )
-                return
-            raise
-
-        params = None  # nextLink/deltaLink already embed query params
-
-        for item in data.get("value", []):
-            if not _delta_item_is_indexable(item, start, end):
-                continue
-            yield DriveItemData.from_graph_json(item)
-
-        page_url = data.get("@odata.nextLink")
-        if not page_url:
-            break
+        result = fetch_drive_delta_checkpoint_page(
+            client,
+            page_url=page_url,
+            drive_id=drive_id,
+            query_params=params,
+            page_size=page_size,
+            select_fields=DRIVE_ITEM_SELECT_FIELDS,
+            allow_full_resync=allow_full_resync,
+        )
+        params = None  # Cursor URLs already embed query parameters.
+        if result.resync_after_410:
+            allow_full_resync = False
+        else:
+            yield from _iter_delta_page_files(result.page, start, end)
+        page_url = result.next_checkpoint_url
 
 
 def build_delta_start_url(
@@ -824,28 +813,12 @@ def fetch_one_delta_page(
     the caller can store the resync URL in the checkpoint and retry on
     the next cycle.
     """
-    try:
-        data = client.get_json(page_url)
-    except requests.HTTPError as e:
-        if e.response is not None and e.response.status_code == 410:
-            logger.warning(
-                "Delta token expired (410 Gone) for drive '%s'. Will restart with full delta enumeration.",
-                drive_id,
-            )
-            full_url = (
-                f"{client.graph_api_base}/drives/{drive_id}/root/delta?"
-                f"$top={page_size}&$select={DRIVE_ITEM_SELECT_FIELDS}"
-            )
-            return [], full_url
-        raise
-
-    items: list[DriveItemData] = []
-    for item in data.get("value", []):
-        if not _delta_item_is_indexable(item, start, end):
-            continue
-        items.append(DriveItemData.from_graph_json(item))
-
-    next_url = data.get("@odata.nextLink")
-    if next_url:
-        return items, next_url
-    return items, None
+    result = fetch_drive_delta_checkpoint_page(
+        client,
+        page_url=page_url,
+        drive_id=drive_id,
+        page_size=page_size,
+        select_fields=DRIVE_ITEM_SELECT_FIELDS,
+    )
+    items = list(_iter_delta_page_files(result.page, start, end))
+    return items, result.next_checkpoint_url

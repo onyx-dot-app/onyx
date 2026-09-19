@@ -99,3 +99,34 @@ def test_retries_chunked_encoding_error(monkeypatch: pytest.MonkeyPatch) -> None
 
     assert result == payload
     assert state["n"] == 2
+
+
+def test_request_headers_are_retained_across_retries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _no_sleep(monkeypatch)
+    responses = iter(
+        [
+            _response(429, body={"error": {"code": "throttled"}}),
+            _response(200, body={"value": []}),
+        ]
+    )
+    captured_headers: list[dict[str, str]] = []
+
+    def _get(*_args: Any, **kwargs: Any) -> Response:
+        captured_headers.append(kwargs["headers"])
+        return next(responses)
+
+    monkeypatch.setattr(graph_client_module.requests, "get", _get)
+
+    graph_api_get_json(
+        _token,
+        PAGE_URL,
+        headers={"Prefer": "hierarchicalsharing"},
+    )
+
+    expected = {
+        "Prefer": "hierarchicalsharing",
+        "Authorization": "Bearer fake-token",
+    }
+    assert captured_headers == [expected, expected]
