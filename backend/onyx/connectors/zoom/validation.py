@@ -35,9 +35,10 @@ _SAMPLE_WINDOW_DAYS = 30
 
 
 def _probe(description: str, call: Callable[[], _T]) -> _T | None:
-    """None means Zoom has no such thing: one configured id that is deleted or
-    past retention. Discovery reports that per session; raising it here would
-    pause the whole connector on every crawl.
+    """None means Zoom has no such thing: a configured meeting, webinar or
+    Group that is deleted or past retention. Discovery reports each one as an
+    indexing error and crawls the rest; raising it here would pause the whole
+    connector on every crawl.
 
     A 503 or a dropped connection must not become ConnectorValidationError,
     because that would disable the connector over a Zoom outage.
