@@ -26,6 +26,13 @@ _METHODS = ("GET", "POST", "PATCH", "PUT", "DELETE")
 # CRM object types this helper supports (path segment under /crm/v3/objects).
 _OBJECTS = ("contacts", "companies", "deals")
 
+# Write subcommands. A write that lacks the HubSpot write scope comes back as a
+# 401 (sometimes 403). The raw auth error confuses the Craft agent (it reads
+# like a credential-injection failure), so we translate it into actionable text
+# explaining a paid write seat is required — see ENG-4263.
+_WRITE_CMDS = ("create", "update")
+_WRITE_DENIED_STATUSES = (401, 403)
+
 # Sensible default properties to fetch per object so output is useful without
 # the caller having to enumerate every property name.
 _DEFAULT_PROPERTIES: dict[str, list[str]] = {
@@ -82,6 +89,28 @@ def _properties_from_pairs(pairs: list[str]) -> dict[str, str]:
         key, value = pair.split("=", 1)
         props[key.strip()] = value
     return props
+
+
+def _write_denied_message(obj: str | None) -> str:
+    """Friendly text for a write rejected for lack of the HubSpot write scope.
+
+    A raw 401/403 here reads like a credential-injection failure and confuses
+    the agent, so we explain the real cause: the connected HubSpot account
+    lacks a paid write seat / write scope for this object (ENG-4263)."""
+    target = f"to {obj}" if obj else "to this object"
+    return (
+        f"This action requires a paid HubSpot seat with write access {target}. "
+        "Your connected HubSpot account doesn't have the write scope for this "
+        "object, so create/update isn't available. Ask a HubSpot admin to grant "
+        "write access (a paid write seat), then reconnect HubSpot in Onyx."
+    )
+
+
+def _is_write_scope_denial(cmd: str | None, status: int) -> bool:
+    """True when a write (create/update) was rejected with a 401/403, i.e. the
+    connected account lacks the write scope. Reads and other statuses keep the
+    raw upstream error unchanged (ENG-4263)."""
+    return cmd in _WRITE_CMDS and status in _WRITE_DENIED_STATUSES
 
 
 def _emit(result: dict[str, Any], raw: bool) -> int:
@@ -262,7 +291,20 @@ def main(argv: list[str]) -> int:
             )
         except ValueError:
             message = detail
-        print(json.dumps({"ok": False, "status": e.code, "error": message}))
+        # A denied write (missing scope) returns a raw 401/403 that looks like a
+        # credential failure and confuses the agent; surface actionable text
+        # instead while preserving the upstream message under `detail` for
+        # debugging (ENG-4263).
+        if _is_write_scope_denial(getattr(a, "cmd", None), e.code):
+            out: dict[str, Any] = {
+                "ok": False,
+                "status": e.code,
+                "error": _write_denied_message(getattr(a, "object", None)),
+                "detail": message,
+            }
+        else:
+            out = {"ok": False, "status": e.code, "error": message}
+        print(json.dumps(out))
         return 1
     except urllib.error.URLError as e:
         print(f"network error calling HubSpot: {e.reason}", file=sys.stderr)
