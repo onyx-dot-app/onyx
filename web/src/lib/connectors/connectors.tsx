@@ -174,6 +174,30 @@ export function buildIncludeAttachmentsOption(
   };
 }
 
+const zoomMeetingIdsOption: ListOption = {
+  type: "list",
+  query: "Enter the Zoom meeting IDs to index:",
+  label: "Meeting IDs",
+  name: "meeting_ids",
+  optional: true,
+  description:
+    "Each recurring meeting is indexed occurrence by occurrence. Zoom returns " +
+    "occurrences from the last 15 months only, so older ones are out of reach " +
+    "of a meeting ID. To index history further back, scope by host email or by " +
+    "Zoom Group instead — neither has that limit.",
+};
+
+const zoomWebinarIdsOption: ListOption = {
+  type: "list",
+  query: "Enter the Zoom webinar IDs to index:",
+  label: "Webinar IDs",
+  name: "webinar_ids",
+  optional: true,
+  description:
+    "Webinars also need the Webinar add-on, enabled for the host. Unlike " +
+    "meeting IDs, webinar history has no 15-month limit.",
+};
+
 export const connectorConfigs: Record<
   ConfigurableSources,
   ConnectionConfiguration
@@ -1896,6 +1920,74 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
     description: "Configure Fireflies connector",
     values: [],
     advanced_values: [],
+  },
+  zoom: {
+    description: "Configure Zoom connector",
+    subtext:
+      "Indexes the Cloud Recording transcript of each Zoom session, on a Zoom " +
+      "Pro plan or higher. A session that was never cloud-recorded is skipped. " +
+      "Set an Indexing Start date under Advanced. Zoom lists recordings a month " +
+      "per request, so without one the first crawl asks for every month back to " +
+      "2013 and spends your account's API allowance on years that hold nothing.",
+    values: [
+      // Two lists rather than one: the same number can be a legal meeting id
+      // and a legal webinar id, so the list it is typed into says which.
+      zoomMeetingIdsOption,
+      zoomWebinarIdsOption,
+      {
+        type: "list",
+        query: "Enter the Zoom host emails to index:",
+        label: "Host Emails",
+        name: "host_emails",
+        optional: true,
+        description:
+          "Index every session these people host, meetings and webinars " +
+          "alike. An email that matches no Zoom user is reported as an " +
+          "indexing error rather than silently ignored.",
+      },
+      {
+        type: "text",
+        query: "Enter the Zoom Group ID to index:",
+        label: "Zoom Group ID",
+        name: "group_id",
+        optional: true,
+        description:
+          "Index every session the members of one Zoom Group host. Zoom " +
+          "re-reads the member list on every run, so a joiner or leaver is " +
+          "picked up without editing this connector. Like Host Emails, it " +
+          "covers both meetings and webinars.",
+      },
+      {
+        type: "select",
+        query: "Select the Zoom plan:",
+        label: "Zoom Plan",
+        name: "plan_tier",
+        optional: false,
+        options: [
+          { name: "pro", value: "pro" },
+          { name: "business_plus", value: "business_plus" },
+        ],
+        description:
+          "Sets how fast this connector is allowed to call Zoom. Pick pro on " +
+          "a Pro account, and business_plus on Business, Education, " +
+          "Enterprise or Partner.",
+      },
+    ],
+    advanced_values: [
+      {
+        type: "number",
+        query: "Enter the share of Zoom's rate limit to use:",
+        label: "Zoom API Rate Limit",
+        name: "rate_limit_percent",
+        optional: true,
+        description:
+          "Whole percent, 1 to 100, of the account's Zoom rate limit this " +
+          "connector may spend. Blank means 50, which leaves room for the " +
+          "customer's other Zoom integrations. Each Zoom connector paces " +
+          "itself and cannot see the others, so two connectors on one Zoom " +
+          "account spend this percent each — divide it if you run several.",
+      },
+    ],
   },
   braintrust: {
     description: "Configure Braintrust connector",

@@ -285,6 +285,12 @@ export interface FirefliesCredentialJson {
   fireflies_api_key: string;
 }
 
+export interface ZoomCredentialJson {
+  zoom_account_id: string;
+  zoom_client_id: string;
+  zoom_client_secret: string;
+}
+
 export interface BraintrustCredentialJson {
   braintrust_api_key: string;
 }
@@ -365,6 +371,7 @@ type CredentialTemplateMap = Record<ValidSources, object | null> & {
   oci_storage: OCICredentialJson;
   freshdesk: FreshdeskCredentialJson;
   fireflies: FirefliesCredentialJson;
+  zoom: ZoomCredentialJson;
   braintrust: BraintrustCredentialJson;
   canvas: CanvasCredentialJson;
   egnyte: EgnyteCredentialJson;
@@ -588,6 +595,11 @@ export const credentialTemplates: Record<ValidSources, any> = {
   fireflies: {
     fireflies_api_key: "",
   },
+  zoom: {
+    zoom_account_id: "",
+    zoom_client_id: "",
+    zoom_client_secret: "",
+  },
   braintrust: {
     braintrust_api_key: "",
   },
@@ -810,6 +822,11 @@ export const credentialDisplayNames: Record<string, string> = {
 
   // Fireflies
   fireflies_api_key: "Fireflies API Key",
+
+  // Zoom
+  zoom_account_id: "Zoom Account ID",
+  zoom_client_id: "Zoom Client ID",
+  zoom_client_secret: "Zoom Client Secret",
 
   // Braintrust
   braintrust_api_key: "Braintrust API Key",
