@@ -25,7 +25,7 @@ def get_provider_adapter(llm_config: LLMConfig) -> PromptCacheProvider:
     """Get the appropriate prompt cache provider adapter for a given provider.
 
     Args:
-        provider: Provider name (e.g., "openai", "anthropic", "vertex_ai")
+        llm_config: Config of the LLM whose provider decides the caching strategy
 
     Returns:
         PromptCacheProvider instance for the given provider
