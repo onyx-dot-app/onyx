@@ -8,10 +8,11 @@ from onyx.connectors.microsoft_utils.drive_delta import (
     DRIVE_DELTA_SELECT_FIELDS,
     HIERARCHICAL_SHARING_PREFERENCE,
     PREFER_HEADER,
-    build_onedrive_delta_start_url,
+    build_drive_delta_start_url,
 )
 from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
 from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
+from onyx.connectors.onedrive.errors import OneDriveGraphError
 from onyx.connectors.onedrive.models import OneDriveCredentials
 from onyx.connectors.onedrive.source_operations import OneDriveSourceOperations
 
@@ -85,14 +86,28 @@ def test_onedrive_delta_410_uses_safe_full_resync_cursor() -> None:
 
 
 def test_onedrive_delta_start_url_uses_sharing_fields_and_page_size() -> None:
-    url = build_onedrive_delta_start_url(
+    url = build_drive_delta_start_url(
         "https://graph.microsoft.com/v1.0",
         "drive",
         page_size=23,
+        select_fields=DRIVE_DELTA_SELECT_FIELDS,
     )
 
     assert "$top=23" in url
     assert f"$select={DRIVE_DELTA_SELECT_FIELDS}" in url
+
+
+def test_onedrive_preserves_msal_throttle_status() -> None:
+    gateway, _ = _gateway()
+
+    with patch(
+        "onyx.connectors.onedrive.source_operations.build_msal_app",
+        side_effect=ValueError("authority discovery failed; HTTP status: 429"),
+    ):
+        with pytest.raises(OneDriveGraphError) as raised:
+            gateway._auth()
+
+    assert raised.value.status == 429
 
 
 def test_onedrive_source_operation_inventory_marks_pr6_operations_untested() -> None:
