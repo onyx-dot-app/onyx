@@ -5477,6 +5477,40 @@
             "description": "الصق مفتاح API من [Nebius TokenFactory](https://tokenfactory.nebius.com/) لتحميل النماذج المتاحة."
           }
         },
+        "oci": {
+          "compartmentIdField": {
+            "description": "معرّف OCID للحيّز (compartment) الذي تُنفَّذ فيه طلبات Generative AI.",
+            "title": "معرّف OCID للحيّز"
+          },
+          "fingerprintField": {
+            "description": "بصمة مفتاح توقيع API كما تظهر في وحدة تحكم OCI.",
+            "title": "بصمة مفتاح API"
+          },
+          "privateKeyField": {
+            "description": "أرفق المفتاح الخاص بتنسيق PEM المقترن بالبصمة أعلاه.",
+            "title": "المفتاح الخاص لتوقيع API"
+          },
+          "regionField": {
+            "description": "منطقة OCI التي تستضيف نقطة نهاية Generative AI، مثل us-chicago-1.",
+            "title": "المنطقة"
+          },
+          "tenancyField": {
+            "description": "معرّف OCID للمستأجر (tenancy) الخاص بك.",
+            "title": "معرّف OCID للمستأجر"
+          },
+          "userField": {
+            "description": "معرّف OCID للمستخدم الذي يملك مفتاح توقيع API.",
+            "title": "معرّف OCID للمستخدم"
+          },
+          "validation": {
+            "compartmentIdRequired": "معرّف OCID للحيّز مطلوب",
+            "fingerprintRequired": "بصمة مفتاح API مطلوبة",
+            "privateKeyRequired": "المفتاح الخاص مطلوب",
+            "regionRequired": "المنطقة مطلوبة",
+            "tenancyRequired": "معرّف OCID للمستأجر مطلوب",
+            "userRequired": "معرّف OCID للمستخدم مطلوب"
+          }
+        },
         "ollama": {
           "apiBaseField": {
             "description": "عنوان URL الأساسي لنسخة Ollama الخاصة بك.",

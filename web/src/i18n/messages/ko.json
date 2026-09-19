@@ -5477,6 +5477,40 @@
             "description": "사용 가능한 모델을 불러오려면 [Nebius TokenFactory](https://tokenfactory.nebius.com/)에서 발급한 API 키를 붙여넣으세요."
           }
         },
+        "oci": {
+          "compartmentIdField": {
+            "description": "Generative AI 요청이 실행되는 구획(compartment)의 OCID입니다.",
+            "title": "구획 OCID"
+          },
+          "fingerprintField": {
+            "description": "OCI 콘솔에 표시되는 API 서명 키의 지문입니다.",
+            "title": "API 키 지문"
+          },
+          "privateKeyField": {
+            "description": "위 지문과 쌍을 이루는 PEM 개인 키를 첨부하세요.",
+            "title": "API 서명 개인 키"
+          },
+          "regionField": {
+            "description": "Generative AI 엔드포인트를 호스팅하는 OCI 리전입니다(예: us-chicago-1).",
+            "title": "리전"
+          },
+          "tenancyField": {
+            "description": "테넌시의 OCID입니다.",
+            "title": "테넌시 OCID"
+          },
+          "userField": {
+            "description": "API 서명 키가 속한 사용자의 OCID입니다.",
+            "title": "사용자 OCID"
+          },
+          "validation": {
+            "compartmentIdRequired": "구획 OCID는 필수입니다",
+            "fingerprintRequired": "API 키 지문은 필수입니다",
+            "privateKeyRequired": "개인 키는 필수입니다",
+            "regionRequired": "리전은 필수입니다",
+            "tenancyRequired": "테넌시 OCID는 필수입니다",
+            "userRequired": "사용자 OCID는 필수입니다"
+          }
+        },
         "ollama": {
           "apiBaseField": {
             "description": "Ollama 인스턴스의 기본 URL입니다.",

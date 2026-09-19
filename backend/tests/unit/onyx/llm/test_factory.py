@@ -41,6 +41,14 @@ def test_build_provider_extra_headers_keeps_existing_bearer_prefix() -> None:
     assert headers == {"Authorization": "bearer test-key"}
 
 
+def test_build_provider_extra_headers_disables_zstd_for_oci() -> None:
+    """OCI zstd-frames every streamed event; httpx cannot decode that, so the
+    request must not advertise zstd (BerriAI/litellm#40028)."""
+    headers = _build_provider_extra_headers(LlmProviderNames.OCI, None)
+
+    assert headers == {"Accept-Encoding": "gzip, deflate"}
+
+
 def test_build_provider_extra_headers_ignores_empty_lm_studio_api_key() -> None:
     headers = _build_provider_extra_headers(
         LlmProviderNames.LM_STUDIO,

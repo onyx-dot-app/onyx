@@ -5477,6 +5477,40 @@
             "description": "Pega tu clave de API de [Nebius TokenFactory](https://tokenfactory.nebius.com/) para cargar los modelos disponibles."
           }
         },
+        "oci": {
+          "compartmentIdField": {
+            "description": "OCID del compartimento en el que se realizan las solicitudes de Generative AI.",
+            "title": "OCID del compartimento"
+          },
+          "fingerprintField": {
+            "description": "Huella digital de la clave de firma de API, tal como se muestra en la consola de OCI.",
+            "title": "Huella digital de la clave de API"
+          },
+          "privateKeyField": {
+            "description": "Adjunte la clave privada PEM que corresponde a la huella digital anterior.",
+            "title": "Clave privada de firma de API"
+          },
+          "regionField": {
+            "description": "Región de OCI que aloja el punto de conexión de Generative AI, por ejemplo us-chicago-1.",
+            "title": "Región"
+          },
+          "tenancyField": {
+            "description": "OCID de su tenancy.",
+            "title": "OCID del tenancy"
+          },
+          "userField": {
+            "description": "OCID del usuario al que pertenece la clave de firma de API.",
+            "title": "OCID del usuario"
+          },
+          "validation": {
+            "compartmentIdRequired": "El OCID del compartimento es obligatorio",
+            "fingerprintRequired": "La huella digital de la clave de API es obligatoria",
+            "privateKeyRequired": "La clave privada es obligatoria",
+            "regionRequired": "La región es obligatoria",
+            "tenancyRequired": "El OCID del tenancy es obligatorio",
+            "userRequired": "El OCID del usuario es obligatorio"
+          }
+        },
         "ollama": {
           "apiBaseField": {
             "description": "La URL base de tu instancia de Ollama.",

@@ -62,6 +62,15 @@ def _build_provider_extra_headers(
             "X-Title": "Onyx",
         }
 
+    # OCI Generative AI compresses each streamed SSE event as its own zstd
+    # frame, and httpx reuses a single zstd decoder per response, so streams
+    # die a few tokens in with "cannot use a decompressobj multiple times"
+    # whenever `zstandard` is importable (it is in this environment). Only
+    # advertise codecs httpx decodes frame by frame. Drop once
+    # https://github.com/BerriAI/litellm/pull/40028 ships in our LiteLLM pin.
+    elif provider == LlmProviderNames.OCI:
+        return {"Accept-Encoding": "gzip, deflate"}
+
     return {}
 
 
