@@ -298,7 +298,12 @@ def should_index(
         return True
 
     current_db_time = get_db_current_time(db_session)
-    time_since_index = current_db_time - last_index_attempt.time_updated
+    # Measure staleness from the attempt's own immutable timeline, not the
+    # mutable time_updated audit column: the hourly checkpoint-cleanup task
+    # bumps time_updated on old attempts (checkpoint_pointer = None), so a
+    # connector idle long enough to cross NUM_DAYS_TO_KEEP_CHECKPOINTS would
+    # otherwise read as "indexed an hour ago" and never be rescheduled.
+    time_since_index = current_db_time - last_index_attempt.time_created
     if time_since_index.total_seconds() < connector.refresh_freq:
         # print(
         #     f"Not indexing cc_pair={cc_pair.id}: Last index attempt={last_index_attempt.id} "
