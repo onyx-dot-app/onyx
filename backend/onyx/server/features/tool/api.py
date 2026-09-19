@@ -5,7 +5,11 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.permission_projection import tool_permissions
-from onyx.auth.permissions import has_permission, require_permission
+from onyx.auth.permissions import (
+    has_global_permission,
+    has_permission,
+    require_permission,
+)
 from onyx.auth.scoped_permissions import get_scoped_groups
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
@@ -29,6 +33,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.tool.models import (
     CustomToolCreate,
+    CustomToolDestination,
     CustomToolUpdate,
     Header,
     ToolSnapshot,
@@ -38,6 +43,7 @@ from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     MethodSpec,
     openapi_to_method_specs,
+    openapi_to_url,
     validate_openapi_schema,
 )
 from onyx.utils.encryption import is_masked_credential
@@ -49,11 +55,36 @@ admin_router = APIRouter(prefix="/admin/tool")
 def _validate_tool_definition(definition: dict[str, Any]) -> None:
     try:
         validate_openapi_schema(definition)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except (ValueError, TypeError, KeyError, AttributeError) as e:
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e)) from e
 
 
-def _validate_auth_settings(tool_data: CustomToolCreate | CustomToolUpdate) -> None:
+def _custom_tool_destinations(
+    definition: dict[str, Any],
+) -> list[CustomToolDestination]:
+    base_url = openapi_to_url(definition)
+    destinations = [
+        CustomToolDestination(
+            url_template=f"{base_url}{method.path}",
+            method=method.method,
+            path_parameters={
+                param["name"]: param["schema"]
+                for param in method.get_path_param_schemas()
+            },
+        )
+        for method in openapi_to_method_specs(definition)
+    ]
+    return sorted(
+        destinations,
+        key=lambda destination: (destination.url_template, destination.method),
+    )
+
+
+def _validate_auth_settings(
+    tool_data: CustomToolCreate | CustomToolUpdate,
+    user: User,
+    existing_tool: Tool | None = None,
+) -> None:
     if tool_data.passthrough_auth and tool_data.custom_headers:
         for header in tool_data.custom_headers:
             if header.key.lower() == "authorization":
@@ -61,6 +92,35 @@ def _validate_auth_settings(tool_data: CustomToolCreate | CustomToolUpdate) -> N
                     status_code=400,
                     detail="Cannot use passthrough auth with custom authorization headers",
                 )
+
+    if has_global_permission(user, Permission.MANAGE_ACTIONS):
+        return
+    if tool_data.passthrough_auth is False:
+        return
+
+    if existing_tool is None or not existing_tool.passthrough_auth:
+        requires_global_permission = bool(tool_data.passthrough_auth)
+    else:
+        definition_changed = tool_data.definition is not None and (
+            existing_tool.openapi_schema is None
+            or _custom_tool_destinations(tool_data.definition)
+            != _custom_tool_destinations(existing_tool.openapi_schema)
+        )
+        headers_changed = False
+        if tool_data.custom_headers is not None:
+            resolved_headers = _resolve_masked_headers(
+                tool_data.custom_headers, existing_tool.custom_headers
+            )
+            headers_changed = [
+                header.model_dump() for header in (resolved_headers or [])
+            ] != (existing_tool.custom_headers or [])
+        requires_global_permission = definition_changed or headers_changed
+
+    if requires_global_permission:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Only a full action manager can forward users' login tokens to an action.",
+        )
 
 
 def _resolve_masked_headers(
@@ -154,7 +214,7 @@ def create_custom_tool(
     ),
 ) -> ToolSnapshot:
     _validate_tool_definition(tool_data.definition)
-    _validate_auth_settings(tool_data)
+    _validate_auth_settings(tool_data, user)
     _assert_can_link_oauth_config(tool_data.oauth_config_id, db_session, user)
     custom_headers = _resolve_masked_headers(tool_data.custom_headers, None)
     tool = create_tool__no_commit(
@@ -182,9 +242,9 @@ def update_custom_tool(
     ),
 ) -> ToolSnapshot:
     existing_tool = _get_manageable_custom_tool(tool_id, db_session, user)
-    if tool_data.definition:
+    if tool_data.definition is not None:
         _validate_tool_definition(tool_data.definition)
-    _validate_auth_settings(tool_data)
+    _validate_auth_settings(tool_data, user, existing_tool)
     _assert_can_link_oauth_config(
         tool_data.oauth_config_id,
         db_session,
