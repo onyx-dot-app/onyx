@@ -26,6 +26,7 @@ from onyx.connectors.zoom.models import (
     ZoomPanelist,
     ZoomParticipant,
     ZoomPastMeetingDetails,
+    ZoomRecordingEntry,
     ZoomRecordingPage,
     ZoomRegistrant,
     ZoomSessionOccurrence,
@@ -327,15 +328,19 @@ class ZoomClient:
             f"{MAX_LISTING_PAGES} pages"
         )
 
-    def get_meeting_transcript(self, meeting_identifier: str) -> ZoomTranscript:
-        """Takes a meeting ID, a webinar ID, or one occurrence's UUID. Zoom has
-        no webinar transcript endpoint, so webinars come through here too.
+    def get_transcript(self, meeting_identifier: str) -> ZoomTranscript | None:
+        """Takes a meeting ID, a webinar ID, or one occurrence's UUID. Webinars
+        come here too because Zoom has no webinar equivalent of this endpoint.
 
-        A session that was never recorded answers 404, which raises here. Whether
-        that is a skip or a failure is the caller's call, not this client's.
+        None means Zoom recorded the session but never transcribed it. A session
+        with no cloud recording at all answers 404, which raises.
+
+        Do not switch this to `GET /meetings/{meetingId}/transcript`. Against a
+        live account that answered 404 for a session whose VTT was sitting in
+        `recording_files`.
         """
-        response = self._get(endpoints.MEETING_TRANSCRIPT, meeting_identifier)
-        return ZoomTranscript.model_validate(response.json())
+        response = self._get(endpoints.MEETING_RECORDINGS, meeting_identifier)
+        return ZoomRecordingEntry.model_validate(response.json()).transcript
 
     def get_past_meeting_details(
         self, meeting_identifier: str
@@ -547,4 +552,6 @@ class ZoomClient:
                 ) from e
 
         _raise_for_zoom_error(response, description)
-        return response.text
+        # The storage host sends no charset, so requests guesses Latin-1 and an
+        # ellipsis arrives as "â€¦". WebVTT is UTF-8 by specification.
+        return response.content.decode("utf-8", errors="replace")

@@ -13,6 +13,7 @@ from onyx.connectors.zoom.models import (
     ZoomParticipant,
     ZoomPastMeetingDetails,
     ZoomRecordingEntry,
+    ZoomRecordingFile,
     ZoomRegistrant,
     ZoomSessionOccurrence,
     ZoomTranscript,
@@ -22,15 +23,27 @@ from onyx.connectors.zoom.models import (
 
 
 def transcript(**overrides: Any) -> ZoomTranscript:
+    """Zoom never sends this shape. `recording_file` below is the payload it
+    really answers with.
+    """
+    fields: dict[str, Any] = {"download_url": "https://zoom.example/transcript.vtt"}
+    return ZoomTranscript(**(fields | overrides))
+
+
+def recording_file(**overrides: Any) -> ZoomRecordingFile:
     fields: dict[str, Any] = {
         "meeting_id": "uaFkQyFCSwya8iNYtkAw3A==",
-        "account_id": "Cx3wERazSgup7ZWRHQM8-w",
-        "meeting_topic": "My Personal Meeting",
-        "host_id": "_0ctZtY0REqWalTmwvrdIw",
-        "transcript_created_time": "2025-06-27T13:48:24Z",
-        "can_download": True,
+        "recording_start": "2021-03-18T05:41:36Z",
+        "file_type": "TRANSCRIPT",
+        "id": "ffc44b9b-c1a2-4a9d-9c0a-1b0a01b8ff9d",
+        "file_extension": "VTT",
+        "file_size": 3260,
+        "recording_end": "2021-03-18T06:01:36Z",
+        "recording_type": "audio_transcript",
+        "status": "completed",
+        "download_url": "https://zoom.example/transcript.vtt",
     }
-    return ZoomTranscript(**(fields | overrides))
+    return ZoomRecordingFile(**(fields | overrides))
 
 
 def past_meeting_details(**overrides: Any) -> ZoomPastMeetingDetails:

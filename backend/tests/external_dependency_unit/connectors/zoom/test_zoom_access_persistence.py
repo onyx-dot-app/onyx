@@ -75,7 +75,7 @@ def _zoom_documents(meeting_id: str) -> list[Document]:
             uuid=f"uuid-{meeting_id}", start_time="2026-01-15T10:00:00Z"
         )
     ]
-    client.get_meeting_transcript.return_value = transcript(
+    client.get_transcript.return_value = transcript(
         download_url="https://zoom.us/rec/download/t.vtt", meeting_topic="Weekly Sync"
     )
     client.download_transcript_vtt.return_value = _SAMPLE_VTT

@@ -84,7 +84,7 @@ class TestResolveTargets:
         assert doc.metadata == {"session_type": "meeting"}
         assert doc.sections[0].text is not None
         assert "Jane Doe: Hello everyone" in doc.sections[0].text
-        client.get_meeting_transcript.assert_called_once_with("uuid-abc")
+        client.get_transcript.assert_called_once_with("uuid-abc")
 
     def test_webinar_target_uses_the_webinar_handler(self) -> None:
         client = _client()
@@ -110,7 +110,7 @@ class TestResolveTargets:
         items = _reindex(client, [_target(_MEETING_DOC_ID)])
 
         assert [d.id for d in items if isinstance(d, Document)] == [_MEETING_DOC_ID]
-        client.get_meeting_transcript.assert_called_once_with("uuid-abc")
+        client.get_transcript.assert_called_once_with("uuid-abc")
         client.list_user_recordings.assert_not_called()
         client.list_past_meeting_occurrences.assert_not_called()
         client.list_users.assert_not_called()
@@ -153,7 +153,7 @@ class TestUnresolvableTargets:
 
     def test_one_broken_target_does_not_cost_the_others_their_retry(self) -> None:
         client = _client()
-        client.get_meeting_transcript.side_effect = [
+        client.get_transcript.side_effect = [
             RuntimeError("boom"),
             transcript(download_url="https://zoom.example/transcript.vtt"),
         ]
@@ -173,7 +173,7 @@ class TestUnresolvableTargets:
         # Expired credentials hit every remaining target too, so a batch of
         # identical failure rows tells the admin less than one loud error does.
         client = _client()
-        client.get_meeting_transcript.side_effect = CredentialExpiredError("expired")
+        client.get_transcript.side_effect = CredentialExpiredError("expired")
 
         with pytest.raises(CredentialExpiredError):
             _reindex(client, [_target(_MEETING_DOC_ID)])

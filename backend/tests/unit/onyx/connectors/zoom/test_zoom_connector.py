@@ -124,7 +124,7 @@ def _configure_happy_path(mock_client: MagicMock) -> None:
             ZoomSessionOccurrence(uuid=f"uuid-{session_id}", start_time=_days_ago(7))
         ]
     )
-    mock_client.get_meeting_transcript.side_effect = lambda uuid: transcript(
+    mock_client.get_transcript.side_effect = lambda uuid: transcript(
         download_url=f"https://zoom.example/{uuid}.vtt",
         meeting_topic="Recorded Session",
     )
@@ -143,8 +143,8 @@ def _configure_happy_path(mock_client: MagicMock) -> None:
 def _transcript_without_a_topic(mock_client: MagicMock) -> None:
     """Zoom names the session in the transcript response, so the details
     endpoints are only reached when it doesn't."""
-    mock_client.get_meeting_transcript.side_effect = lambda uuid: transcript(
-        download_url=f"https://zoom.example/{uuid}.vtt", meeting_topic=""
+    mock_client.get_transcript.side_effect = lambda uuid: transcript(
+        download_url=f"https://zoom.example/{uuid}.vtt"
     )
 
 
@@ -408,7 +408,7 @@ class TestZoomConnectorCheckpoint:
         # Assert on the occurrence UUID, not the meeting id: passing the bare
         # meeting id would silently index only the most recent occurrence.
         assert doc.id == "ZOOM_MEETING_uuid-111"
-        mock_client.get_meeting_transcript.assert_called_once_with("uuid-111")
+        mock_client.get_transcript.assert_called_once_with("uuid-111")
         # The transcript names the session, so the details endpoint — and the
         # one-year cap that comes with it — is never reached.
         assert doc.semantic_identifier == "Recorded Session"
@@ -462,7 +462,7 @@ class TestZoomConnectorCheckpoint:
                 raise RuntimeError("boom")
             return transcript(download_url=f"https://zoom.example/{uuid}.vtt")
 
-        mock_client.get_meeting_transcript.side_effect = _transcript
+        mock_client.get_transcript.side_effect = _transcript
 
         outputs = load_everything_from_checkpoint_connector(
             connector, _POLL_START, _FULL_HISTORY_END
@@ -519,7 +519,7 @@ class TestZoomConnectorCheckpoint:
         )
 
         assert all(output.items == [] for output in outputs)
-        mock_client.get_meeting_transcript.assert_not_called()
+        mock_client.get_transcript.assert_not_called()
         assert outputs[-1].next_checkpoint.has_more is False
 
     def test_discovery_failure_surfaces_as_connector_failure(self) -> None:
@@ -635,7 +635,7 @@ class TestSystemicFailureDoesNotAdvanceWork:
         connector, mock_client = _make_connector(meeting_ids=["111"])
         response = requests.Response()
         response.status_code = 429
-        mock_client.get_meeting_transcript.side_effect = requests.HTTPError(
+        mock_client.get_transcript.side_effect = requests.HTTPError(
             "429", response=response
         )
 
@@ -655,7 +655,7 @@ class TestSystemicFailureDoesNotAdvanceWork:
         connector, mock_client = _make_connector(meeting_ids=["111"])
         response = requests.Response()
         response.status_code = 400
-        mock_client.get_meeting_transcript.side_effect = requests.HTTPError(
+        mock_client.get_transcript.side_effect = requests.HTTPError(
             "400", response=response
         )
 
@@ -678,7 +678,7 @@ class TestSystemicFailureDoesNotAdvanceWork:
         connector, mock_client = _make_connector(meeting_ids=["111"])
         response = requests.Response()
         response.status_code = 404
-        mock_client.get_meeting_transcript.side_effect = requests.HTTPError(
+        mock_client.get_transcript.side_effect = requests.HTTPError(
             "404", response=response
         )
 
@@ -736,7 +736,7 @@ class TestSessionSourceTypes:
         mock_client.get_webinar_details.assert_not_called()
         # A webinar's transcript comes from the meeting endpoint; Zoom has no
         # webinar one.
-        mock_client.get_meeting_transcript.assert_called_once_with("uuid-222")
+        mock_client.get_transcript.assert_called_once_with("uuid-222")
         mock_client.list_past_meeting_occurrences.assert_not_called()
 
     def test_both_dispatches_each_id_to_its_own_endpoint(self) -> None:
