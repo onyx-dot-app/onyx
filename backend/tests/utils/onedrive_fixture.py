@@ -1,8 +1,5 @@
-"""Provision the fixed OneDrive connector corpus in a dedicated test subtree."""
+"""OneDrive tenant corpus setup used by live connector tests."""
 
-from __future__ import annotations
-
-import argparse
 import io
 import logging
 import os
@@ -116,12 +113,6 @@ class FilePath(str, Enum):
     IDENTITY = f"{IDENTITY_FOLDER_NAME}/{IDENTITY_FILE_NAME}"
 
 
-class FixturePhase(str, Enum):
-    DESCRIBE = "describe"
-    SETUP = "setup"
-    MUTATE = "mutate"
-
-
 class GroupVisibility(str, Enum):
     PRIVATE = "Private"
     HIDDEN_MEMBERSHIP = "HiddenMembership"
@@ -233,11 +224,6 @@ class CertificateAppCredentials(BaseModel):
     private_key: str
     certificate_password: str
     directory_id: str
-
-
-class CliArgs(BaseModel):
-    phase: FixturePhase
-    apply: bool
 
 
 class FixtureState(BaseModel):
@@ -952,54 +938,3 @@ def build_provisioner(config: FixtureConfig) -> OneDriveFixtureProvisioner:
         )
 
     return OneDriveFixtureProvisioner(config, graph, build_rest_context)
-
-
-def print_fixture_plan(phase: FixturePhase) -> None:
-    print(f"Phase: {phase.value}")
-    print(f"Fixture root: {FIXTURE_ROOT_NAME}")
-    if phase is FixturePhase.SETUP:
-        print(f"Folders: {len(FolderPath)}")
-        print(f"Files: {len(FilePath)}")
-        print("Setup deletes and recreates only the fixture root.")
-    elif phase is FixturePhase.MUTATE:
-        print("Mutations: move, unshare, restore inheritance, update, delete.")
-
-
-def parse_args() -> CliArgs:
-    parser = argparse.ArgumentParser(
-        description="Provision the OneDrive connector test corpus"
-    )
-    parser.add_argument(
-        "phase",
-        type=FixturePhase,
-        choices=list(FixturePhase),
-    )
-    parser.add_argument(
-        "--apply",
-        action="store_true",
-        help="Apply external changes. Without this flag, only print the plan.",
-    )
-    return CliArgs.model_validate(vars(parser.parse_args()))
-
-
-def main() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    args = parse_args()
-    config = load_fixture_config()
-    phase = args.phase
-    print_fixture_plan(phase)
-    if phase is FixturePhase.DESCRIBE or not args.apply:
-        return
-
-    provisioner = build_provisioner(config)
-    if phase is FixturePhase.SETUP:
-        state = provisioner.setup()
-        print(f"Created fixture root with {len(state.files)} files.")
-        return
-    if phase is FixturePhase.MUTATE:
-        provisioner.mutate()
-        print("Applied fixture mutations.")
-
-
-if __name__ == "__main__":
-    main()

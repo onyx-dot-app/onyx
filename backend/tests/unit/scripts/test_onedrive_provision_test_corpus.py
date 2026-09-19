@@ -3,8 +3,9 @@
 from unittest.mock import MagicMock
 
 import pytest
-import scripts.onedrive.provision_test_corpus as provision_test_corpus
-from scripts.onedrive.provision_test_corpus import (
+
+import tests.utils.onedrive_fixture as onedrive_fixture
+from tests.utils.onedrive_fixture import (
     ALTERNATE_UPN_ENV,
     DEFAULT_ALTERNATE_UPN,
     DEFAULT_OWNER_UPN,
@@ -29,7 +30,6 @@ from scripts.onedrive.provision_test_corpus import (
     relative_to_fixture_root,
     validate_fixture_paths,
 )
-
 from tests.utils.secret_names import TestSecret
 
 
@@ -183,7 +183,7 @@ def test_certificate_credentials_use_test_secret_loader(
         TestSecret.PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD: "password",
         TestSecret.PERM_SYNC_SHAREPOINT_DIRECTORY_ID: "directory",
     }
-    monkeypatch.setattr(provision_test_corpus, "get_secrets", lambda _keys: values)
+    monkeypatch.setattr(onedrive_fixture, "get_secrets", lambda _keys: values)
 
     credentials = load_certificate_credentials()
 
