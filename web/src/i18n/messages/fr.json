@@ -2400,6 +2400,9 @@
         "retryButton": {
           "label": "Réessayer"
         },
+        "rollbackFailed": {
+          "toast": "Impossible de supprimer le connecteur après l'expiration du délai : {detail}. Vérifiez /admin/indexing/status ; un administrateur devra peut-être le supprimer."
+        },
         "timeout": {
           "toast": "L'opération a expiré après {seconds} secondes. Vérifiez si votre configuration contient des erreurs ?"
         },

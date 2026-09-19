@@ -2400,6 +2400,9 @@
         "retryButton": {
           "label": "重试"
         },
+        "rollbackFailed": {
+          "toast": "超时后无法移除连接器：{detail}。请检查 /admin/indexing/status；可能需要管理员移除它。"
+        },
         "timeout": {
           "toast": "操作在 {seconds} 秒后超时。请检查配置是否有误。"
         },

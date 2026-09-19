@@ -2400,6 +2400,9 @@
         "retryButton": {
           "label": "Erneut versuchen"
         },
+        "rollbackFailed": {
+          "toast": "Der Connector konnte nach der Zeitüberschreitung nicht entfernt werden: {detail}. Prüfen Sie /admin/indexing/status; ein Administrator muss ihn möglicherweise entfernen."
+        },
         "timeout": {
           "toast": "Zeitüberschreitung des Vorgangs nach {seconds} Sekunden. Prüfen Sie Ihre Konfiguration auf Fehler."
         },

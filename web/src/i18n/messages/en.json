@@ -2400,6 +2400,9 @@
         "retryButton": {
           "label": "Retry"
         },
+        "rollbackFailed": {
+          "toast": "Could not remove the connector after the timeout: {detail}. Check /admin/indexing/status; an admin may need to remove it."
+        },
         "timeout": {
           "toast": "Operation timed out after {seconds} seconds. Check your configuration for errors?"
         },
