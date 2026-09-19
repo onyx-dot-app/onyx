@@ -95,6 +95,8 @@ def find_service_desk(
     if service_desk_id is not None:
         try:
             return service_desk_api_get(jira_client, f"servicedesk/{service_desk_id}")
+        except (CredentialExpiredError, InsufficientPermissionsError):
+            raise
         except ConnectorValidationError:
             return None
 
@@ -117,6 +119,8 @@ def get_customer_request(jira_client: JIRA, issue_key: str) -> dict[str, Any] | 
             f"request/{issue_key}",
             params={"expand": "requestType,currentStatus"},
         )
+    except (CredentialExpiredError, InsufficientPermissionsError):
+        raise
     except ConnectorValidationError:
         return None
 

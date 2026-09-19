@@ -71,6 +71,7 @@ _FIELD_REQUEST_STATUS = "request_status"
 _FIELD_SERVICE_DESK_ID = "service_desk_id"
 _FIELD_CUSTOMER_PORTAL_URL = "customer_portal_url"
 _FIELD_CHANNEL = "channel"
+_FIELD_LABELS = "labels"
 
 
 class JiraServiceManagementConnectorCheckpoint(JiraConnectorCheckpoint):
@@ -79,6 +80,16 @@ class JiraServiceManagementConnectorCheckpoint(JiraConnectorCheckpoint):
     Kept as a distinct class so stored checkpoint JSON for the two sources can
     evolve independently.
     """
+
+
+def build_jsm_document_id(jira_base_url: str, issue_key: str) -> str:
+    """Document id for a JSM request.
+
+    The Jira connector already uses the browse URL as the document id, so JSM
+    docs get a fragment suffix to avoid overwriting a doc indexed through the
+    plain Jira connector. The URL still opens the ticket.
+    """
+    return f"{build_jira_url(jira_base_url, issue_key)}#jira-service-management"
 
 
 def process_service_desk_request(
@@ -104,16 +115,20 @@ def process_service_desk_request(
         return None
 
     document.source = DocumentSource.JIRA_SERVICE_MANAGEMENT
+    document.id = build_jsm_document_id(jira_base_url, issue.key)
 
     try:
         request = get_customer_request(jira_client, issue.key)
-    except Exception:
+    except (CredentialExpiredError, InsufficientPermissionsError):
+        raise
+    except Exception as e:
         # Requests that are not customer-visible (or a servicedeskapi outage)
         # should not drop the ticket from the index.
         logger.warning(
             "Could not fetch JSM request view for %s; indexing without "
-            "service desk metadata.",
+            "service desk metadata: %s",
             issue.key,
+            e,
         )
         return document
 
@@ -209,14 +224,19 @@ class JiraServiceManagementConnector(
         # When only a service desk id is given, index that desk's backing
         # project so results stay scoped to the service desk.
         if self.service_desk_id is not None and not self.jira_project:
-            try:
-                service_desk = find_service_desk(
-                    self._jira_client, service_desk_id=self.service_desk_id
+            service_desk = find_service_desk(
+                self._jira_client, service_desk_id=self.service_desk_id
+            )
+            project_key = service_desk.get("projectKey") if service_desk else None
+            if not isinstance(project_key, str) or not project_key:
+                # fail closed: an unresolved desk id must not turn into an
+                # unscoped sync of every visible Jira project
+                raise ConnectorValidationError(
+                    f"Could not resolve service desk '{self.service_desk_id}' "
+                    "to its backing Jira project. Check that the service desk "
+                    "exists and that the credential can view it."
                 )
-            except Exception:
-                service_desk = None
-            if service_desk and service_desk.get("projectKey"):
-                self.jira_project = service_desk["projectKey"]
+            self.jira_project = project_key
 
         return None
 
@@ -347,18 +367,23 @@ class JiraServiceManagementConnector(
                 jql=jql,
                 start=current_offset,
                 max_results=JIRA_SLIM_PAGE_SIZE,
-                fields="created,key",
+                fields="created,key,labels",
                 all_issue_ids=checkpoint.all_issue_ids,
                 checkpoint_callback=checkpoint_callback,
                 nextPageToken=checkpoint.cursor,
                 ids_done=checkpoint.ids_done,
             ):
                 issue_key = best_effort_get_field_from_issue(issue, _FIELD_KEY)
+
+                labels = best_effort_get_field_from_issue(issue, _FIELD_LABELS)
+                if labels and any(label in labels for label in self.labels_to_skip):
+                    continue
+
                 created = best_effort_get_field_from_issue(issue, _FIELD_CREATED)
 
                 slim_doc_batch.append(
                     SlimDocument(
-                        id=build_jira_url(self.jira_base, issue_key),
+                        id=build_jsm_document_id(self.jira_base, issue_key),
                         doc_created_at=(time_str_to_utc(created) if created else None),
                     )
                 )
@@ -431,6 +456,9 @@ class JiraServiceManagementConnector(
             )
 
     def _handle_settings_error(self, e: Exception) -> None:
+        if isinstance(e, (CredentialExpiredError, InsufficientPermissionsError)):
+            raise e
+
         status_code = getattr(e, "status_code", None)  # ods: ignore[getattr]
         logger.error("Jira Service Management API error during validation: %s", e)
 
