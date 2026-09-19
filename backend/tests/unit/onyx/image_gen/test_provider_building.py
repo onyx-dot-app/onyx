@@ -7,12 +7,14 @@ from onyx.image_gen.exceptions import ImageProviderCredentialsError
 from onyx.image_gen.factory import get_image_generation_provider
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials, ReferenceImage
 from onyx.image_gen.providers.azure_img_gen import AzureImageGenerationProvider
+from onyx.image_gen.providers.minimax_img_gen import MiniMaxImageGenerationProvider
 from onyx.image_gen.providers.openai_img_gen import OpenAIImageGenerationProvider
 from onyx.image_gen.providers.vertex_img_gen import VertexImageGenerationProvider
 
 OPENAI_PROVIDER = "openai"
 AZURE_PROVIDER = "azure"
 VERTEX_PROVIDER = "vertex_ai"
+MINIMAX_PROVIDER = "minimax"
 
 
 def _get_default_image_gen_creds() -> ImageGenerationProviderCredentials:
@@ -59,6 +61,19 @@ def test_build_openai_provider_fails_no_api_key() -> None:
 
     with pytest.raises(ImageProviderCredentialsError):
         get_image_generation_provider(provider, credentials)
+
+
+def test_build_minimax_provider_from_api_key_and_base() -> None:
+    credentials = _get_default_image_gen_creds()
+    credentials.api_key = "test"
+    credentials.api_base = "https://api.minimaxi.com/v1"
+
+    provider = get_image_generation_provider(MINIMAX_PROVIDER, credentials)
+
+    assert isinstance(provider, MiniMaxImageGenerationProvider)
+    assert provider._api_key == "test"
+    assert provider._api_base == "https://api.minimaxi.com/v1/image_generation"
+    assert provider.supports_reference_images is False
 
 
 def test_build_azure_provider_from_api_key_and_base_and_version() -> None:
