@@ -1,8 +1,6 @@
-from typing import IO, TYPE_CHECKING, Any, cast
+from typing import IO, TYPE_CHECKING, Any
 
-from onyx.configs.constants import KV_UNSTRUCTURED_API_KEY
-from onyx.key_value_store.factory import get_kv_store
-from onyx.key_value_store.interface import KvKeyNotFoundError
+from onyx.db.unstructured import access_unstructured_api_key
 from onyx.utils.logger import setup_logger
 
 if TYPE_CHECKING:
@@ -13,21 +11,15 @@ logger = setup_logger()
 
 
 def get_unstructured_api_key() -> str | None:
-    kv_store = get_kv_store()
-    try:
-        return cast(str, kv_store.load(KV_UNSTRUCTURED_API_KEY))
-    except KvKeyNotFoundError:
-        return None
+    return access_unstructured_api_key("load")
 
 
 def update_unstructured_api_key(api_key: str) -> None:
-    kv_store = get_kv_store()
-    kv_store.store(KV_UNSTRUCTURED_API_KEY, api_key)
+    access_unstructured_api_key("store", api_key)
 
 
 def delete_unstructured_api_key() -> None:
-    kv_store = get_kv_store()
-    kv_store.delete(KV_UNSTRUCTURED_API_KEY)
+    access_unstructured_api_key("delete")
 
 
 def _sdk_partition_request(

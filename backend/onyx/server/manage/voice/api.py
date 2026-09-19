@@ -21,6 +21,7 @@ from onyx.db.voice import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.custom_config_mapping import map_custom_config_to_model_kwargs
 from onyx.server.manage.voice.models import (
     VoiceOption,
     VoiceProviderTestRequest,
@@ -173,6 +174,27 @@ def _fetch_provider_for_stored_secret(
     return provider
 
 
+def _validate_stored_voice_destination(
+    stored: VoiceProvider,
+    provider_type: str,
+    api_base: str | None,
+    custom_config: dict[str, Any] | None,
+) -> None:
+    if (
+        normalize_provider_type(stored.provider_type) != provider_type
+        or (stored.api_base or None) != (api_base or None)
+        or (
+            provider_type == "azure"
+            and (stored.custom_config or {}).get("speech_region")
+            != (custom_config or {}).get("speech_region")
+        )
+    ):
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Re-enter credentials to change the stored provider destination.",
+        )
+
+
 def _provider_to_view(provider: VoiceProvider) -> VoiceProviderView:
     """Convert a VoiceProvider model to a VoiceProviderView."""
     raw_key = provider.api_key.get_value(apply_mask=False) if provider.api_key else None
@@ -227,6 +249,23 @@ async def upsert_voice_provider_endpoint(
                 OnyxErrorCode.VALIDATION_ERROR,
                 "Selected LLM provider has no API key configured.",
             )
+        mapped_config = map_custom_config_to_model_kwargs(
+            llm_provider.provider,
+            llm_provider.custom_config,
+            None,
+            llm_provider.api_base,
+        )
+        stored_api_base = (
+            llm_provider.api_base or mapped_config.model_kwargs.get("api_base") or None
+        )
+        if (
+            normalize_provider_type(llm_provider.provider) != request.provider_type
+            or (request.target_uri or request.api_base or None) != stored_api_base
+        ):
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "Provider type and target URI must match the selected LLM provider.",
+            )
         api_key = llm_provider.api_key.get_value(apply_mask=False)
         api_key_changed = True
 
@@ -235,6 +274,29 @@ async def upsert_voice_provider_endpoint(
         request.provider_type, request.target_uri or request.api_base
     )
     custom_config = _reject_custom_config_credentials(request.custom_config)
+
+    if request.id is not None:
+        stored = fetch_voice_provider_by_id(db_session, request.id, for_update=True)
+        if stored is not None:
+            stored_key = (
+                stored.api_key.get_value(apply_mask=False) if stored.api_key else None
+            )
+            stored_secret = (
+                stored.api_secret.get_value(apply_mask=False)
+                if stored.api_secret
+                else None
+            )
+            if (stored_key and not api_key_changed) or (
+                stored_secret and not api_secret_changed
+            ):
+                _validate_stored_voice_destination(
+                    stored,
+                    request.provider_type,
+                    api_base,
+                    custom_config
+                    if custom_config is not None
+                    else stored.custom_config,
+                )
 
     provider = upsert_voice_provider(
         db_session=db_session,
@@ -407,6 +469,11 @@ async def test_voice_provider(
     api_base = _validate_voice_api_base(
         request.provider_type, request.target_uri or request.api_base
     )
+
+    if existing_provider is not None:
+        _validate_stored_voice_destination(
+            existing_provider, request.provider_type, api_base, request.custom_config
+        )
 
     # Create a temporary VoiceProvider for testing (not saved to DB)
     temp_provider = VoiceProvider(
