@@ -13,7 +13,9 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     ADMIN_MY_DRIVE_ID,
     ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
     EXTERNAL_ONLY_ADMIN_FOLDER_ID,
+    EXTERNAL_ONLY_ADMIN_SENTINEL_DOC_ID,
     EXTERNAL_ONLY_USER_1_FOLDER_ID,
+    EXTERNAL_ONLY_USER_1_SENTINEL_DOC_ID,
     EXTERNAL_SHARED_DOC_SINGLETON,
     EXTERNAL_SHARED_DOCS_IN_FOLDER,
     EXTERNAL_SHARED_FOLDER_ID,
@@ -24,7 +26,6 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     FOLDER_1_2_FILE_IDS,
     FOLDER_1_2_URL,
     FOLDER_1_FILE_IDS,
-    FOLDER_1_ID,
     FOLDER_2_1_FILE_IDS,
     FOLDER_2_1_URL,
     FOLDER_2_2_FILE_IDS,
@@ -48,9 +49,9 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     SECTIONS_FILE_IDS,
     SECTIONS_FOLDER_ID,
     SHARED_DRIVE_1_FILE_IDS,
-    SHARED_DRIVE_1_ID,
     SHARED_DRIVE_1_URL,
     SHARED_DRIVE_2_FILE_IDS,
+    SHORTCUT_ANCESTOR_NODE_IDS,
     TEST_USER_1_DRIVE_B_FOLDER_ID,
     TEST_USER_1_DRIVE_B_ID,
     TEST_USER_1_EMAIL,
@@ -339,15 +340,13 @@ def test_include_my_drives_only(
         EXTERNAL_ONLY_ADMIN_FOLDER_ID,
         LIMITED_ACCESS_MY_DRIVE_FOLDER_ID,
         LIMITED_ACCESS_MY_DRIVE_CHILD_ID,
-        # Resolving the My Drive shortcut pulls in its shared drive ancestors.
-        SHARED_DRIVE_1_ID,
-        FOLDER_1_ID,
     )
     # Reached without resolving test_user_1's My Drive root, so the parent is unset.
     expected_nodes = _clear_parents(expected_nodes, LIMITED_ACCESS_MY_DRIVE_FOLDER_ID)
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
         expected_nodes=expected_nodes,
+        ignorable_node_ids=set(SHORTCUT_ANCESTOR_NODE_IDS),
     )
 
 
@@ -518,10 +517,17 @@ def test_shared_folder_owned_by_external_user(
 
     expected_docs = EXTERNAL_SHARED_DOCS_IN_FOLDER
 
-    # Plus a sentinel in each of the two limited-access fixture folders, which
-    # only become visible when the connector unions over admin and test_user_1.
+    # Plus a sentinel in each of the two limited-access fixture folders. Neither
+    # admin nor test_user_1 can read both, so retrieving both is what proves the
+    # connector unioned over users rather than settling for one principal.
     assert len(output.documents) == len(expected_docs) + 2
-    assert any(expected_docs[0] in doc.id for doc in output.documents)
+    retrieved_ids = [doc.id for doc in output.documents]
+    for expected_id in (
+        expected_docs[0],
+        EXTERNAL_ONLY_USER_1_SENTINEL_DOC_ID,
+        EXTERNAL_ONLY_ADMIN_SENTINEL_DOC_ID,
+    ):
+        assert any(expected_id in doc_id for doc_id in retrieved_ids), expected_id
 
 
 @patch(

@@ -340,6 +340,16 @@ GROUP_ORGANIZER_DRIVE_ID = "0ADgUQ3lo072RUk9PVA"
 # Name of the placeholder document inside each fixture folder.
 FIXTURE_SENTINEL_DOC_NAME = "sentinel"
 
+# The sentinel in each external branch. Only one principal can read each, so
+# retrieving both is what proves the connector unioned over users.
+EXTERNAL_ONLY_USER_1_SENTINEL_DOC_ID = "1RsdYIpQhj9fZKCZPqw1kaskhCtkMPdT9MSsPADV18LU"
+EXTERNAL_ONLY_ADMIN_SENTINEL_DOC_ID = "1HZeUsWImC-Ao4Qx2qr5GWk8zQV5Xi6Sgrt9Ub0RBbHA"
+
+# Resolving the My Drive shortcut surfaces its shared drive ancestors even when a
+# run excludes shared drives. Tolerated rather than asserted: this looks like a
+# scoping leak, so fixing it must not break these tests.
+SHORTCUT_ANCESTOR_NODE_IDS = (SHARED_DRIVE_1_ID, FOLDER_1_ID)
+
 # Every fixture node, for tests that walk the whole tenant.
 PARTIAL_VISIBILITY_FIXTURE_NODE_IDS = (
     EXTERNAL_ONLY_USER_1_FOLDER_ID,
@@ -889,7 +899,11 @@ def get_expected_hierarchy_for_test_user_1_shared_drives_only() -> dict[
 def get_expected_hierarchy_for_test_user_1_shared_with_me_only() -> dict[
     str, ExpectedHierarchyNode
 ]:
-    """Expected hierarchy nodes when test_user_1 runs with include_files_shared_with_me=True only."""
+    """Expected hierarchy nodes when test_user_1 runs with include_files_shared_with_me=True only.
+
+    Only the external root appears, not the branch inside it that test_user_1 holds a
+    direct grant on: this run surfaces the shared ancestor, not each shared descendant.
+    """
     return _clear_parents(
         _pick(FOLDER_3_ID, TEST_USER_1_EXTRA_FOLDER_ID, EXTERNAL_SHARED_FOLDER_ID),
         FOLDER_3_ID,
@@ -905,9 +919,6 @@ def get_expected_hierarchy_for_test_user_1_my_drive_only() -> dict[
         TEST_USER_1_MY_DRIVE_FOLDER_ID,
         LIMITED_ACCESS_MY_DRIVE_FOLDER_ID,
         LIMITED_ACCESS_MY_DRIVE_CHILD_ID,
-        # Resolving the My Drive shortcut pulls in its shared drive ancestors.
-        SHARED_DRIVE_1_ID,
-        FOLDER_1_ID,
         # Reached through test_user_1's direct grant inside the external folder.
         EXTERNAL_SHARED_FOLDER_ID,
         EXTERNAL_ONLY_USER_1_FOLDER_ID,
