@@ -12,17 +12,23 @@ export interface OAuthDetails {
   supports_manual_credentials: boolean;
   additional_kwargs: OAuthAdditionalKwargDescription[];
 }
-export interface AuthMethodOption<TFields> {
-  value: string;
+export interface AuthMethodOption<
+  TFields,
+  TAuthMethod extends string = string,
+> {
+  value: TAuthMethod;
   label: string;
   fields: TFields;
   description?: string;
   // UI-only: if true, hide/disable the "Auto Sync Permissions" access type when this auth is used
   disablePermSync?: boolean;
 }
-export interface CredentialTemplateWithAuth<TFields> {
-  authentication_method?: string;
-  authMethods?: AuthMethodOption<Partial<TFields>>[];
+export interface CredentialTemplateWithAuth<
+  TFields,
+  TAuthMethod extends string = string,
+> {
+  authentication_method?: TAuthMethod;
+  authMethods?: AuthMethodOption<Partial<TFields>, TAuthMethod>[];
 }
 
 export interface CredentialBase<T> {
@@ -244,6 +250,17 @@ export interface SharepointCredentialJson {
   sp_private_key?: TypedFile;
 }
 
+export type OneDriveAuthenticationMethod = "client_secret" | "certificate";
+
+export interface OneDriveCredentialJson {
+  authentication_method: OneDriveAuthenticationMethod;
+  onedrive_client_id: string;
+  onedrive_directory_id: string;
+  onedrive_client_secret?: string;
+  onedrive_certificate_password?: string;
+  onedrive_private_key?: TypedFile | null;
+}
+
 export interface AsanaCredentialJson {
   asana_api_token_secret: string;
 }
@@ -354,6 +371,10 @@ type CredentialTemplateMap = Record<ValidSources, object | null> & {
   dropbox: DropboxCredentialJson;
   salesforce: SalesforceCredentialJson;
   sharepoint: CredentialTemplateWithAuth<SharepointCredentialJson>;
+  onedrive: CredentialTemplateWithAuth<
+    OneDriveCredentialJson,
+    OneDriveAuthenticationMethod
+  >;
   asana: AsanaCredentialJson;
   teams: CredentialTemplateWithAuth<TeamsCredentialJson>;
   outlook: CredentialTemplateWithAuth<OutlookCredentialJson>;
@@ -483,6 +504,33 @@ export const credentialTemplates: Record<ValidSources, any> = {
       },
     ],
   } as CredentialTemplateWithAuth<SharepointCredentialJson>,
+  onedrive: {
+    authentication_method: "client_secret",
+    authMethods: [
+      {
+        value: "client_secret",
+        label: "Client Secret",
+        fields: {
+          onedrive_client_id: "",
+          onedrive_directory_id: "",
+          onedrive_client_secret: "",
+        },
+      },
+      {
+        value: "certificate",
+        label: "Certificate",
+        fields: {
+          onedrive_client_id: "",
+          onedrive_directory_id: "",
+          onedrive_certificate_password: "",
+          onedrive_private_key: null,
+        },
+      },
+    ],
+  } satisfies CredentialTemplateWithAuth<
+    OneDriveCredentialJson,
+    OneDriveAuthenticationMethod
+  >,
   asana: {
     asana_api_token_secret: "",
   },
@@ -806,6 +854,13 @@ export const credentialDisplayNames: Record<string, string> = {
   sp_directory_id: "SharePoint Directory ID",
   sp_certificate_password: "SharePoint Certificate Password",
   sp_private_key: "SharePoint Private Key",
+
+  // OneDrive
+  onedrive_client_id: "OneDrive Client ID",
+  onedrive_client_secret: "OneDrive Client Secret",
+  onedrive_directory_id: "OneDrive Directory ID",
+  onedrive_certificate_password: "OneDrive Certificate Password",
+  onedrive_private_key: "OneDrive Certificate",
 
   // Asana
   asana_api_token_secret: "Asana API Token",

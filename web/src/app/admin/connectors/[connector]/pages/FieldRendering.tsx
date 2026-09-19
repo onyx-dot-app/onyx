@@ -1,6 +1,10 @@
 import React, { FC, useEffect } from "react";
 import { useTranslations } from "next-intl";
-import { TabOption } from "@/lib/connectors/connectors";
+import {
+  getSelectedTabValue,
+  getTabValueUpdates,
+  TabOption,
+} from "@/lib/connectors/connectors";
 import SelectInput from "./ConnectorInput/SelectInput";
 import NumberInput from "./ConnectorInput/NumberInput";
 import { TextFormField, MultiSelectField } from "@/components/Field";
@@ -64,18 +68,16 @@ const TabsField: FC<TabsFieldProps> = ({
         </Text>
       ) : (
         <Tabs
-          defaultValue={tabField.defaultTab || tabField.tabs[0]?.value}
+          {...(tabField.selectionField
+            ? { value: getSelectedTabValue(tabField, values) }
+            : {
+                defaultValue: tabField.defaultTab || tabField.tabs[0]?.value,
+              })}
           onValueChange={(newTab) => {
-            // Clear values from other tabs but preserve defaults
-            tabField.tabs.forEach((tab) => {
-              if (tab.value !== newTab) {
-                tab.fields.forEach((field) => {
-                  // Only clear if not default value
-                  if (values[field.name] !== field.default) {
-                    setFieldValue(field.name, field.default);
-                  }
-                });
-              }
+            Object.entries(
+              getTabValueUpdates(tabField, newTab, values)
+            ).forEach(([name, value]) => {
+              setFieldValue(name, value);
             });
           }}
         >

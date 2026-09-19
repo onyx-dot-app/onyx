@@ -628,6 +628,7 @@ export enum ValidSources {
   Discord = "discord",
   Salesforce = "salesforce",
   Sharepoint = "sharepoint",
+  OneDrive = "onedrive",
   Teams = "teams",
   Outlook = "outlook",
   Zendesk = "zendesk",

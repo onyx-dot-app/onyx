@@ -7,6 +7,7 @@ import {
   getDisplayNameForCredentialKey,
 } from "@/lib/connectors/credentials";
 import { isTypedFileField } from "@/lib/connectors/fileTypes";
+import { ValidSources } from "@/lib/types";
 import type {
   CredentialFieldValues,
   CredentialFormValues,
@@ -67,6 +68,10 @@ function fieldSchema(
       otherwise: (s) => s.notRequired(),
     });
 }
+
+const AUTHENTICATION_METHOD_KEY = "authentication_method";
+const ONEDRIVE_LEGACY_AUTHENTICATION_METHOD_KEY =
+  "onedrive_authentication_method";
 
 export function createValidationSchema(jsonValues: Record<string, any>) {
   const schemaFields: Record<string, Yup.AnySchema> = {};
@@ -129,13 +134,10 @@ export function createEditingValidationSchema(
 
 function getAuthMethodFieldsForCredential(
   credentialJson: CredentialFieldValues,
-  credentialTemplate: CredentialTemplateWithAuth<CredentialFieldValues>
+  credentialTemplate: CredentialTemplateWithAuth<CredentialFieldValues>,
+  storedAuthMethod: string | undefined
 ): CredentialFieldValues {
   const authMethods = credentialTemplate.authMethods ?? [];
-  const storedAuthMethod =
-    typeof credentialJson.authentication_method === "string"
-      ? credentialJson.authentication_method
-      : undefined;
   const selectedAuthMethod =
     authMethods.find((method) => method.value === storedAuthMethod) ??
     authMethods.find((method) =>
@@ -151,6 +153,21 @@ function getAuthMethodFieldsForCredential(
       "",
     ...selectedAuthMethod?.fields,
   };
+}
+
+function getStoredAuthMethod(
+  credentialJson: CredentialFieldValues,
+  sourceType: Credential<any>["source"]
+): string | undefined {
+  const standardMethod = credentialJson[AUTHENTICATION_METHOD_KEY];
+  if (typeof standardMethod === "string") {
+    return standardMethod;
+  }
+  const legacyMethod =
+    sourceType === ValidSources.OneDrive
+      ? credentialJson[ONEDRIVE_LEGACY_AUTHENTICATION_METHOD_KEY]
+      : undefined;
+  return typeof legacyMethod === "string" ? legacyMethod : undefined;
 }
 
 const OAUTH_MANAGED_CREDENTIAL_KEYS = new Set([
@@ -194,7 +211,11 @@ export function getEditableCredentialFields(
     credentialTemplate as CredentialTemplateWithAuth<CredentialFieldValues>;
   const templateFields =
     templateWithAuth.authMethods && templateWithAuth.authMethods.length > 1
-      ? getAuthMethodFieldsForCredential(credentialJson, templateWithAuth)
+      ? getAuthMethodFieldsForCredential(
+          credentialJson,
+          templateWithAuth,
+          getStoredAuthMethod(credentialJson, sourceType)
+        )
       : Object.fromEntries(
           Object.entries(credentialTemplate).filter(
             ([key]) => key !== "authMethods"
