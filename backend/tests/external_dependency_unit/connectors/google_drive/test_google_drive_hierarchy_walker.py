@@ -146,7 +146,7 @@ class _PrecomputedHierarchyConnector(CheckpointedConnector[GoogleDriveCheckpoint
             retrieved_folder_and_drive_ids=set(),
             completion_stage=DriveRetrievalStage.DONE,
             completion_map=ThreadSafeDict(),
-            all_retrieved_file_ids=set(),
+            retrieved_drive_file_ids=set(),
             has_more=False,
         )
 

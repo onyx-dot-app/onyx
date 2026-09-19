@@ -122,6 +122,11 @@ MY_DRIVE_PAGES_PER_CHECKPOINT = 2
 OAUTH_PAGES_PER_CHECKPOINT = 2
 FOLDERS_PER_CHECKPOINT = 1
 
+# Upper bound on the dedup set. Drive file ids measure ~119 bytes per entry with
+# deep_getsizeof, so this holds it near 95 MB and leaves room under the
+# checkpoint size budget for the rest of the checkpoint.
+MAX_DEDUP_DRIVE_FILE_IDS = 800_000
+
 
 def _extract_str_list_from_comma_str(string: str | None) -> list[str]:
     if not string:
@@ -1613,15 +1618,30 @@ class GoogleDriveConnector(
                 yield file
                 continue
 
+            # Dedup on the Drive file id rather than the document URL. The URL
+            # costs ~159 bytes per entry under deep_getsizeof (what the
+            # checkpoint size guard measures) against ~119 for the id.
+            dedup_key = drive_file.get("id") or document_id
+            seen_file_ids = checkpoint.retrieved_drive_file_ids
             logger.debug(
                 "Updating checkpoint for file: %s. Seen: %s",
                 drive_file.get("name"),
-                document_id in checkpoint.all_retrieved_file_ids,
+                dedup_key in seen_file_ids,
             )
-            if document_id in checkpoint.all_retrieved_file_ids:
+            if dedup_key in seen_file_ids:
                 continue
 
-            checkpoint.all_retrieved_file_ids.add(document_id)
+            # Past the cap, stop tracking and let duplicates through. The
+            # indexing pipeline drops them on doc_updated_at, which is far
+            # cheaper than failing the sync outright.
+            if len(seen_file_ids) < MAX_DEDUP_DRIVE_FILE_IDS:
+                seen_file_ids.add(dedup_key)
+                if len(seen_file_ids) == MAX_DEDUP_DRIVE_FILE_IDS:
+                    logger.warning(
+                        "Reached the %s file dedup cap; later duplicates will be "
+                        "re-yielded and deduplicated during indexing.",
+                        MAX_DEDUP_DRIVE_FILE_IDS,
+                    )
             yield file
 
     def _manage_oauth_retrieval(
@@ -1940,7 +1960,7 @@ class GoogleDriveConnector(
         logger.info(
             "Loading from checkpoint with completion stage: %s,num retrieved ids: %s",
             checkpoint.completion_stage,
-            len(checkpoint.all_retrieved_file_ids),
+            len(checkpoint.retrieved_drive_file_ids),
         )
         checkpoint = copy.deepcopy(checkpoint)
         self._retrieved_folder_and_drive_ids = checkpoint.retrieved_folder_and_drive_ids
@@ -1966,7 +1986,7 @@ class GoogleDriveConnector(
         checkpoint.retrieved_folder_and_drive_ids = self._retrieved_folder_and_drive_ids
 
         logger.info(
-            "num drive files retrieved: %s", len(checkpoint.all_retrieved_file_ids)
+            "num drive files retrieved: %s", len(checkpoint.retrieved_drive_file_ids)
         )
         if checkpoint.completion_stage == DriveRetrievalStage.DONE:
             checkpoint.has_more = False
@@ -2291,7 +2311,7 @@ class GoogleDriveConnector(
             retrieved_folder_and_drive_ids=set(),
             completion_stage=DriveRetrievalStage.START,
             completion_map=ThreadSafeDict(),
-            all_retrieved_file_ids=set(),
+            retrieved_drive_file_ids=set(),
             has_more=True,
         )
 

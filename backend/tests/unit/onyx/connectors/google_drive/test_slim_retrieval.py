@@ -40,7 +40,7 @@ def _make_done_checkpoint() -> GoogleDriveCheckpoint:
         retrieved_folder_and_drive_ids=set(),
         completion_stage=DriveRetrievalStage.DONE,
         completion_map=ThreadSafeDict(),
-        all_retrieved_file_ids=set(),
+        retrieved_drive_file_ids=set(),
         has_more=False,
     )
 
@@ -203,7 +203,7 @@ class TestRetrieveAllSlimDocs:
                 retrieved_folder_and_drive_ids=set(),
                 completion_stage=DriveRetrievalStage.START,
                 completion_map=ThreadSafeDict(),
-                all_retrieved_file_ids=set(),
+                retrieved_drive_file_ids=set(),
                 has_more=False,
             )
             mock_build.return_value = start_checkpoint
@@ -235,7 +235,7 @@ class TestRetrieveAllSlimDocs:
             retrieved_folder_and_drive_ids=set(),
             completion_stage=DriveRetrievalStage.START,
             completion_map=ThreadSafeDict(),
-            all_retrieved_file_ids=set(),
+            retrieved_drive_file_ids=set(),
             has_more=False,
         )
 
@@ -271,7 +271,7 @@ class TestRetrieveAllSlimDocsPermSync:
             retrieved_folder_and_drive_ids=set(),
             completion_stage=DriveRetrievalStage.START,
             completion_map=ThreadSafeDict(),
-            all_retrieved_file_ids=set(),
+            retrieved_drive_file_ids=set(),
             has_more=False,
         )
 
@@ -562,7 +562,7 @@ def _make_checkpoint_with_user(user_email: str) -> GoogleDriveCheckpoint:
         retrieved_folder_and_drive_ids=set(),
         completion_stage=DriveRetrievalStage.MY_DRIVE_FILES,
         completion_map=completion_map,
-        all_retrieved_file_ids=set(),
+        retrieved_drive_file_ids=set(),
         has_more=False,
         user_emails=[user_email],
     )
