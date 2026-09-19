@@ -29,6 +29,7 @@ class LlmProviderNames(str, Enum):
     OPENAI_COMPATIBLE = "openai_compatible"
     NEBIUS_TOKENFACTORY = "nebius_tokenfactory"
     PORTKEY = "portkey"
+    CHEAPERINFERENCE = "cheaperinference"
 
     def __str__(self) -> str:
         """Needed so things like:
@@ -52,6 +53,7 @@ WELL_KNOWN_PROVIDER_NAMES = [
     LlmProviderNames.OPENAI_COMPATIBLE,
     LlmProviderNames.NEBIUS_TOKENFACTORY,
     LlmProviderNames.PORTKEY,
+    LlmProviderNames.CHEAPERINFERENCE,
 ]
 
 
@@ -73,6 +75,7 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     LlmProviderNames.OPENAI_COMPATIBLE: "OpenAI-Compatible",
     LlmProviderNames.NEBIUS_TOKENFACTORY: "Nebius TokenFactory",
     LlmProviderNames.PORTKEY: "Portkey",
+    LlmProviderNames.CHEAPERINFERENCE: "Cheaper Inference",
     "groq": "Groq",
     "anyscale": "Anyscale",
     "deepseek": "DeepSeek",
@@ -166,6 +169,7 @@ AGGREGATOR_PROVIDERS: set[str] = {
     LlmProviderNames.OPENAI_COMPATIBLE,
     LlmProviderNames.NEBIUS_TOKENFACTORY,
     LlmProviderNames.PORTKEY,
+    LlmProviderNames.CHEAPERINFERENCE,
 }
 
 # Dynamic providers fetch models directly from source APIs (not LiteLLM).
@@ -184,12 +188,14 @@ DYNAMIC_LLM_PROVIDERS: frozenset[str] = frozenset(
 # Providers whose `available-models` endpoint reads a context limit from the
 # source API and persists it as `max_input_tokens`. Those values are
 # authoritative and must never be second-guessed against LiteLLM's model map.
-# Nebius TokenFactory and Portkey do this without being dynamic providers, so
-# this is deliberately a superset of DYNAMIC_LLM_PROVIDERS rather than a reuse.
+# Nebius TokenFactory, Portkey and Cheaper Inference do this without being
+# dynamic providers, so this is deliberately a superset of
+# DYNAMIC_LLM_PROVIDERS rather than a reuse.
 SOURCE_API_CONTEXT_LIMIT_PROVIDERS: frozenset[str] = DYNAMIC_LLM_PROVIDERS | frozenset(
     {
         LlmProviderNames.NEBIUS_TOKENFACTORY,
         LlmProviderNames.PORTKEY,
+        LlmProviderNames.CHEAPERINFERENCE,
     }
 )
 
