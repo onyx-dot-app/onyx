@@ -399,9 +399,9 @@ def model_is_reasoning_model(model_name: str, model_provider: str) -> bool:
 
         # Fallback for newer models missing from the local model map
         full_model_name = (
-            f"{model_provider}/{model_name}"
-            if model_provider not in model_name
-            else model_name
+            model_name
+            if model_name.startswith(f"{model_provider}/")
+            else f"{model_provider}/{model_name}"
         )
         return _litellm_supports_reasoning(full_model_name)
 
