@@ -1,7 +1,7 @@
 # OneDrive daily test
 
-This test uses the fixed `danswerai` tenant corpus. Its fixture utility owns only
-the `Onyx OneDrive Daily Tests` subtree in two test drives.
+Read-only tests use the fixed `danswerai` tenant corpus. CI does not modify this
+corpus.
 
 The test uses these existing certificate-app variables:
 
@@ -16,7 +16,3 @@ Run the test from the repository root:
 uv run --env-file .vscode/.env pytest \
   backend/tests/daily/connectors/onedrive/test_onedrive_fixed_tenant_daily.py
 ```
-
-The test resets the daily corpus before mutation coverage. It resets the same
-corpus during teardown, even when a mutation assertion fails. Do not point the
-owner variables at drives where this subtree contains user data.
