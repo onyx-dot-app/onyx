@@ -9,6 +9,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import CapabilityCheckContext
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
+    CredentialInvalidError,
     InsufficientPermissionsError,
 )
 from onyx.connectors.microsoft_utils.drive_delta import (
@@ -31,7 +32,12 @@ from onyx.connectors.onedrive.connector import (
     folder_node,
     hierarchy_item_id,
 )
-from onyx.connectors.onedrive.errors import OneDriveGraphError
+from onyx.connectors.onedrive.errors import (
+    MISSING_CREDENTIAL_CODE,
+    OneDriveAuthError,
+    OneDriveGraphError,
+    raise_for_auth_error,
+)
 from onyx.connectors.onedrive.models import (
     OneDriveCheckpoint,
     OneDriveDeltaResult,
@@ -70,7 +76,7 @@ def _drive() -> OneDriveDrive:
 
 
 def _connector(*, users: list[str] | None = None) -> tuple[OneDriveConnector, Any]:
-    connector = OneDriveConnector(users=users)
+    connector = OneDriveConnector(users=users, all_users=users is None)
     gateway = create_autospec(OneDriveSourceOperations, instance=True)
     connector._ops = gateway
     return connector, gateway
@@ -116,6 +122,25 @@ def test_onedrive_scope_is_ordered_normalized_and_deduplicated() -> None:
     ) == ["first@example.com", "second@example.com"]
     with pytest.raises(ConnectorValidationError):
         normalize_configured_users(["not-an-email"])
+    with pytest.raises(ConnectorValidationError, match="cannot be blank"):
+        normalize_configured_users([" "])
+
+
+def test_onedrive_scope_requires_consistent_all_users_setting() -> None:
+    with pytest.raises(ConnectorValidationError, match="Do not list users"):
+        OneDriveConnector(users=["owner@example.com"], all_users=True)
+    with pytest.raises(ConnectorValidationError, match="list at least one user"):
+        OneDriveConnector(users=[], all_users=False)
+
+
+def test_onedrive_credential_validation_error_does_not_expose_input() -> None:
+    secret = "do-not-expose"
+    error = OneDriveAuthError(MISSING_CREDENTIAL_CODE, secret)
+
+    with pytest.raises(CredentialInvalidError) as raised:
+        raise_for_auth_error(error)
+
+    assert secret not in str(raised.value)
 
 
 def test_onedrive_uses_shared_national_cloud_pair_validation() -> None:
@@ -244,6 +269,27 @@ def test_onedrive_explicit_drive_denial_yields_failure() -> None:
     assert len(output) == 1
     assert isinstance(output[0], ConnectorFailure)
     assert checkpoint.current_user is None
+
+
+@pytest.mark.parametrize("status", [400, 401])
+def test_onedrive_systemic_graph_errors_propagate(status: int) -> None:
+    error = OneDriveGraphError(status, "systemicError", "stop")
+    connector, gateway = _connector()
+    gateway.get_default_drive.side_effect = error
+    drive_checkpoint = OneDriveCheckpoint(has_more=True, current_user=_user())
+
+    with pytest.raises(OneDriveGraphError):
+        _run_step(connector, drive_checkpoint)
+
+    gateway.get_delta_page.side_effect = error
+    delta_checkpoint = OneDriveCheckpoint(
+        has_more=True,
+        current_user=_user(),
+        current_drive=_drive(),
+    )
+
+    with pytest.raises(OneDriveGraphError):
+        _run_step(connector, delta_checkpoint)
 
 
 def test_onedrive_checkpoint_deduplicates_pages_then_clears_drive_state() -> None:
@@ -437,6 +483,23 @@ def test_onedrive_slim_walk_skips_unselected_user_drives() -> None:
     assert isinstance(batches[0][0], HierarchyNode)
 
 
+def test_onedrive_slim_walk_continues_after_unselected_delta() -> None:
+    connector, gateway = _connector()
+    gateway.list_users.return_value = OneDriveUserPage(
+        users=[_user("denied@example.com"), _user("readable@example.com")]
+    )
+    gateway.get_default_drive.return_value = _drive()
+    gateway.get_delta_page.side_effect = [
+        OneDriveGraphError(403, "accessDenied", "not selected"),
+        OneDriveDeltaResult(page=DriveDeltaPage()),
+    ]
+
+    batches = list(connector.retrieve_all_slim_docs())
+
+    assert len(batches) == 2
+    assert gateway.get_delta_page.call_count == 2
+
+
 def test_onedrive_path_and_time_gates_run_before_download() -> None:
     connector, gateway = _connector()
     connector.settings = connector.settings.model_copy(
@@ -477,7 +540,10 @@ def test_onedrive_named_capability_checks_pass_through_gateway() -> None:
     context = CapabilityCheckContext(
         source=DocumentSource.ONEDRIVE,
         credential_json={},
-        connector_specific_config={"users": ["owner@example.com"]},
+        connector_specific_config={
+            "all_users": False,
+            "users": ["owner@example.com"],
+        },
         source_operations=gateway,
     )
 
@@ -530,10 +596,13 @@ def test_onedrive_drive_check_skips_unavailable_discovered_users() -> None:
     assert gateway.get_default_drive.call_count == 2
 
 
-def test_onedrive_drive_check_follows_bounded_user_pages() -> None:
+def test_onedrive_drive_check_follows_all_user_pages() -> None:
     gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
     gateway.list_users.side_effect = [
-        OneDriveUserPage(users=[], next_link="next-users"),
+        *[
+            OneDriveUserPage(users=[], next_link=f"next-users-{page}")
+            for page in range(20)
+        ],
         OneDriveUserPage(users=[_user()]),
     ]
     gateway.get_default_drive.return_value = _drive()
@@ -551,7 +620,8 @@ def test_onedrive_drive_check_follows_bounded_user_pages() -> None:
 
     check.run(context)
 
-    assert gateway.list_users.call_count == 2
+    assert gateway.list_users.call_count == 21
+    assert gateway.list_users.call_args.kwargs["page_size"] == 999
 
 
 def test_onedrive_delta_check_finds_later_readable_configured_drive() -> None:
@@ -572,7 +642,8 @@ def test_onedrive_delta_check_finds_later_readable_configured_drive() -> None:
         source=DocumentSource.ONEDRIVE,
         credential_json={},
         connector_specific_config={
-            "users": ["first@example.com", "second@example.com"]
+            "all_users": False,
+            "users": ["first@example.com", "second@example.com"],
         },
         source_operations=gateway,
     )

@@ -11,7 +11,7 @@ def normalize_configured_users(users: list[str] | None) -> list[str]:
     for raw_user in users or []:
         candidate = raw_user.strip()
         if not candidate:
-            continue
+            raise ConnectorValidationError("OneDrive user entries cannot be blank.")
         try:
             user = str(_EMAIL_ADAPTER.validate_python(candidate)).casefold()
         except ValidationError as error:
@@ -23,7 +23,3 @@ def normalize_configured_users(users: list[str] | None) -> list[str]:
         seen.add(user)
         normalized.append(user)
     return normalized
-
-
-def uses_all_users(users: list[str]) -> bool:
-    return not users

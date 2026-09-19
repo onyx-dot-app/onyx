@@ -16,8 +16,9 @@ from onyx.connectors.interfaces import (
     SlimConnector,
 )
 from onyx.connectors.microsoft_utils.drive_delta import (
+    DRIVE_DELTA_SELECT_FIELDS,
     DriveDeltaItem,
-    build_onedrive_delta_start_url,
+    build_drive_delta_start_url,
 )
 from onyx.connectors.microsoft_utils.drive_items import (
     DriveItemContent,
@@ -49,11 +50,9 @@ from onyx.connectors.onedrive.models import (
     OneDriveSettings,
     OneDriveUser,
 )
-from onyx.connectors.onedrive.scope import (
-    normalize_configured_users,
-    uses_all_users,
-)
+from onyx.connectors.onedrive.scope import normalize_configured_users
 from onyx.connectors.onedrive.source_operations import (
+    CONFIG_ALL_USERS,
     CONFIG_AUTHORITY_HOST,
     CONFIG_GRAPH_API_HOST,
     CONFIG_USERS,
@@ -72,10 +71,20 @@ ROOT_NODE_SUFFIX = "root"
 HIERARCHY_ID_SEPARATOR = ":"
 METADATA_DRIVE = "drive"
 METADATA_PATH = "path"
+USER_UNAVAILABLE_STATUSES = frozenset({403, 404})
 
 
-def _is_transient(error: OneDriveGraphError) -> bool:
-    return error.status is None or error.status == 429 or error.status >= 500
+def _is_user_unavailable(error: OneDriveGraphError) -> bool:
+    return error.status in USER_UNAVAILABLE_STATUSES
+
+
+def _validate_user_scope(settings: OneDriveSettings) -> None:
+    if settings.all_users and settings.users:
+        raise ConnectorValidationError(
+            "Do not list users when all-user indexing is selected."
+        )
+    if not settings.all_users and not settings.users:
+        raise ConnectorValidationError("Select all users or list at least one user.")
 
 
 def hierarchy_item_id(drive_id: str, item_id: str) -> str:
@@ -202,6 +211,7 @@ class OneDriveConnector(
             graph_api_host=graph_api_host.rstrip("/"),
             batch_size=batch_size,
         )
+        _validate_user_scope(self.settings)
         resolve_microsoft_environment(
             self.settings.graph_api_host, self.settings.authority_host
         )
@@ -229,6 +239,7 @@ class OneDriveConnector(
             connector_specific_config={
                 CONFIG_AUTHORITY_HOST: self.settings.authority_host,
                 CONFIG_GRAPH_API_HOST: self.settings.graph_api_host,
+                CONFIG_ALL_USERS: self.settings.all_users,
                 CONFIG_USERS: self.settings.users,
             },
         )
@@ -237,10 +248,7 @@ class OneDriveConnector(
         resolve_microsoft_environment(
             self.settings.graph_api_host, self.settings.authority_host
         )
-        if not self.settings.users and not self.settings.all_users:
-            raise ConnectorValidationError(
-                "Select all users or list at least one user."
-            )
+        _validate_user_scope(self.settings)
 
     def build_dummy_checkpoint(self) -> OneDriveCheckpoint:
         return OneDriveCheckpoint(has_more=True)
@@ -269,7 +277,7 @@ class OneDriveConnector(
         try:
             user = self.ops.get_user(identifier=identifier)
         except OneDriveGraphError as error:
-            if _is_transient(error):
+            if not _is_user_unavailable(error):
                 raise
             checkpoint.configured_user_index += 1
             yield _entity_failure(identifier, str(error), error)
@@ -301,9 +309,9 @@ class OneDriveConnector(
         try:
             drive = self.ops.get_default_drive(user_id=user.id)
         except OneDriveGraphError as error:
-            if _is_transient(error):
+            if not _is_user_unavailable(error):
                 raise
-            if not uses_all_users(self.settings.users):
+            if not self.settings.all_users:
                 yield _entity_failure(user, str(error), error)
             else:
                 logger.info(
@@ -314,7 +322,7 @@ class OneDriveConnector(
             self._clear_current_user(checkpoint)
             return
         if drive is None:
-            if not uses_all_users(self.settings.users):
+            if not self.settings.all_users:
                 yield _entity_failure(
                     user, f"`{user.user_principal_name}` has no OneDrive."
                 )
@@ -377,11 +385,12 @@ class OneDriveConnector(
         assert user is not None and drive is not None
         start_at = datetime.fromtimestamp(start, tz=timezone.utc) if start else None
         end_at = datetime.fromtimestamp(end, tz=timezone.utc) if end else None
-        page_url = checkpoint.delta_cursor or build_onedrive_delta_start_url(
+        page_url = checkpoint.delta_cursor or build_drive_delta_start_url(
             f"{self.settings.graph_api_host}/{GRAPH_API_VERSION}",
             drive.id,
             start=start_at,
             page_size=self.settings.batch_size,
+            select_fields=DRIVE_DELTA_SELECT_FIELDS,
         )
         try:
             result = self.ops.get_delta_page(
@@ -390,9 +399,9 @@ class OneDriveConnector(
                 page_size=self.settings.batch_size,
             )
         except OneDriveGraphError as error:
-            if _is_transient(error):
+            if not _is_user_unavailable(error):
                 raise
-            if self.settings.users:
+            if not self.settings.all_users:
                 yield _entity_failure(user, str(error), error)
             else:
                 logger.info(
@@ -441,10 +450,10 @@ class OneDriveConnector(
         checkpoint: OneDriveCheckpoint,
     ) -> CheckpointOutput[OneDriveCheckpoint]:
         if checkpoint.current_user is None:
-            if self.settings.users:
-                yield from self._select_explicit_user(checkpoint)
-            else:
+            if self.settings.all_users:
                 self._select_discovered_user(checkpoint)
+            else:
+                yield from self._select_explicit_user(checkpoint)
             return checkpoint
         if checkpoint.current_drive is None:
             yield from self._open_current_drive(checkpoint)
@@ -453,7 +462,7 @@ class OneDriveConnector(
         return checkpoint
 
     def _users_for_full_walk(self) -> Generator[OneDriveUser, None, None]:
-        if self.settings.users:
+        if not self.settings.all_users:
             for identifier in self.settings.users:
                 user = self.ops.get_user(identifier=identifier)
                 if user is None:
@@ -468,6 +477,58 @@ class OneDriveConnector(
             if next_link is None:
                 return
 
+    def _retrieve_slim_drive(
+        self,
+        user: OneDriveUser,
+        drive: OneDriveDrive,
+        callback: IndexingHeartbeatInterface | None,
+    ) -> GenerateSlimDocumentOutput:
+        yield [user_root_node(user, drive)]
+        cursor = build_drive_delta_start_url(
+            f"{self.settings.graph_api_host}/{GRAPH_API_VERSION}",
+            drive.id,
+            page_size=self.settings.batch_size,
+            select_fields=DRIVE_DELTA_SELECT_FIELDS,
+        )
+        seen_document_ids: set[str] = set()
+        seen_hierarchy_raw_ids: set[str] = {drive_root_id(drive.id)}
+        while cursor:
+            if callback and callback.should_stop():
+                return
+            result = self.ops.get_delta_page(
+                drive_id=drive.id,
+                page_url=cursor,
+                page_size=self.settings.batch_size,
+            )
+            batch: list[SlimDocument | HierarchyNode] = []
+            for item in result.page.items:
+                if item.is_tombstone:
+                    continue
+                if item.is_folder:
+                    raw_id = hierarchy_item_id(drive.id, item.id)
+                    if not self._path_allowed(item) or raw_id in seen_hierarchy_raw_ids:
+                        continue
+                    seen_hierarchy_raw_ids.add(raw_id)
+                    batch.append(folder_node(drive, item))
+                    continue
+                if (
+                    item.is_file
+                    and item.id not in seen_document_ids
+                    and self._item_allowed(item, None, None)
+                ):
+                    seen_document_ids.add(item.id)
+                    batch.append(
+                        SlimDocument(
+                            id=item.id,
+                            external_access=get_ce_onedrive_access(),
+                            parent_hierarchy_raw_node_id=item_parent_id(drive.id, item),
+                            doc_created_at=item.created_datetime,
+                        )
+                    )
+            if batch:
+                yield batch
+            cursor = result.next_cursor
+
     def retrieve_all_slim_docs(
         self,
         start: SecondsSinceUnixEpoch | None = None,
@@ -479,7 +540,7 @@ class OneDriveConnector(
             try:
                 drive = self.ops.get_default_drive(user_id=user.id)
             except OneDriveGraphError as error:
-                if _is_transient(error) or self.settings.users:
+                if not self.settings.all_users or not _is_user_unavailable(error):
                     raise
                 logger.info(
                     "OneDrive: skipping inaccessible drive for %s (%s)",
@@ -488,56 +549,18 @@ class OneDriveConnector(
                 )
                 continue
             if drive is None:
-                if self.settings.users:
+                if not self.settings.all_users:
                     raise ConnectorValidationError(
                         f"`{user.user_principal_name}` has no OneDrive."
                     )
                 continue
-            yield [user_root_node(user, drive)]
-            cursor = build_onedrive_delta_start_url(
-                f"{self.settings.graph_api_host}/{GRAPH_API_VERSION}",
-                drive.id,
-                page_size=self.settings.batch_size,
-            )
-            seen_document_ids: set[str] = set()
-            seen_hierarchy_raw_ids: set[str] = {drive_root_id(drive.id)}
-            while cursor:
-                if callback and callback.should_stop():
-                    return
-                result = self.ops.get_delta_page(
-                    drive_id=drive.id,
-                    page_url=cursor,
-                    page_size=self.settings.batch_size,
+            try:
+                yield from self._retrieve_slim_drive(user, drive, callback)
+            except OneDriveGraphError as error:
+                if not self.settings.all_users or not _is_user_unavailable(error):
+                    raise
+                logger.info(
+                    "OneDrive: skipping inaccessible delta for %s (%s)",
+                    user.user_principal_name,
+                    error.code,
                 )
-                batch: list[SlimDocument | HierarchyNode] = []
-                for item in result.page.items:
-                    if item.is_tombstone:
-                        continue
-                    if item.is_folder:
-                        raw_id = hierarchy_item_id(drive.id, item.id)
-                        if (
-                            not self._path_allowed(item)
-                            or raw_id in seen_hierarchy_raw_ids
-                        ):
-                            continue
-                        seen_hierarchy_raw_ids.add(raw_id)
-                        batch.append(folder_node(drive, item))
-                    elif (
-                        item.is_file
-                        and item.id not in seen_document_ids
-                        and self._item_allowed(item, None, None)
-                    ):
-                        seen_document_ids.add(item.id)
-                        batch.append(
-                            SlimDocument(
-                                id=item.id,
-                                external_access=get_ce_onedrive_access(),
-                                parent_hierarchy_raw_node_id=item_parent_id(
-                                    drive.id, item
-                                ),
-                                doc_created_at=item.created_datetime,
-                            )
-                        )
-                if batch:
-                    yield batch
-                cursor = result.next_cursor
