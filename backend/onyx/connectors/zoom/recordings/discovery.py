@@ -428,6 +428,9 @@ def _list_every_recording(
             return recordings
 
 
+ALL_SESSION_TYPES: frozenset[ZoomSessionType] = frozenset(ZoomSessionType)
+
+
 class _UserRecordingsSource(DiscoverySource):
     """Shared body of the host and Group mechanisms, which differ only in how they
     find their set of hosts.
@@ -437,8 +440,15 @@ class _UserRecordingsSource(DiscoverySource):
     history. Depth is bounded by the account's own auto-delete policy instead.
     """
 
-    def __init__(self, scope_entity_id: str) -> None:
+    def __init__(
+        self,
+        scope_entity_id: str,
+        session_types: frozenset[ZoomSessionType] = ALL_SESSION_TYPES,
+    ) -> None:
         self._scope_entity_id = scope_entity_id
+        # A user's recordings listing mixes meetings and webinars; the admin's
+        # session-type choice decides which of them become work.
+        self._session_types = session_types
         self._resolved: list[_Host] | None = None
         self._listed_key: tuple[str, date] | None = None
         self._listed: list[ZoomRecordingEntry] = []
@@ -625,7 +635,7 @@ class _UserRecordingsSource(DiscoverySource):
         work = [
             item
             for item in (_work_from_recording(recording) for recording in page)
-            if item is not None
+            if item is not None and item.session_type in self._session_types
         ]
 
         if first + len(page) < len(ordered):
@@ -655,8 +665,12 @@ class _UserRecordingsSource(DiscoverySource):
 
 
 class HostAllowlistSource(_UserRecordingsSource):
-    def __init__(self, host_emails: list[str]) -> None:
-        super().__init__("host-allowlist")
+    def __init__(
+        self,
+        host_emails: list[str],
+        session_types: frozenset[ZoomSessionType] = ALL_SESSION_TYPES,
+    ) -> None:
+        super().__init__("host-allowlist", session_types)
         self._emails = {email.strip().lower() for email in host_emails if email.strip()}
 
     def _resolve_hosts(
@@ -695,9 +709,13 @@ class HostAllowlistSource(_UserRecordingsSource):
 
 
 class GroupSource(_UserRecordingsSource):
-    def __init__(self, group_id: str) -> None:
+    def __init__(
+        self,
+        group_id: str,
+        session_types: frozenset[ZoomSessionType] = ALL_SESSION_TYPES,
+    ) -> None:
         self._group_id = group_id.strip()
-        super().__init__(f"group:{self._group_id}")
+        super().__init__(f"group:{self._group_id}", session_types)
 
     def _resolve_hosts(
         self,
@@ -735,12 +753,15 @@ def build_discovery_sources(
     webinar_ids: list[str] | None = None,
     host_emails: list[str] | None = None,
     group_id: str | None = None,
+    session_types: frozenset[ZoomSessionType] = ALL_SESSION_TYPES,
 ) -> list[DiscoverySource]:
+    """The ID lists already say which type each ID is, so `session_types` only
+    scopes the host and Group mechanisms."""
     sources: list[DiscoverySource] = []
     if session_ids(meeting_ids) or session_ids(webinar_ids):
         sources.append(IdAllowlistSource(meeting_ids or [], webinar_ids or []))
     if host_emails and any(email.strip() for email in host_emails):
-        sources.append(HostAllowlistSource(host_emails))
+        sources.append(HostAllowlistSource(host_emails, session_types))
     if group_id and group_id.strip():
-        sources.append(GroupSource(group_id))
+        sources.append(GroupSource(group_id, session_types))
     return sources

@@ -1941,8 +1941,8 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
         name: "host_emails",
         optional: true,
         description:
-          "Index every session these people host, meetings and webinars " +
-          "alike. An email that matches no Zoom user is reported as an " +
+          "Index every session these people host, of the types ticked " +
+          "below. An email that matches no Zoom user is reported as an " +
           "indexing error rather than silently ignored.",
       },
       {
@@ -1952,10 +1952,29 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
         name: "group_id",
         optional: true,
         description:
-          "Index every session the members of one Zoom Group host. Zoom " +
-          "re-reads the member list on every run, so a joiner or leaver is " +
-          "picked up without editing this connector. Like Host Emails, it " +
-          "covers both meetings and webinars.",
+          "Index every session the members of one Zoom Group host, of the " +
+          "types ticked below. Zoom re-reads the member list on every run, " +
+          "so a joiner or leaver is picked up without editing this connector.",
+      },
+      {
+        type: "checkbox",
+        query: "Include meetings?",
+        label: "Include meetings",
+        name: "include_meetings",
+        description:
+          "Applies to Host Emails and Zoom Group. The ID lists above already " +
+          "say which type each ID is.",
+        default: true,
+      },
+      {
+        type: "checkbox",
+        query: "Include webinars?",
+        label: "Include webinars",
+        name: "include_webinars",
+        description:
+          "Applies to Host Emails and Zoom Group. Webinars also need the " +
+          "Webinar add-on, enabled for the host.",
+        default: true,
       },
       {
         type: "select",

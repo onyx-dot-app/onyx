@@ -45,7 +45,14 @@ test("every discovery mechanism is on the form at once", () => {
   }
 });
 
-test("the ID lists post the names the connector takes", () => {
+test("meetings and webinars are both included until the admin unticks one", () => {
+  const values = createConnectorInitialValues(ValidSources.Zoom);
+
+  expect(values.include_meetings).toBe(true);
+  expect(values.include_webinars).toBe(true);
+});
+
+test("the form posts the names the connector takes", () => {
   const names = connectorConfigs.zoom.values.map((field) => field.name);
 
   expect(names).toEqual([
@@ -53,6 +60,8 @@ test("the ID lists post the names the connector takes", () => {
     "webinar_ids",
     "host_emails",
     "group_id",
+    "include_meetings",
+    "include_webinars",
     "plan_tier",
   ]);
 });
