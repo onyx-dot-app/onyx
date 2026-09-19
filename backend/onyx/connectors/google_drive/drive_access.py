@@ -10,7 +10,7 @@ the gap: the organizer saw 25 items in shared_drive_1, a reader saw 23.
 Nothing here calls the retrieval path; it only decides who should do the call.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from enum import Enum
 
 from googleapiclient.errors import HttpError  # type: ignore[import-untyped]
@@ -111,6 +111,8 @@ def list_drive_members(admin_drive_service: object, drive_id: str) -> list[Drive
     with useDomainAdminAccess still names the organizer to impersonate.
 
     Returns an empty list for drives outside our domain, where the call 404s.
+    Any other failure is raised: an auth or server error is not evidence that a
+    drive has no members, and swallowing it would silently skip the drive.
     """
     members: list[DriveMember] = []
     try:
@@ -126,12 +128,13 @@ def list_drive_members(admin_drive_service: object, drive_id: str) -> list[Drive
             if member is not None:
                 members.append(member)
     except HttpError as error:
-        # 404 is the normal answer for a drive in a foreign domain; domain admin
-        # access only applies to drives we own.
+        if error.resp.status != 404:
+            raise
+        # Domain admin access only applies to drives we own, so a drive in a
+        # foreign domain always answers 404 here.
         logger.info(
-            "Could not read members of drive %s (%s); treating as no members.",
+            "Drive %s is not in this domain; it has no members we can read.",
             drive_id,
-            error.resp.status,
         )
         return []
 
@@ -159,34 +162,57 @@ def check_drive_reachable(drive_service: object, drive_id: str) -> DriveReachabi
     return DriveReachability.REACHABLE
 
 
+def _emails_of_type(
+    members: list[DriveMember],
+    role: DriveRole,
+    principal_type: PrincipalType,
+) -> list[str]:
+    # Sorted so a resumed run makes the same choice as the original.
+    return sorted(
+        {
+            member.email
+            for member in members
+            if member.role is role
+            and member.principal_type is principal_type
+            and member.email is not None
+        }
+    )
+
+
 def _candidate_emails(
     members: list[DriveMember],
     role: DriveRole,
     google_domain: str,
     expand_group: Callable[[str], list[str]],
-) -> list[str]:
-    """In-domain user emails holding `role`, expanding groups into their members.
+) -> Iterator[str]:
+    """In-domain emails holding `role`, direct members before group members.
 
-    External principals are dropped: we cannot impersonate an account outside
-    the domain, so naming one as the organizer would just fail later.
+    Lazy on purpose. Groups are expanded only once the direct members are
+    exhausted, so a Directory API outage cannot stop us from picking a direct
+    organizer that would have worked.
+
+    External principals are dropped throughout: an account outside the domain
+    cannot be impersonated, so naming it would only fail later.
     """
-    emails: list[str] = []
-    for member in members:
-        if member.role is not role or member.email is None:
-            continue
-        if member.principal_type is PrincipalType.GROUP:
-            emails.extend(
-                email
-                for email in expand_group(member.email)
-                if _in_domain(email, google_domain)
-            )
-        elif member.principal_type is PrincipalType.USER and _in_domain(
-            member.email, google_domain
-        ):
-            emails.append(member.email)
+    seen: set[str] = set()
 
-    # Stable order so a resumed run makes the same choice as the original.
-    return sorted(dict.fromkeys(emails))
+    for email in _emails_of_type(members, role, PrincipalType.USER):
+        if _in_domain(email, google_domain) and email not in seen:
+            seen.add(email)
+            yield email
+
+    for group_email in _emails_of_type(members, role, PrincipalType.GROUP):
+        try:
+            group_members = expand_group(group_email)
+        except Exception:
+            logger.exception(
+                "Could not expand group %s while selecting an organizer.", group_email
+            )
+            continue
+        for email in sorted(group_members):
+            if _in_domain(email, google_domain) and email not in seen:
+                seen.add(email)
+                yield email
 
 
 def _in_domain(email: str, google_domain: str) -> bool:
@@ -202,9 +228,9 @@ def select_drive_organizer(
 ) -> OrganizerChoice:
     """Pick the identity to impersonate for a shared drive.
 
-    Walks roles from organizer downward, and within a role prefers direct user
-    members over group members. Every candidate is verified with a cheap listing
-    before it is returned, because a named organizer can still fail to
+    Walks roles from organizer downward, and within a role takes direct user
+    members before group members. Every candidate is verified with a cheap
+    listing before it is returned, because a named organizer can still fail to
     impersonate (suspended account, delegation gap).
     """
     for role in _ROLE_PREFERENCE:

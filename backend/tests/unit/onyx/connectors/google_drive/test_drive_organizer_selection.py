@@ -71,6 +71,58 @@ def test_expands_a_group_organizer_into_members() -> None:
     assert choice.complete is True
 
 
+def test_direct_organizer_outranks_a_group_organizer() -> None:
+    """Sorting the two pools together would let a group member win on alphabet."""
+    choice = _select(
+        [
+            _member(f"zeta@{_DOMAIN}", DriveRole.ORGANIZER),
+            _member(f"team@{_DOMAIN}", DriveRole.ORGANIZER, PrincipalType.GROUP),
+        ],
+        groups={f"team@{_DOMAIN}": [f"alpha@{_DOMAIN}"]},
+    )
+
+    assert choice.email == f"zeta@{_DOMAIN}"
+
+
+def test_direct_organizer_is_used_when_group_expansion_fails() -> None:
+    """A Directory API outage must not block a usable direct organizer."""
+
+    def exploding_expand(_email: str) -> list[str]:
+        raise RuntimeError("directory api down")
+
+    choice = select_drive_organizer(
+        drive_id=_DRIVE,
+        members=[
+            _member(f"boss@{_DOMAIN}", DriveRole.ORGANIZER),
+            _member(f"team@{_DOMAIN}", DriveRole.ORGANIZER, PrincipalType.GROUP),
+        ],
+        google_domain=_DOMAIN,
+        expand_group=exploding_expand,
+        can_list_drive=lambda _email: True,
+    )
+
+    assert choice.email == f"boss@{_DOMAIN}"
+
+
+def test_group_expansion_failure_falls_through_to_a_lesser_role() -> None:
+    def exploding_expand(_email: str) -> list[str]:
+        raise RuntimeError("directory api down")
+
+    choice = select_drive_organizer(
+        drive_id=_DRIVE,
+        members=[
+            _member(f"team@{_DOMAIN}", DriveRole.ORGANIZER, PrincipalType.GROUP),
+            _member(f"writer@{_DOMAIN}", DriveRole.WRITER),
+        ],
+        google_domain=_DOMAIN,
+        expand_group=exploding_expand,
+        can_list_drive=lambda _email: True,
+    )
+
+    assert choice.email == f"writer@{_DOMAIN}"
+    assert choice.complete is False
+
+
 def test_skips_external_organizers() -> None:
     """An account outside the domain cannot be impersonated at all."""
     choice = _select(
@@ -168,13 +220,20 @@ def test_members_with_unrecognized_role_or_type_are_skipped() -> None:
         {"emailAddress": f"odd@{_DOMAIN}", "type": "user", "role": "brandNewRole"},
         {"type": "domain", "domain": _DOMAIN, "role": "reader"},
     ]
-    with patch(f"{_MOD}.execute_paginated_retrieval", return_value=iter(raw)):
+    with patch(
+        f"{_MOD}.execute_paginated_retrieval", return_value=iter(raw)
+    ) as retrieval:
         members = list_drive_members(MagicMock(), _DRIVE)
 
     assert [(m.email, m.role, m.principal_type) for m in members] == [
         (f"boss@{_DOMAIN}", DriveRole.ORGANIZER, PrincipalType.USER),
         (None, DriveRole.READER, PrincipalType.DOMAIN),
     ]
+    # Domain admin access is the whole reason this works for drives the admin
+    # is not a member of; without it files.list would 403 and discovery stops.
+    assert retrieval.call_args.kwargs["useDomainAdminAccess"] is True
+    assert retrieval.call_args.kwargs["supportsAllDrives"] is True
+    assert retrieval.call_args.kwargs["fileId"] == _DRIVE
 
 
 def test_foreign_domain_drive_yields_no_members() -> None:
@@ -186,3 +245,20 @@ def test_foreign_domain_drive_yields_no_members() -> None:
         side_effect=HttpError(resp, b"not found"),
     ):
         assert list_drive_members(MagicMock(), _DRIVE) == []
+
+
+@pytest.mark.parametrize("status", [403, 500])
+def test_unexpected_member_lookup_errors_are_not_silently_empty(status: int) -> None:
+    """An auth or server error is not evidence that a drive has no members.
+
+    Returning [] here would make selection report "no impersonable principal"
+    and skip the drive without surfacing the failure.
+    """
+    resp = MagicMock()
+    resp.status = status
+    with patch(
+        f"{_MOD}.execute_paginated_retrieval",
+        side_effect=HttpError(resp, b"boom"),
+    ):
+        with pytest.raises(HttpError):
+            list_drive_members(MagicMock(), _DRIVE)
