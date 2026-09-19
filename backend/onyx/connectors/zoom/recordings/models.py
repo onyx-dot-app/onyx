@@ -59,3 +59,12 @@ def fails_the_whole_run(error: Exception) -> bool:
     # Anything else — dropped connection, exhausted Retry, truncated body — means
     # the exchange broke, which says nothing about this particular session.
     return isinstance(error, requests.RequestException)
+
+
+def has_no_transcript(error: Exception) -> bool:
+    """Zoom answers 404 for a session it never transcribed, which is most of
+    them. Reporting that would raise a failure for nearly every session."""
+    if not isinstance(error, requests.HTTPError):
+        return False
+    response = error.response
+    return response is not None and response.status_code == 404

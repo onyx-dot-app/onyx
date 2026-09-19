@@ -800,7 +800,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.DROPBOX: "Cloud-stored files and folders",
     DocumentSource.SHAREPOINT: "Documents and team sites",
     DocumentSource.TEAMS: "Chat messages and channels",
-    DocumentSource.OUTLOOK: "Email conversations from Microsoft 365 mailboxes",
+    DocumentSource.OUTLOOK: "Email conversations and calendar events from Microsoft 365 mailboxes",
     DocumentSource.SALESFORCE: "Sales data, accounts, and opportunities",
     DocumentSource.DISCOURSE: "Community forums and discussions",
     DocumentSource.AXERO: "Employee engagement and intranet content",

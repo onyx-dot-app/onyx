@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
@@ -15,7 +16,9 @@ Uses the cached image — for a full image rebuild, use "ods dev rebuild".
 Examples:
   ods dev restart`,
 		Run: func(cmd *cobra.Command, args []string) {
-			runDevcontainer("up", []string{"--remove-existing-container"})
+			if err := runDevcontainer("up", []string{"--remove-existing-container"}); err != nil {
+				log.Fatal(err)
+			}
 		},
 	}
 

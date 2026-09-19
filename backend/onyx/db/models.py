@@ -523,6 +523,22 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         """Returns True if this is the anonymous user."""
         return str(self.id) == ANONYMOUS_USER_UUID
 
+    @property
+    def live_oauth_token(self) -> str | None:
+        """Access token of the link with the latest expiry, across providers.
+
+        A row can hold several links for one provider, one per re-issued
+        subject. The relationship has no order, so row position cannot pick
+        the live one. A link with no expiry ranks lowest. Ties keep row order.
+        Needs fully loaded links: a `load_only` collection lazy-loads each row.
+        """
+        if not self.oauth_accounts:
+            return None
+        live: OAuthAccount = max(
+            self.oauth_accounts, key=lambda link: link.expires_at or 0
+        )
+        return live.access_token
+
 
 class AccessToken(SQLAlchemyBaseAccessTokenTableUUID, Base):
     pass

@@ -30,19 +30,19 @@ logging.addLevelName(logging.INFO + 5, "NOTICE")
 # copy, update, then `set()` a new dict.
 pruning_ctx: contextvars.ContextVar[dict[str, Any]] = contextvars.ContextVar(
     "pruning_ctx",
-    default=dict(),  # noqa: B039
+    default={},  # noqa: B039
 )
 
 doc_permission_sync_ctx: contextvars.ContextVar[dict[str, Any]] = (
-    contextvars.ContextVar("doc_permission_sync_ctx", default=dict())  # noqa: B039
+    contextvars.ContextVar("doc_permission_sync_ctx", default={})  # noqa: B039
 )
 
 
 class LoggerContextVars:
     @staticmethod
     def reset() -> None:
-        pruning_ctx.set(dict())
-        doc_permission_sync_ctx.set(dict())
+        pruning_ctx.set({})
+        doc_permission_sync_ctx.set({})
 
 
 # Third-party loggers that are extremely chatty at DEBUG (LiteLLM logs several

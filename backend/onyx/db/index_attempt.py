@@ -842,7 +842,7 @@ def get_error_counts_for_index_attempts(
         .where(IndexAttemptError.index_attempt_id.in_(index_attempt_ids))
         .group_by(IndexAttemptError.index_attempt_id)
     )
-    return {attempt_id: count for attempt_id, count in db_session.execute(stmt).all()}
+    return {attempt_id: count for attempt_id, count in db_session.execute(stmt).all()}  # noqa: C416  # unpacking types the SQLAlchemy Row
 
 
 def get_paginated_index_attempts_for_cc_pair_id(

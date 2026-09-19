@@ -15,9 +15,8 @@ from uuid import uuid4
 
 import httpx
 from mcp.client.auth import OAuthClientProvider, PKCEParameters, TokenStorage
-from mcp.client.auth.exceptions import OAuthFlowError, OAuthTokenError
+from mcp.client.auth.exceptions import OAuthFlowError
 from mcp.client.auth.oauth2 import OAuthContext
-from mcp.client.auth.utils import handle_token_response_scopes
 from mcp.shared.auth import (
     OAuthClientInformationFull,
     OAuthClientMetadata,
@@ -806,13 +805,14 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
                 detail,
             )
 
+        body = await response.aread()
         try:
-            tokens = await handle_token_response_scopes(response)
-        except OAuthTokenError as error:
+            tokens = _oauth_token_from_response(body)
+        except ValidationError:
             raise OnyxError(
                 OnyxErrorCode.BAD_GATEWAY,
                 "MCP OAuth token endpoint returned an invalid token response.",
-            ) from error
+            ) from None
         self.context.current_tokens = tokens
         self.context.update_token_expiry(tokens)
         storage = self.context.storage

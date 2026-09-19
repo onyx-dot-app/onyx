@@ -459,6 +459,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   useSendChatMessageFromURL({
     onSubmit,
     deepResearch: deepResearchEnabledForCurrentWorkflow,
+    toolConfiguration,
   });
 
   useSendMessageToParent();

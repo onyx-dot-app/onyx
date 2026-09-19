@@ -198,7 +198,7 @@ def create_chat_session_from_request(
 
     persona_id = chat_session_request.persona_id
     if persona_id != DEFAULT_PERSONA_ID:
-        if not user.is_anonymous and not user_can_access_persona(
+        if not user_can_access_persona(
             db_session=db_session,
             persona_id=persona_id,
             user=user,
@@ -829,7 +829,7 @@ def convert_chat_history(
                     message=chat_message.message,
                     token_count=chat_message.token_count + image_token_count,
                     message_type=MessageType.USER,
-                    image_files=image_files if image_files else None,
+                    image_files=image_files or None,
                     image_token_count=image_token_count,
                 )
             )

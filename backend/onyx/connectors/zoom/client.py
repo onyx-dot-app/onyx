@@ -2,17 +2,22 @@ import time
 from collections.abc import Callable
 from datetime import date, datetime
 from typing import Any, TypeVar
-from urllib.parse import quote, urljoin, urlparse
+from urllib.parse import urljoin, urlparse
 
 import requests
 from requests.adapters import HTTPAdapter
-from urllib3.util import Retry
 
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.connectors.exceptions import (
     CredentialExpiredError,
     CredentialInvalidError,
     InsufficientPermissionsError,
+)
+from onyx.connectors.zoom import endpoints
+from onyx.connectors.zoom.endpoints import (
+    ENTITLEMENT_HINTS,
+    ZoomEndpoint,
+    ZoomEntitlement,
 )
 from onyx.connectors.zoom.models import (
     ZOOM_NOT_ENTITLED_CODE,
@@ -29,14 +34,18 @@ from onyx.connectors.zoom.models import (
     ZoomUserPage,
     ZoomWebinarDetails,
 )
+from onyx.connectors.zoom.rate_limit import (
+    ZoomRateLimiter,
+    ZoomRateLimitSettings,
+)
+from onyx.utils.logger import setup_logger
 from onyx.utils.url import (
     SSRFException,
     ssrf_safe_get,
     validate_outbound_http_url,
 )
 
-_OAUTH_TOKEN_URL = "https://zoom.us/oauth/token"
-_API_BASE_URL = "https://api.zoom.us/v2"
+logger = setup_logger()
 
 _ZOOM_HOST = "zoom.us"
 
@@ -45,21 +54,14 @@ _TOKEN_REFRESH_MARGIN_SECONDS = 60
 # Zoom's date-scoped query parameters are whole UTC days.
 _ZOOM_DATE_FORMAT = "%Y-%m-%d"
 
-_WEBINAR_ACCESS_HINT = (
-    "Zoom refused a webinar request. Webinars need the Webinar add-on enabled for "
-    "the host, and the app needs the webinar:read:admin scope. Meetings need "
-    "neither, so credentials that read meetings can still fail here."
-)
-
 # Zoom caps page_size at 300 on every listing this client pages through.
 _MAX_PAGE_SIZE = 300
 
-# A next_page_token dies 15 minutes after Zoom issues it, so an access list is
-# paged straight through here instead of being resumed from the checkpoint. This
-# bound only stops a broken cursor looping forever: at 300 people per page it is
-# far larger than any real session, so lowering it would silently cut people out
-# of an access list.
-_MAX_ACCESS_LIST_PAGES = 200
+# Backstop for a cursor that keeps advancing forever; the cycle check in
+# _paginate catches one that repeats. A Celery task has no working time limit,
+# so nothing else would stop either loop. Tripping this drops the document
+# rather than truncating its access list.
+MAX_LISTING_PAGES = 200
 
 _AccessRecordT = TypeVar("_AccessRecordT")
 
@@ -68,15 +70,6 @@ class ZoomNotEntitledError(InsufficientPermissionsError):
     """The account's plan or licence does not cover an endpoint, which no retry
     and no scope change can fix. Kept apart from a missing scope so a caller can
     carry on without the data instead of failing the run."""
-
-
-def _encode_meeting_identifier(identifier: str) -> str:
-    """Zoom requires a UUID to be encoded twice when it starts with "/" or
-    contains "//"."""
-    encoded = quote(identifier, safe="")
-    if identifier.startswith("/") or "//" in identifier:
-        encoded = quote(encoded, safe="")
-    return encoded
 
 
 def _next_page_token(body: dict[str, Any]) -> str | None:
@@ -136,7 +129,13 @@ def _raise_for_zoom_error(response: requests.Response, description: str) -> None
 
 
 class ZoomClient:
-    def __init__(self, account_id: str, client_id: str, client_secret: str) -> None:
+    def __init__(
+        self,
+        account_id: str,
+        client_id: str,
+        client_secret: str,
+        rate_limit_settings: ZoomRateLimitSettings | None = None,
+    ) -> None:
         self.account_id = account_id
         self.client_id = client_id
         self.client_secret = client_secret
@@ -144,26 +143,32 @@ class ZoomClient:
         self._access_token: str | None = None
         self._token_expires_at: float = 0.0
 
-        self._session = requests.Session()
-        retry_strategy = Retry(
-            total=5,
-            backoff_factor=1,
-            status_forcelist=[429, 500, 502, 503, 504],
-            allowed_methods=["GET", "POST"],
+        self._rate_limiter = ZoomRateLimiter(
+            rate_limit_settings or ZoomRateLimitSettings()
         )
-        # Mount on the scheme, not per URL: the API, token endpoint and download
-        # are three different Zoom hosts, and a missed one silently gets no retries.
-        self._session.mount("https://", HTTPAdapter(max_retries=retry_strategy))
+
+        # urllib3 re-sends inside one call, which skips the pacer, and Zoom
+        # counts a request it received however slowly it answered. So nothing
+        # retries here: ZoomRateLimiter sends every attempt, a slot each.
+        self._session = requests.Session()
+        for scheme in ("https://", "http://"):
+            self._session.mount(scheme, HTTPAdapter(max_retries=0))
 
     def _fetch_access_token(self) -> str:
-        response = self._session.post(
-            _OAUTH_TOKEN_URL,
-            params={
-                "grant_type": "account_credentials",
-                "account_id": self.account_id,
-            },
-            auth=(self.client_id, self.client_secret),
-            timeout=REQUEST_TIMEOUT_SECONDS,
+        endpoint = endpoints.OAUTH_TOKEN
+        description = endpoint.description()
+        response = self._rate_limiter.call(
+            description,
+            endpoint.tier,
+            lambda: self._session.post(
+                endpoint.url(),
+                params={
+                    "grant_type": "account_credentials",
+                    "account_id": self.account_id,
+                },
+                auth=(self.client_id, self.client_secret),
+                timeout=REQUEST_TIMEOUT_SECONDS,
+            ),
         )
         # A Server-to-Server client secret never expires, so this 401 is invalid,
         # not expired. The 401 in _send_authorized is a real token expiry.
@@ -176,7 +181,7 @@ class ZoomClient:
                 "Zoom refused to issue a token for this app — check that it is "
                 "activated and its scopes are granted"
             )
-        _raise_for_zoom_error(response, "the OAuth token request")
+        _raise_for_zoom_error(response, description)
 
         token = ZoomAccessToken.model_validate(response.json())
         self._access_token = token.access_token
@@ -193,64 +198,134 @@ class ZoomClient:
         return self._access_token
 
     def _send_authorized(
-        self, description: str, send: Callable[[str], requests.Response]
+        self,
+        endpoint: ZoomEndpoint,
+        description: str,
+        send: Callable[[str], requests.Response],
     ) -> requests.Response:
         """Zoom sometimes rejects a token before the expiry it gave us, so retry
         once with a fresh one. Reporting the 401 instead raises
         CredentialExpiredError, and five of those in a row mark the connector
         invalid and email the admins.
+
+        Pacing sits here so that a page of a listing and this 401 re-send each
+        count as the separate HTTP request they are.
         """
-        response = send(self._get_access_token())
+
+        def paced(token: str) -> requests.Response:
+            return self._rate_limiter.call(
+                description, endpoint.tier, lambda: send(token)
+            )
+
+        response = paced(self._get_access_token())
         if response.status_code == 401:
             self._access_token = None
-            response = send(self._get_access_token())
+            response = paced(self._get_access_token())
 
         if response.status_code == 401:
             raise CredentialExpiredError(
                 f"Zoom rejected {description} as unauthorized, even with a fresh token"
             )
         if response.status_code == 403:
-            raise InsufficientPermissionsError(
-                f"Zoom denied access to {description} — check the app's granted scopes"
-            )
+            raise self._entitlement_aware_denial(endpoint, description)
         return response
 
-    def _request(self, method: str, endpoint: str, **kwargs: Any) -> requests.Response:
-        url = f"{_API_BASE_URL}{endpoint}"
-        headers = kwargs.pop("headers", {})
+    @staticmethod
+    def _entitlement_aware_denial(
+        endpoint: ZoomEndpoint, description: str
+    ) -> InsufficientPermissionsError:
+        """A 403 on an entitled endpoint is usually the missing add-on rather
+        than a missing scope, and the generic message sends the admin to
+        re-check scopes that are already correct. Either way it names Zoom's
+        operation, because the admin has to know which call was refused.
+        """
+        denied = f"Zoom denied access to {description}"
+        if endpoint.operation:
+            denied = f"{denied} ({endpoint.operation})"
+
+        hint = ENTITLEMENT_HINTS.get(endpoint.requires)
+        if hint is not None:
+            return InsufficientPermissionsError(f"{hint} ({denied})")
+        return InsufficientPermissionsError(
+            f"{denied} — check the app's granted scopes"
+        )
+
+    def _get(
+        self,
+        endpoint: ZoomEndpoint,
+        identifier: str = "",
+        params: dict[str, Any] | None = None,
+    ) -> requests.Response:
+        description = endpoint.description(identifier)
+        url = endpoint.url(identifier)
 
         def send(token: str) -> requests.Response:
             return self._session.request(
-                method,
+                "GET",
                 url,
-                headers={**headers, "Authorization": f"Bearer {token}"},
+                headers={"Authorization": f"Bearer {token}"},
+                params=params or {},
                 timeout=REQUEST_TIMEOUT_SECONDS,
-                **kwargs,
             )
 
-        return self._send_authorized(endpoint, send)
+        response = self._send_authorized(endpoint, description, send)
 
-    def _request_webinar(
-        self, endpoint: str, params: dict[str, Any] | None = None
-    ) -> requests.Response:
-        """Every webinar endpoint fails the same way without the Webinar add-on,
-        and the generic scope message sends the admin to check scopes that are
-        already correct.
-        """
-        try:
-            response = self._request("GET", endpoint, params=params or {})
-        except InsufficientPermissionsError as e:
-            raise InsufficientPermissionsError(f"{_WEBINAR_ACCESS_HINT} ({e})") from e
-
-        if response.status_code == 400:
+        if endpoint.requires is not ZoomEntitlement.NONE and (
+            response.status_code == 400
+        ):
             denial = _not_entitled_message(response)
             if denial is not None:
                 # Zoom's message names the user whose licence is missing, which
                 # the hint can't know.
-                raise ZoomNotEntitledError(
-                    f"{_WEBINAR_ACCESS_HINT} Zoom said: {denial}"
-                )
+                hint = ENTITLEMENT_HINTS[endpoint.requires]
+                raise ZoomNotEntitledError(f"{hint} Zoom said: {denial}")
+
+        _raise_for_zoom_error(response, description)
         return response
+
+    def _paginate(
+        self,
+        endpoint: ZoomEndpoint,
+        identifier: str,
+        response_key: str,
+        parse: Callable[[Any], _AccessRecordT],
+        extra_params: dict[str, Any] | None = None,
+    ) -> list[_AccessRecordT]:
+        """Zoom's next_page_token expires 15 minutes after it is issued, so the
+        whole list is drained here rather than resumed from the checkpoint.
+
+        An empty page is a normal answer: Zoom returns no records for a session
+        where registration was never turned on.
+        """
+        records: list[_AccessRecordT] = []
+        page_token: str | None = None
+        seen_tokens: set[str] = set()
+
+        for _ in range(MAX_LISTING_PAGES):
+            params: dict[str, Any] = {
+                "page_size": _MAX_PAGE_SIZE,
+                **(extra_params or {}),
+            }
+            if page_token:
+                params["next_page_token"] = page_token
+
+            body = self._get(endpoint, identifier, params).json()
+            records.extend(parse(entry) for entry in body.get(response_key, []))
+
+            page_token = _next_page_token(body)
+            if not page_token:
+                return records
+            if page_token in seen_tokens:
+                raise ValueError(
+                    "Zoom stopped advancing the cursor for "
+                    f"{endpoint.description(identifier)}"
+                )
+            seen_tokens.add(page_token)
+
+        raise ValueError(
+            f"Zoom kept paging {endpoint.description(identifier)} past "
+            f"{MAX_LISTING_PAGES} pages"
+        )
 
     def get_meeting_transcript(self, meeting_identifier: str) -> ZoomTranscript:
         """Takes a meeting ID, a webinar ID, or one occurrence's UUID. Zoom has
@@ -259,20 +334,13 @@ class ZoomClient:
         A session that was never recorded answers 404, which raises here. Whether
         that is a skip or a failure is the caller's call, not this client's.
         """
-        response = self._request(
-            "GET",
-            f"/meetings/{_encode_meeting_identifier(meeting_identifier)}/transcript",
-        )
-        _raise_for_zoom_error(response, f"the transcript for {meeting_identifier}")
+        response = self._get(endpoints.MEETING_TRANSCRIPT, meeting_identifier)
         return ZoomTranscript.model_validate(response.json())
 
     def get_past_meeting_details(
         self, meeting_identifier: str
     ) -> ZoomPastMeetingDetails:
-        response = self._request(
-            "GET", f"/past_meetings/{_encode_meeting_identifier(meeting_identifier)}"
-        )
-        _raise_for_zoom_error(response, f"the details for {meeting_identifier}")
+        response = self._get(endpoints.PAST_MEETING_DETAILS, meeting_identifier)
         return ZoomPastMeetingDetails.model_validate(response.json())
 
     def list_past_meeting_occurrences(
@@ -298,12 +366,7 @@ class ZoomClient:
                 "to": window_end.strftime(_ZOOM_DATE_FORMAT),
             }
 
-        response = self._request(
-            "GET",
-            f"/past_meetings/{_encode_meeting_identifier(meeting_id)}/instances",
-            params=params,
-        )
-        _raise_for_zoom_error(response, f"the occurrences for {meeting_id}")
+        response = self._get(endpoints.PAST_MEETING_OCCURRENCES, meeting_id, params)
         occurrences = response.json().get("meetings", [])
         return [ZoomSessionOccurrence.model_validate(o) for o in occurrences]
 
@@ -312,10 +375,7 @@ class ZoomClient:
         `/past_webinars/{id}` to match the meeting details endpoint, so a past
         occurrence is read back through this one.
         """
-        response = self._request_webinar(
-            f"/webinars/{_encode_meeting_identifier(webinar_identifier)}"
-        )
-        _raise_for_zoom_error(response, f"the details for webinar {webinar_identifier}")
+        response = self._get(endpoints.WEBINAR_DETAILS, webinar_identifier)
         return ZoomWebinarDetails.model_validate(response.json())
 
     def list_past_webinar_occurrences(
@@ -327,10 +387,7 @@ class ZoomClient:
         An unknown webinar answers 404, which raises here rather than reading as
         a webinar that ran no times.
         """
-        response = self._request_webinar(
-            f"/past_webinars/{_encode_meeting_identifier(webinar_id)}/instances"
-        )
-        _raise_for_zoom_error(response, f"the occurrences for webinar {webinar_id}")
+        response = self._get(endpoints.PAST_WEBINAR_OCCURRENCES, webinar_id)
         occurrences = response.json().get("webinars", [])
         return [ZoomSessionOccurrence.model_validate(o) for o in occurrences]
 
@@ -343,11 +400,7 @@ class ZoomClient:
         if page_token:
             params["next_page_token"] = page_token
 
-        response = self._request(
-            "GET", f"/groups/{quote(group_id, safe='')}/members", params=params
-        )
-        _raise_for_zoom_error(response, f"the members of group {group_id}")
-        body = response.json()
+        body = self._get(endpoints.GROUP_MEMBERS, group_id, params).json()
         return ZoomUserPage(
             users=[ZoomUser.model_validate(m) for m in body.get("members", [])],
             next_page_token=_next_page_token(body),
@@ -360,9 +413,7 @@ class ZoomClient:
         if page_token:
             params["next_page_token"] = page_token
 
-        response = self._request("GET", "/users", params=params)
-        _raise_for_zoom_error(response, "the account's users")
-        body = response.json()
+        body = self._get(endpoints.USERS, params=params).json()
         return ZoomUserPage(
             users=[ZoomUser.model_validate(u) for u in body.get("users", [])],
             next_page_token=_next_page_token(body),
@@ -386,55 +437,11 @@ class ZoomClient:
         if page_token:
             params["next_page_token"] = page_token
 
-        response = self._request(
-            "GET", f"/users/{quote(user_id, safe='')}/recordings", params=params
-        )
-        _raise_for_zoom_error(response, f"the recordings for user {user_id}")
-        body = response.json()
+        body = self._get(endpoints.USER_RECORDINGS, user_id, params).json()
         return ZoomRecordingPage(
             recordings=body.get("meetings", []),
             next_page_token=_next_page_token(body),
         )
-
-    def _request_meeting(
-        self, endpoint: str, params: dict[str, Any] | None = None
-    ) -> requests.Response:
-        return self._request("GET", endpoint, params=params or {})
-
-    def _list_access_pages(
-        self,
-        description: str,
-        endpoint: str,
-        request: Callable[[str, dict[str, Any] | None], requests.Response],
-        response_key: str,
-        parse: Callable[[Any], _AccessRecordT],
-        extra_params: dict[str, Any] | None = None,
-    ) -> list[_AccessRecordT]:
-        """Drains every page in one go. An empty page is a normal answer here:
-        Zoom returns no records for a session where registration was never
-        turned on.
-        """
-        records: list[_AccessRecordT] = []
-        page_token: str | None = None
-
-        for _ in range(_MAX_ACCESS_LIST_PAGES):
-            params: dict[str, Any] = {
-                "page_size": _MAX_PAGE_SIZE,
-                **(extra_params or {}),
-            }
-            if page_token:
-                params["next_page_token"] = page_token
-
-            response = request(endpoint, params)
-            _raise_for_zoom_error(response, description)
-
-            body = response.json()
-            records.extend(parse(entry) for entry in body.get(response_key, []))
-            page_token = _next_page_token(body)
-            if not page_token:
-                return records
-
-        raise ValueError(f"Zoom kept paging {description} past the page limit")
 
     def list_past_meeting_participants(
         self, occurrence_uuid: str
@@ -442,11 +449,9 @@ class ZoomClient:
         """This is the only access source with an age limit: Zoom deletes
         attendance after the retention window and then answers 400 with code
         12702. Registrants and invitees still answer for the same old meeting."""
-        identifier = _encode_meeting_identifier(occurrence_uuid)
-        return self._list_access_pages(
-            f"the participants of meeting {occurrence_uuid}",
-            f"/past_meetings/{identifier}/participants",
-            self._request_meeting,
+        return self._paginate(
+            endpoints.PAST_MEETING_PARTICIPANTS,
+            occurrence_uuid,
             "participants",
             ZoomParticipant.model_validate,
         )
@@ -454,11 +459,9 @@ class ZoomClient:
     def list_past_webinar_participants(
         self, occurrence_uuid: str
     ) -> list[ZoomParticipant]:
-        identifier = _encode_meeting_identifier(occurrence_uuid)
-        return self._list_access_pages(
-            f"the participants of webinar {occurrence_uuid}",
-            f"/past_webinars/{identifier}/participants",
-            self._request_webinar,
+        return self._paginate(
+            endpoints.PAST_WEBINAR_PARTICIPANTS,
+            occurrence_uuid,
             "participants",
             ZoomParticipant.model_validate,
         )
@@ -468,11 +471,9 @@ class ZoomClient:
     ) -> list[ZoomRegistrant]:
         """Registrants belong to the scheduled meeting, not to one occurrence, so
         a recurring series returns the same list for every run."""
-        identifier = _encode_meeting_identifier(meeting_id)
-        return self._list_access_pages(
-            f"the registrants of meeting {meeting_id}",
-            f"/meetings/{identifier}/registrants",
-            self._request_meeting,
+        return self._paginate(
+            endpoints.MEETING_REGISTRANTS,
+            meeting_id,
             "registrants",
             ZoomRegistrant.model_validate,
             extra_params={"status": status} if status else None,
@@ -481,11 +482,9 @@ class ZoomClient:
     def list_webinar_registrants(
         self, webinar_id: str, status: str | None = None
     ) -> list[ZoomRegistrant]:
-        identifier = _encode_meeting_identifier(webinar_id)
-        return self._list_access_pages(
-            f"the registrants of webinar {webinar_id}",
-            f"/webinars/{identifier}/registrants",
-            self._request_webinar,
+        return self._paginate(
+            endpoints.WEBINAR_REGISTRANTS,
+            webinar_id,
             "registrants",
             ZoomRegistrant.model_validate,
             extra_params={"status": status} if status else None,
@@ -497,10 +496,7 @@ class ZoomClient:
         every run and an ad-hoc meeting has none at all. There is no age limit
         here, so an old meeting still answers.
         """
-        identifier = _encode_meeting_identifier(meeting_id)
-        response = self._request("GET", f"/meetings/{identifier}")
-        _raise_for_zoom_error(response, f"the details for meeting {meeting_id}")
-
+        response = self._get(endpoints.MEETING_DETAILS, meeting_id)
         settings = response.json().get("settings") or {}
         return [
             ZoomInvitee.model_validate(i) for i in settings.get("meeting_invitees", [])
@@ -512,9 +508,7 @@ class ZoomClient:
         parameters here and sends no next_page_token back, unlike the registrant and
         participant listings.
         """
-        identifier = _encode_meeting_identifier(webinar_id)
-        response = self._request_webinar(f"/webinars/{identifier}/panelists")
-        _raise_for_zoom_error(response, f"the panelists of webinar {webinar_id}")
+        response = self._get(endpoints.WEBINAR_PANELISTS, webinar_id)
         return [
             ZoomPanelist.model_validate(p) for p in response.json().get("panelists", [])
         ]
@@ -527,6 +521,8 @@ class ZoomClient:
         the signed URL.
         """
         _reject_non_zoom_download_url(download_url)
+        endpoint = endpoints.TRANSCRIPT_DOWNLOAD
+        description = endpoint.description()
 
         def send(token: str) -> requests.Response:
             return self._session.get(
@@ -536,7 +532,7 @@ class ZoomClient:
                 allow_redirects=False,
             )
 
-        response = self._send_authorized("the transcript download", send)
+        response = self._send_authorized(endpoint, description, send)
         if response.is_redirect:
             location = urljoin(download_url, response.headers["Location"])
             try:
@@ -550,5 +546,5 @@ class ZoomClient:
                     f"Zoom redirected the transcript download somewhere unsafe: {e}"
                 ) from e
 
-        _raise_for_zoom_error(response, "the transcript download")
+        _raise_for_zoom_error(response, description)
         return response.text

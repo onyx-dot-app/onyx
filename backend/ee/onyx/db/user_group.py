@@ -830,7 +830,7 @@ def update_user_group(
         added_cc_pair_ids=added_cc_pair_ids,
     )
 
-    current_user_ids = set([user.id for user in db_user_group.users])
+    current_user_ids = {user.id for user in db_user_group.users}
     updated_user_ids = set(user_group_update.user_ids)
     added_user_ids = list(updated_user_ids - current_user_ids)
     removed_user_ids = list(current_user_ids - updated_user_ids)

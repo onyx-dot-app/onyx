@@ -1367,6 +1367,11 @@ OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD = int(
     os.environ.get("OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
+# Largest file posted in a channel that the Teams connector downloads and extracts.
+TEAMS_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD = int(
+    os.environ.get("TEAMS_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD", 20 * 1024 * 1024)
+)
+
 # When True, group sync enumerates every Azure AD group in the tenant (expensive).
 # When False (default), only groups found in site role assignments are synced.
 # Can be overridden per-connector via the "exhaustive_ad_enumeration" key in
@@ -1375,12 +1380,20 @@ SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION = (
     os.environ.get("SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION", "").lower() == "true"
 )
 
+AIRTABLE_ATTACHMENT_SIZE_THRESHOLD = int(
+    os.environ.get("AIRTABLE_ATTACHMENT_SIZE_THRESHOLD", 10 * 1024 * 1024)
+)
+
 BLOB_STORAGE_SIZE_THRESHOLD = int(
     os.environ.get("BLOB_STORAGE_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
 BOX_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("BOX_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
+)
+
+DROPBOX_CONNECTOR_SIZE_THRESHOLD = int(
+    os.environ.get("DROPBOX_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
 JIRA_CONNECTOR_LABELS_TO_SKIP = [
@@ -1983,9 +1996,7 @@ SIGNUP_RATE_LIMIT_ENABLED = (
 MOCK_CONNECTOR_FILE_PATH = os.environ.get("MOCK_CONNECTOR_FILE_PATH")
 
 # Set to true to mock LLM responses for testing purposes
-MOCK_LLM_RESPONSE = (
-    os.environ.get("MOCK_LLM_RESPONSE") if os.environ.get("MOCK_LLM_RESPONSE") else None
-)
+MOCK_LLM_RESPONSE = os.environ.get("MOCK_LLM_RESPONSE") or None
 
 
 DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB = 20

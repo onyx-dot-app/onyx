@@ -35,6 +35,7 @@ from onyx.chat.prompt_utils import (
     get_default_base_system_prompt,
     process_prompt_template,
 )
+from onyx.chat.search_receipts import maybe_append_search_receipt
 from onyx.chat.token_budget import resolve_chat_token_budget
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
@@ -676,6 +677,19 @@ def _create_file_tool_metadata_message(
     usage setting). Naming a tool the model was never given makes it invent
     workarounds — it searches the web for the document or guesses the contents.
 
+    Preference order is read_file, then internal search, then the python tool.
+    read_file pages through a file directly; search retrieves from the indexed
+    copy; the python tool is handed the files themselves, so prompt truncation
+    does not take them away from it.
+
+    The python tier applies only when every listed file actually reached
+    ``chat_files_for_tools`` (see ``FileToolMetadata.staged_for_tools``) —
+    summary-truncated files are listed for the LLM but never staged, so naming
+    python for them would send the model after bytes it does not have. The
+    notice also stops short of promising a path, because PythonTool normalizes
+    and de-duplicates filenames at staging time and applies its own count and
+    byte caps.
+
     An unreported tool set names no tool. Steps that offer none are common (a
     deep-research final report runs with no tools), and under-promising is the
     safe direction to fail in.
@@ -699,6 +713,15 @@ def _create_file_tool_metadata_message(
             "These files are attached but too large to include in full. Their "
             "contents are indexed — use internal search to find the relevant "
             "passages. Do not guess them or search the web for them:"
+        ]
+    elif PythonTool.NAME in offered and all(
+        meta.staged_for_tools for meta in file_metadata
+    ):
+        lines = [
+            "These files are attached but too large to include in full. The "
+            "python tool receives them — read them there, listing the working "
+            "directory if a name does not resolve. Do not guess their contents "
+            "or search the web for them:"
         ]
     else:
         lines = [
@@ -807,6 +830,8 @@ def run_llm_loop(
     include_citations: bool = True,
     all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
     inject_memories_in_prompt: bool = True,
+    # Append retrieval receipts to internal search responses (see onyx.chat.search_receipts).
+    enable_search_receipts: bool = False,
 ) -> None:
     with trace(
         "run_llm_loop",
@@ -886,6 +911,9 @@ def run_llm_loop(
         has_called_search_tool: bool = False
         code_interpreter_file_generated: bool = False
         fallback_extraction_attempted: bool = False
+        # Candidate document ids seen by earlier searches in this user turn; receipts
+        # report new vs repeated candidates against it. Never shared across turns.
+        seen_search_document_ids: set[str] = set()
         citation_mapping: dict[int, str] = {}  # Maps citation_num -> document_id/URL
 
         # Fetch this in a short-lived session so the long-running stream loop does
@@ -1185,6 +1213,7 @@ def run_llm_loop(
                 chat_files=chat_files,
                 url_snippet_map=extract_url_snippet_map(gathered_documents or []),
                 inject_memories_in_prompt=inject_memories_in_prompt,
+                include_search_retrieval_candidates=enable_search_receipts,
             )
             tool_responses = parallel_tool_call_results.tool_responses
             citation_mapping = parallel_tool_call_results.updated_citation_mapping
@@ -1230,6 +1259,15 @@ def run_llm_loop(
                 if not tool:
                     raise ValueError(
                         f"Tool '{tool_call.tool_name}' not found in tools list"
+                    )
+
+                # Responses are enriched in this sequential order, so an earlier
+                # sibling in the same batch counts as already seen. This runs before
+                # the response is persisted or added to history.
+                if enable_search_receipts and isinstance(tool, SearchTool):
+                    maybe_append_search_receipt(
+                        tool_response=tool_response,
+                        seen_document_ids=seen_search_document_ids,
                     )
 
                 # Extract search_docs if this is a search tool response

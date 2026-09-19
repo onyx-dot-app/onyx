@@ -138,7 +138,10 @@ export function Explorer({
       setIsLoading(true);
       try {
         const filters = buildFilters(
-          filterManager.selectedSources,
+          // Empty here means "no filter", never "match nothing".
+          filterManager.selectedSources.length > 0
+            ? filterManager.selectedSources
+            : null,
           filterManager.selectedDocumentSets,
           filterManager.timeRange,
           filterManager.selectedTags

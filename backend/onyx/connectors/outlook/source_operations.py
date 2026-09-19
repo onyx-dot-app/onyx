@@ -1,4 +1,4 @@
-"""Outlook source-operations gateway: every Graph mail call lives here.
+"""Outlook source-operations gateway: every Graph mail and calendar call lives here.
 
 Indexing and the capability checks compose these operations, and nothing else
 under ``onyx/connectors/outlook`` talks to Graph. Transport, retry and token
@@ -6,7 +6,8 @@ acquisition come from the shared Microsoft package. Each operation returns the
 plain models in ``models.py`` so a Graph schema change surfaces in one file.
 
 Application permissions this gateway needs: ``Mail.Read`` for folders and
-messages, ``User.Read.All`` to enumerate and resolve mailboxes.
+messages, ``Calendars.Read`` for the calendar view, ``User.Read.All`` to
+enumerate and resolve mailboxes.
 """
 
 import base64
@@ -47,6 +48,8 @@ from onyx.connectors.outlook.models import (
     OutlookAttachment,
     OutlookAuthError,
     OutlookDeltaPage,
+    OutlookEvent,
+    OutlookEventPage,
     OutlookFolder,
     OutlookFolderPage,
     OutlookGraphError,
@@ -99,6 +102,8 @@ CONFIG_GRAPH_API_HOST = "graph_api_host"
 USERS_PAGE_SIZE = 999
 FOLDERS_PAGE_SIZE = 250
 MESSAGES_PAGE_SIZE = 100
+# The calendar view delta takes no $select, so every row carries a full body.
+EVENTS_PAGE_SIZE = 50
 
 MAILBOX_SELECT = "id,mail,userPrincipalName,displayName"
 FOLDER_SELECT = "id,displayName,parentFolderId,childFolderCount,isHidden"
@@ -128,6 +133,10 @@ FILE_ATTACHMENT_TYPE = "#microsoft.graph.fileAttachment"
 
 # Graph renders bodies as HTML unless asked for text, and text spares a parse.
 TEXT_BODY_PREFERENCE = 'outlook.body-content-type="text"'
+# Graph defaults event times to UTC. Pinned so the naive dateTime never
+# needs a Windows zone table.
+UTC_TIMEZONE_PREFERENCE = 'outlook.timezone="UTC"'
+EVENT_PREFERENCES = f"{TEXT_BODY_PREFERENCE}, {UTC_TIMEZONE_PREFERENCE}"
 SEARCH_FOLDER_TYPE = "#microsoft.graph.mailSearchFolder"
 
 # Graph only orders by a property that leads the filter, so conversation reads
@@ -267,6 +276,88 @@ def _parse_message(raw: dict[str, Any]) -> OutlookMessage:
         web_link=raw.get("webLink"),
         is_draft=bool(raw.get("isDraft")),
         has_attachments=bool(raw.get("hasAttachments")),
+    )
+
+
+_RECURRENCE_UNITS = {
+    "daily": "day",
+    "weekly": "week",
+    "absoluteMonthly": "month",
+    "relativeMonthly": "month",
+    "absoluteYearly": "year",
+    "relativeYearly": "year",
+}
+_MONTH_NAMES = (
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+)
+
+
+def _recurrence_summary(raw: dict[str, Any] | None) -> str | None:
+    """The pattern and range of a series in words, so a search for the weekly
+    standup or the first-Monday review finds the series document."""
+    if not raw:
+        return None
+    pattern = raw.get("pattern") or {}
+    range_ = raw.get("range") or {}
+    kind = pattern.get("type") or ""
+    interval = pattern.get("interval") or 1
+    unit = _RECURRENCE_UNITS.get(kind, "time")
+    parts = [f"every {unit}" if interval == 1 else f"every {interval} {unit}s"]
+    days = ", ".join(pattern.get("daysOfWeek") or [])
+    # Relative patterns pick a weekday by its place in the month ("the last
+    # friday"), absolute ones a day number.
+    if days and kind.startswith("relative"):
+        parts.append(f"on the {pattern.get('index') or 'first'} {days}")
+    elif days:
+        parts.append(f"on {days}")
+    if kind.startswith("absolute") and pattern.get("dayOfMonth"):
+        parts.append(f"on day {pattern['dayOfMonth']}")
+    month = pattern.get("month") or 0
+    if kind.endswith("Yearly") and 1 <= month <= len(_MONTH_NAMES):
+        parts.append(f"of {_MONTH_NAMES[month - 1]}")
+    if range_.get("startDate"):
+        parts.append(f"from {range_['startDate']}")
+    if range_.get("type") == "endDate" and range_.get("endDate"):
+        parts.append(f"until {range_['endDate']}")
+    elif range_.get("type") == "numbered" and range_.get("numberOfOccurrences"):
+        parts.append(f"for {range_['numberOfOccurrences']} occurrences")
+    return " ".join(parts)
+
+
+def _parse_event(raw: dict[str, Any]) -> OutlookEvent:
+    # Event times arrive as a naive clock in the zone every request asks for,
+    # UTC, and the shared parser reads a naive value as UTC.
+    return OutlookEvent(
+        id=raw["id"],
+        subject=raw.get("subject"),
+        body_text=_body_text(raw.get("body")),
+        body_present="body" in raw,
+        start_at=parse_graph_datetime((raw.get("start") or {}).get("dateTime")),
+        end_at=parse_graph_datetime((raw.get("end") or {}).get("dateTime")),
+        time_zone=raw.get("originalStartTimeZone") or None,
+        is_all_day=bool(raw.get("isAllDay")),
+        is_cancelled=bool(raw.get("isCancelled")),
+        sensitivity=raw.get("sensitivity") or "normal",
+        event_type=raw.get("type") or "singleInstance",
+        series_master_id=raw.get("seriesMasterId"),
+        organizer=_recipient(raw.get("organizer")),
+        attendees=_recipients(raw.get("attendees")),
+        location=(raw.get("location") or {}).get("displayName") or None,
+        web_link=raw.get("webLink"),
+        created_at=parse_graph_datetime(raw.get("createdDateTime")),
+        last_modified_at=parse_graph_datetime(raw.get("lastModifiedDateTime")),
+        recurrence=_recurrence_summary(raw.get("recurrence")),
     )
 
 
@@ -620,6 +711,68 @@ class OutlookSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "The calendar check reads one page of it, but only when the "
+            "connector config turns calendars on, which the coverage harness's "
+            "empty config never does."
+        ),
+    )
+    def fetch_calendar_delta_page(
+        self,
+        *,
+        mailbox_id: str,
+        window_start: datetime,
+        window_end: datetime,
+        page_size: int = EVENTS_PAGE_SIZE,
+        next_link: str | None = None,
+    ) -> OutlookEventPage:
+        """One page of the events in the window, recurring series expanded into
+        their occurrences. The window rides in the state tokens, so it goes on
+        the first request only. Removed rows are dropped: pruning owns deletions,
+        and Graph also files events outside the window under @removed."""
+        params = None
+        url = next_link
+        if url is None:
+            url = f"{self._user_url(mailbox_id)}/calendarView/delta"
+            params = {
+                "startDateTime": _graph_timestamp(window_start),
+                "endDateTime": _graph_timestamp(window_end),
+            }
+        data = self._get(
+            url,
+            params,
+            {"Prefer": f"odata.maxpagesize={page_size}, {EVENT_PREFERENCES}"},
+        )
+        return OutlookEventPage(
+            events=[
+                _parse_event(raw)
+                for raw in data.get("value", [])
+                if "@removed" not in raw
+            ],
+            next_link=data.get("@odata.nextLink"),
+        )
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Needs a series master id, which only a recurring event provides. "
+            "The calendar check reads the same calendar under the same grant."
+        ),
+    )
+    def get_event(self, *, mailbox_id: str, event_id: str) -> OutlookEvent:
+        """One event by id, read for the master of a recurring series."""
+        return _parse_event(
+            self._get(
+                f"{self._user_url(mailbox_id)}/events/{event_id}",
+                None,
+                {"Prefer": EVENT_PREFERENCES},
+            )
+        )
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
     )
     def list_message_attachments(
         self, *, mailbox_id: str, message_id: str, limit: int
@@ -662,6 +815,29 @@ class OutlookSourceOperations(SourceOperations):
             )
         except requests.RequestException as e:
             raise _to_graph_error(e) from e
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "The calendar check reads one event body with it, but only when the "
+            "connector config turns calendars on, which the coverage harness's "
+            "empty config never does."
+        ),
+    )
+    def read_any_event(self, *, mailbox_id: str) -> OutlookEvent | None:
+        """One event from the mailbox's calendar with its body, or None when
+        the calendar holds none.
+
+        Calendars.ReadBasic.All lists events but withholds bodies, so this is
+        the call that tells it apart from Calendars.Read.
+        """
+        raw = self._first_item(
+            f"{self._user_url(mailbox_id)}/events",
+            {"$select": "id,subject,body", "$top": "1"},
+            {"Prefer": EVENT_PREFERENCES},
+        )
+        return _parse_event(raw) if raw else None
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},

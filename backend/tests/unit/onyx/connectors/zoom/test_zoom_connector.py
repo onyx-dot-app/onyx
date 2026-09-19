@@ -1,10 +1,16 @@
 import time
+from collections.abc import Generator
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock
+from typing import Any, Callable, cast
+from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
+from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import Permission
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.connector_runner import CheckpointOutputWrapper
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.models import (
@@ -12,6 +18,7 @@ from onyx.connectors.models import (
     ConnectorMissingCredentialError,
     Document,
     HierarchyNode,
+    InputType,
 )
 from onyx.connectors.zoom.client import ZoomClient
 from onyx.connectors.zoom.connector import ZoomConnector, ZoomConnectorCheckpoint
@@ -23,16 +30,36 @@ from onyx.connectors.zoom.models import (
     ZoomUser,
     ZoomUserPage,
 )
+from onyx.connectors.zoom.rate_limit import (
+    DEFAULT_RATE_LIMIT_SHARE,
+    ZoomPlanTier,
+    ZoomRateLimitSettings,
+)
 from onyx.connectors.zoom.recordings.models import (
     OccurrenceWork,
     RecordingsState,
     ZoomSessionType,
+)
+from onyx.db.enums import AccessType
+from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.server.documents import connector as connector_router
+from onyx.server.documents.connector import (
+    create_connector_from_model,
+    create_connector_with_mock_credential,
+)
+from onyx.server.documents.models import (
+    ConnectorBase,
+    ConnectorUpdateRequest,
+    ObjectCreationIdResponse,
 )
 from tests.unit.onyx.connectors.utils import (
     _ITERATION_LIMIT,
     load_everything_from_checkpoint_connector,
     load_everything_from_checkpoint_connector_from_checkpoint,
 )
+from tests.unit.onyx.connectors.zoom.helpers import SAMPLE_VTT, mock_zoom_client
 from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
     invitee,
     participant,
@@ -52,6 +79,13 @@ _ZOOM_CREDS = {
 
 _FULL_HISTORY_END = time.time()
 
+_OLDEST_OCCURRENCE_DAYS_AGO = 21
+
+# An epoch start would split into hundreds of 30-day windows per host. Derived from
+# the oldest occurrence rather than picked, so the window holds it even where
+# ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS is set to zero and widens the start by nothing.
+_POLL_START = _FULL_HISTORY_END - (_OLDEST_OCCURRENCE_DAYS_AGO + 1) * 24 * 60 * 60
+
 
 def _days_ago(days: int) -> str:
     # Build these off the same clock as _FULL_HISTORY_END. A pinned calendar date
@@ -61,18 +95,6 @@ def _days_ago(days: int) -> str:
         days=days
     )
     return moment.isoformat()
-
-
-_SAMPLE_VTT = """WEBVTT
-
-1
-00:00:00.000 --> 00:00:02.500
-Jane Doe: Hello everyone, welcome to the call.
-
-2
-00:00:02.600 --> 00:00:05.000
-John Smith: Thanks for having me.
-"""
 
 
 def _make_connector(
@@ -91,7 +113,7 @@ def _make_connector(
         group_id=group_id,
     )
     connector.load_credentials(_ZOOM_CREDS)
-    mock_client = MagicMock(spec=ZoomClient)
+    mock_client = mock_zoom_client()
     connector.client = mock_client
     return connector, mock_client
 
@@ -106,7 +128,7 @@ def _configure_happy_path(mock_client: MagicMock) -> None:
         download_url=f"https://zoom.example/{uuid}.vtt",
         meeting_topic="Recorded Session",
     )
-    mock_client.download_transcript_vtt.return_value = _SAMPLE_VTT
+    mock_client.download_transcript_vtt.return_value = SAMPLE_VTT
     mock_client.get_past_meeting_details.return_value = past_meeting_details(
         topic="Weekly Sync"
     )
@@ -137,6 +159,139 @@ class TestZoomConnectorCredentials:
         checkpoint = connector.build_dummy_checkpoint()
         with pytest.raises(ConnectorMissingCredentialError):
             next(connector.load_from_checkpoint(0, 1, checkpoint))
+
+    def test_reindex_without_credentials_raises(self) -> None:
+        connector = ZoomConnector(meeting_ids=["111"])
+        with pytest.raises(ConnectorMissingCredentialError):
+            next(connector.reindex(errors=[]))
+
+    @pytest.mark.parametrize(
+        "plan, percent, expected_plan, expected_share",
+        [
+            (None, None, ZoomPlanTier.PRO, DEFAULT_RATE_LIMIT_SHARE),
+            ("business_plus", 10, ZoomPlanTier.BUSINESS_PLUS, 0.1),
+        ],
+        ids=["unset falls back to the defaults", "configured"],
+    )
+    def test_the_configured_rate_limits_reach_the_client(
+        self,
+        plan: str | None,
+        percent: int | None,
+        expected_plan: ZoomPlanTier,
+        expected_share: float,
+    ) -> None:
+        connector = ZoomConnector(
+            meeting_ids=["111"], plan_tier=plan, rate_limit_percent=percent
+        )
+
+        with patch.object(ZoomClient, "__init__", return_value=None) as build:
+            connector.load_credentials(_ZOOM_CREDS)
+
+        settings = build.call_args.kwargs["rate_limit_settings"]
+        assert settings == ZoomRateLimitSettings(
+            plan_tier=expected_plan, share=expected_share
+        )
+
+
+class TestPruningDrivesTheConnectorFromTheEpoch:
+    """extract_ids_from_runnable_connector drives load_from_checkpoint with a
+    hardcoded epoch start. Rejecting that start stops pruning before it names a
+    single document, on every Zoom connector, every week."""
+
+    def test_an_epoch_start_still_runs(self) -> None:
+        connector, mock_client = _make_connector(meeting_ids=["111"])
+        _configure_happy_path(mock_client)
+
+        outputs = load_everything_from_checkpoint_connector(
+            connector, 0, _FULL_HISTORY_END
+        )
+
+        documents = [
+            item
+            for output in outputs
+            for item in output.items
+            if isinstance(item, Document)
+        ]
+        assert [d.id for d in documents] == ["ZOOM_MEETING_uuid-111"]
+
+
+class TestIndexingStartIsRequiredAtConfigTime:
+    """Enforced where the connector cannot: the class above is why a start date
+    cannot be demanded at index time. These drive the endpoints an admin posts to
+    rather than the check itself, which an endpoint could quietly stop calling.
+    """
+
+    _START = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    _ENDPOINTS = [create_connector_from_model, create_connector_with_mock_credential]
+
+    @staticmethod
+    def _admin() -> User:
+        user = MagicMock()
+        user.effective_permissions = [Permission.FULL_ADMIN_PANEL_ACCESS.value]
+        return cast(User, user)
+
+    @staticmethod
+    @contextmanager
+    def _rows_written() -> Generator[list[ConnectorBase]]:
+        """Stands in for the row write, so what an endpoint forwards can be read
+        back without a database."""
+        written: list[ConnectorBase] = []
+
+        def create(
+            db_session: Session,  # noqa: ARG001
+            connector_data: ConnectorBase,
+        ) -> ObjectCreationIdResponse:
+            written.append(connector_data)
+            return ObjectCreationIdResponse(id=1)
+
+        with patch.object(connector_router, "create_connector", create):
+            yield written
+
+    def _post(
+        self,
+        endpoint: Callable[..., Any],
+        source: DocumentSource = DocumentSource.ZOOM,
+        indexing_start: datetime | None = None,
+    ) -> None:
+        endpoint(
+            ConnectorUpdateRequest(
+                name="test",
+                source=source,
+                input_type=InputType.POLL,
+                connector_specific_config={},
+                indexing_start=indexing_start,
+                access_type=AccessType.PUBLIC,
+            ),
+            user=self._admin(),
+            db_session=cast(Session, MagicMock(spec=Session)),
+        )
+
+    @pytest.mark.parametrize("endpoint", _ENDPOINTS, ids=["connector", "mock-cred"])
+    def test_zoom_without_a_start_date_never_reaches_the_row(
+        self, endpoint: Callable[..., Any]
+    ) -> None:
+        with self._rows_written() as written:
+            with pytest.raises(OnyxError) as raised:
+                self._post(endpoint)
+
+        assert raised.value.error_code is OnyxErrorCode.INVALID_INPUT
+        assert written == []
+
+    # Only the plain endpoint: the mock-credential one carries on into credential
+    # creation and a Celery dispatch that a stubbed session cannot answer for.
+    def test_the_start_date_an_admin_sets_is_the_one_stored(self) -> None:
+        """Demanding a date buys nothing if the endpoint then drops it, which is
+        exactly what the update path did."""
+        with self._rows_written() as written:
+            self._post(create_connector_from_model, indexing_start=self._START)
+
+        assert [row.indexing_start for row in written] == [self._START]
+
+    def test_another_source_still_creates_without_one(self) -> None:
+        with self._rows_written() as written:
+            self._post(create_connector_from_model, source=DocumentSource.CONFLUENCE)
+
+        assert [row.indexing_start for row in written] == [None]
 
 
 class TestZoomConnectorValidateSettings:
@@ -175,6 +330,35 @@ class TestZoomConnectorValidateSettings:
         with pytest.raises(ConnectorValidationError):
             connector.validate_connector_settings()
 
+    def test_an_unknown_plan_is_rejected_at_setup(self) -> None:
+        # Without this check a typo reaches the client and crashes mid-backfill,
+        # where no admin sees it.
+        connector = ZoomConnector(meeting_ids=["111"], plan_tier="enterprise")
+        with pytest.raises(ConnectorValidationError):
+            connector.validate_connector_settings()
+
+    @pytest.mark.parametrize("percent", [0, 101])
+    def test_a_rate_limit_percent_outside_the_range_is_rejected(
+        self, percent: int
+    ) -> None:
+        connector = ZoomConnector(meeting_ids=["111"], rate_limit_percent=percent)
+        with pytest.raises(ConnectorValidationError):
+            connector.validate_connector_settings()
+
+    @pytest.mark.parametrize("percent", ["50", True])
+    def test_a_rate_limit_percent_of_the_wrong_type_is_rejected(
+        self, percent: Any
+    ) -> None:
+        connector = ZoomConnector(meeting_ids=["111"], rate_limit_percent=percent)
+        with pytest.raises(ConnectorValidationError):
+            connector.validate_connector_settings()
+
+    @pytest.mark.parametrize("plan", [5, ["pro"]])
+    def test_a_plan_that_is_not_text_is_rejected(self, plan: Any) -> None:
+        connector = ZoomConnector(meeting_ids=["111"], plan_tier=plan)
+        with pytest.raises(ConnectorValidationError):
+            connector.validate_connector_settings()
+
 
 class TestZoomConnectorCheckpoint:
     def test_build_dummy_checkpoint(self) -> None:
@@ -208,7 +392,7 @@ class TestZoomConnectorCheckpoint:
         _configure_happy_path(mock_client)
 
         outputs = load_everything_from_checkpoint_connector(
-            connector, 0, _FULL_HISTORY_END
+            connector, _POLL_START, _FULL_HISTORY_END
         )
         docs = [
             item
@@ -237,13 +421,15 @@ class TestZoomConnectorCheckpoint:
         _configure_happy_path(mock_client)
         mock_client.list_past_meeting_occurrences.side_effect = None
         mock_client.list_past_meeting_occurrences.return_value = [
-            ZoomSessionOccurrence(uuid="uuid-1", start_time=_days_ago(21)),
+            ZoomSessionOccurrence(
+                uuid="uuid-1", start_time=_days_ago(_OLDEST_OCCURRENCE_DAYS_AGO)
+            ),
             ZoomSessionOccurrence(uuid="uuid-2", start_time=_days_ago(14)),
             ZoomSessionOccurrence(uuid="uuid-3", start_time=_days_ago(7)),
         ]
 
         outputs = load_everything_from_checkpoint_connector(
-            connector, 0, _FULL_HISTORY_END
+            connector, _POLL_START, _FULL_HISTORY_END
         )
         docs = [
             item
@@ -264,7 +450,9 @@ class TestZoomConnectorCheckpoint:
         _configure_happy_path(mock_client)
         mock_client.list_past_meeting_occurrences.side_effect = None
         mock_client.list_past_meeting_occurrences.return_value = [
-            ZoomSessionOccurrence(uuid="uuid-1", start_time=_days_ago(21)),
+            ZoomSessionOccurrence(
+                uuid="uuid-1", start_time=_days_ago(_OLDEST_OCCURRENCE_DAYS_AGO)
+            ),
             ZoomSessionOccurrence(uuid="uuid-2", start_time=_days_ago(14)),
             ZoomSessionOccurrence(uuid="uuid-3", start_time=_days_ago(7)),
         ]
@@ -277,7 +465,7 @@ class TestZoomConnectorCheckpoint:
         mock_client.get_meeting_transcript.side_effect = _transcript
 
         outputs = load_everything_from_checkpoint_connector(
-            connector, 0, _FULL_HISTORY_END
+            connector, _POLL_START, _FULL_HISTORY_END
         )
         items = [item for output in outputs for item in output.items]
         docs = [item for item in items if isinstance(item, Document)]
@@ -310,7 +498,7 @@ class TestZoomConnectorCheckpoint:
         mock_client.list_past_meeting_occurrences.side_effect = _occurrences
 
         outputs = load_everything_from_checkpoint_connector(
-            connector, 0, _FULL_HISTORY_END
+            connector, _POLL_START, _FULL_HISTORY_END
         )
         items = [item for output in outputs for item in output.items]
         docs = [item for item in items if isinstance(item, Document)]
@@ -327,7 +515,7 @@ class TestZoomConnectorCheckpoint:
         mock_client.list_past_meeting_occurrences.return_value = []
 
         outputs = load_everything_from_checkpoint_connector(
-            connector, 0, _FULL_HISTORY_END
+            connector, _POLL_START, _FULL_HISTORY_END
         )
 
         assert all(output.items == [] for output in outputs)
@@ -339,7 +527,7 @@ class TestZoomConnectorCheckpoint:
         mock_client.list_past_meeting_occurrences.side_effect = RuntimeError("boom")
 
         outputs = load_everything_from_checkpoint_connector(
-            connector, 0, _FULL_HISTORY_END
+            connector, _POLL_START, _FULL_HISTORY_END
         )
         failures = [
             item
@@ -358,7 +546,7 @@ class TestZoomConnectorCheckpoint:
         _configure_happy_path(mock_client)
 
         outputs = load_everything_from_checkpoint_connector(
-            connector, 0, _FULL_HISTORY_END
+            connector, _POLL_START, _FULL_HISTORY_END
         )
 
         # Discover and process each of the two ids in turn.
@@ -383,7 +571,9 @@ class TestZoomConnectorCheckpoint:
         # The real worker serializes the checkpoint between invocations, so round-trip
         # it through JSON here and finish the run from the restored copy.
         checkpoint = connector.build_dummy_checkpoint()
-        generator = connector.load_from_checkpoint(0, _FULL_HISTORY_END, checkpoint)
+        generator = connector.load_from_checkpoint(
+            _POLL_START, _FULL_HISTORY_END, checkpoint
+        )
         try:
             while True:
                 next(generator)
@@ -392,7 +582,7 @@ class TestZoomConnectorCheckpoint:
         restored = connector.validate_checkpoint_json(checkpoint.model_dump_json())
 
         outputs = load_everything_from_checkpoint_connector_from_checkpoint(
-            connector, 0, _FULL_HISTORY_END, restored
+            connector, _POLL_START, _FULL_HISTORY_END, restored
         )
         docs = [
             item
@@ -411,7 +601,7 @@ class TestZoomConnectorCheckpoint:
         connector, mock_client = _make_connector(meeting_ids=[])
 
         outputs = load_everything_from_checkpoint_connector(
-            connector, 0, _FULL_HISTORY_END
+            connector, _POLL_START, _FULL_HISTORY_END
         )
 
         assert len(outputs) == 1
@@ -451,7 +641,7 @@ class TestSystemicFailureDoesNotAdvanceWork:
 
         emitted = 0
         generator = connector.load_from_checkpoint(
-            0, _FULL_HISTORY_END, self._checkpoint()
+            _POLL_START, _FULL_HISTORY_END, self._checkpoint()
         )
         with pytest.raises(requests.HTTPError):
             for _ in generator:
@@ -464,13 +654,13 @@ class TestSystemicFailureDoesNotAdvanceWork:
     def test_a_document_specific_failure_still_advances(self) -> None:
         connector, mock_client = _make_connector(meeting_ids=["111"])
         response = requests.Response()
-        response.status_code = 404
+        response.status_code = 400
         mock_client.get_meeting_transcript.side_effect = requests.HTTPError(
-            "404", response=response
+            "400", response=response
         )
 
         generator = connector.load_from_checkpoint(
-            0, _FULL_HISTORY_END, self._checkpoint()
+            _POLL_START, _FULL_HISTORY_END, self._checkpoint()
         )
         items: list[Document | HierarchyNode | ConnectorFailure] = []
         try:
@@ -482,6 +672,30 @@ class TestSystemicFailureDoesNotAdvanceWork:
         assert [isinstance(item, ConnectorFailure) for item in items] == [True]
         assert returned.recordings.work_index == 1
 
+    def test_a_session_without_a_transcript_advances_without_a_failure(self) -> None:
+        # Reporting each untranscribed session would end every run
+        # COMPLETED_WITH_ERRORS and bury the real failures.
+        connector, mock_client = _make_connector(meeting_ids=["111"])
+        response = requests.Response()
+        response.status_code = 404
+        mock_client.get_meeting_transcript.side_effect = requests.HTTPError(
+            "404", response=response
+        )
+
+        generator = connector.load_from_checkpoint(
+            _POLL_START, _FULL_HISTORY_END, self._checkpoint()
+        )
+        emitted = 0
+        try:
+            while True:
+                next(generator)
+                emitted += 1
+        except StopIteration as stop:
+            returned = stop.value
+
+        assert emitted == 0
+        assert returned.recordings.work_index == 1
+
 
 class TestSessionSourceTypes:
     """The admin picks Meeting only, Webinar only, or Both at setup, so
@@ -489,7 +703,7 @@ class TestSessionSourceTypes:
 
     def _documents(self, connector: ZoomConnector) -> list[Document]:
         outputs = load_everything_from_checkpoint_connector(
-            connector, 0, _FULL_HISTORY_END
+            connector, _POLL_START, _FULL_HISTORY_END
         )
         assert outputs[-1].next_checkpoint.has_more is False
         return [
@@ -595,6 +809,8 @@ def _recording(
     topic: str = "Weekly Sync",
     recording_type: str = "2",
 ) -> ZoomRecordingEntry:
+    # The poll window is measured off the same clock as _FULL_HISTORY_END, so
+    # these timestamps have to be relative rather than a pinned date.
     return recording_entry(
         uuid=uuid,
         id=session_id,
@@ -633,7 +849,7 @@ class TestDiscoveryMechanismUnion:
 
     def _documents(self, connector: ZoomConnector) -> list[Document]:
         outputs = load_everything_from_checkpoint_connector(
-            connector, 0, _FULL_HISTORY_END
+            connector, _POLL_START, _FULL_HISTORY_END
         )
         assert outputs[-1].next_checkpoint.has_more is False
         return [
@@ -761,7 +977,9 @@ class TestDiscoveryMechanismUnion:
         )
 
         checkpoint = connector.build_dummy_checkpoint()
-        generator = connector.load_from_checkpoint(0, _FULL_HISTORY_END, checkpoint)
+        generator = connector.load_from_checkpoint(
+            _POLL_START, _FULL_HISTORY_END, checkpoint
+        )
         try:
             while True:
                 next(generator)
@@ -774,7 +992,7 @@ class TestDiscoveryMechanismUnion:
 
         restored = connector.validate_checkpoint_json(checkpoint.model_dump_json())
         outputs = load_everything_from_checkpoint_connector_from_checkpoint(
-            connector, 0, _FULL_HISTORY_END, restored
+            connector, _POLL_START, _FULL_HISTORY_END, restored
         )
         docs = [
             item
@@ -808,7 +1026,7 @@ def _run_with_perm_sync(
             raise RuntimeError("Too many iterations. Infinite loop?")
         generator = CheckpointOutputWrapper[ZoomConnectorCheckpoint]()(
             connector.load_from_checkpoint_with_perm_sync(
-                0, _FULL_HISTORY_END, checkpoint
+                _POLL_START, _FULL_HISTORY_END, checkpoint
             )
         )
         for document, _hierarchy, failure, next_checkpoint in generator:
@@ -865,7 +1083,7 @@ class TestPermissionSyncEntryPoint:
         self._access_configured(mock_client)
 
         outputs = load_everything_from_checkpoint_connector(
-            connector, 0, _FULL_HISTORY_END
+            connector, _POLL_START, _FULL_HISTORY_END
         )
         documents = [
             item

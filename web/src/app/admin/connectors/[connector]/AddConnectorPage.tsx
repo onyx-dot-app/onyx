@@ -317,7 +317,8 @@ export default function AddConnector({
     try {
       const response = await prepareOAuthAuthorizationRequest(
         connector,
-        currentPageUrl
+        currentPageUrl,
+        t("add.oauthStartFailed.toast")
       );
       if (response.url) {
         setOauthUrl(response.url);

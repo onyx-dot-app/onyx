@@ -755,7 +755,7 @@ def docfetching_proxy_task(
     if result.status == IndexingWatchdogTerminalStatus.TERMINATED_BY_SIGNAL:
         try:
             with get_session_with_current_tenant() as db_session:
-                logger.exception(
+                logger.error(
                     "Marking attempt %s as canceled due to termination signal",
                     index_attempt_id,
                 )

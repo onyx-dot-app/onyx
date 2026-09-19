@@ -124,6 +124,28 @@ def _build_upstream_request(
             OnyxErrorCode.INVALID_INPUT,
             "mcp_servers is not supported by the Onyx gateway.",
         )
+    if body.get("container") is not None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "container references are not supported by the Onyx gateway.",
+        )
+    pending: list[Any] = list(body.get("messages") or [])
+    while pending:
+        part = pending.pop()
+        if not isinstance(part, dict):
+            continue
+        source = part.get("source")
+        if part.get("file_id") or (
+            isinstance(source, dict) and source.get("type") == "file"
+        ):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "file_id references are not supported by the Onyx "
+                "gateway; send file content inline.",
+            )
+        content = part.get("content")
+        if isinstance(content, list):
+            pending.extend(content)
     body["model"] = model_name
     if stream is not None:
         # Always overwrite: opaque provider-side abuse attribution, never a

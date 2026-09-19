@@ -1068,7 +1068,7 @@ def batch_get_last_active(
 
     # Every requested id gets a key, so a user who has never chatted reads as
     # None rather than going missing from the mapping.
-    last_active_by_user = {user_id: last_active for user_id, last_active in rows}
+    last_active_by_user = {user_id: last_active for user_id, last_active in rows}  # noqa: C416  # unpacking types the SQLAlchemy Row
     return {uid: last_active_by_user.get(uid) for uid in user_ids}
 
 

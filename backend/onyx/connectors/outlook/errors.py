@@ -22,15 +22,21 @@ from onyx.connectors.outlook.models import (
     OutlookGraphError,
 )
 
+
 # Exchange caches app permission changes, so a freshly scoped mailbox can keep
 # answering 403 for a while. Microsoft documents the window as 30 minutes to
 # two hours.
-EXCHANGE_SCOPE_REMEDIATION = (
-    "Grant the `Mail.Read` application permission and admin-consent it, or, "
-    "when the app is scoped with Exchange RBAC for Applications or an "
-    "application access policy, add the mailbox to that scope. Exchange takes "
-    "30 minutes to two hours to apply the change."
-)
+def _scope_remediation(permission: str) -> str:
+    return (
+        f"Grant the `{permission}` application permission and admin-consent it, "
+        "or, when the app is scoped with Exchange RBAC for Applications or an "
+        "application access policy, add the mailbox to that scope. Exchange "
+        "takes 30 minutes to two hours to apply the change."
+    )
+
+
+EXCHANGE_SCOPE_REMEDIATION = _scope_remediation("Mail.Read")
+CALENDAR_READ_REMEDIATION = _scope_remediation("Calendars.Read")
 
 MAILBOX_UNAVAILABLE_REMEDIATION = (
     "Use the user principal name or primary SMTP address of a licensed, "
@@ -86,11 +92,16 @@ def raise_for_auth_error(error: OutlookAuthError) -> NoReturn:
     raise CredentialInvalidError(f"Microsoft did not issue a token: {error}") from error
 
 
-def raise_for_graph_error(error: OutlookGraphError, denied_message: str) -> NoReturn:
+def raise_for_graph_error(
+    error: OutlookGraphError,
+    denied_message: str,
+    remediation: str = EXCHANGE_SCOPE_REMEDIATION,
+) -> NoReturn:
     """Turn a Graph HTTP failure into the validation family.
 
     ``denied_message`` explains what a 403 means for the call that failed, since
-    a denied mailbox and a missing permission look identical on the wire.
+    a denied mailbox and a missing permission look identical on the wire, and
+    ``remediation`` names the grant that call needs.
     """
     if error.status == 401:
         raise CredentialExpiredError(
@@ -98,13 +109,13 @@ def raise_for_graph_error(error: OutlookGraphError, denied_message: str) -> NoRe
         ) from error
     if error.status == 403:
         raise InsufficientPermissionsError(
-            f"{denied_message} Graph reported `{error.code}`. {EXCHANGE_SCOPE_REMEDIATION}"
+            f"{denied_message} Graph reported `{error.code}`. {remediation}"
         ) from error
     if error.status == 404:
         raise ConnectorValidationError(
             f"Graph found no mailbox ({error.code}). {MAILBOX_UNAVAILABLE_REMEDIATION}"
         ) from error
-    if error.is_transient:
+    if error.fails_the_attempt:
         raise UnexpectedValidationError(
             f"Graph is throttling or unreachable ({error.status} {error.code}). "
             "Re-run the checks in a few minutes."
