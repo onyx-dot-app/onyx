@@ -5597,6 +5597,14 @@
           "apiKeyRequired": "La clé d'API est obligatoire",
           "modelNameRequired": "Le nom du modèle est obligatoire"
         },
+        "venice": {
+          "apiBaseField": {
+            "description": "URL du point de terminaison de l'API Venice (avec la version de l'API)."
+          },
+          "apiKeyField": {
+            "description": "Collez votre clé d'API [Venice](https://venice.ai/settings/api) pour charger les modèles disponibles."
+          }
+        },
         "vertexAi": {
           "authMethodField": {
             "description": "Choisissez comment Onyx doit s'authentifier auprès de Google Vertex AI.",
