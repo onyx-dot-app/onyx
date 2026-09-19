@@ -176,6 +176,11 @@ export interface ClickupCredentialJson {
   clickup_team_id: string;
 }
 
+export interface ClickupDocsCredentialJson {
+  clickup_api_token: string;
+  clickup_team_id: string;
+}
+
 export interface ZendeskCredentialJson {
   zendesk_subdomain: string;
   zendesk_email: string;
@@ -558,6 +563,10 @@ export const credentialTemplates: Record<ValidSources, any> = {
     axero_api_token: "",
   },
   clickup: {
+    clickup_api_token: "",
+    clickup_team_id: "",
+  },
+  clickup_docs: {
     clickup_api_token: "",
     clickup_team_id: "",
   },

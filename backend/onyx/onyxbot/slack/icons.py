@@ -41,6 +41,7 @@ _SOURCE_IMAGE_FILENAMES: Mapping[DocumentSource, str] = {
     DocumentSource.DISCOURSE: "Discourse.png",
     DocumentSource.AXERO: "Axero.png",
     DocumentSource.CLICKUP: "Clickup.png",
+    DocumentSource.CLICKUP_DOCS: "Clickup.png",
     DocumentSource.MEDIAWIKI: "MediaWiki.png",
     DocumentSource.WIKIPEDIA: "Wikipedia.png",
     DocumentSource.ASANA: "Asana.png",
