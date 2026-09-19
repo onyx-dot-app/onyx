@@ -23,11 +23,14 @@ import (
 )
 
 const (
-	gitrelForkPRJSON = `{"number":7353,"title":"feat: from a fork","headRefName":"feature","headRepository":{"name":"onyx"},"headRepositoryOwner":{"login":"alice"},"baseRefName":"main","isCrossRepository":true}`
-	gitrelPRViewArm  = `"pr view 7353 --json number,title,headRefName,headRepository,headRepositoryOwner,baseRefName,isCrossRepository") echo '` + gitrelForkPRJSON + `' ;;`
-	gitrelNoCIPRArm  = `"pr list --head run-ci/7353 --state open --json url") echo '[]' ;;`
-	gitrelCIPRArm    = `"pr list --head run-ci/7353 --state open --json url") echo '[{"url":"https://github.com/onyx-dot-app/onyx/pull/8000"}]' ;;`
-	gitrelCIPRCreate = `"pr create "*) echo https://github.com/onyx-dot-app/onyx/pull/9002 ;;`
+	gitrelEditableBranch  = "chore/feature-pr-7353-edits"
+	gitrelForkPRJSON      = `{"number":7353,"title":"feat: from a fork","body":"PR body","headRefName":"feature","headRepository":{"name":"onyx"},"headRepositoryOwner":{"login":"alice"},"baseRefName":"main","isCrossRepository":true}`
+	gitrelPRViewArm       = `"pr view 7353 --json number,title,body,headRefName,headRepository,headRepositoryOwner,baseRefName,isCrossRepository") echo '` + gitrelForkPRJSON + `' ;;`
+	gitrelNoCIPRArm       = `"pr list --head run-ci/7353 --state open --limit 1 --json url") echo '[]' ;;`
+	gitrelCIPRArm         = `"pr list --head run-ci/7353 --state open --limit 1 --json url") echo '[{"url":"https://github.com/onyx-dot-app/onyx/pull/8000"}]' ;;`
+	gitrelNoEditablePRArm = `"pr list --head ` + gitrelEditableBranch + ` --state all --limit 1 --json url") echo '[]' ;;`
+	gitrelEditablePRArm   = `"pr list --head ` + gitrelEditableBranch + ` --state all --limit 1 --json url") echo '[{"url":"https://github.com/onyx-dot-app/onyx/pull/8001"}]' ;;`
+	gitrelCIPRCreate      = `"pr create "*) echo https://github.com/onyx-dot-app/onyx/pull/9002 ;;`
 )
 
 type gitrelRunCIRepo struct {
@@ -88,6 +91,62 @@ func TestRunCI_createsBranchAndPR(t *testing.T) {
 	})
 	if branch := gittest.Git(t, repo.Work, "branch", "--show-current"); branch != "main" {
 		t.Errorf("expected to be back on main, got %q", branch)
+	}
+}
+
+func TestRunCI_forEditsCreatesReplacementPR(t *testing.T) {
+	repo := gitrelSetupRunCIRepo(t)
+	calls := gitrelFakeGH(t, gitrelPRViewArm+"\n"+gitrelNoEditablePRArm+"\n"+gitrelCIPRCreate)
+
+	err := runCI("7353", &RunCIOptions{Yes: true, ForEdits: true})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tip := gittest.Git(t, repo.Origin, "rev-parse", "refs/heads/"+gitrelEditableBranch); tip != repo.ForkSHA {
+		t.Errorf("expected origin %s at the fork head %s, got %s", gitrelEditableBranch, repo.ForkSHA, tip)
+	}
+	creates := gitrelCallsWithPrefix(calls(), "pr", "create")
+	if len(creates) != 1 {
+		t.Fatalf("expected one gh pr create call, got %q", creates)
+	}
+	gitrelAssertArgs(t, creates[0], []string{
+		"pr", "create",
+		"--base", "main",
+		"--head", gitrelEditableBranch,
+		"--title", "feat: from a fork [edit of #7353]",
+		"--body", "> [!IMPORTANT]\n> This PR supersedes #7353. Merge this PR and close #7353 without merging.\n\n## Original PR description\n\nPR body\n\n- [ ] [Optional] Please cherry-pick this PR to the latest release version.\n- [x] Override Linear Check",
+	})
+}
+
+func TestRunCI_forEditsRefusesExistingPR(t *testing.T) {
+	repo := gitrelSetupRunCIRepo(t)
+	gitrelFakeGH(t, gitrelPRViewArm+"\n"+gitrelEditablePRArm)
+
+	err := runCI("7353", &RunCIOptions{Yes: true, ForEdits: true})
+
+	want := "Cannot create editable PR: editable PR already exists for branch " +
+		gitrelEditableBranch + ": https://github.com/onyx-dot-app/onyx/pull/8001"
+	if err == nil || err.Error() != want {
+		t.Fatalf("expected %q, got %v", want, err)
+	}
+	if gitrelRefExists(repo.Origin, "refs/heads/"+gitrelEditableBranch) {
+		t.Error("existing editable PR must not replace the remote branch")
+	}
+}
+
+func TestRunCI_forEditsRefusesExistingRemoteBranch(t *testing.T) {
+	repo := gitrelSetupRunCIRepo(t)
+	gitrelFakeGH(t, gitrelPRViewArm+"\n"+gitrelNoEditablePRArm)
+	gittest.Git(t, repo.Work, "branch", gitrelEditableBranch)
+	gittest.Git(t, repo.Work, "push", "--quiet", "origin", gitrelEditableBranch)
+
+	err := runCI("7353", &RunCIOptions{Yes: true, ForEdits: true})
+
+	want := "Cannot create editable PR: refusing to overwrite existing remote branch " +
+		gitrelEditableBranch + "; delete it manually if it is safe to replace"
+	if err == nil || err.Error() != want {
+		t.Fatalf("expected %q, got %v", want, err)
 	}
 }
 
