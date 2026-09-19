@@ -81,6 +81,9 @@
       },
       "projectSearch": {
         "label": "Project Search"
+      },
+      "selectSearchSources": {
+        "label": "Select Search Sources"
       }
     },
     "addMcpModal": {
@@ -5803,6 +5806,80 @@
         "description": "Connect OpenAPI servers to add custom actions and tools for your agents."
       }
     },
+    "systemUsage": {
+      "categories": {
+        "contextualRagChunkContext": {
+          "label": "Contextual RAG chunk context"
+        },
+        "contextualRagDocumentSummary": {
+          "label": "Contextual RAG document summaries"
+        },
+        "imageSummarization": {
+          "label": "Image summarization"
+        },
+        "kgDeepExtraction": {
+          "label": "Knowledge graph extraction"
+        },
+        "kgDocumentClassification": {
+          "label": "Knowledge graph classification"
+        },
+        "other": {
+          "label": "Other"
+        },
+        "unattributed": {
+          "label": "Unattributed"
+        }
+      },
+      "filters": {
+        "allModels": {
+          "label": "All models"
+        },
+        "allProviders": {
+          "label": "All providers"
+        }
+      },
+      "panel": {
+        "description": "{start} – {end} · System usage is LLM activity that Onyx runs in the background rather than for a specific user. Examples include image summaries, contextual RAG processing, and knowledge graph extraction.",
+        "emptyDescription": "System usage is LLM activity that Onyx runs in the background rather than for a specific user. Examples include image summaries, contextual RAG processing, and knowledge graph extraction.",
+        "error": {
+          "title": "Failed to load system usage for this period."
+        },
+        "title": "System usage"
+      },
+      "summary": {
+        "spend": {
+          "label": "System spend"
+        },
+        "tokens": {
+          "label": "Total tokens"
+        },
+        "unattributed": {
+          "label": "Unattributed spend"
+        }
+      },
+      "table": {
+        "columns": {
+          "category": {
+            "header": "Category"
+          },
+          "input": {
+            "header": "Input"
+          },
+          "output": {
+            "header": "Output"
+          },
+          "spend": {
+            "header": "Spend"
+          },
+          "tokens": {
+            "header": "Tokens"
+          }
+        },
+        "empty": {
+          "description": "No system usage matches the current filters."
+        }
+      }
+    },
     "perUserUsage": {
       "panel": {
         "description": "{start} – {end} · Costs are calculated from recorded model usage.",
@@ -7884,6 +7961,9 @@
         "title": "Permissions have changed"
       },
       "resetPasswordModal": {
+        "copyButton": {
+          "label": "Copy password"
+        },
         "description": "This will generate a new random password for <strong>{email}</strong>. Their current password will stop working immediately.",
         "doneButton": {
           "label": "Done"
@@ -7982,8 +8062,8 @@
           "groups": {
             "header": "Groups"
           },
-          "lastUpdated": {
-            "header": "Last Updated"
+          "lastActive": {
+            "header": "Last Active"
           },
           "name": {
             "header": "Name"
@@ -8055,6 +8135,9 @@
         "elevenlabsTts": {
           "subtitle": "ElevenLabs Text to Speech API."
         },
+        "zoomScribe": {
+          "subtitle": "Zoom Scribe real-time speech-to-text API."
+        },
         "tts1": {
           "subtitle": "OpenAI's text-to-speech model optimized for speed."
         },
@@ -8071,6 +8154,12 @@
           "label": "API Key",
           "placeholder": "API key",
           "required": "API key is required"
+        },
+        "apiSecret": {
+          "description": "Paste your [API secret]({url}) from {provider} to access Scribe.",
+          "label": "API Secret",
+          "placeholder": "API secret",
+          "required": "API secret is required"
         },
         "cancelButton": {
           "label": "Cancel"
@@ -8099,6 +8188,12 @@
           "invalid": "Enter comma-separated locales like en-US, fr-FR (one per language)",
           "label": "Spoken Languages",
           "selfHostedCapExceeded": "Self-hosted endpoints support at most {cap} spoken languages (at-start detection)"
+        },
+        "sttLanguage": {
+          "description": "Select the locale Zoom Scribe should use for live transcription. See [supported locales]({docsUrl}).",
+          "invalid": "Select a supported spoken language",
+          "label": "Spoken Language",
+          "required": "Spoken language is required"
         },
         "sttModel": {
           "label": "STT Model"
@@ -8952,6 +9047,9 @@
       "ssoMissingAuthUrl": {
         "error": "Sign-in response was missing the authorization URL"
       },
+      "ssoRedirecting": {
+        "text": "Taking you to {provider} to sign in…"
+      },
       "ssoSignInButton": {
         "label": "Sign in with SSO"
       },
@@ -9530,6 +9628,9 @@
         },
         "startRecording": {
           "ariaLabel": "Start recording"
+        },
+        "startingRecording": {
+          "ariaLabel": "Starting recording"
         },
         "stopRecording": {
           "ariaLabel": "Stop recording"
@@ -10395,6 +10496,14 @@
         },
         "fileCount": {
           "label": "{count, plural, one {# File} other {# Files}}"
+        },
+        "fileRow": {
+          "deleteButton": {
+            "ariaLabel": "Delete file"
+          },
+          "viewButton": {
+            "ariaLabel": "Open file"
+          }
         },
         "fileStatus": {
           "deleting": {
@@ -12631,6 +12740,9 @@
       "providerCard": {
         "connect": {
           "label": "Connect"
+        },
+        "settingsButton": {
+          "ariaLabel": "Provider settings"
         }
       },
       "title": "Connect your LLM models"

@@ -81,6 +81,9 @@
       },
       "projectSearch": {
         "label": "Búsqueda del proyecto"
+      },
+      "selectSearchSources": {
+        "label": "Seleccionar fuentes de búsqueda"
       }
     },
     "addMcpModal": {
@@ -5803,6 +5806,50 @@
         "description": "Conecta servidores de OpenAPI para añadir acciones y herramientas personalizadas a tus agentes."
       }
     },
+    "systemUsage": {
+      "categories": {
+        "contextualRagChunkContext": {
+          "label": "Contexto de fragmentos RAG contextuales"
+        },
+        "contextualRagDocumentSummary": {
+          "label": "Resúmenes contextuales de documentos RAG"
+        },
+        "imageSummarization": { "label": "Resumen de imágenes" },
+        "kgDeepExtraction": { "label": "Extracción del grafo de conocimiento" },
+        "kgDocumentClassification": {
+          "label": "Clasificación del grafo de conocimiento"
+        },
+        "other": { "label": "Otros" },
+        "unattributed": { "label": "Sin atribuir" }
+      },
+      "filters": {
+        "allModels": { "label": "Todos los modelos" },
+        "allProviders": { "label": "Todos los proveedores" }
+      },
+      "panel": {
+        "description": "{start} – {end} · El uso del sistema es actividad del LLM que Onyx ejecuta en segundo plano, no para un usuario específico. Algunos ejemplos son los resúmenes de imágenes, el procesamiento RAG contextual y la extracción del grafo de conocimiento.",
+        "emptyDescription": "El uso del sistema es actividad del LLM que Onyx ejecuta en segundo plano, no para un usuario específico. Algunos ejemplos son los resúmenes de imágenes, el procesamiento RAG contextual y la extracción del grafo de conocimiento.",
+        "error": { "title": "No se pudo cargar el uso del sistema de este periodo." },
+        "title": "Uso del sistema"
+      },
+      "summary": {
+        "spend": { "label": "Gasto del sistema" },
+        "tokens": { "label": "Tokens totales" },
+        "unattributed": { "label": "Gasto sin atribuir" }
+      },
+      "table": {
+        "columns": {
+          "category": { "header": "Categoría" },
+          "input": { "header": "Entrada" },
+          "output": { "header": "Salida" },
+          "spend": { "header": "Gasto" },
+          "tokens": { "header": "Tokens" }
+        },
+        "empty": {
+          "description": "Ningún uso del sistema coincide con los filtros actuales."
+        }
+      }
+    },
     "perUserUsage": {
       "panel": {
         "description": "{start} – {end} · Los costes se calculan a partir del uso registrado de los modelos.",
@@ -7884,6 +7931,9 @@
         "title": "Los permisos han cambiado"
       },
       "resetPasswordModal": {
+        "copyButton": {
+          "label": "Copiar contraseña"
+        },
         "description": "Esto generará una nueva contraseña aleatoria para <strong>{email}</strong>. Su contraseña actual dejará de funcionar de inmediato.",
         "doneButton": {
           "label": "Listo"
@@ -7982,8 +8032,8 @@
           "groups": {
             "header": "Grupos"
           },
-          "lastUpdated": {
-            "header": "Última actualización"
+          "lastActive": {
+            "header": "Última actividad"
           },
           "name": {
             "header": "Nombre"
@@ -8055,6 +8105,9 @@
         "elevenlabsTts": {
           "subtitle": "API de texto a voz de ElevenLabs."
         },
+        "zoomScribe": {
+          "subtitle": "API de voz a texto en tiempo real de Zoom Scribe."
+        },
         "tts1": {
           "subtitle": "El modelo de texto a voz de OpenAI optimizado para la velocidad."
         },
@@ -8071,6 +8124,12 @@
           "label": "Clave de API",
           "placeholder": "Clave de API",
           "required": "La clave de API es obligatoria"
+        },
+        "apiSecret": {
+          "description": "Pega tu [secreto de API]({url}) de {provider} para acceder a Scribe.",
+          "label": "Secreto de API",
+          "placeholder": "Secreto de API",
+          "required": "El secreto de API es obligatorio"
         },
         "cancelButton": {
           "label": "Cancelar"
@@ -8099,6 +8158,12 @@
           "invalid": "Introduce configuraciones regionales separadas por comas, como en-US, fr-FR (una por idioma)",
           "label": "Idiomas hablados",
           "selfHostedCapExceeded": "Los endpoints autoalojados admiten como máximo {cap} idiomas hablados (detección al inicio)"
+        },
+        "sttLanguage": {
+          "description": "Selecciona la configuración regional que Zoom Scribe debe usar para la transcripción en vivo. Consulta las [configuraciones regionales admitidas]({docsUrl}).",
+          "invalid": "Selecciona un idioma hablado admitido",
+          "label": "Idioma hablado",
+          "required": "El idioma hablado es obligatorio"
         },
         "sttModel": {
           "label": "Modelo de STT"
@@ -8952,6 +9017,9 @@
       "ssoMissingAuthUrl": {
         "error": "La respuesta de inicio de sesión no incluía la URL de autorización"
       },
+      "ssoRedirecting": {
+        "text": "Redirigiendo a {provider} para iniciar sesión…"
+      },
       "ssoSignInButton": {
         "label": "Iniciar sesión con SSO"
       },
@@ -9530,6 +9598,9 @@
         },
         "startRecording": {
           "ariaLabel": "Iniciar grabación"
+        },
+        "startingRecording": {
+          "ariaLabel": "Iniciando grabación"
         },
         "stopRecording": {
           "ariaLabel": "Detener grabación"
@@ -10395,6 +10466,14 @@
         },
         "fileCount": {
           "label": "{count, plural, one {# archivo} other {# archivos}}"
+        },
+        "fileRow": {
+          "deleteButton": {
+            "ariaLabel": "Eliminar archivo"
+          },
+          "viewButton": {
+            "ariaLabel": "Abrir archivo"
+          }
         },
         "fileStatus": {
           "deleting": {
@@ -12631,6 +12710,9 @@
       "providerCard": {
         "connect": {
           "label": "Conectar"
+        },
+        "settingsButton": {
+          "ariaLabel": "Configuración del proveedor"
         }
       },
       "title": "Conecta tus modelos de LLM"

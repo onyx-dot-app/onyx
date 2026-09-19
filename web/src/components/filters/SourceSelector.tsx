@@ -3,15 +3,15 @@ import { DocumentSetSummary, Tag, ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { FiBook, FiBookmark, FiMap, FiX } from "react-icons/fi";
 import { SearchDateRangeSelector } from "@/components/dateRangeSelectors/SearchDateRangeSelector";
-import { DateRangePickerValue } from "@opal/components";
+import { InputDateRangePickerValue } from "@opal/components";
 import { listSourceMetadata } from "@/lib/sources";
 import { SourceIcon } from "@/components/SourceIcon";
 import { FilterDropdown } from "@/components/search/filtering/FilterDropdown";
 
 export interface SourceSelectorProps {
-  timeRange: DateRangePickerValue | null;
+  timeRange: InputDateRangePickerValue | null;
   setTimeRange: React.Dispatch<
-    React.SetStateAction<DateRangePickerValue | null>
+    React.SetStateAction<InputDateRangePickerValue | null>
   >;
   showDocSidebar?: boolean;
   selectedSources: SourceMetadata[];

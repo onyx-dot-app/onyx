@@ -222,11 +222,11 @@ def _run_perform_ttl(retention_days: int) -> None:
         ex=CELERY_CHAT_TTL_DELETE_TASK_EXPIRES,
     )
     result = ttl_tasks.perform_ttl_management_task.apply(
-        kwargs=dict(
-            retention_limit_days=retention_days,
-            chain_token=token,
-            tenant_id=tenant_id,
-        ),
+        kwargs={
+            "retention_limit_days": retention_days,
+            "chain_token": token,
+            "tenant_id": tenant_id,
+        },
     )
     assert result.successful(), f"TTL task failed: {result.traceback}"
 

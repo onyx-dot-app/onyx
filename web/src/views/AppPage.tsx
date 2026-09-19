@@ -1,6 +1,12 @@
 "use client";
 
-import { redirect, useRouter, useSearchParams } from "next/navigation";
+import {
+  redirect,
+  usePathname,
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
+import { loginPath } from "@/lib/auth/paths";
 import { endIncognitoSession } from "@/app/app/services/lib";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
@@ -144,6 +150,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     },
   });
   const searchParams = useSearchParams();
+  const pathname = usePathname();
 
   // Use SWR hooks for data fetching
   const {
@@ -452,6 +459,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   useSendChatMessageFromURL({
     onSubmit,
     deepResearch: deepResearchEnabledForCurrentWorkflow,
+    toolConfiguration,
   });
 
   useSendMessageToParent();
@@ -518,7 +526,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   ]);
 
   if (resolvedUser === null) {
-    redirect("/auth/login");
+    // Carries the current URL like the layout's redirect does, since both run
+    // on the same server render and either may reach the browser first.
+    const query = searchParams?.toString();
+    redirect(loginPath({ next: query ? `${pathname}?${query}` : pathname }));
   }
 
   const onChat = useCallback(
@@ -771,11 +782,15 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
         ))}
 
       <div className="w-full h-full overflow-hidden">
+        {/* noPaste: the input bar already uploads pasted files itself. Without
+            it react-dropzone handles the same paste again and attaches the
+            image twice. */}
         <Dropzone
           onDrop={(acceptedFiles) =>
             handleMessageSpecificFileUpload(acceptedFiles)
           }
           noClick
+          noPaste
         >
           {({ getRootProps }) => (
             <div

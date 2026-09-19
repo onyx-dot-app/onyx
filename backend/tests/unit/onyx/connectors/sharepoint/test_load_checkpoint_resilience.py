@@ -1,7 +1,7 @@
 """Tests for resilience wrappers added to SharepointConnector._load_from_checkpoint.
 
 Covers three failure modes that previously aborted the whole attempt:
-- G1: BFS-mode generator (`_iter_drive_items_paged`) raising mid-iteration.
+- G1: BFS-mode generator (`iter_drive_items_paged`) raising mid-iteration.
 - G2: `_fetch_site_pages` raising a non-Graph 4xx in Phase 5.
 - G3: A single site page failing to convert in Phase 5.
 
@@ -26,6 +26,7 @@ from onyx.connectors.models import (
     EntityFailure,
     TextSection,
 )
+from onyx.connectors.sharepoint import connector as sp_connector
 from onyx.connectors.sharepoint.connector import (
     DriveItemData,
     SharepointConnector,
@@ -164,7 +165,7 @@ def _build_phase5_checkpoint() -> SharepointConnectorCheckpoint:
 
 
 class TestBfsIterationFailure:
-    """When `_iter_drive_items_paged` (BFS path) raises after yielding some
+    """When `iter_drive_items_paged` (BFS path) raises after yielding some
     items, items emitted before the raise are kept, an EntityFailure is
     yielded for the drive, the drive checkpoint state is cleared, and the
     generator returns cleanly instead of aborting the attempt."""
@@ -178,7 +179,7 @@ class TestBfsIterationFailure:
         good_items = [_make_item("a"), _make_item("b")]
 
         def fake_iter_paged(
-            self: SharepointConnector,  # noqa: ARG001
+            client: Any,  # noqa: ARG001
             drive_id: str,  # noqa: ARG001
             folder_path: str | None = None,  # noqa: ARG001
             start: datetime | None = None,  # noqa: ARG001
@@ -188,9 +189,7 @@ class TestBfsIterationFailure:
             yield from good_items
             raise RuntimeError("graph 500 mid-page")
 
-        monkeypatch.setattr(
-            SharepointConnector, "_iter_drive_items_paged", fake_iter_paged
-        )
+        monkeypatch.setattr(sp_connector, "iter_drive_items_paged", fake_iter_paged)
 
         # folder_path forces BFS mode
         checkpoint = _build_phase3_checkpoint(folder_path="Engineering/Docs")
@@ -225,7 +224,7 @@ class TestBfsIterationFailure:
         _mock_convert(monkeypatch)
 
         def fake_iter_paged(
-            self: SharepointConnector,  # noqa: ARG001
+            client: Any,  # noqa: ARG001
             drive_id: str,  # noqa: ARG001
             folder_path: str | None = None,  # noqa: ARG001
             start: datetime | None = None,  # noqa: ARG001
@@ -235,9 +234,7 @@ class TestBfsIterationFailure:
             raise RuntimeError("connection reset")
             yield  # pragma: no cover  # make this a generator
 
-        monkeypatch.setattr(
-            SharepointConnector, "_iter_drive_items_paged", fake_iter_paged
-        )
+        monkeypatch.setattr(sp_connector, "iter_drive_items_paged", fake_iter_paged)
 
         checkpoint = _build_phase3_checkpoint(folder_path="Engineering/Docs")
         gen = connector._load_from_checkpoint(

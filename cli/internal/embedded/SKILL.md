@@ -78,6 +78,7 @@ onyx-cli search --days 30 "recent production incidents"
 
 # Use a specific agent for scoped search
 onyx-cli search --agent-id 5 "engineering roadmap"
+onyx-cli search --agent-name "Support Agent" "engineering roadmap"
 
 # Full API response for programmatic use
 onyx-cli search --raw "API documentation" | jq '.results[].title'
@@ -91,6 +92,7 @@ onyx-cli search --no-query-expansion "exact error message text"
 | `--source`              | string | Filter by source type (comma-separated: slack,google_drive)      |
 | `--days`                | int    | Only return results from the last N days                         |
 | `--agent-id`            | int    | Agent ID for scoped search (inherits filters, document sets)     |
+| `--agent-name`          | string | Agent name for scoped search (exact or unique substring)         |
 | `--raw`                 | bool   | Output full API response (adds per-result citation_id) |
 | `--no-query-expansion`  | bool   | Skip LLM query expansion — faster, but only safe when the query is already precise (exact names, titles, quoted phrases) |
 | `--max-output`          | int    | Max bytes to print before truncating (0 to disable, default 50000 for non-TTY, ignored with --raw) |
@@ -106,6 +108,7 @@ Streams an LLM-generated answer as plain text to stdout. Use `search` instead wh
 ```bash
 # Use a specific agent
 onyx-cli ask --agent-id 5 "Summarize our Q4 roadmap"
+onyx-cli ask --agent-name "Support Agent" "hello"
 
 # Pipe context in with the question
 cat error.log | onyx-cli ask --prompt "Find the root cause"
@@ -117,6 +120,7 @@ onyx-cli ask --json "List all active API integrations"
 | Flag           | Type | Description                                                  |
 | -------------- | ---- | ------------------------------------------------------------ |
 | `--agent-id`   | int  | Agent ID to use (overrides default)                          |
+| `--agent-name` | str  | Agent name to use (exact or unique substring; mutually exclusive with `--agent-id`) |
 | `--json`       | bool | Output NDJSON stream events instead of plain text (bypasses truncation) |
 | `--quiet`      | bool | Buffer output and print once at end (no streaming)           |
 | `--prompt`     | str  | Question text (use with piped stdin context)                 |
@@ -129,7 +133,7 @@ onyx-cli agents
 onyx-cli agents --json
 ```
 
-Prints a table of agent IDs, names, and descriptions. Use `--json` for structured JSON output. Use agent IDs with `search --agent-id` or `ask --agent-id`.
+Prints a table of agent IDs, names, and descriptions. Use `--json` for structured JSON output. Use agent IDs with `--agent-id`, or names with `--agent-name`, on `ask`, `search`, and `chat`.
 
 ### Validate configuration
 

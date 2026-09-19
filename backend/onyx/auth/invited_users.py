@@ -22,7 +22,7 @@ def get_invited_users() -> list[str]:
         store = get_kv_store()
         return cast(list, store.load(KV_USER_STORE_KEY))
     except KvKeyNotFoundError:
-        return list()
+        return []
 
 
 def write_invited_users(emails: list[str]) -> int:
@@ -36,7 +36,7 @@ def get_pending_users() -> list[str]:
         store = get_kv_store()
         return cast(list, store.load(KV_PENDING_USERS_KEY))
     except KvKeyNotFoundError:
-        return list()
+        return []
 
 
 def write_pending_users(emails: list[str]) -> int:

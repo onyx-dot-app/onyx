@@ -81,6 +81,9 @@
       },
       "projectSearch": {
         "label": "Projektsuche"
+      },
+      "selectSearchSources": {
+        "label": "Suchquellen auswählen"
       }
     },
     "addMcpModal": {
@@ -5803,6 +5806,50 @@
         "description": "Verbinden Sie OpenAPI-Server, um benutzerdefinierte Aktionen und Tools für Ihre Agenten hinzuzufügen."
       }
     },
+    "systemUsage": {
+      "categories": {
+        "contextualRagChunkContext": {
+          "label": "Kontext für kontextbezogene RAG-Abschnitte"
+        },
+        "contextualRagDocumentSummary": {
+          "label": "Kontextbezogene RAG-Dokumentzusammenfassungen"
+        },
+        "imageSummarization": { "label": "Bildzusammenfassung" },
+        "kgDeepExtraction": { "label": "Knowledge-Graph-Extraktion" },
+        "kgDocumentClassification": {
+          "label": "Knowledge-Graph-Klassifizierung"
+        },
+        "other": { "label": "Sonstige" },
+        "unattributed": { "label": "Nicht zugeordnet" }
+      },
+      "filters": {
+        "allModels": { "label": "Alle Modelle" },
+        "allProviders": { "label": "Alle Anbieter" }
+      },
+      "panel": {
+        "description": "{start} – {end} · Systemnutzung ist LLM-Aktivität, die Onyx im Hintergrund statt für einen bestimmten Benutzer ausführt. Beispiele sind Bildzusammenfassungen, kontextbezogene RAG-Verarbeitung und Knowledge-Graph-Extraktion.",
+        "emptyDescription": "Systemnutzung ist LLM-Aktivität, die Onyx im Hintergrund statt für einen bestimmten Benutzer ausführt. Beispiele sind Bildzusammenfassungen, kontextbezogene RAG-Verarbeitung und Knowledge-Graph-Extraktion.",
+        "error": { "title": "Die Systemnutzung für diesen Zeitraum konnte nicht geladen werden." },
+        "title": "Systemnutzung"
+      },
+      "summary": {
+        "spend": { "label": "Systemausgaben" },
+        "tokens": { "label": "Token insgesamt" },
+        "unattributed": { "label": "Nicht zugeordnete Ausgaben" }
+      },
+      "table": {
+        "columns": {
+          "category": { "header": "Kategorie" },
+          "input": { "header": "Eingabe" },
+          "output": { "header": "Ausgabe" },
+          "spend": { "header": "Ausgaben" },
+          "tokens": { "header": "Token" }
+        },
+        "empty": {
+          "description": "Keine Systemnutzung entspricht den aktuellen Filtern."
+        }
+      }
+    },
     "perUserUsage": {
       "panel": {
         "description": "{start} – {end} · Die Kosten werden aus der erfassten Modellnutzung berechnet.",
@@ -7884,6 +7931,9 @@
         "title": "Die Berechtigungen haben sich geändert"
       },
       "resetPasswordModal": {
+        "copyButton": {
+          "label": "Passwort kopieren"
+        },
         "description": "Dadurch wird ein neues zufälliges Passwort für <strong>{email}</strong> erzeugt. Das aktuelle Passwort funktioniert sofort nicht mehr.",
         "doneButton": {
           "label": "Fertig"
@@ -7982,8 +8032,8 @@
           "groups": {
             "header": "Gruppen"
           },
-          "lastUpdated": {
-            "header": "Zuletzt aktualisiert"
+          "lastActive": {
+            "header": "Zuletzt aktiv"
           },
           "name": {
             "header": "Name"
@@ -8055,6 +8105,9 @@
         "elevenlabsTts": {
           "subtitle": "ElevenLabs Text to Speech API."
         },
+        "zoomScribe": {
+          "subtitle": "Zoom Scribe Echtzeit-Sprache-zu-Text-API."
+        },
         "tts1": {
           "subtitle": "Auf Geschwindigkeit optimiertes Text-zu-Sprache-Modell von OpenAI."
         },
@@ -8071,6 +8124,12 @@
           "label": "API-Schlüssel",
           "placeholder": "API-Schlüssel",
           "required": "API-Schlüssel ist erforderlich"
+        },
+        "apiSecret": {
+          "description": "Fügen Sie Ihr [API-Secret]({url}) von {provider} ein, um auf Scribe zuzugreifen.",
+          "label": "API-Secret",
+          "placeholder": "API-Secret",
+          "required": "API-Secret ist erforderlich"
         },
         "cancelButton": {
           "label": "Abbrechen"
@@ -8099,6 +8158,12 @@
           "invalid": "Geben Sie durch Kommas getrennte Gebietsschemas wie en-US, fr-FR ein (eines pro Sprache)",
           "label": "Gesprochene Sprachen",
           "selfHostedCapExceeded": "Selbst gehostete Endpunkte unterstützen höchstens {cap} gesprochene Sprachen (Erkennung zu Beginn)"
+        },
+        "sttLanguage": {
+          "description": "Wählen Sie das Gebietsschema aus, das Zoom Scribe für Live-Transkription verwenden soll. Siehe [unterstützte Gebietsschemas]({docsUrl}).",
+          "invalid": "Wählen Sie eine unterstützte gesprochene Sprache aus",
+          "label": "Gesprochene Sprache",
+          "required": "Gesprochene Sprache ist erforderlich"
         },
         "sttModel": {
           "label": "STT-Modell"
@@ -8952,6 +9017,9 @@
       "ssoMissingAuthUrl": {
         "error": "In der Anmeldeantwort fehlte die Autorisierungs-URL"
       },
+      "ssoRedirecting": {
+        "text": "Sie werden zur Anmeldung zu {provider} weitergeleitet …"
+      },
       "ssoSignInButton": {
         "label": "Mit SSO anmelden"
       },
@@ -9530,6 +9598,9 @@
         },
         "startRecording": {
           "ariaLabel": "Aufnahme starten"
+        },
+        "startingRecording": {
+          "ariaLabel": "Aufnahme wird gestartet"
         },
         "stopRecording": {
           "ariaLabel": "Aufnahme stoppen"
@@ -10395,6 +10466,14 @@
         },
         "fileCount": {
           "label": "{count, plural, one {# Datei} other {# Dateien}}"
+        },
+        "fileRow": {
+          "deleteButton": {
+            "ariaLabel": "Datei löschen"
+          },
+          "viewButton": {
+            "ariaLabel": "Datei öffnen"
+          }
         },
         "fileStatus": {
           "deleting": {
@@ -12631,6 +12710,9 @@
       "providerCard": {
         "connect": {
           "label": "Verbinden"
+        },
+        "settingsButton": {
+          "ariaLabel": "Anbieter-Einstellungen"
         }
       },
       "title": "Verbinden Sie Ihre LLM-Modelle"

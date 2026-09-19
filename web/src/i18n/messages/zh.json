@@ -81,6 +81,9 @@
       },
       "projectSearch": {
         "label": "项目搜索"
+      },
+      "selectSearchSources": {
+        "label": "选择搜索来源"
       }
     },
     "addMcpModal": {
@@ -5803,6 +5806,50 @@
         "description": "连接 OpenAPI 服务器，为您的智能体添加自定义操作和工具。"
       }
     },
+    "systemUsage": {
+      "categories": {
+        "contextualRagChunkContext": {
+          "label": "上下文 RAG 分块上下文"
+        },
+        "contextualRagDocumentSummary": {
+          "label": "上下文 RAG 文档摘要"
+        },
+        "imageSummarization": { "label": "图像摘要" },
+        "kgDeepExtraction": { "label": "知识图谱提取" },
+        "kgDocumentClassification": {
+          "label": "知识图谱分类"
+        },
+        "other": { "label": "其他" },
+        "unattributed": { "label": "未归属" }
+      },
+      "filters": {
+        "allModels": { "label": "所有模型" },
+        "allProviders": { "label": "所有提供商" }
+      },
+      "panel": {
+        "description": "{start} – {end} · 系统用量是 Onyx 在后台运行而非为特定用户运行的 LLM 活动。例如图像摘要、上下文 RAG 处理和知识图谱提取。",
+        "emptyDescription": "系统用量是 Onyx 在后台运行而非为特定用户运行的 LLM 活动。例如图像摘要、上下文 RAG 处理和知识图谱提取。",
+        "error": { "title": "无法加载此期间的系统用量。" },
+        "title": "系统用量"
+      },
+      "summary": {
+        "spend": { "label": "系统支出" },
+        "tokens": { "label": "总 Token 数" },
+        "unattributed": { "label": "未归属支出" }
+      },
+      "table": {
+        "columns": {
+          "category": { "header": "类别" },
+          "input": { "header": "输入" },
+          "output": { "header": "输出" },
+          "spend": { "header": "支出" },
+          "tokens": { "header": "Token" }
+        },
+        "empty": {
+          "description": "没有符合当前筛选条件的系统用量。"
+        }
+      }
+    },
     "perUserUsage": {
       "panel": {
         "description": "{start} – {end} · 费用根据记录的模型用量计算。",
@@ -7884,6 +7931,9 @@
         "title": "权限已变更"
       },
       "resetPasswordModal": {
+        "copyButton": {
+          "label": "复制密码"
+        },
         "description": "这将为 <strong>{email}</strong> 生成一个新的随机密码。该用户当前的密码将立即失效。",
         "doneButton": {
           "label": "完成"
@@ -7982,8 +8032,8 @@
           "groups": {
             "header": "用户组"
           },
-          "lastUpdated": {
-            "header": "最后更新"
+          "lastActive": {
+            "header": "最近活跃"
           },
           "name": {
             "header": "名称"
@@ -8055,6 +8105,9 @@
         "elevenlabsTts": {
           "subtitle": "ElevenLabs 文字转语音 API。"
         },
+        "zoomScribe": {
+          "subtitle": "Zoom Scribe 实时语音转文字 API。"
+        },
         "tts1": {
           "subtitle": "OpenAI 针对速度优化的文字转语音模型。"
         },
@@ -8071,6 +8124,12 @@
           "label": "API 密钥",
           "placeholder": "API 密钥",
           "required": "API 密钥为必填项"
+        },
+        "apiSecret": {
+          "description": "粘贴来自 {provider} 的 [API 机密]({url})，以访问 Scribe。",
+          "label": "API 机密",
+          "placeholder": "API 机密",
+          "required": "API 机密为必填项"
         },
         "cancelButton": {
           "label": "取消"
@@ -8099,6 +8158,12 @@
           "invalid": "请输入以逗号分隔的区域设置，例如 en-US, fr-FR（每种语言一个）",
           "label": "语音语言",
           "selfHostedCapExceeded": "自托管端点最多支持 {cap} 种语音语言（在开始时检测）"
+        },
+        "sttLanguage": {
+          "description": "选择 Zoom Scribe 用于实时转录的区域设置。请参阅[支持的区域设置]({docsUrl})。",
+          "invalid": "请选择支持的语音语言",
+          "label": "语音语言",
+          "required": "语音语言为必填项"
         },
         "sttModel": {
           "label": "STT 模型"
@@ -8952,6 +9017,9 @@
       "ssoMissingAuthUrl": {
         "error": "登录响应中缺少授权 URL"
       },
+      "ssoRedirecting": {
+        "text": "正在前往 {provider} 登录…"
+      },
       "ssoSignInButton": {
         "label": "使用 SSO 登录"
       },
@@ -9530,6 +9598,9 @@
         },
         "startRecording": {
           "ariaLabel": "开始录音"
+        },
+        "startingRecording": {
+          "ariaLabel": "正在开始录音"
         },
         "stopRecording": {
           "ariaLabel": "停止录音"
@@ -10395,6 +10466,14 @@
         },
         "fileCount": {
           "label": "{count, plural, one {# 个文件} other {# 个文件}}"
+        },
+        "fileRow": {
+          "deleteButton": {
+            "ariaLabel": "删除文件"
+          },
+          "viewButton": {
+            "ariaLabel": "打开文件"
+          }
         },
         "fileStatus": {
           "deleting": {
@@ -12631,6 +12710,9 @@
       "providerCard": {
         "connect": {
           "label": "连接"
+        },
+        "settingsButton": {
+          "ariaLabel": "提供商设置"
         }
       },
       "title": "连接您的 LLM 模型"

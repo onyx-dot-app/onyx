@@ -20,7 +20,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { DateRangePickerValue } from "@opal/components";
+import { InputDateRangePickerValue } from "@opal/components";
 import { SourceMetadata } from "./search/interfaces";
 import {
   getProviderOverrideForAgent,

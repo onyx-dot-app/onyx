@@ -7,11 +7,11 @@ import Text from "@/refresh-components/texts/Text";
 import type { IconProps } from "@opal/types";
 import { getFileExtension, isImageExtension } from "@/lib/utils";
 import { UserFileStatus } from "@/lib/projects/types";
-import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
 import { Modal } from "@opal/components";
 import { useModal } from "@opal/components";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import {
+  SvgExternalLink,
   SvgEye,
   SvgFiles,
   SvgFileText,
@@ -21,6 +21,8 @@ import {
   SvgXCircle,
   SvgSimpleLoader,
 } from "@opal/icons";
+import { Hoverable } from "@opal/core";
+import { AttachmentItemButton, Text as OpalText } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import useFilter from "@/hooks/useFilter";
 import { Button } from "@opal/components";
@@ -89,19 +91,49 @@ function FileAttachment({
     : "";
 
   return (
-    <AttachmentButton
-      onClick={onClick}
-      icon={Icon}
-      description={description}
-      rightText={rightText}
-      selected={isSelected}
-      processing={isProcessing}
-      onView={onView}
-      actionIcon={SvgTrash}
-      onAction={onDelete}
-    >
-      {file.name}
-    </AttachmentButton>
+    <Hoverable.Root group="user-file-row">
+      <AttachmentItemButton
+        prominence="primary"
+        onClick={onClick}
+        icon={Icon}
+        title={file.name}
+        description={description}
+        state={isSelected ? "selected" : undefined}
+        centerChildren={
+          rightText ? (
+            <Section alignItems="end">
+              <OpalText font="secondary-body" color="text-03" maxLines={1}>
+                {rightText}
+              </OpalText>
+            </Section>
+          ) : undefined
+        }
+        rightChildren={
+          <Hoverable.Item group="user-file-row">
+            <Section flexDirection="row" gap={0} padding={1.5}>
+              {onView && (
+                <Button
+                  icon={SvgExternalLink}
+                  onClick={onView}
+                  prominence="internal"
+                  size="sm"
+                  tooltip={t("fileRow.viewButton.ariaLabel")}
+                />
+              )}
+              {onDelete && (
+                <Button
+                  icon={SvgTrash}
+                  onClick={onDelete}
+                  prominence="internal"
+                  size="sm"
+                  tooltip={t("fileRow.deleteButton.ariaLabel")}
+                />
+              )}
+            </Section>
+          </Hoverable.Item>
+        }
+      />
+    </Hoverable.Root>
   );
 }
 
@@ -228,7 +260,7 @@ export default function UserFilesModal({
             {filtered.length === 0 ? (
               <Text text03>{t("emptyState.description")}</Text>
             ) : (
-              <ScrollIndicatorDiv className="p-2 gap-2 max-h-[70vh]">
+              <ScrollIndicatorDiv className="p-1 gap-1 max-h-[70vh]">
                 {filtered.map((projectFle) => {
                   const isSelected = selectedIds.has(projectFle.id);
                   return (

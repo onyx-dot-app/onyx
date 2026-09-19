@@ -249,7 +249,7 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
         return [
             file.file_id
             for file in self.file_store.list_files_by_prefix(
-                self._per_cc_pair_base_path()
+                f"{self._per_cc_pair_base_path()}/"
             )
         ]
 
@@ -260,6 +260,13 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
             if path_info is None:
                 logger.warning(
                     "Could not extract path info from batch file: %s", batch_file_name
+                )
+                continue
+            if path_info.cc_pair_id != self.cc_pair_id:
+                logger.warning(
+                    "Skipping batch file %s owned by cc_pair %s",
+                    batch_file_name,
+                    path_info.cc_pair_id,
                 )
                 continue
             new_batch_file_name = self._get_batch_file_name(path_info.batch_num)

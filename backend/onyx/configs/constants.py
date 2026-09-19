@@ -277,6 +277,7 @@ class DocumentSource(str, Enum):
     DROPBOX = "dropbox"
     SHAREPOINT = "sharepoint"
     TEAMS = "teams"
+    OUTLOOK = "outlook"
     SALESFORCE = "salesforce"
     DISCOURSE = "discourse"
     AXERO = "axero"
@@ -293,6 +294,7 @@ class DocumentSource(str, Enum):
     DISCORD = "discord"
     FRESHDESK = "freshdesk"
     FIREFLIES = "fireflies"
+    ZOOM = "zoom"
     EGNYTE = "egnyte"
     AIRTABLE = "airtable"
     HIGHSPOT = "highspot"
@@ -798,6 +800,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.DROPBOX: "Cloud-stored files and folders",
     DocumentSource.SHAREPOINT: "Documents and team sites",
     DocumentSource.TEAMS: "Chat messages and channels",
+    DocumentSource.OUTLOOK: "Email conversations and calendar events from Microsoft 365 mailboxes",
     DocumentSource.SALESFORCE: "Sales data, accounts, and opportunities",
     DocumentSource.DISCOURSE: "Community forums and discussions",
     DocumentSource.AXERO: "Employee engagement and intranet content",
@@ -813,6 +816,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.DISCORD: "Chat messages and server discussions",
     DocumentSource.FRESHDESK: "Support tickets and customer queries",
     DocumentSource.FIREFLIES: "Meeting transcripts and recordings",
+    DocumentSource.ZOOM: "Meeting and webinar transcripts and recordings",
     DocumentSource.EGNYTE: "Cloud-stored files and documents",
     DocumentSource.AIRTABLE: "Structured data and records",
     DocumentSource.HIGHSPOT: "Sales enablement content and pitches",

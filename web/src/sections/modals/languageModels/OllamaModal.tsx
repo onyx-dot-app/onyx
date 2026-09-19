@@ -180,7 +180,7 @@ export default function OllamaModal({
       existingLlmProvider
     ),
     api_base: existingLlmProvider?.api_base ?? defaultApiBase,
-  } as OllamaModalValues;
+  };
 
   const validationSchema = useMemo(
     () =>

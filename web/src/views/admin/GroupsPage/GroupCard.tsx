@@ -1,6 +1,5 @@
 "use client";
 
-import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { UserGroup } from "@/lib/types";
@@ -76,9 +75,7 @@ function GroupCard({ group }: GroupCardProps) {
                   prominence="tertiary"
                   tooltip={t("card.viewGroup.label")}
                   aria-label={t("card.viewGroup.label")}
-                  onClick={() =>
-                    router.push(`/admin/groups/${group.id}` as Route)
-                  }
+                  onClick={() => router.push(`/admin/groups/${group.id}`)}
                 />
               )}
             </Section>

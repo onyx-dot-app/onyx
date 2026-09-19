@@ -63,7 +63,7 @@ class BaseConnector(abc.ABC, Generic[CT]):
             if isinstance(metadata_value, str):
                 metadata_lines.append(f"{metadata_key}: {metadata_value}")
             elif isinstance(metadata_value, list):
-                if not all([isinstance(val, str) for val in metadata_value]):
+                if not all(isinstance(val, str) for val in metadata_value):
                     raise RuntimeError(custom_parser_req_msg)
                 metadata_lines.append(f"{metadata_key}: {', '.join(metadata_value)}")
             else:

@@ -16,7 +16,7 @@ import {
   PopoverMenu,
   Tooltip,
   useCreateModal,
-  InputTags,
+  InputMultiSelect,
 } from "@opal/components";
 import { Hoverable, Disabled } from "@opal/core";
 import { FullAgent, PersonaSharingStatus } from "@/lib/agents/types";
@@ -107,6 +107,7 @@ import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions";
 import { can } from "@/lib/permissions/resource-actions";
 import { useDraft, draftKey } from "@/hooks/useDraft";
+import type { Agent } from "@/lib/agents/types";
 
 // Length of the translated starterExamples array, which is local to
 // AgentStarterMessages, shared here so the editor can size against it.
@@ -181,7 +182,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
         return;
       }
 
-      const { file_id } = await response.json();
+      const { file_id }: { file_id: string } = await response.json();
       setFieldValue("uploaded_image_id", file_id);
       setPopoverOpen(false);
     } catch (error) {
@@ -976,15 +977,11 @@ export default function AgentEditorPage({
         // Sharing on saved agents is managed by the share dialog — omitting
         // the fields here keeps form saves from clobbering it. Creates carry
         // the draft share state captured before the agent existed.
-        ...(existingAgent
-          ? {}
-          : {
-              is_public: values.is_public,
-              users: values.shared_user_ids,
-              groups: values.shared_group_ids,
-            }),
+        is_public: existingAgent ? undefined : values.is_public,
+        users: existingAgent ? undefined : values.shared_user_ids,
+        groups: existingAgent ? undefined : values.shared_group_ids,
         default_model_configuration_id:
-          (values as any).default_model_configuration_id ?? null,
+          values.default_model_configuration_id ?? null,
         starter_messages: finalAgentStarterMessages,
         tool_ids: toolIds,
         // uploaded_image: null, // Already uploaded separately
@@ -1036,7 +1033,8 @@ export default function AgentEditorPage({
       }
 
       // Success
-      const agent = await personaResponse.json();
+      const agent: Omit<Agent, "user_permission"> =
+        await personaResponse.json();
 
       // clear() (not clearDraft) so an in-flight debounced write is cancelled too.
       clearAgentDraftRef.current?.();
@@ -1110,7 +1108,7 @@ export default function AgentEditorPage({
   function handlePickRecentFile(
     file: ProjectFile,
     currentFileIds: string[],
-    setFieldValue: (field: string, value: unknown) => void
+    setFieldValue: (field: string, value: string[]) => void
   ) {
     if (!currentFileIds.includes(file.id)) {
       setFieldValue("user_file_ids", [...currentFileIds, file.id]);
@@ -1120,7 +1118,7 @@ export default function AgentEditorPage({
   function handleUnpickRecentFile(
     file: ProjectFile,
     currentFileIds: string[],
-    setFieldValue: (field: string, value: unknown) => void
+    setFieldValue: (field: string, value: string[]) => void
   ) {
     setFieldValue(
       "user_file_ids",
@@ -1138,7 +1136,7 @@ export default function AgentEditorPage({
   async function handleUploadChange(
     e: React.ChangeEvent<HTMLInputElement>,
     currentFileIds: string[],
-    setFieldValue: (field: string, value: unknown) => void
+    setFieldValue: (field: string, value: string[]) => void
   ) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -1608,7 +1606,7 @@ export default function AgentEditorPage({
                               gap={1}
                               alignItems="stretch"
                             >
-                              <InputTags
+                              <InputMultiSelect
                                 tags={(allLabels ?? [])
                                   .filter((label) =>
                                     values.label_ids.includes(label.id)
@@ -1818,6 +1816,7 @@ export default function AgentEditorPage({
                                   )}
                                 >
                                   <ModelSelector
+                                    agentId={existingAgent?.id}
                                     value={
                                       (values.default_model_configuration_id as
                                         | number

@@ -6,6 +6,7 @@ import {
 } from "@/app/app/message/messageComponents/interfaces";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { OnyxDocument } from "@/lib/search/interfaces";
+import { openExternalLink } from "@/lib/search/utils";
 import { ValidSources } from "@/lib/types";
 import { SearchChipList, SourceInfo } from "../search/SearchChipList";
 import { getMetadataTags } from "../search/searchStateUtils";
@@ -97,7 +98,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
                 getKey={(doc: OnyxDocument) => doc.document_id}
                 toSourceInfo={(doc: OnyxDocument) => documentToSourceInfo(doc)}
                 onClick={(doc: OnyxDocument) => {
-                  if (doc.link) window.open(doc.link, "_blank");
+                  if (doc.link) openExternalLink(doc.link);
                 }}
                 emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
               />
@@ -108,7 +109,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
                 expansionCount={URLS_PER_EXPANSION}
                 getKey={(url: string) => url}
                 toSourceInfo={urlToSourceInfo}
-                onClick={(url: string) => window.open(url, "_blank")}
+                onClick={(url: string) => openExternalLink(url)}
                 emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
               />
             ) : (
@@ -136,7 +137,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
               getKey={(doc: OnyxDocument) => doc.document_id}
               toSourceInfo={(doc: OnyxDocument) => documentToSourceInfo(doc)}
               onClick={(doc: OnyxDocument) => {
-                if (doc.link) window.open(doc.link, "_blank");
+                if (doc.link) openExternalLink(doc.link);
               }}
               emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
             />
@@ -147,7 +148,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
               expansionCount={URLS_PER_EXPANSION}
               getKey={(url: string) => url}
               toSourceInfo={urlToSourceInfo}
-              onClick={(url: string) => window.open(url, "_blank")}
+              onClick={(url: string) => openExternalLink(url)}
               emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
             />
           ) : (

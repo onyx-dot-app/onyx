@@ -81,6 +81,9 @@
       },
       "projectSearch": {
         "label": "Recherche du projet"
+      },
+      "selectSearchSources": {
+        "label": "Sélectionner les sources de recherche"
       }
     },
     "addMcpModal": {
@@ -5803,6 +5806,50 @@
         "description": "Connectez des serveurs OpenAPI pour ajouter des actions et des outils personnalisés à vos agents."
       }
     },
+    "systemUsage": {
+      "categories": {
+        "contextualRagChunkContext": {
+          "label": "Contexte des fragments RAG contextuels"
+        },
+        "contextualRagDocumentSummary": {
+          "label": "Résumés contextuels des documents RAG"
+        },
+        "imageSummarization": { "label": "Résumé des images" },
+        "kgDeepExtraction": { "label": "Extraction du graphe de connaissances" },
+        "kgDocumentClassification": {
+          "label": "Classification du graphe de connaissances"
+        },
+        "other": { "label": "Autres" },
+        "unattributed": { "label": "Non attribué" }
+      },
+      "filters": {
+        "allModels": { "label": "Tous les modèles" },
+        "allProviders": { "label": "Tous les fournisseurs" }
+      },
+      "panel": {
+        "description": "{start} – {end} · L’utilisation système correspond à l’activité LLM exécutée par Onyx en arrière-plan plutôt que pour un utilisateur spécifique. Cela inclut les résumés d’images, le traitement RAG contextuel et l’extraction du graphe de connaissances.",
+        "emptyDescription": "L’utilisation système correspond à l’activité LLM exécutée par Onyx en arrière-plan plutôt que pour un utilisateur spécifique. Cela inclut les résumés d’images, le traitement RAG contextuel et l’extraction du graphe de connaissances.",
+        "error": { "title": "Échec du chargement de l'utilisation système pour cette période." },
+        "title": "Utilisation système"
+      },
+      "summary": {
+        "spend": { "label": "Dépenses système" },
+        "tokens": { "label": "Total des jetons" },
+        "unattributed": { "label": "Dépenses non attribuées" }
+      },
+      "table": {
+        "columns": {
+          "category": { "header": "Catégorie" },
+          "input": { "header": "Entrée" },
+          "output": { "header": "Sortie" },
+          "spend": { "header": "Dépenses" },
+          "tokens": { "header": "Jetons" }
+        },
+        "empty": {
+          "description": "Aucune utilisation système ne correspond aux filtres actuels."
+        }
+      }
+    },
     "perUserUsage": {
       "panel": {
         "description": "{start} – {end} · Les coûts sont calculés à partir de l'utilisation enregistrée des modèles.",
@@ -7884,6 +7931,9 @@
         "title": "Les autorisations ont changé"
       },
       "resetPasswordModal": {
+        "copyButton": {
+          "label": "Copier le mot de passe"
+        },
         "description": "Cette action générera un nouveau mot de passe aléatoire pour <strong>{email}</strong>. Son mot de passe actuel cessera de fonctionner immédiatement.",
         "doneButton": {
           "label": "Terminé"
@@ -7982,8 +8032,8 @@
           "groups": {
             "header": "Groupes"
           },
-          "lastUpdated": {
-            "header": "Dernière mise à jour"
+          "lastActive": {
+            "header": "Dernière activité"
           },
           "name": {
             "header": "Nom"
@@ -8055,6 +8105,9 @@
         "elevenlabsTts": {
           "subtitle": "API de synthèse vocale ElevenLabs."
         },
+        "zoomScribe": {
+          "subtitle": "API de reconnaissance vocale en temps réel Zoom Scribe."
+        },
         "tts1": {
           "subtitle": "Modèle de synthèse vocale d'OpenAI optimisé pour la rapidité."
         },
@@ -8071,6 +8124,12 @@
           "label": "Clé d'API",
           "placeholder": "Clé d'API",
           "required": "La clé d'API est obligatoire"
+        },
+        "apiSecret": {
+          "description": "Collez votre [secret d'API]({url}) de {provider} pour accéder à Scribe.",
+          "label": "Secret d'API",
+          "placeholder": "Secret d'API",
+          "required": "Le secret d'API est obligatoire"
         },
         "cancelButton": {
           "label": "Annuler"
@@ -8099,6 +8158,12 @@
           "invalid": "Saisissez des paramètres régionaux séparés par des virgules, comme en-US, fr-FR (un par langue)",
           "label": "Langues parlées",
           "selfHostedCapExceeded": "Les points de terminaison auto-hébergés prennent en charge au maximum {cap} langues parlées (détection au démarrage)"
+        },
+        "sttLanguage": {
+          "description": "Sélectionnez le paramètre régional que Zoom Scribe doit utiliser pour la transcription en direct. Consultez les [paramètres régionaux pris en charge]({docsUrl}).",
+          "invalid": "Sélectionnez une langue parlée prise en charge",
+          "label": "Langue parlée",
+          "required": "La langue parlée est obligatoire"
         },
         "sttModel": {
           "label": "Modèle de reconnaissance vocale"
@@ -8952,6 +9017,9 @@
       "ssoMissingAuthUrl": {
         "error": "La réponse de connexion ne contenait pas l'URL d'autorisation"
       },
+      "ssoRedirecting": {
+        "text": "Redirection vers {provider} pour vous connecter…"
+      },
       "ssoSignInButton": {
         "label": "Se connecter avec SSO"
       },
@@ -9530,6 +9598,9 @@
         },
         "startRecording": {
           "ariaLabel": "Démarrer l'enregistrement"
+        },
+        "startingRecording": {
+          "ariaLabel": "Démarrage de l'enregistrement"
         },
         "stopRecording": {
           "ariaLabel": "Arrêter l'enregistrement"
@@ -10395,6 +10466,14 @@
         },
         "fileCount": {
           "label": "{count, plural, one {# fichier} other {# fichiers}}"
+        },
+        "fileRow": {
+          "deleteButton": {
+            "ariaLabel": "Supprimer le fichier"
+          },
+          "viewButton": {
+            "ariaLabel": "Ouvrir le fichier"
+          }
         },
         "fileStatus": {
           "deleting": {
@@ -12631,6 +12710,9 @@
       "providerCard": {
         "connect": {
           "label": "Connecter"
+        },
+        "settingsButton": {
+          "ariaLabel": "Paramètres du fournisseur"
         }
       },
       "title": "Connectez vos modèles LLM"

@@ -78,7 +78,7 @@ import { InputVertical, InputHorizontal } from "@opal/layouts";
 
 // Horizontal with implicit label (click-forwarding)
 <InputHorizontal withLabel title="Notifications" description="Enable notifications">
-  <Switch />
+  <InputSwitch />
 </InputHorizontal>
 
 // No label (default) — for non-form children like buttons
@@ -93,6 +93,6 @@ import { InputVertical, InputHorizontal } from "@opal/layouts";
   description="Control what is shown in query history"
   fillInput
 >
-  <InputSelect ... />
+  <InputSingleSelect ... />
 </InputHorizontal>
 ```

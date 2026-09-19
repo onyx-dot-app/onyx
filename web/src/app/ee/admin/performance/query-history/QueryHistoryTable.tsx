@@ -20,7 +20,6 @@ import { Feedback, TaskStatus } from "@/lib/types";
 import { DateRange } from "@opal/components";
 import { PageSelector } from "@/components/PageSelector";
 import Link from "next/link";
-import type { Route } from "next";
 import { FeedbackBadge } from "@/app/ee/admin/performance/query-history/FeedbackBadge";
 import KickoffCSVExport from "@/app/ee/admin/performance/query-history/KickoffCSVExport";
 import CardSection from "@/components/admin/CardSection";
@@ -89,9 +88,7 @@ function QueryHistoryTableRow({
       {/* Wrapping in <td> to avoid console warnings */}
       <td className="w-0 p-0">
         <Link
-          href={
-            `/ee/admin/performance/query-history/${chatSessionMinimal.id}` as Route
-          }
+          href={`/ee/admin/performance/query-history/${chatSessionMinimal.id}`}
           className="absolute w-full h-full start-0 top-0"
         ></Link>
       </td>

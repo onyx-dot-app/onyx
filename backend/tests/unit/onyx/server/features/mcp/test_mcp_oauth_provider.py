@@ -2,7 +2,7 @@ import asyncio
 import base64
 import hashlib
 from typing import Any, Literal
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
 import pytest
@@ -229,6 +229,44 @@ def test_authorization_code_exchange_honors_client_auth_method_and_persists(
             f"Basic {expected_credentials}"
         )
     assert parse_qs(token_request.content.decode()) == expected_body
+
+
+def test_authorization_code_exchange_accepts_form_encoded_token_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    storage = _RecordingAuthorizationStorage()
+
+    def handle_token_request(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=urlencode(
+                {
+                    "access_token": "new-access-token",
+                    "refresh_token": "new-refresh-token",
+                    "token_type": "Bearer",
+                    "expires_in": "3600",
+                    "refresh_token_expires_in": "28800",
+                }
+            ).encode(),
+            headers={"content-type": "application/x-www-form-urlencoded"},
+            request=request,
+        )
+
+    monkeypatch.setattr(
+        oauth,
+        "mcp_ssrf_httpx_client_factory",
+        lambda **_kwargs: httpx.AsyncClient(
+            transport=httpx.MockTransport(handle_token_request)
+        ),
+    )
+
+    tokens = asyncio.run(
+        _provider(storage).complete_authorization_code_exchange("auth-code", "v" * 128)
+    )
+
+    assert tokens.access_token == "new-access-token"
+    assert tokens.refresh_token == "new-refresh-token"
+    assert storage.tokens == tokens
 
 
 def test_failed_token_exchange_does_not_persist_authorization(

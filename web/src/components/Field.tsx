@@ -28,7 +28,7 @@ import { useState, useEffect, memo, JSX } from "react";
 import remarkGfm from "remark-gfm";
 import {
   Button,
-  Checkbox,
+  InputCheckbox,
   InputDatePicker,
   InputTextArea,
   type InputTextAreaProps,
@@ -771,7 +771,7 @@ export const BooleanFormField = memo(function BooleanFormField({
                     removeIndent ? "me-2" : "mx-3"
                   )}
                 >
-                  <Checkbox
+                  <InputCheckbox
                     aria-label={`${label
                       .toLowerCase()
                       .replace(" ", "-")}-checkbox`}

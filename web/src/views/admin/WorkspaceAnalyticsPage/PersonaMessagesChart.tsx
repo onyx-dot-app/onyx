@@ -17,7 +17,7 @@ import {
   chartSeries,
   resolveChartState,
 } from "@/sections/usage/AnalyticsChart";
-import { DateRangePickerValue } from "@opal/components";
+import { InputDateRangePickerValue } from "@opal/components";
 import { Agent } from "@/lib/agents/types";
 
 interface PersonaPickerProps {
@@ -107,7 +107,7 @@ function PersonaPicker({
 }
 
 interface PersonaMessagesChartProps {
-  timeRange: DateRangePickerValue;
+  timeRange: InputDateRangePickerValue;
 }
 
 export function PersonaMessagesChart({ timeRange }: PersonaMessagesChartProps) {

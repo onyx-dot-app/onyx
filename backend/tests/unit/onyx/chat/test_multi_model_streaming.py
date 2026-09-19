@@ -1027,3 +1027,37 @@ class TestRunModels:
         # The state_container kwarg passed to run_llm_loop must be the external one
         call_kwargs = mock_llm.call_args.kwargs
         assert call_kwargs["state_container"] is external
+
+
+def test_worker_traceback_only_reaches_development_clients() -> None:
+    for dev_mode in (False, True):
+        setup = _make_setup()
+        setup.llms[0].config.api_key = None
+        setup.llms[0].config.custom_config = None
+        setup.llms[0].config.model_name = "test-model"
+        setup.llms[0].config.model_provider = "test-provider"
+        with (
+            patch("onyx.chat.process_message.DEV_MODE", dev_mode, create=True),
+            patch("onyx.chat.process_message.load_settings"),
+            patch("onyx.chat.process_message.get_session_with_current_tenant"),
+            patch(
+                "onyx.chat.process_message.run_llm_loop",
+                side_effect=RuntimeError("worker-frame"),
+            ),
+            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.construct_tools", return_value={}),
+            patch("onyx.chat.process_message.llm_loop_completion_handle"),
+            patch(
+                "onyx.chat.process_message.get_llm_token_counter",
+                return_value=lambda _: 0,
+            ),
+        ):
+            packets = _run_models_collect(setup)
+        errors = [packet for packet in packets if isinstance(packet, StreamingError)]
+        assert len(errors) == 1
+        error = errors[0]
+        assert error.error_code != "STREAM_WRITER_ERROR"
+        if dev_mode:
+            assert error.stack_trace and "worker-frame" in error.stack_trace
+        else:
+            assert error.stack_trace is None

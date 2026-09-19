@@ -81,6 +81,9 @@
       },
       "projectSearch": {
         "label": "プロジェクト検索"
+      },
+      "selectSearchSources": {
+        "label": "検索ソースを選択"
       }
     },
     "addMcpModal": {
@@ -5803,6 +5806,50 @@
         "description": "OpenAPI サーバーを接続して、エージェント用のカスタムアクションとツールを追加します。"
       }
     },
+    "systemUsage": {
+      "categories": {
+        "contextualRagChunkContext": {
+          "label": "コンテキスト RAG チャンクの文脈"
+        },
+        "contextualRagDocumentSummary": {
+          "label": "コンテキスト RAG ドキュメント要約"
+        },
+        "imageSummarization": { "label": "画像要約" },
+        "kgDeepExtraction": { "label": "ナレッジグラフ抽出" },
+        "kgDocumentClassification": {
+          "label": "ナレッジグラフ分類"
+        },
+        "other": { "label": "その他" },
+        "unattributed": { "label": "未帰属" }
+      },
+      "filters": {
+        "allModels": { "label": "すべてのモデル" },
+        "allProviders": { "label": "すべてのプロバイダー" }
+      },
+      "panel": {
+        "description": "{start} – {end} · システム使用状況とは、特定のユーザー向けではなく、Onyx がバックグラウンドで実行する LLM 処理です。例として、画像要約、コンテキスト RAG 処理、ナレッジグラフ抽出があります。",
+        "emptyDescription": "システム使用状況とは、特定のユーザー向けではなく、Onyx がバックグラウンドで実行する LLM 処理です。例として、画像要約、コンテキスト RAG 処理、ナレッジグラフ抽出があります。",
+        "error": { "title": "この期間のシステム使用状況を読み込めませんでした。" },
+        "title": "システム使用状況"
+      },
+      "summary": {
+        "spend": { "label": "システム費用" },
+        "tokens": { "label": "合計トークン" },
+        "unattributed": { "label": "未帰属の費用" }
+      },
+      "table": {
+        "columns": {
+          "category": { "header": "カテゴリー" },
+          "input": { "header": "入力" },
+          "output": { "header": "出力" },
+          "spend": { "header": "費用" },
+          "tokens": { "header": "トークン" }
+        },
+        "empty": {
+          "description": "現在のフィルターに一致するシステム使用状況はありません。"
+        }
+      }
+    },
     "perUserUsage": {
       "panel": {
         "description": "{start} – {end} · コストは記録されたモデル使用量から算出されます。",
@@ -7884,6 +7931,9 @@
         "title": "権限が変更されました"
       },
       "resetPasswordModal": {
+        "copyButton": {
+          "label": "パスワードをコピー"
+        },
         "description": "<strong>{email}</strong> の新しいランダムなパスワードを生成します。現在のパスワードは直ちに使用できなくなります。",
         "doneButton": {
           "label": "完了"
@@ -7982,8 +8032,8 @@
           "groups": {
             "header": "グループ"
           },
-          "lastUpdated": {
-            "header": "最終更新"
+          "lastActive": {
+            "header": "最終アクティブ"
           },
           "name": {
             "header": "名前"
@@ -8055,6 +8105,9 @@
         "elevenlabsTts": {
           "subtitle": "ElevenLabs のテキスト読み上げ API。"
         },
+        "zoomScribe": {
+          "subtitle": "Zoom Scribe のリアルタイム音声テキスト変換 API。"
+        },
         "tts1": {
           "subtitle": "速度に最適化された OpenAI のテキスト読み上げモデル。"
         },
@@ -8071,6 +8124,12 @@
           "label": "API キー",
           "placeholder": "API キー",
           "required": "API キーは必須です"
+        },
+        "apiSecret": {
+          "description": "Scribe にアクセスするには、{provider} の [API シークレット]({url}) を貼り付けてください。",
+          "label": "API シークレット",
+          "placeholder": "API シークレット",
+          "required": "API シークレットは必須です"
         },
         "cancelButton": {
           "label": "キャンセル"
@@ -8099,6 +8158,12 @@
           "invalid": "en-US, fr-FR のようにロケールをカンマ区切りで入力してください（1 言語につき 1 つ）",
           "label": "音声言語",
           "selfHostedCapExceeded": "セルフホストのエンドポイントは音声言語を最大 {cap} 個までサポートします（開始時に検出）"
+        },
+        "sttLanguage": {
+          "description": "Zoom Scribe がリアルタイム文字起こしに使用するロケールを選択してください。[対応ロケール]({docsUrl}) を参照してください。",
+          "invalid": "対応している音声言語を選択してください",
+          "label": "音声言語",
+          "required": "音声言語は必須です"
         },
         "sttModel": {
           "label": "STT モデル"
@@ -8952,6 +9017,9 @@
       "ssoMissingAuthUrl": {
         "error": "サインインの応答に認可 URL が含まれていませんでした"
       },
+      "ssoRedirecting": {
+        "text": "サインインのため {provider} に移動しています…"
+      },
       "ssoSignInButton": {
         "label": "SSO でサインイン"
       },
@@ -9530,6 +9598,9 @@
         },
         "startRecording": {
           "ariaLabel": "録音を開始"
+        },
+        "startingRecording": {
+          "ariaLabel": "録音を開始しています"
         },
         "stopRecording": {
           "ariaLabel": "録音を停止"
@@ -10395,6 +10466,14 @@
         },
         "fileCount": {
           "label": "{count, plural, one {# 件のファイル} other {# 件のファイル}}"
+        },
+        "fileRow": {
+          "deleteButton": {
+            "ariaLabel": "ファイルを削除"
+          },
+          "viewButton": {
+            "ariaLabel": "ファイルを開く"
+          }
         },
         "fileStatus": {
           "deleting": {
@@ -12631,6 +12710,9 @@
       "providerCard": {
         "connect": {
           "label": "接続"
+        },
+        "settingsButton": {
+          "ariaLabel": "プロバイダー設定"
         }
       },
       "title": "LLM モデルを接続"

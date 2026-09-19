@@ -30,6 +30,12 @@ export {
   type FilterButtonProps,
 } from "@opal/components/buttons/filter-button/components";
 
+/* AttachmentItemButton */
+export {
+  AttachmentItemButton,
+  type AttachmentItemButtonProps,
+} from "@opal/components/buttons/attachment-item-button/components";
+
 /* LineItemButton */
 export {
   LineItemButton,
@@ -54,14 +60,14 @@ export {
   type TextButtonProps,
 } from "@opal/components/buttons/text-button/components";
 
-/* DateRangePicker */
+/* InputDateRangePicker */
 export {
-  DateRangePicker,
+  InputDateRangePicker,
   rangeForInclusiveDays,
   THIRTY_DAYS,
   type DateRange,
-  type DateRangePickerValue,
-} from "@opal/components/inputs/date-range-picker/components";
+  type InputDateRangePickerValue,
+} from "@opal/components/inputs/chrono/input-date-range-picker/components";
 
 /* InputAvatar */
 export { default as InputAvatar } from "@opal/components/inputs/input-avatar/components";
@@ -78,7 +84,7 @@ export {
   default as InputComboBox,
   type InputComboBoxProps,
   type ComboBoxOption,
-} from "@opal/components/inputs/input-combo-box/index";
+} from "@opal/components/inputs/selections/input-combo-box/index";
 
 /* InputImage */
 export {
@@ -98,11 +104,11 @@ export {
   type InputFileProps,
 } from "@opal/components/inputs/input-file/components";
 
-/* ListFieldInput */
+/* InputList */
 export {
-  ListFieldInput,
-  type ListFieldInputProps,
-} from "@opal/components/inputs/list-field-input/components";
+  InputList,
+  type InputListProps,
+} from "@opal/components/inputs/input-list/components";
 
 /* Text */
 export {
@@ -189,11 +195,11 @@ export {
   type CalendarProps,
 } from "@opal/components/calendar/components";
 
-/* Checkbox */
+/* InputCheckbox */
 export {
-  Checkbox,
-  type CheckboxProps,
-} from "@opal/components/checkbox/components";
+  InputCheckbox,
+  type InputCheckboxProps,
+} from "@opal/components/inputs/booleans/input-checkbox/components";
 
 /* Table */
 export { Table } from "@opal/components/table/components";
@@ -243,29 +249,29 @@ export {
 export {
   InputDatePicker,
   type InputDatePickerProps,
-} from "@opal/components/inputs/input-date-picker/components";
+} from "@opal/components/inputs/chrono/input-date-picker/components";
 
-/* InputSelect */
+/* InputSingleSelect */
 export {
-  InputSelect,
-  type InputSelectRootProps,
-  type InputSelectTriggerProps,
-  type InputSelectItemProps,
-  type InputSelectSearchProps,
-} from "@opal/components/inputs/input-select/components";
+  InputSingleSelect,
+  type InputSingleSelectRootProps,
+  type InputSingleSelectTriggerProps,
+  type InputSingleSelectItemProps,
+  type InputSingleSelectSearchProps,
+} from "@opal/components/inputs/selections/input-single-select/components";
 
-/* InputTags */
+/* InputMultiSelect */
 export {
-  InputTags,
-  type InputTagsProps,
+  InputMultiSelect,
+  type InputMultiSelectProps,
   type TagItem,
-} from "@opal/components/inputs/input-tags/components";
+} from "@opal/components/inputs/selections/input-multi-select/components";
 
-/* PasswordInputTypeIn */
+/* InputPasswordTypeIn */
 export {
-  PasswordInputTypeIn,
-  type PasswordInputTypeInProps,
-} from "@opal/components/inputs/password-input-type-in/components";
+  InputPasswordTypeIn,
+  type InputPasswordTypeInProps,
+} from "@opal/components/inputs/input-password-type-in/components";
 
 /* InputTextArea */
 export {
@@ -278,16 +284,16 @@ export {
   InputTime,
   type InputTimeProps,
   type TimeValue,
-} from "@opal/components/inputs/input-time/components";
+} from "@opal/components/inputs/chrono/input-time/components";
 
 /* Spacer */
 export { Spacer, type SpacerProps } from "@opal/components/spacer/components";
 
-/* Switch */
+/* InputSwitch */
 export {
-  Switch,
-  type SwitchProps,
-} from "@opal/components/inputs/switch/components";
+  InputSwitch,
+  type InputSwitchProps,
+} from "@opal/components/inputs/booleans/input-switch/components";
 
 /* CopyButton */
 export {

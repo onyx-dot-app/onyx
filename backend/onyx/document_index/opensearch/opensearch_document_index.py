@@ -628,7 +628,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         missing_chunk_ids: list[str] = []
         missing_document_ids: set[str] = set()
         for update_request in update_requests:
-            properties_to_update: dict[str, Any] = dict()
+            properties_to_update: dict[str, Any] = {}
             # TODO(andrei): Nit but consider if we can use DocumentChunk here so
             # we don't have to think about passing in the appropriate types into
             # this dict.

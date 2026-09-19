@@ -161,15 +161,15 @@ export interface ConnectionConfiguration {
 // kwarg on the backend connector; see backend/onyx/connectors/README.md for
 // the convention, including how to pick the default.
 export function buildIncludeAttachmentsOption(
-  defaultValue: boolean
+  defaultValue: boolean,
+  description: string = "Enable processing of page attachments including images and documents"
 ): BooleanOption {
   return {
     type: "checkbox",
     query: "Include attachments?",
     label: "Include Attachments",
     name: "include_attachments",
-    description:
-      "Enable processing of page attachments including images and documents",
+    description,
     default: defaultValue,
   };
 }
@@ -1039,8 +1039,106 @@ export const connectorConfigs: Record<
         optional: true,
         description: `Specify 0 or more Teams to index. For example, specifying the Team 'Support' for the 'onyxai' Org will cause us to only index messages sent in channels belonging to the 'Support' Team. If no Teams are specified, all Teams in your organization will be indexed.`,
       },
+      buildIncludeAttachmentsOption(
+        false,
+        "Index the files in each channel's Files tab as their own documents, " +
+          "with the readers SharePoint grants them. Needs a certificate " +
+          "credential and read access to the channel sites, through " +
+          "Sites.Read.All or a Sites.Selected grant on each channel site."
+      ),
     ],
     advanced_values: [
+      {
+        type: "text",
+        query: "Microsoft Authority Host:",
+        label: "Authority Host",
+        name: "authority_host",
+        optional: true,
+        default: "https://login.microsoftonline.com",
+        description:
+          "The Microsoft identity authority host used for authentication. " +
+          "For most deployments, leave as default. " +
+          "For GCC High / DoD, use https://login.microsoftonline.us",
+      },
+      {
+        type: "text",
+        query: "Microsoft Graph API Host:",
+        label: "Graph API Host",
+        name: "graph_api_host",
+        optional: true,
+        default: "https://graph.microsoft.com",
+        description:
+          "The Microsoft Graph API host. " +
+          "For most deployments, leave as default. " +
+          "For GCC High / DoD, use https://graph.microsoft.us",
+      },
+    ],
+  },
+  outlook: {
+    description: "Configure Outlook connector",
+    values: [
+      {
+        type: "list",
+        query: "Enter mailboxes to index:",
+        label: "Mailboxes",
+        name: "mailboxes",
+        optional: true,
+        description:
+          "User principal names or primary email addresses of the mailboxes to index. " +
+          "Leave empty to index every mailbox the app registration may open. " +
+          "Shared mailboxes are never picked up automatically and must be listed here.",
+      },
+      buildIncludeAttachmentsOption(
+        false,
+        "Index the text of file attachments. Inline images, nested items and cloud links are skipped."
+      ),
+      {
+        type: "checkbox",
+        query: "Include calendar events?",
+        label: "Include Calendar",
+        name: "include_calendar",
+        description:
+          "Index the calendar of each mailbox as well as its mail. " +
+          "Needs the Calendars.Read application permission.",
+        default: false,
+      },
+    ],
+    advanced_values: [
+      {
+        type: "list",
+        query: "Enter folders to skip:",
+        label: "Excluded Folders",
+        name: "excluded_folders",
+        optional: true,
+        description:
+          "Folder names to skip in every mailbox, in addition to Junk Email, " +
+          "Deleted Items, Drafts and Outbox, which are always skipped.",
+      },
+      {
+        type: "number",
+        query: "Days of past calendar to index:",
+        label: "Calendar Past Days",
+        name: "calendar_past_days",
+        optional: true,
+        default: 365,
+        description:
+          "Used when Include Calendar is on. How far back the calendar window " +
+          "reaches. Events older than this leave the index at the next prune as " +
+          "the window moves forward. Widening it later needs a re-index, since " +
+          "unchanged events do not re-enter on their own.",
+      },
+      {
+        type: "number",
+        query: "Days of future calendar to index:",
+        label: "Calendar Future Days",
+        name: "calendar_future_days",
+        optional: true,
+        default: 180,
+        description:
+          "Used when Include Calendar is on. How far ahead the calendar window " +
+          "reaches. Widening it later needs a re-index, since unchanged events " +
+          "do not re-enter on their own.",
+      },
       {
         type: "text",
         query: "Microsoft Authority Host:",
@@ -2000,23 +2098,20 @@ type ConnectorField = ConnectionConfiguration["values"][number];
 const buildInitialValuesForFields = (
   fields: ConnectorField[]
 ): Record<string, any> =>
-  fields.reduce(
-    (acc, field) => {
-      if (field.type === "select") {
-        acc[field.name] = null;
-      } else if (field.type === "list") {
-        acc[field.name] = field.default || [];
-      } else if (field.type === "multiselect") {
-        acc[field.name] = field.default || [];
-      } else if (field.type === "checkbox") {
-        acc[field.name] = field.default ?? false;
-      } else if (field.default !== undefined) {
-        acc[field.name] = field.default;
-      }
-      return acc;
-    },
-    {} as Record<string, any>
-  );
+  fields.reduce<Record<string, any>>((acc, field) => {
+    if (field.type === "select") {
+      acc[field.name] = null;
+    } else if (field.type === "list") {
+      acc[field.name] = field.default || [];
+    } else if (field.type === "multiselect") {
+      acc[field.name] = field.default || [];
+    } else if (field.type === "checkbox") {
+      acc[field.name] = field.default ?? false;
+    } else if (field.default !== undefined) {
+      acc[field.name] = field.default;
+    }
+    return acc;
+  }, {});
 
 export function createConnectorInitialValues(
   connector: ConfigurableSources
@@ -2048,32 +2143,31 @@ export function createConnectorValidationSchema(
           ? schema.min(1, "Select at least one group you manage")
           : schema
       ),
-    ...[...configuration.values, ...configuration.advanced_values].reduce(
-      (acc, field) => {
-        let schema: any =
-          field.type === "select"
-            ? Yup.string()
-            : field.type === "list"
+    ...[...configuration.values, ...configuration.advanced_values].reduce<
+      Record<string, any>
+    >((acc, field) => {
+      let schema: any =
+        field.type === "select"
+          ? Yup.string()
+          : field.type === "list"
+            ? Yup.array().of(Yup.string())
+            : field.type === "multiselect"
               ? Yup.array().of(Yup.string())
-              : field.type === "multiselect"
-                ? Yup.array().of(Yup.string())
-                : field.type === "string_pair_list"
-                  ? Yup.array().of(Yup.object())
-                  : field.type === "checkbox"
-                    ? Yup.boolean()
-                    : field.type === "file"
-                      ? Yup.mixed()
-                      : Yup.string();
+              : field.type === "string_pair_list"
+                ? Yup.array().of(Yup.object())
+                : field.type === "checkbox"
+                  ? Yup.boolean()
+                  : field.type === "file"
+                    ? Yup.mixed()
+                    : Yup.string();
 
-        if (!field.optional) {
-          schema = schema.required(`${field.label} is required`);
-        }
+      if (!field.optional) {
+        schema = schema.required(`${field.label} is required`);
+      }
 
-        acc[field.name] = schema;
-        return acc;
-      },
-      {} as Record<string, any>
-    ),
+      acc[field.name] = schema;
+      return acc;
+    }, {}),
     // These are advanced settings
     indexingStart: Yup.string().nullable(),
     pruneFreq: Yup.number().min(
@@ -2214,6 +2308,7 @@ export interface SharepointConfig {
 
 export interface TeamsConfig {
   teams?: string[];
+  include_attachments?: boolean;
   authority_host?: string;
   graph_api_host?: string;
 }

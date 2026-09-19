@@ -27,7 +27,7 @@ import {
   type ModelPrice,
 } from "@/app/app/settings/usage/lib";
 import {
-  DateRangePicker,
+  InputDateRangePicker,
   rangeForInclusiveDays,
   type DateRange,
 } from "@opal/components";
@@ -448,7 +448,7 @@ export default function UsageSettings() {
       <Section gap={0.75} justifyContent="start">
         <div className="flex w-full flex-wrap items-center justify-between gap-3">
           <Text font="heading-h3">{t("header.title")}</Text>
-          <DateRangePicker
+          <InputDateRangePicker
             value={dateRange}
             onValueChange={setDateRange}
             size="sm"

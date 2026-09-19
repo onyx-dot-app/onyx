@@ -2,6 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from onyx.db.enums import SystemUsageAttribution
 from onyx.db.models import ModelCostOverride
 from onyx.db.user_usage import UserUsageByDay as UsageDayModel
 from onyx.llm.cost import ModelPrice
@@ -72,6 +73,31 @@ class UsageExportResponse(BaseModel):
     start: str
     end: str
     users: list[UsageExportUser]
+
+
+class SystemUsageRecord(BaseModel):
+    attribution: SystemUsageAttribution
+    model: str
+    flow: str
+    provider: str
+    day: str
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cache_creation_tokens: int
+    cost_cents: float
+
+
+class SystemUsageCategory(BaseModel):
+    category: str
+    totals: UsageExportTotals
+    records: list[SystemUsageRecord]
+
+
+class SystemUsageResponse(BaseModel):
+    start: str
+    end: str
+    categories: list[SystemUsageCategory]
 
 
 class ResetUsageRequest(BaseModel):

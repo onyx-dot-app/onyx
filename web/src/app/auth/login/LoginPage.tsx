@@ -5,6 +5,7 @@ import LoginText from "@/app/auth/login/LoginText";
 import CloudSSOSignIn from "@/app/auth/login/CloudSSOSignIn";
 import ProviderSignInButton from "@/app/auth/login/ProviderSignInButton";
 import { SignInButton, EmailPasswordForm } from "@/lib/auth/components";
+import { shouldAutoStartSso } from "@/lib/auth/utils";
 import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 import { useSendAuthRequiredMessage } from "@/lib/extension/hooks";
 import { Button, MessageCard } from "@opal/components";
@@ -18,6 +19,8 @@ interface LoginPageProps {
   hidePageRedirect?: boolean;
   verified?: boolean;
   isFirstUser?: boolean;
+  /** False keeps the SSO button instead of starting the flow on load. */
+  autoRedirectToSso: boolean;
 }
 
 export default function LoginPage({
@@ -27,6 +30,7 @@ export default function LoginPage({
   hidePageRedirect,
   verified,
   isFirstUser,
+  autoRedirectToSso,
 }: LoginPageProps) {
   const t = useTranslations("auth");
   useSendAuthRequiredMessage();
@@ -38,6 +42,7 @@ export default function LoginPage({
   const ssoProviders = authTypeMetadata?.ssoProviders ?? [];
   // Kill switch off: hide password login/signup. Backend refuses regardless.
   const passwordAuthEnabled = authTypeMetadata?.passwordAuthEnabled !== false;
+  const autoStartSso = shouldAutoStartSso(authTypeMetadata, autoRedirectToSso);
   const orDivider = t("login.orDivider.text");
 
   return (
@@ -82,6 +87,7 @@ export default function LoginPage({
                     key={provider.name}
                     provider={provider}
                     nextUrl={effectiveNextUrl}
+                    autoStart={autoStartSso}
                   />
                 ))}
               </div>

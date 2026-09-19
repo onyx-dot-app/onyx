@@ -41,7 +41,7 @@ def _verify_query_history_pagination(
         )
 
     # Create a set of all the expected chat session IDs
-    all_expected_sessions = set(str(session.id) for session in chat_sessions)
+    all_expected_sessions = {str(session.id) for session in chat_sessions}
     # Create a set of all the retrieved chat session IDs
     all_retrieved_sessions = set(retrieved_sessions)
 

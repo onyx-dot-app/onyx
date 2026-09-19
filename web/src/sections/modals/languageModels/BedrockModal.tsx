@@ -287,7 +287,7 @@ export default function BedrockModal({
         (existingLlmProvider?.custom_config
           ?.AWS_BEARER_TOKEN_BEDROCK as string) ?? "",
     },
-  } as BedrockModalValues;
+  };
 
   const validationSchema = buildValidationSchema(t, isOnboarding, {
     extra: {

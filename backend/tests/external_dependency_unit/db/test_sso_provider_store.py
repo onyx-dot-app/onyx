@@ -44,13 +44,13 @@ def provider_name(db_session: Session) -> Generator[str, None, None]:
 
 
 def _create(db_session: Session, name: str, **overrides: object) -> SSOProvider:
-    kwargs: dict = dict(
-        name=name,
-        display_name="Company A",
-        provider_type=SSOProviderType.GOOGLE_OAUTH,
-        config=dict(_GOOGLE_CONFIG),
-        allowed_email_domains=["CompanyA.com ", "companya.com"],
-    )
+    kwargs: dict = {
+        "name": name,
+        "display_name": "Company A",
+        "provider_type": SSOProviderType.GOOGLE_OAUTH,
+        "config": dict(_GOOGLE_CONFIG),
+        "allowed_email_domains": ["CompanyA.com ", "companya.com"],
+    }
     kwargs.update(overrides)
     return create_sso_provider(db_session, **kwargs)
 

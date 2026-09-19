@@ -347,9 +347,7 @@ def save_chat_turn(
     )
 
     # 7. Build citations mapping - use the mapping we already built in step 4
-    assistant_message.citations = (
-        citation_number_to_search_doc_id if citation_number_to_search_doc_id else None
-    )
+    assistant_message.citations = citation_number_to_search_doc_id or None
 
     # 8. Attach code interpreter generated files that the assistant actually
     # referenced in its response, so they are available via load_all_chat_files

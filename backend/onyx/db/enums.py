@@ -616,6 +616,9 @@ class HierarchyNodeType(str, PyEnum):
     # Slack
     CHANNEL = "channel"
 
+    # Outlook
+    MAILBOX = "mailbox"
+
 
 class LLMModelFlowType(str, PyEnum):
     CHAT = "chat"
@@ -777,6 +780,16 @@ class SSOProviderType(str, PyEnum):
     GOOGLE_OAUTH = "GOOGLE_OAUTH"
     OIDC = "OIDC"
     SAML = "SAML"
+
+
+class SystemUsageAttribution(str, PyEnum):
+    ATTRIBUTED = "ATTRIBUTED"
+    UNATTRIBUTED = "UNATTRIBUTED"
+
+
+class UsageActorKind(str, PyEnum):
+    USER = "USER"
+    SYSTEM = "SYSTEM"
 
 
 class IncognitoRecordMode(str, PyEnum):

@@ -81,6 +81,9 @@
       },
       "projectSearch": {
         "label": "프로젝트 검색"
+      },
+      "selectSearchSources": {
+        "label": "검색 소스 선택"
       }
     },
     "addMcpModal": {
@@ -5803,6 +5806,50 @@
         "description": "OpenAPI 서버를 연결해 에이전트용 사용자 지정 작업과 도구를 추가하세요."
       }
     },
+    "systemUsage": {
+      "categories": {
+        "contextualRagChunkContext": {
+          "label": "컨텍스트 RAG 청크 문맥"
+        },
+        "contextualRagDocumentSummary": {
+          "label": "컨텍스트 RAG 문서 요약"
+        },
+        "imageSummarization": { "label": "이미지 요약" },
+        "kgDeepExtraction": { "label": "지식 그래프 추출" },
+        "kgDocumentClassification": {
+          "label": "지식 그래프 분류"
+        },
+        "other": { "label": "기타" },
+        "unattributed": { "label": "미귀속" }
+      },
+      "filters": {
+        "allModels": { "label": "모든 모델" },
+        "allProviders": { "label": "모든 제공업체" }
+      },
+      "panel": {
+        "description": "{start} – {end} · 시스템 사용량은 Onyx가 특정 사용자를 위해서가 아니라 백그라운드에서 실행하는 LLM 작업입니다. 이미지 요약, 컨텍스트 RAG 처리, 지식 그래프 추출 등이 포함됩니다.",
+        "emptyDescription": "시스템 사용량은 Onyx가 특정 사용자를 위해서가 아니라 백그라운드에서 실행하는 LLM 작업입니다. 이미지 요약, 컨텍스트 RAG 처리, 지식 그래프 추출 등이 포함됩니다.",
+        "error": { "title": "이 기간의 시스템 사용량을 불러오지 못했습니다." },
+        "title": "시스템 사용량"
+      },
+      "summary": {
+        "spend": { "label": "시스템 비용" },
+        "tokens": { "label": "총 토큰" },
+        "unattributed": { "label": "미귀속 비용" }
+      },
+      "table": {
+        "columns": {
+          "category": { "header": "카테고리" },
+          "input": { "header": "입력" },
+          "output": { "header": "출력" },
+          "spend": { "header": "비용" },
+          "tokens": { "header": "토큰" }
+        },
+        "empty": {
+          "description": "현재 필터와 일치하는 시스템 사용량이 없습니다."
+        }
+      }
+    },
     "perUserUsage": {
       "panel": {
         "description": "{start} – {end} · 비용은 기록된 모델 사용량을 기준으로 계산됩니다.",
@@ -7884,6 +7931,9 @@
         "title": "권한이 변경되었습니다"
       },
       "resetPasswordModal": {
+        "copyButton": {
+          "label": "비밀번호 복사"
+        },
         "description": "<strong>{email}</strong>의 새 임의 비밀번호를 생성합니다. 현재 비밀번호는 즉시 사용할 수 없게 됩니다.",
         "doneButton": {
           "label": "완료"
@@ -7982,8 +8032,8 @@
           "groups": {
             "header": "그룹"
           },
-          "lastUpdated": {
-            "header": "마지막 업데이트"
+          "lastActive": {
+            "header": "마지막 활동"
           },
           "name": {
             "header": "이름"
@@ -8055,6 +8105,9 @@
         "elevenlabsTts": {
           "subtitle": "ElevenLabs 텍스트 음성 변환 API."
         },
+        "zoomScribe": {
+          "subtitle": "Zoom Scribe 실시간 음성 텍스트 변환 API."
+        },
         "tts1": {
           "subtitle": "속도에 최적화된 OpenAI의 텍스트 음성 변환 모델."
         },
@@ -8071,6 +8124,12 @@
           "label": "API 키",
           "placeholder": "API 키",
           "required": "API 키가 필요합니다"
+        },
+        "apiSecret": {
+          "description": "Scribe에 액세스하려면 {provider}의 [API 시크릿]({url})을 붙여넣으세요.",
+          "label": "API 시크릿",
+          "placeholder": "API 시크릿",
+          "required": "API 시크릿이 필요합니다"
         },
         "cancelButton": {
           "label": "취소"
@@ -8099,6 +8158,12 @@
           "invalid": "en-US, fr-FR처럼 쉼표로 구분한 로캘을 입력하세요(언어당 하나씩)",
           "label": "음성 언어",
           "selfHostedCapExceeded": "자체 호스팅 엔드포인트는 음성 언어를 최대 {cap}개까지 지원합니다(시작 시 감지)"
+        },
+        "sttLanguage": {
+          "description": "Zoom Scribe가 실시간 전사에 사용할 로캘을 선택하세요. [지원되는 로캘]({docsUrl})을 참조하세요.",
+          "invalid": "지원되는 음성 언어를 선택하세요",
+          "label": "음성 언어",
+          "required": "음성 언어가 필요합니다"
         },
         "sttModel": {
           "label": "STT 모델"
@@ -8952,6 +9017,9 @@
       "ssoMissingAuthUrl": {
         "error": "로그인 응답에 인증 URL이 없습니다"
       },
+      "ssoRedirecting": {
+        "text": "로그인을 위해 {provider}(으)로 이동하는 중…"
+      },
       "ssoSignInButton": {
         "label": "SSO로 로그인"
       },
@@ -9530,6 +9598,9 @@
         },
         "startRecording": {
           "ariaLabel": "녹음 시작"
+        },
+        "startingRecording": {
+          "ariaLabel": "녹음 시작 중"
         },
         "stopRecording": {
           "ariaLabel": "녹음 중지"
@@ -10395,6 +10466,14 @@
         },
         "fileCount": {
           "label": "{count, plural, one {파일 #개} other {파일 #개}}"
+        },
+        "fileRow": {
+          "deleteButton": {
+            "ariaLabel": "파일 삭제"
+          },
+          "viewButton": {
+            "ariaLabel": "파일 열기"
+          }
         },
         "fileStatus": {
           "deleting": {
@@ -12631,6 +12710,9 @@
       "providerCard": {
         "connect": {
           "label": "연결"
+        },
+        "settingsButton": {
+          "ariaLabel": "제공자 설정"
         }
       },
       "title": "LLM 모델 연결"

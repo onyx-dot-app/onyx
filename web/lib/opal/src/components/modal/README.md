@@ -61,4 +61,4 @@ When a `[data-main-container]` element is present (the content area beside the s
 
 ## Deferred
 
-The remaining Figma header/footer content variants (Search, Card, Panel, Checkbox, Message) are follow-ups.
+The remaining Figma header/footer content variants (Search, Card, Panel, InputCheckbox, Message) are follow-ups.

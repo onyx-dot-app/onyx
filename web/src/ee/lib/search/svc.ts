@@ -23,7 +23,7 @@ export async function classifyQuery(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       user_query: query,
-    } as SearchFlowClassificationRequest),
+    } satisfies SearchFlowClassificationRequest),
     signal,
   });
 

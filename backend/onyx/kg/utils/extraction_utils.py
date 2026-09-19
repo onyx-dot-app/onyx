@@ -39,10 +39,14 @@ from onyx.prompts.kg_prompts import (
     MASTER_EXTRACTION_PROMPT,
 )
 from onyx.tracing.flows import LLMFlow
+from onyx.tracing.framework.create import ensure_trace
+from onyx.tracing.framework.traces import TraceContentMode
 from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+KG_DOCUMENT_PROCESSING_TRACE_NAME = "kg_document_processing"
 
 
 def get_entity_types_str(active: bool | None = None) -> str:
@@ -335,9 +339,29 @@ def kg_deep_extraction(
     index_name: str,
     kg_config_settings: KGConfigSettings,
 ) -> KGDocumentDeepExtractionResults:
-    """
-    Perform deep extraction and classification on the document.
-    """
+    """Perform one document's deep extraction and classification workflow."""
+    with ensure_trace(
+        KG_DOCUMENT_PROCESSING_TRACE_NAME,
+        content_mode=TraceContentMode.METADATA_ONLY,
+    ):
+        return _kg_deep_extraction(
+            document_id=document_id,
+            metadata=metadata,
+            implied_extraction=implied_extraction,
+            tenant_id=tenant_id,
+            index_name=index_name,
+            kg_config_settings=kg_config_settings,
+        )
+
+
+def _kg_deep_extraction(
+    document_id: str,
+    metadata: KGEnhancedDocumentMetadata,
+    implied_extraction: KGImpliedExtractionResults,
+    tenant_id: str,
+    index_name: str,
+    kg_config_settings: KGConfigSettings,
+) -> KGDocumentDeepExtractionResults:
     result = KGDocumentDeepExtractionResults(
         classification_result=None,
         deep_extracted_entities=set(),
@@ -427,6 +451,7 @@ def kg_classify_document(
             llm=llm,
             flow=LLMFlow.KG_DOCUMENT_CLASSIFICATION,
             input_messages=[prompt_msg],
+            content_mode=TraceContentMode.METADATA_ONLY,
         ) as span_generation:
             response = llm.invoke(prompt_msg)
             record_llm_response(span_generation, response)
@@ -499,7 +524,10 @@ def kg_deep_extract_chunks(
     try:
         prompt_msg = UserMessage(content=prompt)
         with llm_generation_span(
-            llm=llm, flow=LLMFlow.KG_DEEP_EXTRACTION, input_messages=[prompt_msg]
+            llm=llm,
+            flow=LLMFlow.KG_DEEP_EXTRACTION,
+            input_messages=[prompt_msg],
+            content_mode=TraceContentMode.METADATA_ONLY,
         ) as span_generation:
             response = llm.invoke(prompt_msg)
             record_llm_response(span_generation, response)

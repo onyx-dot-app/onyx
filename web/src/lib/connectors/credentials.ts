@@ -250,8 +250,18 @@ export interface AsanaCredentialJson {
 
 export interface TeamsCredentialJson {
   teams_client_id: string;
-  teams_client_secret: string;
+  teams_client_secret?: string;
   teams_directory_id: string;
+  teams_certificate_password?: string;
+  teams_private_key?: TypedFile;
+}
+
+export interface OutlookCredentialJson {
+  outlook_client_id: string;
+  outlook_client_secret?: string;
+  outlook_directory_id: string;
+  outlook_certificate_password?: string;
+  outlook_private_key?: TypedFile;
 }
 
 export interface DiscourseCredentialJson {
@@ -318,77 +328,131 @@ export interface TestRailCredentialJson {
   testrail_api_key: string;
 }
 
+// Gmail and Google Drive use dedicated credential UIs, so their templates are partial.
+type CredentialTemplateMap = Record<ValidSources, object | null> & {
+  github: GithubCredentialJson;
+  gitlab: GitlabCredentialJson;
+  lumapps: LumAppsCredentialJson;
+  bitbucket: BitbucketCredentialJson;
+  slack: SlackCredentialJson;
+  bookstack: BookstackCredentialJson;
+  outline: OutlineCredentialJson;
+  confluence: ConfluenceCredentialJson;
+  jira: JiraCredentialJson;
+  productboard: ProductboardCredentialJson;
+  slab: SlabCredentialJson;
+  coda: CodaCredentialJson;
+  notion: NotionCredentialJson;
+  guru: GuruCredentialJson;
+  gong: GongCredentialJson;
+  zulip: ZulipCredentialJson;
+  linear: LinearCredentialJson;
+  hubspot: HubSpotCredentialJson;
+  document360: Document360CredentialJson;
+  loopio: LoopioCredentialJson;
+  box: BoxCredentialJson;
+  dropbox: DropboxCredentialJson;
+  salesforce: SalesforceCredentialJson;
+  sharepoint: CredentialTemplateWithAuth<SharepointCredentialJson>;
+  asana: AsanaCredentialJson;
+  teams: CredentialTemplateWithAuth<TeamsCredentialJson>;
+  outlook: CredentialTemplateWithAuth<OutlookCredentialJson>;
+  zendesk: ZendeskCredentialJson;
+  discourse: DiscourseCredentialJson;
+  axero: AxeroCredentialJson;
+  clickup: ClickupCredentialJson;
+  s3: CredentialTemplateWithAuth<S3CredentialJson>;
+  r2: R2CredentialJson;
+  google_cloud_storage: GCSCredentialJson;
+  oci_storage: OCICredentialJson;
+  freshdesk: FreshdeskCredentialJson;
+  fireflies: FirefliesCredentialJson;
+  braintrust: BraintrustCredentialJson;
+  canvas: CanvasCredentialJson;
+  egnyte: EgnyteCredentialJson;
+  airtable: AirtableCredentialJson;
+  drupal_wiki: DrupalWikiCredentialJson;
+  discord: DiscordCredentialJson;
+  google_drive: Partial<GoogleDriveCredentialJson>;
+  gmail: Partial<GmailCredentialJson>;
+  gitbook: GitbookCredentialJson;
+  highspot: HighspotCredentialJson;
+  imap: ImapCredentialJson;
+  testrail: TestRailCredentialJson;
+};
+
 export const credentialTemplates: Record<ValidSources, any> = {
   github: {
     github_access_token: "",
     github_base_url: null,
-  } as GithubCredentialJson,
+  },
   gitlab: {
     gitlab_url: "",
     gitlab_access_token: "",
-  } as GitlabCredentialJson,
+  },
   lumapps: {
     lumapps_application_id: "",
     lumapps_api_key: "",
     lumapps_service_user: "",
-  } as LumAppsCredentialJson,
+  },
   bitbucket: {
     bitbucket_email: "",
     bitbucket_api_token: "",
-  } as BitbucketCredentialJson,
-  slack: { slack_bot_token: "" } as SlackCredentialJson,
+  },
+  slack: { slack_bot_token: "" },
   bookstack: {
     bookstack_base_url: "",
     bookstack_api_token_id: "",
     bookstack_api_token_secret: "",
-  } as BookstackCredentialJson,
+  },
   outline: {
     outline_base_url: "",
     outline_api_token: "",
-  } as OutlineCredentialJson,
+  },
   confluence: {
     confluence_username: "",
     confluence_access_token: "",
-  } as ConfluenceCredentialJson,
+  },
   jira: {
     jira_user_email: null,
     jira_api_token: "",
-  } as JiraCredentialJson,
-  productboard: { productboard_access_token: "" } as ProductboardCredentialJson,
-  slab: { slab_bot_token: "" } as SlabCredentialJson,
-  coda: { coda_bearer_token: "" } as CodaCredentialJson,
-  notion: { notion_integration_token: "" } as NotionCredentialJson,
-  guru: { guru_user: "", guru_user_token: "" } as GuruCredentialJson,
+  },
+  productboard: { productboard_access_token: "" },
+  slab: { slab_bot_token: "" },
+  coda: { coda_bearer_token: "" },
+  notion: { notion_integration_token: "" },
+  guru: { guru_user: "", guru_user_token: "" },
   gong: {
     gong_access_key: "",
     gong_access_key_secret: "",
     gong_base_url: null,
-  } as GongCredentialJson,
-  zulip: { zuliprc_content: "" } as ZulipCredentialJson,
-  linear: { linear_api_key: "" } as LinearCredentialJson,
-  hubspot: { hubspot_access_token: "" } as HubSpotCredentialJson,
+  },
+  zulip: { zuliprc_content: "" },
+  linear: { linear_api_key: "" },
+  hubspot: { hubspot_access_token: "" },
   document360: {
     portal_id: "",
     document360_api_token: "",
-  } as Document360CredentialJson,
+  },
   loopio: {
     loopio_subdomain: "",
     loopio_client_id: "",
     loopio_client_token: "",
-  } as LoopioCredentialJson,
+  },
   box: {
     box_client_id: "",
     box_client_secret: "",
     box_enterprise_id: "",
     box_user_email: null,
-  } as BoxCredentialJson,
-  dropbox: { dropbox_access_token: "" } as DropboxCredentialJson,
+  },
+  dropbox: { dropbox_access_token: "" },
   salesforce: {
     sf_username: "",
     sf_password: "",
     sf_security_token: "",
     is_sandbox: false,
-  } as SalesforceCredentialJson,
+  },
+  // SAFETY: the certificate template seeds sp_private_key with null, which TypedFile does not allow.
   sharepoint: {
     authentication_method: "client_credentials",
     authMethods: [
@@ -421,29 +485,82 @@ export const credentialTemplates: Record<ValidSources, any> = {
   } as CredentialTemplateWithAuth<SharepointCredentialJson>,
   asana: {
     asana_api_token_secret: "",
-  } as AsanaCredentialJson,
+  },
+  // SAFETY: the certificate template seeds teams_private_key with null, which TypedFile does not allow.
   teams: {
-    teams_client_id: "",
-    teams_client_secret: "",
-    teams_directory_id: "",
-  } as TeamsCredentialJson,
+    authentication_method: "client_secret",
+    authMethods: [
+      {
+        value: "client_secret",
+        label: "Client Secret",
+        fields: {
+          teams_client_id: "",
+          teams_client_secret: "",
+          teams_directory_id: "",
+        },
+        description:
+          "The connector signs in with a client secret of the app registration. Provide the client ID, directory ID and secret. Channel messages and members only: SharePoint refuses a secret, so Include Attachments needs the certificate option.",
+      },
+      {
+        value: "certificate",
+        label: "Certificate Authentication",
+        fields: {
+          teams_client_id: "",
+          teams_directory_id: "",
+          teams_certificate_password: "",
+          teams_private_key: null,
+        },
+        description:
+          "The connector signs in with a certificate uploaded to the app registration. Provide the client ID, directory ID, the PFX bundle and its password. Required for Include Attachments, which reads channel files and their readers from SharePoint.",
+      },
+    ],
+  } as CredentialTemplateWithAuth<TeamsCredentialJson>,
+  // SAFETY: the certificate template seeds outlook_private_key with null, which TypedFile does not allow.
+  outlook: {
+    authentication_method: "client_secret",
+    authMethods: [
+      {
+        value: "client_secret",
+        label: "Client Secret",
+        fields: {
+          outlook_client_id: "",
+          outlook_client_secret: "",
+          outlook_directory_id: "",
+        },
+        description:
+          "The connector signs in with a client secret of the app registration. Provide the client ID, directory ID and secret.",
+      },
+      {
+        value: "certificate",
+        label: "Certificate Authentication",
+        fields: {
+          outlook_client_id: "",
+          outlook_directory_id: "",
+          outlook_certificate_password: "",
+          outlook_private_key: null,
+        },
+        description:
+          "The connector signs in with a certificate uploaded to the app registration. Provide the client ID, directory ID, the PFX bundle and its password.",
+      },
+    ],
+  } as CredentialTemplateWithAuth<OutlookCredentialJson>,
   zendesk: {
     zendesk_subdomain: "",
     zendesk_email: "",
     zendesk_token: "",
-  } as ZendeskCredentialJson,
+  },
   discourse: {
     discourse_api_key: "",
     discourse_api_username: "",
-  } as DiscourseCredentialJson,
+  },
   axero: {
     base_url: "",
     axero_api_token: "",
-  } as AxeroCredentialJson,
+  },
   clickup: {
     clickup_api_token: "",
     clickup_team_id: "",
-  } as ClickupCredentialJson,
+  },
 
   s3: {
     authentication_method: "access_key",
@@ -474,45 +591,45 @@ export const credentialTemplates: Record<ValidSources, any> = {
         disablePermSync: false,
       },
     ],
-  } as CredentialTemplateWithAuth<S3CredentialJson>,
+  },
   r2: {
     account_id: "",
     r2_access_key_id: "",
     r2_secret_access_key: "",
-  } as R2CredentialJson,
+  },
   google_cloud_storage: {
     access_key_id: "",
     secret_access_key: "",
-  } as GCSCredentialJson,
+  },
   oci_storage: {
     namespace: "",
     region: "",
     access_key_id: "",
     secret_access_key: "",
-  } as OCICredentialJson,
+  },
   freshdesk: {
     freshdesk_domain: "",
     freshdesk_api_key: "",
-  } as FreshdeskCredentialJson,
+  },
   fireflies: {
     fireflies_api_key: "",
-  } as FirefliesCredentialJson,
+  },
   braintrust: {
     braintrust_api_key: "",
-  } as BraintrustCredentialJson,
+  },
   canvas: {
     canvas_access_token: "",
-  } as CanvasCredentialJson,
+  },
   egnyte: {
     domain: "",
     access_token: "",
-  } as EgnyteCredentialJson,
+  },
   airtable: {
     airtable_access_token: "",
-  } as AirtableCredentialJson,
+  },
   drupal_wiki: {
     drupal_wiki_api_token: "",
-  } as DrupalWikiCredentialJson,
+  },
   xenforo: null,
   google_sites: null,
   file: null,
@@ -524,29 +641,29 @@ export const credentialTemplates: Record<ValidSources, any> = {
   not_applicable: null,
   ingestion_api: null,
   federated_slack: null,
-  discord: { discord_bot_token: "" } as DiscordCredentialJson,
+  discord: { discord_bot_token: "" },
 
   // NOTE: These are Special Cases
-  google_drive: { google_tokens: "" } as GoogleDriveCredentialJson,
-  gmail: { google_tokens: "" } as GmailCredentialJson,
+  google_drive: { google_tokens: "" },
+  gmail: { google_tokens: "" },
   gitbook: {
     gitbook_api_key: "",
-  } as GitbookCredentialJson,
+  },
   highspot: {
     highspot_url: "",
     highspot_key: "",
     highspot_secret: "",
-  } as HighspotCredentialJson,
+  },
   imap: {
     imap_username: "",
     imap_password: "",
-  } as ImapCredentialJson,
+  },
   testrail: {
     testrail_base_url: "",
     testrail_username: "",
     testrail_api_key: "",
-  } as TestRailCredentialJson,
-};
+  },
+} satisfies CredentialTemplateMap;
 
 export const credentialDisplayNames: Record<string, string> = {
   // Github
@@ -697,6 +814,15 @@ export const credentialDisplayNames: Record<string, string> = {
   teams_client_id: "Microsoft Teams Client ID",
   teams_client_secret: "Microsoft Teams Client Secret",
   teams_directory_id: "Microsoft Teams Directory ID",
+  teams_certificate_password: "Microsoft Teams Certificate Password",
+  teams_private_key: "Microsoft Teams Private Key (PFX)",
+
+  // Outlook
+  outlook_client_id: "Microsoft Outlook Client ID",
+  outlook_client_secret: "Microsoft Outlook Client Secret",
+  outlook_directory_id: "Microsoft Outlook Directory ID",
+  outlook_certificate_password: "Microsoft Outlook Certificate Password",
+  outlook_private_key: "Microsoft Outlook Private Key (PFX)",
 
   // Discourse
   discourse_api_key: "Discourse API Key",

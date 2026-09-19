@@ -105,7 +105,7 @@ import { InputSelect } from "@/refresh-components/inputs/InputSelect";
 ```
 
 The select grows to fill the row (up to 240px) instead of sitting at its content width. Compact
-controls like `Switch`/`Button` should omit `fillRight` so they keep hugging the right edge.
+controls like `InputSwitch`/`Button` should omit `fillRight` so they keep hugging the right edge.
 
 ### No right children (padding-only wrapper)
 

@@ -243,7 +243,7 @@ export default function MCPOAuthCallbackPage() {
                 />
                 <Button
                   width="full"
-                  onClick={() => router.push(DEFAULT_REDIRECT_PATH as Route)}
+                  onClick={() => router.push(DEFAULT_REDIRECT_PATH)}
                 >
                   {t("mcpOauthCallback.backToChatButton.label")}
                 </Button>

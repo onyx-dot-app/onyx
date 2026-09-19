@@ -34,12 +34,11 @@ function Main() {
 
   const handleSave = async () => {
     try {
-      await fetch(
-        `/api/search-settings/upsert-unstructured-api-key?unstructured_api_key=${apiKey}`,
-        {
-          method: "PUT",
-        }
-      );
+      await fetch("/api/search-settings/upsert-unstructured-api-key", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ unstructured_api_key: apiKey }),
+      });
     } catch (error) {
       console.error("Failed to save API key:", error);
     }
@@ -145,7 +144,11 @@ function Main() {
                   </Text>
                 </>
               ) : (
-                <Button variant="action" onClick={handleSave}>
+                <Button
+                  variant="action"
+                  onClick={handleSave}
+                  disabled={!apiKey.trim()}
+                >
                   {t("unstructured.saveButton.label")}
                 </Button>
               )}

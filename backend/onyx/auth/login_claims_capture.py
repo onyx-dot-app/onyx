@@ -568,7 +568,7 @@ def get_idp_profile(email: str) -> IdpProfileViews:
     try:
         profile = _resolve_profile(email)
         return IdpProfileViews(
-            fields={label: value for label, value in profile.values()},
+            fields=dict(profile.values()),
             placeholders={key: value for key, (_, value) in profile.items()},
         )
     except Exception:

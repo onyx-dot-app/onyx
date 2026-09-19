@@ -81,6 +81,9 @@
       },
       "projectSearch": {
         "label": "بحث المشروع"
+      },
+      "selectSearchSources": {
+        "label": "تحديد مصادر البحث"
       }
     },
     "addMcpModal": {
@@ -5803,6 +5806,50 @@
         "description": "اربط خوادم OpenAPI لإضافة إجراءات وأدوات مخصصة لوكلائك."
       }
     },
+    "systemUsage": {
+      "categories": {
+        "contextualRagChunkContext": {
+          "label": "سياق مقاطع RAG السياقية"
+        },
+        "contextualRagDocumentSummary": {
+          "label": "ملخصات مستندات RAG السياقية"
+        },
+        "imageSummarization": { "label": "تلخيص الصور" },
+        "kgDeepExtraction": { "label": "استخراج الرسم البياني المعرفي" },
+        "kgDocumentClassification": {
+          "label": "تصنيف الرسم البياني المعرفي"
+        },
+        "other": { "label": "أخرى" },
+        "unattributed": { "label": "غير منسوب" }
+      },
+      "filters": {
+        "allModels": { "label": "كل النماذج" },
+        "allProviders": { "label": "كل المزوّدين" }
+      },
+      "panel": {
+        "description": "{start} – {end} · استخدام النظام هو نشاط نماذج اللغة الكبيرة الذي يشغّله Onyx في الخلفية بدلًا من تشغيله لمستخدم محدد. تشمل الأمثلة تلخيص الصور ومعالجة RAG السياقية واستخراج الرسم البياني المعرفي.",
+        "emptyDescription": "استخدام النظام هو نشاط نماذج اللغة الكبيرة الذي يشغّله Onyx في الخلفية بدلًا من تشغيله لمستخدم محدد. تشمل الأمثلة تلخيص الصور ومعالجة RAG السياقية واستخراج الرسم البياني المعرفي.",
+        "error": { "title": "تعذر تحميل استخدام النظام لهذه الفترة." },
+        "title": "استخدام النظام"
+      },
+      "summary": {
+        "spend": { "label": "إنفاق النظام" },
+        "tokens": { "label": "إجمالي الرموز" },
+        "unattributed": { "label": "إنفاق غير منسوب" }
+      },
+      "table": {
+        "columns": {
+          "category": { "header": "الفئة" },
+          "input": { "header": "الإدخال" },
+          "output": { "header": "الإخراج" },
+          "spend": { "header": "الإنفاق" },
+          "tokens": { "header": "الرموز" }
+        },
+        "empty": {
+          "description": "لا يوجد استخدام للنظام يطابق عوامل التصفية الحالية."
+        }
+      }
+    },
     "perUserUsage": {
       "panel": {
         "description": "{start} – {end} · تُحسب التكاليف من استخدام النماذج المسجل.",
@@ -7884,6 +7931,9 @@
         "title": "تغيّرت الأذونات"
       },
       "resetPasswordModal": {
+        "copyButton": {
+          "label": "نسخ كلمة المرور"
+        },
         "description": "سيولّد هذا كلمة مرور عشوائية جديدة لـ <strong>{email}</strong>. ستتوقف كلمة مروره الحالية عن العمل فورًا.",
         "doneButton": {
           "label": "تم"
@@ -7982,8 +8032,8 @@
           "groups": {
             "header": "المجموعات"
           },
-          "lastUpdated": {
-            "header": "آخر تحديث"
+          "lastActive": {
+            "header": "آخر نشاط"
           },
           "name": {
             "header": "الاسم"
@@ -8055,6 +8105,9 @@
         "elevenlabsTts": {
           "subtitle": "واجهة ElevenLabs لتحويل النص إلى كلام."
         },
+        "zoomScribe": {
+          "subtitle": "واجهة Zoom Scribe لتحويل الكلام إلى نص في الوقت الحقيقي."
+        },
         "tts1": {
           "subtitle": "نموذج OpenAI لتحويل النص إلى كلام محسّن للسرعة."
         },
@@ -8071,6 +8124,12 @@
           "label": "مفتاح API",
           "placeholder": "مفتاح API",
           "required": "مفتاح API مطلوب"
+        },
+        "apiSecret": {
+          "description": "الصق [سر API]({url}) من {provider} للوصول إلى Scribe.",
+          "label": "سر API",
+          "placeholder": "سر API",
+          "required": "سر API مطلوب"
         },
         "cancelButton": {
           "label": "إلغاء"
@@ -8099,6 +8158,12 @@
           "invalid": "أدخل لغات محلية مفصولة بفواصل مثل en-US, fr-FR (واحدة لكل لغة)",
           "label": "اللغات المنطوقة",
           "selfHostedCapExceeded": "تدعم نقاط النهاية المستضافة ذاتيًا ما لا يزيد على {cap} لغات منطوقة (اكتشاف عند البدء)"
+        },
+        "sttLanguage": {
+          "description": "اختر اللغة المحلية التي يجب أن يستخدمها Zoom Scribe للنسخ المباشر. راجع [اللغات المدعومة]({docsUrl}).",
+          "invalid": "اختر لغة منطوقة مدعومة",
+          "label": "اللغة المنطوقة",
+          "required": "اللغة المنطوقة مطلوبة"
         },
         "sttModel": {
           "label": "نموذج تحويل الكلام إلى نص"
@@ -8952,6 +9017,9 @@
       "ssoMissingAuthUrl": {
         "error": "استجابة تسجيل الدخول لا تتضمن رابط التفويض"
       },
+      "ssoRedirecting": {
+        "text": "جارٍ تحويلك إلى {provider} لتسجيل الدخول…"
+      },
       "ssoSignInButton": {
         "label": "تسجيل الدخول عبر SSO"
       },
@@ -9530,6 +9598,9 @@
         },
         "startRecording": {
           "ariaLabel": "بدء التسجيل"
+        },
+        "startingRecording": {
+          "ariaLabel": "جارٍ بدء التسجيل"
         },
         "stopRecording": {
           "ariaLabel": "إيقاف التسجيل"
@@ -10395,6 +10466,14 @@
         },
         "fileCount": {
           "label": "{count, plural, one {# ملف} other {# ملفات}}"
+        },
+        "fileRow": {
+          "deleteButton": {
+            "ariaLabel": "حذف الملف"
+          },
+          "viewButton": {
+            "ariaLabel": "فتح الملف"
+          }
         },
         "fileStatus": {
           "deleting": {
@@ -12631,6 +12710,9 @@
       "providerCard": {
         "connect": {
           "label": "ربط"
+        },
+        "settingsButton": {
+          "ariaLabel": "إعدادات المزوّد"
         }
       },
       "title": "اربط نماذج LLM الخاصة بك"

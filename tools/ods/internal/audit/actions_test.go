@@ -271,3 +271,64 @@ func mkTag(name, sha string) ghTag {
 	t.Commit.SHA = sha
 	return t
 }
+
+func TestAffectedByAdvisoryReopenedRangeOutOfOrder(t *testing.T) {
+	// Events arrive unsorted: the range is [1.0.0, 2.0.0) plus [3.0.0, 3.1.0).
+	v := ecoVuln("GHSA-w",
+		map[string]string{"introduced": "3.0.0"},
+		map[string]string{"fixed": "2.0.0"},
+		map[string]string{"fixed": "3.1.0"},
+		map[string]string{"introduced": "1.0.0"},
+	)
+	cases := []struct {
+		version string
+		want    bool
+	}{
+		{"0.9.0", false},
+		{"1.0.0", true},
+		{"1.5.0", true},
+		{"2.0.0", false},
+		{"2.5.0", false},
+		{"3.0.0", true},
+		{"3.1.0", false},
+	}
+	for _, tc := range cases {
+		if got := affectedByAdvisory(tc.version, v); got != tc.want {
+			t.Errorf("affectedByAdvisory(%q) = %v, want %v", tc.version, got, tc.want)
+		}
+	}
+}
+
+func TestAffectedByAdvisoryIgnoresGitRanges(t *testing.T) {
+	v := osvVuln{
+		ID: "GHSA-git",
+		Affected: []osvAffected{{
+			Package: osvPackage{Ecosystem: actionsEcosystem, Name: "a/b"},
+			Ranges:  []osvRange{{Type: "GIT", Events: []map[string]string{{"introduced": "0"}}}},
+		}},
+	}
+	if affectedByAdvisory("1.0.0", v) {
+		t.Error("GIT ranges carry commits, not versions, and must be ignored")
+	}
+}
+
+func TestFirstFixedPicksEarliestActionsFix(t *testing.T) {
+	v := osvVuln{
+		ID: "GHSA-multi",
+		Affected: []osvAffected{
+			{
+				Package: osvPackage{Ecosystem: "npm", Name: "a"},
+				Ranges:  []osvRange{{Type: "SEMVER", Events: []map[string]string{{"fixed": "0.1.0"}}}},
+			},
+			{
+				Package: osvPackage{Ecosystem: actionsEcosystem, Name: "a/b"},
+				Ranges: []osvRange{{Type: "ECOSYSTEM", Events: []map[string]string{
+					{"introduced": "0"}, {"fixed": "5.0.0"}, {"fixed": ""}, {"fixed": "4.2.0"}, {"fixed": "4.10.0"},
+				}}},
+			},
+		},
+	}
+	if got := firstFixed(v); got != "4.2.0" {
+		t.Errorf("firstFixed = %q, want 4.2.0 (other ecosystems and empty fixes ignored)", got)
+	}
+}

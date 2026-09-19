@@ -143,12 +143,12 @@ class RedisConnectorDelete:
             # Priority on sync's triggered by new indexing should be medium
             celery_app.send_task(
                 OnyxCeleryTask.DOCUMENT_BY_CC_PAIR_CLEANUP_TASK,
-                kwargs=dict(
-                    document_id=doc_id,
-                    connector_id=cc_pair.connector_id,
-                    credential_id=cc_pair.credential_id,
-                    tenant_id=self.tenant_id,
-                ),
+                kwargs={
+                    "document_id": doc_id,
+                    "connector_id": cc_pair.connector_id,
+                    "credential_id": cc_pair.credential_id,
+                    "tenant_id": self.tenant_id,
+                },
                 queue=OnyxCeleryQueues.CONNECTOR_DELETION,
                 task_id=custom_task_id,
                 priority=OnyxCeleryPriority.MEDIUM,
