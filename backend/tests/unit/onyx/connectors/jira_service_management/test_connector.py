@@ -2,6 +2,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 from jira import JIRA
 from jira.resources import Issue
 
@@ -84,8 +85,9 @@ def test_process_service_desk_request_adds_jsm_metadata() -> None:
     assert doc.metadata["customer_portal_url"] == (
         "https://jira.example.com/servicedesk/customer/portal/3/HELP-1"
     )
-    # doc id stays the canonical browse URL so slim docs match
-    assert doc.id == "https://jira.example.com/browse/HELP-1"
+    # doc id is the browse URL plus the JSM marker so it does not collide
+    # with a document indexed through the plain Jira connector
+    assert doc.id == ("https://jira.example.com/browse/HELP-1#jira-service-management")
 
 
 def test_process_service_desk_request_without_jsm_view() -> None:
@@ -93,7 +95,9 @@ def test_process_service_desk_request_without_jsm_view() -> None:
     client = _mock_jira_client()
     resp = MagicMock()
     resp.status_code = 404
-    resp.raise_for_status.side_effect = Exception("404")
+    resp.raise_for_status.side_effect = requests.exceptions.HTTPError(
+        "404", response=resp
+    )
     client._session.get.return_value = resp
 
     doc = process_service_desk_request(
@@ -126,6 +130,26 @@ def test_load_credentials_resolves_project_from_service_desk() -> None:
         connector.load_credentials({"jira_api_token": "tok"})
 
     assert connector.jira_project == "HELP"
+
+
+def test_load_credentials_unresolved_service_desk_fails() -> None:
+    """An unresolvable service desk id must not fall back to an unscoped sync."""
+    connector = JiraServiceManagementConnector(
+        jira_base_url="https://jira.example.com",
+        service_desk_id=99,
+    )
+    with (
+        patch(
+            "onyx.connectors.jira_service_management.connector.build_jira_client"
+        ) as mock_build,
+        patch(
+            "onyx.connectors.jira_service_management.connector.find_service_desk",
+            return_value=None,
+        ),
+    ):
+        mock_build.return_value = _mock_jira_client()
+        with pytest.raises(ConnectorValidationError):
+            connector.load_credentials({"jira_api_token": "tok"})
 
 
 def test_jql_query_scoped_to_project() -> None:
