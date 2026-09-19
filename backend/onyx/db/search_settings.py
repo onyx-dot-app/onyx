@@ -1,4 +1,4 @@
-from sqlalchemy import and_, delete, func, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session
 
@@ -150,12 +150,16 @@ def delete_search_settings(db_session: Session, search_settings_id: int) -> None
     db_session.commit()
 
 
-def get_current_search_settings(db_session: Session) -> SearchSettings:
+def get_current_search_settings(
+    db_session: Session, *, for_update: bool = False
+) -> SearchSettings:
     query = (
         select(SearchSettings)
         .where(SearchSettings.status == IndexModelStatus.PRESENT)
         .order_by(SearchSettings.id.desc())
     )
+    if for_update:
+        query = query.with_for_update()
     result = db_session.execute(query)
     latest_settings = result.scalars().first()
 
@@ -301,8 +305,13 @@ def set_reclaim_intent_on_current__no_commit(
     """Mark the current PRESENT index (the future PAST) for reclamation at reindex
     submit. Stores the consented not-ported cc_pairs. No-op if there is no PRESENT.
     Caller commits (atomically with FUTURE creation)."""
+    # Nothing enforces a single PRESENT row any more, so this has to order like
+    # get_current_search_settings or it stamps the consent set on a row that never
+    # becomes the old index.
     present = db_session.scalar(
-        select(SearchSettings).where(SearchSettings.status == IndexModelStatus.PRESENT)
+        select(SearchSettings)
+        .where(SearchSettings.status == IndexModelStatus.PRESENT)
+        .order_by(SearchSettings.id.desc())
     )
     if present is None:
         return
@@ -324,6 +333,21 @@ def clear_reclaim_intent__no_commit(
     ss.reclaim_attempts = 0
     ss.reclaim_last_error = None
     ss.pending_cc_pair_deletions = None
+
+
+def mark_abandoned_future_for_reclaim__no_commit(
+    abandoned_future: SearchSettings,
+) -> None:
+    """Mark a PAST index for immediate reclamation — a reverted/superseded FUTURE, or an
+    unreclaimed occupant whose index name a new reindex now needs. Jumps straight to
+    DELETING: the soak window + `_new_index_can_serve` gate exist for swapping out a *live*
+    index, which doesn't apply here (the data was never the live read path, or its name is
+    being reclaimed on demand). Caller commits."""
+    abandoned_future.reclaim_status = IndexReclaimStatus.DELETING
+    abandoned_future.reclaim_stopped_reading_at = None
+    abandoned_future.reclaim_attempts = 0
+    abandoned_future.reclaim_last_error = None
+    abandoned_future.pending_cc_pair_deletions = None
 
 
 def fetch_reclaimable_past_settings(
@@ -368,6 +392,18 @@ def advance_to_deleting__no_commit(search_settings: SearchSettings) -> bool:
     return True
 
 
+def advance_to_reclaimed__no_commit(search_settings: SearchSettings) -> bool:
+    """DELETING -> RECLAIMED: the old index's data is gone. Terminal success — the PAST
+    row is KEPT as the durable record (we only delete the OpenSearch index, not the row).
+    No-op returning False unless currently DELETING. Caller commits."""
+    if search_settings.reclaim_status != IndexReclaimStatus.DELETING:
+        return False
+    search_settings.reclaim_status = IndexReclaimStatus.RECLAIMED
+    search_settings.reclaim_attempts = 0
+    search_settings.reclaim_last_error = None
+    return True
+
+
 def record_failure__no_commit(
     search_settings: SearchSettings,
     error: str,
@@ -382,3 +418,23 @@ def record_failure__no_commit(
         search_settings.reclaim_status = IndexReclaimStatus.BLOCKED
         return True
     return False
+
+
+def find_unreclaimed_past_by_index_name(
+    db_session: Session, index_name: str
+) -> list[SearchSettings]:
+    """PAST rows whose index_name still holds data, so a new reindex must not take that
+    name. ALT_INDEX_SUFFIX alternation can hand a new FUTURE the same name as an old PAST,
+    and several generations can share one physical index.
+
+    A NULL reclaim_status counts too — those are rows from before reclamation existed,
+    whose index was never deleted. Only RECLAIMED means the data is confirmed gone."""
+    stmt = select(SearchSettings).where(
+        SearchSettings.status == IndexModelStatus.PAST,
+        SearchSettings.index_name == index_name,
+        or_(
+            SearchSettings.reclaim_status.is_(None),
+            SearchSettings.reclaim_status != IndexReclaimStatus.RECLAIMED,
+        ),
+    )
+    return list(db_session.scalars(stmt))
