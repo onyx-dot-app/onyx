@@ -146,6 +146,7 @@ export const AGGREGATOR_PROVIDERS = new Set([
   "bedrock_converse",
   "openrouter",
   "ollama_chat",
+  "llmman",
   "lm_studio",
   "litellm_proxy",
   "bifrost",
