@@ -1,7 +1,6 @@
 import io
 import json
-from typing import Any
-from typing import cast
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -11,17 +10,16 @@ from onyx.chat.emitter import Emitter
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.file_processing.extract_file_text import extract_file_text
-from onyx.file_store.models import ChatFileType
-from onyx.file_store.models import InMemoryChatFile
-from onyx.file_store.utils import load_chat_file_by_id
-from onyx.file_store.utils import load_user_file
+from onyx.file_store.models import ChatFileType, InMemoryChatFile
+from onyx.file_store.utils import load_chat_file_by_id, load_user_file
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import FileReaderResult
-from onyx.server.query_and_chat.streaming_models import FileReaderStart
-from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import (
+    FileReaderResult,
+    FileReaderStart,
+    Packet,
+)
 from onyx.tools.interface import Tool
-from onyx.tools.models import ToolCallException
-from onyx.tools.models import ToolResponse
+from onyx.tools.models import ToolCallException, ToolResponse
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

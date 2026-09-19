@@ -1,4 +1,8 @@
-FROM golang:1.26-alpine@sha256:2389ebfa5b7f43eeafbd6be0c3700cc46690ef842ad962f6c5bd6be49ed82039 AS builder
+# Registry prefix for base images. Defaults to Docker Hub; CI overrides this to the ECR
+# pull-through cache (<account>.dkr.ecr.us-east-2.amazonaws.com/docker-hub) to avoid Docker
+# Hub rate limits.
+ARG BASE_IMAGE_REGISTRY=docker.io
+FROM ${BASE_IMAGE_REGISTRY}/library/golang:1.27.1-alpine@sha256:cf6fca6641884b8433441b2b0652976f975e1d0fdd26d177eaaf8596087f3125 AS builder
 
 WORKDIR /app
 COPY ./ .

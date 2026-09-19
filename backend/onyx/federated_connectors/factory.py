@@ -1,8 +1,7 @@
 """Factory for creating federated connector instances."""
 
 import importlib
-from typing import Any
-from typing import Type
+from typing import Any, Type
 
 from onyx.configs.constants import FederatedConnectorSource
 from onyx.federated_connectors.interfaces import FederatedConnector
@@ -38,7 +37,7 @@ def _load_federated_connector_class(
 
     try:
         module = importlib.import_module(mapping.module_path)
-        connector_class = getattr(module, mapping.class_name)
+        connector_class = getattr(module, mapping.class_name)  # ods: ignore[getattr]
         _federated_connector_cache[source] = connector_class
         return connector_class
     except (ImportError, AttributeError) as e:

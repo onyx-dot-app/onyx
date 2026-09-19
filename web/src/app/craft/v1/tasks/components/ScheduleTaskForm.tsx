@@ -1,21 +1,37 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import Text from "@/refresh-components/texts/Text";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import InputTextArea from "@/refresh-components/inputs/InputTextArea";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
-import { Button, Divider } from "@opal/components";
-import Card from "@/refresh-components/cards/Card";
-import { Section } from "@/layouts/general-layouts";
-import { toast } from "@/hooks/useToast";
+import { useSWRConfig } from "swr";
+import {
+  Button,
+  Divider,
+  InputTextArea,
+  InputTypeIn,
+  Text,
+} from "@opal/components";
+import { Disabled } from "@opal/core";
+import { SettingsLayouts, InputVertical, toast } from "@opal/layouts";
+import * as GeneralLayouts from "@/layouts/general-layouts";
 import { SvgClock } from "@opal/icons";
 import ScheduleEditor from "@/app/craft/v1/tasks/components/ScheduleEditor";
-import { compileToCron, computeNextRuns } from "@/app/craft/v1/tasks/schedule";
-import SkillPickerPopover from "@/sections/input/SkillPickerPopover";
+import PreApprovalPicker from "@/app/craft/v1/tasks/components/PreApprovalPicker";
+import {
+  compileLocalPayloadToUtcCron,
+  localPayloadToUtcPayload,
+} from "@/app/craft/v1/tasks/schedule";
+import EntryPickerPopover from "@/sections/input/EntryPickerPopover";
 import useUserSkills from "@/hooks/useUserSkills";
-import { detectSlashTrigger, toPickerSkills } from "@/lib/skills/picker";
+import useUserExternalApps from "@/hooks/useUserExternalApps";
+import { useCraftMcpServers } from "@/lib/tools/hooks";
+import {
+  detectSlashTrigger,
+  pickerEntryConnectionPath,
+  pickerEntryPromptPrefix,
+  toPickerSections,
+  type PickerEntry,
+} from "@/lib/skills/picker";
 import type {
   EditorMode,
   EditorPayload,
@@ -27,13 +43,8 @@ import {
   createScheduledTask,
   updateScheduledTask,
 } from "@/app/craft/v1/tasks/api";
-import {
-  formatAbsolute,
-  formatRelativeShort,
-  getBrowserTimezone,
-  getCommonTimezones,
-} from "@/app/craft/v1/tasks/utils";
 import { TASKS_PATH, taskDetailPath } from "@/app/craft/v1/tasks/constants";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 export interface ScheduleTaskFormInitial {
   /** ``null`` for create. */
@@ -42,32 +53,55 @@ export interface ScheduleTaskFormInitial {
   prompt: string;
   mode: EditorMode;
   payload: EditorPayload;
-  timezone: string;
+  preApprovedAppIds: number[];
+  preApprovedMcpServerIds: number[];
 }
 
 interface ScheduleTaskFormProps {
   initial: ScheduleTaskFormInitial;
   /** Used to title the page / customize the submit button. */
   isEdit: boolean;
+  /** Title rendered in the settings header. */
+  title: string;
+  /** Optional sub-title rendered beneath the header title. */
+  description?: string;
+  /** Invoked when the back button is pressed. */
+  onBack: () => void;
 }
 
 export default function ScheduleTaskForm({
   initial,
   isEdit,
+  title,
+  description,
+  onBack,
 }: ScheduleTaskFormProps) {
+  const t = useTranslations("craft.tasks.form");
   const router = useRouter();
+  const { mutate } = useSWRConfig();
   const [name, setName] = useState(initial.name);
   const [prompt, setPrompt] = useState(initial.prompt);
   const [mode, setMode] = useState<EditorMode>(initial.mode);
   const [payload, setPayload] = useState<EditorPayload>(initial.payload);
-  const [timezone, setTimezone] = useState(initial.timezone);
+  const [preApprovedAppIds, setPreApprovedAppIds] = useState<number[]>(
+    initial.preApprovedAppIds
+  );
+  const [preApprovedMcpServerIds, setPreApprovedMcpServerIds] = useState<
+    number[]
+  >(initial.preApprovedMcpServerIds);
   const [saving, setSaving] = useState(false);
+  const [nameTouched, setNameTouched] = useState(false);
+  const [promptTouched, setPromptTouched] = useState(false);
 
-  // `/` skill picker state for the prompt field. Scoped to the trigger
-  // owner's accessible skills (same access query as `GET /skills`).
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const { data: skillsData } = useUserSkills();
-  const pickerSkills = useMemo(() => toPickerSkills(skillsData), [skillsData]);
+  const { data: externalAppsData } = useUserExternalApps();
+  const { data: craftMcpData } = useCraftMcpServers();
+  const pickerSections = useMemo(
+    () =>
+      toPickerSections(skillsData, externalAppsData, craftMcpData?.mcp_servers),
+    [skillsData, externalAppsData, craftMcpData]
+  );
   const [skillPicker, setSkillPicker] = useState<{
     open: boolean;
     anchorRect: DOMRect | null;
@@ -114,89 +148,106 @@ export default function ScheduleTaskForm({
   }, []);
 
   const handleSkillPickerSelect = useCallback(
-    (slug: string) => {
-      setSkillPicker((prev) => {
-        if (!prev.open) return prev;
-        const replacement = `/${slug} `;
-        const newPrompt =
-          prompt.slice(0, prev.slashIndex) +
-          replacement +
-          prompt.slice(prev.slashIndex + 1 + prev.query.length);
-        setPrompt(newPrompt);
+    (entry: PickerEntry) => {
+      const connectionPath = pickerEntryConnectionPath(entry);
+      if (connectionPath) {
+        setSkillPicker((s) => ({ ...s, open: false }));
+        router.push(connectionPath);
+        return;
+      }
+      if (!skillPicker.open) return;
 
-        const cursorPos = prev.slashIndex + replacement.length;
-        const textarea = promptTextareaRef.current;
-        if (textarea) {
-          requestAnimationFrame(() => {
-            textarea.focus();
-            textarea.setSelectionRange(cursorPos, cursorPos);
-          });
-        }
-        return { ...prev, open: false };
-      });
+      const replacement = `${pickerEntryPromptPrefix(entry)} `;
+      const newPrompt =
+        prompt.slice(0, skillPicker.slashIndex) +
+        replacement +
+        prompt.slice(skillPicker.slashIndex + 1 + skillPicker.query.length);
+      setPrompt(newPrompt);
+
+      const cursorPos = skillPicker.slashIndex + replacement.length;
+      const textarea = promptTextareaRef.current;
+      if (textarea) {
+        requestAnimationFrame(() => {
+          textarea.focus();
+          textarea.setSelectionRange(cursorPos, cursorPos);
+        });
+      }
+
+      setSkillPicker((prev) => (prev.open ? { ...prev, open: false } : prev));
     },
-    [prompt]
+    [prompt, router, skillPicker]
   );
 
-  const timezones = useMemo(() => getCommonTimezones(), []);
-  const compiled = compileToCron(mode, payload);
-
-  const nextRuns = useMemo(() => {
-    if (!compiled.ok) return [];
-    return computeNextRuns(compiled.cron, timezone, 3);
-  }, [compiled, timezone]);
+  const compiled = compileLocalPayloadToUtcCron(mode, payload);
 
   const trimmedName = name.trim();
   const trimmedPrompt = prompt.trim();
 
-  // Validation states surfaced to the user.
-  const nameError = trimmedName.length === 0 ? "Name is required." : null;
-  const promptError = trimmedPrompt.length === 0 ? "Prompt is required." : null;
-  const tzError = !timezone ? "Timezone is required." : null;
+  // Validation states. These gate submission regardless of interaction, but
+  // are only surfaced inline once the user has touched (blurred) the field so
+  // a pristine form doesn't render red on load.
+  const nameError = trimmedName.length === 0 ? t("errors.nameRequired") : null;
+  const promptError =
+    trimmedPrompt.length === 0 ? t("errors.promptRequired") : null;
   const scheduleError = !compiled.ok ? compiled.error : null;
 
-  const canSubmit =
-    !nameError && !promptError && !tzError && !scheduleError && !saving;
+  const shownNameError = nameTouched ? nameError : null;
+  const shownPromptError = promptTouched ? promptError : null;
+
+  const canSubmit = !nameError && !promptError && !scheduleError && !saving;
+
+  // Reason a submit button is blocked, surfaced via the `Disabled` wrapper's
+  // tooltip. A natively-disabled <button> is inert and never fires hover
+  // events, so the tooltip must live on the (interactive) wrapper instead.
+  const disabledReason = saving
+    ? t("savingLabel")
+    : (nameError ?? promptError ?? scheduleError ?? undefined);
 
   const submit = useCallback(
     async (runImmediately: boolean) => {
       if (!compiled.ok) return; // validation should already block, but typescript needs this
       setSaving(true);
       try {
+        const storagePayload = localPayloadToUtcPayload(mode, payload);
         if (isEdit && initial.taskId) {
           const body: ScheduledTaskPatchBody = {
             name: trimmedName,
             prompt: trimmedPrompt,
             editor_mode: mode,
-            editor_payload: payload,
-            timezone,
+            editor_payload: storagePayload,
+            pre_approved_app_ids: preApprovedAppIds,
+            pre_approved_mcp_server_ids: preApprovedMcpServerIds,
           };
           const updated: ScheduledTaskDetail = await updateScheduledTask(
             initial.taskId,
             body
           );
-          toast.success("Scheduled task updated.");
+          await mutate(SWR_KEYS.scheduledTask(updated.id), updated, {
+            revalidate: false,
+          });
+          await mutate(SWR_KEYS.scheduledTasks);
+          toast.success(t("toasts.updated"));
           router.push(taskDetailPath(updated.id));
         } else {
           const body: ScheduledTaskCreateBody = {
             name: trimmedName,
             prompt: trimmedPrompt,
             editor_mode: mode,
-            editor_payload: payload,
-            timezone,
+            editor_payload: storagePayload,
             run_immediately: runImmediately,
+            pre_approved_app_ids: preApprovedAppIds,
+            pre_approved_mcp_server_ids: preApprovedMcpServerIds,
           };
           await createScheduledTask(body);
+          await mutate(SWR_KEYS.scheduledTasks);
           toast.success(
-            runImmediately
-              ? "Scheduled task created and queued."
-              : "Scheduled task created."
+            runImmediately ? t("toasts.createdAndQueued") : t("toasts.created")
           );
           router.push(TASKS_PATH);
         }
       } catch (err) {
         toast.error(
-          err instanceof Error ? err.message : "Failed to save scheduled task"
+          err instanceof Error ? err.message : t("toasts.saveFailed")
         );
       } finally {
         setSaving(false);
@@ -207,167 +258,158 @@ export default function ScheduleTaskForm({
       isEdit,
       initial.taskId,
       mode,
+      mutate,
       payload,
+      preApprovedAppIds,
+      preApprovedMcpServerIds,
       router,
-      timezone,
       trimmedName,
       trimmedPrompt,
+      t,
     ]
   );
 
   return (
-    <Section gap={1}>
-      {/* Name */}
-      <Card>
-        <Text mainUiAction text05>
-          Name
-        </Text>
-        <InputTypeIn
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Weekly customer escalations digest"
-          data-testid="task-name-input"
-          variant={nameError ? "error" : undefined}
-        />
-        {nameError && (
-          <Text secondaryBody text03 className="text-status-error-05">
-            {nameError}
-          </Text>
-        )}
-      </Card>
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header
+        icon={SvgClock}
+        title={title}
+        description={description}
+        backButton={onBack}
+        divider
+        rightChildren={
+          <div className="flex gap-2 self-start">
+            <Button
+              variant="default"
+              prominence="secondary"
+              type="button"
+              onClick={() => router.push(TASKS_PATH)}
+              disabled={saving}
+            >
+              {t("cancelButton")}
+            </Button>
+            {!isEdit && (
+              <Disabled
+                disabled={!canSubmit}
+                tooltip={disabledReason}
+                tooltipSide="bottom"
+              >
+                <Button
+                  variant="default"
+                  prominence="secondary"
+                  type="button"
+                  disabled={!canSubmit}
+                  onClick={() => void submit(true)}
+                  data-testid="save-and-run-now"
+                >
+                  {t("saveAndRunNowButton")}
+                </Button>
+              </Disabled>
+            )}
+            <Disabled
+              disabled={!canSubmit}
+              tooltip={disabledReason}
+              tooltipSide="bottom"
+            >
+              <Button
+                variant="default"
+                prominence="primary"
+                type="button"
+                disabled={!canSubmit}
+                onClick={() => void submit(false)}
+                data-testid="save-task"
+              >
+                {isEdit ? t("saveChangesButton") : t("saveButton")}
+              </Button>
+            </Disabled>
+          </div>
+        }
+      />
 
-      {/* Prompt */}
-      <Card>
-        <Text mainUiAction text05>
-          Prompt
-        </Text>
-        <Text secondaryBody text03>
-          This message is sent to Craft each time the task fires.
-        </Text>
-        <InputTextArea
-          ref={promptTextareaRef}
-          value={prompt}
-          onChange={handlePromptChange}
-          onKeyUp={handlePromptCursorChange}
-          onClick={handlePromptCursorChange}
-          placeholder="Describe what Craft should do on each run..."
-          rows={6}
-          autoResize
-          maxRows={12}
-          data-testid="task-prompt-input"
-          variant={promptError ? "error" : undefined}
-        />
-        <SkillPickerPopover
-          open={skillPicker.open}
-          anchorRect={skillPicker.anchorRect}
-          query={skillPicker.query}
-          skills={pickerSkills}
-          onSelect={handleSkillPickerSelect}
-          onClose={closeSkillPicker}
-        />
-        {promptError && (
-          <Text secondaryBody text03 className="text-status-error-05">
-            {promptError}
-          </Text>
-        )}
-      </Card>
+      <SettingsLayouts.Body>
+        <GeneralLayouts.Section>
+          <InputVertical withLabel title={t("fields.name.label")}>
+            <InputTypeIn
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onBlur={() => setNameTouched(true)}
+              placeholder={t("fields.name.placeholder")}
+              data-testid="task-name-input"
+              variant={shownNameError ? "error" : undefined}
+            />
+            {shownNameError && (
+              <Text font="secondary-body" color="status-error-05">
+                {shownNameError}
+              </Text>
+            )}
+          </InputVertical>
 
-      {/* Schedule */}
-      <Card>
-        <Text mainUiAction text05>
-          Schedule
-        </Text>
-        <ScheduleEditor
-          mode={mode}
-          onModeChange={setMode}
-          payload={payload}
-          onPayloadChange={setPayload}
-          error={scheduleError}
-        />
-        <Divider />
-        <Text mainUiAction text05>
-          Timezone
-        </Text>
-        <div className="w-full max-w-[28rem]">
-          <InputSelect value={timezone} onValueChange={setTimezone}>
-            <InputSelect.Trigger placeholder="Select a timezone..." />
-            <InputSelect.Content>
-              {timezones.map((tz) => (
-                <InputSelect.Item key={tz} value={tz}>
-                  {tz}
-                </InputSelect.Item>
-              ))}
-            </InputSelect.Content>
-          </InputSelect>
-        </div>
-        {tzError && (
-          <Text secondaryBody text03 className="text-status-error-05">
-            {tzError}
-          </Text>
-        )}
-      </Card>
-
-      {/* Next runs preview */}
-      <Card>
-        <div className="flex items-center gap-2">
-          <SvgClock size={16} className="text-text-03" />
-          <Text mainUiAction text05>
-            Next 3 runs
-          </Text>
-        </div>
-        {nextRuns.length === 0 ? (
-          <Text secondaryBody text03>
-            {scheduleError
-              ? "Fix the schedule above to preview future fires."
-              : "No upcoming fires for this expression."}
-          </Text>
-        ) : (
-          <ul className="flex flex-col gap-1">
-            {nextRuns.map((iso, idx) => (
-              <li key={iso} className="flex flex-col">
-                <Text mainUiBody text05>
-                  {idx + 1}. {formatAbsolute(iso)}
-                </Text>
-                <Text secondaryBody text03>
-                  {formatRelativeShort(iso)} ({timezone})
-                </Text>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-
-      <div className="flex items-center gap-2 justify-end">
-        <Button
-          variant="default"
-          prominence="secondary"
-          onClick={() => router.push(TASKS_PATH)}
-          disabled={saving}
-        >
-          Cancel
-        </Button>
-        {!isEdit && (
-          <Button
-            variant="default"
-            prominence="secondary"
-            disabled={!canSubmit}
-            onClick={() => void submit(true)}
-            data-testid="save-and-run-now"
+          <InputVertical
+            withLabel
+            title={t("fields.prompt.label")}
+            description={t("fields.prompt.description")}
           >
-            Save and run now
-          </Button>
-        )}
-        <Button
-          variant="default"
-          prominence="primary"
-          disabled={!canSubmit}
-          onClick={() => void submit(false)}
-          data-testid="save-task"
-        >
-          {isEdit ? "Save changes" : "Save"}
-        </Button>
-      </div>
-    </Section>
+            <InputTextArea
+              ref={promptTextareaRef}
+              value={prompt}
+              onChange={handlePromptChange}
+              onKeyUp={handlePromptCursorChange}
+              onClick={handlePromptCursorChange}
+              onBlur={() => setPromptTouched(true)}
+              placeholder={t("fields.prompt.placeholder")}
+              rows={6}
+              autoResize
+              maxRows={12}
+              data-testid="task-prompt-input"
+              variant={shownPromptError ? "error" : undefined}
+            />
+            <EntryPickerPopover
+              open={skillPicker.open}
+              anchorRect={skillPicker.anchorRect}
+              query={skillPicker.query}
+              sections={pickerSections}
+              onSelect={handleSkillPickerSelect}
+              onClose={closeSkillPicker}
+            />
+            {shownPromptError && (
+              <Text font="secondary-body" color="status-error-05">
+                {shownPromptError}
+              </Text>
+            )}
+          </InputVertical>
+        </GeneralLayouts.Section>
+
+        <Divider paddingParallel={0} paddingPerpendicular={0} />
+
+        <GeneralLayouts.Section>
+          <InputVertical title={t("fields.schedule.label")}>
+            <ScheduleEditor
+              mode={mode}
+              onModeChange={setMode}
+              payload={payload}
+              onPayloadChange={setPayload}
+              error={scheduleError}
+            />
+          </InputVertical>
+        </GeneralLayouts.Section>
+
+        <Divider paddingParallel={0} paddingPerpendicular={0} />
+
+        <GeneralLayouts.Section>
+          <InputVertical
+            title={t("fields.preApproval.label")}
+            description={t("fields.preApproval.description")}
+          >
+            <PreApprovalPicker
+              selectedAppIds={preApprovedAppIds}
+              selectedMcpServerIds={preApprovedMcpServerIds}
+              onAppChange={setPreApprovedAppIds}
+              onMcpServerChange={setPreApprovedMcpServerIds}
+            />
+          </InputVertical>
+        </GeneralLayouts.Section>
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 }
 
@@ -378,6 +420,7 @@ export function defaultFormInitial(): ScheduleTaskFormInitial {
     prompt: "",
     mode: "interval",
     payload: { unit: "hours", every: 1 },
-    timezone: getBrowserTimezone(),
+    preApprovedAppIds: [],
+    preApprovedMcpServerIds: [],
   };
 }

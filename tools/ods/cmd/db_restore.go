@@ -51,13 +51,17 @@ Examples:
   ods db restore --fetch-seeded          # Download and restore seeded snapshot`,
 		Args: cobra.MaximumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
+			var err error
 			if opts.FetchSeeded {
-				runDBRestoreSeeded(opts)
+				err = runDBRestoreSeeded(opts)
 			} else {
 				if len(args) == 0 {
 					log.Fatal("Must provide an input file or use --fetch-seeded")
 				}
-				runDBRestore(args[0], opts)
+				err = runDBRestore(args[0], opts)
+			}
+			if err != nil {
+				log.Fatal(err)
 			}
 		},
 		ValidArgsFunction: completeSnapshotFiles,
@@ -78,7 +82,7 @@ func completeSnapshotFiles(cmd *cobra.Command, args []string, toComplete string)
 
 	var completions []string
 
-	// List files from snapshots directory
+	// List files from snapshots directory.
 	snapshotsDir := paths.SnapshotsDir()
 	entries, err := os.ReadDir(snapshotsDir)
 	if err == nil {
@@ -87,7 +91,7 @@ func completeSnapshotFiles(cmd *cobra.Command, args []string, toComplete string)
 				continue
 			}
 			name := entry.Name()
-			// Only suggest .dump and .sql files
+			// Only suggest .dump and .sql files.
 			if strings.HasSuffix(name, ".dump") || strings.HasSuffix(name, ".sql") {
 				if strings.HasPrefix(name, toComplete) {
 					completions = append(completions, name)
@@ -96,47 +100,47 @@ func completeSnapshotFiles(cmd *cobra.Command, args []string, toComplete string)
 		}
 	}
 
-	// Also allow file path completion
+	// Also allow file path completion.
 	return completions, cobra.ShellCompDirectiveDefault
 }
 
-func runDBRestoreSeeded(opts *DBRestoreOptions) {
-	// Download seeded snapshot to snapshots directory
+func runDBRestoreSeeded(opts *DBRestoreOptions) error {
+	// Download seeded snapshot to snapshots directory.
 	destPath := filepath.Join(paths.SnapshotsDir(), "seeded.dump")
 
 	log.Infof("Downloading seeded snapshot from %s...", seededSnapshotURL)
 	if err := s3.FetchToFile(seededSnapshotURL, destPath); err != nil {
-		log.Fatalf("Failed to download seeded snapshot: %v", err)
+		return fatalErrorf("Failed to download seeded snapshot: %w", err)
 	}
 
-	// Verify download is non-empty
+	// Verify download is non-empty.
 	info, err := os.Stat(destPath)
 	if err != nil {
-		log.Fatalf("Failed to stat downloaded snapshot: %v", err)
+		return fatalErrorf("Failed to stat downloaded snapshot: %w", err)
 	}
 	if info.Size() == 0 {
-		log.Fatalf("Downloaded snapshot is empty (0 bytes). The S3 object may be missing or the download was corrupted.")
+		return fatalErrorf("Downloaded snapshot is empty (0 bytes). The S3 object may be missing or the download was corrupted.")
 	}
 
 	log.Infof("Downloaded seeded snapshot to: %s (%d bytes)", destPath, info.Size())
 
-	// Restore the downloaded snapshot
-	runDBRestore(destPath, opts)
+	// Restore the downloaded snapshot.
+	return runDBRestore(destPath, opts)
 }
 
-func runDBRestore(input string, opts *DBRestoreOptions) {
-	// Resolve input path
+func runDBRestore(input string, opts *DBRestoreOptions) error {
+	// Resolve input path.
 	inputPath := resolveInputPath(input)
 
-	// Check if file exists
+	// Check if file exists.
 	if _, err := os.Stat(inputPath); os.IsNotExist(err) {
-		log.Fatalf("Input file not found: %s", inputPath)
+		return fatalErrorf("Input file not found: %s", inputPath)
 	}
 
-	// Find PostgreSQL container
-	container, err := docker.FindPostgresContainer()
+	// Find PostgreSQL container.
+	container, err := docker.FindPostgresContainer(docker.ProjectName())
 	if err != nil {
-		log.Fatalf("Failed to find PostgreSQL container: %v", err)
+		return fatalErrorf("Failed to find PostgreSQL container: %w", err)
 	}
 	log.Infof("Found PostgreSQL container: %s", container)
 
@@ -148,25 +152,25 @@ func runDBRestore(input string, opts *DBRestoreOptions) {
 			filepath.Base(inputPath), config.Database)
 		if !prompt.Confirm(msg) {
 			log.Info("Aborted.")
-			return
+			return nil
 		}
 	}
 
-	// Detect format from extension
+	// Detect format from extension.
 	isCustomFormat := strings.HasSuffix(strings.ToLower(inputPath), ".dump")
 
 	log.Infof("Restoring database '%s' from: %s", config.Database, inputPath)
 
-	// Copy file to container
+	// Copy file to container.
 	containerTmpFile := "/tmp/onyx_restore_tmp"
 	if err := docker.CopyToContainer(container, inputPath, containerTmpFile); err != nil {
-		log.Fatalf("Failed to copy file to container: %v", err)
+		return fatalErrorf("Failed to copy file to container: %w", err)
 	}
 
 	env := config.Env()
 
 	if isCustomFormat {
-		// Use pg_restore for custom format
+		// Use pg_restore for custom format.
 		args := config.PgRestoreArgs()
 		if opts.Clean {
 			args = append(args, "--clean", "--if-exists")
@@ -175,45 +179,46 @@ func runDBRestore(input string, opts *DBRestoreOptions) {
 
 		restoreArgs := append([]string{"pg_restore"}, args...)
 		if err := docker.ExecWithEnv(container, env, restoreArgs...); err != nil {
-			// pg_restore may return non-zero for warnings, check if it's fatal
+			// pg_restore may return non-zero for warnings, check if it's fatal.
 			log.Warnf("pg_restore completed with warnings or errors: %v", err)
 		}
 	} else {
-		// Use psql for SQL format
+		// Use psql for SQL format.
 		args := config.PsqlArgs()
 		args = append(args, "-f", containerTmpFile)
 
 		psqlArgs := append([]string{"psql"}, args...)
 		if err := docker.ExecWithEnv(container, env, psqlArgs...); err != nil {
-			log.Fatalf("Failed to restore from SQL file: %v", err)
+			return fatalErrorf("Failed to restore from SQL file: %w", err)
 		}
 	}
 
-	// Clean up temporary file in container
+	// Clean up temporary file in container.
 	_ = docker.Exec(container, "rm", "-f", containerTmpFile)
 
 	log.Info("Restore completed successfully")
+	return nil
 }
 
 // resolveInputPath resolves the input file path.
 func resolveInputPath(input string) string {
-	// If it's an absolute path or contains directory separator, use as-is
+	// If it's an absolute path or contains directory separator, use as-is.
 	if filepath.IsAbs(input) || strings.Contains(input, string(filepath.Separator)) {
 		return input
 	}
 
-	// Check if file exists in snapshots directory
+	// Check if file exists in snapshots directory.
 	snapshotPath := filepath.Join(paths.SnapshotsDir(), input)
 	if _, err := os.Stat(snapshotPath); err == nil {
 		return snapshotPath
 	}
 
-	// Check if file exists in current directory
+	// Check if file exists in current directory.
 	if _, err := os.Stat(input); err == nil {
 		absPath, _ := filepath.Abs(input)
 		return absPath
 	}
 
-	// Default to snapshots directory
+	// Default to snapshots directory.
 	return snapshotPath
 }

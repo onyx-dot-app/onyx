@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { SvgCheck, SvgAlertTriangle } from "@opal/icons";
@@ -33,14 +34,15 @@ interface OAuthCallbackPageProps {
 }
 
 export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
+  const t = useTranslations("common.oauthCallback");
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const [statusMessage, setStatusMessage] = useState(
-    config.processingMessage || "Processing..."
+    config.processingMessage || t("processing.title")
   );
   const [statusDetails, setStatusDetails] = useState(
-    config.processingDetails || "Please wait while we complete the setup."
+    config.processingDetails || t("processing.description")
   );
   const [isError, setIsError] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -50,6 +52,10 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
     undefined
   );
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+
+  // State + auth code are single-use; block duplicate POSTs (StrictMode
+  // double-invoke or re-renders) that race the first request and 400.
+  const hasProcessedRef = useRef(false);
 
   // Extract query parameters
   const code = searchParams?.get("code");
@@ -86,15 +92,15 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
   ]);
 
   useEffect(() => {
-    const controller = new AbortController();
+    if (hasProcessedRef.current) return;
+    hasProcessedRef.current = true;
 
     const handleOAuthCallback = async () => {
       // Handle OAuth error from provider
       if (error) {
-        setStatusMessage(config.errorMessage || "Authorization Failed");
+        setStatusMessage(config.errorMessage || t("authorizationFailed.title"));
         setStatusDetails(
-          errorDescription ||
-            "The authorization was cancelled or failed. Please try again."
+          errorDescription || t("authorizationFailed.description")
         );
         setIsError(true);
         setIsLoading(false);
@@ -103,10 +109,8 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
 
       // Validate required parameters
       if (!code || !state) {
-        setStatusMessage("Invalid Request");
-        setStatusDetails(
-          "The authorization request was incomplete. Please try again."
-        );
+        setStatusMessage(t("invalidRequest.title"));
+        setStatusDetails(t("invalidRequest.description"));
         setIsError(true);
         setIsLoading(false);
         return;
@@ -124,11 +128,10 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
             "Content-Type": "application/json",
           },
           credentials: "include",
-          signal: controller.signal,
         });
 
         if (!response.ok) {
-          let errorMessage = "Failed to complete authorization";
+          let errorMessage = t("completeFailed.message");
           try {
             const errorData = await response.json();
             if (errorData.detail && config.errorMessageMap) {
@@ -175,29 +178,22 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
         const redirectUrl = new URL(sanitizedPath, window.location.origin);
         redirectUrl.searchParams.set("message", "oauth_connected");
         setRedirectPath(redirectUrl.pathname + redirectUrl.search);
-        setStatusMessage(config.successMessage || "Success!");
+        setStatusMessage(config.successMessage || t("success.title"));
 
+        const serviceName = result.serviceName || t("serviceFallback.text");
         const successDetails = config.successDetailsTemplate
-          ? config.successDetailsTemplate.replace(
-              "{serviceName}",
-              result.serviceName || "service"
-            )
-          : `Your ${
-              result.serviceName || "service"
-            } authorization completed successfully.`;
+          ? config.successDetailsTemplate.replace("{serviceName}", serviceName)
+          : t("success.detailsTemplate", { serviceName });
 
         setStatusDetails(successDetails);
         setIsSuccess(true);
         setIsError(false);
         setIsLoading(false);
       } catch (error) {
-        if (controller.signal.aborted) return;
         console.error("OAuth callback error:", error);
-        setStatusMessage(config.errorMessage || "Something Went Wrong");
+        setStatusMessage(config.errorMessage || t("genericError.title"));
         setStatusDetails(
-          error instanceof Error
-            ? error.message
-            : "An error occurred during the OAuth process. Please try again."
+          error instanceof Error ? error.message : t("genericError.description")
         );
         setIsError(true);
         setIsLoading(false);
@@ -205,8 +201,9 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
     };
 
     handleOAuthCallback();
-    return () => controller.abort();
-  }, [code, state, error, errorDescription, searchParams, config]);
+    // Run once; the single-use callback must not re-fire (see hasProcessedRef).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const getStatusIcon = () => {
     if (isLoading) {
@@ -257,8 +254,7 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
             {isSuccess && secondsLeft !== null && (
               <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 mb-6">
                 <p className="text-green-800 dark:text-green-200 text-sm">
-                  Redirecting in {secondsLeft}{" "}
-                  {secondsLeft === 1 ? "second" : "seconds"}...
+                  {t("redirecting.text", { count: secondsLeft })}
                 </p>
               </div>
             )}
@@ -274,14 +270,14 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
                     }}
                     width="full"
                   >
-                    {config.backButtonText || "Back to Chat"}
+                    {config.backButtonText || t("backButton.label")}
                   </Button>
                 </div>
               )}
 
               {isLoading && (
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  This may take a few moments...
+                  {t("loadingHint.text")}
                 </p>
               )}
             </div>

@@ -1,34 +1,34 @@
 from collections.abc import Callable
 from typing import cast
 
+from sqlalchemy import and_, or_, select
 from sqlalchemy import cast as sa_cast
-from sqlalchemy import or_
-from sqlalchemy import select
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
 from onyx.access.models import DocumentAccess
 from onyx.access.utils import prefix_user_email
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import FileOrigin
-from onyx.configs.constants import PUBLIC_DOC_PAT
-from onyx.db.document import get_access_info_for_document
-from onyx.db.document import get_access_info_for_documents
-from onyx.db.models import ChatMessage
-from onyx.db.models import ChatSession
-from onyx.db.models import ChatSessionSharedStatus
-from onyx.db.models import Connector
-from onyx.db.models import Document
-from onyx.db.models import DocumentByConnectorCredentialPair
-from onyx.db.models import FileRecord
-from onyx.db.models import Persona
-from onyx.db.models import Persona__User
-from onyx.db.models import Persona__UserFile
-from onyx.db.models import User
-from onyx.db.models import UserFile
+from onyx.configs.constants import PUBLIC_DOC_PAT, DocumentSource, FileOrigin
+from onyx.db.document import get_access_info_for_document, get_access_info_for_documents
+from onyx.db.models import (
+    ChatMessage,
+    ChatSession,
+    ChatSessionSharedStatus,
+    Connector,
+    Document,
+    DocumentByConnectorCredentialPair,
+    FileRecord,
+    Persona,
+    Persona__User,
+    Persona__UserFile,
+    User,
+    UserFile,
+)
 from onyx.db.user_file import fetch_user_files_with_access_relationships
-from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
-from onyx.utils.variable_functionality import fetch_versioned_implementation
+from onyx.utils.variable_functionality import (
+    fetch_ee_implementation_or_noop,
+    fetch_versioned_implementation,
+)
 
 
 def _get_access_for_document(
@@ -121,10 +121,18 @@ def _get_acl_for_user(
     matches one entry in the returned set.
 
     Anonymous users only have access to public documents.
+
+    Addresses the user was renamed away from match too. Indexed ACLs keep
+    naming the old one until the source system re-syncs, and the alias is
+    revoked as soon as the address belongs to somebody else.
     """
     if user.is_anonymous:
         return {PUBLIC_DOC_PAT}
-    return {prefix_user_email(user.email), PUBLIC_DOC_PAT}
+    return {
+        prefix_user_email(user.email),
+        *(prefix_user_email(email) for email in user.prior_emails),
+        PUBLIC_DOC_PAT,
+    }
 
 
 def get_acl_for_user(user: User, db_session: Session | None = None) -> set[str]:
@@ -247,7 +255,10 @@ def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> 
         .where(
             or_(
                 ChatSession.user_id == user.id,
-                ChatSession.shared_status == ChatSessionSharedStatus.PUBLIC,
+                and_(
+                    ChatSession.shared_status == ChatSessionSharedStatus.PUBLIC,
+                    ChatSession.deleted.is_(False),
+                ),
             )
         )
         .limit(1)
@@ -255,10 +266,12 @@ def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> 
     if db_session.execute(chat_file_stmt).first() is not None:
         return True
 
-    # TODO: CHAT_IMAGE_GEN files are public because the bytes land in the
-    # store before the linking tool-call row is written; tightening this
-    # requires reordering the streaming/tool-call writes. Kept above the
-    # connector branch so previews hit a PK lookup, not the JSONB scan.
+    # TODO(jtahara): every CHAT_IMAGE_GEN file is public, which overrides the session
+    # checks above. Generated images never reach ChatMessage.files, and a
+    # code-interpreter file reaches it only when the reply cites the id, so
+    # this branch is the real access path for the rest. Scoping it needs
+    # chat_session_id stamped into FileRecord.file_metadata at save time.
+    # Kept above the connector branch so previews hit a PK lookup.
     is_chat_image_gen = db_session.query(
         select(FileRecord.file_id)
         .where(

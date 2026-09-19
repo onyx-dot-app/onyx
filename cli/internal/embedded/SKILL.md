@@ -34,7 +34,8 @@ export ONYX_PAT="your-pat"
 
 | Variable          | Required | Description                                              |
 | ----------------- | -------- | -------------------------------------------------------- |
-| `ONYX_SERVER_URL` | No       | Onyx server URL (default: `https://cloud.onyx.app`) |
+| `ONYX_SERVER_URL` | No       | Server origin or already-prefixed API base (default: `https://cloud.onyx.app`) |
+| `ONYX_API_PREFIX` | No       | API path prefix (default: `/api`); empty for direct backend access |
 | `ONYX_PAT`    | Yes      | Personal access token for authentication (unless config file exists) |
 | `ONYX_PERSONA_ID` | No       | Default agent/persona ID                                 |
 | `ONYX_STREAM_MARKDOWN` | No | Enable/disable progressive markdown rendering (true/false) |
@@ -59,9 +60,16 @@ Exit code 0 on success. Non-zero with a descriptive error on failure (see exit c
 onyx-cli search "What is our deployment process?"
 ```
 
-Returns ranked, cited documents from the Onyx knowledge base as JSON. Default output is a lean shape: `{"results": [{title, url, source_type, content, updated_at}, ...]}`. Results contain only documents the LLM judged relevant, ordered by relevance; `content` is the full chunk text of each. Use `--raw` for the full API response (adds per-result `citation_id`).
+Returns ranked, cited documents from the Onyx knowledge base as JSON. Default output is a lean shape: `{"results": [{title, url, source_type, content, updated_at}, ...]}`. Results contain only documents the LLM judged relevant, ordered by relevance; `content` is the full chunk text of each. Use `--raw` for the full API response — printed bare for one query (adds per-result `citation_id`), and as `{"searches": [{query, response}, ...]}` for several.
+
+Each query is a full search pass that takes tens of seconds. Multiple queries passed in one invocation (up to 3) run concurrently — batch independent questions into a single call instead of running them sequentially. Multi-query output is `{"searches": [{query, results}, ...]}` in argument order; a failed query has an `error` field and null `results`, and partial failures still exit 0, so check per-query `error` fields. Write search output to files and parse it in a separate shell call — a parsing script (e.g. a Python heredoc) chained after a search can hang, hit your shell timeout, and throw away the completed searches.
+
+Stdout is always valid JSON. If the response exceeds `--max-output` bytes (default 50000 for non-TTY), lowest-ranked results are dropped and a `truncation` object is added: `{truncated, total_results, shown_results, total_bytes, content_truncated, full_response_path, hint}`. The complete response — shaped like the printed output (`results` for one query, `searches` for several) — is saved to `full_response_path`; read that file for the dropped results. With multiple queries, per-query result counts are capped uniformly until the combined output fits, so small result sets pass through whole.
 
 ```bash
+# Batch independent questions (concurrent)
+onyx-cli search "Q3 roadmap" "hiring plan" "incident postmortem template"
+
 # Filter by source
 onyx-cli search --source slack,google_drive "auth migration status"
 
@@ -70,6 +78,7 @@ onyx-cli search --days 30 "recent production incidents"
 
 # Use a specific agent for scoped search
 onyx-cli search --agent-id 5 "engineering roadmap"
+onyx-cli search --agent-name "Support Agent" "engineering roadmap"
 
 # Full API response for programmatic use
 onyx-cli search --raw "API documentation" | jq '.results[].title'
@@ -83,8 +92,9 @@ onyx-cli search --no-query-expansion "exact error message text"
 | `--source`              | string | Filter by source type (comma-separated: slack,google_drive)      |
 | `--days`                | int    | Only return results from the last N days                         |
 | `--agent-id`            | int    | Agent ID for scoped search (inherits filters, document sets)     |
+| `--agent-name`          | string | Agent name for scoped search (exact or unique substring)         |
 | `--raw`                 | bool   | Output full API response (adds per-result citation_id) |
-| `--no-query-expansion`  | bool   | Skip LLM query expansion (faster, less comprehensive)           |
+| `--no-query-expansion`  | bool   | Skip LLM query expansion — faster, but only safe when the query is already precise (exact names, titles, quoted phrases) |
 | `--max-output`          | int    | Max bytes to print before truncating (0 to disable, default 50000 for non-TTY, ignored with --raw) |
 
 ### Ask a question
@@ -98,6 +108,7 @@ Streams an LLM-generated answer as plain text to stdout. Use `search` instead wh
 ```bash
 # Use a specific agent
 onyx-cli ask --agent-id 5 "Summarize our Q4 roadmap"
+onyx-cli ask --agent-name "Support Agent" "hello"
 
 # Pipe context in with the question
 cat error.log | onyx-cli ask --prompt "Find the root cause"
@@ -109,6 +120,7 @@ onyx-cli ask --json "List all active API integrations"
 | Flag           | Type | Description                                                  |
 | -------------- | ---- | ------------------------------------------------------------ |
 | `--agent-id`   | int  | Agent ID to use (overrides default)                          |
+| `--agent-name` | str  | Agent name to use (exact or unique substring; mutually exclusive with `--agent-id`) |
 | `--json`       | bool | Output NDJSON stream events instead of plain text (bypasses truncation) |
 | `--quiet`      | bool | Buffer output and print once at end (no streaming)           |
 | `--prompt`     | str  | Question text (use with piped stdin context)                 |
@@ -121,7 +133,7 @@ onyx-cli agents
 onyx-cli agents --json
 ```
 
-Prints a table of agent IDs, names, and descriptions. Use `--json` for structured JSON output. Use agent IDs with `search --agent-id` or `ask --agent-id`.
+Prints a table of agent IDs, names, and descriptions. Use `--json` for structured JSON output. Use agent IDs with `--agent-id`, or names with `--agent-name`, on `ask`, `search`, and `chat`.
 
 ### Validate configuration
 
@@ -136,7 +148,7 @@ Checks config exists, PAT is present, server is reachable, and credentials are v
 - **stdout**: Results only (answer text, agent list, status)
 - **stderr**: Progress indicators, warnings, errors
 - **Non-TTY**: No ANSI escape codes, no interactive prompts
-- **Truncation**: When stdout is not a TTY, `search` and `ask` output is truncated to 50000 bytes. Full response is saved to a temp file whose path is printed. Read the temp file for more.
+- **Truncation**: When stdout is not a TTY, `search` and `ask` output is limited to 50000 bytes and the full response is saved to a temp file. `search` stays valid JSON — whole results are dropped and a `truncation` object carries the temp file path. `ask` (plain text) is cut at the byte limit with the temp file path printed at the end.
 
 ## Exit Codes
 

@@ -2,14 +2,14 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "onyx.fullname" . }}-ingress-mcp
+  name: {{ include "onyx.resourceName" (list . "ingress-mcp") }}
   annotations:
     {{- if not .Values.ingress.className }}
     kubernetes.io/ingress.class: nginx
     {{- end }}
     nginx.ingress.kubernetes.io/rewrite-target: /$2
     nginx.ingress.kubernetes.io/use-regex: "true"
-    cert-manager.io/cluster-issuer: {{ include "onyx.fullname" . }}-letsencrypt
+    cert-manager.io/cluster-issuer: {{ include "onyx.resourceName" (list . "letsencrypt") }}
 spec:
   {{- if .Values.ingress.className }}
   ingressClassName: {{ .Values.ingress.className }}
@@ -22,12 +22,12 @@ spec:
             pathType: ImplementationSpecific
             backend:
               service:
-                name: {{ include "onyx.fullname" . }}-mcp-server-service
+                name: {{ include "onyx.resourceName" (list . "mcp-server-service") }}
                 port:
                   number: {{ .Values.mcpServer.service.servicePort }}
   tls:
     - hosts:
         - {{ .Values.ingress.api.host }}
-      secretName: {{ include "onyx.fullname" . }}-ingress-mcp-tls
+      secretName: {{ include "onyx.resourceName" (list . "ingress-mcp-tls") }}
 {{- end }}
 

@@ -1,0 +1,499 @@
+"""Scheduled-task pre-approvals (ext-dep): real SQL for the grant lookup,
+the pre-decided insert, and the grant patch semantics.
+
+The gate-side short-circuit behavior (skip park / fall through / DENY
+ordering) is covered with stubs in ``tests/unit/sandbox_proxy/test_gate.py``;
+this file pins the queries those stubs stand in for.
+"""
+
+from __future__ import annotations
+
+from typing import Callable
+from uuid import uuid4
+
+import pytest
+from sqlalchemy import delete, select
+from sqlalchemy.orm import Session
+
+from onyx.db.enums import (
+    ApprovalDecidedVia,
+    ApprovalDecision,
+    GatedAppKind,
+    ScheduledTaskRunStatus,
+    ScheduledTaskStatus,
+    ScheduledTaskTriggerSource,
+)
+from onyx.db.models import (
+    BuildSession,
+    ExternalApp,
+    MCPServer,
+    ScheduledTask,
+    ScheduledTaskPreApprovedTarget,
+    User,
+)
+from onyx.db.scheduled_task import (
+    create_scheduled_task,
+    get_live_scheduled_run_grants,
+    insert_run,
+    mark_run_status,
+    update_scheduled_task,
+)
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.build.db.action_approval import insert_action_approval
+from onyx.server.features.build.scheduled_tasks import api as scheduled_tasks_api
+from tests.common.craft.payloads import default_action_entries
+from tests.external_dependency_unit.craft.db_helpers import (
+    make_external_app,
+    make_skill,
+    make_user,
+)
+
+
+def _make_app(db_session: Session) -> int:
+    """Create a real ``ExternalApp`` and return its id. Grants now FK to
+    ``external_app``, so tests can't use arbitrary ints."""
+    app = make_external_app(db_session, skill=make_skill(db_session), auth_template={})
+    return app.id
+
+
+def _make_mcp_server(db_session: Session, user: User) -> int:
+    server = MCPServer(
+        owner=user.email,
+        name=f"pre_approval_mcp_{uuid4().hex[:8]}",
+        server_url="https://example.com/mcp",
+        available_in_craft=True,
+        is_public=False,
+    )
+    db_session.add(server)
+    db_session.flush()
+    return server.id
+
+
+def _seed_task(
+    db_session: Session,
+    user: User,
+    *,
+    pre_approved_external_app_ids: list[int] | None = None,
+    pre_approved_mcp_server_ids: list[int] | None = None,
+    prompt: str = "Summarise yesterday's events",
+) -> ScheduledTask:
+    task = create_scheduled_task(
+        db_session=db_session,
+        user_id=user.id,
+        name="nightly-report",
+        prompt=prompt,
+        cron_expression="0 9 * * *",
+        editor_mode="advanced",
+        status=ScheduledTaskStatus.ACTIVE,
+        pre_approved_external_app_ids=pre_approved_external_app_ids,
+        pre_approved_mcp_server_ids=pre_approved_mcp_server_ids,
+    )
+    db_session.commit()
+    db_session.refresh(task)
+    return task
+
+
+# ---------------------------------------------------------------------------
+# get_live_scheduled_run_grants
+# ---------------------------------------------------------------------------
+
+
+def test_grants_returned_for_running_run(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    build_session_with_user: Callable[..., BuildSession],
+) -> None:
+    user = make_user(db_session)
+    bs = build_session_with_user(user=user)
+    app_a, app_b = _make_app(db_session), _make_app(db_session)
+    server_id = _make_mcp_server(db_session, user)
+    task = _seed_task(
+        db_session,
+        user,
+        pre_approved_external_app_ids=[app_a, app_b],
+        pre_approved_mcp_server_ids=[server_id],
+    )
+    run = insert_run(
+        db_session=db_session,
+        task_id=task.id,
+        trigger_source=ScheduledTaskTriggerSource.SCHEDULED,
+    )
+    mark_run_status(
+        db_session=db_session,
+        run_id=run.id,
+        status=ScheduledTaskRunStatus.RUNNING,
+        session_id=bs.id,
+    )
+    db_session.commit()
+
+    grants = get_live_scheduled_run_grants(db_session=db_session, session_id=bs.id)
+
+    assert grants is not None
+    run_id, granted = grants
+    assert run_id == run.id
+    assert granted == {
+        (GatedAppKind.EXTERNAL_APP, app_a),
+        (GatedAppKind.EXTERNAL_APP, app_b),
+        (GatedAppKind.MCP_SERVER, server_id),
+    }
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        ScheduledTaskRunStatus.SUCCEEDED,
+        ScheduledTaskRunStatus.FAILED,
+        ScheduledTaskRunStatus.AWAITING_APPROVAL,
+    ],
+)
+def test_no_grants_for_non_running_run(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    build_session_with_user: Callable[..., BuildSession],
+    status: ScheduledTaskRunStatus,
+) -> None:
+    """A finished scheduled session (interactive follow-up turns) parks as
+    usual — the RUNNING filter is the load-bearing scope guard."""
+    user = make_user(db_session)
+    bs = build_session_with_user(user=user)
+    task = _seed_task(
+        db_session, user, pre_approved_external_app_ids=[_make_app(db_session)]
+    )
+    run = insert_run(
+        db_session=db_session,
+        task_id=task.id,
+        trigger_source=ScheduledTaskTriggerSource.SCHEDULED,
+    )
+    mark_run_status(
+        db_session=db_session,
+        run_id=run.id,
+        status=status,
+        session_id=bs.id,
+    )
+    db_session.commit()
+
+    assert (
+        get_live_scheduled_run_grants(db_session=db_session, session_id=bs.id) is None
+    )
+
+
+def test_no_grants_for_interactive_session(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    build_session_with_user: Callable[..., BuildSession],
+) -> None:
+    """Sessions with no run row (interactive origin) never match."""
+    user = make_user(db_session)
+    bs = build_session_with_user(user=user)
+
+    assert (
+        get_live_scheduled_run_grants(db_session=db_session, session_id=bs.id) is None
+    )
+
+
+# ---------------------------------------------------------------------------
+# insert_action_approval — pre-decided rows
+# ---------------------------------------------------------------------------
+
+
+def test_insert_pre_decided_row(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    build_session_with_user: Callable[..., BuildSession],
+) -> None:
+    user = make_user(db_session)
+    bs = build_session_with_user(user=user)
+    app_id = _make_app(db_session)
+
+    row = insert_action_approval(
+        db_session,
+        session_id=bs.id,
+        actions=default_action_entries(),
+        app_name="Slack",
+        payload={"text": "hi"},
+        target=(GatedAppKind.EXTERNAL_APP, app_id),
+        decision=ApprovalDecision.APPROVED,
+        decided_via=ApprovalDecidedVia.PRE_APPROVAL,
+    )
+    db_session.commit()
+    db_session.refresh(row)
+
+    assert row.decision == ApprovalDecision.APPROVED
+    assert row.decided_via == ApprovalDecidedVia.PRE_APPROVAL
+    assert row.decided_at is not None
+    assert row.decided_at.tzinfo is not None
+
+
+def test_insert_default_row_stays_pending(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    build_session_with_user: Callable[..., BuildSession],
+) -> None:
+    user = make_user(db_session)
+    bs = build_session_with_user(user=user)
+    app_id = _make_app(db_session)
+
+    row = insert_action_approval(
+        db_session,
+        session_id=bs.id,
+        actions=default_action_entries(),
+        app_name="Slack",
+        payload={},
+        target=(GatedAppKind.EXTERNAL_APP, app_id),
+    )
+    db_session.commit()
+    db_session.refresh(row)
+
+    assert row.decision is None
+    assert row.decided_at is None
+    assert row.decided_via is None
+    assert row.gated_app_id is not None
+
+
+# ---------------------------------------------------------------------------
+# update_scheduled_task — grant patch semantics
+# ---------------------------------------------------------------------------
+
+
+def test_prompt_change_preserves_grants(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """Grants are explicit state surfaced as checkboxes in the editor: a
+    prompt edit that omits ``pre_approved_external_app_ids`` leaves them untouched."""
+    user = make_user(db_session)
+    app = _make_app(db_session)
+    task = _seed_task(
+        db_session, user, pre_approved_external_app_ids=[app], prompt="orig"
+    )
+
+    updated = update_scheduled_task(
+        db_session=db_session,
+        task_id=task.id,
+        user_id=user.id,
+        prompt="a rewritten prompt",
+    )
+    db_session.commit()
+
+    assert updated.pre_approved_external_app_ids == [app]
+
+
+def test_supplied_grants_replace_existing(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """Supplying ``pre_approved_external_app_ids`` replaces the set wholesale —
+    dropping omitted apps and adding new ones."""
+    user = make_user(db_session)
+    app_a, app_b = _make_app(db_session), _make_app(db_session)
+    task = _seed_task(db_session, user, pre_approved_external_app_ids=[app_a])
+
+    updated = update_scheduled_task(
+        db_session=db_session,
+        task_id=task.id,
+        user_id=user.id,
+        pre_approved_external_app_ids=[app_b],
+    )
+    db_session.commit()
+
+    assert updated.pre_approved_external_app_ids == [app_b]
+
+
+def test_resubmitting_existing_grant_is_idempotent(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """Re-submitting an already-granted app must not orphan+reinsert the same
+    (task, app) unique key in one flush (which Postgres rejects). The editor
+    re-sends current grants on every save, so this is the common path."""
+    user = make_user(db_session)
+    app_a, app_b = _make_app(db_session), _make_app(db_session)
+    task = _seed_task(db_session, user, pre_approved_external_app_ids=[app_a])
+
+    updated = update_scheduled_task(
+        db_session=db_session,
+        task_id=task.id,
+        user_id=user.id,
+        pre_approved_external_app_ids=[app_a, app_b],  # app_a already granted
+    )
+    db_session.commit()
+
+    assert set(updated.pre_approved_external_app_ids) == {app_a, app_b}
+
+
+def test_mcp_grants_survive_external_app_replacement(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    build_session_with_user: Callable[..., BuildSession],
+) -> None:
+    """Each target kind has independent replacement semantics and reaches the gate."""
+    user = make_user(db_session)
+    bs = build_session_with_user(user=user)
+    app_a, app_b = _make_app(db_session), _make_app(db_session)
+    server_a = _make_mcp_server(db_session, user)
+    server_b = _make_mcp_server(db_session, user)
+    task = _seed_task(
+        db_session,
+        user,
+        pre_approved_external_app_ids=[app_a],
+        pre_approved_mcp_server_ids=[server_a],
+    )
+
+    updated = update_scheduled_task(
+        db_session=db_session,
+        task_id=task.id,
+        user_id=user.id,
+        pre_approved_external_app_ids=[app_b],
+    )
+    db_session.commit()
+
+    assert updated.pre_approved_external_app_ids == [app_b]  # MCP grant excluded
+    assert updated.pre_approved_mcp_server_ids == [server_a]
+
+    updated = update_scheduled_task(
+        db_session=db_session,
+        task_id=task.id,
+        user_id=user.id,
+        pre_approved_mcp_server_ids=[server_b],
+    )
+    db_session.commit()
+
+    assert updated.pre_approved_external_app_ids == [app_b]
+    assert updated.pre_approved_mcp_server_ids == [server_b]
+
+    run = insert_run(
+        db_session=db_session,
+        task_id=task.id,
+        trigger_source=ScheduledTaskTriggerSource.SCHEDULED,
+    )
+    mark_run_status(
+        db_session=db_session,
+        run_id=run.id,
+        status=ScheduledTaskRunStatus.RUNNING,
+        session_id=bs.id,
+    )
+    db_session.commit()
+
+    grants = get_live_scheduled_run_grants(db_session=db_session, session_id=bs.id)
+    assert grants is not None
+    assert grants[1] == {
+        (GatedAppKind.EXTERNAL_APP, app_b),
+        (GatedAppKind.MCP_SERVER, server_b),
+    }
+
+
+def test_create_stores_each_grant_once(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    user = make_user(db_session)
+    app_a, app_b = _make_app(db_session), _make_app(db_session)
+    server_id = _make_mcp_server(db_session, user)
+    task = _seed_task(
+        db_session,
+        user,
+        pre_approved_external_app_ids=[app_b, app_a, app_b],
+        pre_approved_mcp_server_ids=[server_id, server_id],
+    )
+    assert set(task.pre_approved_external_app_ids) == {app_a, app_b}
+    assert len(task.pre_approved_external_app_ids) == 2
+    assert set(task.pre_approved_mcp_server_ids) == {server_id}
+    assert len(task.pre_approved_mcp_server_ids) == 1
+
+    bare = _seed_task(db_session, user)
+    assert bare.pre_approved_external_app_ids == []
+    assert bare.pre_approved_mcp_server_ids == []
+
+
+# ---------------------------------------------------------------------------
+# FK referential actions (deliberate, documented ondelete choices)
+# ---------------------------------------------------------------------------
+
+
+def test_deleting_app_drops_grants(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """``external_app_id`` is ``ON DELETE CASCADE``: removing an app drops its
+    grant rows — a grant on a removed app is meaningless."""
+    user = make_user(db_session)
+    app_id = _make_app(db_session)
+    task = _seed_task(db_session, user, pre_approved_external_app_ids=[app_id])
+    assert task.pre_approved_external_app_ids == [app_id]
+
+    db_session.execute(delete(ExternalApp).where(ExternalApp.id == app_id))
+    db_session.commit()
+
+    remaining = (
+        db_session.execute(
+            select(ScheduledTaskPreApprovedTarget).where(
+                ScheduledTaskPreApprovedTarget.scheduled_task_id == task.id
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert remaining == []
+
+
+def test_deleting_app_nulls_action_approval_fk(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    build_session_with_user: Callable[..., BuildSession],
+) -> None:
+    """``action_approval.gated_app_id`` is ``ON DELETE SET NULL``: an audit row
+    survives app deletion with the FK cleared, not cascaded away. Deleting the
+    app cascades its gated_app row away, which nulls the approval's FK."""
+    user = make_user(db_session)
+    bs = build_session_with_user(user=user)
+    app_id = _make_app(db_session)
+    row = insert_action_approval(
+        db_session,
+        session_id=bs.id,
+        actions=default_action_entries(),
+        app_name="Slack",
+        payload={},
+        target=(GatedAppKind.EXTERNAL_APP, app_id),
+        decision=ApprovalDecision.APPROVED,
+        decided_via=ApprovalDecidedVia.PRE_APPROVAL,
+    )
+    db_session.commit()
+    assert row.gated_app_id is not None
+
+    db_session.execute(delete(ExternalApp).where(ExternalApp.id == app_id))
+    db_session.commit()
+    db_session.refresh(row)
+
+    assert row.gated_app_id is None
+
+
+# ---------------------------------------------------------------------------
+# API validation helper
+# ---------------------------------------------------------------------------
+
+
+def test_validate_app_ids_accepts_known_duplicates_and_reports_unknown_ids_once(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Duplicates are valid, but unknown ids raise INVALID_INPUT."""
+
+    class _App:
+        def __init__(self, app_id: int) -> None:
+            self.id = app_id
+
+    monkeypatch.setattr(
+        scheduled_tasks_api,
+        "get_external_apps",
+        lambda _db: [_App(7), _App(9)],
+    )
+
+    scheduled_tasks_api._validate_app_ids(db_session, [])
+    scheduled_tasks_api._validate_app_ids(db_session, [9, 7, 9])
+
+    with pytest.raises(OnyxError) as exc_info:
+        scheduled_tasks_api._validate_app_ids(db_session, [456, 7, 123, 456])
+    assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
+    assert exc_info.value.detail == "Unknown external app id(s): [123, 456]"

@@ -4,11 +4,15 @@ import { useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 import { usePreProvisionPolling } from "@/app/craft/hooks/usePreProvisionPolling";
+import { useSandboxStatusReconciler } from "@/app/craft/hooks/useSandboxStatusReconciler";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
-import { getBuildUserPersona } from "@/app/craft/onboarding/constants";
-import { useLLMProviders } from "@/hooks/useLanguageModels";
-import { checkPreProvisionedSession } from "@/app/craft/services/apiServices";
+import { hasSupportedCraftProvider } from "@/app/craft/onboarding/constants";
+import { useLLMProviders } from "@/lib/languageModels/hooks";
+import {
+  checkPreProvisionedSession,
+  fetchSession,
+} from "@/app/craft/services/apiServices";
 
 interface UseBuildSessionControllerProps {
   /** Session ID from search params, or null for new session */
@@ -33,16 +37,14 @@ export function useBuildSessionController({
   existingSessionId,
 }: UseBuildSessionControllerProps) {
   const router = useRouter();
+  useSandboxStatusReconciler();
 
-  // Check LLM provider availability
+  // Pre-provisioning gates only on having a visible configured model. When one
+  // exists we start provisioning
+  // immediately — even while the onboarding intro is still open — so the user
+  // exits onboarding to a ready sandbox.
   const { llmProviders } = useLLMProviders();
-  const hasAnyProvider = !!(llmProviders && llmProviders.length > 0);
-
-  // Check if user has completed onboarding (persona cookie is set)
-  // Read directly from cookie on every render - cookie reads are cheap and this
-  // ensures we always have the current value, especially important after onboarding
-  // completes when the cookie is set synchronously but other state updates are async
-  const hasCompletedOnboarding = getBuildUserPersona() !== null;
+  const hasAnyProvider = hasSupportedCraftProvider(llmProviders);
 
   // Track previous existingSessionId to detect navigation transitions
   const prevExistingSessionIdRef = useRef<string | null>(existingSessionId);
@@ -55,6 +57,9 @@ export function useBuildSessionController({
     (state) => state.setCurrentSession
   );
   const loadSession = useBuildSessionStore((state) => state.loadSession);
+  const updateSessionData = useBuildSessionStore(
+    (state) => state.updateSessionData
+  );
 
   // Controller state from Zustand (replaces refs for better race condition handling)
   const controllerState = useBuildSessionStore(
@@ -92,6 +97,33 @@ export function useBuildSessionController({
   const isPreProvisioning = preProvisioning.status === "provisioning";
   const isPreProvisioningReady = preProvisioning.status === "ready";
 
+  const refreshCachedSessionState = useCallback(
+    async (sessionId: string) => {
+      const cachedSession = useBuildSessionStore
+        .getState()
+        .sessions.get(sessionId);
+      if (!cachedSession?.isLoaded) return;
+      const skillsStaleRevision = cachedSession.skillsStaleRevision;
+
+      try {
+        const session = await fetchSession(sessionId, {
+          checkWorkspace: false,
+        });
+        if (!session.skills_stale) return;
+        const currentSession = useBuildSessionStore
+          .getState()
+          .sessions.get(sessionId);
+        if (currentSession?.skillsStaleRevision !== skillsStaleRevision) return;
+        updateSessionData(sessionId, {
+          skillsStale: true,
+        });
+      } catch {
+        // Keep the usable cached session on transient refresh failures.
+      }
+    },
+    [updateSessionData]
+  );
+
   // Effect: Handle session changes based on URL
   useEffect(() => {
     const prevExistingSessionId = prevExistingSessionIdRef.current;
@@ -117,14 +149,12 @@ export function useBuildSessionController({
         controllerState.lastTriggeredForUrl !== "new-build" &&
         (preProvisioning.status === "idle" ||
           preProvisioning.status === "failed") &&
-        hasCompletedOnboarding &&
         hasAnyProvider;
 
       // Also trigger retry if failed and retry time has passed
       const shouldRetry =
         preProvisioning.status === "failed" &&
         Date.now() >= preProvisioning.retryAt &&
-        hasCompletedOnboarding &&
         hasAnyProvider;
 
       if (canTrigger || shouldRetry) {
@@ -140,7 +170,7 @@ export function useBuildSessionController({
     }
 
     // Handle navigation to existing session
-    async function fetchSession() {
+    async function loadRequestedSession() {
       if (!existingSessionId) return;
 
       // Mark as loaded BEFORE any async work to prevent duplicate calls
@@ -151,7 +181,6 @@ export function useBuildSessionController({
       const cachedSession = currentState.sessions.get(existingSessionId);
 
       if (cachedSession?.isLoaded) {
-        // Just switch to it
         setCurrentSession(existingSessionId);
         return;
       }
@@ -174,7 +203,7 @@ export function useBuildSessionController({
       controllerState.loadedSessionId !== existingSessionId &&
       !isCurrentlyStreaming
     ) {
-      fetchSession();
+      loadRequestedSession();
     } else if (currentSessionId !== existingSessionId) {
       // Session is cached, just switch to it
       setCurrentSession(existingSessionId);
@@ -186,7 +215,6 @@ export function useBuildSessionController({
     loadSession,
     preProvisioning,
     ensurePreProvisionedSession,
-    hasCompletedOnboarding,
     hasAnyProvider,
     controllerState.lastTriggeredForUrl,
     controllerState.loadedSessionId,
@@ -202,7 +230,6 @@ export function useBuildSessionController({
     if (
       preProvisioning.status !== "failed" ||
       existingSessionId !== null ||
-      !hasCompletedOnboarding ||
       !hasAnyProvider
     ) {
       return;
@@ -230,16 +257,18 @@ export function useBuildSessionController({
   }, [
     preProvisioning,
     existingSessionId,
-    hasCompletedOnboarding,
     hasAnyProvider,
     ensurePreProvisionedSession,
   ]);
 
-  // Effect: Re-validate pre-provisioned session on tab focus (multi-tab support)
-  // Uses checkPreProvisionedSession API to validate without resetting state,
-  // which prevents unnecessary cascading effects when session is still valid.
+  // Effect: Refresh cached session state and re-validate pre-provisioning on focus.
   useEffect(() => {
     const handleFocus = async () => {
+      if (existingSessionId) {
+        await refreshCachedSessionState(existingSessionId);
+        return;
+      }
+
       const { preProvisioning } = useBuildSessionStore.getState();
 
       // Only re-validate if we have a "ready" pre-provisioned session
@@ -286,9 +315,12 @@ export function useBuildSessionController({
       }
     };
 
+    if (existingSessionId) {
+      void refreshCachedSessionState(existingSessionId);
+    }
     window.addEventListener("focus", handleFocus);
     return () => window.removeEventListener("focus", handleFocus);
-  }, []);
+  }, [existingSessionId, refreshCachedSessionState]);
 
   /**
    * Navigate to a specific session

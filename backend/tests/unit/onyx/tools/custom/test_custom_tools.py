@@ -6,13 +6,12 @@ from unittest.mock import patch
 import pytest
 
 from onyx.server.query_and_chat.placement import Placement
-from onyx.tools.models import DynamicSchemaInfo
-from onyx.tools.models import ToolResponse
+from onyx.tools.models import DynamicSchemaInfo, ToolResponse
 from onyx.tools.tool_implementations.custom.custom_tool import (
+    CustomToolCallSummary,
     build_custom_tools_from_openapi_schema_and_headers,
+    validate_openapi_schema,
 )
-from onyx.tools.tool_implementations.custom.custom_tool import CustomToolCallSummary
-from onyx.tools.tool_implementations.custom.custom_tool import validate_openapi_schema
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_method_specs,
 )
@@ -313,7 +312,9 @@ class TestCustomTool(unittest.TestCase):
             email=user_email,
         )
 
-        expected_url = f"http://localhost:8080/users/{user_id}/by-email/{user_email}"
+        expected_url = (
+            f"http://localhost:8080/users/{user_id}/by-email/alice%40example.com"
+        )
         # Custom headers do NOT receive placeholder substitution today;
         # only the OpenAPI schema string is templated.
         expected_headers = {

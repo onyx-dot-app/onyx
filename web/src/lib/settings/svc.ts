@@ -1,4 +1,4 @@
-import { Settings } from "@/interfaces/settings";
+import { Settings } from "@/lib/settings/types";
 
 async function parseErrorDetail(
   res: Response,
@@ -12,9 +12,13 @@ async function parseErrorDetail(
   }
 }
 
-export async function updateAdminSettings(settings: Settings): Promise<void> {
+// The endpoint merges only the fields sent, so a partial patch leaves the
+// rest of the stored settings untouched.
+export async function updateAdminSettings(
+  settings: Partial<Settings>
+): Promise<void> {
   const res = await fetch("/api/admin/settings", {
-    method: "PUT",
+    method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(settings),
   });

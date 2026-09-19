@@ -1,28 +1,26 @@
 import json
 from collections.abc import Generator
 
-from github import Github
 from github.Repository import Repository
 
-from ee.onyx.external_permissions.github.utils import fetch_repository_team_slugs
-from ee.onyx.external_permissions.github.utils import form_collaborators_group_id
-from ee.onyx.external_permissions.github.utils import form_organization_group_id
 from ee.onyx.external_permissions.github.utils import (
-    form_outside_collaborators_group_id,
+    GitHubVisibility,
+    form_collaborators_group_id,
+    form_organization_group_id,
+    get_external_access_permission,
+    get_repository_visibility,
 )
-from ee.onyx.external_permissions.github.utils import get_external_access_permission
-from ee.onyx.external_permissions.github.utils import get_repository_visibility
-from ee.onyx.external_permissions.github.utils import GitHubVisibility
-from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
-from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsIdsFunction
+from ee.onyx.external_permissions.perm_sync_types import (
+    FetchAllDocumentsFunction,
+    FetchAllDocumentsIdsFunction,
+)
+from ee.onyx.external_permissions.utils import credential_json
 from onyx.access.models import DocExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.github.connector import DocMetadata
-from onyx.connectors.github.connector import GithubConnector
+from onyx.connectors.github.connector import DocMetadata, GithubConnector
 from onyx.db.models import ConnectorCredentialPair
-from onyx.db.utils import DocumentRow
-from onyx.db.utils import SortOrder
+from onyx.db.utils import DocumentRow, SortOrder
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
@@ -37,12 +35,7 @@ def github_doc_sync(
     fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,  # noqa: ARG001
     callback: IndexingHeartbeatInterface | None = None,
 ) -> Generator[DocExternalAccess, None, None]:
-    """
-    Sync GitHub documents with external access permissions.
-
-    This function checks each repository for visibility/team changes and updates
-    document permissions accordingly without using checkpoints.
-    """
+    """Update document permissions when repository visibility changes."""
     logger.info("Starting GitHub document sync for CC pair ID: %s", cc_pair.id)
 
     # Initialize GitHub connector with credentials
@@ -50,12 +43,7 @@ def github_doc_sync(
         **cc_pair.connector.connector_specific_config
     )
 
-    credential_json = (
-        cc_pair.credential.credential_json.get_value(apply_mask=False)
-        if cc_pair.credential.credential_json
-        else {}
-    )
-    github_connector.load_credentials(credential_json)
+    github_connector.load_credentials(credential_json(cc_pair))
     logger.info("GitHub connector credentials loaded successfully")
 
     if not github_connector.github_client:
@@ -102,14 +90,12 @@ def github_doc_sync(
                 continue
 
             current_external_group_ids = repo_doc_list[0].external_user_group_ids or []
-            # Check if repository has any permission changes
-            has_changes = _check_repository_for_changes(
+            visibility_changed = _is_repo_visibility_changed_from_groups(
                 repo=repo,
-                github_client=github_connector.github_client,
                 current_external_group_ids=current_external_group_ids,
             )
 
-            if has_changes:
+            if visibility_changed:
                 logger.info(
                     "Repository %s (%s) has changes, updating documents",
                     repo.id,
@@ -146,39 +132,6 @@ def github_doc_sync(
             )
 
     logger.info("GitHub document sync completed for CC pair ID: %s", cc_pair.id)
-
-
-def _check_repository_for_changes(
-    repo: Repository,
-    github_client: Github,
-    current_external_group_ids: list[str],
-) -> bool:
-    """
-    Check if repository has any permission changes (visibility or team updates).
-    """
-    logger.info("Checking repository %s (%s) for changes", repo.id, repo.name)
-
-    # Check for repository visibility changes using the sample document data
-    if _is_repo_visibility_changed_from_groups(
-        repo=repo,
-        current_external_group_ids=current_external_group_ids,
-    ):
-        logger.info("Repository %s (%s) has visibility changes", repo.id, repo.name)
-        return True
-
-    # Check for team membership changes if repository is private
-    if get_repository_visibility(
-        repo
-    ) == GitHubVisibility.PRIVATE and _teams_updated_from_groups(
-        repo=repo,
-        github_client=github_client,
-        current_external_group_ids=current_external_group_ids,
-    ):
-        logger.info("Repository %s (%s) has team changes", repo.id, repo.name)
-        return True
-
-    logger.info("Repository %s (%s) has no changes", repo.id, repo.name)
-    return False
 
 
 def _is_repo_visibility_changed_from_groups(
@@ -235,68 +188,3 @@ def _is_repo_visibility_changed_from_groups(
         )
 
     return visibility_changed
-
-
-def _teams_updated_from_groups(
-    repo: Repository,
-    github_client: Github,
-    current_external_group_ids: list[str],
-) -> bool:
-    """
-    Check if repository team memberships have changed using existing group IDs.
-    """
-    # Fetch current team slugs for the repository
-    current_teams = fetch_repository_team_slugs(repo=repo, github_client=github_client)
-    logger.info(
-        "Current teams for repository %s (name: %s): %s",
-        repo.id,
-        repo.name,
-        current_teams,
-    )
-
-    # Build group IDs to exclude from team comparison (non-team groups)
-    collaborators_group_id = build_ext_group_name_for_onyx(
-        source=DocumentSource.GITHUB,
-        ext_group_name=form_collaborators_group_id(repo.id),
-    )
-    outside_collaborators_group_id = build_ext_group_name_for_onyx(
-        source=DocumentSource.GITHUB,
-        ext_group_name=form_outside_collaborators_group_id(repo.id),
-    )
-    non_team_group_ids = {collaborators_group_id, outside_collaborators_group_id}
-
-    # Extract existing team IDs from current external group IDs
-    existing_team_ids = set()
-    for group_id in current_external_group_ids:
-        # Skip all non-team groups, keep only team groups
-        if group_id not in non_team_group_ids:
-            existing_team_ids.add(group_id)
-
-    # Note: existing_team_ids from DB are already prefixed (e.g., "github__team-slug")
-    # but current_teams from API are raw team slugs, so we need to add the prefix
-    current_team_ids = set()
-    for team_slug in current_teams:
-        team_group_id = build_ext_group_name_for_onyx(
-            source=DocumentSource.GITHUB,
-            ext_group_name=team_slug,
-        )
-        current_team_ids.add(team_group_id)
-
-    logger.info(
-        "Existing team IDs: %s, Current team IDs: %s",
-        existing_team_ids,
-        current_team_ids,
-    )
-
-    # Compare actual team IDs to detect changes
-    teams_changed = current_team_ids != existing_team_ids
-    if teams_changed:
-        logger.info(
-            "Team changes detected for repo %s (name: %s): existing=%s, current=%s",
-            repo.id,
-            repo.name,
-            existing_team_ids,
-            current_team_ids,
-        )
-
-    return teams_changed

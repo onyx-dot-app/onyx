@@ -1,0 +1,302 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
+import { Table, createTableColumns } from "@opal/components";
+import { Content, toast } from "@opal/layouts";
+import { Button } from "@opal/components";
+import { SvgDownload, SvgSimpleLoader } from "@opal/icons";
+import SvgNoResult from "@opal/illustrations/no-result";
+import { IllustrationContent } from "@opal/layouts";
+import { AccountType, UserStatus } from "@/lib/types";
+import { timeAgo } from "@opal/time";
+import Text from "@/refresh-components/texts/Text";
+import { InputTypeIn } from "@opal/components";
+import useAdminUsers from "@/hooks/useAdminUsers";
+import useGroups from "@/hooks/useGroups";
+import { downloadUsersCsv } from "./svc";
+import UserFilters from "./UserFilters";
+import GroupsCell from "./GroupsCell";
+import UserRowActions from "./UserRowActions";
+import AccountTypeCell from "./AccountTypeCell";
+import type {
+  UserRow,
+  GroupOption,
+  StatusFilter,
+  StatusCountMap,
+} from "./types";
+import UserAvatar from "@/refresh-components/avatars/UserAvatar";
+import type { User } from "@/lib/types";
+
+// ---------------------------------------------------------------------------
+// Column renderers
+// ---------------------------------------------------------------------------
+
+function renderNameColumn(email: string, row: UserRow) {
+  return (
+    <Content
+      sizePreset="main-ui"
+      variant="section"
+      title={row.personal_name ?? email}
+      description={row.personal_name ? email : undefined}
+    />
+  );
+}
+
+function renderStatusColumn(
+  value: UserStatus,
+  row: UserRow,
+  labels: ColumnLabels
+) {
+  return (
+    <div className="flex flex-col">
+      <Text as="span" mainUiBody text03>
+        {labels.status[value] ?? value}
+      </Text>
+      {row.is_scim_synced && (
+        <Text as="span" secondaryBody text03>
+          {labels.scimSynced}
+        </Text>
+      )}
+    </div>
+  );
+}
+
+function renderLastActiveColumn(value: string | null, locale: string) {
+  return (
+    <Text as="span" secondaryBody text03>
+      {value ? (timeAgo(value, locale) ?? "\u2014") : "\u2014"}
+    </Text>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Columns
+// ---------------------------------------------------------------------------
+
+const tc = createTableColumns<UserRow>();
+
+interface ColumnLabels {
+  name: string;
+  groups: string;
+  accountType: string;
+  lastActive: string;
+  statusHeader: string;
+  status: Record<UserStatus, string>;
+  scimSynced: string;
+}
+
+function buildColumns(
+  onMutate: () => void,
+  labels: ColumnLabels,
+  locale: string
+) {
+  return [
+    tc.qualifier({
+      content: "icon",
+      iconSize: "lg",
+      getContent: (row) => {
+        const user = {
+          email: row.email,
+          personalization: row.personal_name
+            ? { name: row.personal_name }
+            : undefined,
+        } as User;
+        return (props) => <UserAvatar user={user} size={props.size} />;
+      },
+    }),
+    tc.column("email", {
+      header: labels.name,
+      weight: 22,
+      cell: renderNameColumn,
+    }),
+    tc.column("groups", {
+      header: labels.groups,
+      weight: 24,
+      enableSorting: false,
+      cell: (value, row) => (
+        <GroupsCell groups={value} user={row} onMutate={onMutate} />
+      ),
+    }),
+    tc.column("account_type", {
+      header: labels.accountType,
+      weight: 16,
+      cell: (_value, row) => <AccountTypeCell user={row} onMutate={onMutate} />,
+    }),
+    tc.column("status", {
+      header: labels.statusHeader,
+      weight: 14,
+      cell: (value, row) => renderStatusColumn(value, row, labels),
+    }),
+    tc.column("last_active", {
+      header: labels.lastActive,
+      weight: 14,
+      cell: (value) => renderLastActiveColumn(value, locale),
+    }),
+    tc.actions({
+      cell: (row) => <UserRowActions user={row} onMutate={onMutate} />,
+    }),
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+const PAGE_SIZE = 8;
+
+interface UsersTableProps {
+  selectedStatuses: StatusFilter;
+  onStatusesChange: (statuses: StatusFilter) => void;
+  accountTypeCounts: Record<string, number>;
+  statusCounts: StatusCountMap;
+}
+
+export default function UsersTable({
+  selectedStatuses,
+  onStatusesChange,
+  accountTypeCounts,
+  statusCounts,
+}: UsersTableProps) {
+  const t = useTranslations("admin.users");
+  const locale = useLocale();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedAccountTypes, setSelectedAccountTypes] = useState<
+    AccountType[]
+  >([]);
+  const [selectedGroups, setSelectedGroups] = useState<number[]>([]);
+
+  const { data: allGroups } = useGroups(true);
+
+  const groupOptions: GroupOption[] = useMemo(
+    () =>
+      (allGroups ?? []).map((g) => ({
+        id: g.id,
+        name: g.name,
+        memberCount: g.users.length,
+      })),
+    [allGroups]
+  );
+
+  const { users, isLoading, error, refresh } = useAdminUsers();
+
+  const columns = useMemo(
+    () =>
+      buildColumns(
+        refresh,
+        {
+          name: t("table.columns.name.header"),
+          groups: t("table.columns.groups.header"),
+          accountType: t("table.columns.accountType.header"),
+          lastActive: t("table.columns.lastActive.header"),
+          statusHeader: t("table.columns.status.header"),
+          status: {
+            [UserStatus.ACTIVE]: t("status.active.label"),
+            [UserStatus.INACTIVE]: t("status.inactive.label"),
+            [UserStatus.INVITED]: t("status.invited.label"),
+            [UserStatus.REQUESTED]: t("status.requested.label"),
+          },
+          scimSynced: t("table.status.scimSynced.label"),
+        },
+        locale
+      ),
+    [refresh, t, locale]
+  );
+
+  // Client-side filtering
+  const filteredUsers = useMemo(() => {
+    let result = users;
+
+    if (selectedAccountTypes.length > 0) {
+      result = result.filter(
+        (u) =>
+          u.account_type !== null &&
+          selectedAccountTypes.includes(u.account_type)
+      );
+    }
+
+    if (selectedStatuses.length > 0) {
+      result = result.filter((u) => selectedStatuses.includes(u.status));
+    }
+
+    if (selectedGroups.length > 0) {
+      result = result.filter((u) =>
+        u.groups.some((g) => selectedGroups.includes(g.id))
+      );
+    }
+
+    return result;
+  }, [users, selectedAccountTypes, selectedStatuses, selectedGroups]);
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-12">
+        <SvgSimpleLoader className="h-6 w-6" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Text as="p" secondaryBody text03>
+        {t("table.error.description")}
+      </Text>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <InputTypeIn
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+        placeholder={t("table.search.placeholder")}
+        searchIcon
+      />
+      <UserFilters
+        selectedAccountTypes={selectedAccountTypes}
+        onAccountTypesChange={setSelectedAccountTypes}
+        selectedGroups={selectedGroups}
+        onGroupsChange={setSelectedGroups}
+        groups={groupOptions}
+        selectedStatuses={selectedStatuses}
+        onStatusesChange={onStatusesChange}
+        accountTypeCounts={accountTypeCounts}
+        statusCounts={statusCounts}
+      />
+      <Table
+        data={filteredUsers}
+        columns={columns}
+        getRowId={(row) => row.id ?? row.email}
+        pageSize={PAGE_SIZE}
+        searchTerm={searchTerm}
+        emptyState={
+          <IllustrationContent
+            illustration={SvgNoResult}
+            title={t("table.empty.title")}
+            description={t("table.empty.description")}
+          />
+        }
+        footer={{
+          leftExtra: (
+            <Button
+              icon={SvgDownload}
+              prominence="tertiary"
+              size="sm"
+              tooltip={t("table.downloadCsvButton.tooltip")}
+              aria-label={t("table.downloadCsvButton.ariaLabel")}
+              onClick={() => {
+                downloadUsersCsv().catch((err) => {
+                  toast.error(
+                    err instanceof Error
+                      ? err.message
+                      : t("table.toasts.downloadFailed")
+                  );
+                });
+              }}
+            />
+          ),
+        }}
+      />
+    </div>
+  );
+}

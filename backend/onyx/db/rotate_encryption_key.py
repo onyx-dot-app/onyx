@@ -12,15 +12,11 @@ safely resumed by re-running.
 import json
 from typing import Any
 
-from sqlalchemy import LargeBinary
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import LargeBinary, select, update
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import ENCRYPTION_KEY_SECRET
-from onyx.db.models import Base
-from onyx.db.models import EncryptedJson
-from onyx.db.models import EncryptedString
+from onyx.db.models import Base, EncryptedJson, EncryptedString
 from onyx.utils.encryption import decrypt_bytes_to_string
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
@@ -57,9 +53,9 @@ def _discover_encrypted_columns() -> list[tuple[type, str, list[str], bool]]:
         for prop in mapper.column_attrs:
             for col in prop.columns:
                 if isinstance(col.type, EncryptedJson):
-                    results.append((model_cls, prop.key, pk_names, True))
+                    results.append((model_cls, prop.key, pk_names, True))  # ty: ignore[invalid-argument-type]
                 elif isinstance(col.type, EncryptedString):
-                    results.append((model_cls, prop.key, pk_names, False))
+                    results.append((model_cls, prop.key, pk_names, False))  # ty: ignore[invalid-argument-type]
 
     return results
 
@@ -97,8 +93,8 @@ def rotate_encryption_key(
 
     for model_cls, col_name, pk_names, is_json in encrypted_columns:
         table_name: str = model_cls.__tablename__  # ty: ignore[unresolved-attribute]
-        col_attr = getattr(model_cls, col_name)
-        pk_attrs = [getattr(model_cls, pk) for pk in pk_names]
+        col_attr = getattr(model_cls, col_name)  # ods: ignore[getattr]
+        pk_attrs = [getattr(model_cls, pk) for pk in pk_names]  # ods: ignore[getattr]
 
         # Read raw bytes directly, bypassing the TypeDecorator
         raw_col = col_attr.property.columns[0]

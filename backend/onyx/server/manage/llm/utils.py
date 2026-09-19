@@ -4,29 +4,19 @@ LLM Provider Utilities
 Utilities for dynamic LLM providers (Bedrock, Ollama, OpenRouter):
 - Display name generation from model identifiers
 - Model validation and filtering
-- Vision/reasoning capability inference
+- Reasoning capability inference
 """
 
 import re
 from typing import TypedDict
 
-from onyx.llm.constants import BEDROCK_MODEL_NAME_MAPPINGS
-from onyx.llm.constants import LlmProviderNames
-from onyx.llm.constants import MODEL_PREFIX_TO_VENDOR
-from onyx.llm.constants import OLLAMA_MODEL_NAME_MAPPINGS
-from onyx.llm.constants import OLLAMA_MODEL_TO_VENDOR
-from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
-
-# Dynamic providers fetch models directly from source APIs (not LiteLLM)
-DYNAMIC_LLM_PROVIDERS = frozenset(
-    {
-        LlmProviderNames.OPENROUTER,
-        LlmProviderNames.BEDROCK,
-        LlmProviderNames.OLLAMA_CHAT,
-        LlmProviderNames.LM_STUDIO,
-        LlmProviderNames.BIFROST,
-        LlmProviderNames.OPENAI_COMPATIBLE,
-    }
+from onyx.llm.constants import (
+    BEDROCK_MODEL_NAME_MAPPINGS,
+    MODEL_PREFIX_TO_VENDOR,
+    OLLAMA_MODEL_NAME_MAPPINGS,
+    OLLAMA_MODEL_TO_VENDOR,
+    PROVIDER_DISPLAY_NAMES,
+    LlmProviderNames,
 )
 
 
@@ -39,36 +29,6 @@ class ModelMetadata(TypedDict):
 
 # Non-LLM model patterns to filter out (image gen, embeddings, etc.)
 NON_LLM_PATTERNS = frozenset({"embed", "stable-", "titan-image", "titan-embed"})
-
-# Known Bedrock vision-capable models (for fallback when base model not in region)
-BEDROCK_VISION_MODELS = frozenset(
-    {
-        "anthropic.claude-3",
-        "anthropic.claude-4",
-        "amazon.nova-pro",
-        "amazon.nova-lite",
-        "amazon.nova-premier",
-    }
-)
-
-# Known Bifrost/OpenAI-compatible vision-capable model families where the
-# source API does not expose this metadata directly.
-BIFROST_VISION_MODEL_FAMILIES = frozenset(
-    {
-        "anthropic/claude-3",
-        "anthropic/claude-4",
-        "amazon/nova-pro",
-        "amazon/nova-lite",
-        "amazon/nova-premier",
-        "openai/gpt-4o",
-        "openai/gpt-4.1",
-        "google/gemini",
-        "meta-llama/llama-3.2",
-        "mistral/pixtral",
-        "qwen/qwen2.5-vl",
-        "qwen/qwen-vl",
-    }
-)
 
 
 def is_valid_bedrock_model(
@@ -91,23 +51,6 @@ def is_valid_bedrock_model(
     if not supports_streaming:
         return False
     return True
-
-
-def infer_vision_support(model_id: str) -> bool:
-    """Infer vision support from model ID when base model metadata unavailable.
-
-    Used for providers like Bedrock and Bifrost where vision support may
-    need to be inferred from vendor/model naming conventions.
-    """
-    model_id_lower = model_id.lower()
-    if any(vision_model in model_id_lower for vision_model in BEDROCK_VISION_MODELS):
-        return True
-
-    normalized_model_id = model_id_lower.replace(".", "/")
-    return any(
-        vision_model in normalized_model_id
-        for vision_model in BIFROST_VISION_MODEL_FAMILIES
-    )
 
 
 def generate_bedrock_display_name(model_id: str) -> str:
@@ -288,9 +231,35 @@ def is_reasoning_model(model_id: str, display_name: str) -> bool:
 
     Used for OpenRouter and other dynamic providers where we need to infer
     reasoning capability from model identifiers.
+
+    TODO: unify with model_is_reasoning_model (onyx/llm/model_capabilities.py)
+    behind a single infer_reasoning_support() helper so the dynamic-provider
+    fetch endpoints and ModelConfigurationView.from_model don't each have to
+    compose the cost-map lookup and this heuristic manually.
     """
     combined = f"{model_id} {display_name}".lower()
     return any(pattern in combined for pattern in REASONING_MODEL_PATTERNS)
+
+
+def lm_studio_capability_enabled(value: object) -> bool:
+    """Read one entry of an LM Studio `capabilities` object as a boolean.
+
+    LM Studio reports a capability either as a plain boolean or as an options
+    object, for example
+    `{"allowed_options": ["off", "low", "high"], "default": "off"}`.
+    An options object means the model supports the capability, unless "off" is
+    the only allowed option.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, dict):
+        allowed_options = value.get("allowed_options")
+        if isinstance(allowed_options, list):
+            return any(str(option).lower() != "off" for option in allowed_options)
+        return True
+    if isinstance(value, str):
+        return value.lower() not in {"", "off", "false", "none"}
+    return bool(value)
 
 
 def extract_base_model_name(model: str) -> str | None:
@@ -323,6 +292,8 @@ def filter_model_configurations(
     model_configurations: list,
     provider: str,
     use_stored_display_name: bool = False,
+    custom_config: dict[str, str] | None = None,
+    deployment_name: str | None = None,
 ) -> list:
     """Filter out obsolete and dated duplicate models from configurations.
 
@@ -331,6 +302,11 @@ def filter_model_configurations(
         provider: The provider name (e.g., "openai", "anthropic")
         use_stored_display_name: If True, prefer the display_name stored in the
             DB over LiteLLM enrichments. Set for custom-config providers.
+        custom_config: The provider's custom config, which for a gateway holds
+            the admin-selected API surface.
+        deployment_name: The provider-level deployment alias (e.g. Azure AI
+            Foundry), which is the string actually sent to LiteLLM when a
+            model's own name doesn't carry its identity.
 
     Returns:
         List of ModelConfigurationView objects with obsolete/duplicate models removed
@@ -351,7 +327,11 @@ def filter_model_configurations(
             continue
         filtered_configs.append(
             ModelConfigurationView.from_model(
-                model_configuration, provider, use_stored_display_name
+                model_configuration,
+                provider,
+                use_stored_display_name=use_stored_display_name,
+                custom_config=custom_config,
+                deployment_name=deployment_name,
             )
         )
 

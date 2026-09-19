@@ -2,24 +2,32 @@ import {
   ApiSessionResponse,
   ApiDetailedSessionResponse,
   ApiMessageResponse,
+  ApiInteractiveTurnResponse,
   ApiArtifactResponse,
-  ApiUsageLimitsResponse,
   ApiWebappInfoResponse,
+  ApiSandboxStatusResponse,
   SessionHistoryItem,
   Artifact,
+  BuildMessageAttachment,
   BuildMessage,
   StreamPacket,
-  UsageLimits,
   DirectoryListing,
   SharingScope,
+  ApiSessionSkillsState,
 } from "@/app/craft/types/streamingTypes";
+import {
+  ApprovalListResponse,
+  ApprovalSubmitDecision,
+  ApprovalView,
+} from "@/app/craft/types/approvals";
+import {
+  RATE_LIMITED_ERROR_CODE,
+  RateLimitDetails,
+} from "@/app/app/interfaces";
 import { BUILD_API_BASE } from "@/app/craft/v1/constants";
-
-// =============================================================================
-// API Configuration
-// =============================================================================
-
-export const USAGE_LIMITS_ENDPOINT = `${BUILD_API_BASE}/limit`;
+import type { ErrorResponseBody } from "@/lib/fetcher";
+import { CRAFT_GATEWAY_PROVIDER } from "@/app/craft/onboarding/constants";
+import type { BuildLlmSelection } from "@/app/craft/onboarding/constants";
 
 // =============================================================================
 // SSE Stream Processing
@@ -52,7 +60,7 @@ export async function processSSEStream(
         const dataStr = line.slice(line.indexOf(":") + 1).trim();
         if (dataStr) {
           try {
-            const data = JSON.parse(dataStr);
+            const data: StreamPacket = JSON.parse(dataStr);
             // The backend sends `event: message` for all events and puts the
             // actual type in data.type. Only use SSE event type as fallback
             // if data.type is not present and SSE event is not "message".
@@ -82,8 +90,30 @@ export async function processSSEStream(
 
 export interface CreateSessionOptions {
   name?: string | null;
-  llmProviderType?: string | null;
-  llmModelName?: string | null;
+}
+
+// Pull the backend's human-readable error detail out of a failed response,
+// falling back to the status code when the body isn't the expected shape.
+async function errorDetail(res: Response, fallback: string): Promise<string> {
+  try {
+    const body: ErrorResponseBody | null = await res.json();
+    if (typeof body?.detail === "string" && body.detail.trim()) {
+      return body.detail;
+    }
+  } catch {
+    // body wasn't JSON — fall through
+  }
+  return `${fallback}: ${res.status}`;
+}
+
+// Mirrors backend `SessionListResponse`.
+interface ApiSessionListResponse {
+  sessions: ApiSessionResponse[];
+}
+
+// Mirrors backend `SessionNameGenerateResponse`.
+interface ApiSessionNameGenerateResponse {
+  name: string;
 }
 
 export async function createSession(
@@ -94,25 +124,58 @@ export async function createSession(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       name: options?.name || null,
-      llm_provider_type: options?.llmProviderType || null,
-      llm_model_name: options?.llmModelName || null,
     }),
   });
 
   if (!res.ok) {
-    throw new Error(`Failed to create session: ${res.status}`);
+    throw new Error(await errorDetail(res, "Failed to create session"));
   }
 
   return res.json();
 }
 
 export async function fetchSession(
-  sessionId: string
+  sessionId: string,
+  options?: { checkWorkspace?: boolean }
 ): Promise<ApiDetailedSessionResponse> {
-  const res = await fetch(`${BUILD_API_BASE}/sessions/${sessionId}`);
+  const params = new URLSearchParams();
+  if (options?.checkWorkspace === false) {
+    params.set("check_workspace", "false");
+  }
+  const query = params.size > 0 ? `?${params}` : "";
+  const res = await fetch(`${BUILD_API_BASE}/sessions/${sessionId}${query}`);
 
   if (!res.ok) {
     throw new Error(`Failed to load session: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+export async function reloadSessionSkills(
+  sessionId: string
+): Promise<ApiSessionSkillsState> {
+  const res = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/skills/reload`,
+    { method: "POST" }
+  );
+
+  if (!res.ok) {
+    throw new Error(await errorDetail(res, "Failed to reload session"));
+  }
+
+  return res.json();
+}
+
+export async function fetchSandboxStatus(
+  sessionId: string
+): Promise<ApiSandboxStatusResponse> {
+  const res = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/sandbox-status`
+  );
+
+  if (!res.ok) {
+    throw new Error(`Failed to fetch sandbox status: ${res.status}`);
   }
 
   return res.json();
@@ -125,7 +188,7 @@ export async function fetchSessionHistory(): Promise<SessionHistoryItem[]> {
     throw new Error(`Failed to fetch session history: ${res.status}`);
   }
 
-  const data = await res.json();
+  const data: ApiSessionListResponse = await res.json();
   return data.sessions.map((s: ApiSessionResponse) => ({
     id: s.id,
     title: s.name || `Session ${s.id.slice(0, 8)}...`,
@@ -146,38 +209,8 @@ export async function generateSessionName(sessionId: string): Promise<string> {
     throw new Error(`Failed to generate session name: ${res.status}`);
   }
 
-  const data = await res.json();
+  const data: ApiSessionNameGenerateResponse = await res.json();
   return data.name;
-}
-
-export interface SuggestionBubble {
-  theme: "add" | "question";
-  text: string;
-}
-
-export async function generateFollowupSuggestions(
-  sessionId: string,
-  userMessage: string,
-  agentMessage: string
-): Promise<SuggestionBubble[]> {
-  const res = await fetch(
-    `${BUILD_API_BASE}/sessions/${sessionId}/generate-suggestions`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        user_message: userMessage,
-        assistant_message: agentMessage,
-      }),
-    }
-  );
-
-  if (!res.ok) {
-    throw new Error(`Failed to generate suggestions: ${res.status}`);
-  }
-
-  const data = await res.json();
-  return data.suggestions;
 }
 
 export async function updateSessionName(
@@ -222,32 +255,41 @@ export async function deleteSession(sessionId: string): Promise<void> {
   }
 }
 
-/**
- * Restore a sleeping sandbox and load the session's snapshot.
- * This is a blocking call that waits until the restore is complete.
- *
- * Handles two cases:
- * 1. Sandbox is SLEEPING: Re-provisions pod, then loads session snapshot
- * 2. Sandbox is RUNNING but session not loaded: Just loads session snapshot
- *
- * Returns immediately if session workspace already exists in pod.
- */
-export async function restoreSession(
-  sessionId: string
-): Promise<ApiDetailedSessionResponse> {
-  const res = await fetch(`${BUILD_API_BASE}/sessions/${sessionId}/restore`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-  });
+// ~2 min of retries — covers a concurrent provision + snapshot restore; the
+// backend's per-sandbox lock itself expires at 300s.
+const RESTORE_CONFLICT_RETRY_DELAY_MS = 2000;
+const RESTORE_CONFLICT_MAX_RETRIES = 60;
 
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
+export async function restoreSession(
+  sessionId: string,
+  // Overridable for tests; production callers use the module defaults.
+  opts: { retryDelayMs?: number; maxRetries?: number } = {}
+): Promise<ApiDetailedSessionResponse> {
+  const retryDelayMs = opts.retryDelayMs ?? RESTORE_CONFLICT_RETRY_DELAY_MS;
+  const maxRetries = opts.maxRetries ?? RESTORE_CONFLICT_MAX_RETRIES;
+
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(`${BUILD_API_BASE}/sessions/${sessionId}/restore`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    if (res.ok) {
+      return res.json();
+    }
+
+    // 409 = another tab/request holds the restore lock; it's transient, so
+    // retry until that restore finishes rather than surfacing it as a failure.
+    if (res.status === 409 && attempt < maxRetries) {
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+      continue;
+    }
+
+    const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
     throw new Error(
       errorData.detail || `Failed to restore session: ${res.status}`
     );
   }
-
-  return res.json();
 }
 
 /**
@@ -293,6 +335,42 @@ function extractContentFromMetadata(
   return "";
 }
 
+function extractAttachmentsFromMetadata(
+  metadata: Record<string, any> | null | undefined
+): BuildMessageAttachment[] {
+  if (!Array.isArray(metadata?.attachments)) return [];
+
+  // Element of an unvalidated attachments array; the body below decodes it.
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters
+  return metadata.attachments.flatMap((attachment: unknown) => {
+    if (
+      typeof attachment !== "object" ||
+      attachment === null ||
+      !("name" in attachment) ||
+      !("path" in attachment) ||
+      !("mime_type" in attachment) ||
+      typeof attachment.name !== "string" ||
+      typeof attachment.path !== "string" ||
+      typeof attachment.mime_type !== "string"
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        name: attachment.name,
+        path: attachment.path,
+        mimeType: attachment.mime_type,
+      },
+    ];
+  });
+}
+
+// Mirrors backend `MessageListResponse`.
+interface ApiMessageListResponse {
+  messages: ApiMessageResponse[];
+}
+
 export async function fetchMessages(
   sessionId: string
 ): Promise<BuildMessage[]> {
@@ -302,56 +380,158 @@ export async function fetchMessages(
     throw new Error(`Failed to fetch messages: ${res.status}`);
   }
 
-  const data = await res.json();
+  const data: ApiMessageListResponse = await res.json();
   return data.messages.map((m: ApiMessageResponse) => ({
     id: m.id,
     type: m.type,
+    turn_index: m.turn_index,
     // Content is stored in message_metadata, not as a separate field
     content: m.content || extractContentFromMetadata(m.message_metadata),
+    attachments: extractAttachmentsFromMetadata(m.message_metadata),
     message_metadata: m.message_metadata,
     timestamp: new Date(m.created_at),
   }));
 }
 
-/**
- * Custom error class for rate limit (429) errors.
- * Used to distinguish rate limit errors from other API errors
- * so the UI can show an upsell modal instead of a generic error.
- */
-export class RateLimitError extends Error {
-  public readonly statusCode: number = 429;
-
-  constructor() {
-    super("Rate limit exceeded");
-    this.name = "RateLimitError";
-  }
+// 429 JSON body emitted by the backend usage rate-limiter (token/cost budgets).
+interface RateLimited429Body {
+  error_code?: string;
+  detail?: string;
+  scope?: string;
+  reset_at?: string;
+  retry_after_seconds?: number;
 }
 
 /**
- * Send a message and return the streaming response.
- * The caller is responsible for processing the SSE stream.
+ * Thrown when the backend's usage rate-limiter (org/user token + cost
+ * budgets) rejects a turn with a structured 429. Carries the reset details
+ * so the UI can render the same rate-limit banner as chat.
  */
-export async function sendMessageStream(
+export class RateLimitedError extends Error {
+  public readonly details: RateLimitDetails;
+
+  constructor(message: string, details: RateLimitDetails) {
+    super(message);
+    this.name = "RateLimitedError";
+    this.details = details;
+  }
+}
+
+export async function createTurn(
   sessionId: string,
   content: string,
-  signal?: AbortSignal
-): Promise<Response> {
+  clientRequestId: string,
+  signal?: AbortSignal,
+  model?: BuildLlmSelection | null,
+  attachments: BuildMessageAttachment[] = []
+): Promise<ApiInteractiveTurnResponse> {
   const res = await fetch(
     `${BUILD_API_BASE}/sessions/${sessionId}/send-message`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({
+        content,
+        client_request_id: clientRequestId,
+        attachments: attachments.map((attachment) => ({
+          name: attachment.name,
+          path: attachment.path,
+          mime_type: attachment.mimeType,
+        })),
+        provider: model ? CRAFT_GATEWAY_PROVIDER : undefined,
+        provider_id: model?.providerId,
+        model: model?.modelName,
+      }),
       signal,
     }
   );
 
   if (!res.ok) {
-    // Handle rate limit errors specifically so UI can show upsell modal
     if (res.status === 429) {
-      throw new RateLimitError();
+      const body: RateLimited429Body | null = await res
+        .json()
+        .catch(() => null);
+      if (body?.error_code === RATE_LIMITED_ERROR_CODE) {
+        throw new RateLimitedError(
+          body.detail || "You've reached your usage limit.",
+          {
+            scope: body.scope,
+            reset_at: body.reset_at,
+            retry_after_seconds: body.retry_after_seconds,
+          }
+        );
+      }
+      throw new Error(body?.detail || `Failed to create turn: ${res.status}`);
     }
-    throw new Error(`Failed to send message: ${res.status}`);
+    throw new Error(await errorDetail(res, "Failed to create turn"));
+  }
+
+  return res.json();
+}
+
+export async function fetchActiveTurn(
+  sessionId: string
+): Promise<ApiInteractiveTurnResponse | null> {
+  const res = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/turns/active`
+  );
+
+  if (!res.ok) {
+    throw new Error(`Failed to fetch active turn: ${res.status}`);
+  }
+
+  return await res.json();
+}
+
+export async function fetchTurnEventStream(
+  sessionId: string,
+  turnId: string,
+  signal?: AbortSignal
+): Promise<Response | null> {
+  const res = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/turns/${turnId}/events`,
+    { headers: { Accept: "text/event-stream" }, signal }
+  );
+
+  if (!res.ok) {
+    if (res.status === 404 || res.status === 409) {
+      return null;
+    }
+    throw new Error(`Failed to stream turn: ${res.status}`);
+  }
+
+  return res;
+}
+
+/**
+ * Interrupt the in-flight agent turn for a session. The backend interrupts the
+ * sandbox turn; any attached live stream then terminates normally.
+ */
+export async function interruptMessageStream(sessionId: string): Promise<void> {
+  const res = await fetch(`${BUILD_API_BASE}/sessions/${sessionId}/interrupt`, {
+    method: "POST",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to interrupt message: ${res.status}`);
+  }
+}
+
+export async function fetchScheduledRunEventStream(
+  sessionId: string,
+  signal?: AbortSignal
+): Promise<Response> {
+  const res = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/scheduled-run-events`,
+    { headers: { Accept: "text/event-stream" }, signal }
+  );
+
+  if (res.status === 409) {
+    return new Response("");
+  }
+
+  if (!res.ok) {
+    throw new Error(`Failed to stream scheduled run: ${res.status}`);
   }
 
   return res;
@@ -368,7 +548,7 @@ export async function fetchArtifacts(sessionId: string): Promise<Artifact[]> {
     throw new Error(`Failed to fetch artifacts: ${res.status}`);
   }
 
-  const data = await res.json();
+  const data: ApiArtifactResponse[] = await res.json();
   // Backend returns a direct array, not wrapped in an object
   return data.map((a: ApiArtifactResponse) => ({
     id: a.id,
@@ -428,13 +608,17 @@ export async function fetchDirectoryListing(
 /**
  * Trigger a browser download for a single file from the sandbox.
  */
-export function downloadArtifactFile(sessionId: string, path: string): void {
+export function buildArtifactUrl(sessionId: string, path: string): string {
   const encodedPath = path
     .split("/")
     .map((segment) => encodeURIComponent(segment))
     .join("/");
+  return `${BUILD_API_BASE}/sessions/${sessionId}/artifacts/${encodedPath}`;
+}
+
+export function downloadArtifactFile(sessionId: string, path: string): void {
   const link = document.createElement("a");
-  link.href = `${BUILD_API_BASE}/sessions/${sessionId}/artifacts/${encodedPath}`;
+  link.href = buildArtifactUrl(sessionId, path);
   link.download = path.split("/").pop() || path;
   document.body.appendChild(link);
   link.click();
@@ -475,15 +659,7 @@ export async function fetchFileContent(
   sessionId: string,
   path: string
 ): Promise<FileContentResponse> {
-  // Encode each path segment individually (spaces, special chars) but preserve slashes
-  const encodedPath = path
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
-
-  const res = await fetch(
-    `${BUILD_API_BASE}/sessions/${sessionId}/artifacts/${encodedPath}`
-  );
+  const res = await fetch(buildArtifactUrl(sessionId, path));
 
   if (!res.ok) {
     throw new Error(`Failed to fetch file content: ${res.status}`);
@@ -534,36 +710,6 @@ export async function fetchFileContent(
 }
 
 // =============================================================================
-// Usage Limits API
-// =============================================================================
-
-/** Transform API response to frontend types */
-function transformUsageLimitsResponse(
-  data: ApiUsageLimitsResponse
-): UsageLimits {
-  return {
-    isLimited: data.is_limited,
-    limitType: data.limit_type,
-    messagesUsed: data.messages_used,
-    limit: data.limit,
-    resetTimestamp: data.reset_timestamp
-      ? new Date(data.reset_timestamp)
-      : null,
-  };
-}
-
-export async function fetchUsageLimits(): Promise<UsageLimits> {
-  const res = await fetch(USAGE_LIMITS_ENDPOINT);
-
-  if (!res.ok) {
-    throw new Error(`Failed to fetch usage limits: ${res.status}`);
-  }
-
-  const data: ApiUsageLimitsResponse = await res.json();
-  return transformUsageLimitsResponse(data);
-}
-
-// =============================================================================
 // File Upload API
 // =============================================================================
 
@@ -590,7 +736,7 @@ export async function uploadFile(
   });
 
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
+    const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
     throw new Error(errorData.detail || `Failed to upload file: ${res.status}`);
   }
 
@@ -618,7 +764,7 @@ export async function deleteFile(
   );
 
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
+    const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
     throw new Error(errorData.detail || `Failed to delete file: ${res.status}`);
   }
 }
@@ -641,7 +787,7 @@ export async function exportDocx(
   );
 
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
+    const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
     throw new Error(
       errorData.detail || `Failed to export as DOCX: ${res.status}`
     );
@@ -678,12 +824,91 @@ export async function fetchPptxPreview(
   );
 
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
+    const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
     throw new Error(
       errorData.detail || `Failed to generate PPTX preview: ${res.status}`
     );
   }
 
+  return res.json();
+}
+
+// =============================================================================
+// Approvals API
+// =============================================================================
+
+export async function fetchLiveApprovals(
+  sessionId: string
+): Promise<ApprovalListResponse> {
+  const res = await fetch(
+    `${BUILD_API_BASE}/approvals/sessions/${sessionId}/live`
+  );
+
+  if (!res.ok) {
+    throw new Error(`Failed to fetch live approvals: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+// Lets the approval card distinguish "already resolved" from a generic
+// network error so both can flow through the same SWR revalidation
+// while keeping logs clean.
+export class ApprovalConflictError extends Error {
+  public readonly statusCode: number = 409;
+
+  constructor(detail: string) {
+    super(detail);
+    this.name = "ApprovalConflictError";
+  }
+}
+
+export async function postApprovalDecision(
+  approvalId: string,
+  decision: ApprovalSubmitDecision
+): Promise<ApprovalView> {
+  const res = await fetch(
+    `${BUILD_API_BASE}/approvals/${approvalId}/decision`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision }),
+    }
+  );
+
+  if (res.status === 409) {
+    const body: ErrorResponseBody = await res.json().catch(() => ({}));
+    throw new ApprovalConflictError(body.detail ?? "decision conflict");
+  }
+  if (!res.ok) {
+    const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
+    throw new Error(
+      errorData.detail || `Failed to post approval decision: ${res.status}`
+    );
+  }
+  return res.json();
+}
+
+export async function postApprovalSessionGrant(
+  approvalId: string
+): Promise<ApprovalView> {
+  const res = await fetch(
+    `${BUILD_API_BASE}/approvals/${approvalId}/session-grant`,
+    {
+      method: "POST",
+    }
+  );
+
+  if (res.status === 409) {
+    const body: ErrorResponseBody = await res.json().catch(() => ({}));
+    throw new ApprovalConflictError(body.detail ?? "decision conflict");
+  }
+  if (!res.ok) {
+    const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
+    throw new Error(
+      errorData.detail || `Failed to approve for session: ${res.status}`
+    );
+  }
   return res.json();
 }
 
@@ -731,7 +956,7 @@ export async function uploadLibraryFiles(
   });
 
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
+    const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
     throw new Error(
       errorData.detail || `Failed to upload files: ${res.status}`
     );
@@ -757,7 +982,7 @@ export async function uploadLibraryZip(
   });
 
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
+    const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
     throw new Error(errorData.detail || `Failed to upload zip: ${res.status}`);
   }
 
@@ -777,35 +1002,13 @@ export async function createLibraryDirectory(
   });
 
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
+    const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
     throw new Error(
       errorData.detail || `Failed to create directory: ${res.status}`
     );
   }
 
   return res.json();
-}
-
-/**
- * Toggle sync status for a file/directory in the user library.
- */
-export async function toggleLibraryFileSync(
-  documentId: string,
-  enabled: boolean
-): Promise<void> {
-  const res = await fetch(
-    `${USER_LIBRARY_BASE}/files/${encodeURIComponent(
-      documentId
-    )}/toggle?enabled=${enabled}`,
-    {
-      method: "PATCH",
-    }
-  );
-
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.detail || `Failed to toggle sync: ${res.status}`);
-  }
 }
 
 /**
@@ -820,7 +1023,7 @@ export async function deleteLibraryFile(documentId: string): Promise<void> {
   );
 
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
+    const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
     throw new Error(errorData.detail || `Failed to delete file: ${res.status}`);
   }
 }

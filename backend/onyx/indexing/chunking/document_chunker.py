@@ -1,12 +1,17 @@
 from chonkie import SentenceChunker
 
-from onyx.connectors.models import IndexingDocument
-from onyx.connectors.models import Section
-from onyx.connectors.models import SectionType
+from onyx.connectors.models import (
+    IndexingDocument,
+    Section,
+    SectionType,
+    TabularSection,
+)
 from onyx.indexing.chunking.image_section_chunker import ImageChunker
-from onyx.indexing.chunking.section_chunker import AccumulatorState
-from onyx.indexing.chunking.section_chunker import ChunkPayload
-from onyx.indexing.chunking.section_chunker import SectionChunker
+from onyx.indexing.chunking.section_chunker import (
+    AccumulatorState,
+    ChunkPayload,
+    SectionChunker,
+)
 from onyx.indexing.chunking.tabular_section_chunker import TabularChunker
 from onyx.indexing.chunking.text_section_chunker import TextChunker
 from onyx.indexing.models import DocAwareChunk
@@ -84,8 +89,17 @@ class DocumentChunker:
 
         for section_idx, section in enumerate(sections):
             section_text = clean_text(str(section.text or ""))
+            # File-backed tabular sections hold their content in csv_file_id, not
+            # text, so they look empty here — keep them for the tabular chunker.
+            is_file_backed = (
+                isinstance(section, TabularSection) and section.csv_file_id is not None
+            )
 
-            if not section_text and (not document.title or section_idx > 0):
+            if (
+                not section_text
+                and not is_file_backed
+                and (not document.title or section_idx > 0)
+            ):
                 logger.warning(
                     "Skipping empty or irrelevant section in doc %s, link=%s",
                     document.semantic_identifier,

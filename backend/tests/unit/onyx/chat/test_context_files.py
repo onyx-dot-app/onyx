@@ -6,19 +6,18 @@ Covers:
 - Search filter / search_usage determination in the caller
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
-from uuid import UUID
-from uuid import uuid4
+from unittest.mock import MagicMock, patch
+from uuid import UUID, uuid4
 
-from onyx.chat.models import ExtractedContextFiles
-from onyx.chat.process_message import determine_search_params
-from onyx.chat.process_message import extract_context_files
-from onyx.chat.process_message import resolve_context_user_files
+from onyx.chat.models import ExtractedContextFiles, FileToolMetadata
+from onyx.chat.process_message import (
+    determine_search_params,
+    extract_context_files,
+    resolve_context_user_files,
+)
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.models import UserFile
-from onyx.file_store.models import ChatFileType
-from onyx.file_store.models import InMemoryChatFile
+from onyx.file_store.models import ChatFileType, InMemoryChatFile
 from onyx.tools.models import SearchToolUsage
 
 # ---------------------------------------------------------------------------
@@ -605,3 +604,75 @@ class TestSearchFilterDetermination:
             extracted_context_files=self._make_context(),
         )
         assert result.search_usage == SearchToolUsage.DISABLED
+
+    def test_persona_and_project_filters_are_mutually_exclusive(self) -> None:
+        """persona_id_filter and project_id_filter must never both be set.
+
+        The two are knowledge-scope triggers for different ownership models
+        (custom-persona files vs. project files); the precedence rule routes to
+        exactly one. This invariant guards against a future refactor of the
+        if/else in determine_search_params silently setting both — which would
+        OR a custom persona's files together with project files.
+        """
+        scenarios = [
+            # (persona_id, project_id, use_as_search_filter)
+            (42, 99, True),  # custom persona in a project, files overflow
+            (42, 99, False),  # custom persona in a project, files fit
+            (42, None, True),  # custom persona, no project, files overflow
+            (DEFAULT_PERSONA_ID, 99, True),  # default persona, project overflow
+            (DEFAULT_PERSONA_ID, 99, False),  # default persona, project fits
+            (DEFAULT_PERSONA_ID, None, True),  # default persona, no project
+        ]
+        for persona_id, project_id, overflow in scenarios:
+            result = determine_search_params(
+                persona_id=persona_id,
+                project_id=project_id,
+                extracted_context_files=self._make_context(
+                    use_as_search_filter=overflow,
+                    uncapped_token_count=7000 if overflow else 100,
+                ),
+            )
+            assert not (
+                result.persona_id_filter is not None
+                and result.project_id_filter is not None
+            ), (
+                "persona_id_filter and project_id_filter must never both be set "
+                f"(persona_id={persona_id}, project_id={project_id}, "
+                f"overflow={overflow}): got persona_id_filter="
+                f"{result.persona_id_filter}, project_id_filter="
+                f"{result.project_id_filter}"
+            )
+
+
+class TestContextFileStagingFlag:
+    """`staged_for_tools` must mirror what actually reaches PythonTool.
+
+    `_load_context_user_files_for_tools` loads only metadata-only files into
+    `chat_files_for_tools`, so everything else is listed for the LLM but never
+    staged. The out-of-context file notice reads this flag to decide whether it
+    may name the python tool; getting it wrong sends the model after bytes the
+    tool was never handed.
+    """
+
+    def _metadata_for(self, name: str, file_type: str) -> FileToolMetadata:
+        from onyx.chat.process_message import _build_tool_metadata
+
+        return _build_tool_metadata(
+            UserFile(
+                id=uuid4(),
+                file_id=f"user_files/{uuid4()}/{name}",
+                name=name,
+                token_count=100,
+                file_type=file_type,
+            )
+        )
+
+    def test_tabular_file_is_staged(self) -> None:
+        """CSV/XLSX are metadata-only, so they are handed to PythonTool."""
+        meta = self._metadata_for("data.csv", "text/csv")
+        assert meta.staged_for_tools is True
+
+    def test_non_metadata_only_file_is_not_staged(self) -> None:
+        """A PDF is listed for the LLM but never loaded into chat_files_for_tools."""
+        meta = self._metadata_for("report.pdf", "application/pdf")
+        assert meta.staged_for_tools is False

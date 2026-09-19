@@ -12,14 +12,14 @@ import (
 	"syscall"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/wish/v2"
+	"charm.land/wish/v2/activeterm"
+	"charm.land/wish/v2/bubbletea"
+	"charm.land/wish/v2/logging"
+	"charm.land/wish/v2/ratelimiter"
 	"github.com/charmbracelet/log"
 	"github.com/charmbracelet/ssh"
-	"github.com/charmbracelet/wish"
-	"github.com/charmbracelet/wish/activeterm"
-	"github.com/charmbracelet/wish/bubbletea"
-	"github.com/charmbracelet/wish/logging"
-	"github.com/charmbracelet/wish/ratelimiter"
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
 	"github.com/onyx-dot-app/onyx/cli/internal/exitcodes"
@@ -100,6 +100,9 @@ environment variable (the --host-key flag takes precedence).`,
   onyx-cli serve --host 0.0.0.0 --port 2222
   onyx-cli serve --idle-timeout 30m --max-session-timeout 2h`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Sessions here belong to remote clients; keep them off the host filesystem.
+			tui.RemoteMode = true
+
 			serverCfg := config.Load()
 			if serverCfg.ServerURL == "" {
 				return exitcodes.New(exitcodes.NotConfigured, "server URL is not configured\n  Run: onyx-cli chat to complete first-time setup")
@@ -144,17 +147,12 @@ environment variable (the --host-key flag takes precedence).`,
 						APIKey:         apiKey,
 						DefaultAgentID: serverCfg.DefaultAgentID,
 					}
-					return tui.NewModel(cfg, api.NewClient(cfg)), []tea.ProgramOption{
-						tea.WithAltScreen(),
-						tea.WithMouseCellMotion(),
-					}
+					return tui.NewModel(cfg, api.NewClient(cfg)), nil
 				}
 
 				// No valid env key — show auth prompt, then transition
 				// to the TUI within the same bubbletea program.
-				return tui.NewServeModel(serverCfg, envErr, validateAPIKey), []tea.ProgramOption{
-					tea.WithMouseCellMotion(),
-				}
+				return tui.NewServeModel(serverCfg, envErr, validateAPIKey), nil
 			}
 
 			serverOptions := []ssh.Option{

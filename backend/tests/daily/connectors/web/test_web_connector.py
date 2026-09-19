@@ -2,10 +2,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.web.connector import WEB_CONNECTOR_VALID_SETTINGS
-from onyx.connectors.web.connector import WebConnector
+from onyx.connectors.models import Document, HierarchyNode
+from onyx.connectors.web.connector import WEB_CONNECTOR_VALID_SETTINGS, WebConnector
 
 EXPECTED_QUOTE = (
     "If you can't explain it to a six year old, you don't understand it yourself."

@@ -2,13 +2,11 @@
 
 import threading
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from prometheus_client import CollectorRegistry
-from prometheus_client import Gauge
+from prometheus_client import CollectorRegistry, Gauge
 
 from onyx.server.metrics.per_tenant import per_tenant_request_callback
 from onyx.server.metrics.prometheus_setup import setup_prometheus_metrics
@@ -66,7 +64,13 @@ def test_slow_request_callback_skips_at_exact_threshold() -> None:
 
 
 def test_setup_attaches_instrumentator_to_app() -> None:
-    with patch("onyx.server.metrics.prometheus_setup.Instrumentator") as mock_cls:
+    with (
+        patch("onyx.server.metrics.prometheus_setup.Instrumentator") as mock_cls,
+        patch(
+            "onyx.server.metrics.prometheus_setup.default_metrics",
+            return_value=MagicMock(),
+        ),
+    ):
         mock_instance = MagicMock()
         mock_instance.instrument.return_value = mock_instance
         mock_cls.return_value = mock_instance
@@ -98,7 +102,11 @@ def test_setup_attaches_instrumentator_to_app() -> None:
                 10.0,
             ),
         )
-        mock_instance.expose.assert_called_once_with(app)
+        mock_instance.expose.assert_called_once()
+        expose_args, expose_kwargs = mock_instance.expose.call_args
+        assert expose_args == (app,)
+        assert list(expose_kwargs) == ["dependencies"]
+        assert len(expose_kwargs["dependencies"]) == 1
 
 
 def test_per_tenant_callback_increments_with_tenant_id() -> None:

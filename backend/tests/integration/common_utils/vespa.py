@@ -3,11 +3,13 @@ from typing import Any
 from opensearchpy import OpenSearch
 from opensearchpy.exceptions import NotFoundError
 
-from onyx.configs.app_configs import OPENSEARCH_ADMIN_PASSWORD
-from onyx.configs.app_configs import OPENSEARCH_ADMIN_USERNAME
-from onyx.configs.app_configs import OPENSEARCH_HOST
-from onyx.configs.app_configs import OPENSEARCH_REST_API_PORT
-from onyx.configs.app_configs import OPENSEARCH_USE_SSL
+from onyx.configs.app_configs import (
+    OPENSEARCH_ADMIN_PASSWORD,
+    OPENSEARCH_ADMIN_USERNAME,
+    OPENSEARCH_HOST,
+    OPENSEARCH_REST_API_PORT,
+    OPENSEARCH_USE_SSL,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.search_settings import get_current_search_settings
 
@@ -74,11 +76,11 @@ class vespa_fixture:
             acl_entries: set[str] = set(source.get("access_control_list") or [])
             if source.get("public"):
                 acl_entries.add("PUBLIC")
-            source["access_control_list"] = {entry: 1 for entry in acl_entries}
+            source["access_control_list"] = dict.fromkeys(acl_entries, 1)
 
-            source["document_sets"] = {
-                entry: 1 for entry in (source.get("document_sets") or [])
-            }
+            source["document_sets"] = dict.fromkeys(
+                source.get("document_sets") or [], 1
+            )
 
             if "image_file_id" in source:
                 source["image_file_name"] = source["image_file_id"]

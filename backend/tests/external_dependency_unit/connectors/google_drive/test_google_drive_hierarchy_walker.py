@@ -29,11 +29,9 @@ After the planned fixes both tests should pass.
 """
 
 from collections.abc import Callable
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any
-from unittest.mock import Mock
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from uuid import uuid4
 
 from sqlalchemy import delete
@@ -44,26 +42,27 @@ from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.connector_runner import ConnectorRunner
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
-from onyx.connectors.google_drive.models import DriveRetrievalStage
-from onyx.connectors.google_drive.models import GoogleDriveCheckpoint
-from onyx.connectors.google_drive.models import GoogleDriveFileType
-from onyx.connectors.google_drive.models import RetrievedDriveFile
-from onyx.connectors.interfaces import CheckpointedConnector
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.google_drive.models import (
+    DriveRetrievalStage,
+    GoogleDriveCheckpoint,
+    GoogleDriveFileType,
+    RetrievedDriveFile,
+)
+from onyx.connectors.interfaces import (
+    CheckpointedConnector,
+    CheckpointOutput,
+    SecondsSinceUnixEpoch,
+)
 from onyx.connectors.models import HierarchyNode as PydanticHierarchyNode
 from onyx.connectors.models import InputType
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.hierarchy import ensure_source_node_exists
-from onyx.db.hierarchy import get_hierarchy_node_by_raw_id
-from onyx.db.hierarchy import get_source_hierarchy_node
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
-from onyx.db.models import HierarchyNode
-from onyx.utils.threadpool_concurrency import ThreadSafeDict
-from onyx.utils.threadpool_concurrency import ThreadSafeSet
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus, HierarchyNodeType
+from onyx.db.hierarchy import (
+    ensure_source_node_exists,
+    get_hierarchy_node_by_raw_id,
+    get_source_hierarchy_node,
+)
+from onyx.db.models import Connector, ConnectorCredentialPair, Credential, HierarchyNode
+from onyx.utils.threadpool_concurrency import ThreadSafeDict, ThreadSafeSet
 
 SOURCE = DocumentSource.GOOGLE_DRIVE
 ADMIN_EMAIL = "admin@example.com"
@@ -424,25 +423,19 @@ def test_off_by_one_batch_split_misparents_child(db_session: Session) -> None:
         _cleanup_cc_pair_triple(db_session, db_connector, db_credential)
 
 
-def test_cross_yield_walk_does_not_heal_misparented_child(
+def test_cross_yield_walk_heals_misparented_child_via_stub(
     db_session: Session,
 ) -> None:
-    """Issue 2: a node yielded with an unresolvable parent in one walk stays
-    mis-parented to SOURCE forever because `seen_hierarchy_node_raw_ids`
-    prevents re-yield even after a later walk discovers the missing
-    ancestor.
+    """A node whose parent is inaccessible in yield 1 is correctly parented
+    after yield 2 discovers the missing ancestor, via stub promotion.
 
     Setup:
       - Chain: ROOT (shared drive) → A → B → C → F
-      - Yield 1 (user X): cannot fetch A. Walker emits [C, B], leaves
-        ``fully_walked`` empty. Upsert: B is mis-parented to SOURCE
-        because A is unknown.
-      - Yield 2 (user Y, broader access): can fetch A. Walker climbs
-        starting from B (the parent of file F2), but skips re-yielding B
-        because it's already in ``seen``. Upsert: A and ROOT land
-        correctly, but B's row never gets touched again.
-
-    Expected after the fix: B's stored parent is updated to A in yield 2.
+      - Yield 1 (user X): cannot fetch A. Walker emits [C, B]. Upsert:
+        a STUB is created for A, and B is parented to that stub.
+      - Yield 2 (user Y, broader access): can fetch A. A is upserted,
+        promoting the existing STUB in-place. B's parent_id already points
+        to the stub's DB id, which now resolves to the real A node.
     """
     test_id = "issue2_crossyield"
     a_id = f"{test_id}_A"
@@ -507,14 +500,15 @@ def test_cross_yield_walk_does_not_heal_misparented_child(
 
             db_session.expire_all()
             b_after_yield_1 = get_hierarchy_node_by_raw_id(db_session, b_id, SOURCE)
+            a_stub = get_hierarchy_node_by_raw_id(db_session, a_id, SOURCE)
             assert b_after_yield_1 is not None
-            assert b_after_yield_1.parent_id == source_node_id, (
-                "Setup invariant: B should be mis-parented to SOURCE after "
-                "yield 1 (its parent A is inaccessible). Got "
-                f"parent_id={b_after_yield_1.parent_id}, SOURCE id={source_node_id}."
+            assert a_stub is not None, (
+                "A STUB should be created for the inaccessible parent A after yield 1."
             )
-            assert get_hierarchy_node_by_raw_id(db_session, a_id, SOURCE) is None, (
-                "Setup invariant: A should not exist in the DB after yield 1."
+            assert a_stub.node_type == HierarchyNodeType.STUB
+            assert b_after_yield_1.parent_id == a_stub.id, (
+                "B should be parented to the STUB for A after yield 1, not SOURCE. "
+                f"Got parent_id={b_after_yield_1.parent_id}, stub id={a_stub.id}."
             )
 
             with patch.object(

@@ -1,131 +1,483 @@
 "use client";
 
-import { useState } from "react";
+import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
+import { useSearchParams } from "next/navigation";
 import useSWR from "swr";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { Button, Text } from "@opal/components";
-import Card from "@/refresh-components/cards/Card";
-import { SvgPlug, SvgCheckCircle } from "@opal/icons";
+import useOnMount from "@/hooks/useOnMount";
+import { cn } from "@opal/utils";
 import {
-  ExternalAppUserResponse,
-  getAppTypeLogo,
-} from "@/app/craft/v1/apps/registry";
+  Button,
+  Card,
+  InputTypeIn,
+  Tabs,
+  Text,
+  Tooltip,
+} from "@opal/components";
 import {
-  disconnectUserFromApp,
-  startExternalAppOAuth,
-} from "@/app/craft/services/externalAppsService";
-import { toast } from "@/hooks/useToast";
+  ContentAction,
+  IllustrationContent,
+  Section,
+  SettingsLayouts,
+  toast,
+} from "@opal/layouts";
+import { SvgNoResult, SvgUnPlugged } from "@opal/illustrations";
+import { SvgAlertCircle, SvgPlug, SvgSettings } from "@opal/icons";
+import { ExternalAppUserResponse } from "@/app/craft/v1/apps/registry";
+import {
+  ConnectableApp,
+  ConnectableKind,
+  externalAppToConnectable,
+  KIND_ORDER,
+  mcpServerToConnectable,
+  parseConnectableTab,
+  useConnectableTab,
+} from "@/app/craft/v1/apps/connectableApps";
+import UserCredentialsModal from "@/app/craft/v1/apps/UserCredentialsModal";
+import { useUser } from "@/providers/UserProvider";
+import useUserSkills from "@/hooks/useUserSkills";
+import { useCraftMcpServers } from "@/lib/tools/hooks";
+import { compareByName } from "@/lib/skills/picker";
 
-export default function ExternalAppsUserPage() {
-  // keepPreviousData so revalidations don't blank the cards.
-  const { data, mutate } = useSWR<ExternalAppUserResponse[]>(
-    SWR_KEYS.buildExternalApps,
-    errorHandlingFetcher,
-    { keepPreviousData: true }
-  );
+// Apps and MCP servers are connected, governed, and taught to the agent
+// differently, so each kind gets its own tab rather than one blended list.
+// Per-kind copy lives in the craft.apps.page.kinds message namespace.
+
+// The user's own app connections. Org-wide configuration lives in the admin
+// panel's Craft section; admins get a shortcut button to it here.
+export default function ExternalAppsPage() {
+  const t = useTranslations("craft.apps.page");
+  const { isAdmin } = useUser();
+  const [query, setQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  // A `?connect` deep-link focuses the targeted card's Connect button, so don't
+  // steal that focus by autofocusing the search.
+  const hasConnectDeepLink = useSearchParams().has("connect");
+
+  useOnMount(() => {
+    if (!hasConnectDeepLink) searchInputRef.current?.focus();
+  });
 
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgPlug}
-        title="My Apps"
-        description="Connect your accounts so Onyx Craft can use them as context."
-      />
+        title={t("header.title")}
+        description={t("header.description")}
+        rightChildren={
+          isAdmin ? (
+            <Button
+              href="/admin/craft/apps"
+              prominence="secondary"
+              icon={SvgSettings}
+            >
+              {t("header.manageButton")}
+            </Button>
+          ) : undefined
+        }
+      >
+        <InputTypeIn
+          ref={searchInputRef}
+          placeholder={t("header.searchPlaceholder")}
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          searchIcon
+        />
+      </SettingsLayouts.Header>
       <SettingsLayouts.Body>
-        {data === undefined ? (
-          <Card variant="tertiary">
-            <Text font="main-content-body">Loading…</Text>
-          </Card>
-        ) : data.length === 0 ? (
-          <Card variant="tertiary">
-            <Text font="main-content-body" color="text-03">
-              No external apps are enabled for your org yet. Ask an admin to
-              enable one.
-            </Text>
-          </Card>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {data.map((userApp) => (
-              <ProviderConnectRow
-                key={userApp.id}
-                userApp={userApp}
-                onChange={() => mutate()}
-              />
-            ))}
-          </div>
-        )}
+        <AppConnections query={query} />
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
 }
 
-interface ProviderConnectRowProps {
-  userApp: ExternalAppUserResponse;
+interface AppConnectionsProps {
+  query: string;
+}
+
+function AppConnections({ query }: AppConnectionsProps) {
+  const t = useTranslations("craft.apps.page");
+  const { data: externalApps, mutate: mutateApps } = useSWR<
+    ExternalAppUserResponse[]
+  >(SWR_KEYS.buildExternalApps, errorHandlingFetcher, {
+    keepPreviousData: true,
+  });
+  const { data: mcpData, refresh: refreshMcp } = useCraftMcpServers();
+  const { data: skillsData, refresh: refreshSkills } = useUserSkills();
+  const searchParams = useSearchParams();
+  const connectParam = searchParams.get("connect");
+  const [tab, setTab] = useConnectableTab();
+
+  // Apps with at least one associated skill switched off. Both skill lists
+  // matter: a built-in provider's associated skill is a built-in row, so
+  // reading only `customs` misses every built-in app. Empty until the fetch
+  // resolves, which is also what keeps an app from being warned about before
+  // its skills are known.
+  const appsNeedingSkillSetup = useMemo(() => {
+    const needsSetup = new Set<number>();
+    for (const skill of [
+      ...(skillsData?.builtins ?? []),
+      ...(skillsData?.customs ?? []),
+    ]) {
+      const externalAppId = skill.external_app?.external_app_id;
+      if (externalAppId !== undefined && !skill.enabled) {
+        needsSetup.add(externalAppId);
+      }
+    }
+    return needsSetup;
+  }, [skillsData]);
+
+  const refresh = () => {
+    void mutateApps();
+    void refreshMcp();
+    void refreshSkills();
+  };
+
+  const { byKind, searching, isLoading, isEmpty } = useMemo(() => {
+    const allApps = (externalApps ?? []).map(externalAppToConnectable);
+    const allMcp = (mcpData?.mcp_servers ?? []).map(mcpServerToConnectable);
+    const q = query.trim().toLowerCase();
+    // Connected first, then by name: what you already have is what you most
+    // often come here to check on or disconnect.
+    const visible = (items: ConnectableApp[]) =>
+      items
+        .filter((item) => (q ? item.name.toLowerCase().includes(q) : true))
+        .sort(
+          (a, b) =>
+            Number(b.authenticated) - Number(a.authenticated) ||
+            compareByName(a, b)
+        );
+    return {
+      byKind: { app: visible(allApps), mcp: visible(allMcp) },
+      searching: q.length > 0,
+      isLoading: externalApps === undefined && mcpData === undefined,
+      isEmpty: allApps.length === 0 && allMcp.length === 0,
+    };
+  }, [externalApps, mcpData, query]);
+
+  if (isLoading) {
+    return (
+      <Card color="transparent" border="dashed" rounding={4}>
+        <Text font="main-content-body">{t("loading.label")}</Text>
+      </Card>
+    );
+  }
+
+  if (isEmpty) {
+    return (
+      <IllustrationContent
+        illustration={SvgUnPlugged}
+        title={t("empty.title")}
+        description={t("empty.description")}
+      />
+    );
+  }
+
+  // `?connect=` deep-links only ever target an external app; `?tab=mcp` is how
+  // the input-bar picker lands a user on an MCP server they need to connect.
+  return (
+    <Tabs
+      value={tab}
+      onValueChange={(next) => setTab(parseConnectableTab(next))}
+    >
+      <Tabs.List>
+        {KIND_ORDER.map((kind) => (
+          <Tabs.Trigger key={kind} value={kind}>
+            {t(`kinds.${kind}.tabLabel`, { count: byKind[kind].length })}
+          </Tabs.Trigger>
+        ))}
+      </Tabs.List>
+      <KindSlot tab={tab}>
+        {(kind) => (
+          <Text font="secondary-body" color="text-03">
+            {t(`kinds.${kind}.blurb`)}
+          </Text>
+        )}
+      </KindSlot>
+      <KindSlot tab={tab} panel>
+        {(kind, active) => (
+          <ConnectableList
+            kind={kind}
+            items={byKind[kind]}
+            searching={searching}
+            // Only the visible kind may claim a deep link; the others are
+            // rendered purely to hold their height.
+            connectParam={active ? connectParam : null}
+            appsNeedingSkillSetup={appsNeedingSkillSetup}
+            onChange={refresh}
+          />
+        )}
+      </KindSlot>
+    </Tabs>
+  );
+}
+
+interface KindSlotProps {
+  tab: ConnectableKind;
+  /** Wire the active kind up as the tab's panel (`role="tabpanel"`). */
+  panel?: boolean;
+  children: (kind: ConnectableKind, active: boolean) => ReactNode;
+}
+
+/**
+ * Renders one piece of the page for every kind, stacked in a single grid cell
+ * with only the active kind visible. Apps and MCP servers share the layout but
+ * not their content lengths, so every slot reserves the tallest kind's height:
+ * the page's geometry — and with it the scrollbar, which would otherwise
+ * re-center the whole page sideways — stays put when the tab changes.
+ */
+function KindSlot({ tab, panel, children }: KindSlotProps) {
+  return (
+    <div className={cn("grid", !panel && "pt-6 pb-2")}>
+      {KIND_ORDER.map((kind) => {
+        const active = kind === tab;
+        const content = children(kind, active);
+        return (
+          <div
+            key={kind}
+            className={cn("col-start-1 row-start-1", !active && "invisible")}
+            aria-hidden={!active}
+          >
+            {!panel ? (
+              content
+            ) : active ? (
+              <Tabs.Content value={kind}>{content}</Tabs.Content>
+            ) : (
+              // Mirrors the w-full wrapper Tabs.Content applies, so the height
+              // an unselected kind holds matches what it occupies once selected.
+              <div className="w-full">{content}</div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+interface ConnectableListProps {
+  kind: ConnectableKind;
+  items: ConnectableApp[];
+  searching: boolean;
+  connectParam: string | null;
+  /** Ids of external apps with a disabled associated skill. */
+  appsNeedingSkillSetup: Set<number>;
   onChange: () => void;
 }
 
-function ProviderConnectRow({ userApp, onChange }: ProviderConnectRowProps) {
+function ConnectableList({
+  kind,
+  items,
+  searching,
+  connectParam,
+  appsNeedingSkillSetup,
+  onChange,
+}: ConnectableListProps) {
+  const t = useTranslations("craft.apps.page");
+
+  if (items.length === 0) {
+    return searching ? (
+      <IllustrationContent
+        illustration={SvgNoResult}
+        title={t("search.noMatchesTitle")}
+        description={t("search.noMatchesDescription")}
+      />
+    ) : (
+      <IllustrationContent
+        illustration={SvgUnPlugged}
+        title={t(`kinds.${kind}.emptyTitle`)}
+        description={t(`kinds.${kind}.empty`)}
+      />
+    );
+  }
+
+  // One grid for both states — connected cards lead, then the rest. A card that
+  // connects moves up into that group but keeps its shape, so the page's
+  // geometry never changes. The tab's count carries the totals.
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+      {items.map((item) => (
+        <ConnectableCard
+          key={item.key}
+          app={item}
+          // Skills are an external-app concept, and only apps carry an id.
+          needsSkillSetup={
+            item.externalAppId !== null &&
+            appsNeedingSkillSetup.has(item.externalAppId)
+          }
+          highlight={connectParam !== null && connectParam === item.connectId}
+          onChange={onChange}
+        />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The card's one-line status. Connecting swaps this and the action beside it;
+ * clamped to a single line, it is also what holds every card to one height.
+ */
+function statusLine(
+  app: ConnectableApp,
+  needsSkillSetup: boolean,
+  t: ReturnType<typeof useTranslations<"craft.apps.page">>
+): string {
+  if (app.authenticated) {
+    return needsSkillSetup
+      ? t("status.connectedNeedsSkills")
+      : t("status.connected");
+  }
+  // Org-managed and not usable by this account (e.g. an admin config that
+  // yields no credentials, or pass-through OAuth for a password-login user).
+  // There is no user-side action.
+  if (app.connectMode === null) {
+    return t("status.notAvailable");
+  }
+  return app.description;
+}
+
+interface ConnectableCardProps {
+  app: ConnectableApp;
+  highlight?: boolean;
+  /** Whether some of the app's associated skills are disabled. Always false
+   * for MCP servers, which have no skills. */
+  needsSkillSetup?: boolean;
+  onChange: () => void;
+}
+
+/**
+ * One card shape for every connectable, connected or not. Connecting swaps the
+ * status line and the action row only — the card keeps its place in the grid.
+ */
+function ConnectableCard({
+  app,
+  highlight,
+  needsSkillSetup = false,
+  onChange,
+}: ConnectableCardProps) {
+  const t = useTranslations("craft.apps.page");
   const [isStarting, setIsStarting] = useState(false);
+  const [credModalOpen, setCredModalOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  // Deep-link landing: scroll the targeted card into view and focus its
+  // Connect button so Enter immediately triggers the flow.
+  useEffect(() => {
+    if (!highlight) return;
+    const el = rootRef.current;
+    if (!el) return;
+    el.scrollIntoView({ block: "center" });
+    el.querySelector<HTMLButtonElement>("button")?.focus();
+  }, [highlight]);
 
   async function connect() {
+    if (app.connectMode === "credentials") {
+      setCredModalOpen(true);
+      return;
+    }
     setIsStarting(true);
     try {
-      const { authorize_url } = await startExternalAppOAuth(userApp.id);
-      window.location.href = authorize_url;
+      window.location.href = await app.startOAuth();
     } catch (e) {
-      toast.error(
-        e instanceof Error ? e.message : "Failed to start authorization"
-      );
+      toast.error(e instanceof Error ? e.message : t("errors.startAuthFailed"));
       setIsStarting(false);
     }
   }
 
-  // Overwrite stored creds with `{}` — flips `authenticated` to false
-  // on the next list call. Avoids a dedicated DELETE endpoint.
   async function disconnect() {
+    if (!app.disconnect) return;
     setIsStarting(true);
     try {
-      await disconnectUserFromApp(userApp.id);
+      await app.disconnect();
       onChange();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to disconnect");
+      toast.error(
+        e instanceof Error ? e.message : t("errors.disconnectFailed")
+      );
     } finally {
       setIsStarting(false);
     }
   }
 
-  const Logo = getAppTypeLogo(userApp.app_type);
+  const Logo = app.logo;
+
   return (
-    <Card>
-      <div className="flex items-center gap-3 w-full">
-        <Logo className="w-8 h-8" />
-        <div className="flex-1 flex flex-col gap-0.5">
-          <div className="flex items-center gap-2">
-            <Text font="main-ui-action">{userApp.name}</Text>
-            {userApp.authenticated && (
-              <SvgCheckCircle className="w-4 h-4 text-status-success-05" />
-            )}
-          </div>
-          <Text font="secondary-body" color="text-03">
-            {userApp.authenticated ? "Connected" : userApp.description}
-          </Text>
-        </div>
-        {userApp.authenticated ? (
-          <Button
-            prominence="secondary"
-            disabled={isStarting}
-            onClick={disconnect}
-          >
-            {isStarting ? "…" : "Disconnect"}
-          </Button>
-        ) : (
-          <Button disabled={isStarting} onClick={connect}>
-            {isStarting ? "Redirecting…" : "Connect"}
-          </Button>
+    <>
+      <div
+        ref={rootRef}
+        className={cn(
+          "rounded-12 transition-shadow",
+          highlight && "ring-2 ring-action-selection-04"
         )}
+      >
+        <Card color="background-tint-00" border="solid" rounding={4}>
+          <ContentAction
+            sizePreset="main-ui"
+            variant="section"
+            padding={0}
+            center
+            icon={Logo}
+            title={app.name}
+            titleMaxLines={1}
+            description={statusLine(app, needsSkillSetup, t)}
+            descriptionMaxLines={1}
+            rightChildren={
+              <Section flexDirection="row" width="fit" height="fit" gap={2}>
+                {app.authenticated ? (
+                  <>
+                    {/* Only the problem state gets a glyph — "Connected" in the
+                        status line already says the happy path. */}
+                    {needsSkillSetup && (
+                      <Tooltip tooltip={t("status.skillWarningTooltip")}>
+                        <SvgAlertCircle
+                          size={16}
+                          className="text-status-warning-05"
+                          aria-label={t("status.skillWarningAriaLabel")}
+                        />
+                      </Tooltip>
+                    )}
+                    {needsSkillSetup && app.externalAppId !== null && (
+                      <Button
+                        prominence="secondary"
+                        href={`/craft/v1/skills?externalAppId=${app.externalAppId}`}
+                      >
+                        {t("reviewSkillsButton")}
+                      </Button>
+                    )}
+                    {app.disconnect && (
+                      <Button
+                        prominence={needsSkillSetup ? "tertiary" : "secondary"}
+                        disabled={isStarting}
+                        onClick={disconnect}
+                      >
+                        {isStarting ? "…" : t("disconnectButton")}
+                      </Button>
+                    )}
+                  </>
+                ) : (
+                  app.connectMode !== null && (
+                    <Button disabled={isStarting} onClick={connect}>
+                      {isStarting ? t("connectingButton") : t("connectButton")}
+                    </Button>
+                  )
+                )}
+              </Section>
+            }
+          />
+        </Card>
       </div>
-    </Card>
+
+      <UserCredentialsModal
+        open={credModalOpen}
+        onClose={() => setCredModalOpen(false)}
+        onSaved={onChange}
+        name={app.name}
+        logo={app.logo}
+        credentialKeys={app.credentialKeys}
+        credentialValues={app.credentialValues}
+        save={app.saveCredentials}
+      />
+    </>
   );
 }

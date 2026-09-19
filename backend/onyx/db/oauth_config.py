@@ -4,9 +4,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.db.models import OAuthConfig
-from onyx.db.models import OAuthUserToken
-from onyx.db.models import Tool
+from onyx.db.models import OAuthConfig, OAuthUserToken, Tool
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

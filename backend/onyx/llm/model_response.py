@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from typing import Any
-from typing import List
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, List
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
+
+from onyx.llm.models import AnyThinkingBlock, RedactedThinkingBlock, ThinkingBlock
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 class FunctionCall(BaseModel):
@@ -29,6 +31,7 @@ class ChatCompletionDeltaToolCall(BaseModel):
 class Delta(BaseModel):
     content: str | None = None
     reasoning_content: str | None = None
+    thinking_blocks: List[AnyThinkingBlock] | None = None
     tool_calls: List[ChatCompletionDeltaToolCall] = Field(default_factory=list)
 
 
@@ -62,6 +65,7 @@ class Message(BaseModel):
     role: str = "assistant"
     tool_calls: List[ChatCompletionMessageToolCall] | None = None
     reasoning_content: str | None = None
+    thinking_blocks: List[AnyThinkingBlock] | None = None
 
 
 class Choice(BaseModel):
@@ -101,17 +105,41 @@ def _parse_delta_tool_calls(
     if not tool_calls:
         return []
 
-    parsed_tool_calls: list[ChatCompletionDeltaToolCall] = []
-    for tool_call in tool_calls:
-        parsed_tool_calls.append(
-            ChatCompletionDeltaToolCall(
-                id=tool_call.get("id"),
-                index=tool_call.get("index", 0),
-                type=tool_call.get("type", "function"),
-                function=_parse_function_call(tool_call.get("function")),
-            )
+    parsed_tool_calls: list[ChatCompletionDeltaToolCall] = [
+        ChatCompletionDeltaToolCall(
+            id=tool_call.get("id"),
+            index=tool_call.get("index", 0),
+            type=tool_call.get("type", "function"),
+            function=_parse_function_call(tool_call.get("function")),
         )
+        for tool_call in tool_calls
+    ]
     return parsed_tool_calls
+
+
+def _parse_thinking_blocks(
+    thinking_blocks: list[dict[str, Any]] | None,
+) -> list[AnyThinkingBlock] | None:
+    if not thinking_blocks:
+        return None
+
+    parsed: list[AnyThinkingBlock] = []
+    for block in thinking_blocks:
+        if not isinstance(block, dict):
+            logger.warning(
+                "Dropping malformed thinking block of type %s", type(block).__name__
+            )
+            continue
+        if block.get("type") == "redacted_thinking":
+            parsed.append(RedactedThinkingBlock(data=block.get("data") or ""))
+        else:
+            parsed.append(
+                ThinkingBlock(
+                    thinking=block.get("thinking") or "",
+                    signature=block.get("signature"),
+                )
+            )
+    return parsed or None
 
 
 def _parse_message_tool_calls(
@@ -137,25 +165,23 @@ def _parse_message_tool_calls(
     return parsed_tool_calls
 
 
-def _validate_and_extract_base_fields(
+def _extract_id_and_created(
     response_data: dict[str, Any], error_prefix: str
-) -> tuple[str, str, dict[str, Any]]:
-    """
-    Validate and extract common fields (id, created, first choice) from a LiteLLM response.
-
-    Returns:
-        Tuple of (id, created, choice_data)
-    """
+) -> tuple[str, str]:
     response_id = response_data.get("id")
     created = response_data.get("created")
     if response_id is None or created is None:
         raise ValueError(f"{error_prefix} must include 'id' and 'created'.")
+    return str(response_id), str(created)
 
+
+def _require_first_choice(
+    response_data: dict[str, Any], error_prefix: str
+) -> dict[str, Any]:
     choices: list[dict[str, Any]] = response_data.get("choices") or []
     if not choices:
         raise ValueError(f"{error_prefix} must include at least one choice.")
-
-    return str(response_id), str(created), choices[0] or {}
+    return choices[0] or {}
 
 
 def _usage_from_usage_data(usage_data: dict[str, Any]) -> Usage:
@@ -181,14 +207,21 @@ def from_litellm_model_response_stream(
     Convert a LiteLLM ModelResponseStream into the simplified Onyx representation.
     """
     response_data = response.model_dump()
-    response_id, created, choice_data = _validate_and_extract_base_fields(
+    response_id, created = _extract_id_and_created(
         response_data, "LiteLLM response stream"
     )
+
+    # OpenAI (and other providers) emit a final usage-only chunk with an empty
+    # `choices` array when stream_options.include_usage is set. Treat it as an
+    # empty-delta chunk that still carries usage rather than failing the stream.
+    choices: list[dict[str, Any]] = response_data.get("choices") or []
+    choice_data: dict[str, Any] = (choices[0] or {}) if choices else {}
 
     delta_data: dict[str, Any] = choice_data.get("delta") or {}
     parsed_delta = Delta(
         content=delta_data.get("content"),
         reasoning_content=delta_data.get("reasoning_content"),
+        thinking_blocks=_parse_thinking_blocks(delta_data.get("thinking_blocks")),
         tool_calls=_parse_delta_tool_calls(delta_data.get("tool_calls")),
     )
 
@@ -214,9 +247,8 @@ def from_litellm_model_response(
     Convert a LiteLLM ModelResponse into the simplified Onyx representation.
     """
     response_data = response.model_dump()
-    response_id, created, choice_data = _validate_and_extract_base_fields(
-        response_data, "LiteLLM response"
-    )
+    response_id, created = _extract_id_and_created(response_data, "LiteLLM response")
+    choice_data = _require_first_choice(response_data, "LiteLLM response")
 
     message_data: dict[str, Any] = choice_data.get("message") or {}
     parsed_tool_calls = _parse_message_tool_calls(message_data.get("tool_calls"))
@@ -224,8 +256,9 @@ def from_litellm_model_response(
     message = Message(
         content=message_data.get("content"),
         role=message_data.get("role", "assistant"),
-        tool_calls=parsed_tool_calls if parsed_tool_calls else None,
+        tool_calls=parsed_tool_calls or None,
         reasoning_content=message_data.get("reasoning_content"),
+        thinking_blocks=_parse_thinking_blocks(message_data.get("thinking_blocks")),
     )
 
     choice = Choice(

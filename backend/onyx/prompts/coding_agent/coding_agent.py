@@ -1,5 +1,4 @@
-from onyx.coding_agent.mock_tools import BASH_TOOL_NAME
-from onyx.coding_agent.mock_tools import GENERATE_ANSWER_TOOL_NAME
+from onyx.coding_agent.mock_tools import BASH_TOOL_NAME, GENERATE_ANSWER_TOOL_NAME
 from onyx.deep_research.dr_mock_tools import THINK_TOOL_NAME
 
 MAX_CODING_AGENT_CYCLES = 20

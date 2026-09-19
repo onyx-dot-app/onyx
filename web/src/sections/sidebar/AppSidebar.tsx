@@ -1,13 +1,21 @@
 "use client";
 
-import { useCallback, memo, useMemo, useState, useEffect, useRef } from "react";
+import {
+  useCallback,
+  useMemo,
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+} from "react";
 import useNotifications from "@/hooks/useNotifications";
 import { useRouter } from "next/navigation";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import Text from "@/refresh-components/texts/Text";
 import ChatButton from "@/sections/sidebar/ChatButton";
-import AgentButton from "@/sections/sidebar/AgentButton";
+import { AgentButton } from "@/lib/agents/components";
 import { DragEndEvent } from "@dnd-kit/core";
 import {
   DndContext,
@@ -29,36 +37,36 @@ import {
   restrictToFirstScrollableAncestor,
   restrictToVerticalAxis,
 } from "@dnd-kit/modifiers";
-import SidebarSection from "@/sections/sidebar/SidebarSection";
 import useChatSessions from "@/hooks/useChatSessions";
-import { useProjects } from "@/lib/hooks/useProjects";
+import { useProjects } from "@/lib/projects/hooks";
+import { useAgents, useActiveAgent, usePinnedAgents } from "@/lib/agents/hooks";
 import {
-  useAgents,
-  useCurrentAgent,
-  usePinnedAgents,
-} from "@/lib/agents/hooks";
-import ProjectFolderButton from "@/sections/sidebar/ProjectFolderButton";
-import CreateProjectModal from "@/sections/modals/CreateProjectModal";
-import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
-import { useProjectsContext } from "@/providers/ProjectsContext";
-import { removeChatSessionFromProject } from "@/app/app/projects/projectsService";
-import type { Project } from "@/app/app/projects/projectsService";
-import * as SidebarLayouts from "@/layouts/sidebar-layouts";
-import { useSidebarFolded } from "@/layouts/sidebar-layouts";
+  FoldedProjectsPopover,
+  ProjectFolderButton,
+} from "@/lib/projects/components";
+import { CreateProjectModal } from "@/lib/projects/components";
+import { MoveCustomAgentChatModal } from "@/lib/agents/components";
+import { useProjectsContext } from "@/lib/projects/providers";
+import { removeChatSessionFromProject } from "@/lib/projects/svc";
+import type { Project } from "@/lib/projects/types";
+import { SidebarLayouts, useSidebarState } from "@opal/layouts";
+import { renderSidebarLogo } from "@/lib/sidebar/utils";
+import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import { Button as OpalButton } from "@opal/components";
 import { cn } from "@opal/utils";
+import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
+import { PHFeatureFlag, usePHFeatureFlag } from "@/lib/analytics/hooks";
 import {
-  DRAG_TYPES,
-  DEFAULT_PERSONA_ID,
-  LOCAL_STORAGE_KEYS,
-} from "@/sections/sidebar/constants";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
-import { showErrorNotification, handleMoveOperation } from "./sidebarUtils";
+  shouldShowMoveModal,
+  showErrorNotification,
+} from "@/lib/sidebar/utils";
+import { handleMoveOperation } from "@/lib/sidebar/svc";
 import { SidebarTab } from "@opal/components";
 import { ChatSession } from "@/app/app/interfaces";
 import { useUser } from "@/providers/UserProvider";
-import useAppFocus from "@/hooks/useAppFocus";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { getFirstPermittedAdminRoute } from "@/lib/permissions";
+import { useAppPosition } from "@/lib/position/hooks";
+import { useCreateModal } from "@opal/components";
 import { useModalContext } from "@/components/context/ModalContext";
 import {
   SvgDevKit,
@@ -73,29 +81,30 @@ import SidebarTabSkeleton from "@/refresh-components/skeletons/SidebarTabSkeleto
 import BuildModeIntroBackground from "@/app/craft/components/IntroBackground";
 import BuildModeIntroContent from "@/app/craft/components/IntroContent";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
-import { usePostHog } from "posthog-js/react";
-import { track, AnalyticsEvent } from "@/lib/analytics";
+import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import { motion, AnimatePresence } from "motion/react";
 import { NotificationType } from "@/lib/notifications/interfaces";
+import { dismissNotification } from "@/lib/notifications/api";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
 import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
 import { useQueryController } from "@/providers/QueryControllerProvider";
+import { DEFAULT_AGENT_ID } from "@/lib/constants";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
 function buildVisibleAgents(
   pinnedAgents: MinimalAgent[],
-  currentAgent: MinimalAgent | null
+  activeAgent: MinimalAgent | undefined
 ): [MinimalAgent[], boolean] {
   /* NOTE: The unified agent (id = 0) is not visible in the sidebar,
   so we filter it out. */
-  if (!currentAgent)
+  if (!activeAgent)
     return [pinnedAgents.filter((agent) => agent.id !== 0), false];
   const currentAgentIsPinned = pinnedAgents.some(
-    (pinnedAgent) => pinnedAgent.id === currentAgent.id
+    (pinnedAgent) => pinnedAgent.id === activeAgent.id
   );
   const visibleAgents = (
-    currentAgentIsPinned ? pinnedAgents : [...pinnedAgents, currentAgent]
+    currentAgentIsPinned ? pinnedAgents : [...pinnedAgents, activeAgent]
   ).filter((agent) => agent.id !== 0);
 
   return [visibleAgents, currentAgentIsPinned];
@@ -120,6 +129,7 @@ function RecentsSection({
   isLoadingMore,
   onLoadMore,
 }: RecentsSectionProps) {
+  const t = useTranslations("sidebar");
   const { setNodeRef, isOver } = useDroppable({
     id: DRAG_TYPES.RECENTS,
     data: {
@@ -133,7 +143,12 @@ function RecentsSection({
   // Sentinel ref for IntersectionObserver-based infinite scroll
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const onLoadMoreRef = useRef(onLoadMore);
-  onLoadMoreRef.current = onLoadMore;
+
+  // Layout effect: an already-scheduled observer callback must not see the
+  // previous page's loadMore after commit.
+  useLayoutEffect(() => {
+    onLoadMoreRef.current = onLoadMore;
+  }, [onLoadMore]);
 
   useEffect(() => {
     if (!hasMore || isLoadingMore) return;
@@ -162,10 +177,10 @@ function RecentsSection({
         isOver && "bg-background-tint-03"
       )}
     >
-      <SidebarSection title="Recents">
+      <SidebarLayouts.Section title={t("appSidebar.recents.title")}>
         {chatSessions.length === 0 ? (
           <Text as="p" text01 className="px-3">
-            Try sending a message! Your chat history will appear here.
+            {t("appSidebar.recents.empty.text")}
           </Text>
         ) : (
           <>
@@ -191,16 +206,17 @@ function RecentsSection({
               ))}
           </>
         )}
-      </SidebarSection>
+      </SidebarLayouts.Section>
     </div>
   );
 }
 
-const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
-  const folded = useSidebarFolded();
+export default function AppSidebar() {
+  const t = useTranslations("sidebar");
+  const moveChatErrorMessage = t("appSidebar.moveChatError.message");
+  const { folded } = useSidebarState();
   const router = useRouter();
-  const combinedSettings = useSettingsContext();
-  const posthog = usePostHog();
+  const combinedSettingsData = useSettings();
   const { newTenantInfo, invitationInfo } = useModalContext();
   const { setAppMode, reset } = useQueryController();
 
@@ -219,7 +235,7 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
     isLoading: isLoadingProjects,
   } = useProjects();
   const { isLoading: isLoadingAgents } = useAgents();
-  const currentAgent = useCurrentAgent();
+  const activeAgent = useActiveAgent();
   const {
     pinnedAgents,
     updatePinnedAgents,
@@ -246,13 +262,14 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
   const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
     useState(false);
 
-  // Fetch notifications for build mode intro
-  const { notifications, refresh: mutateNotifications } = useNotifications();
-
   // Check if Onyx Craft is enabled via settings (backed by PostHog feature flag)
   // Only explicit true enables the feature; false or undefined = disabled
-  const isOnyxCraftEnabled =
-    combinedSettings?.settings?.onyx_craft_enabled === true;
+  const isOnyxCraftEnabled = combinedSettingsData?.onyx_craft_enabled === true;
+
+  // Fetch notifications for build mode intro
+  const { notifications, refresh: mutateNotifications } = useNotifications({
+    enabled: isOnyxCraftEnabled,
+  });
 
   // Find build_mode feature announcement notification (only if Onyx Craft is enabled)
   const buildModeNotification = isOnyxCraftEnabled
@@ -273,8 +290,9 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
   // Don't show if tenant/invitation modal is open (e.g., "join existing team" modal)
   // Gated by PostHog feature flag: if `craft-animation-disabled` is true (or
   // PostHog is unavailable), skip the auto-show entirely.
-  const isCraftAnimationDisabled =
-    posthog?.isFeatureEnabled(FEATURE_FLAGS.CRAFT_ANIMATION_DISABLED) ?? true;
+  const isCraftAnimationDisabled = usePHFeatureFlag(
+    PHFeatureFlag.CRAFT_ANIMATION_DISABLED
+  );
   const hasTenantModal = !!(newTenantInfo || invitationInfo);
   useEffect(() => {
     if (
@@ -298,9 +316,7 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
   const dismissBuildModeNotification = useCallback(async () => {
     if (!buildModeNotification) return;
     try {
-      await fetch(`/api/notifications/${buildModeNotification.id}/dismiss`, {
-        method: "POST",
-      });
+      await dismissNotification(buildModeNotification.id);
       mutateNotifications();
     } catch (error) {
       console.error("Error dismissing notification:", error);
@@ -308,8 +324,8 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
   }, [buildModeNotification, mutateNotifications]);
 
   const [visibleAgents, currentAgentIsPinned] = useMemo(
-    () => buildVisibleAgents(pinnedAgents, currentAgent),
-    [pinnedAgents, currentAgent]
+    () => buildVisibleAgents(pinnedAgents, activeAgent),
+    [pinnedAgents, activeAgent]
   );
   const visibleAgentIds = useMemo(
     () => visibleAgents.map((agent) => agent.id),
@@ -343,11 +359,18 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
 
       let newPinnedAgents: MinimalAgent[];
 
-      if (currentAgent && !currentAgentIsPinned) {
+      // The Assistant is excluded: it is the active agent in plain chat but is
+      // never in `visibleAgents`, so pinning it here would persist an agent the
+      // sidebar cannot show.
+      if (
+        activeAgent &&
+        activeAgent.id !== DEFAULT_AGENT_ID &&
+        !currentAgentIsPinned
+      ) {
         // This is the case in which the user is dragging the UNPINNED agent and moving it to somewhere else in the list.
         // This is an indication that we WANT to pin this agent!
         if (activeIndex === visibleAgentIds.length - 1) {
-          const pinnedWithCurrent = [...pinnedAgents, currentAgent];
+          const pinnedWithCurrent = [...pinnedAgents, activeAgent];
           newPinnedAgents = arrayMove(
             pinnedWithCurrent,
             activeIndex,
@@ -369,7 +392,7 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
       visibleAgents,
       pinnedAgents,
       updatePinnedAgents,
-      currentAgent,
+      activeAgent,
       currentAgentIsPinned,
     ]
   );
@@ -425,16 +448,7 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
           return;
         }
 
-        const hideModal =
-          typeof window !== "undefined" &&
-          window.localStorage.getItem(
-            LOCAL_STORAGE_KEYS.HIDE_MOVE_CUSTOM_AGENT_MODAL
-          ) === "true";
-
-        const isChatUsingDefaultAgent =
-          chatSession.persona_id === DEFAULT_PERSONA_ID;
-
-        if (!isChatUsingDefaultAgent && !hideModal) {
+        if (shouldShowMoveModal(chatSession)) {
           setPendingMoveChatSession(chatSession);
           setPendingMoveProjectId(targetProject.id);
           setShowMoveCustomAgentModal(true);
@@ -444,7 +458,7 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
         try {
           await performChatMove(targetProject.id, chatSession);
         } catch (error) {
-          showErrorNotification("Failed to move chat. Please try again.");
+          showErrorNotification(moveChatErrorMessage);
         }
       }
 
@@ -475,137 +489,53 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
       refreshChatSessions,
       refreshCurrentProjectDetails,
       refreshProjects,
+      moveChatErrorMessage,
     ]
   );
 
-  const { isAdmin, isCurator, user } = useUser();
-  const activeSidebarTab = useAppFocus();
+  const { hasAdminAccess, adminCapabilities, user } = useUser();
+  const activeSidebarTab = useAppPosition();
   const createProjectModal = useCreateModal();
+  const showLogoWhenFolded = useShowLogoWhenFolded();
   const defaultAppMode =
     (user?.preferences?.default_app_mode?.toLowerCase() as "chat" | "search") ??
     "chat";
-  const newSessionButton = useMemo(() => {
-    const href =
-      combinedSettings?.settings?.disable_default_assistant && currentAgent
-        ? `/app?agentId=${currentAgent.id}`
-        : "/app";
-    return (
-      <div data-testid="AppSidebar/new-session">
-        <SidebarTab
-          icon={SvgEditBig}
-          folded={folded}
-          href={href}
-          selected={activeSidebarTab.isNewSession()}
-          onClick={() => {
-            if (!activeSidebarTab.isNewSession()) return;
-            setAppMode(defaultAppMode);
-            reset();
-          }}
-        >
-          New Session
-        </SidebarTab>
-      </div>
-    );
-  }, [
-    folded,
-    activeSidebarTab,
-    combinedSettings,
-    currentAgent,
-    defaultAppMode,
-  ]);
 
-  const buildButton = useMemo(
-    () => (
-      <div data-testid="AppSidebar/build">
-        <SidebarTab
-          icon={SvgDevKit}
-          folded={folded}
-          href={CRAFT_PATH}
-          onClick={() => track(AnalyticsEvent.CLICKED_CRAFT_IN_SIDEBAR)}
-        >
-          Craft
-        </SidebarTab>
-      </div>
-    ),
-    [folded, posthog]
-  );
-
-  const searchChatsButton = useMemo(
-    () => (
-      <ChatSearchCommandMenu
-        trigger={
-          <SidebarTab icon={SvgSearchMenu} folded={folded}>
-            Search Chats
-          </SidebarTab>
-        }
-      />
-    ),
-    [folded]
-  );
-  const moreAgentsButton = useMemo(
-    () => (
-      <div data-testid="AppSidebar/more-agents">
-        <SidebarTab
-          icon={
-            folded || visibleAgents.length === 0
-              ? SvgOnyxOctagon
-              : SvgMoreHorizontal
-          }
-          href="/app/agents"
-          folded={folded}
-          selected={activeSidebarTab.isMoreAgents()}
-          variant={folded ? "sidebar-heavy" : "sidebar-light"}
-        >
-          {visibleAgents.length === 0 ? "Explore Agents" : "More Agents"}
-        </SidebarTab>
-      </div>
-    ),
-    [folded, activeSidebarTab, visibleAgents]
-  );
-  const newProjectButton = useMemo(
-    () => (
+  const moreAgentsButton = (
+    <div data-testid="AppSidebar/more-agents">
       <SidebarTab
-        icon={SvgFolderPlus}
-        onClick={() => createProjectModal.toggle(true)}
-        selected={createProjectModal.isOpen}
-        folded={folded}
+        icon={
+          folded || visibleAgents.length === 0
+            ? SvgOnyxOctagon
+            : SvgMoreHorizontal
+        }
+        href="/app/agents"
+        selected={activeSidebarTab.isMoreAgents()}
         variant={folded ? "sidebar-heavy" : "sidebar-light"}
       >
-        New Project
+        {visibleAgents.length === 0
+          ? t("appSidebar.exploreAgents.label")
+          : t("appSidebar.moreAgents.label")}
       </SidebarTab>
-    ),
-    [folded, createProjectModal.toggle, createProjectModal.isOpen]
+    </div>
   );
+
+  // Only the unfolded empty state uses this — folded, the sidebar shows
+  // `FoldedProjectsPopover` instead.
+  const newProjectButton = (
+    <SidebarTab
+      icon={SvgFolderPlus}
+      onClick={() => createProjectModal.toggle(true)}
+      selected={createProjectModal.isOpen}
+      variant="sidebar-light"
+    >
+      {t("appSidebar.newProject.label")}
+    </SidebarTab>
+  );
+
   const handleShowBuildIntro = useCallback(() => {
     setShowIntroAnimation(true);
   }, []);
-
-  const settingsButton = useMemo(
-    () => (
-      <div>
-        {(isAdmin || isCurator) && (
-          <SidebarTab
-            href={
-              isCurator
-                ? "/admin/agents"
-                : "/admin/configuration/language-models"
-            }
-            icon={SvgSettings}
-            folded={folded}
-          >
-            {isAdmin ? "Admin Panel" : "Curator Panel"}
-          </SidebarTab>
-        )}
-        <AccountPopover
-          folded={folded}
-          onShowBuildIntro={
-            isOnyxCraftEnabled ? handleShowBuildIntro : undefined
-          }
-        />
-      </div>
-    ),
-    [folded, isAdmin, isCurator, handleShowBuildIntro, isOnyxCraftEnabled]
-  );
 
   return (
     <>
@@ -636,7 +566,7 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
               try {
                 await performChatMove(target, chat);
               } catch (error) {
-                showErrorNotification("Failed to move chat. Please try again.");
+                showErrorNotification(moveChatErrorMessage);
               }
             }
           }}
@@ -669,88 +599,128 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
         )}
       </AnimatePresence>
 
-      <SidebarLayouts.Header>
-        <div className="flex flex-col">
-          {newSessionButton}
-          {searchChatsButton}
-          {isOnyxCraftEnabled && buildButton}
-          {folded && moreAgentsButton}
-          {folded && newProjectButton}
-        </div>
-      </SidebarLayouts.Header>
-
-      <SidebarLayouts.Body scrollKey="app-sidebar">
-        {isLoadingDynamicContent ? null : (
-          <>
-            {/* Agents */}
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleAgentDragEnd}
+      <SidebarLayouts.Root foldable>
+        <SidebarLayouts.Header
+          showLogoWhenFolded={showLogoWhenFolded}
+          renderAppLogo={renderSidebarLogo}
+        >
+          <div data-testid="AppSidebar/new-session">
+            <SidebarTab
+              icon={SvgEditBig}
+              href="/app"
+              selected={activeSidebarTab.isNewSession()}
+              onClick={() => {
+                if (!activeSidebarTab.isNewSession()) return;
+                setAppMode(defaultAppMode);
+                reset();
+              }}
             >
-              <SidebarSection title="Agents">
-                <SortableContext
-                  items={visibleAgentIds}
-                  strategy={verticalListSortingStrategy}
-                >
-                  {visibleAgents.map((visibleAgent) => (
-                    <AgentButton key={visibleAgent.id} agent={visibleAgent} />
-                  ))}
-                </SortableContext>
-                {moreAgentsButton}
-              </SidebarSection>
-            </DndContext>
-
-            {/* Wrap Projects and Recents in a shared DndContext for chat-to-project drag */}
-            <DndContext
-              sensors={sensors}
-              collisionDetection={pointerWithin}
-              modifiers={[
-                restrictToFirstScrollableAncestor,
-                restrictToVerticalAxis,
-              ]}
-              onDragEnd={handleChatProjectDragEnd}
-            >
-              {/* Projects */}
-              <SidebarSection
-                title="Projects"
-                action={
-                  <OpalButton
-                    icon={SvgFolderPlus}
-                    prominence="tertiary"
-                    size="sm"
-                    tooltip="New Project"
-                    onClick={() => createProjectModal.toggle(true)}
-                  />
-                }
+              {t("appSidebar.newSession.label")}
+            </SidebarTab>
+          </div>
+          <ChatSearchCommandMenu
+            trigger={(open) => (
+              <SidebarTab icon={SvgSearchMenu} onClick={open}>
+                {t("appSidebar.searchChats.label")}
+              </SidebarTab>
+            )}
+          />
+          {isOnyxCraftEnabled && (
+            <div data-testid="AppSidebar/build">
+              <SidebarTab
+                icon={SvgDevKit}
+                href={CRAFT_PATH}
+                onClick={() => track(AnalyticsEvent.CLICKED_CRAFT_IN_SIDEBAR)}
               >
-                {projects.map((project) => (
-                  <ProjectFolderButton key={project.id} project={project} />
-                ))}
-                {projects.length === 0 && newProjectButton}
-              </SidebarSection>
+                {t("appSidebar.craft.label")}
+              </SidebarTab>
+            </div>
+          )}
+          {folded && moreAgentsButton}
+          {folded && <FoldedProjectsPopover />}
+        </SidebarLayouts.Header>
 
-              {/* Recents */}
-              <RecentsSection
-                chatSessions={chatSessions}
-                hasMore={hasMore}
-                isLoadingMore={isLoadingMore}
-                onLoadMore={loadMore}
-              />
-            </DndContext>
-          </>
-        )}
-      </SidebarLayouts.Body>
+        <SidebarLayouts.Body scrollKey="app-sidebar">
+          {isLoadingDynamicContent ? null : (
+            <>
+              {/* Agents */}
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleAgentDragEnd}
+              >
+                <SidebarLayouts.Section title={t("appSidebar.agents.title")}>
+                  <SortableContext
+                    items={visibleAgentIds}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    {visibleAgents.map((visibleAgent) => (
+                      <AgentButton key={visibleAgent.id} agent={visibleAgent} />
+                    ))}
+                  </SortableContext>
+                  {moreAgentsButton}
+                </SidebarLayouts.Section>
+              </DndContext>
 
-      <SidebarLayouts.Footer>{settingsButton}</SidebarLayouts.Footer>
+              {/* Wrap Projects and Recents in a shared DndContext for chat-to-project drag */}
+              <DndContext
+                sensors={sensors}
+                collisionDetection={pointerWithin}
+                modifiers={[
+                  restrictToFirstScrollableAncestor,
+                  restrictToVerticalAxis,
+                ]}
+                onDragEnd={handleChatProjectDragEnd}
+              >
+                {/* Projects */}
+                <SidebarLayouts.Section
+                  title={t("appSidebar.projects.title")}
+                  action={
+                    <OpalButton
+                      icon={SvgFolderPlus}
+                      prominence="tertiary"
+                      size="md"
+                      tooltip={t("appSidebar.newProject.tooltip")}
+                      onClick={() => createProjectModal.toggle(true)}
+                    />
+                  }
+                >
+                  {projects.map((project) => (
+                    <ProjectFolderButton key={project.id} project={project} />
+                  ))}
+                  {projects.length === 0 && newProjectButton}
+                </SidebarLayouts.Section>
+
+                {/* Recents */}
+                <RecentsSection
+                  chatSessions={chatSessions}
+                  hasMore={hasMore}
+                  isLoadingMore={isLoadingMore}
+                  onLoadMore={loadMore}
+                />
+              </DndContext>
+            </>
+          )}
+        </SidebarLayouts.Body>
+
+        <SidebarLayouts.Footer>
+          <div>
+            {hasAdminAccess && (
+              <SidebarTab
+                href={getFirstPermittedAdminRoute(adminCapabilities)}
+                icon={SvgSettings}
+              >
+                {t("appSidebar.adminPanel.label")}
+              </SidebarTab>
+            )}
+            <AccountPopover
+              onShowBuildIntro={
+                isOnyxCraftEnabled ? handleShowBuildIntro : undefined
+              }
+            />
+          </div>
+        </SidebarLayouts.Footer>
+      </SidebarLayouts.Root>
     </>
-  );
-});
-
-export default function AppSidebar() {
-  return (
-    <SidebarLayouts.Root foldable>
-      <MemoizedAppSidebarInner />
-    </SidebarLayouts.Root>
   );
 }

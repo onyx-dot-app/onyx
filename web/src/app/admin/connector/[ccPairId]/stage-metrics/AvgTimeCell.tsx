@@ -3,7 +3,7 @@
 import { Text } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { IndexAttemptStageMetric } from "@/lib/types";
-import { formatDurationMs } from "@/lib/time";
+import { formatDurationMs } from "@opal/time";
 import { cn } from "@opal/utils";
 import { colorClassForStage } from "./utils";
 
@@ -29,9 +29,9 @@ export default function AvgTimeCell({ stage, maxAvgMs }: AvgTimeCellProps) {
       justifyContent="center"
       width="full"
       height="fit"
-      gap={0.25}
+      gap={1}
     >
-      <Text font="secondary-body" color="text-05" nowrap>
+      <Text font="secondary-body" color="text-05" wordWrap="whitespace-nowrap">
         {avgLabel}
       </Text>
       {avgPct > 0 && (

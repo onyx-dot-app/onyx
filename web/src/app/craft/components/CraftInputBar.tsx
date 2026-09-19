@@ -1,0 +1,352 @@
+"use client";
+
+import {
+  forwardRef,
+  memo,
+  useCallback,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import useSWR from "swr";
+import BaseInputBar, {
+  type BaseInputBarHandle,
+} from "@/sections/input/BaseInputBar";
+import EntryInfoPopover from "@/sections/input/EntryInfoPopover";
+import EntryPickerPopover from "@/sections/input/EntryPickerPopover";
+import InterruptHint from "@/app/craft/components/InterruptHint";
+import ContextRing from "@/app/craft/components/ContextRing";
+import { InputChipStrip } from "@/sections/input/InputChipStrip";
+import { PlusMenuButton } from "@/sections/input/PlusMenuButton";
+import { buildEntryMenuItems } from "@/app/craft/components/buildEntryMenuItems";
+import UserLibraryModal from "@/app/craft/components/UserLibraryModal";
+import { useEscapeInterrupt } from "@/hooks/useEscapeInterrupt";
+import useSlashPicker from "@/hooks/useSlashPicker";
+import {
+  useUploadFilesContext,
+  type BuildFile,
+} from "@/app/craft/contexts/UploadFilesContext";
+import useUserSkills from "@/hooks/useUserSkills";
+import useUserExternalApps from "@/hooks/useUserExternalApps";
+import { useCraftMcpServers } from "@/lib/tools/hooks";
+import {
+  pickerEntryConnectionPath,
+  pickerEntryKey,
+  pickerEntryPromptPrefix,
+  toPickerSections,
+  type PickerEntry,
+} from "@/lib/skills/picker";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { fetchLibraryTree } from "@/app/craft/services/apiServices";
+import type { QueuedMessage } from "@/app/app/interfaces";
+
+export interface CraftInputBarHandle {
+  reset: () => void;
+  focus: () => void;
+  setMessage: (message: string) => void;
+}
+
+export interface CraftInputBarProps {
+  onSubmit: (message: string, files: BuildFile[]) => void;
+  isRunning: boolean;
+  disabled?: boolean;
+  placeholder?: string;
+  sandboxInitializing?: boolean;
+  noBottomRounding?: boolean;
+  queuedMessages?: readonly QueuedMessage[];
+  onQueueMessage?: (text: string, files: BuildFile[]) => void;
+  onRemoveQueuedMessage?: (index: number) => void;
+  onInterrupt?: () => void;
+  isInterrupting?: boolean;
+  contextUsage?: {
+    usedTokens: number;
+    contextLimit: number | null;
+  } | null;
+  /** Seed the active entry chips. For stories/tests; production callers leave unset. */
+  initialEntries?: PickerEntry[];
+}
+
+function withEntryPrefixes(message: string, entries: PickerEntry[]): string {
+  const prefixes = entries.map(pickerEntryPromptPrefix).join(" ");
+  return prefixes ? `${prefixes} ${message}` : message;
+}
+
+const CraftInputBar = memo(
+  forwardRef<CraftInputBarHandle, CraftInputBarProps>(
+    (
+      {
+        onSubmit,
+        isRunning,
+        disabled = false,
+        placeholder,
+        sandboxInitializing = false,
+        noBottomRounding = false,
+        queuedMessages,
+        onQueueMessage,
+        onRemoveQueuedMessage,
+        onInterrupt,
+        isInterrupting = false,
+        contextUsage,
+        initialEntries,
+      },
+      ref
+    ) => {
+      const t = useTranslations("craft.inputBar");
+      const entryMenuT = useTranslations("craft.entryMenu");
+      const baseRef = useRef<BaseInputBarHandle>(null);
+      const fileInputRef = useRef<HTMLInputElement>(null);
+      const router = useRouter();
+
+      const {
+        currentMessageFiles,
+        uploadFiles,
+        removeFile,
+        clearFiles,
+        hasUploadingFiles,
+      } = useUploadFilesContext();
+
+      const { data: skillsData } = useUserSkills();
+      const { data: appsData } = useUserExternalApps();
+      const { data: craftMcpData } = useCraftMcpServers();
+      const pickerSections = useMemo(
+        () => toPickerSections(skillsData, appsData, craftMcpData?.mcp_servers),
+        [skillsData, appsData, craftMcpData]
+      );
+
+      const { data: libraryTree, mutate: mutateLibrary } = useSWR(
+        SWR_KEYS.buildUserLibraryTree,
+        fetchLibraryTree
+      );
+      const libraryFiles = useMemo(
+        () =>
+          (libraryTree ?? [])
+            .filter((entry) => !entry.is_directory)
+            .map((entry) => ({ id: entry.id, name: entry.name })),
+        [libraryTree]
+      );
+      const [libraryModalOpen, setLibraryModalOpen] = useState(false);
+
+      const [activeEntries, setActiveEntries] = useState<PickerEntry[]>(
+        initialEntries ?? []
+      );
+      const [entryInfo, setEntryInfo] = useState<{
+        entry: PickerEntry;
+        chipEl: HTMLElement;
+      } | null>(null);
+      const dismissEntryInfo = useCallback(() => setEntryInfo(null), []);
+
+      const addEntry = useCallback(
+        (entry: PickerEntry) => {
+          const connectionPath = pickerEntryConnectionPath(entry);
+          if (connectionPath) {
+            router.push(connectionPath);
+            return;
+          }
+          setActiveEntries((prev) =>
+            prev.some(
+              (candidate) => pickerEntryKey(candidate) === pickerEntryKey(entry)
+            )
+              ? prev
+              : [...prev, entry]
+          );
+        },
+        [router]
+      );
+
+      const removeEntry = useCallback((entryKey: string) => {
+        setActiveEntries((prev) =>
+          prev.filter((entry) => pickerEntryKey(entry) !== entryKey)
+        );
+      }, []);
+
+      const slashPicker = useSlashPicker({
+        inputRef: baseRef,
+        onSelect: addEntry,
+      });
+
+      const interruptible = !!onInterrupt && isRunning;
+      const handleInterrupt = useCallback(() => {
+        if (interruptible && !isInterrupting) onInterrupt?.();
+      }, [interruptible, isInterrupting, onInterrupt]);
+
+      useEscapeInterrupt({
+        enabled:
+          interruptible && !isInterrupting && !slashPicker.open && !entryInfo,
+        onInterrupt: handleInterrupt,
+      });
+
+      useImperativeHandle(ref, () => ({
+        reset: () => {
+          baseRef.current?.reset();
+          setActiveEntries([]);
+          clearFiles();
+          slashPicker.reset();
+        },
+        focus: () => baseRef.current?.focus(),
+        setMessage: (msg: string) => baseRef.current?.setMessage(msg),
+      }));
+
+      const onPasteText = useCallback(
+        (text: string): boolean => {
+          const slug = text.trim().match(/^\/(\S+)$/)?.[1];
+          const entry = slug
+            ? (pickerSections.skills.find((entry) => entry.slug === slug) ??
+              null)
+            : null;
+          if (entry) {
+            addEntry(entry);
+            return true;
+          }
+          return false;
+        },
+        [pickerSections, addEntry]
+      );
+
+      const handleSubmit = useCallback(
+        (message: string) => {
+          onSubmit(
+            withEntryPrefixes(message, activeEntries),
+            currentMessageFiles
+          );
+          setActiveEntries([]);
+          clearFiles({ suppressRefetch: true });
+        },
+        [activeEntries, currentMessageFiles, onSubmit, clearFiles]
+      );
+
+      const handleQueueMessage = useCallback(
+        (message: string) => {
+          if (!onQueueMessage) return;
+          onQueueMessage(
+            withEntryPrefixes(message, activeEntries),
+            currentMessageFiles
+          );
+          setActiveEntries([]);
+          clearFiles({ suppressRefetch: true });
+        },
+        [activeEntries, currentMessageFiles, onQueueMessage, clearFiles]
+      );
+
+      // Always rendered so the strip can animate its own collapse/expand.
+      const topSlot = (
+        <InputChipStrip
+          files={currentMessageFiles}
+          entries={activeEntries}
+          onRemoveFile={removeFile}
+          onRemoveEntry={removeEntry}
+          onClickEntry={(entry, chipEl) => setEntryInfo({ entry, chipEl })}
+        />
+      );
+
+      const plusMenuItems = useMemo(
+        () =>
+          buildEntryMenuItems(
+            pickerSections,
+            {
+              onAttachFiles: () => fileInputRef.current?.click(),
+              onSelectEntry: addEntry,
+              onBrowseSkills: () => router.push("/craft/v1/skills"),
+              onBrowseApps: () => router.push("/craft/v1/apps"),
+              libraryFiles,
+              // Defer the modal until the + popover finishes closing, else it paints over it.
+              onManageLibrary: () =>
+                window.setTimeout(() => setLibraryModalOpen(true), 200),
+            },
+            entryMenuT
+          ),
+        [pickerSections, addEntry, libraryFiles, router, entryMenuT]
+      );
+
+      const bottomLeftSlot = (
+        <>
+          <PlusMenuButton
+            items={plusMenuItems}
+            disabled={disabled}
+            tooltip={t("plusMenu.tooltip")}
+          />
+          {interruptible && <InterruptHint interrupting={isInterrupting} />}
+        </>
+      );
+
+      const bottomRightSlot = contextUsage ? (
+        <ContextRing
+          usedTokens={contextUsage.usedTokens}
+          contextLimit={contextUsage.contextLimit}
+        />
+      ) : undefined;
+
+      return (
+        <>
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            multiple
+            onChange={(e) => {
+              const files = e.target.files;
+              if (files && files.length > 0) uploadFiles(Array.from(files));
+              e.target.value = "";
+            }}
+          />
+          <BaseInputBar
+            ref={baseRef}
+            onSubmit={handleSubmit}
+            isRunning={isRunning}
+            disabled={disabled}
+            placeholder={placeholder}
+            noBottomRounding={noBottomRounding}
+            pasteTilesEnabled
+            sandboxInitializing={sandboxInitializing}
+            submitBlocked={hasUploadingFiles}
+            queuedMessages={queuedMessages}
+            onQueueMessage={onQueueMessage ? handleQueueMessage : undefined}
+            onRemoveQueuedMessage={onRemoveQueuedMessage}
+            onInterrupt={onInterrupt}
+            isInterrupting={isInterrupting}
+            topSlot={topSlot}
+            bottomLeftSlot={bottomLeftSlot}
+            bottomRightSlot={bottomRightSlot}
+            onPasteText={onPasteText}
+            onPasteFiles={uploadFiles}
+            onInputCallback={slashPicker.onInput}
+            onSelectionChange={slashPicker.onSelectionChange}
+          />
+          <EntryPickerPopover
+            open={slashPicker.open}
+            anchorRect={slashPicker.anchorRect}
+            query={slashPicker.query}
+            sections={pickerSections}
+            onSelect={slashPicker.onSelect}
+            onClose={slashPicker.onClose}
+          />
+          {entryInfo && (
+            <EntryInfoPopover
+              name={entryInfo.entry.name}
+              description={
+                entryInfo.entry.kind === "skill"
+                  ? entryInfo.entry.description
+                  : entryInfo.entry.authenticated
+                    ? t("entryInfo.connected")
+                    : t("entryInfo.connectionRequired")
+              }
+              tileElement={entryInfo.chipEl}
+              onDismiss={dismissEntryInfo}
+            />
+          )}
+          <UserLibraryModal
+            open={libraryModalOpen}
+            onClose={() => setLibraryModalOpen(false)}
+            onChanges={() => mutateLibrary()}
+          />
+        </>
+      );
+    }
+  )
+);
+
+CraftInputBar.displayName = "CraftInputBar";
+
+export default CraftInputBar;

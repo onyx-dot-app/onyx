@@ -8,7 +8,7 @@ Parameters:
     Default: production
   VpcID:
     Type: String
-    Default: vpc-0f230ca52bb04c722 
+    Description: "The ID of the VPC to deploy into"
   SubnetIDs:
     Type: CommaDelimitedList
     Description: "Comma-delimited list of at least two subnet IDs in different Availability Zones"

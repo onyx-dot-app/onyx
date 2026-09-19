@@ -22,19 +22,17 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.chat.emitter import Emitter
-from onyx.db.enums import MCPAuthenticationPerformer
-from onyx.db.enums import MCPAuthenticationType
-from onyx.db.enums import MCPTransport
+from onyx.db.enums import (
+    MCPAuthenticationPerformer,
+    MCPAuthenticationType,
+    MCPTransport,
+)
 from onyx.db.mcp import create_mcp_server__no_commit
-from onyx.db.models import OAuthAccount
-from onyx.db.models import Persona
-from onyx.db.models import Tool
-from onyx.db.models import User
+from onyx.db.models import OAuthAccount, Persona, Tool, User
 from onyx.llm.factory import get_default_llm
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.models import CustomToolCallSummary
-from onyx.tools.tool_constructor import construct_tools
-from onyx.tools.tool_constructor import SearchToolConfig
+from onyx.tools.tool_constructor import SearchToolConfig, construct_tools
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
 from tests.external_dependency_unit.conftest import create_test_user
@@ -475,18 +473,16 @@ class TestMCPPassThroughOAuth:
         # (code should work identically for Google OAuth and OIDC)
         assert mcp_tool._user_oauth_token == oidc_access_token
 
-    def test_pt_oauth_uses_first_oauth_account(self, db_session: Session) -> None:
+    def test_pt_oauth_uses_latest_oauth_account(self, db_session: Session) -> None:
         """
-        Test that PT_OAUTH uses the first OAuth account when user has multiple.
-
-        Users might have OAuth accounts from multiple providers (unlikely but possible).
-        The code should consistently use the first one.
+        Test that PT_OAUTH forwards the most recently issued token when a user
+        holds several OAuth accounts, whatever order the rows come back in.
         """
         user = create_test_user(db_session, "multi_oauth_user")
         first_token = "first_oauth_token_123"
         second_token = "second_oauth_token_456"
 
-        # Add first OAuth account (Google)
+        # The first row holds the older token.
         oauth_account_1 = OAuthAccount(
             user_id=user.id,
             oauth_name="google",
@@ -494,11 +490,12 @@ class TestMCPPassThroughOAuth:
             account_email=user.email,
             access_token=first_token,
             refresh_token="",
+            expires_at=1_000,
         )
         db_session.add(oauth_account_1)
         db_session.commit()
 
-        # Add second OAuth account (OIDC)
+        # The second row holds the newer token.
         oauth_account_2 = OAuthAccount(
             user_id=user.id,
             oauth_name="openid",
@@ -506,6 +503,7 @@ class TestMCPPassThroughOAuth:
             account_email=user.email,
             access_token=second_token,
             refresh_token="",
+            expires_at=2_000,
         )
         db_session.add(oauth_account_2)
         db_session.commit()
@@ -551,5 +549,5 @@ class TestMCPPassThroughOAuth:
         mcp_tool = tool_dict[mcp_tool_db.id][0]
         assert isinstance(mcp_tool, MCPTool)
 
-        # Should use the first OAuth account's token
-        assert mcp_tool._user_oauth_token == first_token
+        # The later expiry wins over row order.
+        assert mcp_tool._user_oauth_token == second_token

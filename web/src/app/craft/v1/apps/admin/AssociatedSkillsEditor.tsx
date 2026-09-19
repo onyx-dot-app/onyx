@@ -1,0 +1,348 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
+import {
+  Button,
+  Card,
+  InputTypeIn,
+  LineItemButton,
+  Popover,
+  Tag,
+  Text,
+} from "@opal/components";
+import { SvgCheck, SvgEdit, SvgPlus, SvgUploadCloud, SvgX } from "@opal/icons";
+import { SvgGithub } from "@opal/logos";
+import useUserSkills from "@/hooks/useUserSkills";
+import type { Skill } from "@/lib/skills/types";
+import type { ExternalAppAdminResponse } from "@/app/craft/v1/apps/registry";
+
+interface AssociatedSkillsEditorProps {
+  app: ExternalAppAdminResponse;
+  selectedSkillIds: string[];
+  onChange: (skillIds: string[]) => void;
+  onOpenSkill: (skillId: string) => void;
+  onCreateSkill: () => void;
+  onUploadSkill: () => void;
+}
+
+interface PendingUnlink {
+  id: string;
+  name: string;
+}
+
+export default function AssociatedSkillsEditor({
+  app,
+  selectedSkillIds,
+  onChange,
+  onOpenSkill,
+  onCreateSkill,
+  onUploadSkill,
+}: AssociatedSkillsEditorProps) {
+  const t = useTranslations("craft.apps.associatedSkills");
+  const { data, isLoading } = useUserSkills();
+  const [query, setQuery] = useState("");
+  const [associateOpen, setAssociateOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [pendingPromotion, setPendingPromotion] = useState<Skill | null>(null);
+  const [pendingUnlink, setPendingUnlink] = useState<PendingUnlink | null>(
+    null
+  );
+  const customSkills = data?.customs ?? [];
+  const customSkillById = useMemo(
+    () => new Map(customSkills.map((skill) => [skill.id, skill])),
+    [customSkills]
+  );
+  const selectedIds = useMemo(
+    () => new Set(selectedSkillIds),
+    [selectedSkillIds]
+  );
+  const selectedNames = useMemo(
+    () =>
+      new Set(
+        selectedSkillIds.flatMap((skillId) => {
+          const name =
+            customSkillById.get(skillId)?.name ??
+            app.associated_skills.find((skill) => skill.id === skillId)?.name;
+          return name ? [name] : [];
+        })
+      ),
+    [app.associated_skills, customSkillById, selectedSkillIds]
+  );
+  const selectableSkills = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return customSkills
+      .filter(
+        (skill) =>
+          skill.user_permission === "OWNER" ||
+          skill.user_permission === "EDITOR"
+      )
+      .filter(
+        (skill) =>
+          normalizedQuery.length === 0 ||
+          skill.name.toLowerCase().includes(normalizedQuery) ||
+          skill.description.toLowerCase().includes(normalizedQuery)
+      );
+  }, [app.id, customSkills, query]);
+  function unavailableReason(skill: Skill): string | null {
+    if (skill.is_valid === false) {
+      return t("unavailable.invalid");
+    }
+    if (
+      skill.external_app !== null &&
+      skill.external_app.external_app_id !== app.id
+    ) {
+      return t("unavailable.otherApp", { name: skill.external_app.name });
+    }
+    if (!selectedIds.has(skill.id) && selectedNames.has(skill.name)) {
+      return t("unavailable.duplicateName", { name: skill.name });
+    }
+    return null;
+  }
+  function select(skill: Skill) {
+    if (unavailableReason(skill)) return;
+    if (selectedIds.has(skill.id)) {
+      setPendingUnlink(skill);
+      setAssociateOpen(false);
+      return;
+    }
+    if (skill.public_permission === null) {
+      setPendingPromotion(skill);
+      return;
+    }
+    onChange([...selectedSkillIds, skill.id]);
+    setAssociateOpen(false);
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-0.5">
+          <Text font="main-ui-action">{t("title")}</Text>
+          <Text font="secondary-body" color="text-03">
+            {t("description")}
+          </Text>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <Popover
+            modal
+            open={associateOpen}
+            onOpenChange={(open) => {
+              setAssociateOpen(open);
+              if (!open) setPendingPromotion(null);
+            }}
+          >
+            <Popover.Trigger asChild>
+              <Button prominence="secondary">{t("associateButton")}</Button>
+            </Popover.Trigger>
+            <Popover.Content align="end" sideOffset={4} width="xl">
+              <div className="flex max-h-[min(20rem,calc(var(--radix-popover-content-available-height)-0.5rem))] flex-col gap-2 overflow-hidden p-2">
+                <InputTypeIn
+                  searchIcon
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder={t("search.placeholder")}
+                  variant="internal"
+                />
+                <div className="flex min-h-0 flex-col gap-1 overflow-y-auto overscroll-contain">
+                  {isLoading ? (
+                    <Text font="secondary-body" color="text-03">
+                      {t("loading.label")}
+                    </Text>
+                  ) : selectableSkills.length === 0 ? (
+                    <Text font="secondary-body" color="text-03">
+                      {t("empty.label")}
+                    </Text>
+                  ) : (
+                    selectableSkills.map((skill) => {
+                      const disabledReason = unavailableReason(skill);
+                      return (
+                        <LineItemButton
+                          key={skill.id}
+                          sizePreset="main-ui"
+                          variant="section"
+                          title={skill.name}
+                          onClick={() => select(skill)}
+                          description={disabledReason ?? skill.description}
+                          // Skill descriptions are user-authored, so cap the
+                          // row rather than let one grow the popover.
+                          descriptionMaxLines={1}
+                          disabled={disabledReason !== null}
+                          state={
+                            selectedIds.has(skill.id) ? "selected" : "empty"
+                          }
+                          rightChildren={
+                            selectedIds.has(skill.id) ? (
+                              <SvgCheck className="size-4 stroke-action-selection-05" />
+                            ) : undefined
+                          }
+                          aria-label={t("associateAriaLabel", {
+                            name: skill.name,
+                          })}
+                        />
+                      );
+                    })
+                  )}
+                </div>
+                {pendingPromotion && (
+                  <div className="flex flex-col gap-2 border-t border-border-01 pt-2">
+                    <Text font="main-ui-action">
+                      {t("promote.title", { name: pendingPromotion.name })}
+                    </Text>
+                    <Text font="secondary-body" color="text-03">
+                      {t("promote.description")}
+                    </Text>
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        prominence="secondary"
+                        onClick={() => setPendingPromotion(null)}
+                      >
+                        {t("promote.cancelButton")}
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          onChange([...selectedSkillIds, pendingPromotion.id]);
+                          setPendingPromotion(null);
+                          setAssociateOpen(false);
+                        }}
+                      >
+                        {t("promote.confirmButton")}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Popover.Content>
+          </Popover>
+          <Popover modal open={createOpen} onOpenChange={setCreateOpen}>
+            <Popover.Trigger asChild>
+              <Button icon={SvgPlus}>{t("createSkillButton")}</Button>
+            </Popover.Trigger>
+            <Popover.Content align="end" sideOffset={4} width="lg">
+              <Popover.Menu>
+                <LineItemButton
+                  sizePreset="main-ui"
+                  variant="section"
+                  icon={SvgEdit}
+                  title={t("create.scratch.label")}
+                  onClick={() => {
+                    setCreateOpen(false);
+                    onCreateSkill();
+                  }}
+                  description={t("create.scratch.description")}
+                />
+                <LineItemButton
+                  sizePreset="main-ui"
+                  variant="section"
+                  icon={SvgUploadCloud}
+                  title={t("create.upload.label")}
+                  onClick={() => {
+                    setCreateOpen(false);
+                    onUploadSkill();
+                  }}
+                  description={t("create.upload.description")}
+                />
+                <LineItemButton
+                  sizePreset="main-ui"
+                  variant="section"
+                  icon={SvgGithub}
+                  title={t("create.github.label")}
+                  disabled
+                  description={t("create.github.description")}
+                />
+              </Popover.Menu>
+            </Popover.Content>
+          </Popover>
+        </div>
+      </div>
+
+      {selectedSkillIds.length === 0 ? (
+        <Card border="solid" rounding={4} padding={2}>
+          <Text font="secondary-body" color="text-03">
+            {t("noneAssociated.label")}
+          </Text>
+        </Card>
+      ) : (
+        <Card border="solid" rounding={2} padding={0}>
+          <div className="flex max-h-48 flex-col divide-y divide-border-01 overflow-y-auto overscroll-contain">
+            {selectedSkillIds.map((skillId) => {
+              const skill = customSkillById.get(skillId);
+              const canEdit =
+                skill?.user_permission === "OWNER" ||
+                skill?.user_permission === "EDITOR";
+              const summary = app.associated_skills.find(
+                (candidate) => candidate.id === skillId
+              );
+              const name = skill?.name ?? summary?.name;
+              if (!name) return null;
+              if (pendingUnlink?.id === skillId) {
+                return (
+                  <div
+                    key={skillId}
+                    className="flex min-h-9 items-center gap-2 px-2 py-1"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <Text font="secondary-body">
+                        {t("unlink.confirm", { name: pendingUnlink.name })}
+                      </Text>
+                    </div>
+                    <Button
+                      size="md"
+                      prominence="secondary"
+                      onClick={() => setPendingUnlink(null)}
+                    >
+                      {t("unlink.cancelButton")}
+                    </Button>
+                    <Button
+                      size="md"
+                      onClick={() => {
+                        onChange(
+                          selectedSkillIds.filter(
+                            (selectedSkillId) =>
+                              selectedSkillId !== pendingUnlink.id
+                          )
+                        );
+                        setPendingUnlink(null);
+                      }}
+                    >
+                      {t("unlink.button")}
+                    </Button>
+                  </div>
+                );
+              }
+              return (
+                <div
+                  key={skillId}
+                  className="flex min-h-9 items-center gap-1 px-2 py-1"
+                >
+                  <div className="min-w-0 flex-1">
+                    <Text font="main-ui-action">{name}</Text>
+                  </div>
+                  {(skill?.is_valid ?? summary?.is_valid) === false && (
+                    <Tag title={t("invalidTag")} color="amber" />
+                  )}
+                  <Button
+                    size="md"
+                    prominence="tertiary"
+                    onClick={() => onOpenSkill(skillId)}
+                  >
+                    {canEdit ? t("editButton") : t("viewButton")}
+                  </Button>
+                  <Button
+                    size="md"
+                    prominence="tertiary"
+                    icon={SvgX}
+                    aria-label={t("unlinkAriaLabel", { name })}
+                    onClick={() => {
+                      setPendingUnlink({ id: skillId, name });
+                    }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}

@@ -1,14 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
+import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
+import { Button, Popover, Text } from "@opal/components";
 import { SvgLink, SvgCopy, SvgCheck, SvgX } from "@opal/icons";
 import { setSessionSharing } from "@/app/craft/services/apiServices";
 import type { SharingScope } from "@/app/craft/types/streamingTypes";
 import { cn } from "@opal/utils";
-import { Popover } from "@opal/components";
-import Truncated from "@/refresh-components/texts/Truncated";
 import { Section } from "@/layouts/general-layouts";
 import { ContentAction } from "@opal/layouts";
 
@@ -19,29 +17,30 @@ interface ShareButtonProps {
   onScopeChange?: () => void;
 }
 
-const SCOPE_OPTIONS: {
-  value: SharingScope;
-  label: string;
-  description: string;
-}[] = [
-  {
-    value: "private",
-    label: "Private",
-    description: "Only you can view this app.",
-  },
-  {
-    value: "public_org",
-    label: "Organization",
-    description: "Anyone logged into your Onyx can view this app.",
-  },
-];
-
 export default function ShareButton({
   sessionId,
   webappUrl,
   sharingScope: initialScope,
   onScopeChange,
 }: ShareButtonProps) {
+  const t = useTranslations("craft.share");
+  const scopeOptions = useMemo<
+    { value: SharingScope; label: string; description: string }[]
+  >(
+    () => [
+      {
+        value: "private",
+        label: t("private.label"),
+        description: t("private.description"),
+      },
+      {
+        value: "public_org",
+        label: t("organization.label"),
+        description: t("organization.description"),
+      },
+    ],
+    [t]
+  );
   const [isOpen, setIsOpen] = useState(false);
   const [sharingScope, setSharingScope] = useState<SharingScope>(initialScope);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">(
@@ -101,22 +100,22 @@ export default function ShareButton({
             variant="action"
             prominence={isShared ? "primary" : "tertiary"}
             icon={SvgLink}
-            aria-label="Share webapp"
+            aria-label={t("trigger.ariaLabel")}
           >
-            {isShared ? "Shared" : "Share"}
+            {isShared ? t("shared.label") : t("share.label")}
           </Button>
         </Popover.Trigger>
         <Popover.Content side="bottom" align="end" width="lg" sideOffset={4}>
           <Section
             alignItems="stretch"
-            gap={0.25}
-            padding={0.25}
+            gap={1}
+            padding={1}
             width="full"
             height="fit"
           >
             {/* Scope options */}
-            <Section alignItems="stretch" gap={0.25} width="full">
-              {SCOPE_OPTIONS.map((opt) => (
+            <Section alignItems="stretch" gap={1} width="full">
+              {scopeOptions.map((opt) => (
                 <div
                   key={opt.value}
                   role="button"
@@ -138,7 +137,7 @@ export default function ShareButton({
                     description={opt.description}
                     sizePreset="main-ui"
                     variant="section"
-                    padding="sm"
+                    padding={1}
                   />
                 </div>
               ))}
@@ -150,15 +149,15 @@ export default function ShareButton({
                 <Section
                   flexDirection="row"
                   alignItems="center"
-                  gap={0.25}
-                  padding={0.25}
+                  gap={1}
+                  padding={1}
                   width="full"
                   height="fit"
                 >
                   <div className="min-w-0 flex-1 overflow-hidden">
-                    <Truncated secondaryBody text03>
+                    <Text font="secondary-body" color="text-03" maxLines={1}>
                       {shareUrl}
-                    </Truncated>
+                    </Text>
                   </div>
                   <Button
                     variant="action"
@@ -172,7 +171,7 @@ export default function ShareButton({
                           : SvgCopy
                     }
                     onClick={handleCopy}
-                    aria-label="Copy link"
+                    aria-label={t("copyLink.ariaLabel")}
                   />
                 </Section>
               </div>

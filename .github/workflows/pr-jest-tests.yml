@@ -6,9 +6,6 @@ concurrency:
 on:
   merge_group:
   pull_request:
-    branches:
-      - main
-      - "release/**"
   push:
     tags:
       - "v*.*.*"
@@ -20,10 +17,10 @@ jobs:
   jest-tests:
     name: Jest Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 10
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 

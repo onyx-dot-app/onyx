@@ -28,30 +28,30 @@ Use SelectButton for general-purpose stateful toggles. Use `OpenButton` for popo
 ```
 Interactive.Stateful           <- variant, state, interaction, disabled, onClick
   └─ Interactive.Container     <- height, rounding, padding (from `size`)
-       └─ div.opal-select-button.interactive-foreground
+       └─ div.opal-select-content.interactive-foreground
             ├─ Icon?           (interactive-foreground-icon)
             ├─ [Foldable]?     (wraps label + rightIcon when foldable)
-            │    ├─ <span>     .opal-select-button-label
+            │    ├─ <span>     .opal-select-content-label
             │    └─ RightIcon?
             └─ <span>? / RightIcon?  (non-foldable)
 ```
 
 ## Props
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `variant` | `"select-light" \| "select-heavy" \| "sidebar"` | `"select-heavy"` | Stateful color variant |
-| `state` | `"empty" \| "filled" \| "selected"` | `"empty"` | Current value state |
-| `interaction` | `"rest" \| "hover" \| "active"` | `"rest"` | JS-controlled interaction override |
-| `icon` | `IconFunctionComponent` | — | Left icon |
-| `children` | `string` | — | Label text |
-| `rightIcon` | `IconFunctionComponent` | — | Right icon |
-| `foldable` | `boolean` | `false` | When `true`, label + rightIcon collapse when not hovered |
-| `size` | `SizeVariant` | `"lg"` | Size preset |
-| `width` | `WidthVariant` | — | Width preset |
-| `tooltip` | `string` | — | Tooltip text |
-| `tooltipSide` | `TooltipSide` | `"top"` | Tooltip placement |
-| `disabled` | `boolean` | `false` | Disables the button |
+| Prop          | Type                                            | Default          | Description                                              |
+| ------------- | ----------------------------------------------- | ---------------- | -------------------------------------------------------- |
+| `variant`     | `"select-light" \| "select-heavy" \| "sidebar"` | `"select-heavy"` | Stateful color variant                                   |
+| `state`       | `"empty" \| "filled" \| "selected"`             | `"empty"`        | Current value state                                      |
+| `interaction` | `"rest" \| "hover" \| "active"`                 | `"rest"`         | JS-controlled interaction override                       |
+| `icon`        | `IconFunctionComponent`                         | —                | Left icon                                                |
+| `children`    | `string`                                        | —                | Label text                                               |
+| `rightIcon`   | `IconFunctionComponent`                         | —                | Right icon                                               |
+| `foldable`    | `boolean`                                       | `false`          | When `true`, label + rightIcon collapse when not hovered |
+| `size`        | `SizeVariant`                                   | `"lg"`           | Size preset                                              |
+| `width`       | `WidthVariant`                                  | —                | Width preset                                             |
+| `tooltip`     | `string`                                        | —                | Tooltip text                                             |
+| `tooltipSide` | `TooltipSide`                                   | `"top"`          | Tooltip placement                                        |
+| `disabled`    | `boolean`                                       | `false`          | Disables the button                                      |
 
 ## Usage
 

@@ -90,8 +90,18 @@ class ProductGatingResponse(BaseModel):
     error: str | None
 
 
+class StripeCheckoutSessionResult(BaseModel):
+    # url is always set on success; sessionId is null for the past_due/unpaid
+    # payment-method-update portal response.
+    session_id: str | None = None
+    url: str | None = None
+    requires_payment_method_update: bool = False
+
+
 class SubscriptionSessionResponse(BaseModel):
-    sessionId: str
+    sessionId: str | None = None
+    url: str | None = None
+    requires_payment_method_update: bool = False
 
 
 class CreateSubscriptionSessionRequest(BaseModel):

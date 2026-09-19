@@ -1,11 +1,9 @@
 from typing import Any
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
-from shared_configs.enums import WebContentProviderType
-from shared_configs.enums import WebSearchProviderType
+from shared_configs.enums import WebContentProviderType, WebSearchProviderType
 
 
 class WebSearchProviderView(BaseModel):

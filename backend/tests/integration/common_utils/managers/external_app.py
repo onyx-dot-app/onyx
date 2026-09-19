@@ -1,10 +1,14 @@
 from typing import Any
 
-from onyx.db.enums import ExternalAppType
-from onyx.server.features.build.api.models import ExternalAppAdminResponse
-from onyx.server.features.build.api.models import ExternalAppUserResponse
-from onyx.server.features.build.api.models import UpsertExternalAppRequest
-from onyx.server.features.build.api.models import UpsertUserCredentialsRequest
+from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.server.features.build.external_apps.models import (
+    CreateBuiltInExternalAppRequest,
+    CreateCustomExternalAppRequest,
+    ExternalAppAdminResponse,
+    ExternalAppUserResponse,
+    UpdateExternalAppRequest,
+    UpsertUserCredentialsRequest,
+)
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
@@ -23,23 +27,21 @@ class ExternalAppManager:
     def create(
         user_performing_action: DATestUser,
         name: str,
-        description: str,
         upstream_url_patterns: list[str],
         auth_template: dict[str, Any],
         organization_credentials: dict[str, Any],
-        enabled: bool = True,
         app_type: ExternalAppType = ExternalAppType.CUSTOM,
+        action_policies: dict[str, EndpointPolicy] | None = None,
     ) -> ExternalAppAdminResponse:
         return ExternalAppManager._upsert(
             user_performing_action,
             None,
             name,
-            description,
             app_type,
             upstream_url_patterns,
             auth_template,
             organization_credentials,
-            enabled,
+            action_policies,
         )
 
     @staticmethod
@@ -47,23 +49,21 @@ class ExternalAppManager:
         user_performing_action: DATestUser,
         app_id: int,
         name: str,
-        description: str,
         upstream_url_patterns: list[str],
         auth_template: dict[str, Any],
         organization_credentials: dict[str, Any],
-        enabled: bool = True,
         app_type: ExternalAppType = ExternalAppType.CUSTOM,
+        action_policies: dict[str, EndpointPolicy] | None = None,
     ) -> ExternalAppAdminResponse:
         return ExternalAppManager._upsert(
             user_performing_action,
             app_id,
             name,
-            description,
             app_type,
             upstream_url_patterns,
             auth_template,
             organization_credentials,
-            enabled,
+            action_policies,
         )
 
     @staticmethod
@@ -71,31 +71,74 @@ class ExternalAppManager:
         user_performing_action: DATestUser,
         app_id: int | None,
         name: str,
-        description: str,
         app_type: ExternalAppType,
         upstream_url_patterns: list[str],
         auth_template: dict[str, Any],
         organization_credentials: dict[str, Any],
-        enabled: bool,
+        action_policies: dict[str, EndpointPolicy] | None = None,
     ) -> ExternalAppAdminResponse:
-        body = UpsertExternalAppRequest(
-            id=app_id,
+        # Update (``app_id`` set) is type-agnostic — the JSON PATCH edits fields
+        # for built-in and custom apps alike. Create routes by app type.
+        if app_id is not None:
+            update_body = UpdateExternalAppRequest(
+                name=name,
+                upstream_url_patterns=upstream_url_patterns,
+                auth_template=auth_template,
+                organization_credentials=organization_credentials,
+                action_policies=action_policies,
+            )
+            response = client.patch(
+                f"{_BUILD_PREFIX}/admin/apps/{app_id}",
+                json=update_body.model_dump(mode="json"),
+                headers=user_performing_action.headers,
+                cookies=user_performing_action.cookies,
+            )
+        elif app_type == ExternalAppType.CUSTOM:
+            response = ExternalAppManager._create_custom(
+                user_performing_action,
+                name,
+                upstream_url_patterns,
+                auth_template,
+                organization_credentials,
+            )
+        else:
+            create_body = CreateBuiltInExternalAppRequest(
+                name=name,
+                app_type=app_type,
+                upstream_url_patterns=upstream_url_patterns,
+                auth_template=auth_template,
+                organization_credentials=organization_credentials,
+                action_policies=action_policies,
+            )
+            response = client.post(
+                f"{_BUILD_PREFIX}/admin/apps/built-in",
+                json=create_body.model_dump(mode="json"),
+                headers=user_performing_action.headers,
+                cookies=user_performing_action.cookies,
+            )
+        response.raise_for_status()
+        return ExternalAppAdminResponse.model_validate(response.json())
+
+    @staticmethod
+    def _create_custom(
+        user_performing_action: DATestUser,
+        name: str,
+        upstream_url_patterns: list[str],
+        auth_template: dict[str, Any],
+        organization_credentials: dict[str, Any],
+    ) -> Any:
+        body = CreateCustomExternalAppRequest(
             name=name,
-            description=description,
-            app_type=app_type,
             upstream_url_patterns=upstream_url_patterns,
             auth_template=auth_template,
             organization_credentials=organization_credentials,
-            enabled=enabled,
         )
-        response = client.post(
-            f"{_BUILD_PREFIX}/admin/apps",
+        return client.post(
+            f"{_BUILD_PREFIX}/admin/apps/custom",
             json=body.model_dump(mode="json"),
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
         )
-        response.raise_for_status()
-        return ExternalAppAdminResponse.model_validate(response.json())
 
     @staticmethod
     def list_admin(
@@ -108,6 +151,21 @@ class ExternalAppManager:
         )
         response.raise_for_status()
         return [ExternalAppAdminResponse.model_validate(row) for row in response.json()]
+
+    @staticmethod
+    def set_enabled(
+        user_performing_action: DATestUser,
+        app_id: int,
+        enabled: bool,
+    ) -> ExternalAppAdminResponse:
+        response = client.patch(
+            f"{_BUILD_PREFIX}/admin/apps/{app_id}",
+            json={"enabled": enabled},
+            headers=user_performing_action.headers,
+            cookies=user_performing_action.cookies,
+        )
+        response.raise_for_status()
+        return ExternalAppAdminResponse.model_validate(response.json())
 
     @staticmethod
     def delete(user_performing_action: DATestUser, app_id: int) -> None:

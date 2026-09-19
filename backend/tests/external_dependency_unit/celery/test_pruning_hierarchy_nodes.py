@@ -22,31 +22,34 @@ from sqlalchemy.orm import Session
 from onyx.access.models import ExternalAccess
 from onyx.background.celery.celery_utils import extract_ids_from_runnable_connector
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnectorWithPermSync
+from onyx.connectors.interfaces import (
+    GenerateSlimDocumentOutput,
+    SecondsSinceUnixEpoch,
+    SlimConnectorWithPermSync,
+)
 from onyx.connectors.models import HierarchyNode as PydanticHierarchyNode
-from onyx.connectors.models import InputType
-from onyx.connectors.models import SlimDocument
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import HierarchyNodeType
-from onyx.db.hierarchy import delete_orphaned_hierarchy_nodes
-from onyx.db.hierarchy import ensure_source_node_exists
-from onyx.db.hierarchy import get_all_hierarchy_nodes_for_source
-from onyx.db.hierarchy import get_hierarchy_node_by_raw_id
-from onyx.db.hierarchy import link_hierarchy_nodes_to_documents
-from onyx.db.hierarchy import remove_stale_hierarchy_node_cc_pair_entries
-from onyx.db.hierarchy import reparent_orphaned_hierarchy_nodes
-from onyx.db.hierarchy import update_document_parent_hierarchy_nodes
-from onyx.db.hierarchy import upsert_hierarchy_node_cc_pair_entries
-from onyx.db.hierarchy import upsert_hierarchy_nodes_batch
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
+from onyx.connectors.models import InputType, SlimDocument
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus, HierarchyNodeType
+from onyx.db.hierarchy import (
+    delete_orphaned_hierarchy_nodes,
+    ensure_source_node_exists,
+    get_all_hierarchy_nodes_for_source,
+    get_hierarchy_node_by_raw_id,
+    link_hierarchy_nodes_to_documents,
+    remove_stale_hierarchy_node_cc_pair_entries,
+    reparent_orphaned_hierarchy_nodes,
+    update_document_parent_hierarchy_nodes,
+    upsert_hierarchy_node_cc_pair_entries,
+    upsert_hierarchy_nodes_batch,
+)
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    Credential,
+    HierarchyNodeByConnectorCredentialPair,
+)
 from onyx.db.models import Document as DbDocument
 from onyx.db.models import HierarchyNode as DBHierarchyNode
-from onyx.db.models import HierarchyNodeByConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.kg.models import KGStage
 
@@ -451,6 +454,44 @@ def test_pruning_hierarchy_node_upsert_updates_fields(db_session: Session) -> No
     assert db_node.is_public is True
     assert db_node.external_user_emails is not None
     assert set(db_node.external_user_emails) == {"new_user@example.com"}
+
+
+def test_pruning_hierarchy_node_upsert_preserves_unspecified_access(
+    db_session: Session,
+) -> None:
+    _cleanup_test_data(db_session)
+    ensure_source_node_exists(db_session, TEST_SOURCE, commit=True)
+    access = ExternalAccess(
+        external_user_emails={"user@example.com"},
+        external_user_group_ids={"external_group"},
+        is_public=False,
+    )
+    node = PydanticHierarchyNode(
+        raw_node_id=CHANNEL_A_ID,
+        display_name=CHANNEL_A_NAME,
+        node_type=HierarchyNodeType.CHANNEL,
+        external_access=access,
+    )
+    upsert_hierarchy_nodes_batch(
+        db_session,
+        [node],
+        TEST_SOURCE,
+        commit=True,
+    )
+
+    node.external_access = None
+    upsert_hierarchy_nodes_batch(
+        db_session,
+        [node],
+        TEST_SOURCE,
+        commit=True,
+    )
+
+    db_node = get_hierarchy_node_by_raw_id(db_session, CHANNEL_A_ID, TEST_SOURCE)
+    assert db_node is not None
+    assert db_node.external_user_emails == ["user@example.com"]
+    assert db_node.external_user_group_ids == ["external_group"]
+    assert db_node.is_public is False
 
 
 # ---------------------------------------------------------------------------

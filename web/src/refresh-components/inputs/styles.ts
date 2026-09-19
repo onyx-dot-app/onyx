@@ -19,7 +19,7 @@ export const wrapperClasses: ClassNamesMap = {
 
 export const innerClasses: ClassNamesMap = {
   primary:
-    "text-text-04 placeholder:!font-secondary-body placeholder:text-text-02",
+    "text-text-04 placeholder:!font-main-ui-muted placeholder:text-text-02",
   internal: null,
   error: null,
   disabled: "text-text-02",

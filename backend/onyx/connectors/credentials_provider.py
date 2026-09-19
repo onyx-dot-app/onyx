@@ -5,10 +5,13 @@ from typing import Any
 from redis.lock import Lock as RedisLock
 from sqlalchemy import select
 
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import CredentialsProviderInterface
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import Credential
 from onyx.redis.redis_pool import get_redis_client
+from onyx.utils.credential_audit import emit_credential_access
+from shared_configs.contextvars import get_current_tenant_id
 
 
 class OnyxDBCredentialsProvider(
@@ -67,6 +70,13 @@ class OnyxDBCredentialsProvider(
 
             if credential.credential_json is None:
                 return {}
+
+            # Audit the connector credential decrypt (best-effort, never raises).
+            emit_credential_access(
+                credential_type="connector",
+                provider=self._connector_name,
+                row_id=self._credential_id,
+            )
             return credential.credential_json.get_value(apply_mask=False)
 
     def set_credentials(self, credential_json: dict[str, Any]) -> None:
@@ -93,6 +103,24 @@ class OnyxDBCredentialsProvider(
 
     def is_dynamic(self) -> bool:
         return True
+
+
+def build_db_credentials_provider(
+    source: DocumentSource, credential_id: int
+) -> OnyxDBCredentialsProvider:
+    """Builds the DB-backed provider for a persisted credential.
+
+    ``instantiate_connector`` and source-operation gateways route through this
+    one site so the decrypt-audit, refresh write-back, and rotation-lock
+    guarantees stay uniform. ``str(source)`` (the historical
+    ``DocumentSource.X`` form, not ``source.value``) feeds the rotation lock
+    key. EE perm-sync code still builds ``source.value``-keyed providers inline;
+    connector migration reroutes those through the gateway and thus through
+    here.
+    """
+    return OnyxDBCredentialsProvider(
+        get_current_tenant_id(), str(source), credential_id
+    )
 
 
 class OnyxStaticCredentialsProvider(

@@ -10,7 +10,6 @@ best-effort deletes the underlying files after the DB commit.
 """
 
 from collections.abc import Generator
-from unittest.mock import MagicMock
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -18,20 +17,24 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.tasks.shared.tasks import document_by_cc_pair_cleanup_task
-from onyx.connectors.models import Document
-from onyx.connectors.models import IndexAttemptMetadata
-from onyx.db.document import delete_all_documents_for_connector_credential_pair
-from onyx.db.document import upsert_document_by_connector_credential_pair
+from onyx.connectors.models import Document, IndexAttemptMetadata
+from onyx.db.document import (
+    delete_all_documents_for_connector_credential_pair,
+    upsert_document_by_connector_credential_pair,
+)
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
 from onyx.server.onyx_api.ingestion import delete_ingestion_doc
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
-from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
-from tests.external_dependency_unit.indexing_helpers import get_doc_row
-from tests.external_dependency_unit.indexing_helpers import get_filerecord
-from tests.external_dependency_unit.indexing_helpers import make_cc_pair
-from tests.external_dependency_unit.indexing_helpers import make_doc
-from tests.external_dependency_unit.indexing_helpers import stage_file
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.indexing_helpers import (
+    cleanup_cc_pair,
+    get_doc_row,
+    get_filerecord,
+    make_cc_pair,
+    make_doc,
+    stage_file,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers (file-local)
@@ -186,7 +189,8 @@ class TestDeleteIngestionDoc:
         ):
             delete_ingestion_doc(
                 document_id=doc.id,
-                _=MagicMock(),  # auth dep — not used by the function body
+                # a real admin: the body now feeds this to the GATE 2 cc_pair check
+                user=create_test_user(db_session, "ingestion_delete", is_admin=True),
                 db_session=db_session,
             )
 
@@ -223,7 +227,7 @@ class TestDocumentByCcPairCleanupTask:
                     doc.id,
                     cc_pair.connector_id,
                     cc_pair.credential_id,
-                    TEST_TENANT_ID,
+                    POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
                 ),
             )
 
@@ -264,7 +268,7 @@ class TestDocumentByCcPairCleanupTask:
                     doc.id,
                     cc_pair.connector_id,
                     cc_pair.credential_id,
-                    TEST_TENANT_ID,
+                    POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
                 ),
             )
 

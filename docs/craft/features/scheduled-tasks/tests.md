@@ -16,11 +16,11 @@ aren't worth automating.
    `/craft/v1/tasks/new` if the list is in its empty state) and fill the
    create form: a unique name, the prompt `say hi`, and an interval
    schedule of every 5 minutes.
-4. Save. Wait for the URL to settle on the detail page
-   (`/craft/v1/tasks/<id>`) and assert the active-status chip
+4. Click `save-and-run-now` — creates the task with an immediate run
+   enqueued and redirects to the tasks list. Open the new task's row to
+   reach the detail page and assert the active-status chip
    (`task-status-active`) is visible — that's "task created."
-5. Click `run-now-button` to trigger an immediate run.
-6. Wait up to 60 s for a row with `data-run-status="succeeded"` or
+5. Wait up to 60 s for a row with `data-run-status="succeeded"` or
    `="failed"` to appear in the run history. Either is fine — we're
    proving the dispatcher → executor → run-history wiring is reachable
    end-to-end. A timeout means the wiring is broken (or the
@@ -28,8 +28,8 @@ aren't worth automating.
 
 Selectors locked in by the spec — any rename in the frontend should
 update them in lockstep: `new-task-button`, `task-name-input`,
-`task-prompt-input`, `interval-every`, `save-task`, `task-status-active`,
-`run-now-button`, plus the `data-run-status` attribute on run rows.
+`task-prompt-input`, `interval-every`, `save-and-run-now`,
+`task-status-active`, plus the `data-run-status` attribute on run rows.
 
 ## Running
 
@@ -51,7 +51,6 @@ This is a smoke test. It does not exercise:
 - The approval-required path.
 - Sidebar filtering of scheduled-run sessions.
 - Per-user ownership boundaries on the HTTP API.
-- DST / IANA timezone behavior.
 
 Those properties rely on review and the manual checklist below.
 
@@ -63,8 +62,8 @@ path:
 - **Every-2-min task vs an Onyx-search prompt.** Walk away for 6 minutes,
   come back, confirm three runs with complete sessions and sensible
   `summary` text.
-- **`Europe/London` Mon/Wed/Fri 9 AM.** Verify `next_run_at` is correct
-  across the BST/GMT boundary and a force-tick at 9 AM local fires.
+- **Mon/Wed/Fri 9 AM.** Verify `next_run_at` is correct and a force-tick
+  at 9 AM UTC fires.
 - **Pause mid-fire.** In-flight run completes, no new fire scheduled.
   Resume → next fire is computed forward from `now()` (no backfire).
 - **Approval boundary.** Run sits in `AWAITING_APPROVAL`, the

@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 )
 
 // slashCommand defines a slash command with its description.
@@ -18,7 +18,8 @@ type slashCommand struct {
 var slashCommands = []slashCommand{
 	{"/help", "Show help message"},
 	{"/clear", "Clear chat and start a new session"},
-	{"/agent", "List and switch agents"},
+	{"/agent", "List and switch agents (by ID or name)"},
+	{"/model", "List and switch models"},
 	{"/attach", "Attach a file to next message"},
 	{"/sessions", "Browse and resume previous sessions"},
 	{"/configure", "Re-run connection setup"},
@@ -36,11 +37,11 @@ var argCommands = map[string]bool{
 // inputModel manages the text input and slash command menu.
 type inputModel struct {
 	textInput     textinput.Model
-	menuVisible   bool
 	menuItems     []slashCommand
-	menuIndex     int
 	attachedFiles []string
 	customPrompt  string
+	menuIndex     int
+	menuVisible   bool
 	suppressMenu  bool
 }
 
@@ -58,7 +59,7 @@ func newInputModel() inputModel {
 }
 
 func (m inputModel) update(msg tea.Msg) (inputModel, tea.Cmd) {
-	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
 		return m.handleKey(keyMsg)
 	}
 
@@ -68,19 +69,19 @@ func (m inputModel) update(msg tea.Msg) (inputModel, tea.Cmd) {
 	return m, cmd
 }
 
-func (m inputModel) handleKey(msg tea.KeyMsg) (inputModel, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyUp:
+func (m inputModel) handleKey(msg tea.KeyPressMsg) (inputModel, tea.Cmd) {
+	switch msg.String() {
+	case "up":
 		if m.menuVisible && m.menuIndex > 0 {
 			m.menuIndex--
 			return m, nil
 		}
-	case tea.KeyDown:
+	case "down":
 		if m.menuVisible && m.menuIndex < len(m.menuItems)-1 {
 			m.menuIndex++
 			return m, nil
 		}
-	case tea.KeyTab:
+	case "tab":
 		if m.menuVisible && len(m.menuItems) > 0 {
 			cmd := m.menuItems[m.menuIndex].command
 			if argCommands[cmd] {
@@ -93,7 +94,7 @@ func (m inputModel) handleKey(msg tea.KeyMsg) (inputModel, tea.Cmd) {
 			m.menuVisible = false
 			return m, nil
 		}
-	case tea.KeyEnter:
+	case "enter":
 		if m.menuVisible && len(m.menuItems) > 0 {
 			cmd := m.menuItems[m.menuIndex].command
 			if argCommands[cmd] {
@@ -123,7 +124,7 @@ func (m inputModel) handleKey(msg tea.KeyMsg) (inputModel, tea.Cmd) {
 		m.menuVisible = false
 		return m, func() tea.Msg { return submitMsg{text: text} }
 
-	case tea.KeyEscape:
+	case "esc":
 		if m.menuVisible {
 			m.menuVisible = false
 			return m, nil
@@ -203,8 +204,12 @@ type fileDropMsg struct {
 	path string
 }
 
-// detectFileDrop checks if the text looks like a file path.
+// detectFileDrop checks if the text looks like a file path. It never matches
+// in remote mode, where the path would resolve on the server host.
 func detectFileDrop(text string) string {
+	if RemoteMode {
+		return ""
+	}
 	cleaned := strings.Trim(text, "'\"")
 	if cleaned == "" {
 		return ""

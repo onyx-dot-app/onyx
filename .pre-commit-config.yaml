@@ -9,6 +9,24 @@ repos:
     rev: d30b4298e4fb63ce8609e29acdbcf4c9018a483c
     hooks:
       - id: uv-sync
+      # The Go CLIs build as wheels in an isolated PEP 517 environment whose
+      # transitive closure is otherwise unpinned and unverified.
+      - id: pip-compile
+        name: pip-compile build-constraints
+        args:
+          [
+            "tools/requirements/build-constraints.in",
+            "--universal",
+            "--generate-hashes",
+            # The floor the three projects declare as `requires-python`,
+            # which is also hatchling's own floor. A `.in` file carries no
+            # project metadata, so the value repeats here.
+            "--python-version",
+            "3.10",
+            "-o",
+            "tools/requirements/build-constraints.txt",
+          ]
+        files: ^tools/requirements/build-constraints\.(in|txt)$
       - id: uv-lock
       - id: uv-export
         name: uv-export default.txt
@@ -59,29 +77,130 @@ repos:
           ]
         files: ^(pyproject\.toml|uv\.lock|backend/requirements/.*\.txt)$
       - id: uv-run
+        alias: check-getattr
+        name: Check getattr
+        # `--only-group ods` installs ods from uv.lock, so the wheel is
+        # hash-verified and pyproject.toml holds the only pin. Every `ods` hook
+        # below works the same way. `uv run` syncs inexactly, unlike `uv sync`:
+        # it adds the group and removes nothing, so these hooks and the `ty`
+        # hook share `.venv`, and a cleaned `.venv` is rebuilt on demand.
+        args: ["--frozen", "--only-group", "ods", "ods", "check-getattr"]
+        pass_filenames: true
+        files: ^backend/.*\.py$
+      - id: uv-run
+        alias: check-lazy-imports
         name: Check lazy imports
-        args: ["--with=onyx-devtools", "ods", "check-lazy-imports"]
+        args: ["--frozen", "--only-group", "ods", "ods", "check-lazy-imports"]
         pass_filenames: true
         files: ^backend/(?!\.venv/|scripts/).*\.py$
+      - id: uv-run
+        alias: docker-compose-sync
+        name: sync docker compose files from template
+        # Regenerates docker-compose.yml / docker-compose.prod.yml /
+        # docker-compose.prod-no-letsencrypt.yml from docker-compose.template.yml,
+        # then refreshes the copies of the guided-install deployment files that
+        # onyx-cli embeds (cli/internal/deploy/deployfiles/embedded/).
+        # `ods generate-compose` ships in onyx-devtools (tools/ods); changes to the
+        # generator need an ods release before this hook picks them up — until the
+        # release that adds the embedded-copy sync, the extra trigger paths below
+        # are harmless no-ops (the cli module's drift test still gates staleness).
+        args: ["--frozen", "--only-group", "ods", "ods", "generate-compose", "--write"]
+        pass_filenames: false
+        files: >-
+          (?x)^(
+            deployment/docker_compose/(
+              docker-compose\.template\.yml
+              |docker-compose\.yml
+              |docker-compose\.prod\.yml
+              |docker-compose\.prod-no-letsencrypt\.yml
+              |docker-compose\.onyx-lite\.yml
+              |docker-compose\.craft\.yml
+              |docker-compose\.dev\.yml
+              |env\.template
+              |env\.prod\.template
+              |env\.nginx\.template
+              |README\.md
+            )
+            |deployment/data/nginx/(app\.conf\.template|app\.conf\.template\.prod|run-nginx\.sh)
+            |cli/internal/deploy/deployfiles/embedded/.+
+          )$
       - id: uv-run
         alias: ty
         name: ty
         args: ["ty", "check"]
         pass_filenames: true
         types_or: [python]
-        exclude: ^backend/onyx/server/features/build/sandbox/kubernetes/docker/sandbox_daemon/
+        # Scope to backend/, matching `[tool.ty.src] include = ["backend"]` in
+        # pyproject. The full ty run only discovers backend/, but pre-commit
+        # passes explicit filenames, which bypass that discovery-time include —
+        # without this, a touched file outside backend/ (examples/, tools/loadtest/,
+        # tools/, …) would get type-checked against the backend venv it was
+        # never meant to run in.
+        files: ^backend/
+        # sandbox_daemon ships in the sandbox image (own runtime); skills/builtin
+        # are sandbox-only scripts importing deps absent from the backend venv
+        # (lxml, PIL, office.*). Both are excluded from the full ty run via
+        # [tool.ty.src] in pyproject; repeat here because the explicit filenames
+        # bypass that discovery-time exclude too.
+        exclude: ^backend/onyx/(server/features/build/sandbox/image/sandbox_daemon/|skills/builtin/)
       - id: uv-run
         alias: ruff
         name: ruff
-        args: ["ruff", "check", "--fix"]
+        # Same pattern as the `ods` hooks above: a one-tool group, so the hook
+        # installs one package rather than the 450+ of a full project sync.
+        args: ["--frozen", "--only-group", "ruff", "ruff", "check", "--fix"]
         pass_filenames: true
         types_or: [python]
       - id: uv-run
         alias: ruff-format
         name: ruff format
-        args: ["ruff", "format"]
+        args: ["--frozen", "--only-group", "ruff", "ruff", "format"]
         pass_filenames: true
         types_or: [python]
+      - id: uv-run
+        alias: terraform-fmt
+        name: terraform fmt
+        # Applies hclwrite.Format, the routine `terraform fmt` itself uses, so
+        # the result matches terraform byte for byte without needing the
+        # binary on PATH. Replaces the pre-commit-terraform terraform_fmt hook.
+        # `ods fmt tf` and `ods lint tf` ship in onyx-devtools (tools/ods), and
+        # the `ods` group installs a published wheel, so both hooks need an ods
+        # release and a version bump in pyproject.toml before they can run. Tag
+        # `ods/` first.
+        args: ["--frozen", "--only-group", "ods", "ods", "fmt", "tf"]
+        pass_filenames: true
+        files: \.tf$
+      - id: uv-run
+        alias: terraform-public-safe
+        name: terraform public-safe values
+        # These modules are published but stay in sync with what Onyx runs, so
+        # an internal value can travel across by accident. Fails on account
+        # ids, access key ids, routable IPv4 CIDRs, and email addresses.
+        # Append '# public-safe: ok' to accept a line.
+        args: ["--frozen", "--only-group", "ods", "ods", "lint", "tf"]
+        pass_filenames: true
+        files: ^deployment/terraform/.*\.tf$
+      - id: uv-run
+        alias: typescript-check
+        name: TypeScript type check and coverage
+        # Type-checks web/ with TypeScript 7 and fails when a web/ directory
+        # drops below its type coverage floor in web/.type-coverage-baseline.yaml.
+        # Raise the floors with `ods type-coverage typescript --update`.
+        args: ["--frozen", "--only-group", "ods", "ods", "type-coverage", "typescript", "--check"]
+        pass_filenames: false
+        # The i18n catalogs are part of the type graph: keyParity.ts turns a
+        # missing or extra locale key into a compile error.
+        files: ^web/(.*\.(ts|tsx)|src/i18n/messages/.*\.json|package\.json|bun\.lock|tsconfig.*\.json|\.type-coverage-baseline\.yaml)$
+      - id: uv-run
+        alias: zizmor
+        name: zizmor
+        # Same pattern. zizmor's online audits (impostor-commit,
+        # known-vulnerable-actions, ...) need a GitHub API token: Quality Checks
+        # PR passes one, and zizmor skips those audits and still passes when no
+        # token is set, so local runs need no setup.
+        args: ["--frozen", "--only-group", "zizmor", "zizmor"]
+        pass_filenames: true
+        files: (^|/)\.github/(workflows/.+\.ya?ml|actions/.+/action\.ya?ml)$
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # frozen: v6.0.0
@@ -89,11 +208,24 @@ repos:
       - id: check-added-large-files
         name: Check for added large files
         args: ["--maxkb=1500"]
+      - id: check-yaml
+        name: Check YAML
+        # --unsafe relaxes check-yaml to syntax-only, so it accepts the
+        # non-standard YAML this repo uses on purpose: custom tags
+        # (CloudFormation `!Ref`, docker-compose `!reset`) and multi-document
+        # files (e.g. vendored CRDs). Helm chart templates are excluded instead —
+        # their Go templating (`{{ ... }}`) isn't parseable as YAML at all.
+        args: ["--unsafe"]
+        exclude: >-
+          (?x)^deployment/helm/charts/onyx/(templates|templates_disabled)/
 
   - repo: https://github.com/rhysd/actionlint
     rev: a443f344ff32813837fa49f7aa6cbc478d770e62 # frozen: v1.7.9
     hooks:
       - id: actionlint
+        # Also lint workflows that ship inside a subdirectory to run in another
+        # repository, such as terraform-provider-onyx/.github/workflows/.
+        files: (^|/)\.github/workflows/.+\.ya?ml$
 
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: 745eface02aef23e168a8afb6b5737818efbea95 # frozen: v0.11.0.1
@@ -101,15 +233,14 @@ repos:
       - id: shellcheck
         exclude: >-
           (?x)^(
-            backend/scripts/setup_craft_templates\.sh|
             deployment/docker_compose/init-letsencrypt\.sh
           )$
 
   - repo: https://github.com/golangci/golangci-lint
-    rev: 5d1e709b7be35cb2025444e19de266b056b7b7ee # frozen: v2.10.1
+    rev: 27774aaf853a4fd21f1dd5e69439459dc1b26e68 # frozen: v2.13.2
     hooks:
       - id: golangci-lint
-        language_version: "1.26.1"
+        language_version: "1.27.1"
         entry: bash -c "find . -name go.mod -not -path './.venv/*' -print0 | xargs -0 -I{} bash -c 'cd \"$(dirname {})\" && golangci-lint run ./...'"
 
   - repo: https://github.com/sirwart/ripsecrets
@@ -118,17 +249,60 @@ repos:
       - id: ripsecrets
         args:
           - --strict-ignore
+          # ripsecrets joins every pattern into one regex and runs it over the
+          # whole file, so `^`/`$` anchor to the start and end of the file, not
+          # a line -- an anchored pattern here silently matches nothing.
+          # `\b` keeps the prefix a real token start: without it the pattern
+          # matches inside words, e.g. the "sk-" in "celery-task-meta-<uuid>".
+          # The capture group makes ripsecrets test the key body for
+          # randomness, which drops placeholders like "sk-test-key-0000...".
           - --additional-pattern
-          - ^sk-[A-Za-z0-9_\-]{20,}$
+          - \bsk-([A-Za-z0-9_\-]{20,})
 
   - repo: https://github.com/antonbabenko/pre-commit-terraform
     rev: d0e12caebb2ab0ee8bf98181c8bfe9702bca103d
     hooks:
-      - id: terraform_fmt
-        files: \.tf$
+      # terraform_fmt is replaced by `ods fmt tf` above, which needs no local
+      # terraform. terraform_validate stays: it resolves provider schemas via
+      # `terraform init`, so it catches wrong argument names and bad module
+      # references that no in-process HCL parser can see.
+      - id: terraform_validate
+        files: ^deployment/terraform/.*\.tf$
+        args:
+          - --tf-init-args=-backend=false
 
   - repo: local
     hooks:
+      # `uv pip compile` cannot read `[build-system] requires`, so the pins are
+      # duplicated in tools/requirements/build-constraints.in. Catch a mismatch
+      # here rather than as an unsatisfiable resolution when a release builds wheels.
+      - id: build-constraints-drift
+        name: build constraints drift
+        description: "Check build-constraints.in matches every project's build requirements"
+        language: system
+        entry: python3 tools/requirements/check_build_constraints.py
+        pass_filenames: false
+        stages: [pre-commit]
+        files: >-
+          (?x)^(
+            (cli|tools/ods|tools/ods-audit)/pyproject\.toml
+            |tools/requirements/build-constraints\.in
+          )$
+      # Regenerate the baseline with `env_inventory.py --write-baseline`.
+      - id: env-drift-baseline
+        name: env drift baseline
+        description: "Fail on new undocumented operator-facing env vars (drift gate)"
+        language: system
+        entry: python3 backend/scripts/env_inventory.py --check-baseline
+        pass_filenames: false
+        stages: [pre-commit]
+        files: >-
+          (?x)^(
+            backend/(onyx|ee|shared_configs|model_server)/.*\.py
+            |backend/scripts/env_inventory(\.py|_baseline\.txt)
+            |deployment/docker_compose/env\.(template|prod\.template)
+            |deployment/helm/charts/onyx/(values\.yaml|templates/configmap\.yaml)
+          )$
       - id: bun-install
         name: bun install
         description: "Automatically run 'bun install' after a checkout, pull or rebase"
@@ -145,26 +319,161 @@ repos:
         pass_filenames: false
         files: ^web/(package\.json|bun\.lock|lib/opal/package\.json)$
 
+      # `bun install` won't rebuild an already-linked file: dep's gitignored `dist`, so
+      # token / opal-CSS changes from a pull leave opal/dist/root.css stale → the web dev
+      # server serves old radius/spacing/colors (a "boxy" UI). Regenerate it explicitly.
+      # `bun install --frozen-lockfile` first guards the clean-tree case (this hook's file
+      # set is disjoint from bun-install's, so it can fire before node_modules exists).
+      - id: opal-css-rebuild
+        name: rebuild opal token CSS
+        description: "Rebuild opal dist CSS after checkout/pull/rebase so dev gets fresh design tokens"
+        language: system
+        entry: bash -c 'cd web && bun install --frozen-lockfile && bun run --cwd lib/shared build:tokens && bun lib/opal/scripts/bundle-css.mjs'
+        pass_filenames: false
+        files: ^web/lib/(opal/src/.*\.css|opal/scripts/bundle-css\.mjs|shared/(tokens/.*\.json|style-dictionary\.config\.mjs))$
+        stages: [post-checkout, post-merge, post-rewrite]
+
+      # Turbopack's persistent dev cache (.next) tracks file content, but can't see
+      # dependency / build-config changes that cross its boundary: a checkout, pull, or
+      # rebase that changes deps, design tokens, opal CSS, or the Next/Tailwind build
+      # config leaves stale compiled output + CSS in .next — the phantom compile errors
+      # and stale styles that otherwise need a manual `rm -rf .next`. Drop it here, in
+      # lockstep with bun-install / opal-css-rebuild. Plain source edits are left alone:
+      # Turbopack invalidates those incrementally, so same-deps switches keep a warm cache.
+      - id: clear-web-build-cache
+        name: clear stale web build cache
+        description: "Drop the Turbopack .next dev cache after checkout/pull/rebase when deps, tokens, opal CSS, or build config change"
+        language: system
+        entry: bash -c 'rm -rf web/.next'
+        pass_filenames: false
+        files: ^web/(package\.json|bun\.lock|lib/opal/package\.json|lib/opal/src/.*\.css|lib/shared/tokens/.*\.json|next\.config\.js|postcss\.config\.js|tailwind\.config\.js|tailwind-themes/)
+        stages: [post-checkout, post-merge, post-rewrite]
+
+      - id: root-bun-install
+        name: root bun install
+        description: "Automatically run 'bun install' at the repo root after a checkout, pull or rebase"
+        language: system
+        entry: bun install
+        pass_filenames: false
+        files: ^(package\.json|bun\.lock|(widget|examples/widget|desktop)/package\.json)$
+        stages: [post-checkout, post-merge, post-rewrite]
+      - id: root-bun-install-check
+        name: root bun install
+        description: "Check the root 'bun.lock' is updated"
+        language: system
+        entry: bun install
+        pass_filenames: false
+        files: ^(package\.json|bun\.lock|(widget|examples/widget|desktop)/package\.json)$
+
+      # `bun run` rather than `bunx` here and below: it runs the binary that
+      # bun.lock pinned and installed, where `bunx` falls back to downloading
+      # the latest from npm when the local install is missing or stale.
       - id: oxfmt
         name: oxfmt
-        entry: bash -c 'cd web && bunx oxfmt "${@#web/}"' _
+        entry: bash -c 'cd web && bun run oxfmt "${@#web/}"' _
         language: system
+        files: ^web/
         types_or: [html, css, javascript, ts, tsx]
 
       - id: oxlint
         name: oxlint
-        entry: bash -c 'cd web && bunx oxlint'
+        entry: bash -c 'cd web && bun run oxlint'
         language: system
         pass_filenames: false
         types_or: [javascript, ts, tsx]
 
-      # Uses tsgo (TypeScript's native Go compiler) for ~10x faster type checking.
-      # This is a preview package - if it breaks:
-      #   1. Try updating: cd web && bun update @typescript/native-preview
-      #   2. Or fallback to tsc: replace 'tsgo' with 'tsc' below
-      - id: typescript-check
-        name: TypeScript type check
-        entry: bash -c 'cd web && bunx tsgo --noEmit --project tsconfig.types.json'
+      # Type checks with the native TypeScript compiler (~10x faster than classic
+      # tsc). web/ is checked by the `typescript-check` uv-run hook above. web/lib/shared
+      # uses the stable typescript@7 release; the widget hooks below still use
+      # tsgo from @typescript/native-preview in the root workspace.
+      - id: widget-typescript-check
+        name: widget TypeScript type check
+        entry: bash -c 'cd widget && bun run tsgo --noEmit'
         language: system
         pass_filenames: false
-        files: ^web/.*\.(ts|tsx)$
+        files: ^(bun\.lock|widget/(.*\.(ts|tsx)|package\.json|tsconfig\.json))$
+
+      - id: examples-widget-typescript-check
+        name: examples/widget TypeScript type check
+        entry: bash -c 'cd examples/widget && bun run tsgo --noEmit'
+        language: system
+        pass_filenames: false
+        files: ^(bun\.lock|examples/widget/(.*\.(ts|tsx)|package\.json|tsconfig\.json))$
+
+      - id: shared-typescript-check
+        name: shared TypeScript type check
+        entry: bash -c 'cd web/lib/shared && bun run typecheck'
+        language: system
+        pass_filenames: false
+        files: ^web/lib/shared/(.*\.(ts|tsx)|package\.json|tsconfig.*\.json)$
+
+      # Needs a Rust toolchain + GTK3/WebKitGTK headers, absent on the shared
+      # Quality-Checks-PR runner -- that workflow SKIPs both hooks and relies on
+      # pr-desktop-build.yml as the actual CI gate instead.
+      - id: desktop-rust-fmt
+        name: desktop cargo fmt
+        entry: bash -c 'cd desktop/src-tauri && cargo fmt --check'
+        language: system
+        pass_filenames: false
+        files: ^desktop/src-tauri/src/.*\.rs$
+
+      - id: desktop-rust-clippy
+        name: desktop cargo clippy
+        entry: bash -c 'cd desktop/src-tauri && cargo clippy --all-targets --all-features -- -D warnings'
+        language: system
+        pass_filenames: false
+        files: ^desktop/src-tauri/(src/.*\.rs|Cargo\.(toml|lock))$
+
+      # mobile/ is a standalone Expo (SDK 56) app with its own bun.lock — it is NOT
+      # part of the root bun workspace, so it gets its own install + lockfile-check
+      # hooks. Lint/format use the Expo-native toolchain (ESLint flat config +
+      # Prettier) rather than web's oxlint/oxfmt: eslint-config-expo gives RN-aware
+      # rules and prettier-plugin-tailwindcss sorts NativeWind classes.
+      #
+      # The typecheck/lint/format hooks below each run `bun install --frozen-lockfile`
+      # first: prek runs only on changed files, so a mobile change that doesn't touch
+      # package.json/bun.lock skips the install-check hook, leaving mobile/node_modules
+      # absent in CI (the auto-install hook only fires on post-checkout/merge/rewrite).
+      - id: mobile-bun-install
+        name: mobile bun install
+        description: "Automatically run 'bun install' in mobile/ after a checkout, pull or rebase"
+        language: system
+        entry: bash -c 'cd mobile && bun install'
+        pass_filenames: false
+        files: ^mobile/(package\.json|bun\.lock)$
+        stages: [post-checkout, post-merge, post-rewrite]
+      - id: mobile-bun-install-check
+        name: mobile bun install check
+        description: "Check the 'mobile/bun.lock' is updated"
+        language: system
+        entry: bash -c 'cd mobile && bun install'
+        pass_filenames: false
+        files: ^mobile/(package\.json|bun\.lock)$
+
+      # Uses tsc (not tsgo) because mobile is standalone and types against Expo/RN
+      # (tsconfig extends expo/tsconfig.base); the native-preview compiler isn't
+      # wired in here.
+      - id: mobile-typescript-check
+        name: mobile TypeScript type check
+        entry: bash -c 'cd mobile && bun install --frozen-lockfile && bun run typecheck'
+        language: system
+        pass_filenames: false
+        files: ^mobile/(.*\.(ts|tsx)|package\.json|tsconfig\.json|bun\.lock)$
+
+      - id: mobile-lint
+        name: mobile lint
+        entry: bash -c 'cd mobile && bun install --frozen-lockfile && bun run lint'
+        language: system
+        pass_filenames: false
+        files: ^mobile/.*\.(ts|tsx|js|jsx)$
+
+      - id: mobile-format
+        name: mobile format
+        # pass_filenames: false so this runs as a single invocation (like the
+        # mobile lint/typecheck hooks above). Passing filenames makes pre-commit
+        # split them into multiple batches that each re-run `bun install`, which
+        # race on bun's cache (EEXIST locally / FileNotFound on CI).
+        entry: bash -c 'cd mobile && bun install --frozen-lockfile && bun run format'
+        language: system
+        pass_filenames: false
+        files: ^mobile/.*\.(ts|tsx|js|jsx|json|css)$

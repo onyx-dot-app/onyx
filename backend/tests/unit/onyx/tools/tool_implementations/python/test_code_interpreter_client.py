@@ -10,32 +10,20 @@ from __future__ import annotations
 
 import time
 from collections.abc import Generator
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
 from onyx.tools.tool_implementations.python import code_interpreter_client as cic
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     BashExecResponse,
-)
-from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
-)
-from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterVersionError,
-)
-from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CreateSessionResponse,
-)
-from onyx.tools.tool_implementations.python.code_interpreter_client import FileInput
-from onyx.tools.tool_implementations.python.code_interpreter_client import (
+    FileInput,
     HealthResponse,
-)
-from onyx.tools.tool_implementations.python.code_interpreter_client import (
     StreamOutputEvent,
-)
-from onyx.tools.tool_implementations.python.code_interpreter_client import (
     StreamResultEvent,
 )
 
@@ -45,7 +33,7 @@ def _prime_health(base_url: str, version: str) -> None:
     the network."""
     cic._health_cache[base_url] = (
         time.monotonic(),
-        HealthResponse(healthy=True, version=version),
+        HealthResponse(connected=True, version=version),
     )
 
 
@@ -621,3 +609,72 @@ def test_min_version_for_decorated_method_returns_declared_value() -> None:
     assert cic._min_version_for(client.create_session) == "0.4.0"
     assert cic._min_version_for(client.delete_session) == "0.4.0"
     assert cic._min_version_for(client.execute_bash_in_session) == "0.4.0"
+
+
+def _make_health_response(status: str = "ok", version: str = "1.2.3") -> MagicMock:
+    """Build a mock ``requests.Response`` for the /health endpoint."""
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.raise_for_status = MagicMock()
+    resp.json.return_value = {"status": status, "version": version}
+    return resp
+
+
+def test_health_ok_reports_connected() -> None:
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+
+    with patch.object(client.session, "get", return_value=_make_health_response()):
+        result = client.health()
+
+    assert result.connected is True
+    assert result.error == ""
+    assert result.version == "1.2.3"
+
+
+def test_health_non_ok_status_reports_connected_with_error() -> None:
+    """A reachable service reporting a non-ok status is connected but unhealthy."""
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+    resp = _make_health_response(status="error")
+    resp.json.return_value = {"status": "error", "message": "sandbox crashed"}
+
+    with patch.object(client.session, "get", return_value=resp):
+        result = client.health()
+
+    assert result.connected is True
+    assert result.error == "sandbox crashed"
+
+
+def test_health_http_error_reports_connected() -> None:
+    """4xx/5xx means the service was reachable, so ``connected`` stays True and
+    the raw exception text (which may embed the request URL) is not surfaced."""
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+
+    resp = MagicMock()
+    error_response = MagicMock()
+    error_response.status_code = 503
+    http_error = requests.HTTPError("503 Server Error for url: http://fake:9000/health")
+    http_error.response = error_response
+    resp.raise_for_status.side_effect = http_error
+
+    with patch.object(client.session, "get", return_value=resp):
+        result = client.health()
+
+    assert result.connected is True
+    assert "503" in result.error
+    assert client.base_url not in result.error
+
+
+def test_health_network_error_reports_not_connected() -> None:
+    """A network-level failure is reported as disconnected with a sanitized error."""
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+
+    with patch.object(
+        client.session,
+        "get",
+        side_effect=requests.ConnectionError("failed to connect to http://fake:9000"),
+    ):
+        result = client.health()
+
+    assert result.connected is False
+    assert result.error == "Unable to reach the Code Interpreter service"
+    assert client.base_url not in result.error

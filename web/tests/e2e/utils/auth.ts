@@ -69,8 +69,13 @@ const generateRandomCredentials = () => {
   };
 };
 
-// Register and log in as a new random user via the API.
-export async function loginAsRandomUser(page: Page): Promise<{
+// Register and log in as a new random user via the API. Also sets a display
+// name by default so the onboarding prompt doesn't block subsequent UI; opt
+// out via `setDisplayName: false` from tests that need the prompt to appear.
+export async function loginAsRandomUser(
+  page: Page,
+  options?: { setDisplayName?: boolean }
+): Promise<{
   email: string;
   password: string;
 }> {
@@ -87,6 +92,18 @@ export async function loginAsRandomUser(page: Page): Promise<{
   }
 
   await apiLogin(page, email, password);
+
+  if (options?.setDisplayName !== false) {
+    const personalizationRes = await page.request.patch(
+      "/api/user/personalization",
+      { data: { name: "Test User" } }
+    );
+    if (!personalizationRes.ok()) {
+      console.warn(
+        `Failed to set display name for ${email}: ${personalizationRes.status()}`
+      );
+    }
+  }
 
   // Navigate to the app so the page is ready for test interactions
   await page.goto("/app?new_team=true");

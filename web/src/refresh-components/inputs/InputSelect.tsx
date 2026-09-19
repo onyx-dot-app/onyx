@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useTranslations } from "next-intl";
 import * as SelectPrimitive from "@radix-ui/react-select";
 import { cn } from "@opal/utils";
 import LineItem, { LineItemProps } from "@/refresh-components/buttons/LineItem";
@@ -14,7 +15,7 @@ import {
 } from "@/refresh-components/inputs/styles";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { SvgChevronDownSmall } from "@opal/icons";
-import { Separator, type SeparatorProps } from "@opal/components";
+import { Divider, type DividerSpacing } from "@opal/components";
 import type { WithoutStyles } from "@opal/types";
 
 // ============================================================================
@@ -22,10 +23,8 @@ import type { WithoutStyles } from "@opal/types";
 // ============================================================================
 
 interface SelectedItemDisplay {
-  childrenRef: React.MutableRefObject<React.ReactNode>;
-  iconRef: React.MutableRefObject<
-    React.FunctionComponent<IconProps> | undefined
-  >;
+  children: React.ReactNode;
+  icon?: React.FunctionComponent<IconProps>;
 }
 
 interface InputSelectContextValue {
@@ -202,9 +201,9 @@ function InputSelectTrigger({
   ref,
   ...props
 }: InputSelectTriggerProps) {
+  const t = useTranslations("common.inputSelect");
   const { variant, selectedItemDisplay } = useInputSelectContext();
 
-  // Don't memoize - we need to read the latest ref values on every render
   let displayContent: React.ReactNode;
 
   if (!selectedItemDisplay) {
@@ -218,16 +217,16 @@ function InputSelectTrigger({
       )
     ) : (
       <Text as="p" text03>
-        Select an option
+        {t("placeholder.fallback")}
       </Text>
     );
   } else {
-    const Icon = selectedItemDisplay.iconRef.current;
+    const Icon = selectedItemDisplay.icon;
     displayContent = (
       <div className="flex flex-row items-center gap-2 flex-1 w-full">
         {Icon && <Icon className={cn("h-4 w-4", iconClasses[variant])} />}
         <Truncated className={cn(textClasses[variant])}>
-          {selectedItemDisplay.childrenRef.current}
+          {selectedItemDisplay.children}
         </Truncated>
       </div>
     );
@@ -353,27 +352,21 @@ function InputSelectItem({
   const { currentValue, setSelectedItemDisplay } = useInputSelectContext();
   const isSelected = value === currentValue;
 
-  // Use refs to hold latest children/icon - these are passed to the context
-  // so the trigger always reads current values without needing re-registration
-  const childrenRef = React.useRef(children);
-  const iconRef = React.useRef(icon);
-  childrenRef.current = children;
-  iconRef.current = icon;
-
-  // Only the selected item registers its display data
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (!isSelected) return;
-    setSelectedItemDisplay({ childrenRef, iconRef });
+    setSelectedItemDisplay({ children, icon });
+  }, [children, icon, isSelected, setSelectedItemDisplay]);
 
-    // Clean up functions only need to return for items which are selected.
+  React.useLayoutEffect(() => {
+    if (!isSelected) return;
     return () => setSelectedItemDisplay(null);
-  }, [isSelected]);
+  }, [isSelected, setSelectedItemDisplay]);
 
   return (
     <SelectPrimitive.Item
       ref={ref}
       value={value}
-      className="outline-hidden focus:outline-hidden rounded-08 data-highlighted:bg-background-tint-02"
+      className="cursor-pointer select-none outline-hidden focus:outline-hidden rounded-08 data-highlighted:bg-background-tint-02"
       onSelect={onClick}
     >
       {/* Hidden ItemText for Radix to track selection */}
@@ -447,38 +440,19 @@ function InputSelectLabel({
   );
 }
 
-// ============================================================================
-// InputSelect Separator
-// ============================================================================
+interface InputSelectSeparatorProps {
+  paddingParallel?: DividerSpacing;
+  paddingPerpendicular?: DividerSpacing;
+}
 
-/**
- * InputSelect Separator Component
- *
- * A visual divider between items in the dropdown.
- * Uses the app's standard Separator component with appropriate defaults for dropdown menus.
- *
- * @example
- * ```tsx
- * <InputSelect.Content>
- *   <InputSelect.Item value="1">Option 1</InputSelect.Item>
- *   <InputSelect.Separator />
- *   <InputSelect.Item value="2">Option 2</InputSelect.Item>
- * </InputSelect.Content>
- * ```
- */
 function InputSelectSeparator({
-  noPadding = true,
-  ref,
-  ...props
-}: WithoutStyles<SeparatorProps> & {
-  ref?: React.Ref<React.ComponentRef<typeof Separator>>;
-}) {
+  paddingParallel,
+  paddingPerpendicular,
+}: InputSelectSeparatorProps) {
   return (
-    <Separator
-      ref={ref}
-      noPadding={noPadding}
-      className="px-2 py-1"
-      {...props}
+    <Divider
+      paddingParallel={paddingParallel}
+      paddingPerpendicular={paddingPerpendicular}
     />
   );
 }

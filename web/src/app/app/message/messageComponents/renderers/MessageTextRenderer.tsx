@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import ReactMarkdown, { Components } from "react-markdown";
 import type { PluggableList } from "unified";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeHighlight from "rehype-highlight";
+import { useHighlightLanguages } from "@/hooks/useHighlightLanguages";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 
@@ -28,6 +30,7 @@ import { CodeBlock } from "@/app/app/message/CodeBlock";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
 import { extractChatImageFileId } from "@/app/app/components/files/images/utils";
 import { transformLinkUri } from "@/lib/utils";
+import { rehypeDirection } from "@/lib/rehypeDirection";
 import { cn } from "@opal/utils";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
@@ -81,9 +84,8 @@ const STREAMING_REMARK_PLUGINS: PluggableList = [
   remarkGfm,
   [remarkMath, { singleDollarTextMath: true }],
 ];
-const STREAMING_REHYPE_PLUGINS: PluggableList = [rehypeKatex];
+const STREAMING_REHYPE_PLUGINS: PluggableList = [rehypeKatex, rehypeDirection];
 const FULL_REMARK_PLUGINS: PluggableList = STREAMING_REMARK_PLUGINS;
-const FULL_REHYPE_PLUGINS: PluggableList = [rehypeHighlight, rehypeKatex];
 
 export const MessageTextRenderer: MessageRenderer<
   ChatPacket,
@@ -100,6 +102,7 @@ export const MessageTextRenderer: MessageRenderer<
   stopReason,
   children,
 }) => {
+  const t = useTranslations("chat.messages");
   const { enabled: smoothStreamingEnabled } = useSmoothStreaming();
   const setLatestMessageRenderComplete = useChatSessionStore(
     (state) => state.setLatestMessageRenderComplete
@@ -276,6 +279,22 @@ export const MessageTextRenderer: MessageRenderer<
   const streamFullyDisplayed =
     isStreamFinished && displayedContent.length >= content.length;
 
+  // Syntax-highlighting grammars load dynamically, and only once the stream is
+  // fully displayed — keeps the ~170 KB corpus off the critical path. Until
+  // they resolve we fall back to the streaming (katex-only) plugin set.
+  const highlightLanguages = useHighlightLanguages(streamFullyDisplayed);
+  const fullRehypePlugins = useMemo<PluggableList>(
+    () =>
+      highlightLanguages
+        ? [
+            [rehypeHighlight, { languages: highlightLanguages }],
+            rehypeKatex,
+            rehypeDirection,
+          ]
+        : STREAMING_REHYPE_PLUGINS,
+    [highlightLanguages]
+  );
+
   // Capture `animate` at mount. `animate = !stopPacketSeen`, which only
   // ever goes true→false during a renderer's lifetime, so its mount-time
   // value distinguishes "actively-streaming renderer" (animate=true) from
@@ -327,8 +346,10 @@ export const MessageTextRenderer: MessageRenderer<
   // never change — otherwise every typewriter tick would invalidate
   // React reconciliation on the markdown subtree.
   const stateRef = useRef(state);
+  // oxlint-disable-next-line react-doctor/no-ref-current-in-render -- render-phase mirror keeps markdownComponents identities stable (see block comment above)
   stateRef.current = state;
   const processedContentRef = useRef(processedContent);
+  // oxlint-disable-next-line react-doctor/no-ref-current-in-render -- render-phase mirror keeps markdownComponents identities stable (see block comment above)
   processedContentRef.current = processedContent;
 
   const markdownComponents = useMemo<Components>(
@@ -359,8 +380,8 @@ export const MessageTextRenderer: MessageRenderer<
           </MemoizedAnchor>
         );
       },
-      p: ({ children }) => (
-        <MemoizedParagraph className="font-main-content-body">
+      p: ({ children, dir }) => (
+        <MemoizedParagraph dir={dir} className="font-main-content-body">
           {children}
         </MemoizedParagraph>
       ),
@@ -437,7 +458,7 @@ export const MessageTextRenderer: MessageRenderer<
       content:
         shouldShowThinkingPlaceholder || shouldShowSpeechWarmupIndicator ? (
           <Text as="span" secondaryBody text04 className="italic">
-            Thinking
+            {t("text.thinkingPlaceholder.text")}
           </Text>
         ) : displayedContent.length > 0 ? (
           <div
@@ -454,7 +475,7 @@ export const MessageTextRenderer: MessageRenderer<
               }
               rehypePlugins={
                 streamFullyDisplayed
-                  ? FULL_REHYPE_PLUGINS
+                  ? fullRehypePlugins
                   : STREAMING_REHYPE_PLUGINS
               }
               urlTransform={transformLinkUri}

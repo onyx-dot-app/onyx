@@ -3,8 +3,8 @@
  *
  * - ``compileToCron``: normalize the three editor modes into a single 5-field
  *   cron expression (mirrors ``backend/.../scheduled_tasks/schedule.py``).
- * - ``computeNextRuns``: best-effort client-side preview of the next N fires,
- *   used by the editor's "next 3 runs" panel before save.
+ * - ``compileLocalPayloadToUtcCron``: compile browser-local editor state into
+ *   the UTC cron persisted by the backend.
  * - ``humanReadableSchedule``: lightweight summary fallback when we can only
  *   render client-side.
  *
@@ -48,6 +48,154 @@ function parseTimeOfDay(value: string | null | undefined): {
   return { hour: Number(m[1]), minute: Number(m[2]) };
 }
 
+function timeOfDay(hour: number, minute: number): string {
+  return `${pad2(hour)}:${pad2(minute)}`;
+}
+
+function localTimeOfDayToUtc(
+  value: string | null | undefined,
+  referenceDate: Date
+): { hour: number; minute: number } | null {
+  const time = parseTimeOfDay(value);
+  if (!time) return null;
+  const date = new Date(referenceDate.getTime());
+  date.setHours(time.hour, time.minute, 0, 0);
+  return { hour: date.getUTCHours(), minute: date.getUTCMinutes() };
+}
+
+function utcTimeOfDayToLocal(
+  value: string | null | undefined,
+  referenceDate: Date
+): { hour: number; minute: number } | null {
+  const time = parseTimeOfDay(value);
+  if (!time) return null;
+  const date = new Date(referenceDate.getTime());
+  date.setUTCHours(time.hour, time.minute, 0, 0);
+  return { hour: date.getHours(), minute: date.getMinutes() };
+}
+
+function uniqueSortedWeekdays(weekdays: number[]): number[] {
+  return Array.from(new Set(weekdays)).sort((a, b) => a - b);
+}
+
+/**
+ * For a given absolute instant, how many calendar days its UTC date sits ahead
+ * of its local date (-1, 0, or +1). When a wall-clock time converts across
+ * midnight, the weekday shifts with it; this lets us apply that one shift
+ * uniformly across a daily/weekly schedule's weekday set.
+ */
+function utcMinusLocalDayDelta(instant: Date): number {
+  const localMidnight = Date.UTC(
+    instant.getFullYear(),
+    instant.getMonth(),
+    instant.getDate()
+  );
+  const utcMidnight = Date.UTC(
+    instant.getUTCFullYear(),
+    instant.getUTCMonth(),
+    instant.getUTCDate()
+  );
+  return Math.round((utcMidnight - localMidnight) / 86_400_000);
+}
+
+function shiftWeekday(weekday: number, dayDelta: number): number {
+  return (((weekday + dayDelta) % 7) + 7) % 7;
+}
+
+export function localPayloadToUtcPayload(
+  mode: EditorMode,
+  payload: EditorPayload,
+  referenceDate: Date = new Date()
+): EditorPayload {
+  if (mode === "interval") {
+    const intervalPayload = payload as IntervalPayload;
+    if (intervalPayload.unit !== "days") return intervalPayload;
+    const utcTime = localTimeOfDayToUtc(
+      intervalPayload.time_of_day,
+      referenceDate
+    );
+    if (!utcTime) return intervalPayload;
+    return {
+      ...intervalPayload,
+      time_of_day: timeOfDay(utcTime.hour, utcTime.minute),
+    };
+  }
+
+  if (mode === "daily_weekly") {
+    const dailyWeeklyPayload = payload as DailyWeeklyPayload;
+    const localTime = parseTimeOfDay(dailyWeeklyPayload.time_of_day);
+    if (!localTime) return dailyWeeklyPayload;
+
+    // Convert the wall-clock time once on the reference date. A single
+    // `M H * * d1,d2,...` cron carries only one (hour, minute) and one
+    // day-shift, so we derive both from one instant and apply the same shift
+    // to every selected weekday. Converting each weekday's next occurrence
+    // independently would diverge across a DST boundary.
+    const instant = new Date(referenceDate.getTime());
+    instant.setHours(localTime.hour, localTime.minute, 0, 0);
+    const dayDelta = utcMinusLocalDayDelta(instant);
+
+    const weekdays = Array.isArray(dailyWeeklyPayload.weekdays)
+      ? dailyWeeklyPayload.weekdays
+      : [];
+    return {
+      ...dailyWeeklyPayload,
+      time_of_day: timeOfDay(instant.getUTCHours(), instant.getUTCMinutes()),
+      weekdays: uniqueSortedWeekdays(
+        weekdays.map((weekday) => shiftWeekday(weekday, dayDelta))
+      ),
+    };
+  }
+
+  return payload;
+}
+
+function utcPayloadToLocalPayload(
+  mode: EditorMode,
+  payload: EditorPayload,
+  referenceDate: Date
+): EditorPayload {
+  if (mode === "interval") {
+    const intervalPayload = payload as IntervalPayload;
+    if (intervalPayload.unit !== "days") return intervalPayload;
+    const localTime = utcTimeOfDayToLocal(
+      intervalPayload.time_of_day,
+      referenceDate
+    );
+    if (!localTime) return intervalPayload;
+    return {
+      ...intervalPayload,
+      time_of_day: timeOfDay(localTime.hour, localTime.minute),
+    };
+  }
+
+  if (mode === "daily_weekly") {
+    const dailyWeeklyPayload = payload as DailyWeeklyPayload;
+    const utcTime = parseTimeOfDay(dailyWeeklyPayload.time_of_day);
+    if (!utcTime) return dailyWeeklyPayload;
+
+    // Mirror of the encode path: convert the stored UTC wall-clock once and
+    // apply the resulting day-shift uniformly to every weekday. See
+    // `localPayloadToUtcPayload`.
+    const instant = new Date(referenceDate.getTime());
+    instant.setUTCHours(utcTime.hour, utcTime.minute, 0, 0);
+    const dayDelta = utcMinusLocalDayDelta(instant);
+
+    const weekdays = Array.isArray(dailyWeeklyPayload.weekdays)
+      ? dailyWeeklyPayload.weekdays
+      : [];
+    return {
+      ...dailyWeeklyPayload,
+      time_of_day: timeOfDay(instant.getHours(), instant.getMinutes()),
+      weekdays: uniqueSortedWeekdays(
+        weekdays.map((weekday) => shiftWeekday(weekday, -dayDelta))
+      ),
+    };
+  }
+
+  return payload;
+}
+
 // ---------------------------------------------------------------------------
 // Cron compilation
 // ---------------------------------------------------------------------------
@@ -64,6 +212,17 @@ export function compileToCron(
     case "advanced":
       return compileAdvanced(payload as AdvancedPayload);
   }
+}
+
+export function compileLocalPayloadToUtcCron(
+  mode: EditorMode,
+  payload: EditorPayload,
+  referenceDate: Date = new Date()
+): ScheduleValidation {
+  return compileToCron(
+    mode,
+    localPayloadToUtcPayload(mode, payload, referenceDate)
+  );
 }
 
 function compileInterval(payload: IntervalPayload): ScheduleValidation {
@@ -136,188 +295,13 @@ function compileAdvanced(payload: AdvancedPayload): ScheduleValidation {
 // Next-fires preview (client-side, best-effort).
 // ---------------------------------------------------------------------------
 
-/**
- * Simple cron field parser supporting:
- *  - ``*``
- *  - integer literals (``5``)
- *  - comma lists (``1,3,5``)
- *  - step values from ``*`` (``*\/15``)
- *  - step values from a literal (``5/15``) — uncommon but legal
- *
- * Range expressions (``1-5``) are *not* supported here — they'd require a
- * lot more code, and the simple cases above cover every cron our editor
- * compiles. Advanced-mode users get to test against the server-computed
- * preview after save.
- */
-function expandField(field: string, min: number, max: number): number[] | null {
-  if (field === "*") {
-    const out: number[] = [];
-    for (let i = min; i <= max; i++) out.push(i);
-    return out;
-  }
-  // step expression
-  if (field.includes("/")) {
-    const parts = field.split("/");
-    const base = parts[0] ?? "";
-    const stepStr = parts[1] ?? "";
-    const step = Number(stepStr);
-    if (!Number.isFinite(step) || step <= 0) return null;
-    let start = min;
-    if (base !== "*" && base !== "") {
-      const n = Number(base);
-      if (!Number.isFinite(n)) return null;
-      start = n;
-    }
-    const out: number[] = [];
-    for (let i = start; i <= max; i += step) out.push(i);
-    return out;
-  }
-  if (field.includes(",")) {
-    const parts = field.split(",").map((p) => Number(p.trim()));
-    if (parts.some((n) => !Number.isFinite(n) || n < min || n > max)) {
-      return null;
-    }
-    return Array.from(new Set(parts)).sort((a, b) => a - b);
-  }
-  const n = Number(field);
-  if (!Number.isFinite(n) || n < min || n > max) return null;
-  return [n];
-}
-
-/**
- * Compute the next ``count`` fires of ``cron`` in the given IANA timezone,
- * starting strictly after ``after`` (default: now). Returns ISO strings in
- * UTC.
- *
- * Returns an empty array if the cron expression cannot be parsed by our
- * tiny client-side parser.
- *
- * Notes / caveats:
- *  - Day-of-month (``dom``) and day-of-week (``dow``) follow cron semantics:
- *    when both are restricted (neither is ``*``), a fire happens on any day
- *    matching *either* constraint. When one is ``*``, only the other is
- *    enforced.
- *  - Months follow 1-12 indexing.
- *  - Timezone handling uses ``Intl.DateTimeFormat`` to map a UTC instant
- *    into local components in the target zone.
- */
-export function computeNextRuns(
-  cron: string,
-  timezone: string,
-  count: number,
-  after: Date = new Date()
-): string[] {
-  const fields = cron.trim().split(/\s+/);
-  if (fields.length !== 5) return [];
-  const [minuteF, hourF, domF, monthF, dowF] = fields as [
-    string,
-    string,
-    string,
-    string,
-    string,
-  ];
-
-  const minutes = expandField(minuteF, 0, 59);
-  const hours = expandField(hourF, 0, 23);
-  const dom = expandField(domF, 1, 31);
-  const months = expandField(monthF, 1, 12);
-  const dow = expandField(dowF, 0, 6);
-
-  if (!minutes || !hours || !dom || !months || !dow) return [];
-
-  const domRestricted = domF !== "*";
-  const dowRestricted = dowF !== "*";
-
-  // Iterate UTC minutes; for each candidate, derive the local components in
-  // the target timezone and test the cron fields against those.
-  const startUtc = new Date(after.getTime());
-  // round up to the next whole minute so we never re-fire on the current
-  // second.
-  startUtc.setUTCSeconds(0, 0);
-  startUtc.setUTCMinutes(startUtc.getUTCMinutes() + 1);
-
-  const SAFETY_LIMIT_MINUTES = 60 * 24 * 366 * 2; // ~2 years
-
-  const fmt = new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone,
-    hourCycle: "h23",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    weekday: "short",
-  });
-
-  const weekdayMap: Record<string, number> = {
-    Sun: 0,
-    Mon: 1,
-    Tue: 2,
-    Wed: 3,
-    Thu: 4,
-    Fri: 5,
-    Sat: 6,
-  };
-
-  const minutesSet = new Set(minutes);
-  const hoursSet = new Set(hours);
-  const domSet = new Set(dom);
-  const monthsSet = new Set(months);
-  const dowSet = new Set(dow);
-
-  const results: string[] = [];
-  const cursor = new Date(startUtc.getTime());
-
-  for (let i = 0; i < SAFETY_LIMIT_MINUTES && results.length < count; i++) {
-    const parts = fmt.formatToParts(cursor);
-    const get = (type: string): string =>
-      parts.find((p) => p.type === type)?.value ?? "";
-
-    const minute = Number(get("minute"));
-    const hour = Number(get("hour"));
-    const day = Number(get("day"));
-    const month = Number(get("month"));
-    const weekdayValue = weekdayMap[get("weekday")];
-    if (weekdayValue === undefined) {
-      // Unknown weekday from the Intl formatter — skip this candidate.
-      cursor.setUTCMinutes(cursor.getUTCMinutes() + 1);
-      continue;
-    }
-
-    let dayOk: boolean;
-    if (domRestricted && dowRestricted) {
-      dayOk = domSet.has(day) || dowSet.has(weekdayValue);
-    } else if (domRestricted) {
-      dayOk = domSet.has(day);
-    } else if (dowRestricted) {
-      dayOk = dowSet.has(weekdayValue);
-    } else {
-      dayOk = true;
-    }
-
-    if (
-      minutesSet.has(minute) &&
-      hoursSet.has(hour) &&
-      monthsSet.has(month) &&
-      dayOk
-    ) {
-      results.push(cursor.toISOString());
-    }
-
-    cursor.setUTCMinutes(cursor.getUTCMinutes() + 1);
-  }
-
-  return results;
-}
-
 // ---------------------------------------------------------------------------
 // Cron → editor payload (best-effort reconstruction for the edit page)
 // ---------------------------------------------------------------------------
 
 /**
- * Reconstruct a UI-friendly payload from a stored cron expression and the
- * editor_mode hint. The backend stores cron + editor_mode but does not
- * round-trip editor_payload, so we re-derive it on the edit page.
+ * Reconstruct the stored payload shape from a stored cron expression and the
+ * editor_mode hint. Use ``decodeUtcCronToLocalPayload`` for browser display.
  *
  * If we can't confidently decode the cron back into the chosen mode, we fall
  * back to ``advanced`` mode so the user sees the raw expression.
@@ -418,6 +402,22 @@ export function decodeCronToPayload(
   return { mode: "advanced", payload: { cron } };
 }
 
+export function decodeUtcCronToLocalPayload(
+  mode: EditorMode,
+  cron: string,
+  referenceDate: Date = new Date()
+): { mode: EditorMode; payload: EditorPayload } {
+  const decoded = decodeCronToPayload(mode, cron);
+  return {
+    mode: decoded.mode,
+    payload: utcPayloadToLocalPayload(
+      decoded.mode,
+      decoded.payload,
+      referenceDate
+    ),
+  };
+}
+
 function parseStepStar(field: string): number | null {
   if (!field.startsWith("*/")) return null;
   const n = Number(field.slice(2));
@@ -473,4 +473,13 @@ export function humanReadableSchedule(
     return `cron: ${cron}`;
   }
   return "—";
+}
+
+export function humanReadableScheduleFromCron(
+  mode: EditorMode,
+  cron: string,
+  referenceDate: Date = new Date()
+): string {
+  const decoded = decodeUtcCronToLocalPayload(mode, cron, referenceDate);
+  return humanReadableSchedule(decoded.mode, decoded.payload, cron);
 }

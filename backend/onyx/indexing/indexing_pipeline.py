@@ -1,95 +1,115 @@
 import time
 from collections import defaultdict
-from collections.abc import Callable
-from collections.abc import Generator
-from collections.abc import Iterator
-from contextlib import contextmanager
-from typing import NamedTuple
-from typing import Protocol
+from collections.abc import Callable, Generator, Iterator
+from contextlib import contextmanager, nullcontext
+from typing import NamedTuple, Protocol
 
 import sentry_sdk
-from pydantic import BaseModel
-from pydantic import ConfigDict
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
-from onyx.configs.app_configs import MAX_CHUNKS_PER_DOC_BATCH
-from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
-from onyx.configs.app_configs import MAX_TOKENS_FOR_FULL_INCLUSION
-from onyx.configs.app_configs import USE_CHUNK_SUMMARY
-from onyx.configs.app_configs import USE_DOCUMENT_SUMMARY
+from onyx.configs.app_configs import (
+    ENABLE_CONTEXTUAL_RAG,
+    MAX_CHUNKS_PER_DOC_BATCH,
+    MAX_DOCUMENT_CHARS,
+    MAX_TOKENS_FOR_FULL_INCLUSION,
+    USE_CHUNK_SUMMARY,
+    USE_DOCUMENT_SUMMARY,
+)
+from onyx.configs.chat_configs import CONTEXTUAL_RAG_LLM_TIMEOUT
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
 )
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import ConnectorStopSignal
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import IndexAttemptMetadata
-from onyx.connectors.models import IndexingDocument
-from onyx.connectors.models import Section
-from onyx.connectors.models import SectionType
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import (
+    ConnectorFailure,
+    ConnectorStopSignal,
+    Document,
+    DocumentFailure,
+    ImageSection,
+    IndexAttemptMetadata,
+    IndexingDocument,
+    Section,
+    SectionType,
+    TextSection,
+)
 from onyx.db.connector_credential_pair import get_connector_credential_pair
-from onyx.db.document import get_documents_by_ids
-from onyx.db.document import update_docs_content_hash__no_commit
-from onyx.db.document import upsert_document_by_connector_credential_pair
-from onyx.db.document import upsert_documents
+from onyx.db.document import (
+    get_documents_by_ids,
+    update_docs_content_hash__no_commit,
+    upsert_document_by_connector_credential_pair,
+    upsert_documents,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import AccessType
-from onyx.db.enums import HookPoint
+from onyx.db.enums import AccessType, HookPoint
 from onyx.db.hierarchy import link_hierarchy_nodes_to_documents
-from onyx.db.index_attempt_metrics import IndexAttemptStage
-from onyx.db.index_attempt_metrics import safe_record_single_event_if_set
-from onyx.db.index_attempt_metrics import time_stage_if_set
+from onyx.db.index_attempt_metrics import (
+    IndexAttemptStage,
+    safe_record_single_event_if_set,
+    time_stage_if_set,
+)
 from onyx.db.models import Document as DBDocument
 from onyx.db.models import IndexModelStatus
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.tag import upsert_document_tags
 from onyx.document_index.document_index_utils import get_multipass_config
 from onyx.document_index.document_metadata import DocumentMetadata
-from onyx.document_index.interfaces_new import DocumentIndex
-from onyx.document_index.interfaces_new import DocumentInsertionRecord
-from onyx.document_index.interfaces_new import IndexingMetadata
+from onyx.document_index.interfaces_new import (
+    DocumentIndex,
+    DocumentInsertionRecord,
+    IndexingMetadata,
+)
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.image_summarization import summarize_image_with_error_handling
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.staging import promote_staged_file
-from onyx.hooks.executor import execute_hook
-from onyx.hooks.executor import HookSkipped
-from onyx.hooks.executor import HookSoftFailed
-from onyx.hooks.points.document_ingestion import DocumentIngestionOwner
-from onyx.hooks.points.document_ingestion import DocumentIngestionPayload
-from onyx.hooks.points.document_ingestion import DocumentIngestionResponse
-from onyx.hooks.points.document_ingestion import DocumentIngestionSection
-from onyx.hooks.points.document_push import DocumentPushPayload
-from onyx.hooks.points.document_push import DocumentPushResponse
+from onyx.hooks.executor import HookSkipped, HookSoftFailed, execute_hook
+from onyx.hooks.points.document_ingestion import (
+    DocumentIngestionOwner,
+    DocumentIngestionPayload,
+    DocumentIngestionResponse,
+    DocumentIngestionSection,
+)
 from onyx.indexing.chunk_batch_store import ChunkBatchStore
 from onyx.indexing.chunker import Chunker
-from onyx.indexing.embedder import embed_chunks_with_failure_handling
-from onyx.indexing.embedder import IndexingEmbedder
-from onyx.indexing.models import DocAwareChunk
-from onyx.indexing.models import DocMetadataAwareIndexChunk
-from onyx.indexing.models import IndexingBatchAdapter
-from onyx.indexing.models import UpdatableChunkData
+from onyx.indexing.document_push import (
+    DocumentPushPayload,
+    DocumentPushResponse,
+    get_document_push_config,
+    push_document_via_config,
+)
+from onyx.indexing.embedder import IndexingEmbedder, embed_chunks_with_failure_handling
+from onyx.indexing.models import (
+    DocAwareChunk,
+    DocMetadataAwareIndexChunk,
+    IndexingBatchAdapter,
+    UpdatableChunkData,
+)
 from onyx.indexing.vector_db_insertion import write_chunks_to_vector_db_with_backoff
-from onyx.llm.factory import get_default_llm_with_vision
-from onyx.llm.factory import get_llm_for_contextual_rag
+from onyx.llm.factory import (
+    get_contextual_rag_llm_for_search_settings,
+    get_default_llm_with_vision,
+)
 from onyx.llm.interfaces import LLM
-from onyx.llm.models import UserMessage
+from onyx.llm.models import ReasoningEffort, UserMessage
 from onyx.llm.multi_llm import LLMRateLimitError
-from onyx.llm.utils import llm_response_to_string
-from onyx.llm.utils import MAX_CONTEXT_TOKENS
-from onyx.natural_language_processing.utils import BaseTokenizer
-from onyx.natural_language_processing.utils import get_tokenizer
-from onyx.natural_language_processing.utils import tokenizer_trim_middle
-from onyx.prompts.contextual_retrieval import CONTEXTUAL_RAG_PROMPT1
-from onyx.prompts.contextual_retrieval import CONTEXTUAL_RAG_PROMPT2
-from onyx.prompts.contextual_retrieval import DOCUMENT_SUMMARY_PROMPT
+from onyx.llm.utils import MAX_CONTEXT_TOKENS, llm_response_to_string
+from onyx.natural_language_processing.utils import (
+    BaseTokenizer,
+    get_tokenizer,
+    tokenizer_trim_middle,
+)
+from onyx.prompts.contextual_retrieval import (
+    CONTEXTUAL_RAG_PROMPT1,
+    CONTEXTUAL_RAG_PROMPT2,
+    DOCUMENT_SUMMARY_PROMPT,
+)
+from onyx.server.query_and_chat.token_limit import check_global_token_rate_limits
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.llm_utils import llm_generation_span
-from onyx.tracing.llm_utils import record_llm_response
+from onyx.tracing.framework.create import ensure_trace
+from onyx.tracing.framework.traces import TraceContentMode
+from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_documents_for_postgres
@@ -101,6 +121,18 @@ logger = setup_logger()
 
 MAX_CONTEXTUAL_RAG_WORKERS = 128  # Assume 8mb of memory per worker
 MAX_IMAGE_WORKERS = 16
+CONTEXTUAL_RAG_ENRICHMENT_NAME = "contextual RAG"
+IMAGE_SUMMARIZATION_ENRICHMENT_NAME = "image summarization"
+LLM_ENRICHMENT_SPEND_LIMIT_FAILURE_MESSAGE = (
+    "Document requires {enrichments}, but the workspace global LLM usage limit "
+    "has been reached. Adjust the limit or wait for it to reset, then retry."
+)
+INDEXING_PIPELINE_TRACE_NAME = "indexing_pipeline"
+
+# Contextual-RAG doc/chunk summaries are a short, non-reasoning task. On a reasoning
+# model the hidden reasoning tokens consume the small MAX_CONTEXT_TOKENS budget and the
+# visible summary returns empty, so disable reasoning for these calls.
+CONTEXTUAL_RAG_REASONING_EFFORT = ReasoningEffort.OFF
 
 
 class _DocsToUpdateResult(NamedTuple):
@@ -124,6 +156,11 @@ class DocumentBatchPrepareContext(BaseModel):
     indexable_docs: list[IndexingDocument] = []
     doc_id_to_content_hash: dict[str, str] = {}
     model_config = ConfigDict(arbitrary_types_allowed=True)
+
+
+class _LLMEnrichmentPartition(BaseModel):
+    documents: list[Document]
+    failures: list[ConnectorFailure]
 
 
 class IndexingPipelineResult(BaseModel):
@@ -321,6 +358,7 @@ def get_docs_to_update(
     documents: list[Document],
     db_docs: list[DBDocument],
     ignore_timestamp_gate: bool = False,
+    ignore_content_hash_gate: bool = False,
 ) -> _DocsToUpdateResult:
     """Return the subset of documents that need to be re-indexed, plus their pre-computed hashes.
 
@@ -340,6 +378,9 @@ def get_docs_to_update(
       a timestamp advance is authoritative evidence of a change and must not be
       overridden (e.g. GDrive in-place image replacement: same image_file_id, but image
       bytes changed; hash would incorrectly say "skip").
+
+      Also skipped when ignore_content_hash_gate=True: a FUTURE/secondary build
+      must not consult the shared (PRESENT-only) hash, else writes cross-suppress.
 
     The returned doc_id_to_content_hash map contains hashes for all documents that
     will be indexed. These are persisted to the DB after successful vector DB writes
@@ -372,10 +413,10 @@ def get_docs_to_update(
         # A timestamp advance is authoritative evidence of a change — skip the hash
         # check so we never suppress a legitimate re-index (see docstring).
         content_hash = doc.content_hash()
-        if not timestamp_advanced:
+        if not timestamp_advanced and not ignore_content_hash_gate:
             db_doc = id_to_db_doc_map.get(doc.id)
             if db_doc and db_doc.content_hash == content_hash:
-                logger.debug(f"Skipping document {doc.id!r} — content hash unchanged")
+                logger.debug("Skipping document %r — content hash unchanged", doc.id)
                 continue
 
         doc_id_to_content_hash[doc.id] = content_hash
@@ -394,8 +435,11 @@ def index_doc_batch_with_handler(
     tenant_id: str,
     adapter: IndexingBatchAdapter,
     ignore_time_skip: bool = False,
+    index_to_secondary: bool = False,
     from_beginning: bool = False,
     enable_contextual_rag: bool = False,
+    llm_enrichment_allowed: bool = True,
+    image_summarization_llm: LLM | None = None,
     llm: LLM | None = None,
 ) -> IndexingPipelineResult:
     try:
@@ -408,8 +452,11 @@ def index_doc_batch_with_handler(
             tenant_id=tenant_id,
             adapter=adapter,
             ignore_time_skip=ignore_time_skip,
+            index_to_secondary=index_to_secondary,
             from_beginning=from_beginning,
             enable_contextual_rag=enable_contextual_rag,
+            llm_enrichment_allowed=llm_enrichment_allowed,
+            image_summarization_llm=image_summarization_llm,
             llm=llm,
         )
 
@@ -494,6 +541,7 @@ def index_doc_batch_prepare(
     index_attempt_metadata: IndexAttemptMetadata,
     db_session: Session,
     ignore_time_skip: bool = False,
+    index_to_secondary: bool = False,
 ) -> DocumentBatchPrepareContext | None:
     """Sets up the documents in the relational DB (source of truth) for permissions, metadata, etc.
     This preceeds indexing it into the actual document index."""
@@ -516,6 +564,7 @@ def index_doc_batch_prepare(
         documents=documents,
         db_docs=db_docs,
         ignore_timestamp_gate=ignore_time_skip,
+        ignore_content_hash_gate=index_to_secondary,
     )
     if len(updatable_docs) != len(documents):
         updatable_doc_ids = [doc.id for doc in updatable_docs]
@@ -693,60 +742,116 @@ def filter_documents(
     return documents, failures
 
 
-def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
-    """
-    Process all sections in documents by:
-    1. Converting both TextSection and ImageSection objects to base Section objects
-    2. Processing ImageSections to generate text summaries using a vision-capable LLM
-    3. Returning IndexingDocument objects with both original and processed sections
+def _convert_documents_without_image_summaries(
+    documents: list[Document],
+) -> list[IndexingDocument]:
+    return [
+        IndexingDocument(
+            **document.model_dump(),
+            processed_sections=[
+                (
+                    Section(
+                        type=section.type,
+                        text="",
+                        link=section.link,
+                        image_file_id=section.image_file_id,
+                        heading=section.heading,
+                    )
+                    if isinstance(section, ImageSection)
+                    else section.model_copy()
+                )
+                for section in document.sections
+            ],
+        )
+        for document in documents
+    ]
 
-    Args:
-        documents: List of documents with TextSection | ImageSection objects
 
-    Returns:
-        List of IndexingDocument objects with processed_sections as list[Section]
-    """
-    # Check if image extraction and analysis is enabled before trying to get a vision LLM.
-    # Use section.type rather than isinstance because sections can round-trip
-    # through pydantic as base Section instances (not the concrete subclass).
+def _system_llm_enrichment_is_allowed() -> bool:
+    try:
+        check_global_token_rate_limits()
+    except OnyxError as error:
+        if error.error_code != OnyxErrorCode.RATE_LIMITED:
+            raise
+        logger.warning(
+            "Blocking indexing LLM enrichment at the global usage limit: %s",
+            error.detail,
+        )
+        return False
+    return True
+
+
+def _partition_documents_blocked_by_llm_spend_limit(
+    documents: list[Document],
+    *,
+    enable_contextual_rag: bool,
+    enable_image_summarization: bool,
+    llm_enrichment_allowed: bool,
+) -> _LLMEnrichmentPartition:
+    if llm_enrichment_allowed:
+        return _LLMEnrichmentPartition(documents=documents, failures=[])
+
+    allowed_documents: list[Document] = []
+    failures: list[ConnectorFailure] = []
+    for document in documents:
+        blocked_enrichments: list[str] = []
+        if enable_contextual_rag:
+            blocked_enrichments.append(CONTEXTUAL_RAG_ENRICHMENT_NAME)
+        if enable_image_summarization and any(
+            section.type == SectionType.IMAGE for section in document.sections
+        ):
+            blocked_enrichments.append(IMAGE_SUMMARIZATION_ENRICHMENT_NAME)
+        if not blocked_enrichments:
+            allowed_documents.append(document)
+            continue
+
+        failures.append(
+            ConnectorFailure(
+                failed_document=DocumentFailure(
+                    document_id=document.id,
+                    document_link=next(
+                        (section.link for section in document.sections if section.link),
+                        None,
+                    ),
+                ),
+                failure_message=LLM_ENRICHMENT_SPEND_LIMIT_FAILURE_MESSAGE.format(
+                    enrichments=" and ".join(blocked_enrichments)
+                ),
+            )
+        )
+
+    return _LLMEnrichmentPartition(
+        documents=allowed_documents,
+        failures=failures,
+    )
+
+
+def _get_image_summarization_llm(
+    documents: list[Document], enabled: bool
+) -> LLM | None:
     has_image_section = any(
         section.type == SectionType.IMAGE
         for document in documents
         for section in document.sections
     )
-    if not get_image_extraction_and_analysis_enabled() or not has_image_section:
-        llm = None
-    else:
-        # Only get the vision LLM if image processing is enabled
-        llm = get_default_llm_with_vision()
+    if not enabled or not has_image_section:
+        return None
 
-    if not llm:
-        if get_image_extraction_and_analysis_enabled():
-            logger.warning(
-                "Image analysis is enabled but no vision-capable LLM is "
-                "available — images will not be summarized. Configure a "
-                "vision model in the admin LLM settings."
-            )
-        # Even without LLM, we still convert to IndexingDocument with base Sections
-        return [
-            IndexingDocument(
-                **document.model_dump(),
-                processed_sections=[
-                    Section(
-                        type=section.type,
-                        text="" if isinstance(section, ImageSection) else section.text,
-                        link=section.link,
-                        image_file_id=(
-                            section.image_file_id
-                            if isinstance(section, ImageSection)
-                            else None
-                        ),
-                    )
-                    for section in document.sections
-                ],
-            )
-            for document in documents
-        ]
+    llm = get_default_llm_with_vision()
+    if llm is None:
+        logger.warning(
+            "Image analysis is enabled but no vision-capable LLM is "
+            "available — images will not be summarized. Configure a "
+            "vision model in the admin LLM settings."
+        )
+    return llm
+
+
+def _process_image_sections(
+    documents: list[Document], llm: LLM | None
+) -> list[IndexingDocument]:
+    if llm is None:
+        return _convert_documents_without_image_summaries(documents)
 
     indexed_documents: list[IndexingDocument] = []
     # Sections that need LLM summarization, paired with their image data.
@@ -760,14 +865,9 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
 
         for section in document.sections:
             if not isinstance(section, ImageSection):
-                processed_sections.append(
-                    Section(
-                        type=section.type,
-                        text=section.text or "",
-                        link=section.link,
-                        image_file_id=None,
-                    )
-                )
+                # model_copy keeps the concrete section (incl. a TabularSection's
+                # csv_file_id) intact; rebuilding as a base Section would drop it.
+                processed_sections.append(section.model_copy())
                 continue
 
             processed_section = Section(
@@ -775,6 +875,7 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
                 link=section.link,
                 image_file_id=section.image_file_id,
                 text="",
+                heading=section.heading,
             )
             processed_sections.append(processed_section)
 
@@ -822,10 +923,18 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
             max_workers=MAX_IMAGE_WORKERS,
         )
 
-        for p, result in zip(pending, results):
+        for p, result in zip(pending, results, strict=True):
             p.section.text = result or "[Error processing image]"
 
     return indexed_documents
+
+
+def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
+    """Convert document sections and summarize images when a vision LLM is available."""
+    llm = _get_image_summarization_llm(
+        documents, get_image_extraction_and_analysis_enabled()
+    )
+    return _process_image_sections(documents, llm)
 
 
 def add_document_summaries(
@@ -859,8 +968,14 @@ def add_document_summaries(
         llm=llm,
         flow=LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
         input_messages=[prompt_msg],
+        content_mode=TraceContentMode.METADATA_ONLY,
     ) as span_generation:
-        response = llm.invoke(prompt_msg, max_tokens=MAX_CONTEXT_TOKENS)
+        response = llm.invoke(
+            prompt_msg,
+            max_tokens=MAX_CONTEXT_TOKENS,
+            reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
+            total_timeout_override=CONTEXTUAL_RAG_LLM_TIMEOUT,
+        )
         record_llm_response(span_generation, response)
     doc_summary = llm_response_to_string(response)
 
@@ -908,8 +1023,14 @@ def add_chunk_summaries(
             llm=llm,
             flow=LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
             input_messages=[fallback_prompt],
+            content_mode=TraceContentMode.METADATA_ONLY,
         ) as span_generation:
-            response = llm.invoke(fallback_prompt, max_tokens=MAX_CONTEXT_TOKENS)
+            response = llm.invoke(
+                fallback_prompt,
+                max_tokens=MAX_CONTEXT_TOKENS,
+                reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
+                total_timeout_override=CONTEXTUAL_RAG_LLM_TIMEOUT,
+            )
             record_llm_response(span_generation, response)
         doc_info = llm_response_to_string(response)
 
@@ -933,8 +1054,14 @@ def add_chunk_summaries(
                 llm=llm,
                 flow=LLMFlow.CONTEXTUAL_RAG_CHUNK_CONTEXT,
                 input_messages=[processed_prompt],
+                content_mode=TraceContentMode.METADATA_ONLY,
             ) as span_generation:
-                response = llm.invoke(processed_prompt, max_tokens=MAX_CONTEXT_TOKENS)
+                response = llm.invoke(
+                    processed_prompt,
+                    max_tokens=MAX_CONTEXT_TOKENS,
+                    reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
+                    total_timeout_override=CONTEXTUAL_RAG_LLM_TIMEOUT,
+                )
                 record_llm_response(span_generation, response)
             chunk.chunk_context = llm_response_to_string(response)
 
@@ -1154,7 +1281,9 @@ def _maybe_push_documents(
     insertion_records: list[DocumentInsertionRecord],
     from_beginning: bool = False,
 ) -> None:
-    """Fire the DOCUMENT_PUSH hook for each successfully indexed public document.
+    """Push each successfully indexed public document to an external sink:
+    the config-driven endpoint (all editions, from DOCUMENT_PUSH_ENDPOINT_URL)
+    when set, otherwise the DOCUMENT_PUSH hook (EE, from the hook table).
 
     Single-tenant only — multi-tenant deployments would mix documents from
     different organizations into a shared external destination.
@@ -1179,6 +1308,11 @@ def _maybe_push_documents(
         )
         if cc_pair is None or cc_pair.access_type != AccessType.PUBLIC:
             return
+
+        # Either/or: the config-driven endpoint wins when set — checked first
+        # since it is a cached local read, while the hook path does a DB
+        # lookup per document.
+        use_config_push = get_document_push_config() is not None
 
         doc_map = {doc.id: doc for doc in filtered_documents}
         for doc_id in successfully_indexed:
@@ -1209,12 +1343,15 @@ def _maybe_push_documents(
                     for k, v in (doc.metadata or {}).items()
                 },
             )
-            execute_hook(
-                db_session=db_session,
-                hook_point=HookPoint.DOCUMENT_PUSH,
-                payload=payload.model_dump(),
-                response_type=DocumentPushResponse,
-            )
+            if use_config_push:
+                push_document_via_config(payload)
+            else:
+                execute_hook(
+                    db_session=db_session,
+                    hook_point=HookPoint.DOCUMENT_PUSH,
+                    payload=payload.model_dump(),
+                    response_type=DocumentPushResponse,
+                )
 
 
 @log_function_time(debug_only=True)
@@ -1228,8 +1365,11 @@ def index_doc_batch(
     tenant_id: str,
     adapter: IndexingBatchAdapter,
     enable_contextual_rag: bool = False,
+    llm_enrichment_allowed: bool = True,
+    image_summarization_llm: LLM | None = None,
     llm: LLM | None = None,
     ignore_time_skip: bool = False,
+    index_to_secondary: bool = False,
     from_beginning: bool = False,
     filter_fnc: Callable[
         [list[Document]], tuple[list[Document], list[ConnectorFailure]]
@@ -1244,8 +1384,8 @@ def index_doc_batch(
     second element is the number of chunks."""
 
     # Log connector info for debugging OOM issues
-    connector_id = getattr(adapter, "connector_id", None)
-    credential_id = getattr(adapter, "credential_id", None)
+    connector_id = getattr(adapter, "connector_id", None)  # ods: ignore[getattr]
+    credential_id = getattr(adapter, "credential_id", None)  # ods: ignore[getattr]
     logger.debug(
         "Starting index_doc_batch: connector_id=%s, credential_id=%s, tenant_id=%s, num_docs=%s",
         connector_id,
@@ -1259,7 +1399,9 @@ def index_doc_batch(
     # mandate an ``index_attempt_metadata`` field, so non-attempt callers
     # (ingestion API, user file processing) get None and the
     # ``*_if_set`` helpers no-op.
-    _attempt_metadata = getattr(adapter, "index_attempt_metadata", None)
+    _attempt_metadata = getattr(  # ods: ignore[getattr]
+        adapter, "index_attempt_metadata", None
+    )
     attempt_id: int | None = (
         _attempt_metadata.attempt_id if _attempt_metadata is not None else None
     )
@@ -1267,11 +1409,29 @@ def index_doc_batch(
     filtered_documents, filter_failures = filter_fnc(document_batch)
     filtered_documents = _apply_document_ingestion_hook(filtered_documents)
     with time_stage_if_set(IndexAttemptStage.DOC_DB_PREPARE, attempt_id):
-        context = adapter.prepare(filtered_documents, ignore_time_skip)
+        context = adapter.prepare(
+            filtered_documents, ignore_time_skip, index_to_secondary
+        )
     if not context:
         result = IndexingPipelineResult.empty(len(filtered_documents))
         result.failures.extend(filter_failures)
         return result
+
+    enrichment_partition = _partition_documents_blocked_by_llm_spend_limit(
+        context.updatable_docs,
+        enable_contextual_rag=enable_contextual_rag,
+        enable_image_summarization=image_summarization_llm is not None,
+        llm_enrichment_allowed=llm_enrichment_allowed,
+    )
+    enrichment_failed_doc_ids = _get_failed_doc_ids(enrichment_partition.failures)
+    context.updatable_docs = enrichment_partition.documents
+    if not context.updatable_docs:
+        return IndexingPipelineResult(
+            new_docs=0,
+            total_docs=len(filtered_documents),
+            total_chunks=0,
+            failures=filter_failures + enrichment_partition.failures,
+        )
 
     # Convert documents to IndexingDocument objects with processed section.
     # Only record IMAGE_PROCESSING when there's actually image work to do --
@@ -1283,9 +1443,13 @@ def index_doc_batch(
     )
     if has_image_section:
         with time_stage_if_set(IndexAttemptStage.IMAGE_PROCESSING, attempt_id):
-            context.indexable_docs = process_image_sections(context.updatable_docs)
+            context.indexable_docs = _process_image_sections(
+                context.updatable_docs, image_summarization_llm
+            )
     else:
-        context.indexable_docs = process_image_sections(context.updatable_docs)
+        context.indexable_docs = _process_image_sections(
+            context.updatable_docs, image_summarization_llm
+        )
 
     doc_descriptors = [
         {
@@ -1304,7 +1468,7 @@ def index_doc_batch(
     llm_tokenizer: BaseTokenizer | None = None
 
     # contextual RAG
-    if enable_contextual_rag:
+    if enable_contextual_rag and llm_enrichment_allowed:
         assert llm is not None, "must provide an LLM for contextual RAG"
         llm_tokenizer = get_tokenizer(
             model_name=llm.config.model_name,
@@ -1429,16 +1593,23 @@ def index_doc_batch(
                 adapter.post_index(
                     context=context,
                     updatable_chunk_data=updatable_chunk_data,
-                    filtered_documents=filtered_documents,
+                    filtered_documents=[
+                        document
+                        for document in filtered_documents
+                        if document.id not in enrichment_failed_doc_ids
+                    ],
                     enrichment=enricher,
                     db_session=db_session,
+                    index_to_secondary=index_to_secondary,
                 )
 
             # Persist content hash only for documents confirmed written to the
             # vector DB. Doing this here (after the write) prevents a failed
             # index from storing a hash that would permanently skip the document
             # on the next sync. Hashes were pre-computed in get_docs_to_update.
-            if primary_doc_idx_insertion_records is not None:
+            # Skipped for FUTURE writes: stamping the PRESENT-only hash would make
+            # the PRESENT poll skip the doc (cross-index suppression).
+            if primary_doc_idx_insertion_records is not None and not index_to_secondary:
                 successfully_indexed_ids = {
                     r.document_id for r in primary_doc_idx_insertion_records
                 }
@@ -1469,6 +1640,7 @@ def index_doc_batch(
         total_chunks=len(embedding_result.successful_chunk_ids),
         failures=primary_doc_idx_vector_db_write_failures
         + embedding_result.connector_failures
+        + enrichment_partition.failures
         + filter_failures,
     )
 
@@ -1484,9 +1656,14 @@ def run_indexing_pipeline(
     adapter: IndexingBatchAdapter,
     chunker: Chunker | None = None,
     ignore_time_skip: bool = False,
+    index_to_secondary: bool = False,
     from_beginning: bool = False,
 ) -> IndexingPipelineResult:
-    """Builds a pipeline which takes in a list (batch) of docs and indexes them."""
+    """Builds a pipeline which takes in a list (batch) of docs and indexes them.
+
+    index_to_secondary disables the content-hash gate + stamp for FUTURE writes so
+    they don't cross-suppress the PRESENT index's shared hash.
+    """
     if db_session is not None:
         all_search_settings = get_active_search_settings(db_session)
     else:
@@ -1502,40 +1679,53 @@ def run_indexing_pipeline(
 
     multipass_config = get_multipass_config(search_settings)
 
-    enable_contextual_rag = (
+    contextual_rag_configured = (
         search_settings.enable_contextual_rag or ENABLE_CONTEXTUAL_RAG
     )
+    image_summarization_llm = _get_image_summarization_llm(
+        document_batch, get_image_extraction_and_analysis_enabled()
+    )
+    image_summarization_configured = image_summarization_llm is not None
+    llm_enrichment_configured = (
+        contextual_rag_configured or image_summarization_configured
+    )
+    llm_enrichment_allowed = (
+        not llm_enrichment_configured or _system_llm_enrichment_is_allowed()
+    )
     llm = None
-    if enable_contextual_rag:
-        mc_id = search_settings.contextual_rag_model_configuration_id
-        if mc_id is None:
-            # Fall back to the global default contextual RAG model (LLMModelFlow).
-            from onyx.db.llm import fetch_default_contextual_rag_model
-
-            with get_session_with_current_tenant() as fallback_session:
-                mc = fetch_default_contextual_rag_model(fallback_session)
-            mc_id = mc.id if mc else None
-        if mc_id is not None:
-            llm = get_llm_for_contextual_rag(mc_id)
+    if contextual_rag_configured and llm_enrichment_allowed:
+        llm = get_contextual_rag_llm_for_search_settings(search_settings)
 
     chunker = chunker or Chunker(
         tokenizer=embedder.embedding_model.tokenizer,
         enable_multipass=multipass_config.multipass_indexing,
         enable_large_chunks=multipass_config.enable_large_chunks,
-        enable_contextual_rag=enable_contextual_rag,
+        enable_contextual_rag=contextual_rag_configured and llm_enrichment_allowed,
         # after every doc, update status in case there are a bunch of really long docs
     )
 
-    return index_doc_batch_with_handler(
-        chunker=chunker,
-        embedder=embedder,
-        document_indices=document_indices,
-        document_batch=document_batch,
-        request_id=request_id,
-        tenant_id=tenant_id,
-        adapter=adapter,
-        enable_contextual_rag=enable_contextual_rag,
-        llm=llm,
-        ignore_time_skip=ignore_time_skip,
-        from_beginning=from_beginning,
+    trace_context = (
+        ensure_trace(
+            INDEXING_PIPELINE_TRACE_NAME,
+            content_mode=TraceContentMode.METADATA_ONLY,
+        )
+        if llm_enrichment_configured
+        else nullcontext()
     )
+    with trace_context:
+        return index_doc_batch_with_handler(
+            chunker=chunker,
+            embedder=embedder,
+            document_indices=document_indices,
+            document_batch=document_batch,
+            request_id=request_id,
+            tenant_id=tenant_id,
+            adapter=adapter,
+            enable_contextual_rag=contextual_rag_configured,
+            llm_enrichment_allowed=llm_enrichment_allowed,
+            image_summarization_llm=image_summarization_llm,
+            llm=llm,
+            ignore_time_skip=ignore_time_skip,
+            index_to_secondary=index_to_secondary,
+            from_beginning=from_beginning,
+        )

@@ -4,14 +4,13 @@ import React from "react";
 import { useField } from "formik";
 import { cn } from "@opal/utils";
 import { Tooltip } from "@opal/components";
-import { Checkbox } from "@opal/components";
+import { InputCheckbox } from "@opal/components";
 
 interface CheckboxFieldProps {
   name: string;
   label: string;
   labelClassName?: string;
   sublabel?: string;
-  size?: "sm" | "md" | "lg";
   tooltip?: string;
   onChange?: (checked: boolean) => void;
   disabled?: boolean;
@@ -22,7 +21,6 @@ export const CheckboxField: React.FC<CheckboxFieldProps> = ({
   label,
   onChange,
   sublabel,
-  size = "md",
   tooltip,
   labelClassName,
   disabled,
@@ -30,14 +28,9 @@ export const CheckboxField: React.FC<CheckboxFieldProps> = ({
 }) => {
   const [field, , helpers] = useField<boolean>({ name, type: "checkbox" });
 
-  const sizeClasses = {
-    sm: "h-2 w-2",
-    md: "h-3 w-3",
-    lg: "h-4 w-4",
-  };
-
-  const handleClick = (e: React.MouseEvent<HTMLLabelElement>) => {
+  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
+    if (disabled) return;
     const next = !field.value;
     helpers.setValue(next);
     onChange?.(next);
@@ -47,7 +40,7 @@ export const CheckboxField: React.FC<CheckboxFieldProps> = ({
 
   const checkboxContent = (
     <div className="flex w-fit items-start space-x-2">
-      <Checkbox
+      <InputCheckbox
         id={name}
         aria-labelledby={labelId}
         checked={field.value}
@@ -55,16 +48,15 @@ export const CheckboxField: React.FC<CheckboxFieldProps> = ({
           helpers.setValue(Boolean(checked));
           onChange?.(Boolean(checked));
         }}
-        className={cn(sizeClasses[size])}
         disabled={disabled}
         {...props}
       />
-      <div className="flex flex-col">
+      {/* Pointer convenience only — the checkbox is keyboard reachable. */}
+      <div className="flex flex-col" role="presentation" onClick={handleClick}>
         <label
           id={labelId}
           htmlFor={name}
           className="flex flex-col cursor-pointer"
-          onClick={handleClick}
         >
           <span
             className={cn(

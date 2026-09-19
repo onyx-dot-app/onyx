@@ -1,13 +1,11 @@
-"""Unit tests for `ee.onyx.utils.tier._self_hosted_tier`.
-
-Focuses on cache-failure resilience: a Redis blip on the cached license
-read must not bubble up to callers (e.g. admin settings updates).
+"""Unit tests for `ee.onyx.utils.tier`: self-hosted tier resolution
+(cache-failure resilience) and the tier-requirement guards.
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
+import requests
 from redis.exceptions import RedisError
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -15,8 +13,7 @@ from ee.onyx.server.license.models import CustomerTier
 from onyx.db.enums import AccessType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.settings.models import ApplicationStatus
-from onyx.server.settings.models import Tier
+from onyx.server.settings.models import ApplicationStatus, Tier
 
 
 def _metadata(
@@ -250,3 +247,155 @@ class TestRequireBusinessTierForSyncAccess:
 
         require_business_tier_for_sync_access(AccessType.SYNC)
         mock_get_tier.assert_not_called()
+
+
+class TestRequireBusinessTierForMultiSSO:
+    """Below BUSINESS raises FEATURE_NOT_AVAILABLE. Enforcement-off passes
+    without a tier read."""
+
+    @patch("ee.onyx.utils.tier.LICENSE_ENFORCEMENT_ENABLED", True)
+    @patch("ee.onyx.utils.tier.get_tier")
+    def test_below_business_raises(self, mock_get_tier: MagicMock) -> None:
+        from ee.onyx.utils.tier import require_business_tier_for_multi_sso
+
+        mock_get_tier.return_value = Tier.COMMUNITY
+        with pytest.raises(OnyxError) as exc_info:
+            require_business_tier_for_multi_sso()
+        assert exc_info.value.error_code == OnyxErrorCode.FEATURE_NOT_AVAILABLE
+
+    @pytest.mark.parametrize(
+        "tier",
+        [Tier.BUSINESS, Tier.ENTERPRISE],
+        ids=["business", "enterprise"],
+    )
+    @patch("ee.onyx.utils.tier.LICENSE_ENFORCEMENT_ENABLED", True)
+    @patch("ee.onyx.utils.tier.get_tier")
+    def test_business_or_above_passes(
+        self, mock_get_tier: MagicMock, tier: Tier
+    ) -> None:
+        from ee.onyx.utils.tier import require_business_tier_for_multi_sso
+
+        mock_get_tier.return_value = tier
+        require_business_tier_for_multi_sso()
+
+    @patch("ee.onyx.utils.tier.LICENSE_ENFORCEMENT_ENABLED", False)
+    @patch("ee.onyx.utils.tier.get_tier")
+    def test_enforcement_disabled_passes_without_tier_read(
+        self, mock_get_tier: MagicMock
+    ) -> None:
+        from ee.onyx.utils.tier import require_business_tier_for_multi_sso
+
+        require_business_tier_for_multi_sso()
+        mock_get_tier.assert_not_called()
+
+
+@patch("ee.onyx.utils.tier.MULTI_TENANT", True)
+def test_default_schema_does_not_lookup_cloud_tier() -> None:
+    from ee.onyx.utils.tier import get_tier
+    from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+
+    with (
+        patch("ee.onyx.utils.tier.get_cached_tier") as cache,
+        patch("ee.onyx.utils.tier.has_recent_tenant_tier_miss") as miss,
+        patch("ee.onyx.utils.tier._lazy_refresh_from_cp") as refresh,
+    ):
+        assert get_tier(POSTGRES_DEFAULT_SCHEMA) == Tier.BUSINESS
+    cache.assert_not_called()
+    miss.assert_not_called()
+    refresh.assert_not_called()
+
+
+@patch("ee.onyx.utils.tier.MULTI_TENANT", True)
+def test_cloud_tier_miss_is_cached_until_expiry() -> None:
+    from ee.onyx.server.tenants.tier_management import (
+        TENANT_TIER_MISS_KEY,
+        TENANT_TIER_MISS_TTL_SECONDS,
+        CachedTier,
+    )
+    from ee.onyx.utils.tier import get_tier
+
+    redis = MagicMock()
+    with (
+        patch("ee.onyx.utils.tier.get_cached_tier", return_value=None) as cache,
+        patch("ee.onyx.utils.tier._lazy_refresh_from_cp", return_value=None) as refresh,
+        patch(
+            "ee.onyx.server.tenants.tier_management.get_redis_client",
+            return_value=redis,
+        ) as primary,
+        patch(
+            "ee.onyx.server.tenants.tier_management.get_redis_replica_client",
+        ) as replica,
+    ):
+        redis.exists.return_value = False
+        assert get_tier("tenant-a") == Tier.BUSINESS
+        assert primary.call_args_list == [
+            call(tenant_id="tenant-a"),
+            call(tenant_id="tenant-a"),
+        ]
+        redis.set.assert_called_once_with(
+            TENANT_TIER_MISS_KEY, "1", ex=TENANT_TIER_MISS_TTL_SECONDS
+        )
+        redis.exists.return_value = True
+        assert get_tier("tenant-a") == Tier.BUSINESS
+        replica.assert_not_called()
+        refresh.assert_called_once_with("tenant-a")
+        cache.return_value = CachedTier(CustomerTier.ENTERPRISE, None)
+        assert get_tier("tenant-a") == Tier.ENTERPRISE
+        cache.return_value = None
+        redis.exists.return_value = False
+        assert get_tier("tenant-a") == Tier.BUSINESS
+        assert refresh.call_count == 2
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        requests.Timeout("retry"),
+        ValueError("invalid payload"),
+        TypeError("invalid shape"),
+    ],
+)
+@patch("ee.onyx.utils.tier.MULTI_TENANT", True)
+def test_cloud_tier_failed_refresh_remains_retryable(failure: Exception) -> None:
+    from ee.onyx.server.tenants.models import SubscriptionStatusResponse
+    from ee.onyx.utils.tier import get_tier
+
+    with (
+        patch("ee.onyx.utils.tier.get_cached_tier", return_value=None),
+        patch("ee.onyx.utils.tier.has_recent_tenant_tier_miss", return_value=False),
+        patch("ee.onyx.utils.tier.mark_tenant_tier_miss") as mark,
+        patch("ee.onyx.utils.tier.update_tenant_tier"),
+        patch(
+            "ee.onyx.utils.tier.fetch_billing_information",
+            side_effect=[
+                failure,
+                SubscriptionStatusResponse(
+                    subscribed=True, customer_tier=CustomerTier.ENTERPRISE
+                ),
+            ],
+        ) as fetch,
+    ):
+        assert get_tier("tenant-a") == Tier.BUSINESS
+        mark.assert_not_called()
+        assert get_tier("tenant-a") == Tier.ENTERPRISE
+        assert fetch.call_count == 2
+
+
+@patch("ee.onyx.utils.tier.MULTI_TENANT", True)
+def test_cloud_tier_missing_data_is_not_a_confirmed_miss() -> None:
+    from ee.onyx.server.tenants.models import SubscriptionStatusResponse
+    from ee.onyx.utils.tier import get_tier
+
+    with (
+        patch("ee.onyx.utils.tier.get_cached_tier", return_value=None),
+        patch("ee.onyx.utils.tier.has_recent_tenant_tier_miss", return_value=False),
+        patch("ee.onyx.utils.tier.mark_tenant_tier_miss") as mark,
+        patch(
+            "ee.onyx.utils.tier.fetch_billing_information",
+            return_value=SubscriptionStatusResponse(
+                subscribed=True, customer_tier=None
+            ),
+        ),
+    ):
+        assert get_tier("tenant-a") == Tier.BUSINESS
+        mark.assert_not_called()

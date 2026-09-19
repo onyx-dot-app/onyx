@@ -15,40 +15,49 @@ class OnyxErrorCode(Enum):
     """
     Each member is a tuple of (error_code_string, http_status_code).
 
-    The error_code_string is a stable, machine-readable identifier that
-    API consumers can match on. The http_status_code is the default HTTP
-    status to return.
+    The error_code_string is a stable, machine-readable identifier that API
+    consumers can match on. The http_status_code is the default HTTP status to
+    return.
     """
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # Authentication (401)
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     UNAUTHENTICATED = ("UNAUTHENTICATED", 401)
     INVALID_TOKEN = ("INVALID_TOKEN", 401)
     TOKEN_EXPIRED = ("TOKEN_EXPIRED", 401)
     CSRF_FAILURE = ("CSRF_FAILURE", 403)
+    # Session rejection reasons (see onyx/auth/session_tokens.py); 403 so the
+    # web client's "403 from /me = session ended" contract holds.
+    SESSION_EXPIRED = ("SESSION_EXPIRED", 403)
+    SESSION_TERMINATED = ("SESSION_TERMINATED", 403)
+    SESSION_UNRECOGNIZED = ("SESSION_UNRECOGNIZED", 403)
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # Authorization (403)
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     UNAUTHORIZED = ("UNAUTHORIZED", 403)
     INSUFFICIENT_PERMISSIONS = ("INSUFFICIENT_PERMISSIONS", 403)
     ADMIN_ONLY = ("ADMIN_ONLY", 403)
+    REGISTRATION_DISABLED = ("REGISTRATION_DISABLED", 403)
     EE_REQUIRED = ("EE_REQUIRED", 403)
     SINGLE_TENANT_ONLY = ("SINGLE_TENANT_ONLY", 403)
     ENV_VAR_GATED = ("ENV_VAR_GATED", 403)
+    # The deployment cannot support the feature at all, so no grant helps.
+    DEPLOYMENT_UNSUPPORTED = ("DEPLOYMENT_UNSUPPORTED", 403)
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # Validation / Bad Request (400)
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
+    BAD_REQUEST = ("BAD_REQUEST", 400)
     VALIDATION_ERROR = ("VALIDATION_ERROR", 400)
     INVALID_INPUT = ("INVALID_INPUT", 400)
     MISSING_REQUIRED_FIELD = ("MISSING_REQUIRED_FIELD", 400)
     QUERY_REJECTED = ("QUERY_REJECTED", 400)
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # Not Found (404)
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     NOT_FOUND = ("NOT_FOUND", 404)
     CONNECTOR_NOT_FOUND = ("CONNECTOR_NOT_FOUND", 404)
     CREDENTIAL_NOT_FOUND = ("CREDENTIAL_NOT_FOUND", 404)
@@ -56,37 +65,45 @@ class OnyxErrorCode(Enum):
     DOCUMENT_NOT_FOUND = ("DOCUMENT_NOT_FOUND", 404)
     SESSION_NOT_FOUND = ("SESSION_NOT_FOUND", 404)
     USER_NOT_FOUND = ("USER_NOT_FOUND", 404)
+    DOCUMENT_SET_NOT_FOUND = ("DOCUMENT_SET_NOT_FOUND", 404)
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # Conflict (409)
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     CONFLICT = ("CONFLICT", 409)
     DUPLICATE_RESOURCE = ("DUPLICATE_RESOURCE", 409)
+    SKILL_NAME_CONFLICT = ("SKILL_NAME_CONFLICT", 409)
+    # A delete refused because something still points at the resource. Distinct
+    # from a plain 400 so a client can tell "repoint it first" from "bad input".
+    RESOURCE_IN_USE = ("RESOURCE_IN_USE", 409)
+    # A write refused because a background sync is still applying the last one.
+    # Retryable, unlike NOT_FOUND, which these routes used to report instead.
+    RESOURCE_SYNCING = ("RESOURCE_SYNCING", 409)
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # Rate Limiting / Quotas (429 / 402)
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     RATE_LIMITED = ("RATE_LIMITED", 429)
     SEAT_LIMIT_EXCEEDED = ("SEAT_LIMIT_EXCEEDED", 402)
     TRIAL_INVITE_LIMIT_EXCEEDED = ("TRIAL_INVITE_LIMIT_EXCEEDED", 403)
     FEATURE_NOT_AVAILABLE = ("FEATURE_NOT_AVAILABLE", 402)
     SUBSCRIPTION_INACTIVE = ("SUBSCRIPTION_INACTIVE", 402)
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # Payload (413)
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     PAYLOAD_TOO_LARGE = ("PAYLOAD_TOO_LARGE", 413)
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # Connector / Credential Errors (400-range)
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     CONNECTOR_VALIDATION_FAILED = ("CONNECTOR_VALIDATION_FAILED", 400)
     CREDENTIAL_INVALID = ("CREDENTIAL_INVALID", 400)
     CREDENTIAL_EXPIRED = ("CREDENTIAL_EXPIRED", 401)
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # Server Errors (5xx)
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     INTERNAL_ERROR = ("INTERNAL_ERROR", 500)
     NOT_IMPLEMENTED = ("NOT_IMPLEMENTED", 501)
     SERVICE_UNAVAILABLE = ("SERVICE_UNAVAILABLE", 503)
@@ -98,6 +115,19 @@ class OnyxErrorCode(Enum):
     def __init__(self, code: str, status_code: int) -> None:
         self.code = code
         self.status_code = status_code
+
+    @classmethod
+    def for_status(cls, status_code: int) -> "OnyxErrorCode":
+        """The code to report for an error raised without one.
+
+        A bare ``HTTPException`` or ``ValueError`` carries a status and a
+        sentence, so a machine client has nothing stable to match on. This
+        gives those responses the same code vocabulary as ``OnyxError``.
+        """
+        canonical = _CANONICAL_CODE_FOR_STATUS.get(status_code)
+        if canonical is not None:
+            return canonical
+        return cls.INTERNAL_ERROR if status_code >= 500 else cls.BAD_REQUEST
 
     def detail(self, message: str | None = None) -> dict[str, str]:
         """Build a structured error detail dict.
@@ -111,3 +141,22 @@ class OnyxErrorCode(Enum):
             "error_code": self.code,
             "detail": message or self.code,
         }
+
+
+# The code a status maps to when the raise site named none. Only statuses with
+# an unambiguous meaning are listed; anything else falls back by class.
+_CANONICAL_CODE_FOR_STATUS: dict[int, OnyxErrorCode] = {
+    400: OnyxErrorCode.BAD_REQUEST,
+    401: OnyxErrorCode.UNAUTHENTICATED,
+    403: OnyxErrorCode.UNAUTHORIZED,
+    404: OnyxErrorCode.NOT_FOUND,
+    409: OnyxErrorCode.CONFLICT,
+    413: OnyxErrorCode.PAYLOAD_TOO_LARGE,
+    422: OnyxErrorCode.VALIDATION_ERROR,
+    429: OnyxErrorCode.RATE_LIMITED,
+    500: OnyxErrorCode.INTERNAL_ERROR,
+    501: OnyxErrorCode.NOT_IMPLEMENTED,
+    502: OnyxErrorCode.BAD_GATEWAY,
+    503: OnyxErrorCode.SERVICE_UNAVAILABLE,
+    504: OnyxErrorCode.GATEWAY_TIMEOUT,
+}

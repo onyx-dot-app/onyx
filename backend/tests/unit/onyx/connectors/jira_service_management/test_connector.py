@@ -1,6 +1,5 @@
 from collections.abc import Callable
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import cast
 from unittest.mock import MagicMock
 
@@ -14,8 +13,7 @@ from onyx.connectors.jira.utils import JIRA_SERVER_API_VERSION
 from onyx.connectors.jira_service_management.connector import (
     JiraServiceManagementConnector,
 )
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
+from onyx.connectors.models import ConnectorMissingCredentialError, Document
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 
@@ -47,7 +45,7 @@ def make_issue() -> Callable[..., MagicMock]:
         issue.fields.priority = None
         issue.fields.status = None
         issue.fields.resolution = None
-        issue.fields.created = None
+        issue.fields.created = "2026-04-30T09:00:00.000+0000"
         issue.fields.duedate = None
         issue.fields.issuetype = MagicMock()
         issue.fields.issuetype.name = "Service Request"
@@ -62,11 +60,15 @@ def make_issue() -> Callable[..., MagicMock]:
 
 
 def _connector(
-    mock_jira_client: MagicMock, **kwargs: object
+    mock_jira_client: MagicMock,
+    *,
+    project_key: str | None = None,
+    jql_query: str | None = None,
 ) -> JiraServiceManagementConnector:
     connector = JiraServiceManagementConnector(
         jira_base_url="https://jira.example.com",
-        **kwargs,
+        project_key=project_key,
+        jql_query=jql_query,
     )
     connector._jira_client = mock_jira_client
     return connector
@@ -88,7 +90,7 @@ def test_jql_restricts_everything_to_service_desk(
 
     assert connector._get_jql_query(start, end) == (
         "spaceType = service_desk AND "
-        "updated >= '2026-05-01 00:00' AND updated <= '2026-05-02 00:00'"
+        "updated >= 1777593600000 AND updated <= 1777680000000"
     )
 
 
@@ -100,8 +102,7 @@ def test_jql_validates_project_scope_without_hot_path_service_desk_call(
     end = datetime(2026, 5, 2, tzinfo=timezone.utc).timestamp()
 
     assert connector._get_jql_query(start, end) == (
-        'project = "HELP" AND '
-        "updated >= '2026-05-01 00:00' AND updated <= '2026-05-02 00:00'"
+        'project = "HELP" AND updated >= 1777593600000 AND updated <= 1777680000000'
     )
 
     assert mock_jira_client.project.call_count == 0
@@ -116,7 +117,7 @@ def test_custom_jql_is_always_scoped_to_service_desk(
 
     assert connector._get_jql_query(start, end) == (
         '(status = "Waiting for support") AND spaceType = service_desk AND '
-        "updated >= '2026-05-01 00:00' AND updated <= '2026-05-02 00:00'"
+        "updated >= 1777593600000 AND updated <= 1777680000000"
     )
 
 
@@ -216,4 +217,5 @@ def test_documents_are_indexed_with_jsm_source(
     document = cast(Document, outputs[0].items[0])
     assert document.source == DocumentSource.JIRA_SERVICE_MANAGEMENT
     assert document.id == "https://jira.example.com/browse/HELP-1"
+    assert document.doc_created_at == datetime(2026, 4, 30, 9, tzinfo=timezone.utc)
     assert outputs[0].next_checkpoint.has_more is False

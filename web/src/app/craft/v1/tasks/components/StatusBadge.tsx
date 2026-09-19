@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@opal/utils";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import {
   SvgAlertCircle,
   SvgCheckCircle,
@@ -38,7 +38,7 @@ export function TaskStatusBadge({ status }: TaskStatusBadgeProps) {
         size={12}
         className={isActive ? "text-status-success-05" : "text-text-03"}
       />
-      <Text figureSmallLabel text03>
+      <Text font="figure-small-label" color="text-03">
         {isActive ? "Active" : "Paused"}
       </Text>
     </div>
@@ -119,17 +119,9 @@ export function RunStatusBadge({ status }: RunStatusBadgeProps) {
       data-testid={`run-status-${status}`}
     >
       <Icon size={12} className={display.iconClassName} />
-      <Text figureSmallLabel text03>
+      <Text font="figure-small-label" color="text-03">
         {display.label}
       </Text>
     </div>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Last-run badge: status badge with relative time, used in list row "Last run".
-// ---------------------------------------------------------------------------
-
-export function getRunStatusLabel(status: ScheduledTaskRunStatus): string {
-  return getRunStatusDisplay(status).label;
 }

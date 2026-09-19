@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { ContentAction } from "@opal/layouts";
 import { Button } from "@opal/components";
 import { SvgSettings } from "@opal/icons";
@@ -55,7 +55,7 @@ export const NoPadding: Story = {
     variant: "section",
     title: "Compact Row",
     description: "No padding around content area.",
-    padding: "fit",
+    padding: 0,
     rightChildren: <Button prominence="tertiary">Action</Button>,
   },
 };

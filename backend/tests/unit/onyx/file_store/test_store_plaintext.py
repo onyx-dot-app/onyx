@@ -1,13 +1,11 @@
 """Tests for store_plaintext caching behavior in file_store.utils."""
 
 from io import BytesIO
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 from onyx.file_store.models import ChatFileType
-from onyx.file_store.utils import load_user_file
-from onyx.file_store.utils import store_plaintext
+from onyx.file_store.utils import load_user_file, store_plaintext
 
 _UTILS_MODULE = "onyx.file_store.utils"
 

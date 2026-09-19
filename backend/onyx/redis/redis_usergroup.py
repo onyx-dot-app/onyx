@@ -7,15 +7,19 @@ from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DB_YIELD_PER_DEFAULT
-from onyx.configs.constants import CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import OnyxRedisConstants
+from onyx.configs.constants import (
+    CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT,
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+    OnyxRedisConstants,
+)
 from onyx.redis.redis_object_helper import RedisObjectHelper
 from onyx.redis.tenant_redis_client import TenantRedisClient
-from onyx.utils.variable_functionality import fetch_versioned_implementation
-from onyx.utils.variable_functionality import global_version
+from onyx.utils.variable_functionality import (
+    fetch_versioned_implementation,
+    global_version,
+)
 
 
 class RedisUserGroup(RedisObjectHelper):
@@ -101,7 +105,7 @@ class RedisUserGroup(RedisObjectHelper):
 
             celery_app.send_task(
                 OnyxCeleryTask.DOCUMENT_INDEX_METADATA_SYNC_TASK,
-                kwargs=dict(document_id=doc_id, tenant_id=tenant_id),
+                kwargs={"document_id": doc_id, "tenant_id": tenant_id},
                 queue=OnyxCeleryQueues.VESPA_METADATA_SYNC,
                 task_id=custom_task_id,
                 priority=OnyxCeleryPriority.MEDIUM,

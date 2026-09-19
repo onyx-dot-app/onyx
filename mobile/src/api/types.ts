@@ -1,0 +1,23 @@
+// pinned_assistants drives the sidebar rail (null → featured fallback).
+export interface UserPreferences {
+  pinned_assistants?: number[] | null;
+}
+
+export interface CurrentUser {
+  id: string;
+  email: string;
+  is_active: boolean;
+  // `/me` always returns preferences; keep it required to surface a boundary mismatch rather
+  // than silently treating malformed data as "no pinned assistants".
+  preferences: UserPreferences;
+}
+
+export interface AuthTypeMetadata {
+  // Cloud (multi-tenant) signup provisions a tenant.
+  multi_tenant: boolean;
+  requires_verification: boolean;
+  anonymous_user_enabled?: boolean | null;
+  password_min_length: number;
+  has_users: boolean;
+  oauth_enabled: boolean;
+}

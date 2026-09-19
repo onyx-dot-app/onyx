@@ -11,12 +11,10 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import DocumentFailure
+from onyx.connectors.models import ConnectorFailure, DocumentFailure
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from onyx.db.enums import IndexingStatus
-from onyx.db.index_attempt import create_index_attempt
-from onyx.db.index_attempt import create_index_attempt_error
+from onyx.db.index_attempt import create_index_attempt, create_index_attempt_error
 from onyx.db.models import IndexAttempt
 from onyx.db.search_settings import get_current_search_settings
 from onyx.server.documents.models import DocumentSource
@@ -27,9 +25,11 @@ from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
-from tests.integration.common_utils.test_models import DATestAPIKey
-from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.common_utils.test_models import DATestUserGroup
+from tests.integration.common_utils.test_models import (
+    DATestAPIKey,
+    DATestUser,
+    DATestUserGroup,
+)
 from tests.integration.common_utils.vespa import vespa_fixture
 
 
@@ -46,9 +46,13 @@ def test_connector_deletion(
 
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(name="admin_user")
-    # create api key
+    # create api key with admin scope so it can hit the ingestion API
+    admin_group = UserGroupManager.get_default(
+        user_performing_action=admin_user, name="Admin"
+    )
     api_key: DATestAPIKey = APIKeyManager.create(
         user_performing_action=admin_user,
+        group_ids=[admin_group.id],
     )
 
     # create connectors
@@ -248,9 +252,13 @@ def test_connector_deletion_for_overlapping_connectors(
 
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(name="admin_user")
-    # create api key
+    # create api key with admin scope so it can hit the ingestion API
+    admin_group = UserGroupManager.get_default(
+        user_performing_action=admin_user, name="Admin"
+    )
     api_key: DATestAPIKey = APIKeyManager.create(
         user_performing_action=admin_user,
+        group_ids=[admin_group.id],
     )
 
     # create connectors

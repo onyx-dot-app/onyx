@@ -6,8 +6,7 @@ from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.tool import ToolManager
-from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.common_utils.test_models import ToolName
+from tests.integration.common_utils.test_models import DATestUser, ToolName
 
 _DUMMY_OPENAI_API_KEY = "sk-mock-tool-policy-tests"
 

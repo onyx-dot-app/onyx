@@ -5,34 +5,40 @@
  */
 
 import {
+  EndpointPolicy,
   ExternalAppAdminResponse,
   ExternalAppType,
 } from "@/app/craft/v1/apps/registry";
 import { BUILD_API_BASE } from "@/app/craft/v1/constants";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 
 async function readErrorDetail(
   res: Response,
   fallback: string
 ): Promise<string> {
-  const data = (await res.json().catch(() => ({}))) as { detail?: string };
+  const data: ErrorResponseBody = await res.json().catch(() => ({}));
   return data.detail ?? `${fallback} (HTTP ${res.status}).`;
 }
 
-interface UpsertExternalAppBody {
-  id: number | null;
+interface CreateBuiltInExternalAppBody {
   name: string;
-  description: string;
   app_type: ExternalAppType;
   upstream_url_patterns: string[];
   auth_template: Record<string, string>;
   organization_credentials: Record<string, string>;
-  enabled: boolean;
+  // Full replace when present; omit to default every action to ASK.
+  action_policies?: Record<string, EndpointPolicy>;
 }
 
-export async function upsertExternalApp(
-  body: UpsertExternalAppBody
+/**
+ * Create a built-in external app (`POST /admin/apps/built-in`). Built-in
+ * providers only — custom apps use {@link createCustomExternalApp}. Updates go
+ * through {@link updateExternalApp}.
+ */
+export async function createBuiltInExternalApp(
+  body: CreateBuiltInExternalAppBody
 ): Promise<ExternalAppAdminResponse> {
-  const res = await fetch(`${BUILD_API_BASE}/admin/apps`, {
+  const res = await fetch(`${BUILD_API_BASE}/admin/apps/built-in`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -43,21 +49,63 @@ export async function upsertExternalApp(
   return res.json();
 }
 
-/** Toggle `enabled` without touching credentials. */
-export async function setExternalAppEnabled(
-  app: ExternalAppAdminResponse,
-  enabled: boolean
+interface CreateCustomExternalAppInput {
+  name: string;
+  upstream_url_patterns: string[];
+  auth_template: Record<string, string>;
+  organization_credentials: Record<string, string>;
+}
+
+/**
+ * Create a CUSTOM external app (`POST /admin/apps/custom`). Skill content is
+ * created and managed independently through the Skills experience.
+ */
+export async function createCustomExternalApp(
+  input: CreateCustomExternalAppInput
 ): Promise<ExternalAppAdminResponse> {
-  return upsertExternalApp({
-    id: app.id,
-    name: app.name,
-    description: app.description,
-    app_type: app.app_type,
-    upstream_url_patterns: app.upstream_url_patterns,
-    auth_template: app.auth_template,
-    organization_credentials: app.organization_credentials,
-    enabled,
+  const res = await fetch(`${BUILD_API_BASE}/admin/apps/custom`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
   });
+  if (!res.ok) {
+    throw new Error(await readErrorDetail(res, "Save failed"));
+  }
+  return res.json();
+}
+
+interface UpdateExternalAppBody {
+  // Every field is optional; omit to leave the stored value untouched.
+  enabled?: boolean;
+  name?: string;
+  upstream_url_patterns?: string[];
+  auth_template?: Record<string, string>;
+  organization_credentials?: Record<string, string>;
+  // Full replace when present; omit to leave stored policies untouched.
+  action_policies?: Record<string, EndpointPolicy>;
+  // Full replacement of the app's custom-skill associations. Provider-owned
+  // built-in skills are preserved by the backend.
+  associated_skill_ids?: string[];
+}
+
+/**
+ * Partial update of any app (PATCH /admin/apps/{id}). For Onyx-managed built-ins
+ * the gateway-config fields are ignored server-side (only policies
+ * apply).
+ */
+export async function updateExternalApp(
+  id: number,
+  body: UpdateExternalAppBody
+): Promise<ExternalAppAdminResponse> {
+  const res = await fetch(`${BUILD_API_BASE}/admin/apps/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorDetail(res, "Save failed"));
+  }
+  return res.json();
 }
 
 export async function deleteExternalApp(id: number): Promise<void> {
@@ -85,10 +133,15 @@ export async function startExternalAppOAuth(
   return res.json();
 }
 
+interface OAuthCallbackResponse {
+  success: boolean;
+  external_app_id: number;
+}
+
 export async function completeExternalAppOAuthCallback(
   code: string,
   state: string
-): Promise<void> {
+): Promise<OAuthCallbackResponse> {
   const res = await fetch(`${BUILD_API_BASE}/apps/oauth/callback`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -96,6 +149,31 @@ export async function completeExternalAppOAuthCallback(
   });
   if (!res.ok) {
     throw new Error(await readErrorDetail(res, "OAuth exchange failed"));
+  }
+  return res.json();
+}
+
+export type ConnectAppDecision = "connected" | "declined";
+
+/**
+ * Resolve a parked `connect_app` request. The api-server is blocking the
+ * agent's tool call on this decision: "connected" allows it, "declined" hands
+ * the agent a rejection result so it can choose an alternative.
+ */
+export async function postConnectAppDecision(
+  requestId: string,
+  decision: ConnectAppDecision
+): Promise<void> {
+  const res = await fetch(
+    `${BUILD_API_BASE}/apps/connect/${requestId}/decision`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision }),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(await readErrorDetail(res, "Failed to resolve connection"));
   }
 }
 
@@ -116,9 +194,14 @@ export async function upsertUserCredentials(
   }
 }
 
-/** "Disconnect" by clearing stored user credentials. */
 export async function disconnectUserFromApp(
   externalAppId: number
 ): Promise<void> {
-  return upsertUserCredentials(externalAppId, {});
+  const res = await fetch(
+    `${BUILD_API_BASE}/apps/${externalAppId}/credentials`,
+    { method: "DELETE" }
+  );
+  if (!res.ok) {
+    throw new Error(await readErrorDetail(res, "Failed to disconnect app"));
+  }
 }

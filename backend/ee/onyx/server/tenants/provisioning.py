@@ -4,78 +4,106 @@ import uuid
 import aiohttp  # Async HTTP client
 import httpx
 import requests
-from fastapi import HTTPException
-from fastapi import Request
+from fastapi import HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ee.onyx.configs.app_configs import HUBSPOT_TRACKING_URL
+from ee.onyx.db.user_tenant_mapping import (
+    add_users_to_tenant,
+    resolve_tenant_id,
+    user_owns_a_tenant,
+)
 from ee.onyx.server.tenants.access import generate_data_plane_token
-from ee.onyx.server.tenants.models import TenantByDomainResponse
-from ee.onyx.server.tenants.models import TenantCreationPayload
-from ee.onyx.server.tenants.models import TenantDeletionPayload
-from ee.onyx.server.tenants.schema_management import create_schema_if_not_exists
-from ee.onyx.server.tenants.schema_management import drop_schema
-from ee.onyx.server.tenants.schema_management import run_alembic_migrations
-from ee.onyx.server.tenants.user_mapping import add_users_to_tenant
-from ee.onyx.server.tenants.user_mapping import get_tenant_id_for_email
-from ee.onyx.server.tenants.user_mapping import user_owns_a_tenant
-from onyx.auth.users import exceptions
-from onyx.configs.app_configs import ANTHROPIC_DEFAULT_API_KEY
-from onyx.configs.app_configs import AUTO_PROVISION_DEFAULT_LLM_PROVIDERS
-from onyx.configs.app_configs import COHERE_DEFAULT_API_KEY
-from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
-from onyx.configs.app_configs import DEV_MODE
-from onyx.configs.app_configs import OPENAI_DEFAULT_API_KEY
-from onyx.configs.app_configs import OPENROUTER_DEFAULT_API_KEY
-from onyx.configs.app_configs import VERTEXAI_DEFAULT_CREDENTIALS
-from onyx.configs.app_configs import VERTEXAI_DEFAULT_LOCATION
-from onyx.db.engine.sql_engine import get_session_with_shared_schema
-from onyx.db.engine.sql_engine import get_session_with_tenant
+from ee.onyx.server.tenants.models import (
+    TenantByDomainResponse,
+    TenantCreationPayload,
+    TenantDeletionPayload,
+)
+from ee.onyx.server.tenants.schema_management import (
+    create_schema_if_not_exists,
+    drop_schema,
+    run_alembic_migrations,
+)
+from onyx.configs.app_configs import (
+    ANTHROPIC_DEFAULT_API_KEY,
+    AUTO_PROVISION_DEFAULT_LLM_PROVIDERS,
+    COHERE_DEFAULT_API_KEY,
+    CONTROL_PLANE_API_BASE_URL,
+    DEV_MODE,
+    OPENAI_DEFAULT_API_KEY,
+    OPENROUTER_DEFAULT_API_KEY,
+    VERTEXAI_DEFAULT_CREDENTIALS,
+    VERTEXAI_DEFAULT_LOCATION,
+)
+from onyx.db.engine.shard_routing import get_shard_for_new_tenant
+from onyx.db.engine.sql_engine import (
+    get_session_with_shared_schema,
+    get_session_with_tenant,
+)
 from onyx.db.image_generation import create_default_image_gen_config_from_api_key
-from onyx.db.llm import fetch_existing_llm_provider_by_name_and_type
-from onyx.db.llm import fetch_existing_llm_provider_by_type_nameless
-from onyx.db.llm import update_default_provider
-from onyx.db.llm import upsert_cloud_embedding_provider
-from onyx.db.llm import upsert_llm_provider
-from onyx.db.models import AvailableTenant
-from onyx.db.models import IndexModelStatus
-from onyx.db.models import SearchSettings
-from onyx.db.models import UserTenantMapping
+from onyx.db.llm import (
+    fetch_existing_llm_provider_by_name_and_type,
+    fetch_existing_llm_provider_by_type_nameless,
+    update_default_provider,
+    upsert_cloud_embedding_provider,
+    upsert_llm_provider,
+)
+from onyx.db.models import (
+    AvailableTenant,
+    IndexModelStatus,
+    SearchSettings,
+    UserTenantMapping,
+)
+from onyx.db.tenant_shard import clear_tenant_placement, record_tenant_placement
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
-from onyx.llm.well_known_providers.constants import ANTHROPIC_PROVIDER_NAME
-from onyx.llm.well_known_providers.constants import OPENAI_PROVIDER_NAME
-from onyx.llm.well_known_providers.constants import OPENROUTER_PROVIDER_NAME
-from onyx.llm.well_known_providers.constants import VERTEX_CREDENTIALS_FILE_KWARG
-from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
-from onyx.llm.well_known_providers.constants import VERTEXAI_PROVIDER_NAME
-from onyx.llm.well_known_providers.llm_provider_options import get_recommendations
+from onyx.llm.well_known_providers.constants import (
+    ANTHROPIC_PROVIDER_NAME,
+    OPENAI_PROVIDER_NAME,
+    OPENROUTER_PROVIDER_NAME,
+    VERTEX_CREDENTIALS_FILE_KWARG,
+    VERTEX_LOCATION_KWARG,
+    VERTEXAI_PROVIDER_NAME,
+)
 from onyx.llm.well_known_providers.llm_provider_options import (
+    get_recommendations,
     model_configurations_for_provider,
 )
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
-from onyx.server.manage.llm.models import LLMProviderUpsertRequest
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+from onyx.server.manage.llm.models import (
+    LLMProviderUpsertRequest,
+    ModelConfigurationUpsertRequest,
+)
 from onyx.setup import setup_onyx
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
-from shared_configs.configs import TENANT_ID_PREFIX
+from shared_configs.configs import (
+    MULTI_TENANT,
+    POSTGRES_DEFAULT_SCHEMA,
+    TENANT_ID_PREFIX,
+)
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.enums import EmbeddingProvider
 
 logger = setup_logger()
+
+# Matches billing.py. Without it a hung control plane pins the caller forever.
+_CONTROL_PLANE_TIMEOUT_S = 30
 
 
 async def get_or_provision_tenant(
     email: str,
     referral_source: str | None = None,
     request: Request | None = None,
+    oauth_name: str | None = None,
+    account_id: str | None = None,
 ) -> str:
     """
     Get existing tenant ID for an email or create a new tenant if none exists.
     This function should only be called after we have verified we want this user's tenant to exist.
     It returns the tenant ID associated with the email, creating a new tenant if necessary.
+
+    When the caller knows the IdP subject it is tried before the email, which is
+    what stops a renamed user being treated as a brand new signup.
     """
     # Early return for non-multi-tenant mode
     if not MULTI_TENANT:
@@ -84,14 +112,9 @@ async def get_or_provision_tenant(
     if referral_source and request:
         await submit_to_hubspot(email, referral_source, request)
 
-    # First, check if the user already has a tenant
-    tenant_id: str | None = None
-    try:
-        tenant_id = get_tenant_id_for_email(email)
+    tenant_id = resolve_tenant_id(email, oauth_name, account_id)
+    if tenant_id:
         return tenant_id
-    except exceptions.UserNotExists:
-        # User doesn't exist, so we need to create a new tenant or assign an existing one
-        pass
 
     try:
         # Try to get a pre-provisioned tenant
@@ -100,7 +123,7 @@ async def get_or_provision_tenant(
         if tenant_id:
             # Run migrations to ensure the pre-provisioned tenant schema is current.
             # Pool tenants may have been created before a new migration was deployed.
-            # Capture as a non-optional local so mypy can type the lambda correctly.
+            # Capture as a non-optional local so type-checking can type the lambda correctly.
             _tenant_id: str = tenant_id
             loop = asyncio.get_running_loop()
             try:
@@ -183,9 +206,15 @@ async def provision_tenant(tenant_id: str, email: str) -> None:
             status_code=409, detail="User already belongs to an organization"
         )
 
-    logger.debug("Provisioning tenant %s for user %s", tenant_id, email)
+    shard_name = get_shard_for_new_tenant()
+    logger.debug(
+        "Provisioning tenant %s for user %s on shard %s", tenant_id, email, shard_name
+    )
 
     try:
+        # Before schema creation: every step below routes via the catalog.
+        record_tenant_placement(tenant_id, shard_name)
+
         # Create the schema for the tenant
         if not create_schema_if_not_exists(tenant_id):
             logger.debug("Created schema for tenant %s", tenant_id)
@@ -243,8 +272,10 @@ async def rollback_tenant_provisioning(tenant_id: str) -> None:
     rollback_errors = []
 
     # 1. Try to drop the tenant's schema
+    schema_dropped = False
     try:
         drop_schema(tenant_id)
+        schema_dropped = True
         logger.info("Successfully dropped schema for tenant %s", tenant_id)
     except Exception as e:
         error_msg = f"Failed to drop schema for tenant {tenant_id}: {str(e)}"
@@ -295,6 +326,26 @@ async def rollback_tenant_provisioning(tenant_id: str) -> None:
         error_msg = f"Failed to remove tenant {tenant_id} from available tenants table: {str(e)}"
         logger.error(error_msg)
         rollback_errors.append(error_msg)
+
+    # 4. Drop the shard mapping — last, and only if the schema is actually gone.
+    # The mapping is the only route to that schema, so clearing it after a failed
+    # drop strands it on a shard nothing can resolve.
+    if schema_dropped:
+        try:
+            clear_tenant_placement(tenant_id)
+            logger.info("Successfully cleared shard mapping for tenant %s", tenant_id)
+        except Exception as e:
+            error_msg = (
+                f"Failed to clear shard mapping for tenant {tenant_id}: {str(e)}"
+            )
+            logger.error(error_msg)
+            rollback_errors.append(error_msg)
+    else:
+        logger.warning(
+            "Keeping shard mapping for tenant %s: its schema was not dropped, and the "
+            "mapping is what a retry needs to find it",
+            tenant_id,
+        )
 
     # Log summary of rollback operation
     if rollback_errors:
@@ -618,6 +669,7 @@ def get_tenant_by_domain_from_control_plane(
             f"{CONTROL_PLANE_API_BASE_URL}/tenant-by-domain",
             headers=headers,
             json={"domain": domain, "tenant_id": tenant_id},
+            timeout=_CONTROL_PLANE_TIMEOUT_S,
         )
 
         if response.status_code != 200:

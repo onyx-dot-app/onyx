@@ -8,17 +8,14 @@ from psycopg2.extensions import connection
 from sqlalchemy import text  # NEW: for SQL large-object helpers
 from sqlalchemy.orm import Session
 
-from onyx.file_store.constants import MAX_IN_MEMORY_SIZE
-from onyx.file_store.constants import STANDARD_CHUNK_SIZE
+from onyx.file_store.constants import MAX_IN_MEMORY_SIZE, STANDARD_CHUNK_SIZE
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
 def get_pg_conn_from_session(db_session: Session) -> connection:
-    return (
-        db_session.connection().connection.connection  # ty: ignore[unresolved-attribute]
-    )
+    return db_session.connection().connection.connection
 
 
 def create_populate_lobj(

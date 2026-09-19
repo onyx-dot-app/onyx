@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import DocumentSource
 from onyx.db.models import User
 from onyx.skills.rendering import build_available_sources_section
-from tests.external_dependency_unit.craft._test_helpers import make_cc_pair
+from tests.external_dependency_unit.indexing_helpers import make_cc_pair
 
 
 class TestBuildAvailableSourcesSection:
@@ -25,7 +25,7 @@ class TestBuildAvailableSourcesSection:
         db_session: Session,
         test_user: User,
     ) -> None:
-        make_cc_pair(db_session, source=DocumentSource.GOOGLE_DRIVE)
+        make_cc_pair(db_session, source=DocumentSource.GOOGLE_DRIVE, commit=False)
 
         result = build_available_sources_section(db_session, test_user)
         assert "google_drive" in result
@@ -36,9 +36,9 @@ class TestBuildAvailableSourcesSection:
         db_session: Session,
         test_user: User,
     ) -> None:
-        make_cc_pair(db_session, source=DocumentSource.GOOGLE_DRIVE)
-        make_cc_pair(db_session, source=DocumentSource.SLACK)
-        make_cc_pair(db_session, source=DocumentSource.LINEAR)
+        make_cc_pair(db_session, source=DocumentSource.GOOGLE_DRIVE, commit=False)
+        make_cc_pair(db_session, source=DocumentSource.SLACK, commit=False)
+        make_cc_pair(db_session, source=DocumentSource.LINEAR, commit=False)
 
         result = build_available_sources_section(db_session, test_user)
         lines = result.strip().split("\n")
@@ -52,8 +52,8 @@ class TestBuildAvailableSourcesSection:
         db_session: Session,
         test_user: User,
     ) -> None:
-        make_cc_pair(db_session, source=DocumentSource.SLACK)
-        make_cc_pair(db_session, source=DocumentSource.SLACK)
+        make_cc_pair(db_session, source=DocumentSource.SLACK, commit=False)
+        make_cc_pair(db_session, source=DocumentSource.SLACK, commit=False)
 
         result = build_available_sources_section(db_session, test_user)
         assert result.count("slack") == 1
@@ -63,7 +63,7 @@ class TestBuildAvailableSourcesSection:
         db_session: Session,
         test_user: User,
     ) -> None:
-        make_cc_pair(db_session, source=DocumentSource.MOCK_CONNECTOR)
+        make_cc_pair(db_session, source=DocumentSource.MOCK_CONNECTOR, commit=False)
 
         result = build_available_sources_section(db_session, test_user)
         assert "Mock Connector" in result
@@ -78,7 +78,7 @@ class TestBuildAvailableSourcesSection:
         test_user: User,
         source: DocumentSource,
     ) -> None:
-        make_cc_pair(db_session, source=source)
+        make_cc_pair(db_session, source=source, commit=False)
         result = build_available_sources_section(db_session, test_user)
         assert result.startswith("- `")
         assert "` — " in result

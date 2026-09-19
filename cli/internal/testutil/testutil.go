@@ -13,9 +13,11 @@ import (
 	"github.com/onyx-dot-app/onyx/cli/internal/iostreams"
 )
 
-// NewClient creates a test API client pointed at the given URL.
-func NewClient(url string) *api.Client {
-	return api.NewClient(config.OnyxCliConfig{ServerURL: url, APIKey: "test-key"})
+// NewClient creates a test API client pointed at the given server URL.
+func NewClient(serverURL string) *api.Client {
+	return api.NewClient(
+		config.OnyxCliConfig{ServerURL: serverURL, APIKey: "test-key"},
+	)
 }
 
 // StatusServer returns an httptest.Server that always responds with the given status code.

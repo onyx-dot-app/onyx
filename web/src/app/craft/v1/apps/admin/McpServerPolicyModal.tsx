@@ -1,0 +1,65 @@
+"use client";
+
+import useSWR from "swr";
+import { useTranslations } from "next-intl";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { MCPServer, ToolSnapshot } from "@/lib/tools/types";
+import { updateMCPServer } from "@/lib/tools/svc";
+import ActionPolicyEditorModal from "@/app/craft/v1/apps/admin/ActionPolicyEditorModal";
+import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
+
+interface McpServerPolicyModalProps {
+  onClose: () => void;
+  onSaved: () => void;
+  server: MCPServer;
+}
+
+/** Edit dialog for an MCP server's Craft tool policies: maps the server's
+ * enabled tools into the shared editor. Server config itself (URL, auth, tool
+ * refresh) lives on the MCP actions page. */
+export default function McpServerPolicyModal({
+  onClose,
+  onSaved,
+  server,
+}: McpServerPolicyModalProps) {
+  const t = useTranslations("craft.apps.mcpPolicy");
+  const { data: toolSnapshots } = useSWR<ToolSnapshot[]>(
+    SWR_KEYS.adminMcpServerToolSnapshots(server.id),
+    errorHandlingFetcher
+  );
+  const enabledTools = toolSnapshots?.filter((tool) => tool.enabled);
+
+  async function save(
+    _values: Record<string, string>,
+    policies: Record<string, EndpointPolicy>
+  ) {
+    // Send the full map; the backend drops default (ASK) entries so the stored
+    // set stays sparse regardless of which client wrote it.
+    await updateMCPServer(server.id, { tool_policies: policies });
+    onSaved();
+  }
+
+  return (
+    <ActionPolicyEditorModal
+      onClose={onClose}
+      title={t("title", { name: server.name })}
+      description={t("description")}
+      fields={[]}
+      initialFieldValues={{}}
+      // Policies are keyed by the tool's raw name (what the backend validates
+      // against), not its display name. Stored overrides are sparse — unlisted
+      // tools fall back to the per-item default of ASK.
+      policyItems={enabledTools?.map((tool) => ({
+        id: tool.name,
+        name: tool.display_name || tool.name,
+        description: tool.description,
+        defaultPolicy: "ASK",
+      }))}
+      initialPolicies={{ ...server.tool_policies }}
+      emptyPoliciesMessage={t("emptyPolicies")}
+      saveLabel={t("saveButton")}
+      onSave={save}
+    />
+  );
+}

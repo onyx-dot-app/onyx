@@ -1,11 +1,12 @@
 "use client";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
+import { useTranslations } from "next-intl";
+import { SettingsLayouts } from "@opal/layouts";
 import { SourceCategory, SourceMetadata } from "@/lib/search/interfaces";
 import { listSourceMetadata } from "@/lib/sources";
 import { Button } from "@opal/components";
 import {
   useCallback,
-  useContext,
   useDeferredValue,
   useEffect,
   useMemo,
@@ -23,13 +24,27 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
 import { Credential } from "@/lib/connectors/credentials";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import SourceTile from "@/components/SourceTile";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
 const route = ADMIN_ROUTES.ADD_CONNECTOR;
+
+// The category headings come from the `SourceCategory` enum, whose values are
+// identifiers shared across the app. Map each one to a message key (inside the
+// `admin.addConnector` namespace) so the component can resolve it with `t`.
+const CATEGORY_LABEL_KEYS = {
+  [SourceCategory.Wiki]: "categories.wiki.label",
+  [SourceCategory.Storage]: "categories.storage.label",
+  [SourceCategory.TicketingAndTaskManagement]:
+    "categories.ticketingAndTaskManagement.label",
+  [SourceCategory.Messaging]: "categories.messaging.label",
+  [SourceCategory.Sales]: "categories.sales.label",
+  [SourceCategory.CodeRepository]: "categories.codeRepository.label",
+  [SourceCategory.Other]: "categories.other.label",
+} as const satisfies Record<SourceCategory, string>;
 
 function SourceTileTooltipWrapper({
   sourceMetadata,
@@ -42,6 +57,8 @@ function SourceTileTooltipWrapper({
   federatedConnectors?: FederatedConnectorDetail[];
   slackCredentials?: Credential<any>[];
 }) {
+  const t = useTranslations("admin.addConnector");
+
   // Check if there's already a federated connector for this source
   const existingFederatedConnector = useMemo(() => {
     if (!sourceMetadata.federated || !federatedConnectors) {
@@ -96,13 +113,15 @@ function SourceTileTooltipWrapper({
       tooltip={
         existingFederatedConnector ? (
           <Text as="p" textLight05 secondaryBody>
-            <strong>Federated connector already configured.</strong> Click to
-            edit the existing connector.
+            {t.rich("sourceTile.tooltip.federatedConfigured", {
+              strong: (chunks) => <strong>{chunks}</strong>,
+            })}
           </Text>
         ) : hasExistingSlackCredentials ? (
           <Text as="p" textLight05 secondaryBody>
-            <strong>Existing Slack credentials found.</strong> Click to manage
-            your Slack connector.
+            {t.rich("sourceTile.tooltip.slackCredentialsFound", {
+              strong: (chunks) => <strong>{chunks}</strong>,
+            })}
           </Text>
         ) : undefined
       }
@@ -120,13 +139,15 @@ function SourceTileTooltipWrapper({
 }
 
 export default function Page() {
+  const t = useTranslations("admin.addConnector");
+  const adminRouteTitle = useAdminRouteTitle();
   const sources = useMemo(() => listSourceMetadata(), []);
 
   const [rawSearchTerm, setSearchTerm] = useState("");
   const searchTerm = useDeferredValue(rawSearchTerm);
 
   const { data: federatedConnectors } = useFederatedConnectors();
-  const settings = useContext(SettingsContext);
+  const settings = useSettings();
 
   // Fetch Slack credentials to determine navigation behavior
   const { data: slackCredentials } = useSWR<Credential<any>[]>(
@@ -180,7 +201,7 @@ export default function Page() {
       {} as Record<SourceCategory, SourceMetadata[]>
     );
     // Filter out the "Other" category if show_extra_connectors is false
-    if (settings?.settings?.show_extra_connectors === false) {
+    if (settings?.show_extra_connectors === false) {
       const filteredCategories = Object.entries(categories).filter(
         ([category]) => category !== SourceCategory.Other
       );
@@ -190,12 +211,7 @@ export default function Page() {
       >;
     }
     return categories;
-  }, [
-    sources,
-    filterSources,
-    searchTerm,
-    settings?.settings?.show_extra_connectors,
-  ]);
+  }, [sources, filterSources, searchTerm, settings?.show_extra_connectors]);
 
   // When searching, dedupe Popular against whatever is already in results
   const resultIds = useMemo(() => {
@@ -247,27 +263,28 @@ export default function Page() {
     <SettingsLayouts.Root width="full">
       <SettingsLayouts.Header
         icon={route.icon}
-        title={route.title}
+        title={adminRouteTitle(route)}
         rightChildren={
-          <Button href="/admin/indexing/status">See Connectors</Button>
+          <Button href="/admin/indexing/status">
+            {t("seeConnectorsButton.label")}
+          </Button>
         }
         divider
       />
       <SettingsLayouts.Body>
         <InputTypeIn
           type="text"
-          placeholder="Search Connectors"
+          placeholder={t("search.placeholder")}
           ref={searchInputRef}
           value={rawSearchTerm} // keep the input bound to immediate state
           onChange={(event) => setSearchTerm(event.target.value)}
           onKeyDown={handleKeyPress}
-          className="w-96 flex-none"
         />
 
         {dedupedPopular.length > 0 && (
           <div className="pt-8">
             <Text as="p" headingH3>
-              Popular
+              {t("popular.title")}
             </Text>
             <div className="flex flex-wrap gap-4 p-4">
               {dedupedPopular.map((source) => (
@@ -288,7 +305,7 @@ export default function Page() {
           .map(([category, sources], categoryInd) => (
             <div key={category} className="pt-8">
               <Text as="p" headingH3>
-                {category}
+                {t(CATEGORY_LABEL_KEYS[category as SourceCategory])}
               </Text>
               <div className="flex flex-wrap gap-4 p-4">
                 {sources.map((source, sourceInd) => (

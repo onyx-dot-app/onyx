@@ -1,30 +1,24 @@
 import argparse
 import sys
-from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import Awaitable
-from typing import Callable
-from typing import Dict
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Any, Awaitable, Callable, Dict, Optional
 
 import bcrypt
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
 from fastmcp import FastMCP
-from fastmcp.server.auth.auth import AccessToken
-from fastmcp.server.auth.auth import TokenVerifier
+from fastmcp.server.auth.auth import AccessToken, TokenVerifier
 from fastmcp.server.dependencies import get_access_token
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 # pip install fastmcp bcrypt fastapi uvicorn
 
 DEFAULT_PORT = 8003
 MCP_PATH_PREFIX = "/mcp"
+USER_EMAIL_HEADER = "X-User-Email"
 
 
 # ---- pretend database --------------------------------------------------------
@@ -129,7 +123,10 @@ class RequireHeadersMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         for header in self.required_headers:
-            if not request.headers.get(header):
+            value = request.headers.get(header)
+            if header.lower() == USER_EMAIL_HEADER.lower():
+                print(f"{USER_EMAIL_HEADER}: {value!r}", flush=True)
+            if not value:
                 return JSONResponse(
                     {"error": f"Missing required header '{header}'"},
                     status_code=401,

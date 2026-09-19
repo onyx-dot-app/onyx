@@ -1,7 +1,8 @@
 @reference "#reference.css";
 
+/* Fixed dark surface in both themes. components.tsx scopes the content to match. */
 .opal-tooltip {
-  z-index: var(--z-tooltip, 1300);
+  z-index: var(--z-tooltip);
   max-width: 20rem;
   @apply rounded-08 px-3 py-2 text-sm
     bg-background-neutral-dark-03 text-text-light-05

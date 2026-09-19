@@ -1,18 +1,24 @@
 import os
 from io import BytesIO
-from typing import Any
-from typing import cast
-from typing import IO
+from typing import Any, cast
 
-from fastapi import HTTPException
+import puremagic
 from fastapi import UploadFile
+from PIL import Image
 
-from ee.onyx.server.enterprise_settings.models import AnalyticsScriptUpload
-from ee.onyx.server.enterprise_settings.models import EnterpriseSettings
-from onyx.configs.constants import FileOrigin
-from onyx.configs.constants import KV_CUSTOM_ANALYTICS_SCRIPT_KEY
-from onyx.configs.constants import KV_ENTERPRISE_SETTINGS_KEY
-from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME
+from ee.onyx.server.enterprise_settings.models import (
+    APPEARANCE_FIELD_MAX_LENGTHS,
+    AnalyticsScriptUpload,
+    EnterpriseSettings,
+)
+from onyx.configs.constants import (
+    KV_CUSTOM_ANALYTICS_SCRIPT_KEY,
+    KV_ENTERPRISE_SETTINGS_KEY,
+    ONYX_DEFAULT_APPLICATION_NAME,
+    FileOrigin,
+)
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
@@ -22,6 +28,42 @@ logger = setup_logger()
 
 _LOGO_FILENAME = "__logo__"
 _LOGOTYPE_FILENAME = "__logotype__"
+
+# The logo is served unauthenticated from the app origin, so only inert raster
+# types are stored. An SVG or HTML body would otherwise run as script there.
+ALLOWED_LOGO_MIME_TYPES: frozenset[str] = frozenset({"image/png", "image/jpeg"})
+
+# Branding art is small. The body is held in memory here and again by the file
+# store, so cap it rather than buffer whatever the caller sends.
+MAX_LOGO_SIZE_BYTES = 5 * 1024 * 1024
+# 4096x4096 is far past any branding need and caps a decode at about 67 MB RGBA.
+MAX_LOGO_PIXELS = 4096 * 4096
+
+
+def _clamp_appearance_fields(stored: dict[str, Any]) -> dict[str, Any]:
+    """Trims stored appearance strings to their caps.
+
+    The caps are `max_length` on the model, so they validate on the way in as
+    well as on the way out. A blob written before a cap existed, or under a
+    larger one, would otherwise raise on load — and `ee_fetch_settings` is
+    unauthenticated, so that is a 500 to every caller and an admin page that
+    cannot open to repair the value. Trimming keeps the settings readable and
+    leaves the admin looking at what is now stored, rather than at nothing.
+    """
+    clamped = dict(stored)
+    for field, limit in APPEARANCE_FIELD_MAX_LENGTHS.items():
+        value = clamped.get(field)
+        if isinstance(value, str) and len(value) > limit:
+            logger.warning(
+                "Enterprise setting %s was %d characters, over its %d limit; "
+                "trimming it to load. Re-save the theme settings to keep the "
+                "shortened value.",
+                field,
+                len(value),
+                limit,
+            )
+            clamped[field] = value[:limit]
+    return clamped
 
 
 def load_settings() -> EnterpriseSettings:
@@ -35,7 +77,9 @@ def load_settings() -> EnterpriseSettings:
     dynamic_config_store = get_kv_store()
     try:
         settings = EnterpriseSettings(
-            **cast(dict, dynamic_config_store.load(KV_ENTERPRISE_SETTINGS_KEY))
+            **_clamp_appearance_fields(
+                cast(dict, dynamic_config_store.load(KV_ENTERPRISE_SETTINGS_KEY))
+            )
         )
     except KvKeyNotFoundError:
         settings = EnterpriseSettings()
@@ -89,17 +133,46 @@ def is_valid_file_type(filename: str) -> bool:
     return filename.endswith(valid_extensions)
 
 
-def guess_file_type(filename: str) -> str:
-    if filename.lower().endswith(".png"):
-        return "image/png"
-    elif filename.lower().endswith(".jpg") or filename.lower().endswith(".jpeg"):
-        return "image/jpeg"
-    return "application/octet-stream"
+def sniff_logo_mime_type(data: bytes) -> str | None:
+    """The allowed raster type of these bytes, or None if they are not one.
+
+    The filename suffix says nothing about the body, and the file store sniffs
+    the served MIME type back out of the bytes, so the content decides. Magic
+    bytes alone are not enough: `OnyxRuntime.get_emailable_logo` decodes the
+    stored logo with Pillow, so a body that only looks like a PNG would raise
+    there every time an email is sent.
+    """
+    try:
+        matches = puremagic.magic_string(data)
+    except (puremagic.PureError, ValueError):
+        # PureError: nothing matched. ValueError: the body is empty.
+        return None
+    mime_type = matches[0].mime_type if matches else None
+    if mime_type not in ALLOWED_LOGO_MIME_TYPES:
+        return None
+
+    try:
+        with Image.open(BytesIO(data)) as image:
+            # size comes from the header, so the bound is applied before any
+            # raster is decoded. The byte cap alone does not give one: a small
+            # highly compressed file can still decode to gigapixels, and
+            # get_emailable_logo() thumbnails it while an email is being sent.
+            width, height = image.size
+            if width * height > MAX_LOGO_PIXELS:
+                logger.warning("Logo is %dx%d, over the pixel cap", width, height)
+                return None
+            # verify() consumes the handle, so this image is not reused
+            # afterwards. It reports a broken raster with whatever the decoder
+            # raises, which includes SyntaxError, so the catch has to be broad.
+            image.verify()
+    except Exception:
+        logger.warning("Logo has a %s header but does not decode", mime_type)
+        return None
+
+    return mime_type
 
 
 def upload_logo(file: UploadFile | str, is_logotype: bool = False) -> bool:
-    content: IO[Any]
-
     if isinstance(file, str):
         logger.notice("Uploading logo from local path %s", file)
         if not os.path.isfile(file) or not is_valid_file_type(file):
@@ -110,24 +183,38 @@ def upload_logo(file: UploadFile | str, is_logotype: bool = False) -> bool:
 
         with open(file, "rb") as file_handle:
             file_content = file_handle.read()
-        content = BytesIO(file_content)
         display_name = file
-        file_type = guess_file_type(file)
 
     else:
         logger.notice("Uploading logo from uploaded file")
         if not file.filename or not is_valid_file_type(file.filename):
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid file type- only .png, .jpg, and .jpeg files are allowed",
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "Invalid file type- only .png, .jpg, and .jpeg files are allowed",
             )
-        content = file.file
+        # One byte over the cap is enough to reject an oversized body without
+        # reading the rest of it.
+        file_content = file.file.read(MAX_LOGO_SIZE_BYTES + 1)
+        if len(file_content) > MAX_LOGO_SIZE_BYTES:
+            raise OnyxError(
+                OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                f"Logo must be {MAX_LOGO_SIZE_BYTES // (1024 * 1024)} MB or smaller",
+            )
         display_name = file.filename
-        file_type = file.content_type or "image/jpeg"
+
+    file_type = sniff_logo_mime_type(file_content)
+    if file_type is None:
+        if isinstance(file, str):
+            logger.error("Logo at %s is not a valid PNG or JPEG image", file)
+            return False
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Invalid file contents- only PNG and JPEG images are allowed",
+        )
 
     file_store = get_default_file_store()
     file_store.save_file(
-        content=content,
+        content=BytesIO(file_content),
         display_name=display_name,
         file_origin=FileOrigin.OTHER,
         file_type=file_type,

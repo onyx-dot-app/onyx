@@ -6,4 +6,5 @@ class CodeInterpreterServer(BaseModel):
 
 
 class CodeInterpreterServerHealth(BaseModel):
-    healthy: bool
+    connected: bool
+    error: str = ""

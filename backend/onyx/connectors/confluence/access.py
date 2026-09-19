@@ -1,11 +1,12 @@
 from collections.abc import Callable
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 from onyx.access.models import ExternalAccess
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
-from onyx.utils.variable_functionality import fetch_versioned_implementation
-from onyx.utils.variable_functionality import global_version
+from onyx.utils.variable_functionality import (
+    fetch_versioned_implementation,
+    global_version,
+)
 
 
 def get_page_restrictions(
@@ -41,6 +42,48 @@ def get_page_restrictions(
 
     return ee_get_all_page_restrictions(
         confluence_client, page_id, page_restrictions, ancestors, add_prefix
+    )
+
+
+def get_page_restrictions_with_per_ancestor_fetch(
+    confluence_client: OnyxConfluence,
+    page_id: str,
+    page_restrictions: dict[str, Any],
+    ancestors: list[dict[str, Any]],
+    ancestor_restrictions_cache: dict[str, dict[str, Any] | None],
+    add_prefix: bool = False,
+) -> ExternalAccess | None:
+    """CONFCLOUD-77618 variant of `get_page_restrictions`. Ancestors
+    arrive without inline restrictions; each is fetched via
+    `restriction/byOperation` with 403/404 swallowed for drafts. EE-only."""
+    if not global_version.is_ee_version():
+        return None
+
+    ee_get_per_ancestor = cast(
+        Callable[
+            [
+                OnyxConfluence,
+                str,
+                dict[str, Any],
+                list[dict[str, Any]],
+                dict[str, dict[str, Any] | None],
+                bool,
+            ],
+            ExternalAccess | None,
+        ],
+        fetch_versioned_implementation(
+            "onyx.external_permissions.confluence.page_access",
+            "get_page_restrictions_with_per_ancestor_fetch",
+        ),
+    )
+
+    return ee_get_per_ancestor(
+        confluence_client,
+        page_id,
+        page_restrictions,
+        ancestors,
+        ancestor_restrictions_cache,
+        add_prefix,
     )
 
 

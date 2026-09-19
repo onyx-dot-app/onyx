@@ -1,7 +1,6 @@
 import re
 
-from onyx.chat.citation_processor import CitationMapping
-from onyx.chat.citation_processor import DynamicCitationProcessor
+from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
 from onyx.context.search.models import SearchDocsResponse
 from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES
 from onyx.tools.models import ToolResponse
@@ -177,11 +176,7 @@ def collapse_citations(
         citation_str = match.group()
 
         # Determine bracket style
-        if (
-            citation_str.startswith("[[")
-            or citation_str.startswith("【【")
-            or citation_str.startswith("［［")
-        ):
+        if citation_str.startswith(("[[", "【【", "［［")):
             open_bracket = citation_str[:2]
             close_bracket = citation_str[-2:]
             content = citation_str[2:-2]

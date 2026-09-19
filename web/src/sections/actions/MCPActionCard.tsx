@@ -7,27 +7,33 @@ import React, {
   useRef,
   useCallback,
 } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import ActionCard from "@/sections/actions/ActionCard";
 import Actions from "@/sections/actions/Actions";
 import ToolItem from "@/sections/actions/ToolItem";
 import ToolsList from "@/sections/actions/ToolsList";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useCreateModal } from "@opal/components";
 import {
   ActionStatus,
   ToolSnapshot,
   MCPServerStatus,
   MCPServer,
-} from "@/lib/tools/interfaces";
+} from "@/lib/tools/types";
 import useServerTools from "@/hooks/useServerTools";
+import { can } from "@/lib/permissions/resource-actions";
 import { KeyedMutator } from "swr";
 import type { IconProps } from "@opal/types";
-import { SvgRefreshCw, SvgServer, SvgTrash } from "@opal/icons";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import {
+  SvgRefreshCw,
+  SvgServer,
+  SvgTrash,
+  SvgSimpleLoader,
+} from "@opal/icons";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import { timeAgo } from "@/lib/time";
+import { timeAgo } from "@opal/time";
 import { cn } from "@opal/utils";
-import Modal from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { ConfirmationModalLayout as Modal } from "@opal/layouts";
 
 export interface MCPActionCardProps {
   // Server identification
@@ -101,11 +107,18 @@ export default function MCPActionCard({
   onUpdateToolsStatus,
   className,
 }: MCPActionCardProps) {
+  const t = useTranslations("actions");
+  const locale = useLocale();
   const [isToolsExpanded, setIsToolsExpanded] = useState(initialExpanded);
   const [searchQuery, setSearchQuery] = useState("");
   const [showOnlyEnabled, setShowOnlyEnabled] = useState(false);
   const [isToolsRefreshing, setIsToolsRefreshing] = useState(false);
   const deleteModal = useCreateModal();
+
+  const canEdit = can(server, "edit");
+  const canDelete = can(server, "delete");
+  const canAuthenticate = can(server, "authenticate");
+  const canManageStatus = can(server, "manage_status");
 
   // Update expanded state when initialExpanded changes
   const hasInitializedExpansion = useRef(false);
@@ -202,17 +215,23 @@ export default function MCPActionCard({
       <Actions
         status={status}
         serverName={title}
-        onDisconnect={onDisconnect}
-        onManage={onManage}
-        onAuthenticate={onAuthenticate}
-        onReconnect={onReconnect}
-        onDelete={onDelete ? () => deleteModal.toggle(true) : undefined}
+        onDisconnect={canManageStatus ? onDisconnect : undefined}
+        onManage={canEdit ? onManage : undefined}
+        onAuthenticate={canAuthenticate ? onAuthenticate : undefined}
+        onReconnect={canManageStatus ? onReconnect : undefined}
+        onDelete={
+          canDelete && onDelete ? () => deleteModal.toggle(true) : undefined
+        }
         toolCount={toolCount}
         isToolsExpanded={isToolsExpanded}
         onToggleTools={handleToggleTools}
       />
     ),
     [
+      canAuthenticate,
+      canDelete,
+      canEdit,
+      canManageStatus,
       deleteModal,
       handleToggleTools,
       isToolsExpanded,
@@ -243,30 +262,35 @@ export default function MCPActionCard({
 
   // Left action for ToolsList footer
   const leftAction = useMemo(() => {
-    const lastRefreshedText = timeAgo(server.last_refreshed_at);
+    const lastRefreshedText = timeAgo(server.last_refreshed_at, locale);
 
     return (
       <div className="flex items-center gap-2">
-        <Button
-          icon={isToolsRefreshing ? SimpleLoader : SvgRefreshCw}
-          prominence="internal"
-          onClick={handleRefreshTools}
-          tooltip="Refresh tools"
-          aria-label="Refresh tools"
-        />
+        {canManageStatus && (
+          <Button
+            icon={isToolsRefreshing ? SvgSimpleLoader : SvgRefreshCw}
+            prominence="internal"
+            onClick={handleRefreshTools}
+            tooltip={t("mcpCard.refreshToolsButton.tooltip")}
+            aria-label={t("mcpCard.refreshToolsButton.ariaLabel")}
+          />
+        )}
         {lastRefreshedText && (
           <Text as="p" text03 mainUiBody className="whitespace-nowrap">
-            Tools last refreshed {lastRefreshedText}
+            {t("mcpCard.lastRefreshed.label", { time: lastRefreshedText })}
           </Text>
         )}
       </div>
     );
   }, [
+    canManageStatus,
     server.last_refreshed_at,
+    locale,
     serverId,
     mutate,
     onRefreshTools,
     isToolsRefreshing,
+    t,
   ]);
 
   return (
@@ -277,8 +301,8 @@ export default function MCPActionCard({
         icon={icon}
         status={status}
         actions={actionsComponent}
-        onEdit={onEdit}
-        onRename={handleRename}
+        onEdit={canEdit ? onEdit : undefined}
+        onRename={canEdit ? handleRename : undefined}
         isExpanded={isToolsExpanded}
         onExpandedChange={setIsToolsExpanded}
         enableSearch={true}
@@ -286,7 +310,7 @@ export default function MCPActionCard({
         onSearchQueryChange={setSearchQuery}
         onFold={handleFold}
         className={className}
-        ariaLabel={`${title} MCP server card`}
+        ariaLabel={t("mcpCard.card.ariaLabel", { title })}
       >
         <ToolsList
           isFetching={
@@ -296,14 +320,20 @@ export default function MCPActionCard({
           enabledCount={tools.filter((tool) => tool.isEnabled).length}
           showOnlyEnabled={showOnlyEnabled}
           onToggleShowOnlyEnabled={handleToggleShowOnlyEnabled}
-          onUpdateToolsStatus={(enabled) => {
-            const toolIds = tools.map((tool) => parseInt(tool.id));
-            onUpdateToolsStatus?.(serverId, toolIds, enabled, mutate);
-          }}
+          onUpdateToolsStatus={
+            // Bulk toggles all tools; the status route 403s the whole batch unless every
+            // tool is manageable, so only offer it when the user can toggle each one.
+            tools.length > 0 && tools.every((tool) => can(tool, "toggle"))
+              ? (enabled) => {
+                  const toolIds = tools.map((tool) => parseInt(tool.id));
+                  onUpdateToolsStatus?.(serverId, toolIds, enabled, mutate);
+                }
+              : undefined
+          }
           isEmpty={filteredTools.length === 0}
           searchQuery={searchQuery}
-          emptyMessage="No tools available"
-          emptySearchMessage="No tools found"
+          emptyMessage={t("toolsList.empty.message")}
+          emptySearchMessage={t("toolsList.empty.searchMessage")}
           leftAction={leftAction}
         >
           {filteredTools.map((tool) => (
@@ -314,6 +344,7 @@ export default function MCPActionCard({
               icon={tool.icon}
               isAvailable={tool.isAvailable}
               isEnabled={tool.isEnabled}
+              canToggle={can(tool, "toggle")}
               onToggle={(enabled) =>
                 onToolToggle?.(serverId, tool.id, enabled, mutate)
               }
@@ -328,7 +359,7 @@ export default function MCPActionCard({
           icon={({ className }) => (
             <SvgTrash className={cn(className, "stroke-action-danger-05")} />
           )}
-          title="Delete MCP server"
+          title={t("mcpCard.deleteModal.title")}
           onClose={() => deleteModal.toggle(false)}
           submit={
             <Button
@@ -344,17 +375,19 @@ export default function MCPActionCard({
                 }
               }}
             >
-              Delete
+              {t("mcpCard.deleteModal.submitButton.label")}
             </Button>
           }
         >
           <div className="flex flex-col gap-4">
             <Text as="p" text03>
-              All tools connected to <b>{title}</b> will be removed. Deletion is
-              irreversible.
+              {t.rich("mcpCard.deleteModal.body.description", {
+                title,
+                emphasis: (chunks) => <b>{chunks}</b>,
+              })}
             </Text>
             <Text as="p" text03>
-              Are you sure you want to delete this MCP server?
+              {t("mcpCard.deleteModal.body.confirmation")}
             </Text>
           </div>
         </Modal>

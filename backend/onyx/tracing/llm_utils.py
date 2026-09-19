@@ -1,19 +1,17 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
-from collections.abc import Mapping
-from collections.abc import Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 from onyx.llm.interfaces import LLM
 from onyx.llm.model_response import ModelResponse
 from onyx.llm.models import ToolCall
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.framework.create import generation_span
+from onyx.tracing.framework.create import generation_span, get_current_span
 from onyx.tracing.framework.span_data import GenerationSpanData
 from onyx.tracing.framework.spans import Span
+from onyx.tracing.framework.traces import TraceContentMode
 
 
 def build_llm_model_config(llm: LLM, flow: LLMFlow | None = None) -> dict[str, str]:
@@ -31,14 +29,18 @@ def llm_generation_span(
     llm: LLM,
     flow: LLMFlow | None,
     input_messages: Sequence[Any] | Any | None = None,
+    tools: Sequence[Mapping[str, Any]] | None = None,
     parent: Any | None = None,
+    content_mode: TraceContentMode | None = None,
 ) -> Iterator[Span[GenerationSpanData]]:
     with generation_span(
         model=llm.config.model_name,
         model_config=build_llm_model_config(llm, flow),
+        tools=tools,
         parent=parent,
+        content_mode=content_mode,
     ) as span:
-        if input_messages is not None:
+        if input_messages is not None and span.content_mode == TraceContentMode.FULL:
             if isinstance(input_messages, Sequence) and not isinstance(
                 input_messages, (str, bytes)
             ):
@@ -57,8 +59,11 @@ def traced_llm_call(
     model: str,
     provider: str,
     extra_config: Mapping[str, str] | None = None,
+    image_count: int | None = None,
     input_messages: Sequence[Any] | Any | None = None,
+    tools: Sequence[Mapping[str, Any]] | None = None,
     parent: Any | None = None,
+    content_mode: TraceContentMode | None = None,
 ) -> Iterator[Span[GenerationSpanData]]:
     """Open a generation span for call sites that don't go through ``LLM``.
 
@@ -76,9 +81,12 @@ def traced_llm_call(
     with generation_span(
         model=model,
         model_config=model_config,
+        image_count=image_count,
+        tools=tools,
         parent=parent,
+        content_mode=content_mode,
     ) as span:
-        if input_messages is not None:
+        if input_messages is not None and span.content_mode == TraceContentMode.FULL:
             if isinstance(input_messages, Sequence) and not isinstance(
                 input_messages, (str, bytes)
             ):
@@ -89,6 +97,18 @@ def traced_llm_call(
                 Sequence[Mapping[str, Any]], normalized_messages
             )
         yield span
+
+
+def record_llm_request_params(params: Mapping[str, Any]) -> None:
+    """Attach request-shaping params (reasoning effort, provider kwargs) to the
+    active generation span. Call once per send attempt with the provider-mapped
+    kwargs: last write wins. No-op when the current span is not a generation span."""
+    span = get_current_span()
+    if span is None or not isinstance(span.span_data, GenerationSpanData):
+        return
+    if span.content_mode == TraceContentMode.METADATA_ONLY:
+        return
+    span.span_data.request_params = dict(params)
 
 
 def record_llm_response(
@@ -104,22 +124,16 @@ def record_llm_response(
         span: The generation span to record to.
         response: The ModelResponse from the LLM.
     """
-    message = response.choice.message
-
-    # Build output dict matching AssistantMessage format
-    output_dict: dict[str, Any] = {"role": "assistant"}
-
-    if message.content is not None:
-        output_dict["content"] = message.content
-
-    if message.tool_calls:
-        output_dict["tool_calls"] = [tc.model_dump() for tc in message.tool_calls]
-
-    span.span_data.output = [output_dict]
-
-    # Record reasoning (extended thinking from reasoning models)
-    if message.reasoning_content:
-        span.span_data.reasoning = message.reasoning_content
+    if span.content_mode == TraceContentMode.FULL:
+        message = response.choice.message
+        output_dict: dict[str, Any] = {"role": "assistant"}
+        if message.content is not None:
+            output_dict["content"] = message.content
+        if message.tool_calls:
+            output_dict["tool_calls"] = [tc.model_dump() for tc in message.tool_calls]
+        span.span_data.output = [output_dict]
+        if message.reasoning_content:
+            span.span_data.reasoning = message.reasoning_content
 
     # Record usage
     if response.usage:
@@ -147,26 +161,25 @@ def record_llm_span_output(
         reasoning: Optional reasoning/extended thinking content.
         tool_calls: Optional list of tool calls.
     """
-    if output is None:
-        output_dict: dict[str, Any] = {"role": "assistant", "content": None}
-        if tool_calls:
-            output_dict["tool_calls"] = [tc.model_dump() for tc in tool_calls]
-        span.span_data.output = [output_dict]
-    elif isinstance(output, str):
-        output_dict = {"role": "assistant", "content": output}
-        if tool_calls:
-            output_dict["tool_calls"] = [  # ty: ignore[invalid-assignment]
-                tc.model_dump() for tc in tool_calls
-            ]
-        span.span_data.output = [output_dict]
-    else:
-        span.span_data.output = cast(Sequence[Mapping[str, Any]], output)
+    if span.content_mode == TraceContentMode.FULL:
+        if output is None:
+            output_dict: dict[str, Any] = {"role": "assistant", "content": None}
+            if tool_calls:
+                output_dict["tool_calls"] = [tc.model_dump() for tc in tool_calls]
+            span.span_data.output = [output_dict]
+        elif isinstance(output, str):
+            output_dict = {"role": "assistant", "content": output}
+            if tool_calls:
+                output_dict["tool_calls"] = [tc.model_dump() for tc in tool_calls]
+            span.span_data.output = [output_dict]
+        else:
+            span.span_data.output = cast(Sequence[Mapping[str, Any]], output)
 
     usage_dict = _build_usage_dict(usage)
     if usage_dict:
         span.span_data.usage = usage_dict
 
-    if reasoning:
+    if reasoning and span.content_mode == TraceContentMode.FULL:
         span.span_data.reasoning = reasoning
 
 
@@ -177,13 +190,19 @@ def _build_usage_dict(usage: Any | None) -> dict[str, Any] | None:
         return usage
 
     usage_dict: dict[str, Any] = {}
-    prompt_tokens = getattr(usage, "prompt_tokens", None)
-    completion_tokens = getattr(usage, "completion_tokens", None)
-    input_tokens = getattr(usage, "input_tokens", None)
-    output_tokens = getattr(usage, "output_tokens", None)
-    total_tokens = getattr(usage, "total_tokens", None)
-    cache_read_input_tokens = getattr(usage, "cache_read_input_tokens", None)
-    cache_creation_input_tokens = getattr(usage, "cache_creation_input_tokens", None)
+    prompt_tokens = getattr(usage, "prompt_tokens", None)  # ods: ignore[getattr]
+    completion_tokens = getattr(  # ods: ignore[getattr]
+        usage, "completion_tokens", None
+    )
+    input_tokens = getattr(usage, "input_tokens", None)  # ods: ignore[getattr]
+    output_tokens = getattr(usage, "output_tokens", None)  # ods: ignore[getattr]
+    total_tokens = getattr(usage, "total_tokens", None)  # ods: ignore[getattr]
+    cache_read_input_tokens = getattr(  # ods: ignore[getattr]
+        usage, "cache_read_input_tokens", None
+    )
+    cache_creation_input_tokens = getattr(  # ods: ignore[getattr]
+        usage, "cache_creation_input_tokens", None
+    )
 
     if prompt_tokens is not None:
         usage_dict["input_tokens"] = prompt_tokens

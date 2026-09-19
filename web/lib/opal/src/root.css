@@ -10,32 +10,13 @@
  * (files are already inlined) but serve as the canonical source of truth for
  * what the design system includes and in what order.
  *
- * App-level tokens (container widths, page widths, etc.) live in the app's
- * own CSS — this file covers only library-owned tokens and stylesheets.
+ * Design tokens (colors, spacing, radius, z-index, typography metrics) live in
+ * @onyx-ai/shared and are pulled in via `@import "@onyx-ai/shared/tokens.css"` in
+ * _reference.css (which leads the bundle). Layout tokens (container widths, page
+ * widths, etc.) are library-owned and live in sizes.css — app-specific overrides
+ * should be applied in the app's own CSS.
  */
 
-@import "./styles/colors.css";
+@import "./styles/sizes.css";
 @import "./styles/typography.css";
-
-:root {
-  /* LINE HEIGHTS + CONTAINER SIZES */
-
-  --opal-line-height-lg: 2.25rem;
-  --opal-line-height-md: 1.75rem;
-  --opal-line-height-sm: 1.5rem;
-  --opal-line-height-xs: 1.25rem;
-  --opal-line-height-2xs: 1rem;
-
-  /* BORDER RADII */
-  --border-radius-02: 0.125rem;
-  --border-radius-04: 0.25rem;
-  --border-radius-08: 0.5rem;
-  --border-radius-12: 0.75rem;
-  --border-radius-16: 1rem;
-  --border-radius-full: 64rem;
-
-  /* BACKDROP BLUR */
-  --backdrop-blur-01: 2px;
-  --backdrop-blur-02: 1px;
-  --backdrop-blur-03: 1px;
-}
+@import "./styles/z-index.css";

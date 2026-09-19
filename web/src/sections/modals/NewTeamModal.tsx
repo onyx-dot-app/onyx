@@ -1,21 +1,23 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
-import { Dialog } from "@headlessui/react";
-import { Button } from "@opal/components";
-import { toast } from "@/hooks/useToast";
+import { Button, Text } from "@opal/components";
+import { InputErrorText, toast } from "@opal/layouts";
+import { Modal } from "@opal/components";
 import { useUser } from "@/providers/UserProvider";
 import { useModalContext } from "@/components/context/ModalContext";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import {
   SvgArrowRight,
   SvgArrowUp,
   SvgCheckCircle,
   SvgOrganization,
   SvgPlus,
+  SvgSimpleLoader,
 } from "@opal/icons";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 export interface TenantByDomainResponse {
   tenant_id: string;
   number_of_users: number;
@@ -23,6 +25,7 @@ export interface TenantByDomainResponse {
 }
 
 export default function NewTeamModal() {
+  const t = useTranslations("admin.modals.newTeam");
   const { showNewTeamModal, setShowNewTeamModal } = useModalContext();
   const [existingTenant, setExistingTenant] =
     useState<TenantByDomainResponse | null>(null);
@@ -32,7 +35,7 @@ export default function NewTeamModal() {
   const [error, setError] = useState<string | null>(null);
 
   const { user } = useUser();
-  const appDomain = user?.email.split("@")[1];
+  const appDomain = user?.email.split("@")[1] ?? "";
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -61,18 +64,18 @@ export default function NewTeamModal() {
       if (!response.ok) {
         throw new Error(`Failed to fetch team info: ${response.status}`);
       }
-      const responseJson = await response.json();
+      const responseJson: TenantByDomainResponse | null = await response.json();
       if (!responseJson) {
         setShowNewTeamModal(false);
         setExistingTenant(null);
         return;
       }
 
-      const data = responseJson as TenantByDomainResponse;
+      const data = responseJson;
       setExistingTenant(data);
     } catch (error) {
       console.error("Failed to fetch tenant info:", error);
-      setError("Could not retrieve team information. Please try again later.");
+      setError(t("loadError.message"));
     } finally {
       setIsLoading(false);
     }
@@ -94,17 +97,21 @@ export default function NewTeamModal() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const errorData: ErrorResponseBody = await response
+          .json()
+          .catch(() => ({}));
         throw new Error(
-          errorData.detail || errorData.message || "Failed to request invite"
+          errorData.detail ||
+            errorData.message ||
+            t("requestError.responseFallback")
         );
       }
 
       setHasRequestedInvite(true);
-      toast.success("Your invite request has been sent to the team admin.");
+      toast.success(t("inviteRequestedToast.message"));
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Failed to request an invite";
+        error instanceof Error ? error.message : t("requestError.message");
       setError(message);
       toast.error(message);
     } finally {
@@ -114,6 +121,7 @@ export default function NewTeamModal() {
 
   const handleContinueToNewOrg = () => {
     const newUrl = window.location.pathname;
+    // SAFETY: the current pathname is a route of this app.
     router.replace(newUrl as Route);
     setShowNewTeamModal(false);
   };
@@ -126,95 +134,80 @@ export default function NewTeamModal() {
   // Only render if showNewTeamModal is true
   if (!showNewTeamModal || isLoading) return null;
 
+  const headerIcon = hasRequestedInvite ? SvgCheckCircle : SvgOrganization;
+  const headerTitle = hasRequestedInvite
+    ? t("header.requestSentTitle")
+    : t("header.title", { domain: appDomain });
+
   return (
-    <Dialog
+    <Modal
       open={showNewTeamModal}
-      onClose={handleClose}
-      className="relative z-1000"
+      onOpenChange={(open) => {
+        if (!open) handleClose();
+      }}
     >
-      {/* Modal backdrop */}
-      <div className="fixed inset-0 bg-mask-03" aria-hidden="true" />
+      <Modal.Content width="sm" preventAccidentalClose={false}>
+        <Modal.Header
+          icon={headerIcon}
+          title={headerTitle}
+          onClose={handleClose}
+        />
 
-      <div className="fixed inset-0 flex items-center justify-center p-4">
-        <Dialog.Panel className="mx-auto w-full max-w-md rounded-lg bg-background-neutral-00 p-6 shadow-xl border">
-          <Dialog.Title className="text-xl font-semibold mb-4 flex items-center">
-            {hasRequestedInvite ? (
-              <>
-                <SvgCheckCircle className="mr-2 h-5 w-5 stroke-text-05" />
-                Join Request Sent
-              </>
-            ) : (
-              <>
-                <SvgOrganization className="mr-2 h-5 w-5 stroke-text-04" />
-                We found an existing team for {appDomain}
-              </>
-            )}
-          </Dialog.Title>
-
-          {isLoading ? (
-            <div className="py-8 text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-border-05 mx-auto mb-4"></div>
-              <p>Loading team information...</p>
-            </div>
-          ) : error ? (
-            <div className="space-y-4">
-              <p className="text-status-text-error-05">{error}</p>
-              <div className="flex w-full pt-2">
-                <Button
-                  onClick={handleContinueToNewOrg}
-                  width="full"
-                  rightIcon={SvgArrowRight}
-                >
-                  Continue with new team
-                </Button>
-              </div>
-            </div>
+        <Modal.Body>
+          {error ? (
+            <InputErrorText>{error}</InputErrorText>
           ) : hasRequestedInvite ? (
-            <div className="space-y-4">
-              <p className="text-text-04">
-                Your join request has been sent. You can explore as your own
-                team while waiting for an admin of {appDomain} to approve your
-                request.
-              </p>
-              <div className="flex w-full pt-2">
-                <Button
-                  onClick={handleContinueToNewOrg}
-                  width="full"
-                  rightIcon={SvgArrowRight}
-                >
-                  Try Onyx while waiting
-                </Button>
-              </div>
-            </div>
+            <Text font="main-ui-body" color="text-04">
+              {t("requestSentBody", { domain: appDomain })}
+            </Text>
           ) : (
-            <div className="space-y-4">
-              <p className="text-text-03 text-sm mb-2">
-                Your join request can be approved by any admin of {appDomain}.
-              </p>
-              <div className="flex flex-col items-center justify-center gap-4 mt-4">
-                <Button
-                  disabled={isSubmitting}
-                  onClick={handleRequestInvite}
-                  width="full"
-                  icon={isSubmitting ? SimpleLoader : SvgArrowUp}
-                >
-                  {isSubmitting
-                    ? "Sending request..."
-                    : "Request to join your team"}
-                </Button>
-              </div>
+            <Text font="main-ui-body" color="text-03">
+              {t("body", { domain: appDomain })}
+            </Text>
+          )}
+        </Modal.Body>
+
+        <Modal.Footer flexDirection="column" alignItems="stretch">
+          {error ? (
+            <Button
+              onClick={handleContinueToNewOrg}
+              width="full"
+              rightIcon={SvgArrowRight}
+            >
+              {t("continueButton.label")}
+            </Button>
+          ) : hasRequestedInvite ? (
+            <Button
+              onClick={handleContinueToNewOrg}
+              width="full"
+              rightIcon={SvgArrowRight}
+            >
+              {t("tryOnyxButton.label")}
+            </Button>
+          ) : (
+            <>
+              <Button
+                disabled={isSubmitting}
+                onClick={handleRequestInvite}
+                width="full"
+                icon={isSubmitting ? SvgSimpleLoader : SvgArrowUp}
+              >
+                {isSubmitting
+                  ? t("requestButton.pendingLabel")
+                  : t("requestButton.label")}
+              </Button>
               <Button
                 onClick={handleContinueToNewOrg}
                 width="full"
                 icon={SvgPlus}
                 prominence="secondary"
               >
-                Continue with new team
+                {t("continueButton.label")}
               </Button>
-            </div>
+            </>
           )}
-        </Dialog.Panel>
-      </div>
-    </Dialog>
+        </Modal.Footer>
+      </Modal.Content>
+    </Modal>
   );
 }

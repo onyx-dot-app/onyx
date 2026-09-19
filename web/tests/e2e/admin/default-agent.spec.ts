@@ -1,8 +1,11 @@
 import { test, expect } from "@playwright/test";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import type { Page, Locator } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
 import {
   TOOL_IDS,
+  TOOL_NAMES,
+  toolOption,
   waitForUnifiedGreeting,
   openActionManagement,
 } from "@tests/e2e/utils/tools";
@@ -38,7 +41,12 @@ async function clickAndWaitForPatch(
   await patchPromise;
 }
 
-test.describe("Chat Preferences Admin Page", () => {
+// @exclusive: every test here mutates the global (tenant-wide) default-assistant
+// `tool_ids` and creates/deletes the singleton default image-generation config in
+// beforeEach/afterEach. Running in the parallel `admin` project races against other
+// files that touch the same global state (e.g. chat/default_agent.spec.ts,
+// chat/actions_popover.spec.ts), causing flaky toggle-persistence failures.
+test.describe("Chat Preferences Admin Page @exclusive", () => {
   let testCcPairId: number | null = null;
   let webSearchProviderId: number | null = null;
   let imageGenConfigId: string | null = null;
@@ -69,8 +77,8 @@ test.describe("Chat Preferences Admin Page", () => {
     }
 
     // Navigate to chat preferences
-    await page.goto("/admin/configuration/chat-preferences");
-    await page.waitForURL("**/admin/configuration/chat-preferences**");
+    await page.goto(ADMIN_ROUTES.CHAT_PREFERENCES.path);
+    await page.waitForURL(`**${ADMIN_ROUTES.CHAT_PREFERENCES.path}**`);
 
     // Attach basic API logging for this spec
     page.on("response", async (resp) => {
@@ -563,7 +571,7 @@ test.describe("Chat Preferences Admin Page", () => {
     await waitForUnifiedGreeting(page);
 
     // Go back and re-enable all tools
-    await page.goto("/admin/configuration/chat-preferences");
+    await page.goto(ADMIN_ROUTES.CHAT_PREFERENCES.path);
     await page.waitForLoadState("networkidle");
     // Reload to ensure the page has the updated tools list (after providers were created)
     await page.reload();
@@ -637,17 +645,15 @@ test.describe("Chat Preferences Admin Page", () => {
     console.log(`[toggle-all] Popover text: ${popoverText}`);
 
     // Verify at least Internal Search is visible (it should always be enabled)
-    await expect(page.locator(TOOL_IDS.searchOption)).toBeVisible({
+    await expect(toolOption(page, TOOL_NAMES.internalSearch)).toBeVisible({
       timeout: 10000,
     });
 
     // Check if other tools are visible (they might not be if there's a form state issue)
-    const webSearchVisible = await page
-      .locator(TOOL_IDS.webSearchOption)
+    const webSearchVisible = await toolOption(page, TOOL_NAMES.webSearch)
       .isVisible()
       .catch(() => false);
-    const imageGenVisible = await page
-      .locator(TOOL_IDS.imageGenerationOption)
+    const imageGenVisible = await toolOption(page, TOOL_NAMES.imageGeneration)
       .isVisible()
       .catch(() => false);
     console.log(
@@ -658,7 +664,7 @@ test.describe("Chat Preferences Admin Page", () => {
     // Web Search and Image Generation form state when providers are created in beforeEach.
     // This is being tracked separately as a potential Formik/form state bug.
 
-    await page.goto("/admin/configuration/chat-preferences");
+    await page.goto(ADMIN_ROUTES.CHAT_PREFERENCES.path);
 
     // Restore original states
     let needsSave = false;
@@ -685,13 +691,13 @@ test.describe("Chat Preferences Non-Admin Access", () => {
     await page.context().clearCookies();
 
     // Try to navigate directly to chat preferences without logging in
-    await page.goto("/admin/configuration/chat-preferences");
+    await page.goto(ADMIN_ROUTES.CHAT_PREFERENCES.path);
 
     // Wait for navigation to settle
     await page.waitForTimeout(2000);
 
     // Should be redirected away from admin page
     const url = page.url();
-    expect(!url.includes("/admin/configuration/chat-preferences")).toBe(true);
+    expect(!url.includes(ADMIN_ROUTES.CHAT_PREFERENCES.path)).toBe(true);
   });
 });

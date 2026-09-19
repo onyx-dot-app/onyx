@@ -117,7 +117,7 @@ html {
 
 .thinking-box__icon {
   color: var(--thinking-text-color);
-  margin-right: 0.25rem;
+  margin-inline-end: 0.25rem;
   animation: pulse 1.5s infinite ease-in-out;
 }
 

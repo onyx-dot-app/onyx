@@ -4,7 +4,7 @@ import { useEffect } from "react";
 
 /**
  * Development-only stats.js overlay showing FPS, MS, and memory usage.
- * Enable by running `npm run dev:profile` or setting NEXT_PUBLIC_ENABLE_STATS=true.
+ * Enable by running `bun run dev:profile` or setting NEXT_PUBLIC_ENABLE_STATS=true.
  * Shows FPS and MB panels (memory is Chrome only).
  *
  * Uses dynamic import to prevent stats.js from being bundled in production.

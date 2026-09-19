@@ -1,12 +1,11 @@
 from collections import defaultdict
+from enum import StrEnum
 
 from jira import JIRA
 from jira.resources import PermissionScheme
 from pydantic import ValidationError
 
-from ee.onyx.external_permissions.jira.models import Holder
-from ee.onyx.external_permissions.jira.models import Permission
-from ee.onyx.external_permissions.jira.models import User
+from ee.onyx.external_permissions.jira.models import Holder, Permission, User
 from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
@@ -33,6 +32,17 @@ SUPPORTED_STATIC_HOLDER_TYPES = {
     HOLDER_TYPE_GROUP,
 }
 
+# Jira DC/Server returns project-role actors flat with this `type` discriminator;
+# Jira Cloud v3 instead wraps them in nested `actorGroup` / `actorUser` objects.
+ATLASSIAN_GROUP_ROLE_ACTOR_TYPE = "atlassian-group-role-actor"
+ATLASSIAN_USER_ROLE_ACTOR_TYPE = "atlassian-user-role-actor"
+
+
+class _RoleActorCategory(StrEnum):
+    GROUP = "group"
+    USER = "user"
+    UNSUPPORTED = "unsupported"
+
 
 def _get_role_id(holder: Holder) -> str | None:
     return holder.get("value") or holder.get("parameter")
@@ -42,8 +52,8 @@ def _get_role_id(holder: Holder) -> str | None:
 # depending on Jira version and endpoint.
 def _get_obj_value(obj: object, field: str) -> object | None:
     if isinstance(obj, dict):
-        return obj.get(field)  # ty: ignore[invalid-argument-type]
-    return getattr(obj, field, None)
+        return obj.get(field)
+    return getattr(obj, field, None)  # ods: ignore[getattr]
 
 
 def _get_raw_value(obj: object, field: str) -> object | None:
@@ -216,6 +226,49 @@ def _get_user_emails(jira_project: str, user_holders: list[Holder]) -> list[str]
     return emails
 
 
+def _describe_actor(actor: object) -> object:
+    """Render a project-role actor for triage logs. `jira.resources.PropertyHolder`
+    inherits object's default repr (only the memory address); dump its populated
+    attributes one level deep so unsupported/empty-name cases are debuggable."""
+    if isinstance(actor, dict):
+        return actor
+    if not hasattr(actor, "__dict__"):
+        return repr(actor)
+    return {
+        k: (
+            {ik: iv for ik, iv in vars(v).items() if not ik.startswith("_")}
+            if hasattr(v, "__dict__")
+            else v
+        )
+        for k, v in vars(actor).items()
+        if not k.startswith("_")
+    }
+
+
+def _classify_role_actor(actor: object) -> _RoleActorCategory:
+    """Categorize a project-role actor across Cloud v3's nested
+    `actorGroup`/`actorUser` shape and DC/Server's flat `type=atlassian-*-role-actor`
+    shape."""
+    if (
+        _get_obj_value(actor, "actorGroup") is not None
+        or _get_raw_value(actor, "actorGroup") is not None
+    ):
+        return _RoleActorCategory.GROUP
+    if (
+        _get_obj_value(actor, "actorUser") is not None
+        or _get_raw_value(actor, "actorUser") is not None
+    ):
+        return _RoleActorCategory.USER
+
+    actor_type = _get_first_str_value(actor, ("type",))
+    if actor_type == ATLASSIAN_GROUP_ROLE_ACTOR_TYPE:
+        return _RoleActorCategory.GROUP
+    if actor_type == ATLASSIAN_USER_ROLE_ACTOR_TYPE:
+        return _RoleActorCategory.USER
+
+    return _RoleActorCategory.UNSUPPORTED
+
+
 def _get_actor_group_name(actor: object) -> str | None:
     for actor_group in [
         _get_obj_value(actor, "actorGroup"),
@@ -258,7 +311,7 @@ def _get_actor_user_email(
         return None
 
     user = jira_client.user(id=user_lookup_id)
-    account_type = getattr(user, "accountType", None)
+    account_type = getattr(user, "accountType", None)  # ods: ignore[getattr]
     if account_type is not None and account_type != "atlassian":
         logger.info(
             "Skipping Jira project %s project role %s user %s because it is not an "
@@ -269,7 +322,7 @@ def _get_actor_user_email(
         )
         return None
 
-    email = getattr(user, "emailAddress", None)
+    email = getattr(user, "emailAddress", None)  # ods: ignore[getattr]
     if email:
         return email
 
@@ -340,11 +393,17 @@ def _get_user_emails_and_groups_from_project_roles(
             continue
 
         for actor in role.actors:
-            actor_group = _get_obj_value(actor, "actorGroup") or _get_raw_value(
-                actor, "actorGroup"
+            category = _classify_role_actor(actor)
+            logger.debug(
+                "Jira project %s project role %s actor classified; "
+                "category=%s actor=%s",
+                jira_project,
+                role_id,
+                category.value,
+                _describe_actor(actor),
             )
-            # Handle group actors
-            if actor_group is not None:
+
+            if category is _RoleActorCategory.GROUP:
                 actor_group_seen_count += 1
                 group_name = _get_actor_group_name(actor)
                 if group_name:
@@ -352,20 +411,23 @@ def _get_user_emails_and_groups_from_project_roles(
                 else:
                     actor_group_missing_name_count += 1
                     logger.warning(
-                        "Jira project %s project role %s has actorGroup with no "
-                        "name/displayName; actor_group=%s",
+                        "Jira project %s project role %s has group actor with no "
+                        "name/displayName; actor=%s",
                         jira_project,
                         role_id,
-                        actor_group,
+                        actor,
                     )
                 continue
 
-            actor_user = _get_obj_value(actor, "actorUser") or _get_raw_value(
-                actor, "actorUser"
-            )
-            # Handle user actors
-            if actor_user is not None:
+            if category is _RoleActorCategory.USER:
                 actor_user_seen_count += 1
+                # Prefer Cloud's nested `actorUser` (keeps accountId lookup);
+                # fall back to the actor itself for DC's flat shape.
+                actor_user = (
+                    _get_obj_value(actor, "actorUser")
+                    or _get_raw_value(actor, "actorUser")
+                    or actor
+                )
                 email = _get_actor_user_email(
                     jira_client=jira_client,
                     jira_project=jira_project,

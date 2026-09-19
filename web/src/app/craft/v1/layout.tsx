@@ -4,6 +4,11 @@ import { BuildProvider } from "@/app/craft/contexts/BuildContext";
 import { UploadFilesProvider } from "@/app/craft/contexts/UploadFilesContext";
 import { BuildOnboardingProvider } from "@/app/craft/onboarding/BuildOnboardingProvider";
 import BuildSidebar from "@/app/craft/components/SideBar";
+// hljs theme for fenced code blocks rendered by the shared CodeBlock (via
+// MinimalMarkdown). CodeBlock expects this CSS to be present; we load it from
+// the craft layout so it's reliably themed on /craft without importing it
+// eagerly elsewhere or editing any component outside /craft.
+import "@/app/app/message/custom-code-styles.css";
 
 /**
  * Build V1 Layout - Skeleton pattern with 3-panel layout
@@ -18,7 +23,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <UploadFilesProvider>
       <BuildProvider>
         <BuildOnboardingProvider>
-          <div className="flex flex-row w-full h-full">
+          <div className="flex h-full min-h-0 w-full flex-row overflow-hidden contain-layout">
             <BuildSidebar />
             {children}
           </div>

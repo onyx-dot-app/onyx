@@ -12,30 +12,34 @@ that claimed the task so concurrent beat ticks don't double-fire.
 
 from __future__ import annotations
 
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import and_
-from sqlalchemy import desc
-from sqlalchemy import literal
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, desc, literal, select
+from sqlalchemy.orm import Session, selectinload
 
-from onyx.db.enums import ScheduledTaskErrorClass
-from onyx.db.enums import ScheduledTaskRunStatus
-from onyx.db.enums import ScheduledTaskSkipReason
-from onyx.db.enums import ScheduledTaskStatus
-from onyx.db.enums import ScheduledTaskTriggerSource
-from onyx.db.models import ScheduledTask
-from onyx.db.models import ScheduledTaskRun
+from onyx.db.enums import (
+    GatedAppKind,
+    ScheduledTaskErrorClass,
+    ScheduledTaskRunStatus,
+    ScheduledTaskSkipReason,
+    ScheduledTaskStatus,
+    ScheduledTaskTriggerSource,
+)
+from onyx.db.gated_app import get_or_create_gated_app_id
+from onyx.db.models import (
+    GatedApp,
+    ScheduledTask,
+    ScheduledTaskPreApprovedTarget,
+    ScheduledTaskRun,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.build.scheduled_tasks.schedule import compute_next_run_at
-from onyx.server.features.build.scheduled_tasks.schedule import EditorMode
-from onyx.server.features.build.scheduled_tasks.schedule import validate_timezone
+from onyx.server.features.build.scheduled_tasks.schedule import (
+    EditorMode,
+    compute_next_run_at,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -53,38 +57,88 @@ def create_scheduled_task(
     name: str,
     prompt: str,
     cron_expression: str,
-    timezone_name: str,
     editor_mode: EditorMode,
     status: ScheduledTaskStatus = ScheduledTaskStatus.ACTIVE,
+    pre_approved_external_app_ids: list[int] | None = None,
+    pre_approved_mcp_server_ids: list[int] | None = None,
     now: datetime | None = None,
 ) -> ScheduledTask:
     """Insert a new ``ScheduledTask``.
 
-    Computes the initial ``next_run_at`` from ``cron_expression`` /
-    ``timezone_name`` if ``status`` is ACTIVE; PAUSED tasks store NULL.
+    Computes the initial ``next_run_at`` from ``cron_expression`` if
+    ``status`` is ACTIVE; PAUSED tasks store NULL.
 
     Raises:
-        OnyxError(INVALID_INPUT): if the cron or timezone is invalid.
+        OnyxError(INVALID_INPUT): if the cron is invalid.
     """
-    validate_timezone(timezone_name)
     now = now or datetime.now(tz=timezone.utc)
     next_run_at: datetime | None = None
     if status == ScheduledTaskStatus.ACTIVE:
-        next_run_at = compute_next_run_at(cron_expression, timezone_name, now)
+        next_run_at = compute_next_run_at(cron_expression, now)
 
     task = ScheduledTask(
         user_id=user_id,
         name=name,
         prompt=prompt,
         cron_expression=cron_expression,
-        timezone=timezone_name,
         editor_mode=editor_mode,
         status=status,
         next_run_at=next_run_at,
     )
+    _replace_pre_approved_targets(
+        db_session,
+        task,
+        external_app_ids=pre_approved_external_app_ids or [],
+        mcp_server_ids=pre_approved_mcp_server_ids or [],
+    )
     db_session.add(task)
     db_session.flush()
     return task
+
+
+def _replace_pre_approved_targets(
+    db_session: Session,
+    task: ScheduledTask,
+    *,
+    external_app_ids: list[int] | None = None,
+    mcp_server_ids: list[int] | None = None,
+) -> None:
+    """Replace supplied target kinds and preserve omitted kinds.
+
+    Reuse unchanged rows to avoid deleting and inserting the same unique key
+    in one flush. The orphan cascade deletes removed grants.
+    """
+    replacements = {
+        kind: target_ids
+        for kind, target_ids in (
+            (GatedAppKind.EXTERNAL_APP, external_app_ids),
+            (GatedAppKind.MCP_SERVER, mcp_server_ids),
+        )
+        if target_ids is not None
+    }
+    if not replacements:
+        return
+
+    existing_by_target = {
+        grant.gated_app.target_key: grant for grant in task.pre_approved_targets
+    }
+    replacement_grants = [
+        existing_by_target.get((kind, target_id))
+        or ScheduledTaskPreApprovedTarget(
+            gated_app_id=get_or_create_gated_app_id(db_session, kind, target_id)
+        )
+        for kind, target_ids in replacements.items()
+        for target_id in set(target_ids)
+    ]
+    retained_grants = [
+        grant
+        for grant in task.pre_approved_targets
+        if grant.gated_app.kind not in replacements
+    ]
+    task.pre_approved_targets = [
+        *replacement_grants,
+        *retained_grants,
+    ]
 
 
 def get_scheduled_task(
@@ -137,23 +191,26 @@ def update_scheduled_task(
     name: str | None = None,
     prompt: str | None = None,
     cron_expression: str | None = None,
-    timezone_name: str | None = None,
     editor_mode: EditorMode | None = None,
     status: ScheduledTaskStatus | None = None,
+    pre_approved_external_app_ids: list[int] | None = None,
+    pre_approved_mcp_server_ids: list[int] | None = None,
     now: datetime | None = None,
 ) -> ScheduledTask:
     """Apply a partial update to a scheduled task.
 
     Recompute rules:
-      - If ``cron_expression`` or ``timezone_name`` changed and the task is
-        (or becomes) ACTIVE, ``next_run_at`` is recomputed from ``now``.
+      - If ``cron_expression`` changed and the task is (or becomes) ACTIVE,
+        ``next_run_at`` is recomputed from ``now``.
       - If ``status`` transitions to PAUSED, ``next_run_at`` is set to NULL.
       - If ``status`` transitions to ACTIVE, ``next_run_at`` is recomputed.
+      - Each pre-approved target field follows normal patch semantics: supplied
+        replaces that target kind, and omitted leaves it unchanged.
 
     Raises:
         OnyxError(NOT_FOUND): the task does not exist or is not owned by
             the caller.
-        OnyxError(INVALID_INPUT): the new cron/timezone is invalid.
+        OnyxError(INVALID_INPUT): the new cron is invalid.
     """
     task = get_scheduled_task(db_session=db_session, task_id=task_id, user_id=user_id)
     now = now or datetime.now(tz=timezone.utc)
@@ -163,14 +220,16 @@ def update_scheduled_task(
         task.name = name
     if prompt is not None:
         task.prompt = prompt
+    _replace_pre_approved_targets(
+        db_session,
+        task,
+        external_app_ids=pre_approved_external_app_ids,
+        mcp_server_ids=pre_approved_mcp_server_ids,
+    )
     if editor_mode is not None:
         task.editor_mode = editor_mode
     if cron_expression is not None and cron_expression != task.cron_expression:
         task.cron_expression = cron_expression
-        schedule_changed = True
-    if timezone_name is not None and timezone_name != task.timezone:
-        validate_timezone(timezone_name)
-        task.timezone = timezone_name
         schedule_changed = True
 
     if status is not None and status != task.status:
@@ -179,11 +238,9 @@ def update_scheduled_task(
             task.next_run_at = None
         else:
             # Becoming ACTIVE — recompute from now regardless of schedule change.
-            task.next_run_at = compute_next_run_at(
-                task.cron_expression, task.timezone, now
-            )
+            task.next_run_at = compute_next_run_at(task.cron_expression, now)
     elif schedule_changed and task.status == ScheduledTaskStatus.ACTIVE:
-        task.next_run_at = compute_next_run_at(task.cron_expression, task.timezone, now)
+        task.next_run_at = compute_next_run_at(task.cron_expression, now)
 
     db_session.flush()
     return task
@@ -257,6 +314,8 @@ def claim_due_scheduled_tasks(
         return []
     stmt = (
         select(ScheduledTask)
+        # The dispatcher gates each task on its owner's Craft access.
+        .options(selectinload(ScheduledTask.user))
         .where(
             ScheduledTask.status == ScheduledTaskStatus.ACTIVE,
             ScheduledTask.deleted.is_(False),
@@ -280,7 +339,7 @@ def advance_next_run_at(
 
     Returns the new ``next_run_at`` (UTC).
     """
-    next_run_at = compute_next_run_at(task.cron_expression, task.timezone, now)
+    next_run_at = compute_next_run_at(task.cron_expression, now)
     task.next_run_at = next_run_at
     db_session.flush()
     return next_run_at
@@ -473,6 +532,49 @@ def find_stuck_runs(
 
 
 # ---------------------------------------------------------------------------
+# Egress-gate pre-approval lookup
+# ---------------------------------------------------------------------------
+
+# (run_id, granted gated targets) for a RUNNING scheduled run, else None. A
+# target is a (kind, id) pair spanning external apps and MCP servers.
+GrantedTarget = tuple[GatedAppKind, int]
+ScheduledRunGrants = tuple[UUID, set[GrantedTarget]] | None
+
+
+def get_live_scheduled_run_grants(
+    *,
+    db_session: Session,
+    session_id: UUID,
+) -> ScheduledRunGrants:
+    """``(run_id, granted_targets)`` when ``session_id`` is a currently
+    RUNNING scheduled run; ``None`` otherwise.
+
+    The ``scheduled_task_run`` lookup subsumes the session-origin check
+    (only SCHEDULED-origin sessions have run rows); the RUNNING filter means
+    interactive follow-ups on a finished scheduled session park as usual.
+    """
+    run = db_session.execute(
+        select(ScheduledTaskRun.id, ScheduledTaskRun.task_id).where(
+            ScheduledTaskRun.session_id == session_id,
+            ScheduledTaskRun.status == ScheduledTaskRunStatus.RUNNING,
+        )
+    ).first()
+    if run is None:
+        return None
+    run_id, task_id = run
+    gated_targets = db_session.scalars(
+        select(GatedApp)
+        .join(
+            ScheduledTaskPreApprovedTarget,
+            ScheduledTaskPreApprovedTarget.gated_app_id == GatedApp.id,
+        )
+        .where(ScheduledTaskPreApprovedTarget.scheduled_task_id == task_id)
+    ).all()
+    granted: set[GrantedTarget] = {target.target_key for target in gated_targets}
+    return run_id, granted
+
+
+# ---------------------------------------------------------------------------
 # Session-view banner helper
 # ---------------------------------------------------------------------------
 
@@ -487,7 +589,14 @@ def get_scheduled_run_context(
 
     Result shape::
 
-        {"task_id": UUID, "task_name": str, "started_at": datetime}
+        {
+            "run_id": UUID,
+            "task_id": UUID,
+            "task_name": str,
+            "status": ScheduledTaskRunStatus,
+            "started_at": datetime,
+            "finished_at": datetime | None,
+        }
 
     Returns ``None`` when the session was not produced by a scheduled run,
     or when the owning task is not accessible to ``user_id``.
@@ -505,7 +614,10 @@ def get_scheduled_run_context(
         return None
     run, task = row
     return {
+        "run_id": run.id,
         "task_id": task.id,
         "task_name": task.name,
+        "status": run.status,
         "started_at": run.started_at,
+        "finished_at": run.finished_at,
     }

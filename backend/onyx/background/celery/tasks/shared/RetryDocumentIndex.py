@@ -1,11 +1,12 @@
 import httpx
-from tenacity import retry
-from tenacity import retry_if_exception_type
-from tenacity import stop_after_delay
-from tenacity import wait_random_exponential
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_delay,
+    wait_random_exponential,
+)
 
-from onyx.document_index.interfaces_new import DocumentIndex
-from onyx.document_index.interfaces_new import MetadataUpdateRequest
+from onyx.document_index.interfaces_new import DocumentIndex, MetadataUpdateRequest
 
 
 class RetryDocumentIndex:

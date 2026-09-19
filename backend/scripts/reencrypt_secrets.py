@@ -24,8 +24,10 @@ import sys
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
-from onyx.db.engine.sql_engine import get_session_with_tenant  # noqa: E402
-from onyx.db.engine.sql_engine import SqlEngine  # noqa: E402
+from onyx.db.engine.sql_engine import (  # noqa: E402
+    SqlEngine,
+    get_session_with_tenant,
+)
 from onyx.db.engine.tenant_utils import get_all_tenant_ids  # noqa: E402
 from onyx.db.rotate_encryption_key import rotate_encryption_key  # noqa: E402
 from onyx.utils.variable_functionality import global_version  # noqa: E402
@@ -75,7 +77,7 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    old_key = args.old_key if args.old_key else None
+    old_key = args.old_key or None
 
     global_version.set_ee()
     SqlEngine.init_engine(pool_size=5, max_overflow=2)

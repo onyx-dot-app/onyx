@@ -191,18 +191,22 @@ The widget is embedded directly in your page layout. Perfect for dedicated suppo
 
 ### Prerequisites
 
-- Node.js 18+ and npm
+- [Bun](https://bun.sh) 1.3+
 - Access to Onyx backend API
 
 ### Setup
 
+Dependencies for `widget/` are managed by the root bun workspace, so install
+once at the repo root:
+
 ```bash
-# Navigate to widget directory
-cd widget/
+# From the repo root
+bun install
+```
 
-# Install dependencies
-npm install
+Then, from `widget/`:
 
+```bash
 # Copy example env file (for self-hosted builds)
 cp .env.example .env
 ```
@@ -210,7 +214,7 @@ cp .env.example .env
 ### Development Server
 
 ```bash
-npm run dev
+bun run dev
 ```
 
 Opens at `http://localhost:5173` with hot module replacement.
@@ -219,13 +223,13 @@ Opens at `http://localhost:5173` with hot module replacement.
 
 ```bash
 # Cloud deployment (no config baked in)
-npm run build:cloud
+bun run build:cloud
 
 # Self-hosted deployment (config from .env)
-npm run build:self-hosted
+bun run build:self-hosted
 
 # Standard build (same as cloud)
-npm run build
+bun run build
 ```
 
 ### Project Structure
@@ -325,7 +329,7 @@ Response: Server-Sent Events stream
 2. **Build with config baked in:**
 
    ```bash
-   npm run build:self-hosted
+   bun run build:self-hosted
    ```
 
 3. **Deploy `dist/onyx-widget.js` to your server**

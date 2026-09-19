@@ -10,10 +10,12 @@ To get the widget working on your webpage, follow these steps:
 
 ### 1. Install Dependencies
 
-Ensure you have the necessary dependencies installed. From the `examples/widget/README.md` file:
+Dependencies are managed by the root [bun](https://bun.sh) workspace, so install
+once at the repo root:
 
 ```bash
-npm i
+# From the repo root
+bun install
 ```
 
 ### 2. Set Environment Variables
@@ -30,7 +32,7 @@ NEXT_PUBLIC_API_KEY=
 Start the development server to see the widget in action.
 
 ```bash
-npm run dev
+bun run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
@@ -57,8 +59,8 @@ export default MyPage;
 Once you are satisfied with the widget, you can build and start the application for production:
 
 ```bash
-npm run build
-npm run start
+bun run build
+bun run start
 ```
 
 ### Custom Styling and Configuration

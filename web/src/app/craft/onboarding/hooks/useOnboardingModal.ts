@@ -2,176 +2,81 @@
 
 import { useCallback, useState, useMemo, useEffect } from "react";
 import { useUser } from "@/providers/UserProvider";
-import { useLLMProviders } from "@/hooks/useLanguageModels";
-import { LLMProviderName } from "@/lib/languageModels/types";
+import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { track, AnalyticsEvent } from "@/lib/analytics/utils";
+import { OnboardingModalController } from "@/app/craft/onboarding/types";
 import {
-  OnboardingModalMode,
-  OnboardingModalController,
-  BuildUserInfo,
-} from "@/app/craft/onboarding/types";
-import {
-  getBuildUserPersona,
-  setBuildUserPersona,
+  getCraftOnboardingSeen,
+  setCraftOnboardingSeen,
+  hasSupportedCraftProvider,
 } from "@/app/craft/onboarding/constants";
-import { updateUserPersonalization } from "@/lib/userSettings";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 
-import type { LLMProviderDescriptor } from "@/lib/languageModels/types";
-
-// Check if all 3 build mode providers are configured (anthropic, openai, openrouter)
-function checkAllProvidersConfigured(
-  llmProviders: LLMProviderDescriptor[] | undefined
-): boolean {
-  if (!llmProviders || llmProviders.length === 0) {
-    return false;
-  }
-  const configuredProviders = new Set(llmProviders.map((p) => p.provider));
-  return (
-    configuredProviders.has(LLMProviderName.ANTHROPIC) &&
-    configuredProviders.has(LLMProviderName.OPENAI) &&
-    configuredProviders.has(LLMProviderName.OPENROUTER)
-  );
-}
-
-// Check if at least one provider is configured
-function checkHasAnyProvider(
-  llmProviders: LLMProviderDescriptor[] | undefined
-): boolean {
-  return !!(llmProviders && llmProviders.length > 0);
-}
-
 export function useOnboardingModal(): OnboardingModalController {
-  const { user, isAdmin, refreshUser } = useUser();
-  const {
-    llmProviders,
-    isLoading: isLoadingLlm,
-    refetch: refetchLlmProviders,
-  } = useLLMProviders();
+  const { user, isAdmin } = useUser();
+  const { llmProviders, isLoading: isLoadingLlm } = useLLMProviders();
 
   // Get ensurePreProvisionedSession from the session store
   const ensurePreProvisionedSession = useBuildSessionStore(
     (state) => state.ensurePreProvisionedSession
   );
 
-  // Modal mode state
-  const [mode, setMode] = useState<OnboardingModalMode>({ type: "closed" });
+  const [introOpen, setIntroOpen] = useState(false);
   const [hasInitialized, setHasInitialized] = useState(false);
+  const [activeProviderKey, setActiveProviderKey] = useState<string | null>(
+    null
+  );
 
-  // Compute initial values for the form (read fresh on every render)
-  const existingPersona = getBuildUserPersona();
-  const existingName = user?.personalization?.name || "";
-  const spaceIndex = existingName.indexOf(" ");
-  const initialFirstName =
-    spaceIndex > 0 ? existingName.slice(0, spaceIndex) : existingName;
-  const initialLastName =
-    spaceIndex > 0 ? existingName.slice(spaceIndex + 1) : "";
+  const hasAnyProvider = useMemo(
+    () => hasSupportedCraftProvider(llmProviders),
+    [llmProviders]
+  );
 
-  const initialValues = {
-    firstName: initialFirstName,
-    lastName: initialLastName,
-    workArea: existingPersona?.workArea,
-    level: existingPersona?.level,
-  };
+  // Auto-open the intro once (until dismissed). LLM setup lives inline on the
+  // welcome page, so the intro is not conditioned on provider state.
+  useEffect(() => {
+    if (hasInitialized || !user) return;
+    setIntroOpen(!getCraftOnboardingSeen(user.id));
+    setHasInitialized(true);
+  }, [hasInitialized, user]);
 
-  // Check if user has completed initial onboarding (only role required, not name)
-  const hasUserInfo = useMemo(() => {
-    return !!getBuildUserPersona()?.workArea;
+  // Bail-out (Escape / X): remember the intro was seen, but don't count it as
+  // a completion.
+  const dismissOnboarding = useCallback(() => {
+    if (user) setCraftOnboardingSeen(user.id);
+    setIntroOpen(false);
   }, [user]);
 
-  // Check if all providers are configured (skip LLM step entirely if so)
-  const allProvidersConfigured = useMemo(
-    () => checkAllProvidersConfigured(llmProviders),
-    [llmProviders]
-  );
-
-  // Check if at least one provider is configured (allow skipping LLM step)
-  const hasAnyProvider = useMemo(
-    () => checkHasAnyProvider(llmProviders),
-    [llmProviders]
-  );
-
-  // Auto-open initial onboarding modal on first load
-  // Shows if: user info (role) missing OR (admin AND no providers configured)
-  useEffect(() => {
-    if (hasInitialized || isLoadingLlm || !user) return;
-
-    const needsUserInfo = !hasUserInfo;
-    const needsLlmSetup = isAdmin && !hasAnyProvider;
-
-    if (needsUserInfo || needsLlmSetup) {
-      setMode({ type: "initial-onboarding" });
-    }
-
-    setHasInitialized(true);
-  }, [
-    hasInitialized,
-    isLoadingLlm,
-    user,
-    hasUserInfo,
-    isAdmin,
-    hasAnyProvider,
-  ]);
-
-  // Complete user info callback
-  const completeUserInfo = useCallback(
-    async (info: BuildUserInfo) => {
-      // Save name via API (handle optional lastName)
-      const fullName = info.lastName
-        ? `${info.firstName} ${info.lastName}`.trim()
-        : info.firstName.trim();
-      await updateUserPersonalization({ name: fullName });
-
-      // Save persona to cookie
-      setBuildUserPersona({
-        workArea: info.workArea,
-        level: info.level,
-      });
-
-      // Refresh user to update state
-      await refreshUser();
-
-      // Trigger pre-provisioning now that onboarding is complete
-      // This ensures the sandbox starts provisioning immediately rather than
-      // waiting for the controller effect to detect the cookie change
+  // Explicit finish (final CTA). Kicks off pre-provisioning early — unless no
+  // provider exists yet, where session create would just fail (the connect
+  // success path triggers it instead).
+  const completeOnboarding = useCallback(() => {
+    if (user) setCraftOnboardingSeen(user.id);
+    track(AnalyticsEvent.COMPLETED_CRAFT_ONBOARDING);
+    if (hasAnyProvider) {
       ensurePreProvisionedSession();
-    },
-    [refreshUser, ensurePreProvisionedSession]
-  );
+    }
+    setIntroOpen(false);
+  }, [user, ensurePreProvisionedSession, hasAnyProvider]);
 
-  // Complete LLM setup callback
-  const completeLlmSetup = useCallback(async () => {
-    await refetchLlmProviders();
-  }, [refetchLlmProviders]);
-
-  // Actions
-  const openUserInfoEditor = useCallback(() => {
-    setMode({ type: "edit-user-info" });
+  // Any well-known provider type — getProvider resolves the matching modal.
+  const openProviderModal = useCallback((providerKey: string) => {
+    setActiveProviderKey(providerKey);
   }, []);
 
-  const openLlmSetup = useCallback((provider?: string) => {
-    setMode({ type: "add-llm", provider });
+  const closeProviderModal = useCallback(() => {
+    setActiveProviderKey(null);
   }, []);
-
-  const close = useCallback(() => {
-    setMode({ type: "closed" });
-  }, []);
-
-  const isOpen = mode.type !== "closed";
 
   return {
-    mode,
-    isOpen,
-    openUserInfoEditor,
-    openLlmSetup,
-    close,
+    introOpen,
+    completeOnboarding,
+    dismissOnboarding,
+    activeProviderKey,
+    openProviderModal,
+    closeProviderModal,
     llmProviders,
-    initialValues,
-    completeUserInfo,
-    completeLlmSetup,
-    refetchLlmProviders,
     isAdmin,
-    hasUserInfo,
-    allProvidersConfigured,
     hasAnyProvider,
     isLoading: isLoadingLlm,
   };

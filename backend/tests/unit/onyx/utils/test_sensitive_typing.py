@@ -14,8 +14,7 @@ from typing import Any
 
 def demonstrate_correct_usage() -> None:
     """Shows correct patterns that pass type checking."""
-    from onyx.utils.encryption import decrypt_bytes_to_string
-    from onyx.utils.encryption import encrypt_string_to_bytes
+    from onyx.utils.encryption import decrypt_bytes_to_string, encrypt_string_to_bytes
     from onyx.utils.sensitive import SensitiveValue
 
     # Create a SensitiveValue

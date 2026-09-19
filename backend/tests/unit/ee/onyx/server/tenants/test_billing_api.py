@@ -1,12 +1,12 @@
 """Tests for billing API endpoints."""
 
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 
+from ee.onyx.server.license.models import CustomerTier
+from ee.onyx.server.tenants.models import TierUpdateRequest
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
@@ -155,3 +155,200 @@ class TestGetStripePublishableKey:
             result2 = await get_stripe_publishable_key()
             # Should still return cached value
             assert result2.publishable_key == "pk_test_cached"
+
+
+class TestCreateSubscriptionSession:
+    """Tests for create_subscription_session endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_returns_session_id_and_url_for_new_checkout(self) -> None:
+        """New-subscription checkout returns both sessionId and a hosted url."""
+        from ee.onyx.server.tenants.billing_api import create_subscription_session
+        from ee.onyx.server.tenants.models import StripeCheckoutSessionResult
+        from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set("tenant_123")
+        try:
+            with patch(
+                "ee.onyx.server.tenants.billing_api.fetch_stripe_checkout_session",
+                return_value=StripeCheckoutSessionResult(
+                    session_id="cs_test_123",
+                    url="https://checkout.stripe.com/session",
+                ),
+            ):
+                result = await create_subscription_session(request=None, _=MagicMock())
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+        assert result.sessionId == "cs_test_123"
+        assert result.url == "https://checkout.stripe.com/session"
+        assert result.requires_payment_method_update is False
+
+    @pytest.mark.asyncio
+    async def test_handles_past_due_portal_response(self) -> None:
+        """past_due/unpaid tenants get a portal url with a null sessionId.
+
+        Regression: the response model used to require a non-null sessionId,
+        so this branch raised a ValidationError -> 500 on the Access Restricted
+        page (the control plane routes lapsed subs to the payment-update portal).
+        """
+        from ee.onyx.server.tenants.billing_api import create_subscription_session
+        from ee.onyx.server.tenants.models import StripeCheckoutSessionResult
+        from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set("tenant_123")
+        try:
+            with patch(
+                "ee.onyx.server.tenants.billing_api.fetch_stripe_checkout_session",
+                return_value=StripeCheckoutSessionResult(
+                    session_id=None,
+                    url="https://billing.stripe.com/portal",
+                    requires_payment_method_update=True,
+                ),
+            ):
+                result = await create_subscription_session(request=None, _=MagicMock())
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+        assert result.sessionId is None
+        assert result.url == "https://billing.stripe.com/portal"
+        assert result.requires_payment_method_update is True
+
+    @pytest.mark.asyncio
+    async def test_wraps_upstream_failure_as_internal_error(self) -> None:
+        """Upstream failures surface as INTERNAL_ERROR, not an unhandled crash."""
+        from ee.onyx.server.tenants.billing_api import create_subscription_session
+        from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set("tenant_123")
+        try:
+            with patch(
+                "ee.onyx.server.tenants.billing_api.fetch_stripe_checkout_session",
+                side_effect=Exception("control plane 409"),
+            ):
+                with pytest.raises(OnyxError) as exc_info:
+                    await create_subscription_session(request=None, _=MagicMock())
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+        assert exc_info.value.error_code is OnyxErrorCode.INTERNAL_ERROR
+
+
+class TestFetchStripeCheckoutSession:
+    """Tests for the control-plane checkout-session proxy."""
+
+    def test_raises_when_control_plane_returns_no_url(self) -> None:
+        """A success response without a url is a contract violation, not silent."""
+        from ee.onyx.server.tenants.billing import fetch_stripe_checkout_session
+
+        mock_response = MagicMock()
+        mock_response.ok = True
+        mock_response.json.return_value = {"sessionId": "cs_test_123"}
+
+        with (
+            patch(
+                "ee.onyx.server.tenants.billing.generate_data_plane_token",
+                return_value="cp_token",
+            ),
+            patch(
+                "ee.onyx.server.tenants.billing.requests.post",
+                return_value=mock_response,
+            ),
+        ):
+            with pytest.raises(Exception, match="no checkout URL"):
+                fetch_stripe_checkout_session("tenant_123")
+
+    def test_returns_full_result(self) -> None:
+        """Parses sessionId, url, and the payment-method-update flag."""
+        from ee.onyx.server.tenants.billing import fetch_stripe_checkout_session
+
+        mock_response = MagicMock()
+        mock_response.ok = True
+        mock_response.json.return_value = {
+            "sessionId": None,
+            "url": "https://billing.stripe.com/portal",
+            "requires_payment_method_update": True,
+        }
+
+        with (
+            patch(
+                "ee.onyx.server.tenants.billing.generate_data_plane_token",
+                return_value="cp_token",
+            ),
+            patch(
+                "ee.onyx.server.tenants.billing.requests.post",
+                return_value=mock_response,
+            ),
+        ):
+            result = fetch_stripe_checkout_session("tenant_123")
+
+        assert result.session_id is None
+        assert result.url == "https://billing.stripe.com/portal"
+        assert result.requires_payment_method_update is True
+
+
+class TestUpdateTier:
+    """Tests for the /tenants/tier-update receiver (control-plane -> data-plane)."""
+
+    def _request(self) -> TierUpdateRequest:
+        return TierUpdateRequest(
+            tenant_id="tenant_abc",
+            customer_tier=CustomerTier.BUSINESS,
+            trial_end=None,
+        )
+
+    def test_invalidates_billing_cache_on_success(self) -> None:
+        """A control-plane tier push must drop the cached billing/trial lookup so
+        an upgrade takes effect without waiting on the TTL backstop."""
+        from ee.onyx.server.tenants.billing_api import update_tier
+
+        with (
+            patch(
+                "ee.onyx.server.tenants.billing_api.update_tenant_tier"
+            ) as mock_update,
+            patch(
+                "ee.onyx.server.tenants.billing_api.invalidate_billing_cache",
+                return_value=True,
+            ) as mock_invalidate,
+        ):
+            result = update_tier(self._request(), None)
+
+        assert result.updated is True
+        mock_update.assert_called_once()
+        mock_invalidate.assert_called_once_with("tenant_abc")
+
+    def test_skips_invalidation_when_tier_update_fails(self) -> None:
+        """If the tier write fails the endpoint reports failure and must not
+        invalidate the billing cache (nothing changed)."""
+        from ee.onyx.server.tenants.billing_api import update_tier
+
+        with (
+            patch(
+                "ee.onyx.server.tenants.billing_api.update_tenant_tier",
+                side_effect=RuntimeError("boom"),
+            ),
+            patch(
+                "ee.onyx.server.tenants.billing_api.invalidate_billing_cache"
+            ) as mock_invalidate,
+        ):
+            result = update_tier(self._request(), None)
+
+        assert result.updated is False
+        mock_invalidate.assert_not_called()
+
+    def test_reports_failure_when_invalidation_fails(self) -> None:
+        """A failed billing-cache drop must report updated=False so the control
+        plane does not treat a still-stale cache as refreshed."""
+        from ee.onyx.server.tenants.billing_api import update_tier
+
+        with (
+            patch("ee.onyx.server.tenants.billing_api.update_tenant_tier"),
+            patch(
+                "ee.onyx.server.tenants.billing_api.invalidate_billing_cache",
+                return_value=False,
+            ) as mock_invalidate,
+        ):
+            result = update_tier(self._request(), None)
+
+        assert result.updated is False
+        mock_invalidate.assert_called_once()

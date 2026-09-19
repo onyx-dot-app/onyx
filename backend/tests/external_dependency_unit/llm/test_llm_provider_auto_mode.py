@@ -7,40 +7,45 @@ is uploaded with is_auto_mode=True.
 
 from collections.abc import Generator
 from datetime import datetime
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import LLMModelFlowType
-from onyx.db.llm import fetch_auto_mode_providers
-from onyx.db.llm import fetch_default_llm_model
-from onyx.db.llm import fetch_existing_llm_provider
-from onyx.db.llm import fetch_existing_llm_providers
-from onyx.db.llm import fetch_llm_provider_view
-from onyx.db.llm import remove_llm_provider
-from onyx.db.llm import sync_auto_mode_models
-from onyx.db.llm import update_default_provider
-from onyx.db.models import UserRole
+from onyx.db.llm import (
+    fetch_auto_mode_providers,
+    fetch_default_craft_model,
+    fetch_default_llm_model,
+    fetch_existing_llm_provider,
+    fetch_existing_llm_providers,
+    fetch_llm_provider_view,
+    remove_llm_provider,
+    sync_auto_mode_models,
+    update_default_craft_provider,
+    update_default_provider,
+)
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
-from onyx.llm.well_known_providers.auto_update_models import LLMProviderRecommendation
-from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
+from onyx.llm.well_known_providers.auto_update_models import (
+    LLMProviderRecommendation,
+    LLMRecommendations,
+)
 from onyx.llm.well_known_providers.models import SimpleKnownModel
 from onyx.server.manage.llm.api import put_llm_provider
 from onyx.server.manage.llm.api import (
     test_default_provider as run_test_default_provider,
 )
-from onyx.server.manage.llm.models import LLMProviderUpsertRequest
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+from onyx.server.manage.llm.models import (
+    LLMProviderUpsertRequest,
+    ModelConfigurationUpsertRequest,
+)
 
 
 def _create_mock_admin() -> MagicMock:
     """Create a mock admin user for testing."""
     mock_admin = MagicMock()
-    mock_admin.role = UserRole.ADMIN
     return mock_admin
 
 
@@ -140,7 +145,7 @@ class TestAutoModeSyncFeature:
                         model_configurations=[],  # No model configs provided
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -237,7 +242,7 @@ class TestAutoModeSyncFeature:
                         model_configurations=[],
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -315,7 +320,7 @@ class TestAutoModeSyncFeature:
                     model_configurations=initial_models,
                 ),
                 is_creation=True,
-                _=_create_mock_admin(),
+                user=_create_mock_admin(),
                 db_session=db_session,
             )
 
@@ -347,7 +352,7 @@ class TestAutoModeSyncFeature:
                         model_configurations=[],  # Auto mode will sync from config
                     ),
                     is_creation=False,  # This is an update
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -431,7 +436,7 @@ class TestAutoModeSyncFeature:
                         ],
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -533,7 +538,7 @@ class TestAutoModeSyncFeature:
                         model_configurations=[],
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -560,7 +565,7 @@ class TestAutoModeSyncFeature:
                         model_configurations=[],
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -640,7 +645,7 @@ class TestAutoModeMissingFlows:
                     model_configurations=[],
                 ),
                 is_creation=True,
-                _=_create_mock_admin(),
+                user=_create_mock_admin(),
                 db_session=db_session,
             )
 
@@ -735,7 +740,7 @@ class TestAutoModeTransitionsAndResync:
                     model_configurations=initial_models,
                 ),
                 is_creation=True,
-                _=_create_mock_admin(),
+                user=_create_mock_admin(),
                 db_session=db_session,
             )
 
@@ -767,7 +772,7 @@ class TestAutoModeTransitionsAndResync:
                         model_configurations=[],
                     ),
                     is_creation=False,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -827,7 +832,7 @@ class TestAutoModeTransitionsAndResync:
                         model_configurations=[],
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -858,7 +863,7 @@ class TestAutoModeTransitionsAndResync:
                     ],
                 ),
                 is_creation=False,
-                _=_create_mock_admin(),
+                user=_create_mock_admin(),
                 db_session=db_session,
             )
 
@@ -925,7 +930,7 @@ class TestAutoModeTransitionsAndResync:
                         model_configurations=[],
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -994,7 +999,7 @@ class TestAutoModeTransitionsAndResync:
                         model_configurations=[],
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -1090,7 +1095,7 @@ class TestAutoModeTransitionsAndResync:
                         model_configurations=[],
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -1191,7 +1196,7 @@ class TestAutoModeTransitionsAndResync:
                         model_configurations=[],
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -1276,7 +1281,7 @@ class TestAutoModeTransitionsAndResync:
                         model_configurations=[],
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -1319,6 +1324,373 @@ class TestAutoModeTransitionsAndResync:
             default_model = fetch_default_llm_model(db_session)
             assert default_model is not None
             assert default_model.name == "gpt-4o"
+
+        finally:
+            db_session.rollback()
+            _cleanup_provider(db_session, provider_name)
+
+
+class TestAutoModeSyncKeepsDefaultModelsVisible:
+    """Sync only re-points the chat default. A model holding any other default
+    must stay visible, or the admin can no longer see or change that default."""
+
+    def test_sync_keeps_a_dropped_craft_default_visible(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        """A model holding the Craft default is not hidden when the config
+        drops it. Nothing re-points Craft, so hiding the model would strand the
+        default on a model the admin cannot select.
+
+        Steps:
+        1. Create provider with config: default=gpt-4o, additional=[gpt-4o-mini].
+        2. Point the Craft default at gpt-4o-mini.
+        3. Re-sync with config: default=gpt-4o (gpt-4o-mini removed).
+        4. Verify gpt-4o-mini stays visible and still holds the Craft default.
+        """
+        config_v1 = _create_mock_llm_recommendations(
+            provider=LlmProviderNames.OPENAI,
+            default_model_name="gpt-4o",
+            additional_models=["gpt-4o-mini"],
+        )
+        config_v2 = _create_mock_llm_recommendations(
+            provider=LlmProviderNames.OPENAI,
+            default_model_name="gpt-4o",
+            additional_models=[],
+        )
+
+        try:
+            with patch(
+                "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
+                return_value=config_v1,
+            ):
+                put_llm_provider(
+                    llm_provider_upsert_request=LLMProviderUpsertRequest(
+                        name=provider_name,
+                        provider=LlmProviderNames.OPENAI,
+                        api_key="sk-test-key-00000000000000000000000000000000000",
+                        api_key_changed=True,
+                        is_auto_mode=True,
+                        model_configurations=[],
+                    ),
+                    is_creation=True,
+                    user=_create_mock_admin(),
+                    db_session=db_session,
+                )
+
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            update_default_craft_provider(provider.id, "gpt-4o-mini", db_session)
+
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            sync_auto_mode_models(
+                db_session=db_session,
+                provider=provider,
+                llm_recommendations=config_v2,
+            )
+
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            visibility = {
+                mc.name: mc.is_visible for mc in provider.model_configurations
+            }
+            assert visibility["gpt-4o-mini"] is True, (
+                "A model holding the Craft default must stay visible, even once "
+                "the config drops it"
+            )
+
+            craft_default = fetch_default_craft_model(db_session)
+            assert craft_default is not None
+            assert craft_default.name == "gpt-4o-mini"
+
+        finally:
+            db_session.rollback()
+            _cleanup_provider(db_session, provider_name)
+
+    def test_sync_keeps_a_model_visible_for_the_defaults_it_still_holds(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        """One model can hold several defaults. Giving up the chat default is
+        not enough to hide it while it still holds another.
+
+        Steps:
+        1. Create provider with config: default=gpt-4o, additional=[gpt-4o-mini].
+        2. Point both the chat default and the Craft default at gpt-4o.
+        3. Re-sync with config: default=gpt-4o-mini (gpt-4o removed).
+        4. Verify chat re-points to gpt-4o-mini, and gpt-4o stays visible
+           because it still holds Craft.
+        """
+        config_v1 = _create_mock_llm_recommendations(
+            provider=LlmProviderNames.OPENAI,
+            default_model_name="gpt-4o",
+            additional_models=["gpt-4o-mini"],
+        )
+        config_v2 = _create_mock_llm_recommendations(
+            provider=LlmProviderNames.OPENAI,
+            default_model_name="gpt-4o-mini",
+            additional_models=[],
+        )
+
+        try:
+            with patch(
+                "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
+                return_value=config_v1,
+            ):
+                put_llm_provider(
+                    llm_provider_upsert_request=LLMProviderUpsertRequest(
+                        name=provider_name,
+                        provider=LlmProviderNames.OPENAI,
+                        api_key="sk-test-key-00000000000000000000000000000000000",
+                        api_key_changed=True,
+                        is_auto_mode=True,
+                        model_configurations=[],
+                    ),
+                    is_creation=True,
+                    user=_create_mock_admin(),
+                    db_session=db_session,
+                )
+
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            update_default_provider(provider.id, "gpt-4o", db_session)
+            update_default_craft_provider(provider.id, "gpt-4o", db_session)
+
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            sync_auto_mode_models(
+                db_session=db_session,
+                provider=provider,
+                llm_recommendations=config_v2,
+            )
+
+            db_session.expire_all()
+            chat_default = fetch_default_llm_model(db_session)
+            assert chat_default is not None
+            assert chat_default.name == "gpt-4o-mini", (
+                "The chat default should follow the new recommendation"
+            )
+
+            craft_default = fetch_default_craft_model(db_session)
+            assert craft_default is not None
+            assert craft_default.name == "gpt-4o"
+
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            visibility = {
+                mc.name: mc.is_visible for mc in provider.model_configurations
+            }
+            assert visibility["gpt-4o"] is True, (
+                "gpt-4o gave up the chat default but still holds Craft, so it "
+                "must stay visible"
+            )
+            assert visibility["gpt-4o-mini"] is True
+
+        finally:
+            db_session.rollback()
+            _cleanup_provider(db_session, provider_name)
+
+    def test_sync_restores_a_hidden_model_that_still_holds_a_default(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        """An earlier sync could already have hidden a model holding a default.
+        Sync repairs that instead of leaving the default unreachable.
+
+        Steps:
+        1. Create provider with config: default=gpt-4o, additional=[gpt-4o-mini].
+        2. Point the Craft default at gpt-4o-mini, then hide it by hand to
+           reproduce what the previous sync left behind.
+        3. Re-sync with config: default=gpt-4o (gpt-4o-mini removed).
+        4. Verify gpt-4o-mini is visible again and still holds Craft.
+        """
+        config_v1 = _create_mock_llm_recommendations(
+            provider=LlmProviderNames.OPENAI,
+            default_model_name="gpt-4o",
+            additional_models=["gpt-4o-mini"],
+        )
+        config_v2 = _create_mock_llm_recommendations(
+            provider=LlmProviderNames.OPENAI,
+            default_model_name="gpt-4o",
+            additional_models=[],
+        )
+
+        try:
+            with patch(
+                "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
+                return_value=config_v1,
+            ):
+                put_llm_provider(
+                    llm_provider_upsert_request=LLMProviderUpsertRequest(
+                        name=provider_name,
+                        provider=LlmProviderNames.OPENAI,
+                        api_key="sk-test-key-00000000000000000000000000000000000",
+                        api_key_changed=True,
+                        is_auto_mode=True,
+                        model_configurations=[],
+                    ),
+                    is_creation=True,
+                    user=_create_mock_admin(),
+                    db_session=db_session,
+                )
+
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            update_default_craft_provider(provider.id, "gpt-4o-mini", db_session)
+
+            # Reproduce the state the old sync left: hidden, but still the default.
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            for mc in provider.model_configurations:
+                if mc.name == "gpt-4o-mini":
+                    mc.is_visible = False
+            db_session.commit()
+
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            sync_auto_mode_models(
+                db_session=db_session,
+                provider=provider,
+                llm_recommendations=config_v2,
+            )
+
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            visibility = {
+                mc.name: mc.is_visible for mc in provider.model_configurations
+            }
+            assert visibility["gpt-4o-mini"] is True, (
+                "Sync must restore a model that an earlier sync hid while it "
+                "still held a default"
+            )
+
+            craft_default = fetch_default_craft_model(db_session)
+            assert craft_default is not None
+            assert craft_default.name == "gpt-4o-mini"
+
+        finally:
+            db_session.rollback()
+            _cleanup_provider(db_session, provider_name)
+
+    def test_sync_leaves_no_stale_visibility_on_the_loaded_provider(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        """put_llm_provider serializes the provider it just handed to sync, and
+        sessions are built with expire_on_commit=False. Both visibility writes
+        must reach the loaded rows, not only the database.
+
+        Steps:
+        1. Create provider with config: default=gpt-4o,
+           additional=[gpt-4o-mini, gpt-4-turbo].
+        2. Point Craft at gpt-4o-mini and hide it by hand, so the sync has one
+           model to restore and one (gpt-4-turbo) to hide.
+        3. Re-sync with config: default=gpt-4o (both extras removed).
+        4. Read the same provider object back with no expire_all in between.
+        """
+        config_v1 = _create_mock_llm_recommendations(
+            provider=LlmProviderNames.OPENAI,
+            default_model_name="gpt-4o",
+            additional_models=["gpt-4o-mini", "gpt-4-turbo"],
+        )
+        config_v2 = _create_mock_llm_recommendations(
+            provider=LlmProviderNames.OPENAI,
+            default_model_name="gpt-4o",
+            additional_models=[],
+        )
+
+        try:
+            with patch(
+                "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
+                return_value=config_v1,
+            ):
+                put_llm_provider(
+                    llm_provider_upsert_request=LLMProviderUpsertRequest(
+                        name=provider_name,
+                        provider=LlmProviderNames.OPENAI,
+                        api_key="sk-test-key-00000000000000000000000000000000000",
+                        api_key_changed=True,
+                        is_auto_mode=True,
+                        model_configurations=[],
+                    ),
+                    is_creation=True,
+                    user=_create_mock_admin(),
+                    db_session=db_session,
+                )
+
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            update_default_craft_provider(provider.id, "gpt-4o-mini", db_session)
+
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            for mc in provider.model_configurations:
+                if mc.name == "gpt-4o-mini":
+                    mc.is_visible = False
+            db_session.commit()
+
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            sync_auto_mode_models(
+                db_session=db_session,
+                provider=provider,
+                llm_recommendations=config_v2,
+            )
+
+            # Deliberately no expire_all: this is the state put_llm_provider
+            # serializes straight after the sync returns.
+            visibility = {
+                mc.name: mc.is_visible for mc in provider.model_configurations
+            }
+            assert visibility["gpt-4-turbo"] is False, (
+                "The hide must reach the loaded row, not just the database"
+            )
+            assert visibility["gpt-4o-mini"] is True, (
+                "The restore must reach the loaded row, not just the database"
+            )
 
         finally:
             db_session.rollback()

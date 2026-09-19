@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
+import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { SvgClock } from "@opal/icons";
 import ScheduleTaskForm, {
   defaultFormInitial,
   type ScheduleTaskFormInitial,
@@ -13,15 +12,14 @@ import type {
   EditorPayload,
 } from "@/app/craft/v1/tasks/interfaces";
 import { TASKS_PATH } from "@/app/craft/v1/tasks/constants";
-import { getBrowserTimezone } from "@/app/craft/v1/tasks/utils";
 
 const VALID_MODES: ReadonlySet<EditorMode> = new Set<EditorMode>([
   "interval",
   "daily_weekly",
-  "advanced",
 ]);
 
 export default function NewScheduledTaskPage() {
+  const t = useTranslations("craft.tasks.newPage");
   const router = useRouter();
   const searchParams = useSearchParams();
   const handleBack = useCallback(() => {
@@ -56,22 +54,16 @@ export default function NewScheduledTaskPage() {
       prompt: promptParam ?? "",
       mode,
       payload,
-      timezone: getBrowserTimezone(),
     };
   }, [searchParams]);
 
   return (
-    <SettingsLayouts.Root width="lg">
-      <SettingsLayouts.Header
-        icon={SvgClock}
-        title="New scheduled task"
-        description="Save a prompt + schedule. Craft will run it on a timer."
-        backButton
-        onBack={handleBack}
-      />
-      <SettingsLayouts.Body>
-        <ScheduleTaskForm initial={initial} isEdit={false} />
-      </SettingsLayouts.Body>
-    </SettingsLayouts.Root>
+    <ScheduleTaskForm
+      initial={initial}
+      isEdit={false}
+      title={t("title")}
+      description={t("description")}
+      onBack={handleBack}
+    />
   );
 }

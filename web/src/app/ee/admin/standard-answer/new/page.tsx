@@ -1,43 +1,56 @@
+"use client";
+
+import { useTranslations } from "next-intl";
 import { StandardAnswerCreationForm } from "@/app/ee/admin/standard-answer/StandardAnswerCreationForm";
-import { fetchSS } from "@/lib/utilsSS";
+import { useStandardAnswerCategories } from "@/app/ee/admin/standard-answer/hooks";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { PageLoader } from "@opal/layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { StandardAnswerCategory } from "@/lib/types";
 
 const route = ADMIN_ROUTES.STANDARD_ANSWERS;
 
-async function Page() {
-  const standardAnswerCategoriesResponse = await fetchSS(
-    "/manage/admin/standard-answer/category"
-  );
+function Body() {
+  const t = useTranslations("admin.standardAnswers");
+  const {
+    data: standardAnswerCategories,
+    isLoading,
+    error,
+  } = useStandardAnswerCategories();
 
-  if (!standardAnswerCategoriesResponse.ok) {
+  if (isLoading) {
+    return <PageLoader />;
+  }
+
+  if (error || !standardAnswerCategories) {
     return (
       <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch standard answer categories - ${await standardAnswerCategoriesResponse.text()}`}
+        errorTitle={t("errors.genericTitle.title")}
+        errorMsg={t("errors.fetchCategoriesFailed.message")}
       />
     );
   }
-  const standardAnswerCategories =
-    (await standardAnswerCategoriesResponse.json()) as StandardAnswerCategory[];
 
+  return (
+    <StandardAnswerCreationForm
+      standardAnswerCategories={standardAnswerCategories}
+    />
+  );
+}
+
+export default function Page() {
+  const t = useTranslations("admin.standardAnswers");
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={route.icon}
-        title="New Standard Answer"
+        title={t("newStandardAnswer.label")}
         backButton
         divider
       />
       <SettingsLayouts.Body>
-        <StandardAnswerCreationForm
-          standardAnswerCategories={standardAnswerCategories}
-        />
+        <Body />
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
 }
-
-export default Page;

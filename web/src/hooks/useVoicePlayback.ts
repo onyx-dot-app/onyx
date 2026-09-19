@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { StreamingTTSPlayer } from "@/lib/streamingTTS";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
+import { stripMarkdownForTTS } from "@/lib/voice/utils";
 
 export interface UseVoicePlaybackReturn {
   isPlaying: boolean;
@@ -55,6 +56,9 @@ export function useVoicePlayback(): UseVoicePlaybackReturn {
       setError(null);
       setIsLoading(true);
 
+      // Strip markdown so TTS engines don't read syntax (e.g. "#") aloud literally.
+      const cleanedText = stripMarkdownForTTS(text);
+
       try {
         const player = new StreamingTTSPlayer({
           onPlayingChange: (playing) => {
@@ -78,7 +82,7 @@ export function useVoicePlayback(): UseVoicePlaybackReturn {
         playerRef.current = player;
         player.setMuted(isTTSMuted);
 
-        await player.speak(text, voice, speed);
+        await player.speak(cleanedText, voice, speed);
         setIsLoading(false);
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {

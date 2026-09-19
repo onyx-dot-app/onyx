@@ -1,10 +1,6 @@
 import "@opal/layouts/content-action/styles.css";
 import { Content, type ContentProps } from "@opal/layouts/content/components";
-import {
-  containerSizeVariants,
-  type ContainerSizeVariants,
-} from "@opal/shared";
-import { cn } from "@opal/utils";
+import { spacingToRem } from "@opal/shared";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -15,13 +11,16 @@ type ContentActionProps = ContentProps & {
   rightChildren?: React.ReactNode;
 
   /**
-   * Padding applied around the `Content` area.
-   * Uses the shared `SizeVariant` scale from `@opal/shared`.
+   * Padding applied around the `Content` area, as a spacing step (`N / 4` rem).
    *
-   * @default "lg"
-   * @see {@link ContainerSizeVariants} for the full list of presets.
+   * Narrowed to the four paddings `Interactive.Container` applies at its size
+   * presets. Matching them is the point of this prop — it is what lines a label
+   * up with an adjacent button of the same size — so an arbitrary step would
+   * only ever break that alignment.
+   *
+   * @default 2
    */
-  padding?: ContainerSizeVariants;
+  padding?: 0 | 0.5 | 1 | 2;
 
   /**
    * When true, vertically centers the Content and rightChildren.
@@ -31,19 +30,54 @@ type ContentActionProps = ContentProps & {
    * @default false
    */
   center?: boolean;
+
+  /**
+   * When true, `rightChildren` reflows responsively — forwarded into the
+   * `ContentMd` slot so it sits to the right of the title/description on desktop
+   * and stacks between them on narrow viewports. Requires a `main-*` size
+   * preset (the only ones with the slot); other presets fall back to the
+   * standard right-hand column. `center` is ignored in this mode.
+   *
+   * @default false
+   */
+  responsive?: boolean;
+
+  /**
+   * When true, the `rightChildren` column grows to fill the row (capped at
+   * `--block-width-form-input-column-max`) instead of hugging its content.
+   * Intended for full-width form inputs; leave off for compact controls like
+   * toggles/buttons. Ignored in the `responsive` branch.
+   *
+   * @default false
+   */
+  fillRight?: boolean;
 };
 
 // ---------------------------------------------------------------------------
 // ContentAction
 // ---------------------------------------------------------------------------
 
+// Only the `main-*` presets route to ContentMd — the one layout with a
+// `rightChildren` slot — so `responsive` can only reflow for those.
+function routesToContentMd(props: {
+  sizePreset?: string;
+  variant?: string;
+}): boolean {
+  const isMdPreset =
+    props.sizePreset === "main-content" ||
+    props.sizePreset === "main-ui" ||
+    props.sizePreset === "secondary";
+  return isMdPreset && props.variant !== "body";
+}
+
 /**
  * A row layout that pairs a {@link Content} block with optional right-side
  * action children (e.g. buttons, badges).
  *
- * The `Content` area receives padding controlled by `padding`, using
- * the same size scale as `Interactive.Container` and `Button`. The
- * `rightChildren` wrapper stretches to the full height of the row.
+ * The `Content` area receives padding controlled by `padding`, whose four steps
+ * are the paddings `Interactive.Container` applies at its size presets — so a row
+ * lines up with an adjacent button. The `rightChildren` wrapper stretches to the
+ * full height of the row.
  *
  * @example
  * ```tsx
@@ -57,26 +91,46 @@ type ContentActionProps = ContentProps & {
  *   description="GPT"
  *   sizePreset="main-content"
  *   variant="section"
- *   padding="lg"
+ *   padding={2}
  *   rightChildren={<Button icon={SvgSettings} prominence="tertiary" />}
  * />
  * ```
  */
 function ContentAction({
   rightChildren,
-  padding = "lg",
+  padding = 2,
   center = false,
+  responsive = false,
+  fillRight = false,
   ...contentProps
 }: ContentActionProps) {
-  const { padding: paddingClass } = containerSizeVariants[padding];
+  const paddingStyle = { padding: spacingToRem(padding) };
+
+  // Responsive: forward rightChildren into the ContentMd slot, which reflows it
+  // to the right on desktop and between the title/description on narrow widths.
+  if (responsive && rightChildren && routesToContentMd(contentProps)) {
+    // Full width: in a flex-col `align-items: start` parent (e.g. InputHorizontal's
+    // Section) a wrapper without w-full shrinks to content width, so the input
+    // wouldn't fill the row.
+    return (
+      <div className="w-full min-w-0" style={paddingStyle}>
+        <Content {...({ ...contentProps, rightChildren } as ContentProps)} />
+      </div>
+    );
+  }
 
   return (
     <div className="opal-content-action" data-centered={center || undefined}>
-      <div className={cn("opal-content-action-content", paddingClass)}>
+      <div className="opal-content-action-content" style={paddingStyle}>
         <Content {...contentProps} />
       </div>
       {rightChildren && (
-        <div className="opal-content-action-right">{rightChildren}</div>
+        <div
+          className="opal-content-action-right"
+          data-fill={fillRight || undefined}
+        >
+          {rightChildren}
+        </div>
       )}
     </div>
   );

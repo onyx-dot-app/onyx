@@ -1,9 +1,9 @@
 "use client";
 
-import { markdown } from "@opal/utils";
+import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
-import { InputDivider } from "@opal/layouts";
+import { InputDivider, toast } from "@opal/layouts";
 import {
   LLMProviderFormProps,
   LLMProviderName,
@@ -14,10 +14,10 @@ import {
   useInitialValues,
   buildValidationSchema,
   BaseLLMFormValues,
-  mergeFetchedModelConfigurations,
+  withFetchedModels,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
-import { LLMProviderConfiguredSource } from "@/lib/analytics";
+import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 import {
   APIBaseField,
   APIKeyField,
@@ -25,8 +25,8 @@ import {
   DisplayNameField,
   ModelAccessField,
   ModalWrapper,
+  useApiBaseSubDescription,
 } from "@/sections/modals/languageModels/shared";
-import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 
 interface OpenAICompatibleModalValues extends BaseLLMFormValues {
@@ -43,7 +43,12 @@ function OpenAICompatibleModalInternals({
   existingLlmProvider,
   isOnboarding,
 }: OpenAICompatibleModalInternalsProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const formikProps = useFormikContext<OpenAICompatibleModalValues>();
+  const apiBaseSubDescription = useApiBaseSubDescription(
+    t("openAiCompatible.apiBaseField.description"),
+    t("openAiCompatible.apiBaseField.learnMore")
+  );
 
   const isFetchDisabled = !formikProps.values.api_base;
 
@@ -51,32 +56,24 @@ function OpenAICompatibleModalInternals({
     const { models, error } = await fetchOpenAICompatibleModels({
       api_base: formikProps.values.api_base,
       api_key: formikProps.values.api_key || undefined,
-      provider_name: existingLlmProvider?.name ?? undefined,
+      provider_id: existingLlmProvider?.id ?? undefined,
     });
     if (error) {
       throw new Error(error);
     }
-    formikProps.setFieldValue(
-      "model_configurations",
-      mergeFetchedModelConfigurations(
-        models,
-        formikProps.values.model_configurations
-      )
-    );
+    formikProps.setValues(withFetchedModels(models));
   };
 
   return (
     <>
       <APIBaseField
-        subDescription={markdown(
-          "Paste your OpenAI-compatible endpoint URL. [Learn More](https://docs.litellm.ai/docs/providers/openai_compatible)"
-        )}
+        subDescription={apiBaseSubDescription}
         placeholder="http://localhost:8000/v1"
       />
 
       <APIKeyField
         optional
-        subDescription="Paste your API key if your model provider requires authentication."
+        subDescription={t("openAiCompatible.apiKeyField.description")}
       />
 
       {!isOnboarding && (
@@ -108,7 +105,9 @@ export default function OpenAICompatibleModal({
   shouldMarkAsDefault,
   onOpenChange,
   onSuccess,
+  analyticsSource,
 }: LLMProviderFormProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
 
@@ -120,7 +119,7 @@ export default function OpenAICompatibleModal({
     existingLlmProvider
   ) as OpenAICompatibleModalValues;
 
-  const validationSchema = buildValidationSchema(isOnboarding, {
+  const validationSchema = buildValidationSchema(t, isOnboarding, {
     apiBase: true,
   });
 
@@ -130,13 +129,16 @@ export default function OpenAICompatibleModal({
       llmProvider={existingLlmProvider}
       onClose={onClose}
       initialValues={initialValues}
-      description="Connect from other cloud or self-hosted models via OpenAI-compatible endpoints."
+      description={t("openAiCompatible.description")}
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         await submitProvider({
-          analyticsSource: isOnboarding
-            ? LLMProviderConfiguredSource.CHAT_ONBOARDING
-            : LLMProviderConfiguredSource.ADMIN_PAGE,
+          t,
+          analyticsSource:
+            analyticsSource ??
+            (isOnboarding
+              ? LLMProviderConfiguredSource.CHAT_ONBOARDING
+              : LLMProviderConfiguredSource.ADMIN_PAGE),
           providerName: LLMProviderName.OPENAI_COMPATIBLE,
           values,
           initialValues,
@@ -152,8 +154,8 @@ export default function OpenAICompatibleModal({
               await refreshLlmProviderCaches(mutate);
               toast.success(
                 existingLlmProvider
-                  ? "Provider updated successfully!"
-                  : "Provider enabled successfully!"
+                  ? t("toasts.providerUpdated")
+                  : t("toasts.providerEnabled")
               );
             }
           },

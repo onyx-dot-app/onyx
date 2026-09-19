@@ -3,15 +3,15 @@
 Tests the decision tree for when the bot should respond to messages.
 """
 
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
 import pytest
 
-from onyx.onyxbot.discord.handle_message import check_implicit_invocation
-from onyx.onyxbot.discord.handle_message import should_respond
+from onyx.onyxbot.discord.handle_message import (
+    check_implicit_invocation,
+    should_respond,
+)
 
 
 class TestBasicShouldRespond:

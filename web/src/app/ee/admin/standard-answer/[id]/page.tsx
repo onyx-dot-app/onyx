@@ -1,72 +1,57 @@
+"use client";
+
+import { useTranslations } from "next-intl";
+import { useParams } from "next/navigation";
 import { StandardAnswerCreationForm } from "@/app/ee/admin/standard-answer/StandardAnswerCreationForm";
-import { fetchSS } from "@/lib/utilsSS";
+import {
+  useStandardAnswers,
+  useStandardAnswerCategories,
+} from "@/app/ee/admin/standard-answer/hooks";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { PageLoader } from "@opal/layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { StandardAnswer, StandardAnswerCategory } from "@/lib/types";
 
 const route = ADMIN_ROUTES.STANDARD_ANSWERS;
 
-async function Main({ id }: { id: string }) {
-  const tasks = [
-    fetchSS("/manage/admin/standard-answer"),
-    fetchSS(`/manage/admin/standard-answer/category`),
-  ];
-  const [standardAnswersResponse, standardAnswerCategoriesResponse] =
-    await Promise.all(tasks);
+function Body({ id }: { id: string }) {
+  const t = useTranslations("admin.standardAnswers");
+  const {
+    data: standardAnswers,
+    isLoading: answersLoading,
+    error: answersError,
+  } = useStandardAnswers();
+  const {
+    data: standardAnswerCategories,
+    isLoading: categoriesLoading,
+    error: categoriesError,
+  } = useStandardAnswerCategories();
 
-  if (standardAnswersResponse === undefined) {
+  if (answersLoading || categoriesLoading) {
+    return <PageLoader />;
+  }
+
+  if (answersError || categoriesError || !standardAnswerCategories) {
     return (
       <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch standard answers.`}
+        errorTitle={t("errors.genericTitle.title")}
+        errorMsg={t("errors.fetchAnswersFailed.message")}
       />
     );
   }
 
-  if (!standardAnswersResponse.ok) {
-    return (
-      <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch standard answers - ${await standardAnswersResponse.text()}`}
-      />
-    );
-  }
-  const allStandardAnswers =
-    (await standardAnswersResponse.json()) as StandardAnswer[];
-  const standardAnswer = allStandardAnswers.find(
+  const standardAnswer = standardAnswers?.find(
     (answer) => answer.id.toString() === id
   );
 
   if (!standardAnswer) {
     return (
       <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Did not find standard answer with ID: ${id}`}
+        errorTitle={t("errors.genericTitle.title")}
+        errorMsg={t("errors.notFound.message", { id })}
       />
     );
   }
-
-  if (standardAnswerCategoriesResponse === undefined) {
-    return (
-      <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch standard answer categories.`}
-      />
-    );
-  }
-
-  if (!standardAnswerCategoriesResponse.ok) {
-    return (
-      <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch standard answer categories - ${await standardAnswerCategoriesResponse.text()}`}
-      />
-    );
-  }
-
-  const standardAnswerCategories =
-    (await standardAnswerCategoriesResponse.json()) as StandardAnswerCategory[];
 
   return (
     <StandardAnswerCreationForm
@@ -76,19 +61,20 @@ async function Main({ id }: { id: string }) {
   );
 }
 
-export default async function Page(props: { params: Promise<{ id: string }> }) {
-  const params = await props.params;
+export default function Page() {
+  const t = useTranslations("admin.standardAnswers");
+  const params = useParams<{ id: string }>();
 
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={route.icon}
-        title="Edit Standard Answer"
+        title={t("editPage.title")}
         backButton
         divider
       />
       <SettingsLayouts.Body>
-        <Main id={params.id} />
+        <Body id={params.id} />
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );

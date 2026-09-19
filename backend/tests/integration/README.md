@@ -9,20 +9,19 @@ The integration tests are designed with a "manager" class and a "test" class for
 
 The idea is that each test can use the manager class to create (.create()) a "test*" object. It can then perform an operation on the object (e.g., send a request to the API) and then check if the "test*" object is in the expected state by using the manager class (.verify()) function.
 
+Craft Kubernetes tests under `tests/integration/tests/craft/k8s/` run in the
+dedicated `pr-craft-k8s-tests.yml` lane against a Helm-installed kind cluster
+with the real api_server, web_server, Celery workers, sandbox-proxy, and sandbox
+pods. Prefer the same API-manager shape there for API behavior. Use direct
+sandbox manager calls only for low-level Kubernetes contracts that are not
+exposed cleanly through public APIs; direct task/stub checks belong in
+`tests/external_dependency_unit/craft/`.
+
 ## Instructions for Running Integration Tests Locally
-0. Generate dependencies
-First install openap-generator
-```sh
-brew install openapi-generator
-```
 
-Then, using the VSCode/Cursor debugger, run the `Onyx OpenAPI Schema Generator` task (see `CONTRIBUTING_VSCODE.md` for `launch.json` setup instructions).
-The task automatically generates the Python client needed for integration tests.
-
-If the client generation fails, try running this command manually:
-```sh
-openapi-generator generate -i backend/generated/openapi.json -g python -o backend/generated/onyx_openapi_client --package-name onyx_openapi_client --skip-validate-spec --openapi-normalizer "SIMPLIFY_ONEOF_ANYOF=true,SET_OAS3_NULLABLE=true"
-```
+The tests call the API through the manager classes in `common_utils/managers`, so
+the generated OpenAPI client is not needed. Use `ods openapi all` only if you want
+the schema or client for other work.
 
 1. Launch onyx (using Docker or running with a debugger), ensuring the API server is running on port 8080.
    - If you'd like to set environment variables, you can do so by creating a `.env` file in the onyx/backend/tests/integration/ directory.

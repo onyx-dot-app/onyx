@@ -1,23 +1,24 @@
-from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Any, Optional
 
 import requests
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
+from onyx.configs.app_configs import INDEX_BATCH_SIZE, REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import TextSection
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    BasicExpertInfo,
+    ConnectorMissingCredentialError,
+    Document,
+    HierarchyNode,
+    TextSection,
+)
 from onyx.utils.retry_wrapper import retry_builder
 
 CLICKUP_API_BASE_URL = "https://api.clickup.com/api/v2"
@@ -36,7 +37,7 @@ class ClickupConnector(LoadConnector, PollConnector):
         self.batch_size = batch_size
         self.api_token = api_token
         self.team_id = team_id
-        self.connector_type = connector_type if connector_type else "workspace"
+        self.connector_type = connector_type or "workspace"
         self.connector_ids = connector_ids
         self.retrieve_task_comments = retrieve_task_comments
 
@@ -54,7 +55,7 @@ class ClickupConnector(LoadConnector, PollConnector):
         headers = {"Authorization": self.api_token}
 
         response = requests.get(
-            f"{CLICKUP_API_BASE_URL}/{endpoint}",
+            f"{CLICKUP_API_BASE_URL}/{endpoint.lstrip('/')}",
             headers=headers,
             params=params,
             timeout=REQUEST_TIMEOUT_SECONDS,
@@ -65,7 +66,7 @@ class ClickupConnector(LoadConnector, PollConnector):
         return response.json()
 
     def _get_task_comments(self, task_id: str) -> list[TextSection]:
-        url_endpoint = f"/task/{task_id}/comment"
+        url_endpoint = f"task/{task_id}/comment"
         response = self._make_request(url_endpoint)
         comments = [
             TextSection(
@@ -104,7 +105,7 @@ class ClickupConnector(LoadConnector, PollConnector):
         elif self.connector_type == "space":
             params["space_ids[]"] = self.connector_ids  # ty: ignore[invalid-assignment]
 
-        url_endpoint = f"/team/{self.team_id}/task"
+        url_endpoint = f"team/{self.team_id}/task"
 
         while True:
             response = self._make_request(url_endpoint, params)
@@ -119,8 +120,14 @@ class ClickupConnector(LoadConnector, PollConnector):
                     semantic_identifier=task["name"],
                     doc_updated_at=(
                         datetime.fromtimestamp(
-                            round(float(task["date_updated"]) / 1000, 3)
-                        ).replace(tzinfo=timezone.utc)
+                            round(float(task["date_updated"]) / 1000, 3),
+                            tz=timezone.utc,
+                        )
+                    ),
+                    # NOTE: doc_created_at population not yet verified against live data
+                    doc_created_at=datetime.fromtimestamp(
+                        round(float(task["date_created"]) / 1000, 3),
+                        tz=timezone.utc,
                     ),
                     primary_owners=[
                         BasicExpertInfo(

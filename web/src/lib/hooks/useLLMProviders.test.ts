@@ -1,5 +1,9 @@
+/**
+ * @jest-environment jsdom
+ */
+import { renderHook } from "@testing-library/react";
 import useSWR from "swr";
-import { useLLMProviders } from "@/hooks/useLanguageModels";
+import { useLLMProviders } from "@/lib/languageModels/hooks";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
 jest.mock("swr", () => ({
@@ -18,7 +22,7 @@ describe("useLLMProviders", () => {
     mockUseSWR.mockReset();
   });
 
-  test("uses public providers endpoint when personaId is not provided", () => {
+  test("uses public providers endpoint when personaId is not provided", async () => {
     const mockMutate = jest.fn();
     mockUseSWR.mockReturnValue({
       data: undefined,
@@ -27,7 +31,7 @@ describe("useLLMProviders", () => {
       isValidating: false,
     } as any);
 
-    const result = useLLMProviders();
+    const { result } = renderHook(() => useLLMProviders());
 
     expect(mockUseSWR).toHaveBeenCalledWith(
       "/api/llm/provider",
@@ -37,13 +41,14 @@ describe("useLLMProviders", () => {
         dedupingInterval: 60000,
       })
     );
-    expect(result.isLoading).toBe(true);
-    expect(result.refetch).toBe(mockMutate);
+    expect(result.current.isLoading).toBe(true);
+    await result.current.refetch();
+    expect(mockMutate).toHaveBeenCalled();
   });
 
-  test("uses persona-specific providers endpoint when personaId is provided", () => {
+  test("uses persona-specific providers endpoint when personaId is provided", async () => {
     const mockMutate = jest.fn();
-    const providers = [{ name: "Persona Provider" }];
+    const providers = [{ name: "Persona Provider", model_configurations: [] }];
     mockUseSWR.mockReturnValue({
       data: { providers, default_text: null, default_vision: null },
       error: undefined,
@@ -51,7 +56,7 @@ describe("useLLMProviders", () => {
       isValidating: false,
     } as any);
 
-    const result = useLLMProviders(42);
+    const { result } = renderHook(() => useLLMProviders(42));
 
     expect(mockUseSWR).toHaveBeenCalledWith(
       "/api/llm/persona/42/providers",
@@ -61,9 +66,10 @@ describe("useLLMProviders", () => {
         dedupingInterval: 60000,
       })
     );
-    expect(result.llmProviders).toBe(providers);
-    expect(result.isLoading).toBe(false);
-    expect(result.refetch).toBe(mockMutate);
+    expect(result.current.llmProviders).toEqual(providers);
+    expect(result.current.isLoading).toBe(false);
+    await result.current.refetch();
+    expect(mockMutate).toHaveBeenCalled();
   });
 
   test("reports not loading when SWR returns an error", () => {
@@ -74,9 +80,9 @@ describe("useLLMProviders", () => {
       isValidating: false,
     } as any);
 
-    const result = useLLMProviders();
+    const { result } = renderHook(() => useLLMProviders());
 
-    expect(result.isLoading).toBe(false);
-    expect(result.error).toBeInstanceOf(Error);
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.error).toBeInstanceOf(Error);
   });
 });

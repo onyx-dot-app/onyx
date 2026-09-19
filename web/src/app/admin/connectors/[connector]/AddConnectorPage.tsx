@@ -1,10 +1,11 @@
 "use client";
 
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import useSWR, { mutate } from "swr";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
-import { toast } from "@/hooks/useToast";
 import { useFormContext } from "@/components/context/FormContext";
 import { getSourceDisplayName, getSourceMetadata } from "@/lib/sources";
 import { SourceIcon } from "@/components/SourceIcon";
@@ -14,8 +15,15 @@ import { submitFiles } from "@/app/admin/connectors/[connector]/pages/utils/file
 import { submitGoogleSite } from "@/app/admin/connectors/[connector]/pages/utils/google_site";
 import AdvancedFormPage from "@/app/admin/connectors/[connector]/pages/Advanced";
 import DynamicConnectionForm from "@/app/admin/connectors/[connector]/pages/DynamicConnectorCreationForm";
-import CreateCredential from "@/components/credentials/actions/CreateCredential";
-import ModifyCredential from "@/components/credentials/actions/ModifyCredential";
+import CreateCredential from "@/lib/credentials/components/CreateCredential";
+import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";
+import {
+  CredentialCreationMethod,
+  getCredentialCreationActionLabel,
+  getCredentialCreationMethods,
+  shouldRedirectToOAuth,
+} from "@/lib/credentials/credentialCreation";
+import ModifyCredential from "@/lib/credentials/components/ModifyCredential";
 import {
   ConfigurableSources,
   oauthSupportedSources,
@@ -32,9 +40,8 @@ import {
   Connector,
   ConnectorBase,
 } from "@/lib/connectors/connectors";
-import { useSettings } from "@/hooks/useSettings";
-import Modal from "@/refresh-components/Modal";
-import { GmailMain } from "@/app/admin/connectors/[connector]/pages/gmail/GmailPage";
+import { useSettings } from "@/lib/settings/hooks";
+import { Modal } from "@opal/components";
 import {
   useGmailCredentials,
   useGoogleDriveCredentials,
@@ -53,15 +60,16 @@ import {
   getConnectorOauthRedirectUrl,
   useOAuthDetails,
 } from "@/lib/connectors/oauth";
-import { CreateStdOAuthCredential } from "@/components/credentials/actions/CreateStdOAuthCredential";
 import { Spinner } from "@/components/Spinner";
-import { Button } from "@opal/components";
+import { Button, Text as OpalText } from "@opal/components";
+import { Section, toast } from "@opal/layouts";
 import { deleteConnector } from "@/lib/connector";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
 import Text from "@/refresh-components/texts/Text";
 import { SvgKey, SvgAlertCircle } from "@opal/icons";
 import { Tooltip } from "@opal/components";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 
 export interface AdvancedConfig {
   refreshFreq: number;
@@ -76,7 +84,11 @@ export async function submitConnector<T>(
   connector: ConnectorBase<T>,
   connectorId?: number,
   fakeCredential?: boolean
-): Promise<{ message: string; isSuccess: boolean; response?: Connector<T> }> {
+): Promise<{
+  errorDetail?: string;
+  isSuccess: boolean;
+  response?: Connector<T>;
+}> {
   const isUpdate = connectorId !== undefined;
   if (!connector.connector_specific_config) {
     connector.connector_specific_config = {} as T;
@@ -96,10 +108,10 @@ export async function submitConnector<T>(
       );
       if (response.ok) {
         const responseJson = await response.json();
-        return { message: "Success!", isSuccess: true, response: responseJson };
+        return { isSuccess: true, response: responseJson };
       } else {
         const errorData = await response.json();
-        return { message: `Error: ${errorData.detail}`, isSuccess: false };
+        return { errorDetail: String(errorData.detail), isSuccess: false };
       }
     } else {
       const response = await fetch(
@@ -115,14 +127,14 @@ export async function submitConnector<T>(
 
       if (response.ok) {
         const responseJson = await response.json();
-        return { message: "Success!", isSuccess: true, response: responseJson };
+        return { isSuccess: true, response: responseJson };
       } else {
         const errorData = await response.json();
-        return { message: `Error: ${errorData.detail}`, isSuccess: false };
+        return { errorDetail: String(errorData.detail), isSuccess: false };
       }
     }
   } catch (error) {
-    return { message: `Error: ${error}`, isSuccess: false };
+    return { errorDetail: String(error), isSuccess: false };
   }
 }
 
@@ -131,6 +143,7 @@ export default function AddConnector({
 }: {
   connector: ConfigurableSources;
 }) {
+  const t = useTranslations("admin.connectorsList");
   const [currentPageUrl, setCurrentPageUrl] = useState<string | null>(null);
   const [oauthUrl, setOauthUrl] = useState<string | null>(null);
   const [isAuthorizing, setIsAuthorizing] = useState(false);
@@ -149,7 +162,7 @@ export default function AddConnector({
   }, []);
 
   const router = useRouter();
-  const { settings } = useSettings();
+  const settings = useSettings();
   const defaultPruneFreqHours = settings.default_pruning_freq
     ? settings.default_pruning_freq / 3600
     : 600; // 25 days fallback until settings load
@@ -157,8 +170,12 @@ export default function AddConnector({
   // State for managing credentials and files
   const [currentCredential, setCurrentCredential] =
     useState<Credential<any> | null>(null);
-  const [createCredentialFormToggle, setCreateCredentialFormToggle] =
-    useState(false);
+  const [credentialCreationMethod, setCredentialCreationMethod] =
+    useState<CredentialCreationMethod | null>(null);
+
+  const { isScopedManager } = usePermissionAuthority(
+    Permission.MANAGE_CONNECTORS
+  );
 
   // Fetch credentials data
   const { data: credentials } = useSWR<Credential<any>[]>(
@@ -227,6 +244,8 @@ export default function AddConnector({
   const displayName = getSourceDisplayName(connector) || connector;
   const sourceMetadata = getSourceMetadata(connector);
   const hasFederatedOption = sourceMetadata.federated === true;
+  const credentialCreationMethods = getCredentialCreationMethods(oauthDetails);
+  const showExplicitCredentialMethods = credentialCreationMethods.length > 1;
 
   if (!credentials || !editableCredentials) {
     return <></>;
@@ -240,7 +259,7 @@ export default function AddConnector({
   const onDeleteCredential = async (credential: Credential<any | null>) => {
     const response = await deleteCredential(credential.id, true);
     if (response.ok) {
-      toast.success("Credential deleted successfully!");
+      toast.success(t("add.credentialDeleted.toast"));
     } else {
       const errorData = await response.json();
       toast.error(errorData.detail || errorData.message);
@@ -250,12 +269,42 @@ export default function AddConnector({
   const onSwap = async (selectedCredential: Credential<any>) => {
     setCurrentCredential(selectedCredential);
     setAllowCreate(true);
-    toast.success("Swapped credential successfully!");
+    toast.success(t("add.credentialSwapped.toast"));
     refresh();
   };
 
   const onSuccess = () => {
     router.push("/admin/indexing/status?message=connector-created");
+  };
+
+  const closeCredentialModal = () => setCredentialCreationMethod(null);
+
+  const attemptOauthRedirect = async () => {
+    try {
+      const redirectUrl = await getConnectorOauthRedirectUrl(connector, {});
+      window.location.href = redirectUrl;
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t("add.oauthStartFailed.toast")
+      );
+    }
+  };
+
+  const openCredentialCreationMethod = async (
+    method: CredentialCreationMethod
+  ) => {
+    if (
+      method === CredentialCreationMethod.OAuth &&
+      oauthDetails &&
+      shouldRedirectToOAuth(oauthDetails)
+    ) {
+      await attemptOauthRedirect();
+      return;
+    }
+    if (method === CredentialCreationMethod.OAuth && !oauthDetails) {
+      return;
+    }
+    setCredentialCreationMethod(method);
   };
 
   const handleAuthorize = async () => {
@@ -268,21 +317,22 @@ export default function AddConnector({
     try {
       const response = await prepareOAuthAuthorizationRequest(
         connector,
-        currentPageUrl
+        currentPageUrl,
+        t("add.oauthStartFailed.toast")
       );
       if (response.url) {
         setOauthUrl(response.url);
         window.open(response.url, "_blank", "noopener,noreferrer");
       } else {
-        toast.error("Failed to fetch OAuth URL");
+        toast.error(t("add.oauthUrlFailed.toast"));
       }
     } catch (error: unknown) {
       // Narrow the type of error
       if (error instanceof Error) {
-        toast.error(`Error: ${error.message}`);
+        toast.error(t("add.error.toast", { detail: error.message }));
       } else {
         // Handle non-standard errors
-        toast.error("An unknown error occurred");
+        toast.error(t("add.unknownError.toast"));
       }
     } finally {
       setIsAuthorizing(false);
@@ -292,7 +342,10 @@ export default function AddConnector({
   return (
     <Formik
       initialValues={createConnectorInitialValues(connector)}
-      validationSchema={createConnectorValidationSchema(connector)}
+      validationSchema={createConnectorValidationSchema(
+        connector,
+        isScopedManager
+      )}
       onSubmit={async (values) => {
         const {
           name,
@@ -378,7 +431,7 @@ export default function AddConnector({
               onSuccess();
             }
           } catch (error) {
-            toast.error("Error uploading files");
+            toast.error(t("add.fileUploadFailed.toast"));
           } finally {
             setUploading(false);
           }
@@ -396,34 +449,38 @@ export default function AddConnector({
           );
 
           const connectorCreationPromise = (async () => {
-            const { message, isSuccess, response } = await submitConnector<any>(
-              {
-                connector_specific_config: transformedConnectorSpecificConfig,
-                input_type: isLoadState(connector) ? "load_state" : "poll", // single case
-                name: name,
-                source: connector,
-                access_type: access_type,
-                refresh_freq: advancedConfiguration.refreshFreq || null,
-                prune_freq: advancedConfiguration.pruneFreq || null,
-                indexing_start: advancedConfiguration.indexingStart || null,
-                groups: groups,
-              },
-              undefined,
-              credentialActivated ? false : true
-            );
+            const { errorDetail, isSuccess, response } =
+              await submitConnector<any>(
+                {
+                  connector_specific_config: transformedConnectorSpecificConfig,
+                  input_type: isLoadState(connector) ? "load_state" : "poll", // single case
+                  name: name,
+                  source: connector,
+                  access_type: access_type,
+                  refresh_freq: advancedConfiguration.refreshFreq || null,
+                  prune_freq: advancedConfiguration.pruneFreq || null,
+                  indexing_start: advancedConfiguration.indexingStart || null,
+                  groups: groups,
+                },
+                undefined,
+                credentialActivated ? false : true
+              );
 
             // Store the connector id immediately for potential timeout
             if (response?.id) {
               connectorIdRef.current = response.id;
             }
 
-            // If no credential
             if (!credentialActivated) {
               if (isSuccess) {
                 onSuccess();
               } else {
-                toast.error(message);
+                toast.error(
+                  t("add.error.toast", { detail: errorDetail ?? "" })
+                );
               }
+              timeoutErrorHappenedRef.current = false;
+              return;
             }
 
             // With credential
@@ -453,7 +510,7 @@ export default function AddConnector({
             } else if (isSuccess) {
               onSuccess();
             } else {
-              toast.error(message);
+              toast.error(t("add.error.toast", { detail: errorDetail ?? "" }));
             }
 
             timeoutErrorHappenedRef.current = false;
@@ -470,9 +527,9 @@ export default function AddConnector({
           if (result.isTimeout) {
             timeoutErrorHappenedRef.current = true;
             toast.error(
-              `Operation timed out after ${
-                CONNECTOR_CREATION_TIMEOUT_MS / 1000
-              } seconds. Check your configuration for errors?`
+              t("add.timeout.toast", {
+                seconds: CONNECTOR_CREATION_TIMEOUT_MS / 1000,
+              })
             );
 
             if (connectorIdRef.current) {
@@ -503,15 +560,13 @@ export default function AddConnector({
                     tooltip={
                       <div className="flex flex-col gap-2">
                         <Text as="p" textLight05>
-                          A federated search option is available for this
-                          connector. It will result in greater latency and
-                          reduced search quality.
+                          {t("add.federated.tooltip.description")}
                         </Text>
                         <Link
                           href={`/admin/connectors/${connector}?mode=federated`}
-                          className="text-action-link-04 hover:underline text-sm"
+                          className="text-action-selection-04 hover:underline text-sm"
                         >
-                          Use federated version instead →
+                          {t("add.federated.tooltip.link.label")}
                         </Link>
                       </div>
                     }
@@ -531,119 +586,113 @@ export default function AddConnector({
           {formStep == 0 && (
             <CardSection>
               <Text as="p" headingH3 className="pb-2">
-                Select a credential
+                {t("add.credentialStep.title")}
               </Text>
 
-              {connector == ValidSources.Gmail ? (
-                <GmailMain />
-              ) : (
-                <>
-                  <ModifyCredential
-                    showIfEmpty
-                    accessType={formikProps.values.access_type}
-                    defaultedCredential={currentCredential!}
-                    credentials={credentials}
-                    editableCredentials={editableCredentials}
-                    onDeleteCredential={onDeleteCredential}
-                    onSwitch={onSwap}
-                  />
-                  {!createCredentialFormToggle && (
-                    <div className="mt-6 flex gap-4">
-                      {/* Button to pop up a form to manually enter credentials */}
-                      <Button
-                        onClick={async () => {
-                          if (oauthDetails && oauthDetails.oauth_enabled) {
-                            if (oauthDetails.additional_kwargs.length > 0) {
-                              setCreateCredentialFormToggle(true);
-                            } else {
-                              const redirectUrl =
-                                await getConnectorOauthRedirectUrl(
-                                  connector,
-                                  {}
-                                );
-                              // if redirect is supported, just use it
-                              if (redirectUrl) {
-                                window.location.href = redirectUrl;
-                              } else {
-                                setCreateCredentialFormToggle(
-                                  (createConnectorToggle) =>
-                                    !createConnectorToggle
-                                );
-                              }
-                            }
-                          } else {
-                            setCreateCredentialFormToggle(
-                              (createConnectorToggle) => !createConnectorToggle
-                            );
-                          }
-                        }}
-                      >
-                        Create New
+              <>
+                <ModifyCredential
+                  showIfEmpty
+                  accessType={formikProps.values.access_type}
+                  defaultedCredential={currentCredential!}
+                  credentials={credentials}
+                  editableCredentials={editableCredentials}
+                  onDeleteCredential={onDeleteCredential}
+                  onSwitch={onSwap}
+                />
+                {credentialCreationMethod === null && (
+                  <Section
+                    flexDirection="row"
+                    justifyContent="start"
+                    gap={1}
+                    className="mt-6"
+                  >
+                    {oauthDetailsLoading ? (
+                      <Button disabled>
+                        {t("add.createCredentialButton.label")}
                       </Button>
-                      {/* Button to sign in via OAuth */}
-                      {oauthSupportedSources.includes(connector) &&
-                        (NEXT_PUBLIC_CLOUD_ENABLED || NEXT_PUBLIC_TEST_ENV) && (
-                          <Button
-                            disabled={isAuthorizing}
-                            variant="action"
-                            onClick={handleAuthorize}
-                            hidden={!isAuthorizeVisible}
-                          >
-                            {isAuthorizing
-                              ? "Authorizing..."
-                              : `Authorize with ${getSourceDisplayName(
-                                  connector
-                                )}`}
-                          </Button>
-                        )}
-                    </div>
-                  )}
-
-                  {createCredentialFormToggle && (
-                    <Modal
-                      open
-                      onOpenChange={() => setCreateCredentialFormToggle(false)}
-                    >
-                      <Modal.Content>
-                        <Modal.Header
-                          icon={SvgKey}
-                          title={`Create a ${getSourceDisplayName(
-                            connector
-                          )} credential`}
-                          onClose={() => setCreateCredentialFormToggle(false)}
-                        />
-                        <Modal.Body>
-                          {oauthDetailsLoading ? (
-                            <Spinner />
-                          ) : (
-                            <>
-                              {oauthDetails && oauthDetails.oauth_enabled ? (
-                                <CreateStdOAuthCredential
-                                  sourceType={connector}
-                                  additionalFields={
-                                    oauthDetails.additional_kwargs
-                                  }
-                                />
-                              ) : (
-                                <CreateCredential
-                                  close
-                                  refresh={refresh}
-                                  sourceType={connector}
-                                  accessType={formikProps.values.access_type}
-                                  onSwitch={onSwap}
-                                  onClose={() =>
-                                    setCreateCredentialFormToggle(false)
-                                  }
-                                />
-                              )}
-                            </>
+                    ) : (
+                      credentialCreationMethods.map((method) => (
+                        <Button
+                          key={method}
+                          onClick={() => openCredentialCreationMethod(method)}
+                        >
+                          {getCredentialCreationActionLabel(
+                            method,
+                            displayName,
+                            showExplicitCredentialMethods
                           )}
-                        </Modal.Body>
-                      </Modal.Content>
-                    </Modal>
-                  )}
-                </>
-              )}
+                        </Button>
+                      ))
+                    )}
+                    {oauthSupportedSources.includes(connector) &&
+                      (NEXT_PUBLIC_CLOUD_ENABLED || NEXT_PUBLIC_TEST_ENV) && (
+                        <Button
+                          disabled={isAuthorizing}
+                          variant="action"
+                          onClick={handleAuthorize}
+                          hidden={!isAuthorizeVisible}
+                        >
+                          {isAuthorizing
+                            ? t("add.authorizeButton.pendingLabel")
+                            : t("add.authorizeButton.label", {
+                                source: displayName,
+                              })}
+                        </Button>
+                      )}
+                  </Section>
+                )}
+
+                {credentialCreationMethod !== null && (
+                  <Modal open onOpenChange={closeCredentialModal}>
+                    <Modal.Content>
+                      <Modal.Header
+                        icon={SvgKey}
+                        title={t("add.credentialModal.title", {
+                          source: displayName,
+                        })}
+                        onClose={closeCredentialModal}
+                      />
+                      <Modal.Body alignItems="stretch">
+                        {oauthDetailsLoading ? (
+                          <Spinner />
+                        ) : credentialCreationMethod ===
+                            CredentialCreationMethod.OAuth && oauthDetails ? (
+                          shouldRedirectToOAuth(oauthDetails) ? (
+                            <Section alignItems="start">
+                              <OpalText
+                                as="p"
+                                font="main-ui-body"
+                                color="text-03"
+                              >
+                                {t("add.oauthRedirectFailed.message", {
+                                  source: displayName,
+                                })}
+                              </OpalText>
+                              <Button onClick={attemptOauthRedirect}>
+                                {t("add.retryButton.label")}
+                              </Button>
+                            </Section>
+                          ) : (
+                            <CreateStdOAuthCredential
+                              sourceType={connector}
+                              additionalFields={oauthDetails.additional_kwargs}
+                            />
+                          )
+                        ) : (
+                          <CreateCredential
+                            close
+                            refresh={refresh}
+                            sourceType={connector}
+                            accessType={formikProps.values.access_type}
+                            onSwitch={onSwap}
+                            onClose={closeCredentialModal}
+                          />
+                        )}
+                      </Modal.Body>
+                    </Modal.Content>
+                  </Modal>
+                )}
+              </>
             </CardSection>
           )}
 

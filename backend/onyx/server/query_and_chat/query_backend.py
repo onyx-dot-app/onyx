@@ -1,13 +1,11 @@
-from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from onyx.access.hierarchy_access import get_user_external_group_ids
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.constants import DocumentSource
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import SearchDoc
+from onyx.context.search.models import IndexFilters, SearchDoc
 from onyx.context.search.preprocessing.access_filters import (
     build_access_filters_for_user,
 )
@@ -17,10 +15,12 @@ from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tag import find_tags
 from onyx.document_index.factory import get_default_document_index
-from onyx.server.query_and_chat.models import AdminSearchRequest
-from onyx.server.query_and_chat.models import AdminSearchResponse
-from onyx.server.query_and_chat.models import SourceTag
-from onyx.server.query_and_chat.models import TagResponse
+from onyx.server.query_and_chat.models import (
+    AdminSearchRequest,
+    AdminSearchResponse,
+    SourceTag,
+    TagResponse,
+)
 from onyx.server.utils_vector_db import require_vector_db
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -30,11 +30,13 @@ logger = setup_logger()
 admin_router = APIRouter(prefix="/admin")
 basic_router = APIRouter(prefix="/query")
 
+MAX_VALID_TAGS_LIMIT = 100
+
 
 @admin_router.post("/search", dependencies=[Depends(require_vector_db)])
 def admin_search(
     question: AdminSearchRequest,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> AdminSearchResponse:
     tenant_id = get_current_tenant_id()
@@ -46,7 +48,8 @@ def admin_search(
     final_filters = IndexFilters(
         source_type=question.filters.source_type,
         document_set=question.filters.document_set,
-        time_cutoff=question.filters.time_cutoff,
+        created_at_range=question.filters.created_at_range,
+        updated_at_range=question.filters.updated_at_range,
         tags=question.filters.tags,
         access_control_list=user_acl_filters,
         tenant_id=tenant_id,
@@ -86,11 +89,13 @@ def get_tags(
     sources: list[DocumentSource] | None = None,
     allow_prefix: bool = True,  # This is currently the only option
     limit: int = 50,
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.READ_SEARCH)),
     db_session: Session = Depends(get_session),
 ) -> TagResponse:
     if not allow_prefix:
         raise NotImplementedError("Cannot disable prefix match for now")
+
+    limit = min(max(limit, 1), MAX_VALID_TAGS_LIMIT)
 
     key_prefix = match_pattern
     value_prefix = match_pattern
@@ -110,6 +115,10 @@ def get_tags(
         sources=sources,
         limit=limit,
         db_session=db_session,
+        user_email=user.email,
+        prior_emails=user.prior_emails,
+        external_group_ids=get_user_external_group_ids(db_session, user),
+        user_id=user.id,
         require_both_to_match=require_both_to_match,
     )
     server_tags = [

@@ -1,7 +1,6 @@
 """Base interface for provider-specific prompt caching adapters."""
 
-from abc import ABC
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 
 from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.prompt_cache.models import CacheMetadata

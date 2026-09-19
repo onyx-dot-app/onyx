@@ -42,6 +42,10 @@ For modifications, you can:
 
 3. Fill in relevant information about the user. For example:
 "What document did I write last week?" -> "What document did John Doe write last week?" (assuming the user is John Doe)
+
+4. Remove source type scoping details — scoping is applied automatically, so naming a specific app or tool to search in only adds noise. For example:
+"Search Google Drive for the SLA doc" -> "SLA doc"
+"the refund policy in Zendesk" -> "refund policy"
 {additional_context}
 =========================
 CRITICAL: ONLY provide the standalone query and nothing else.
@@ -69,6 +73,7 @@ Each query should have as few keywords as necessary to represent the user's sear
 Guidelines:
 - Do not provide more than 3 queries.
 - Do not replace or expand niche, proprietary, or obscure terms
+- Do not include source type scoping details (e.g. naming an app or tool like Zendesk, Google Drive, Slack) as keywords — scoping is applied automatically.
 - Focus on the last user message, in most cases the history and any extra context should be ignored.
 {additional_context}
 =========================
@@ -118,7 +123,8 @@ Select the most relevant document sections for the user's query (maximum {max_se
 later to expand the section and read more from the document so include the section.
 
 # Output Format
-Return ONLY section_ids as a comma-separated list, ordered by relevance:
+Return ONLY the section_ids as a bracketed, comma-separated list of integers, ordered by relevance. \
+Do not include any other text.
 [most_relevant_section_id, second_most_relevant_section_id, ...]
 
 Section IDs:

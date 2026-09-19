@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { FiEdit2 } from "react-icons/fi";
 import { SvgCheck } from "@opal/icons";
 
@@ -15,6 +16,7 @@ export function EditableValue({
   emptyDisplay?: string;
   consistentWidth?: boolean;
 }) {
+  const t = useTranslations("common.editable");
   const [isOpen, setIsOpen] = useState(false);
   const [editedValue, setEditedValue] = useState(initialValue);
 
@@ -40,34 +42,38 @@ export function EditableValue({
           }}
           className="border bg-background-200 border-background-300 rounded-sm py-1 px-1 w-12 h-4 my-auto"
         />
-        <div
+        <button
+          type="button"
+          aria-label={t("save.ariaLabel")}
           onClick={async () => {
             const success = await onSubmit(editedValue);
             if (success) {
               setIsOpen(false);
             }
           }}
-          className="cursor-pointer my-auto ml-2"
+          className="cursor-pointer my-auto ms-2"
         >
           <SvgCheck size={16} className="text-green-700" />
-        </div>
+        </button>
       </div>
     );
   }
 
   return (
     <div className="h-full flex flex-col">
-      <div
+      <button
+        type="button"
+        aria-label={t("edit.ariaLabel")}
         className="flex my-auto cursor-pointer hover:bg-accent-background-hovered rounded-sm"
         onClick={() => setIsOpen(true)}
       >
         <div className={"flex " + (consistentWidth && " w-6")}>
-          <div className="ml-auto my-auto">{initialValue || emptyDisplay}</div>
+          <div className="ms-auto my-auto">{initialValue || emptyDisplay}</div>
         </div>
-        <div className="cursor-pointer ml-2 my-auto h-4">
+        <div className="cursor-pointer ms-2 my-auto h-4">
           <FiEdit2 size={16} />
         </div>
-      </div>
+      </button>
     </div>
   );
 }

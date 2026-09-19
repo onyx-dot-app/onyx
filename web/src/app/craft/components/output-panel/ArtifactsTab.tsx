@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
+import { Text, Button } from "@opal/components";
 import {
   SvgGlobe,
   SvgDownloadCloud,
@@ -15,7 +15,10 @@ import {
 } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { Artifact } from "@/app/craft/hooks/useBuildSessionStore";
-import { useFilesNeedsRefresh } from "@/app/craft/hooks/useBuildSessionStore";
+import {
+  useFilesNeedsRefresh,
+  useBuildSessionStore,
+} from "@/app/craft/hooks/useBuildSessionStore";
 import {
   fetchDirectoryListing,
   downloadArtifactFile,
@@ -23,7 +26,7 @@ import {
 } from "@/app/craft/services/apiServices";
 import { FileSystemEntry } from "@/app/craft/types/streamingTypes";
 import { getFileIcon } from "@/lib/utils";
-import { cn } from "@opal/utils";
+import { clickOnKeyDown } from "@opal/utils";
 
 interface ArtifactsTabProps {
   artifacts: Artifact[];
@@ -34,8 +37,27 @@ export default function ArtifactsTab({
   artifacts,
   sessionId,
 }: ArtifactsTabProps) {
+  const t = useTranslations("craft.artifactsTab");
   const webappArtifacts = artifacts.filter(
     (a) => a.type === "nextjs_app" || a.type === "web_app"
+  );
+
+  const setActiveOutputTab = useBuildSessionStore(
+    (state) => state.setActiveOutputTab
+  );
+  const openFilePreview = useBuildSessionStore(
+    (state) => state.openFilePreview
+  );
+
+  const handleWebappOpen = useCallback(() => {
+    if (sessionId) setActiveOutputTab(sessionId, "preview");
+  }, [sessionId, setActiveOutputTab]);
+
+  const handleFileOpen = useCallback(
+    (path: string, fileName: string) => {
+      if (sessionId) openFilePreview(sessionId, path, fileName);
+    },
+    [sessionId, openFilePreview]
   );
 
   const filesNeedsRefresh = useFilesNeedsRefresh();
@@ -124,14 +146,14 @@ export default function ArtifactsTab({
         height="full"
         alignItems="center"
         justifyContent="center"
-        padding={2}
+        padding={8}
       >
         <SvgFiles size={48} className="stroke-text-02" />
-        <Text headingH3 text03>
-          No artifacts yet
+        <Text font="heading-h3" color="text-03">
+          {t("empty.title")}
         </Text>
-        <Text secondaryBody text02>
-          Output files and web apps will appear here
+        <Text font="secondary-body" color="text-02">
+          {t("empty.description")}
         </Text>
       </Section>
     );
@@ -143,18 +165,28 @@ export default function ArtifactsTab({
         <div className="divide-y divide-border-01">
           {/* Webapp Artifacts */}
           {webappArtifacts.map((artifact) => (
+            // The row holds its own buttons, so it stays a div with button
+            // semantics rather than a <button> wrapping a <button>.
             <div
               key={artifact.id}
-              className="flex items-center gap-3 p-3 hover:bg-background-tint-01 transition-colors"
+              className="flex items-center gap-3 p-3 hover:bg-background-tint-01 transition-colors cursor-pointer"
+              style={{ paddingLeft: 12 }}
+              role="button"
+              tabIndex={0}
+              aria-label={t("openItem.ariaLabel", { name: artifact.name })}
+              onKeyDown={clickOnKeyDown(handleWebappOpen)}
+              onClick={handleWebappOpen}
             >
-              <SvgGlobe size={24} className="stroke-text-02 shrink-0" />
+              <div className="w-4 shrink-0" />
+
+              <SvgGlobe size={20} className="stroke-text-02 shrink-0" />
 
               <div className="flex-1 min-w-0 flex items-center gap-2">
-                <Text secondaryBody text04 className="truncate">
+                <Text font="secondary-body" color="text-04" maxLines={1}>
                   {artifact.name}
                 </Text>
-                <Text secondaryBody text02>
-                  Next.js Application
+                <Text font="secondary-body" color="text-02">
+                  {t("nextjsApp.label")}
                 </Text>
               </div>
 
@@ -163,9 +195,12 @@ export default function ArtifactsTab({
                   variant="action"
                   prominence="tertiary"
                   icon={SvgDownloadCloud}
-                  onClick={handleWebappDownload}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleWebappDownload();
+                  }}
                 >
-                  Download
+                  {t("download.button")}
                 </Button>
               </div>
             </div>
@@ -179,6 +214,7 @@ export default function ArtifactsTab({
               sessionId={sessionId!}
               depth={0}
               onDownload={handleOutputDownload}
+              onFileOpen={handleFileOpen}
             />
           ))}
         </div>
@@ -192,6 +228,7 @@ interface OutputEntryRowProps {
   sessionId: string;
   depth: number;
   onDownload: (path: string, isDirectory: boolean) => void;
+  onFileOpen: (path: string, fileName: string) => void;
 }
 
 function OutputEntryRow({
@@ -199,7 +236,9 @@ function OutputEntryRow({
   sessionId,
   depth,
   onDownload,
+  onFileOpen,
 }: OutputEntryRowProps) {
+  const t = useTranslations("craft.artifactsTab");
   const [expanded, setExpanded] = useState(false);
   const [children, setChildren] = useState<FileSystemEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -217,18 +256,29 @@ function OutputEntryRow({
     setExpanded((prev) => !prev);
   }, [entry.is_directory, entry.path, sessionId, loaded]);
 
+  const openEntry = entry.is_directory
+    ? toggleExpand
+    : () => onFileOpen(entry.path, entry.name);
+
   const FileIcon = entry.is_directory ? SvgFolder : getFileIcon(entry.name);
   const paddingLeft = depth * 20;
 
   return (
     <>
+      {/* The row holds its own buttons, so it stays a div with button
+      semantics rather than a <button> wrapping a <button>. */}
       <div
-        className={cn(
-          "flex items-center gap-3 p-3 hover:bg-background-tint-01 transition-colors",
-          entry.is_directory && "cursor-pointer"
-        )}
+        className="flex items-center gap-3 p-3 hover:bg-background-tint-01 transition-colors cursor-pointer"
         style={{ paddingLeft: 12 + paddingLeft }}
-        onClick={entry.is_directory ? toggleExpand : undefined}
+        role="button"
+        tabIndex={0}
+        aria-label={
+          entry.is_directory
+            ? t("toggleItem.ariaLabel", { name: entry.name })
+            : t("openItem.ariaLabel", { name: entry.name })
+        }
+        onKeyDown={clickOnKeyDown(openEntry)}
+        onClick={openEntry}
       >
         {entry.is_directory ? (
           expanded ? (
@@ -243,11 +293,11 @@ function OutputEntryRow({
         <FileIcon size={20} className="stroke-text-02 shrink-0" />
 
         <div className="flex-1 min-w-0 flex items-center gap-2">
-          <Text secondaryBody text04 className="truncate">
+          <Text font="secondary-body" color="text-04" maxLines={1}>
             {entry.name}
           </Text>
           {!entry.is_directory && entry.size !== null ? (
-            <Text secondaryBody text02>
+            <Text font="secondary-body" color="text-02">
               {formatFileSize(entry.size)}
             </Text>
           ) : null}
@@ -263,7 +313,7 @@ function OutputEntryRow({
               onDownload(entry.path, entry.is_directory);
             }}
           >
-            Download
+            {t("download.button")}
           </Button>
         </div>
       </div>
@@ -276,6 +326,7 @@ function OutputEntryRow({
             sessionId={sessionId}
             depth={depth + 1}
             onDownload={onDownload}
+            onFileOpen={onFileOpen}
           />
         ))}
     </>

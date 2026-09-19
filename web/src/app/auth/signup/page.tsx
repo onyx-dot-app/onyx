@@ -1,23 +1,20 @@
 import { User } from "@/lib/types";
-import {
-  getCurrentUserSS,
-  getAuthTypeMetadataSS,
-  AuthTypeMetadata,
-  getAuthUrlSS,
-} from "@/lib/userSS";
+import { getCurrentUserSS } from "@/lib/users/svcSS";
+import { getAuthTypeMetadataSS, getAuthUrlSS } from "@/lib/auth/svcSS";
+import { AuthTypeMetadata } from "@/lib/auth/types";
 import { redirect } from "next/navigation";
-import EmailPasswordForm from "../login/EmailPasswordForm";
-import SignInButton from "@/app/auth/login/SignInButton";
+import { EmailPasswordForm, SignInButton } from "@/lib/auth/components";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import ReferralSourceSelector from "./ReferralSourceSelector";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@opal/utils";
-import { AuthType } from "@/lib/constants";
+import { getTranslations } from "next-intl/server";
 
 const Page = async (props: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }) => {
+  const t = await getTranslations("auth");
   const searchParams = await props.searchParams;
   const nextUrl = Array.isArray(searchParams?.next)
     ? searchParams?.next[0]
@@ -48,16 +45,21 @@ const Page = async (props: {
     }
     return redirect("/auth/waiting-on-verification");
   }
-  const cloud = authTypeMetadata?.authType === AuthType.CLOUD;
+  const cloud = authTypeMetadata?.multiTenant === true;
 
-  // only enable this page if basic login is enabled
-  if (authTypeMetadata?.authType !== AuthType.BASIC && !cloud) {
+  // No auth metadata (backend unreachable), nothing to render here.
+  if (authTypeMetadata?.multiTenant !== false && !cloud) {
     return redirect("/app");
+  }
+
+  // Kill switch off: signup is refused by the backend, bounce to login.
+  if (!cloud && authTypeMetadata?.passwordAuthEnabled === false) {
+    return redirect("/auth/login");
   }
 
   let authUrl: string | null = null;
   if (cloud && authTypeMetadata) {
-    authUrl = await getAuthUrlSS(authTypeMetadata.authType, null);
+    authUrl = await getAuthUrlSS(authTypeMetadata.multiTenant, null);
   }
 
   return (
@@ -74,19 +76,21 @@ const Page = async (props: {
         >
           <div className="w-full">
             <Text as="p" headingH2 text05>
-              {cloud ? "Complete your sign up" : "Create account"}
+              {cloud
+                ? t("signup.cloudSignupHeading.title")
+                : t("signup.createAccountHeading.title")}
             </Text>
             <Text as="p" text03>
-              Get started with Onyx
+              {t("signup.subtitle.text")}
             </Text>
           </div>
           {cloud && authUrl && (
             <div className="w-full justify-center mt-6">
-              <SignInButton authorizeUrl={authUrl} authType={AuthType.CLOUD} />
+              <SignInButton authorizeUrl={authUrl} />
               <div className="flex items-center w-full my-4">
                 <div className="grow border-t border-border-01" />
                 <Text as="p" mainUiMuted text03 className="mx-2">
-                  or
+                  {t("signup.orDivider.text")}
                 </Text>
                 <div className="grow border-t border-border-01" />
               </div>
@@ -102,7 +106,7 @@ const Page = async (props: {
           )}
 
           <EmailPasswordForm
-            isSignup
+            label="create"
             shouldVerify={authTypeMetadata?.requiresVerification}
             nextUrl={nextUrl}
             defaultEmail={defaultEmail}

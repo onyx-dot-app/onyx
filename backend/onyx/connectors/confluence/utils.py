@@ -1,35 +1,27 @@
 import math
 import time
 from collections.abc import Callable
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
-from typing import Any
-from typing import cast
-from typing import TYPE_CHECKING
-from typing import TypeVar
-from urllib.parse import parse_qs
-from urllib.parse import quote
-from urllib.parse import urljoin
-from urllib.parse import urlparse
+from typing import TYPE_CHECKING, Any, TypeVar, cast
+from urllib.parse import parse_qs, quote, urljoin, urlparse
 
 import requests
 from pydantic import BaseModel
 
 from onyx.configs.app_configs import (
     CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD,
+    CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD,
+    REQUEST_TIMEOUT_SECONDS,
 )
-from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
-from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import FileOrigin
-from onyx.file_processing.extract_file_text import extract_file_text
-from onyx.file_processing.extract_file_text import get_file_ext
-from onyx.file_processing.file_types import OnyxFileExtensions
-from onyx.file_processing.file_types import OnyxMimeTypes
+from onyx.file_processing.extract_file_text import extract_file_text, get_file_ext
+from onyx.file_processing.file_types import OnyxFileExtensions, OnyxMimeTypes
 from onyx.file_processing.image_utils import store_image_and_create_section
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_after import parse_retry_after_seconds
 
 if TYPE_CHECKING:
     from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
@@ -304,16 +296,7 @@ def build_confluence_document_id(
 
 
 def datetime_from_string(datetime_string: str) -> datetime:
-    datetime_object = datetime.fromisoformat(datetime_string)
-
-    if datetime_object.tzinfo is None:
-        # If no timezone info, assume it is UTC
-        datetime_object = datetime_object.replace(tzinfo=timezone.utc)
-    else:
-        # If not in UTC, translate it
-        datetime_object = datetime_object.astimezone(timezone.utc)
-
-    return datetime_object
+    return datetime_to_utc(datetime.fromisoformat(datetime_string))
 
 
 def confluence_refresh_tokens(
@@ -443,23 +426,17 @@ def _handle_http_error(e: requests.HTTPError, attempt: int, max_retries: int) ->
     ):
         raise e
 
-    retry_after = None
-
-    retry_after_header = e.response.headers.get("Retry-After")
-    if retry_after_header is not None:
-        try:
-            retry_after = int(retry_after_header)
-            if retry_after > MAX_DELAY:
-                logger.warning(
-                    "Clamping retry_after from %s to %s seconds...",
-                    retry_after,
-                    MAX_DELAY,
-                )
-                retry_after = MAX_DELAY
-            if retry_after < MIN_DELAY:
-                retry_after = MIN_DELAY
-        except ValueError:
-            pass
+    retry_after = parse_retry_after_seconds(e.response.headers.get("Retry-After"))
+    if retry_after is not None:
+        if retry_after > MAX_DELAY:
+            logger.warning(
+                "Clamping retry_after from %s to %s seconds...",
+                retry_after,
+                MAX_DELAY,
+            )
+            retry_after = MAX_DELAY
+        if retry_after < MIN_DELAY:
+            retry_after = MIN_DELAY
 
     if retry_after is not None:
         logger.warning(

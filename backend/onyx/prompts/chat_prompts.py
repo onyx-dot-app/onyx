@@ -74,6 +74,13 @@ If you reference or share these files, use the exact markdown format [filename](
 """.strip()
 
 
+# Wrapped in <system-reminder> tags by translate_history_to_llm_format when
+# the per-request image cap drops images from the outgoing request.
+IMAGE_DROP_REMINDER = """
+{dropped_count} earlier image(s) attached to this conversation were omitted to fit the model's per-request image limit.
+""".strip()
+
+
 # Specifically for OpenAI models, this prefix needs to be in place for the model to output markdown and correct styling
 CODE_BLOCK_MARKDOWN = "Formatting re-enabled. "
 
@@ -88,6 +95,13 @@ Here is some additional context which may be relevant to the user query:
 TOOL_CALL_RESPONSE_CROSS_MESSAGE = """
 This tool call completed but the results are no longer accessible.
 """.strip()
+
+# Replayed in place of an image when the current model does not accept image
+# input (e.g. after a mid-session model switch).
+NON_VISION_IMAGE_MARKER = (
+    "[attached image — file_id: {file_id} — not shown: the current model does "
+    "not support image input]"
+)
 
 # This is used to add the current date and time to the prompt in the case where the Agent should be aware of the current
 # date and time but the replacement pattern is not present in the prompt.

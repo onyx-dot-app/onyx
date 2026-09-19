@@ -31,14 +31,17 @@ jest.mock("next/navigation", () => ({
   useSearchParams: () => mockSearchParams,
 }));
 
-jest.mock("@/layouts/settings-layouts", () => ({
-  Root: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="settings-root">{children}</div>
-  ),
-  Header: () => <div data-testid="settings-header" />,
-  Body: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="settings-body">{children}</div>
-  ),
+jest.mock("@opal/layouts", () => ({
+  ...jest.requireActual("@opal/layouts"),
+  SettingsLayouts: {
+    Root: ({ children }: { children: React.ReactNode }) => (
+      <div data-testid="settings-root">{children}</div>
+    ),
+    Header: () => <div data-testid="settings-header" />,
+    Body: ({ children }: { children: React.ReactNode }) => (
+      <div data-testid="settings-body">{children}</div>
+    ),
+  },
 }));
 
 jest.mock("@/layouts/general-layouts", () => ({

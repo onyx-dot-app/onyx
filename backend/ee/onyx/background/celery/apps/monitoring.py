@@ -5,6 +5,7 @@ celery_app.autodiscover_tasks(
     app_base.filter_task_modules(
         [
             "ee.onyx.background.celery.tasks.tenant_provisioning",
+            "ee.onyx.background.celery.tasks.log_export",
         ]
     )
 )

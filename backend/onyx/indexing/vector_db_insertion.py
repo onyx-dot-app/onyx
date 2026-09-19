@@ -1,18 +1,17 @@
 import time
-from collections.abc import Callable
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from http import HTTPStatus
-from itertools import chain
-from itertools import groupby
+from itertools import chain, groupby
 
 import httpx
 import sentry_sdk
 
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import DocumentFailure
-from onyx.document_index.interfaces_new import DocumentIndex
-from onyx.document_index.interfaces_new import DocumentInsertionRecord
-from onyx.document_index.interfaces_new import IndexingMetadata
+from onyx.connectors.models import ConnectorFailure, DocumentFailure
+from onyx.document_index.interfaces_new import (
+    DocumentIndex,
+    DocumentInsertionRecord,
+    IndexingMetadata,
+)
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.utils.logger import setup_logger
 

@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { SvgFileText } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { getArtifactUrl } from "@/lib/build/client";
@@ -24,6 +25,7 @@ export default function PdfPreview({
   filePath,
   refreshKey,
 }: PdfPreviewProps) {
+  const t = useTranslations("craft.pdfPreview");
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -79,15 +81,17 @@ export default function PdfPreview({
         height="full"
         alignItems="center"
         justifyContent="center"
-        padding={2}
+        padding={8}
       >
         <SvgFileText size={48} className="stroke-text-02" />
-        <Text headingH3 text03>
-          Cannot preview PDF
+        <Text font="heading-h3" color="text-03">
+          {t("error.title")}
         </Text>
-        <Text secondaryBody text02 className="text-center max-w-md">
-          The PDF file could not be loaded.
-        </Text>
+        <div className="text-center max-w-md">
+          <Text font="secondary-body" color="text-02">
+            {t("error.description")}
+          </Text>
+        </div>
       </Section>
     );
   }
@@ -98,10 +102,10 @@ export default function PdfPreview({
         height="full"
         alignItems="center"
         justifyContent="center"
-        padding={2}
+        padding={8}
       >
-        <Text secondaryBody text03>
-          Loading PDF...
+        <Text font="secondary-body" color="text-03">
+          {t("loading.label")}
         </Text>
       </Section>
     );
@@ -110,7 +114,7 @@ export default function PdfPreview({
   return (
     <iframe
       src={blobUrl}
-      title={filePath.split("/").pop() || "PDF Preview"}
+      title={filePath.split("/").pop() || t("frame.title")}
       className={cn("w-full h-full border-none")}
     />
   );

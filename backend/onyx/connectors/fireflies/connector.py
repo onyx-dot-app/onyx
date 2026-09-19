@@ -1,25 +1,26 @@
 import time
 from collections.abc import Iterator
-from datetime import datetime
-from datetime import timezone
-from typing import cast
-from typing import List
+from datetime import datetime, timezone
+from typing import List, cast
 
 import requests
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
+from onyx.configs.app_configs import INDEX_BATCH_SIZE, REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import TextSection
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    BasicExpertInfo,
+    ConnectorMissingCredentialError,
+    Document,
+    HierarchyNode,
+    ImageSection,
+    TextSection,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -51,7 +52,14 @@ _FIREFLIES_API_QUERY = """
     }
 """
 
-ONE_MINUTE = 60
+# Fireflies surfaces a transcript only after the meeting ends and processing
+# completes, and `transcripts(fromDate, toDate)` filters on the meeting START
+# time. Because the poll cursor only moves forward, a transcript that becomes
+# available after its start-time window was already polled would be skipped
+# permanently. So each poll re-scans an overlap window large enough to cover the
+# longest meeting plus Fireflies' processing lag. Re-seen transcripts are cheap:
+# Onyx's content-hash check skips re-chunking/re-embedding anything already indexed.
+_FIREFLIES_POLL_OVERLAP_SECONDS = 8 * 60 * 60  # 8 hours
 
 
 def _create_doc_from_transcript(transcript: dict) -> Document | None:
@@ -100,10 +108,11 @@ def _create_doc_from_transcript(transcript: dict) -> Document | None:
     meeting_organizer_email = transcript["organizer_email"]
     organizer_email_user_info = [BasicExpertInfo(email=meeting_organizer_email)]
 
-    meeting_participants_email_list = []
-    for participant in transcript.get("participants", []):
-        if participant != meeting_organizer_email and participant:
-            meeting_participants_email_list.append(BasicExpertInfo(email=participant))
+    meeting_participants_email_list = [
+        BasicExpertInfo(email=participant)
+        for participant in transcript.get("participants", [])
+        if participant != meeting_organizer_email and participant
+    ]
 
     return Document(
         id=fireflies_id,
@@ -126,6 +135,7 @@ def _create_doc_from_transcript(transcript: dict) -> Document | None:
             }.items()
             if v is not None
         },
+        doc_created_at=meeting_date,
         doc_updated_at=meeting_date,
         primary_owners=organizer_email_user_info,
         secondary_owners=meeting_participants_email_list,
@@ -238,9 +248,10 @@ class FirefliesConnector(PollConnector, LoadConnector):
     def poll_source(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> GenerateDocumentsOutput:
-        # add some leeway to account for any timezone funkiness and/or bad handling
-        # of start time on the Fireflies side
-        start = max(0, start - ONE_MINUTE)
+        # Re-scan an overlap window so transcripts that became available after
+        # their start-time window was first polled are still picked up (see
+        # _FIREFLIES_POLL_OVERLAP_SECONDS).
+        start = max(0, start - _FIREFLIES_POLL_OVERLAP_SECONDS)
         start_datetime = datetime.fromtimestamp(start, tz=timezone.utc).strftime(
             "%Y-%m-%dT%H:%M:%S.000Z"
         )

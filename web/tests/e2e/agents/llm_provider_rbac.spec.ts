@@ -1,7 +1,7 @@
-import { test, expect } from "@playwright/test";
-import { Page } from "@playwright/test";
+import { test } from "@playwright/test";
 import { loginAsRandomUser, loginAs } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
+import { AgentEditorPage } from "@tests/e2e/pages/AgentEditorPage";
 
 /**
  * This test verifies that LLM Provider RBAC works correctly in the assistant editor.
@@ -12,29 +12,6 @@ import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
  * 3. Navigate to assistant creation page
  * 4. Verify the restricted provider doesn't appear in the LLM selector
  */
-
-const getDefaultModelSelector = (page: Page) =>
-  page
-    .locator(
-      'button:has-text("User Default"), button:has-text("System Default")'
-    )
-    .first();
-
-const getLLMProviderOptions = async (page: Page) => {
-  // Click the selector to open the dropdown
-  await getDefaultModelSelector(page).click();
-
-  // Wait for the dropdown to be visible
-  await page.waitForSelector('[role="option"]', { state: "visible" });
-
-  // Get all visible options
-  const options = await page.locator('[role="option"]').allTextContents();
-
-  // Close the dropdown by clicking elsewhere
-  await page.keyboard.press("Escape");
-
-  return options;
-};
 
 test("Restricted LLM Provider should not appear for unauthorized users", async ({
   page,
@@ -70,34 +47,12 @@ test("Restricted LLM Provider should not appear for unauthorized users", async (
     await page.context().clearCookies();
     await loginAsRandomUser(page);
 
-    // Step 5: Navigate to the assistant creation page
-    await page.goto("/app/agents/create");
-    await page.waitForLoadState("networkidle");
-
-    // Step 6: Scroll to the Default Model section
-    const defaultModelSection = page.locator("text=Default Model").first();
-    await defaultModelSection.scrollIntoViewIfNeeded();
-
-    // Step 7: Get all available LLM provider options
-    const llmOptions = await getLLMProviderOptions(page);
-
-    // Step 8: Verify that we have some options (at least the default provider)
-    expect(llmOptions.length).toBeGreaterThan(0);
-
-    // Step 9: Verify the restricted provider does NOT appear
-    const hasRestrictedProvider = llmOptions.some((option) =>
-      option.includes(restrictedProviderName)
-    );
-    expect(hasRestrictedProvider).toBe(false);
-
-    // Step 10: Verify that default/public providers DO appear
-    const hasDefaultOption = llmOptions.some(
-      (option) =>
-        option.includes("Default") ||
-        option.includes("GPT") ||
-        option.includes("Claude")
-    );
-    expect(hasDefaultOption).toBe(true);
+    const agentEditor = new AgentEditorPage(page);
+    await agentEditor.goto();
+    await agentEditor.expectDefaultModelOptions({
+      visible: [/Default|GPT|Claude/i],
+      hidden: [restrictedProviderName],
+    });
 
     console.log(
       `✓ Verified restricted provider "${restrictedProviderName}" does not appear for unauthorized user`
@@ -120,34 +75,46 @@ test("Restricted LLM Provider should not appear for unauthorized users", async (
   }
 });
 
+test("Agent-restricted provider appears in its default model selector", async ({
+  page,
+}) => {
+  await page.context().clearCookies();
+  await loginAs(page, "admin");
+
+  const client = new OnyxApiClient(page.request);
+  const suffix = Date.now();
+  let agentId: number | null = null;
+  let providerId: number | null = null;
+
+  try {
+    agentId = await client.createAgent(`Restricted Model Agent ${suffix}`);
+    const providerName = `Agent Provider ${suffix}`;
+    providerId = await client.createAgentRestrictedProvider(providerName, [
+      agentId,
+    ]);
+
+    const agentEditor = new AgentEditorPage(page);
+    await agentEditor.gotoEdit(agentId);
+    await agentEditor.expectDefaultModelOptions({
+      visible: [providerName],
+    });
+  } finally {
+    if (providerId) {
+      await client.deleteProvider(providerId);
+    }
+    if (agentId) {
+      await client.deleteAgent(agentId);
+    }
+  }
+});
+
 test("Default Model selector shows available models", async ({ page }) => {
   await page.context().clearCookies();
   await loginAsRandomUser(page);
 
-  // Navigate to the assistant creation page
-  await page.goto("/app/agents/create");
-  await page.waitForLoadState("networkidle");
-
-  // Scroll to the Default Model section
-  const defaultModelSection = page.locator("text=Default Model").first();
-  await defaultModelSection.scrollIntoViewIfNeeded();
-
-  // Open the model selector
-  await getDefaultModelSelector(page).click();
-  await page.waitForSelector('[role="option"]', { state: "visible" });
-
-  // Get all options
-  const options = await page.locator('[role="option"]').allTextContents();
-
-  // Close dropdown
-  await page.keyboard.press("Escape");
-
-  // Verify we have at least the default option
-  expect(options.length).toBeGreaterThan(0);
-
-  // Verify the default/system default option exists
-  const hasDefaultOption = options.some((option) =>
-    option.toLowerCase().includes("default")
-  );
-  expect(hasDefaultOption).toBeTruthy();
+  const agentEditor = new AgentEditorPage(page);
+  await agentEditor.goto();
+  await agentEditor.expectDefaultModelOptions({
+    visible: [/default/i],
+  });
 });

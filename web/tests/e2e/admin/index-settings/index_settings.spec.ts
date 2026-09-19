@@ -1,11 +1,46 @@
 import { expect, test } from "@playwright/test";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import type { Page } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
+import { IndexSettingsPage } from "./IndexSettingsPage";
 
-const INDEX_SETTINGS_URL = "/admin/configuration/index-settings";
+const INDEX_SETTINGS_URL = ADMIN_ROUTES.INDEX_SETTINGS.path;
 const EMBEDDING_PROVIDER_API = "**/api/admin/embedding/embedding-provider**";
 const TEST_EMBEDDING_API = "**/api/admin/embedding/test-embedding";
 const SET_NEW_SETTINGS_API = "**/api/search-settings/set-new-search-settings**";
+const UPDATE_INFERENCE_SETTINGS_API =
+  "**/api/search-settings/update-inference-settings**";
+const CURRENT_SEARCH_SETTINGS_API =
+  "**/api/search-settings/get-current-search-settings**";
+const SECONDARY_SEARCH_SETTINGS_API =
+  "**/api/search-settings/get-secondary-search-settings**";
+const LLM_PROVIDER_API = "**/api/llm/provider**";
+
+interface TestModelConfiguration {
+  id: number | null;
+  name: string;
+  custom_display_name?: string | null;
+  display_name?: string | null;
+  is_visible: boolean;
+  [key: string]: unknown;
+}
+
+interface TestLlmProvider {
+  model_configurations: TestModelConfiguration[];
+  [key: string]: unknown;
+}
+
+interface TestLlmProviderResponse {
+  providers: TestLlmProvider[];
+  [key: string]: unknown;
+}
+
+interface TestSearchSettings {
+  model_name: string;
+  enable_contextual_rag: boolean;
+  contextual_rag_model_configuration_id: number | null;
+  [key: string]: unknown;
+}
 
 // ---------------------------------------------------------------------------
 // API helpers
@@ -38,6 +73,28 @@ async function getCurrentSearchSettings(page: Page) {
   );
   expect(response.ok()).toBeTruthy();
   return response.json();
+}
+
+async function getLlmProviderResponse(
+  page: Page
+): Promise<TestLlmProviderResponse> {
+  const response = await page.request.get("/api/llm/provider");
+  expect(response.ok()).toBeTruthy();
+  return (await response.json()) as TestLlmProviderResponse;
+}
+
+function getVisibleLlmModels(
+  response: TestLlmProviderResponse
+): TestModelConfiguration[] {
+  return response.providers.flatMap((provider) =>
+    provider.model_configurations.filter(
+      (model) => model.is_visible && model.id !== null
+    )
+  );
+}
+
+function modelDisplayName(model: TestModelConfiguration): string {
+  return model.custom_display_name || model.display_name || model.name;
 }
 
 // ---------------------------------------------------------------------------
@@ -241,6 +298,109 @@ test.describe("Index Settings Page @exclusive", () => {
   });
 });
 
+test.describe("Index Settings — contextual LLM updates @exclusive", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.context().clearCookies();
+    await loginAs(page, "admin");
+  });
+
+  test("applies a contextual LLM only to new and updated documents", async ({
+    page,
+  }) => {
+    const current = (await getCurrentSearchSettings(
+      page
+    )) as TestSearchSettings;
+    const llmProviderResponse = await getLlmProviderResponse(page);
+    const models = getVisibleLlmModels(llmProviderResponse);
+    test.skip(models.length === 0, "A visible LLM model is required");
+
+    const currentContextualModel = models[0]!;
+    const nextContextualModel: TestModelConfiguration = {
+      ...currentContextualModel,
+      id: currentContextualModel.id! + 1000000,
+      name: "forward-only-test-model",
+      custom_display_name: "Forward-only test model",
+    };
+    const mockedLlmProviderResponse: TestLlmProviderResponse = {
+      ...llmProviderResponse,
+      providers: llmProviderResponse.providers.map((provider, index) =>
+        index === 0
+          ? {
+              ...provider,
+              model_configurations: [
+                ...provider.model_configurations,
+                nextContextualModel,
+              ],
+            }
+          : provider
+      ),
+    };
+
+    let servedSettings: TestSearchSettings = {
+      ...current,
+      enable_contextual_rag: true,
+      contextual_rag_model_configuration_id: currentContextualModel.id,
+    };
+    let setNewRequestCount = 0;
+
+    await page.route(CURRENT_SEARCH_SETTINGS_API, async (route) => {
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify(servedSettings),
+      });
+    });
+    await page.route(SECONDARY_SEARCH_SETTINGS_API, async (route) => {
+      await route.fulfill({ status: 200, body: "null" });
+    });
+    await page.route(LLM_PROVIDER_API, async (route) => {
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify(mockedLlmProviderResponse),
+      });
+    });
+    await page.route(SET_NEW_SETTINGS_API, async (route) => {
+      setNewRequestCount += 1;
+      await route.fulfill({ status: 200, body: JSON.stringify({ id: 1 }) });
+    });
+
+    const updateBodyPromise = new Promise<Record<string, unknown>>(
+      (resolve) => {
+        void page.route(UPDATE_INFERENCE_SETTINGS_API, async (route) => {
+          const body = JSON.parse(
+            route.request().postData() ?? "{}"
+          ) as TestSearchSettings;
+          servedSettings = body;
+          resolve(body);
+          await route.fulfill({
+            status: 200,
+            body: JSON.stringify({
+              contextual_rag_model_configuration_id:
+                body.contextual_rag_model_configuration_id,
+            }),
+          });
+        });
+      }
+    );
+
+    const indexSettingsPage = new IndexSettingsPage(page);
+    await indexSettingsPage.goto();
+    await indexSettingsPage.stageContextualModel(
+      modelDisplayName(nextContextualModel)
+    );
+    await indexSettingsPage.expectContextualModelActions();
+    await indexSettingsPage.openForwardOnlyConfirmation();
+    await indexSettingsPage.expectForwardOnlyWarning();
+    await indexSettingsPage.confirmForwardOnlyUpdate();
+
+    const body = await updateBodyPromise;
+    expect(body.contextual_rag_model_configuration_id).toBe(
+      nextContextualModel.id
+    );
+    expect(body.model_name).toBe(current.model_name);
+    expect(setNewRequestCount).toBe(0);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Switchover strategy tests
 // ---------------------------------------------------------------------------
@@ -328,28 +488,142 @@ test.describe("Index Settings — switchover strategies @exclusive", () => {
     });
   }
 
-  test("toggling contextual retrieval stages a change and enables Apply & Re-index", async ({
+  test("toggling contextual retrieval without a model stages the change but blocks Apply & Re-index", async ({
     page,
   }) => {
-    let setNewSettingsCalled = false;
-
-    await page.route(SET_NEW_SETTINGS_API, async (route) => {
-      setNewSettingsCalled = true;
-      await route.fulfill({ status: 200, body: JSON.stringify({}) });
-    });
-
     await navigateToIndexSettings(page);
 
     const toggle = page.getByRole("switch", { name: /contextual retrieval/i });
     await expect(toggle).toBeVisible({ timeout: 10000 });
     await toggle.click();
 
-    // Any settings change (including non-model changes) always requires a full re-index
+    // Contextual Retrieval on with no model must stage the change but block the
+    // re-index — the port re-embeds via the LLM and would fail without one.
+    await expect(
+      page.getByText(/Select a Contextual Retrieval LLM/i)
+    ).toBeVisible({ timeout: 5000 });
+
+    // Apply & Re-index renders only when dirty, so its presence proves the change staged.
     const applyButton = page.getByRole("button", { name: "Apply & Re-index" });
     await expect(applyButton).toBeVisible({ timeout: 5000 });
-    await expect(applyButton).toBeEnabled();
-    await applyButton.click();
-
-    await expect.poll(() => setNewSettingsCalled, { timeout: 5000 }).toBe(true);
+    await expect(applyButton).toBeDisabled();
   });
+});
+
+// ---------------------------------------------------------------------------
+// Empty-registry cloud providers (LiteLLM / Azure)
+//
+// These providers ship no pre-registered models, so their connect modal
+// collects the model spec (name + dimension) itself. Regression coverage for
+// the bug where that spec was dropped after the provider row was saved: the
+// model was never staged (so no search-settings row was ever created), and
+// even when staged it was misresolved as self-hosted (provider_type=null),
+// bypassing the saved cloud credentials. Both must reach
+// set-new-search-settings with the typed model AND the correct provider_type.
+// ---------------------------------------------------------------------------
+
+interface EmptyRegistryProviderCase {
+  providerType: string;
+  displayName: string;
+  // Fills the credential fields unique to this provider via the page object
+  // (the shared model-spec fields are filled by the test body).
+  fillCredentials: (indexSettings: IndexSettingsPage) => Promise<void>;
+}
+
+const EMPTY_REGISTRY_PROVIDERS: EmptyRegistryProviderCase[] = [
+  {
+    providerType: "litellm",
+    displayName: "LiteLLM",
+    fillCredentials: (indexSettings) =>
+      indexSettings.fillLiteLLMCredentials({
+        apiBaseUrl: "https://proxy.example.com",
+        apiKey: "sk-test-key",
+      }),
+  },
+  {
+    providerType: "azure",
+    displayName: "Azure",
+    fillCredentials: (indexSettings) =>
+      indexSettings.fillAzureCredentials({
+        targetUrl: "https://res.openai.azure.com/openai/v1/embeddings",
+        apiKey: "az-test-key",
+        apiVersion: "2023-05-15",
+        deploymentName: "my-deployment",
+      }),
+  },
+];
+
+test.describe("Index Settings — empty-registry providers @exclusive", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.context().clearCookies();
+    await loginAs(page, "admin");
+  });
+
+  for (const {
+    providerType,
+    displayName,
+    fillCredentials,
+  } of EMPTY_REGISTRY_PROVIDERS) {
+    test(`connecting ${displayName} stages its model and applies with provider_type="${providerType}"`, async ({
+      page,
+    }) => {
+      // Stub the credential test + save so no real endpoint/key is needed.
+      await page.route(TEST_EMBEDDING_API, async (route) => {
+        await route.fulfill({ status: 200, body: JSON.stringify({}) });
+      });
+      await page.route(EMBEDDING_PROVIDER_API, async (route) => {
+        const method = route.request().method();
+        if (method === "PUT") {
+          await route.fulfill({
+            status: 200,
+            body: JSON.stringify({ provider_type: providerType }),
+          });
+        } else if (method === "GET") {
+          await route.fulfill({ status: 200, body: JSON.stringify([]) });
+        } else {
+          await route.continue();
+        }
+      });
+
+      // Capture the search-settings request body — this is what the bug broke.
+      const bodyPromise = new Promise<Record<string, unknown>>((resolve) => {
+        void page.route(SET_NEW_SETTINGS_API, async (route) => {
+          resolve(
+            JSON.parse(route.request().postData() ?? "{}") as Record<
+              string,
+              unknown
+            >
+          );
+          await route.fulfill({ status: 200, body: JSON.stringify({}) });
+        });
+      });
+
+      const indexSettings = new IndexSettingsPage(page);
+      await indexSettings.goto();
+      await indexSettings.expandModelPicker();
+      await indexSettings.switchToCloudTab();
+
+      // Empty-registry providers render an "Add Configuration" card instead of
+      // model cards. Open it, fill the credentials + model spec, and connect.
+      await indexSettings.openProviderSetup(displayName);
+      await fillCredentials(indexSettings);
+      await indexSettings.fillModelSpec({
+        modelName: "my-embed-model",
+        modelDim: 1024,
+      });
+      await indexSettings.submitProviderSetup();
+
+      // The just-defined model must be staged — Apply & Re-index appears.
+      await indexSettings.expectModelStaged();
+      await indexSettings.applyReindex();
+
+      const body = await bodyPromise;
+      expect(body.model_name).toBe("my-embed-model");
+      expect(Number(body.model_dim)).toBe(1024);
+      // The core regression: the model is bound to its cloud provider, NOT
+      // sent as provider_type=null (which the backend treats as self-hosted
+      // and would ignore the credentials we just saved).
+      expect(body.provider_type).toBe(providerType);
+    });
+  }
 });

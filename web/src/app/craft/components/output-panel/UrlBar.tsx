@@ -1,9 +1,9 @@
 "use client";
 
 import React from "react";
-import { cn } from "@opal/utils";
-import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
+import { useTranslations } from "next-intl";
+import { cn, copyText } from "@opal/utils";
+import { Text, Button } from "@opal/components";
 import {
   SvgDownloadCloud,
   SvgLoader,
@@ -11,6 +11,7 @@ import {
   SvgArrowRight,
   SvgExternalLink,
   SvgRevert,
+  SvgCheck,
 } from "@opal/icons";
 import { IconProps } from "@opal/types";
 import { Tooltip } from "@opal/components";
@@ -40,6 +41,8 @@ export interface UrlBarProps {
   isDownloading?: boolean;
   /** Optional refresh callback — shows a refresh icon at the right edge of the URL pill */
   onRefresh?: () => void;
+  /** Whether the current view is refreshing. */
+  isRefreshing?: boolean;
   /** Session ID — when present with previewUrl, shows share button for webapp */
   sessionId?: string;
   /** Sharing scope for the webapp (used when sessionId + previewUrl) */
@@ -64,19 +67,60 @@ export default function UrlBar({
   onForward,
   previewUrl,
   onDownloadRaw,
-  downloadRawTooltip = "Download file",
+  downloadRawTooltip,
   onDownload,
   isDownloading = false,
   onRefresh,
+  isRefreshing = false,
   sessionId,
   sharingScope = "private",
   onScopeChange,
 }: UrlBarProps) {
+  const t = useTranslations("craft.urlBar");
+  const rawTooltip = downloadRawTooltip ?? t("downloadFile.tooltip");
+  const [copiedUrl, setCopiedUrl] = React.useState<string | null>(null);
+  const [copyFeedbackKey, setCopyFeedbackKey] = React.useState(0);
+  const isDisplayUrlCopyable = React.useMemo(() => {
+    try {
+      const { protocol } = new URL(displayUrl);
+      return protocol === "http:" || protocol === "https:";
+    } catch {
+      return false;
+    }
+  }, [displayUrl]);
+  const isUrlCopied = copiedUrl === displayUrl;
+
+  React.useEffect(() => {
+    setCopiedUrl(null);
+  }, [displayUrl]);
+
   const handleOpenInNewTab = () => {
     if (previewUrl) {
       window.open(previewUrl, "_blank", "noopener,noreferrer");
     }
   };
+
+  const handleCopyUrl = async () => {
+    if (!isDisplayUrlCopyable) {
+      return;
+    }
+
+    try {
+      await copyText(displayUrl);
+      setCopiedUrl(displayUrl);
+      setCopyFeedbackKey((key) => key + 1);
+    } catch (err) {
+      console.error("Failed to copy URL:", err);
+      setCopiedUrl(null);
+    }
+  };
+
+  const urlText = (
+    // dir="ltr": URL structure never reorders, even in an RTL locale.
+    <Text as="p" dir="ltr" font="secondary-body" color="text-03" maxLines={1}>
+      {displayUrl}
+    </Text>
+  );
 
   return (
     <div className="px-3 pb-2">
@@ -93,7 +137,7 @@ export default function UrlBar({
                   ? "hover:bg-background-tint-03 text-text-03"
                   : "text-text-02 cursor-not-allowed"
               )}
-              aria-label="Go back"
+              aria-label={t("back.ariaLabel")}
             >
               <SvgArrowLeft size={16} />
             </button>
@@ -106,30 +150,42 @@ export default function UrlBar({
                   ? "hover:bg-background-tint-03 text-text-03"
                   : "text-text-02 cursor-not-allowed"
               )}
-              aria-label="Go forward"
+              aria-label={t("forward.ariaLabel")}
             >
               <SvgArrowRight size={16} />
             </button>
             {onRefresh && (
               <button
                 onClick={onRefresh}
-                className="p-1.5 rounded-full transition-colors hover:bg-background-tint-03 text-text-03"
-                aria-label="Refresh"
+                disabled={isRefreshing}
+                className={cn(
+                  "p-1.5 rounded-full transition-colors text-text-03",
+                  isRefreshing ? "cursor-wait" : "hover:bg-background-tint-03"
+                )}
+                aria-label={t("refresh.ariaLabel")}
+                aria-busy={isRefreshing}
               >
-                <SvgRevert size={14} className="-scale-x-100" />
+                {isRefreshing ? (
+                  <SpinningLoader size={14} />
+                ) : (
+                  <SvgRevert size={14} className="-scale-x-100" />
+                )}
               </button>
             )}
           </div>
         )}
         {/* URL display */}
-        <div className="flex-1 min-w-0 flex items-center px-3 py-1.5 bg-background-tint-02 rounded-full gap-2 min-h-9">
+        <div
+          data-testid="url-bar-pill"
+          className="flex-1 min-w-0 flex items-center px-3 py-1.5 bg-background-tint-02 rounded-full gap-2 min-h-9"
+        >
           {/* Download raw file button */}
           {onDownloadRaw && (
-            <Tooltip tooltip={downloadRawTooltip} delayDuration={200}>
+            <Tooltip tooltip={rawTooltip} delayDuration={200}>
               <button
                 onClick={onDownloadRaw}
                 className="shrink-0 p-0.5 rounded-sm transition-colors hover:bg-background-tint-03 text-text-03"
-                aria-label={downloadRawTooltip}
+                aria-label={rawTooltip}
               >
                 <SvgDownloadCloud size={14} />
               </button>
@@ -137,19 +193,55 @@ export default function UrlBar({
           )}
           {/* Open in new tab button - only shown for Preview tab with valid URL */}
           {previewUrl && (
-            <Tooltip tooltip="open in a new tab" delayDuration={200}>
+            <Tooltip tooltip={t("openInNewTab.tooltip")} delayDuration={200}>
               <button
                 onClick={handleOpenInNewTab}
                 className="shrink-0 p-0.5 rounded-sm transition-colors hover:bg-background-tint-03 text-text-03"
-                aria-label="open in a new tab"
+                aria-label={t("openInNewTab.tooltip")}
+                data-copy-state={isUrlCopied ? "copied" : "idle"}
               >
-                <SvgExternalLink size={14} />
+                {isUrlCopied ? (
+                  <SvgCheck
+                    key={`copied-${copyFeedbackKey}`}
+                    size={14}
+                    className="animate-in fade-in-0 zoom-in-95 duration-500 stroke-status-success-05"
+                    onAnimationEnd={() => {
+                      setCopiedUrl((currentCopiedUrl) =>
+                        currentCopiedUrl === displayUrl
+                          ? null
+                          : currentCopiedUrl
+                      );
+                    }}
+                  />
+                ) : (
+                  <SvgExternalLink
+                    key="open"
+                    size={14}
+                    className="transition-transform duration-200"
+                  />
+                )}
               </button>
             </Tooltip>
           )}
-          <Text secondaryBody text03 className="min-w-0 flex-1 truncate">
-            {displayUrl}
-          </Text>
+          <div
+            data-testid="url-text-wrapper"
+            className="min-w-0 flex-1 overflow-hidden"
+          >
+            <Tooltip tooltip={displayUrl} side="bottom" delayDuration={200}>
+              {isDisplayUrlCopyable ? (
+                <button
+                  type="button"
+                  onClick={handleCopyUrl}
+                  className="block w-full min-w-0 cursor-pointer text-start focus:outline-hidden"
+                  aria-label={t("copyUrl.ariaLabel", { url: displayUrl })}
+                >
+                  {urlText}
+                </button>
+              ) : (
+                <div className="block w-full min-w-0 text-start">{urlText}</div>
+              )}
+            </Tooltip>
+          </div>
         </div>
         {/* Export button — shown for downloadable file previews (e.g. markdown → docx) */}
         {onDownload && (
@@ -160,7 +252,7 @@ export default function UrlBar({
             icon={isDownloading ? SpinningLoader : SvgExternalLink}
             onClick={onDownload}
           >
-            {isDownloading ? "Exporting..." : "Export to .docx"}
+            {isDownloading ? t("export.inProgress") : t("export.button")}
           </Button>
         )}
         {/* Share button — shown when webapp preview is active */}

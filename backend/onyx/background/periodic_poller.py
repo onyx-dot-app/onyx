@@ -15,8 +15,7 @@ that runs from the API server process.  Two responsibilities:
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
-from dataclasses import field
+from dataclasses import dataclass, field
 
 from onyx.utils.logger import setup_logger
 
@@ -65,11 +64,23 @@ def _run_cache_cleanup() -> None:
     cleanup_expired_cache_entries()
 
 
+def _run_license_reclaim() -> None:
+    from onyx.utils.variable_functionality import fetch_versioned_implementation
+    from shared_configs.contextvars import get_current_tenant_id
+
+    fetch_versioned_implementation(
+        "onyx.background.celery.tasks.license_reclaim.tasks",
+        "reclaim_license_task",
+    )(tenant_id=get_current_tenant_id())
+
+
 def _run_scheduled_eval() -> None:
-    from onyx.configs.app_configs import BRAINTRUST_API_KEY
-    from onyx.configs.app_configs import SCHEDULED_EVAL_DATASET_NAMES
-    from onyx.configs.app_configs import SCHEDULED_EVAL_PERMISSIONS_EMAIL
-    from onyx.configs.app_configs import SCHEDULED_EVAL_PROJECT
+    from onyx.configs.app_configs import (
+        BRAINTRUST_API_KEY,
+        SCHEDULED_EVAL_DATASET_NAMES,
+        SCHEDULED_EVAL_PERMISSIONS_EMAIL,
+        SCHEDULED_EVAL_PROJECT,
+    )
 
     if not all(
         [
@@ -81,8 +92,7 @@ def _run_scheduled_eval() -> None:
     ):
         return
 
-    from datetime import datetime
-    from datetime import timezone
+    from datetime import datetime, timezone
 
     from onyx.evals.eval import run_eval
     from onyx.evals.models import EvalConfigurationOptions
@@ -107,14 +117,19 @@ def _run_scheduled_eval() -> None:
 
 
 _CACHE_CLEANUP_INTERVAL_SECONDS = 300
+# The lead-up reclaim rate. No beat runs here, so this thread sets the cadence.
+_LICENSE_RECLAIM_INTERVAL_SECONDS = 6 * 3600
 
 
 def _build_periodic_tasks() -> list[_PeriodicTaskDef]:
     from onyx.cache.interface import CacheBackendType
-    from onyx.configs.app_configs import AUTO_LLM_CONFIG_URL
-    from onyx.configs.app_configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS
-    from onyx.configs.app_configs import CACHE_BACKEND
-    from onyx.configs.app_configs import SCHEDULED_EVAL_DATASET_NAMES
+    from onyx.configs.app_configs import (
+        AUTO_LLM_CONFIG_URL,
+        AUTO_LLM_UPDATE_INTERVAL_SECONDS,
+        CACHE_BACKEND,
+        SCHEDULED_EVAL_DATASET_NAMES,
+    )
+    from onyx.utils.variable_functionality import global_version
 
     tasks: list[_PeriodicTaskDef] = []
     if CACHE_BACKEND == CacheBackendType.POSTGRES:
@@ -144,6 +159,17 @@ def _build_periodic_tasks() -> list[_PeriodicTaskDef]:
                 run_fn=_run_scheduled_eval,
             )
         )
+    # EE-only: no license exists elsewhere. This deployment runs no Celery
+    # worker, so neither beat nor the point-of-use scheduler can renew.
+    if global_version.is_ee_version():
+        tasks.append(
+            _PeriodicTaskDef(
+                name="license-reclaim",
+                interval_seconds=_LICENSE_RECLAIM_INTERVAL_SECONDS,
+                lock_id=PERIODIC_TASK_LOCK_BASE + 3,
+                run_fn=_run_license_reclaim,
+            )
+        )
     return tasks
 
 
@@ -159,8 +185,7 @@ def _try_claim_task(task_def: _PeriodicTaskDef) -> bool:
     ``KVStore`` timestamp for cross-instance dedup.  The DB session is held
     only for this brief claim transaction, not during task execution.
     """
-    from datetime import datetime
-    from datetime import timezone
+    from datetime import datetime, timezone
 
     from sqlalchemy import text
 
@@ -218,9 +243,11 @@ def _try_run_periodic_task(task_def: _PeriodicTaskDef) -> None:
 
 
 def _run_drain_loops(tenant_id: str) -> None:
-    from onyx.background.task_utils import drain_delete_loop
-    from onyx.background.task_utils import drain_processing_loop
-    from onyx.background.task_utils import drain_project_sync_loop
+    from onyx.background.task_utils import (
+        drain_delete_loop,
+        drain_processing_loop,
+        drain_project_sync_loop,
+    )
 
     drain_processing_loop(tenant_id)
     drain_delete_loop(tenant_id)

@@ -4,16 +4,12 @@ from redis.exceptions import RedisError
 from sqlalchemy.exc import SQLAlchemyError
 
 from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
-from ee.onyx.db.license import get_cached_license_metadata
-from ee.onyx.db.license import refresh_license_cache
-from ee.onyx.utils.tier import get_tier
-from ee.onyx.utils.tier import tier_from_license_metadata
+from ee.onyx.db.license import get_cached_license_metadata, refresh_license_cache
+from ee.onyx.utils.tier import get_tier, tier_from_license_metadata
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.server.settings.models import ApplicationStatus
-from onyx.server.settings.models import Settings
-from onyx.server.settings.models import Tier
+from onyx.server.settings.models import ApplicationStatus, Settings, Tier
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import MULTI_TENANT

@@ -2,30 +2,32 @@ import csv
 import io
 from datetime import datetime
 
-from celery import shared_task
-from celery import Task
+from celery import Task, shared_task
 
-from ee.onyx.server.query_history.api import fetch_and_process_chat_session_history
-from ee.onyx.server.query_history.api import ONYX_ANONYMIZED_EMAIL
 from ee.onyx.server.query_history.models import QuestionAnswerPairSnapshot
 from onyx.background.task_utils import construct_query_history_report_name
 from onyx.configs.app_configs import JOB_TIMEOUT
-from onyx.configs.constants import FileOrigin
-from onyx.configs.constants import FileType
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import QueryHistoryType
+from onyx.configs.constants import (
+    FileOrigin,
+    FileType,
+    OnyxCeleryTask,
+    QueryHistoryType,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.tasks import delete_task_with_id
-from onyx.db.tasks import mark_task_as_finished_with_id
-from onyx.db.tasks import mark_task_as_started_with_id
+from onyx.db.tasks import (
+    delete_task_with_id,
+    mark_task_as_finished_with_id,
+    mark_task_as_started_with_id,
+)
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.settings.store import load_settings
+from onyx.utils.csv_utils import sanitize_csv_row
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.EXPORT_QUERY_HISTORY_TASK,
     ignore_result=True,
     soft_time_limit=JOB_TIMEOUT,
@@ -41,6 +43,11 @@ def export_query_history_task(
     # Need to include the tenant_id since the TenantAwareTask needs this
     tenant_id: str,  # noqa: ARG001
 ) -> None:
+    from ee.onyx.server.query_history.api import (
+        ONYX_ANONYMIZED_EMAIL,
+        fetch_and_process_chat_session_history,
+    )
+
     if not self.request.id:
         raise RuntimeError("No task id defined for this task; cannot identify it")
 
@@ -71,7 +78,9 @@ def export_query_history_task(
                     snapshot.user_email = ONYX_ANONYMIZED_EMAIL
 
                 writer.writerows(
-                    qa_pair.to_json()
+                    # Sanitize to prevent CSV/formula injection against
+                    # whoever opens the export in a spreadsheet (ON-008).
+                    sanitize_csv_row(qa_pair.to_json())
                     for qa_pair in QuestionAnswerPairSnapshot.from_chat_session_snapshot(
                         snapshot
                     )

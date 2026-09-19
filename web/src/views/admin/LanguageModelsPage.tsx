@@ -1,0 +1,610 @@
+"use client";
+
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
+import { useState, useMemo } from "react";
+import { useTranslations } from "next-intl";
+import { useSWRConfig } from "swr";
+import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
+import { PageLoader } from "@opal/layouts";
+import { Content, ContentAction, InputHorizontal, toast } from "@opal/layouts";
+import {
+  Button,
+  Divider,
+  MessageCard,
+  SelectCard,
+  InputSwitch,
+  Text,
+  Card,
+} from "@opal/components";
+import { Hoverable, Disabled } from "@opal/core";
+import { SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
+import { SettingsLayouts } from "@opal/layouts";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import * as GeneralLayouts from "@/layouts/general-layouts";
+import { getProvider } from "@/lib/languageModels";
+import {
+  refreshLlmProviderCaches,
+  setDefaultLlmModelAndRefresh,
+} from "@/lib/languageModels/cache";
+import { deleteLlmProvider } from "@/lib/languageModels/svc";
+import { buildLlmOptions, groupLlmOptions } from "@/lib/languageModels/options";
+import { findProviderOwningModelConfig } from "@/lib/languageModels/utils";
+import { useSettings } from "@/lib/settings/hooks";
+import { updateAdminSettings } from "@/lib/settings/svc";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import ModelSelector from "@/sections/model-selector/ModelSelector";
+import { ConfirmationModalLayout } from "@opal/layouts";
+import { useCreateModal } from "@opal/components";
+import { LLMProviderName, LLMProviderView } from "@/lib/languageModels/types";
+import { Section } from "@/layouts/general-layouts";
+import { markdown } from "@opal/utils";
+import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
+import CostOverridesPanel from "@/views/admin/CostOverridesPanel";
+
+const route = ADMIN_ROUTES.LLM_MODELS;
+
+function providerDisplayName(provider: LLMProviderView): string {
+  return provider.name || getProvider(provider.provider, provider).productName;
+}
+
+// ============================================================================
+// Provider grouping (keyed by provider name from the API)
+// ============================================================================
+
+// The "Add Provider" area is split into labeled groups. Provider names must
+// match the backend's WELL_KNOWN_PROVIDER_NAMES (minus any that lack a
+// dedicated modal); order within each group controls display order.
+interface ProviderGroup {
+  // Stable React key, independent of the translated title.
+  id: string;
+  title: string;
+  description?: string;
+  // Emphasized (main-content) header vs. a lighter secondary sub-header.
+  emphasis?: boolean;
+  providerNames: string[];
+  // Append the custom-provider card to this group.
+  includeCustom?: boolean;
+}
+
+// ============================================================================
+// ExistingProviderCard — card for configured (existing) providers
+// ============================================================================
+
+interface ExistingProviderCardProps {
+  provider: LLMProviderView;
+  isDefault: boolean;
+  isLastProvider: boolean;
+}
+
+function ExistingProviderCard({
+  provider,
+  isDefault,
+  isLastProvider,
+}: ExistingProviderCardProps) {
+  const t = useTranslations("admin.languageModels");
+  const { mutate } = useSWRConfig();
+  const [isOpen, setIsOpen] = useState(false);
+  const deleteModal = useCreateModal();
+
+  const handleDelete = async () => {
+    try {
+      await deleteLlmProvider(provider.id, isLastProvider);
+      await refreshLlmProviderCaches(mutate);
+      deleteModal.toggle(false);
+      toast.success(t("toasts.providerDeleted"));
+    } catch (e) {
+      const message = e instanceof Error ? e.message : t("toasts.unknownError");
+      toast.error(t("toasts.providerDeleteFailed", { message }));
+    }
+  };
+
+  const { icon, companyName, Modal } = getProvider(provider.provider, provider);
+
+  return (
+    <>
+      {isOpen && (
+        <Modal existingLlmProvider={provider} onOpenChange={setIsOpen} />
+      )}
+
+      {deleteModal.isOpen && (
+        <ConfirmationModalLayout
+          icon={SvgTrash}
+          title={markdown(
+            t("deleteModal.title", { provider: providerDisplayName(provider) })
+          )}
+          onClose={() => deleteModal.toggle(false)}
+          submit={
+            <Button
+              variant="danger"
+              onClick={handleDelete}
+              disabled={isDefault && !isLastProvider}
+            >
+              {t("deleteModal.submit.label")}
+            </Button>
+          }
+        >
+          <Section alignItems="start" gap={2}>
+            {isDefault && !isLastProvider ? (
+              <Text font="main-ui-body" color="text-03">
+                {t("deleteModal.defaultProviderWarning")}
+              </Text>
+            ) : (
+              <>
+                <Text font="main-ui-body" color="text-03">
+                  {markdown(
+                    t("deleteModal.description", {
+                      provider: providerDisplayName(provider),
+                    })
+                  )}
+                </Text>
+                {isLastProvider && (
+                  <Text font="main-ui-body" color="text-03">
+                    {t("deleteModal.lastProviderNote")}
+                  </Text>
+                )}
+              </>
+            )}
+          </Section>
+        </ConfirmationModalLayout>
+      )}
+
+      <Hoverable.Root
+        group="ExistingProviderCard"
+        interaction={deleteModal.isOpen ? "hover" : "rest"}
+      >
+        <SelectCard
+          state="filled"
+          padding={2}
+          rounding={4}
+          // A name to select the card by. The Edit and Delete buttons inside
+          // are labelled "Edit <name>" / "Delete <name>", so an exact match on
+          // the bare name reaches the card alone.
+          aria-label={providerDisplayName(provider)}
+          onClick={() => setIsOpen(true)}
+        >
+          <ContentAction
+            icon={icon}
+            title={providerDisplayName(provider)}
+            description={companyName}
+            sizePreset="main-ui"
+            variant="section"
+            padding={2}
+            tag={
+              isDefault
+                ? { title: t("providerCard.defaultTag.label"), color: "blue" }
+                : undefined
+            }
+            rightChildren={
+              <div className="flex flex-row">
+                <Hoverable.Item
+                  group="ExistingProviderCard"
+                  variant="appear-on-hover"
+                >
+                  <Button
+                    icon={SvgTrash}
+                    prominence="tertiary"
+                    aria-label={t("providerCard.deleteButton.ariaLabel", {
+                      provider: providerDisplayName(provider),
+                    })}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteModal.toggle(true);
+                    }}
+                  />
+                </Hoverable.Item>
+                <Button
+                  icon={SvgSettings}
+                  prominence="tertiary"
+                  aria-label={t("providerCard.editButton.ariaLabel", {
+                    provider: providerDisplayName(provider),
+                  })}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsOpen(true);
+                  }}
+                />
+              </div>
+            }
+          />
+        </SelectCard>
+      </Hoverable.Root>
+    </>
+  );
+}
+
+// ============================================================================
+// NewProviderCard — card for the "Add Provider" list
+// ============================================================================
+
+interface NewProviderCardProps {
+  providerName: string;
+  isFirstProvider: boolean;
+}
+
+function NewProviderCard({
+  providerName,
+  isFirstProvider,
+}: NewProviderCardProps) {
+  const t = useTranslations("admin.languageModels");
+  const [isOpen, setIsOpen] = useState(false);
+  const { icon, productName, companyName, Modal } = getProvider(providerName);
+
+  return (
+    <SelectCard
+      state="empty"
+      padding={2}
+      rounding={4}
+      // A name to select the card by. It carries the company as well as the
+      // product, because the card reads "GPT" with "OpenAI" underneath and
+      // callers look for the company.
+      aria-label={t("newProviderCard.ariaLabel", {
+        company: companyName,
+        product: productName,
+      })}
+      onClick={() => setIsOpen(true)}
+    >
+      <ContentAction
+        icon={icon}
+        title={productName}
+        description={companyName}
+        sizePreset="main-ui"
+        variant="section"
+        padding={2}
+        rightChildren={
+          <Button
+            rightIcon={SvgArrowExchange}
+            prominence="tertiary"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsOpen(true);
+            }}
+          >
+            {t("newProviderCard.connectButton.label")}
+          </Button>
+        }
+      />
+      {isOpen && (
+        <Modal shouldMarkAsDefault={isFirstProvider} onOpenChange={setIsOpen} />
+      )}
+    </SelectCard>
+  );
+}
+
+// ============================================================================
+// NewCustomProviderCard — card for adding a custom LLM provider
+// ============================================================================
+
+interface NewCustomProviderCardProps {
+  isFirstProvider: boolean;
+}
+
+function NewCustomProviderCard({
+  isFirstProvider,
+}: NewCustomProviderCardProps) {
+  const t = useTranslations("admin.languageModels");
+  const [isOpen, setIsOpen] = useState(false);
+  const { icon, productName, companyName, Modal } = getProvider("custom");
+
+  return (
+    <>
+      {isOpen && (
+        <Modal shouldMarkAsDefault={isFirstProvider} onOpenChange={setIsOpen} />
+      )}
+
+      <SelectCard
+        state="empty"
+        padding={2}
+        rounding={4}
+        onClick={() => setIsOpen(true)}
+      >
+        <ContentAction
+          icon={icon}
+          title={productName}
+          description={companyName}
+          sizePreset="main-ui"
+          variant="section"
+          padding={2}
+          rightChildren={
+            <Button
+              rightIcon={SvgArrowExchange}
+              prominence="tertiary"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsOpen(true);
+              }}
+            >
+              {t("newCustomProviderCard.setUpButton.label")}
+            </Button>
+          }
+        />
+      </SelectCard>
+    </>
+  );
+}
+
+// ============================================================================
+// LanguageModelsPage — main page component
+// ============================================================================
+
+export default function LanguageModelsPage() {
+  const t = useTranslations("admin.languageModels");
+  const adminRouteTitle = useAdminRouteTitle();
+  const { mutate } = useSWRConfig();
+  const settings = useSettings();
+  // Optimistic value while the save is in flight. It also locks the switch so
+  // a second click cannot resubmit the stale stored value.
+  const [pendingHideGrouping, setPendingHideGrouping] = useState<
+    boolean | null
+  >(null);
+  const { llmProviders: existingLlmProviders, defaultText } =
+    useAdminLLMProviders();
+  const isConfigurationDisabled = usePHFeatureFlag(
+    PHFeatureFlag.LANGUAGE_MODEL_CONFIGURATION_DISABLED
+  );
+
+  // Hide the toggle unless the selector would group: several providers, or
+  // one aggregator provider whose models span several vendors.
+  const hasProviderGrouping = useMemo(
+    () => groupLlmOptions(buildLlmOptions(existingLlmProviders)).length > 1,
+    [existingLlmProviders]
+  );
+
+  // Resolve the current default to a model_configuration_id for ModelSelector
+  const defaultModelConfigId = useMemo(() => {
+    if (!defaultText || !existingLlmProviders) return null;
+    const provider = existingLlmProviders.find(
+      (p) => p.id === defaultText.provider_id
+    );
+    return (
+      provider?.model_configurations.find(
+        (m) => m.name === defaultText.model_name
+      )?.id ?? null
+    );
+  }, [defaultText, existingLlmProviders]);
+
+  const providerGroups = useMemo<ProviderGroup[]>(
+    () => [
+      {
+        id: "addProvider",
+        title: t("groups.addProvider.title"),
+        description: t("groups.addProvider.description"),
+        emphasis: true,
+        providerNames: [
+          LLMProviderName.OPENAI,
+          LLMProviderName.ANTHROPIC,
+          LLMProviderName.VERTEX_AI,
+          LLMProviderName.BEDROCK,
+          LLMProviderName.AZURE,
+        ],
+      },
+      {
+        id: "gateways",
+        title: t("groups.gateways.title"),
+        providerNames: [
+          LLMProviderName.OPENROUTER,
+          LLMProviderName.LITELLM_PROXY,
+          LLMProviderName.PORTKEY,
+          LLMProviderName.NEBIUS_TOKENFACTORY,
+          LLMProviderName.BIFROST,
+        ],
+      },
+      {
+        id: "selfHosted",
+        title: t("groups.selfHosted.title"),
+        providerNames: [
+          LLMProviderName.OLLAMA_CHAT,
+          LLMProviderName.LM_STUDIO,
+          LLMProviderName.OPENAI_COMPATIBLE,
+        ],
+        includeCustom: true,
+      },
+    ],
+    [t]
+  );
+
+  if (!existingLlmProviders) {
+    return <PageLoader />;
+  }
+
+  const hasProviders = existingLlmProviders.length > 0;
+  const isFirstProvider = !hasProviders;
+
+  // Pre-sort providers so the default appears first
+  const sortedProviders = [...existingLlmProviders].sort((a, b) => {
+    const aIsDefault = defaultText?.provider_id === a.id;
+    const bIsDefault = defaultText?.provider_id === b.id;
+    if (aIsDefault && !bIsDefault) return -1;
+    if (!aIsDefault && bIsDefault) return 1;
+    return 0;
+  });
+
+  // Pre-filter to providers that have at least one visible model
+  const providersWithVisibleModels = existingLlmProviders
+    .map((provider) => ({
+      provider,
+      visibleModels: provider.model_configurations.filter((m) => m.is_visible),
+    }))
+    .filter(({ visibleModels }) => visibleModels.length > 0);
+
+  // Default model logic — use the global default from the API response
+  const currentDefaultValue = defaultText
+    ? `${defaultText.provider_id}:${defaultText.model_name}`
+    : undefined;
+
+  async function handleDefaultModelChange(compositeValue: string) {
+    const separatorIndex = compositeValue.indexOf(":");
+    const providerId = Number(compositeValue.slice(0, separatorIndex));
+    const modelName = compositeValue.slice(separatorIndex + 1);
+    await setDefaultLlmModelAndRefresh(providerId, modelName, mutate);
+  }
+
+  async function handleHideProviderGroupingChange(checked: boolean) {
+    if (pendingHideGrouping !== null) return;
+    setPendingHideGrouping(checked);
+    try {
+      await updateAdminSettings({ hide_provider_grouping: checked });
+      await mutate(SWR_KEYS.settings);
+      toast.success(t("toasts.settingsUpdated"));
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : t("toasts.settingsUpdateFailed")
+      );
+    } finally {
+      setPendingHideGrouping(null);
+    }
+  }
+
+  return (
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header
+        icon={route.icon}
+        title={adminRouteTitle(route)}
+        divider
+      />
+
+      <SettingsLayouts.Body>
+        {hasProviders ? (
+          <Card border="solid" rounding={4}>
+            <Section alignItems="stretch">
+              <InputHorizontal
+                title={t("defaultModel.title")}
+                description={t("defaultModel.description")}
+                center
+                withLabel
+              >
+                <ModelSelector
+                  value={defaultModelConfigId}
+                  onChange={(opt) => {
+                    // Keyed on the model configuration id. Matching on provider
+                    // type plus display name picks the first of several
+                    // same-named providers — and nameless providers are the
+                    // common case, so `!p.name && !opt.name` matched any of
+                    // them. The backend accepts the wrong provider whenever it
+                    // also hosts a model of that name, so this failed silently.
+                    const provider = findProviderOwningModelConfig(
+                      existingLlmProviders,
+                      opt.modelConfigurationId
+                    );
+                    if (provider) {
+                      void handleDefaultModelChange(
+                        `${provider.id}:${opt.modelName}`
+                      );
+                    }
+                  }}
+                  side="bottom"
+                />
+              </InputHorizontal>
+              {hasProviderGrouping && (
+                <InputHorizontal
+                  title={t("hideProviderGrouping.title")}
+                  description={t("hideProviderGrouping.description")}
+                  withLabel
+                >
+                  <InputSwitch
+                    checked={
+                      pendingHideGrouping ??
+                      settings.hide_provider_grouping ??
+                      false
+                    }
+                    disabled={pendingHideGrouping !== null}
+                    onCheckedChange={(checked) => {
+                      void handleHideProviderGroupingChange(checked);
+                    }}
+                  />
+                </InputHorizontal>
+              )}
+            </Section>
+          </Card>
+        ) : (
+          <MessageCard variant="info" title={t("noProviders.title")} />
+        )}
+
+        {/* ── Available Providers (only when providers exist) ── */}
+        {hasProviders && (
+          <>
+            <GeneralLayouts.Section
+              gap={3}
+              height="fit"
+              alignItems="stretch"
+              justifyContent="start"
+            >
+              <Content
+                title={t("availableProviders.title")}
+                sizePreset="main-content"
+                variant="section"
+              />
+
+              <div className="flex flex-col gap-2">
+                {sortedProviders.map((provider) => (
+                  <ExistingProviderCard
+                    key={provider.id}
+                    provider={provider}
+                    isDefault={defaultText?.provider_id === provider.id}
+                    isLastProvider={sortedProviders.length === 1}
+                  />
+                ))}
+              </div>
+            </GeneralLayouts.Section>
+
+            <Divider paddingParallel={0} paddingPerpendicular={0} />
+          </>
+        )}
+
+        {/* ── LLM configuration disablement notice ── */}
+        {isConfigurationDisabled && (
+          <MessageCard
+            title={t("configurationDisabled.title")}
+            description={t("configurationDisabled.description")}
+            headerPadding={1}
+          />
+        )}
+
+        {/* ── Add Provider groups (always visible) ── */}
+        <Disabled disabled={isConfigurationDisabled}>
+          <div className="@container/providercards flex flex-col gap-8">
+            {providerGroups.map((group) => (
+              <GeneralLayouts.Section
+                key={group.id}
+                gap={3}
+                height="fit"
+                alignItems="stretch"
+                justifyContent="start"
+              >
+                {group.emphasis ? (
+                  <Content
+                    title={group.title}
+                    description={group.description}
+                    sizePreset="main-content"
+                    variant="section"
+                  />
+                ) : (
+                  <Text font="main-ui-action" color="text-03">
+                    {group.title}
+                  </Text>
+                )}
+
+                <div className="grid grid-cols-1 @xl/providercards:grid-cols-2 gap-2">
+                  {group.providerNames.map((name) => (
+                    <NewProviderCard
+                      key={name}
+                      providerName={name}
+                      isFirstProvider={isFirstProvider}
+                    />
+                  ))}
+                  {group.includeCustom && (
+                    <NewCustomProviderCard isFirstProvider={isFirstProvider} />
+                  )}
+                </div>
+              </GeneralLayouts.Section>
+            ))}
+          </div>
+        </Disabled>
+
+        <Divider paddingParallel={0} paddingPerpendicular={0} />
+
+        {/* ── Cost Overrides — negotiated per-model rates for usage costing ── */}
+        <CostOverridesPanel />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
+  );
+}

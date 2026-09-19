@@ -19,20 +19,31 @@ export const SWR_KEYS = {
   enterpriseSettings: "/api/enterprise-settings",
   customAnalyticsScript: "/api/enterprise-settings/custom-analytics-script",
   authType: "/api/auth/type",
+  adminSecuritySettings: "/api/admin/security",
+  adminSecurityPinnedFields: "/api/admin/security/pinned-fields",
+  incognitoAvailability: "/api/chat/incognito-availability",
+  adminSsoProviders: "/api/admin/sso/provider",
+  adminSsoProviderTypes: "/api/admin/sso/provider-type",
+  adminSsoDomains: "/api/admin/sso/domain",
+  // Cache key for the POST /records lookup, keyed by the domains being configured.
+  adminSsoDomainRecords: (domains: string[]) => [
+    "sso-domain-records",
+    ...domains,
+  ],
 
-  // ── Agents / Personas ─────────────────────────────────────────────────────
-  personas: "/api/persona",
-  persona: (id: number) => `/api/persona/${id}`,
-  agentPreferences: "/api/user/assistant/preferences",
+  // ── Agents ────────────────────────────────────────────────────────────────
+  agents: "/api/persona",
+  agent: (agentId: number) => `/api/persona/${agentId}`,
   defaultAssistantConfig: "/api/admin/default-assistant/configuration",
-  personaLabels: "/api/persona/labels",
+  agentLabels: "/api/persona/labels",
+  adminAgentLabel: (labelId: number) => `/api/admin/persona/label/${labelId}`,
   adminAgents: "/api/admin/agents",
   adminPersona: "/api/admin/persona",
 
   // ── LLM Providers ─────────────────────────────────────────────────────────
   llmProviders: "/api/llm/provider",
-  llmProvidersForPersona: (personaId: number) =>
-    `/api/llm/persona/${personaId}/providers`,
+  llmProvidersForAgent: (agentId: number) =>
+    `/api/llm/persona/${agentId}/providers`,
   adminLlmProviders: "/api/admin/llm/provider",
   llmProvidersWithImageGen: "/api/admin/llm/provider?include_image_gen=true",
   customProviderNames: "/api/admin/llm/custom-provider-names",
@@ -40,6 +51,11 @@ export const SWR_KEYS = {
   wellKnownLlmProvider: (providerEndpoint: string) =>
     `/api/admin/llm/built-in/options/${providerEndpoint}`,
   llmContextualCost: "/api/admin/llm/provider-contextual-cost",
+  userUsage: "/api/user/usage",
+  costOverrides: "/api/admin/cost-overrides",
+  adminUsageExport: "/api/admin/usage/export",
+  adminSystemUsage: "/api/admin/usage/system",
+  adminUsageReset: "/api/admin/usage/reset",
 
   // ── Image Generation ──────────────────────────────────────────────────────
   imageGenConfig: "/api/admin/image-generation/config",
@@ -57,10 +73,6 @@ export const SWR_KEYS = {
   federatedConnectors: "/api/federated",
 
   // ── Google Connectors ─────────────────────────────────────────────────────
-  googleConnectorAppCredential: (service: "gmail" | "google-drive") =>
-    `/api/manage/admin/connector/${service}/app-credential`,
-  googleConnectorServiceAccountKey: (service: "gmail" | "google-drive") =>
-    `/api/manage/admin/connector/${service}/service-account-key`,
   googleConnectorCredentials: (service: "gmail" | "google-drive") =>
     `/api/manage/admin/connector/${service}/credentials`,
   googleConnectorPublicCredential: (service: "gmail" | "google-drive") =>
@@ -72,16 +84,35 @@ export const SWR_KEYS = {
   // ── Search Settings ───────────────────────────────────────────────────────
   currentSearchSettings: "/api/search-settings/get-current-search-settings",
   secondarySearchSettings: "/api/search-settings/get-secondary-search-settings",
+  reindexProgress: "/api/search-settings/reindex-progress",
+  reindexErrors: "/api/search-settings/reindex-errors",
   embeddingProviders: "/api/admin/embedding/embedding-provider",
 
   // ── Chat Sessions ─────────────────────────────────────────────────────────
   chatSessions: "/api/chat/get-user-chat-sessions",
+  chatSearch: "/api/chat/search",
 
   // ── Projects & Files ──────────────────────────────────────────────────────
   userProjects: "/api/user/projects",
   recentFiles: "/api/user/files/recent",
   userPats: "/api/user/pats",
+  userPatScopes: "/api/user/pats/scopes",
   notifications: "/api/notifications",
+  notificationsSummary: "/api/notifications/summary",
+  notificationsPage: (pageNum: number, pageSize: number) => {
+    const params = new URLSearchParams({
+      page_num: pageNum.toString(),
+      page_size: pageSize.toString(),
+    });
+    return `/api/notifications?${params.toString()}`;
+  },
+  notificationsBySeverity: (minSeverity: string, pageSize: number) => {
+    const params = new URLSearchParams({
+      min_severity: minSeverity,
+      page_size: pageSize.toString(),
+    });
+    return `/api/notifications?${params.toString()}`;
+  },
 
   // ── Users ─────────────────────────────────────────────────────────────────
   acceptedUsers: "/api/manage/users/accepted/all",
@@ -99,21 +130,32 @@ export const SWR_KEYS = {
 
   // ── Groups ────────────────────────────────────────────────────────────────
   adminUserGroups: "/api/manage/admin/user-group",
+  adminUserGroupsWithDefault:
+    "/api/manage/admin/user-group?include_default=true",
   shareableGroups: "/api/manage/user-groups/minimal",
+  userGroupPermissions: (groupId: number) =>
+    `/api/manage/admin/user-group/${groupId}/permissions`,
+  permissionRegistry: "/api/manage/admin/permissions/registry",
   scimToken: "/api/admin/enterprise-settings/scim/token",
 
   // ── MCP Servers ───────────────────────────────────────────────────────────
   adminMcpServers: "/api/admin/mcp/servers",
+  adminMcpServerToolSnapshots: (serverId: number) =>
+    `/api/admin/mcp/server/${serverId}/tools/snapshots?source=db`,
   mcpServers: "/api/mcp/servers",
+  mcpServersCraft: "/api/mcp/servers/craft",
+  agentMcpServers: (agentId: number) => `/api/mcp/servers/persona/${agentId}`,
 
   // ── Skills ────────────────────────────────────────────────────────────────
-  adminSkills: "/api/admin/skills",
   userSkills: "/api/skills",
+  userSkillPreview: (skillId: string) => `/api/skills/${skillId}/preview`,
+  editableSkill: (skillId: string) => `/api/skills/custom/${skillId}/edit`,
 
   // ── Tools ─────────────────────────────────────────────────────────────────
   tools: "/api/tool",
   openApiTools: "/api/tool/openapi",
   oauthTokenStatus: "/api/user-oauth-token/status",
+  adminOAuthTestClaims: "/api/admin/oauth-test/claims",
 
   // ── Voice ─────────────────────────────────────────────────────────────────
   voiceProviders: "/api/admin/voice/providers",
@@ -136,6 +178,9 @@ export const SWR_KEYS = {
   buildExternalApps: "/api/build/apps",
   buildExternalAppsAdmin: "/api/build/admin/apps",
   buildExternalAppsBuiltInOptions: "/api/build/admin/apps/built-in/options",
+  buildBaseInstructions: "/api/build/admin/base-instructions",
+  buildSessionLiveApprovals: (sessionId: string) =>
+    `/api/build/approvals/sessions/${sessionId}/live`,
 
   // ── Token Rate Limits ─────────────────────────────────────────────────────
   globalTokenRateLimits: "/api/admin/token-rate-limits/global",
@@ -151,8 +196,14 @@ export const SWR_KEYS = {
   webSearchContentProviders: "/api/admin/web-search/content-providers",
   webSearchSearchProviders: "/api/admin/web-search/search-providers",
 
+  // ── Tracing ───────────────────────────────────────────────────────────────
+  tracingProviders: "/api/admin/tracing/providers",
+
   // ── Prompt shortcuts ──────────────────────────────────────────────────────
   promptShortcuts: "/api/input_prompt",
+
+  // ── Admin Banner ──────────────────────────────────────────────────────────
+  adminBanner: "/api/admin/banner",
 
   // ── License & Billing ─────────────────────────────────────────────────────
   license: "/api/license",
@@ -162,6 +213,7 @@ export const SWR_KEYS = {
   // ── Admin ─────────────────────────────────────────────────────────────────
   hooks: "/api/admin/hooks",
   hookSpecs: "/api/admin/hooks/specs",
+  logExportStatus: (exportId: string) => `/api/admin/log-export/${exportId}`,
 
   // ── Slack Bots ────────────────────────────────────────────────────────────
   slackChannels: "/api/manage/admin/slack-app/channel",

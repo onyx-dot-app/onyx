@@ -44,6 +44,7 @@
     },
     {
       "name": "Run All Onyx Services (k8s)",
+      "preLaunchTask": "k8s: telepresence quit",
       "configurations": [
         "Web Server",
         "API Server (k8s)",
@@ -95,6 +96,17 @@
         "group": "1"
       },
       "stopAll": true
+    },
+    {
+      "name": "Web Server + Shared Watch",
+      "configurations": [
+        "Web Server",
+        "Shared Watch (rebuild dist)"
+      ],
+      "presentation": {
+        "group": "1"
+      },
+      "stopAll": true
     }
   ],
   "configurations": [
@@ -125,6 +137,22 @@
       "consoleTitle": "Web Server Console"
     },
     {
+      "name": "Shared Watch (rebuild dist)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceRoot}/web/lib/shared",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "presentation": {
+        "group": "2"
+      },
+      "console": "integratedTerminal",
+      "consoleTitle": "Shared Watch Console"
+    },
+    {
       "name": "Model Server",
       "consoleName": "Model Server",
       "type": "debugpy",
@@ -139,6 +167,8 @@
       "args": [
         "model_server.main:app",
         "--reload",
+        "--reload-exclude",
+        "${workspaceFolder}/backend/onyx/skills/builtin",
         "--port",
         "9000"
       ],
@@ -154,6 +184,7 @@
       "request": "launch",
       "module": "uvicorn",
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "DEBUG",
@@ -162,6 +193,10 @@
       "args": [
         "onyx.main:app",
         "--reload",
+        "--reload-exclude",
+        "${workspaceFolder}/backend/onyx/skills/builtin",
+        "--reload-exclude",
+        "${workspaceFolder}/backend/onyx/server/features/build/sandbox/image",
         "--port",
         "8080"
       ],
@@ -188,6 +223,10 @@
       "args": [
         "onyx.main:app",
         "--reload",
+        "--reload-exclude",
+        "${workspaceFolder}/backend/onyx/skills/builtin",
+        "--reload-exclude",
+        "${workspaceFolder}/backend/onyx/server/features/build/sandbox/image",
         "--port",
         "8080"
       ],
@@ -251,6 +290,8 @@
       "args": [
         "onyx.mcp_server.api:mcp_app",
         "--reload",
+        "--reload-exclude",
+        "${workspaceFolder}/backend/onyx/skills/builtin",
         "--port",
         "8090",
         "--timeout-graceful-shutdown",
@@ -268,6 +309,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "INFO",
@@ -299,6 +341,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "INFO",
@@ -315,7 +358,7 @@
         "--loglevel=INFO",
         "--hostname=light@%n",
         "-Q",
-        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,opensearch_migration"
+        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,index_reclaim,opensearch_migration"
       ],
       "presentation": {
         "group": "2",
@@ -330,6 +373,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "INFO",
@@ -362,6 +406,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "INFO",
@@ -393,6 +438,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "INFO",
@@ -409,7 +455,7 @@
         "--loglevel=INFO",
         "--hostname=user_file_processing@%n",
         "-Q",
-        "user_file_processing,user_file_project_sync,user_file_delete"
+        "user_file_processing,user_file_project_sync,user_file_delete,user_file_port"
       ],
       "presentation": {
         "group": "2",
@@ -425,6 +471,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "INFO",
@@ -457,6 +504,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "DEBUG",
@@ -488,6 +536,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "ENABLE_MULTIPASS_INDEXING": "false",
@@ -504,7 +553,7 @@
         "--loglevel=INFO",
         "--hostname=docprocessing@%n",
         "-Q",
-        "docprocessing"
+        "docprocessing,port"
       ],
       "presentation": {
         "group": "2",
@@ -520,6 +569,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "DEBUG",
@@ -596,7 +646,7 @@
         "--loglevel=INFO",
         "--hostname=light@%n",
         "-Q",
-        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,opensearch_migration"
+        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,index_reclaim,opensearch_migration"
       ],
       "presentation": {
         "group": "2",
@@ -696,7 +746,7 @@
         "--loglevel=INFO",
         "--hostname=user_file_processing@%n",
         "-Q",
-        "user_file_processing,user_file_project_sync,user_file_delete"
+        "user_file_processing,user_file_project_sync,user_file_delete,user_file_port"
       ],
       "presentation": {
         "group": "2",
@@ -797,7 +847,7 @@
         "--loglevel=INFO",
         "--hostname=docprocessing@%n",
         "-Q",
-        "docprocessing"
+        "docprocessing,port"
       ],
       "presentation": {
         "group": "2",
@@ -873,20 +923,19 @@
         "up",
         "-d"
       ],
-      "cwd": "${workspaceFolder}/profiling",
+      "cwd": "${workspaceFolder}/tools/profiling",
       "console": "integratedTerminal",
       "presentation": {
         "group": "3"
       }
     },
     {
-      "name": "Clear and Restart External Volumes and Containers",
+      "name": "Start External Infrastructure Containers",
       "type": "node",
       "request": "launch",
+      "preLaunchTask": "ods-compose-dev-infra",
       "runtimeExecutable": "bash",
-      "runtimeArgs": [
-        "${workspaceFolder}/backend/scripts/restart_containers.sh"
-      ],
+      "runtimeArgs": ["-c", "true"],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "presentation": {
@@ -922,6 +971,7 @@
       "request": "launch",
       "program": "scripts/dev_run_background_jobs.py",
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "DEBUG",

@@ -2,41 +2,38 @@
 
 import React, {
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-import LineItem from "@/refresh-components/buttons/LineItem";
+import { useTranslations } from "next-intl";
 import { MinimalAgent } from "@/lib/agents/types";
 import { InputPrompt } from "@/app/app/interfaces";
-import { FilterManager, LlmManager, useFederatedConnectors } from "@/lib/hooks";
+import { LlmManager } from "@/lib/hooks";
 import usePromptShortcuts from "@/hooks/usePromptShortcuts";
 import { useContentEditable } from "@/hooks/useContentEditable";
 import useFilter from "@/hooks/useFilter";
-import useCCPairs from "@/hooks/useCCPairs";
+import { useAvailableSources } from "@/lib/connectors/hooks";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
-import { ChatState } from "@/app/app/interfaces";
-import { useForcedTools } from "@/lib/hooks/useForcedTools";
-import useAppFocus from "@/hooks/useAppFocus";
+import { ChatState, MAX_QUEUED_MESSAGES } from "@/app/app/interfaces";
+import { useQueuedMessageNavigation } from "@/hooks/useQueuedMessageNavigation";
+import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
+import { useAppPosition } from "@/lib/position/hooks";
+import { useDraft, draftKey } from "@/hooks/useDraft";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import PasteTilePopover from "@/sections/input/PasteTilePopover";
 import { cn } from "@opal/utils";
+import { firstStrongTextDir } from "@/lib/rehypeDirection";
 import { Disabled } from "@opal/core";
 import { useUser } from "@/providers/UserProvider";
-import {
-  SettingsContext,
-  useVectorDbEnabled,
-} from "@/providers/SettingsProvider";
-import { useProjectsContext } from "@/providers/ProjectsContext";
+import { useSettings } from "@/lib/settings/hooks";
+import { useProjectsContext } from "@/lib/projects/providers";
+import { useActiveProject, useProjects } from "@/lib/projects/hooks";
 import { FileCard } from "@/sections/cards/FileCard";
-import {
-  ProjectFile,
-  UserFileStatus,
-} from "@/app/app/projects/projectsService";
+import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
-import ActionsPopover from "@/refresh-components/popovers/ActionsPopover";
+import { ToolsPopover } from "@/lib/tools/components";
 import {
   getIconForAction,
   hasSearchToolsAvailable,
@@ -51,13 +48,19 @@ import {
   SvgSearch,
   SvgStop,
   SvgX,
+  SvgSimpleLoader,
 } from "@opal/icons";
-import { Button, SelectButton } from "@opal/components";
-import { Popover } from "@opal/components";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import {
+  Button,
+  LineItemButton,
+  Popover,
+  SelectButton,
+  Spacer,
+  Text,
+} from "@opal/components";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { Section } from "@/layouts/general-layouts";
-import Spacer from "@/refresh-components/Spacer";
+import { useIncognito } from "@/providers/IncognitoProvider";
 import MicrophoneButton from "@/sections/input/MicrophoneButton";
 import Waveform from "@/components/voice/Waveform";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
@@ -68,6 +71,7 @@ import {
   useChatSessionStore,
 } from "@/app/app/stores/useChatSessionStore";
 import QueuedMessageBar from "@/sections/input/QueuedMessageBar";
+import { handleInputNavKeys } from "@/sections/input/inputBarKeys";
 
 export interface AppInputBarHandle {
   reset: () => void;
@@ -84,16 +88,19 @@ export interface AppInputBarProps {
   availableContextTokens: number;
 
   // agents
-  selectedAgent: MinimalAgent | undefined;
+  activeAgent: MinimalAgent | undefined;
 
   handleFileUpload: (files: File[]) => void;
-  filterManager: FilterManager;
   deepResearchEnabled: boolean;
   setPresentingDocument?: (document: MinimalOnyxDocument) => void;
   toggleDeepResearch: () => void;
   isMultiModelActive?: boolean;
   disabled: boolean;
-  awaitingPreferredSelection?: boolean;
+  /**
+   * Owned by the surface rather than read here, because the send path reads
+   * the same one and two instances would drift.
+   */
+  toolConfiguration: ToolConfigurationHandle;
   ref?: React.Ref<AppInputBarHandle>;
   // Side panel tab reading
   tabReadingEnabled?: boolean;
@@ -103,15 +110,13 @@ export interface AppInputBarProps {
 
 const AppInputBar = React.memo(
   ({
-    filterManager,
     initialMessage = "",
     stopGenerating,
     onSubmit,
     chatState,
     currentSessionFileTokenCount,
     availableContextTokens,
-    selectedAgent,
-
+    activeAgent,
     handleFileUpload,
     llmManager,
     deepResearchEnabled,
@@ -119,12 +124,14 @@ const AppInputBar = React.memo(
     isMultiModelActive,
     setPresentingDocument,
     disabled,
-    awaitingPreferredSelection = false,
+    toolConfiguration,
     ref,
     tabReadingEnabled,
     currentTabUrl,
     onToggleTabReading,
   }: AppInputBarProps) => {
+    const t = useTranslations("chat.input");
+    const { incognitoEnabled } = useIncognito();
     const [isRecording, setIsRecording] = useState(false);
     const [recordingCycleCount, setRecordingCycleCount] = useState(0);
     const [isMuted, setIsMuted] = useState(false);
@@ -141,9 +148,6 @@ const AppInputBar = React.memo(
     const removeCurrentQueuedMessage = useChatSessionStore(
       (state) => state.removeCurrentQueuedMessage
     );
-    const [highlightedQueueIndex, setHighlightedQueueIndex] = useState<
-      number | null
-    >(null);
     const { user, isAdmin } = useUser();
     const isAutoSending = useRef(false);
     const inputWrapperRef = useRef<HTMLDivElement>(null);
@@ -165,10 +169,20 @@ const AppInputBar = React.memo(
       tilePopover,
       dismissTilePopover,
       updateTileText,
+      expandTile,
     } = useContentEditable({
       initialContent: initialMessage,
       wrapperRef: inputWrapperRef,
       pasteTilesEnabled: user?.preferences?.paste_as_tile ?? false,
+    });
+
+    // Keyboard navigation + highlight state for the queued-message bar
+    // (shared with the Craft input bar).
+    const queueNav = useQueuedMessageNavigation({
+      messages: queuedMessages,
+      inputIsEmpty: !message,
+      onRemove: removeCurrentQueuedMessage,
+      onEdit: setMessage,
     });
 
     const filesWrapperRef = useRef<HTMLDivElement>(null);
@@ -194,19 +208,83 @@ const AppInputBar = React.memo(
       isTTSPlaying || isTTSLoading || isAwaitingAutoPlaybackStart;
     const isVoicePlaybackControllable = isVoicePlaybackActive && !isRecording;
     const isTTSActuallySpeaking = isTTSPlaying || isManualTTSPlaying;
-    const appFocus = useAppFocus();
-    const isNewSession = appFocus.isNewSession();
+    const appPosition = useAppPosition();
+    const isNewSession = appPosition.isNewSession();
     const appMode = state.phase === "idle" ? state.appMode : undefined;
     const isSearchMode =
       (isNewSession && appMode === "search") || isSearchActive;
 
+    const activePlaceholder =
+      queuedMessages.length > 0 && !message
+        ? t("appInputBar.input.queuedPlaceholder")
+        : isRecording
+          ? t("appInputBar.input.listeningPlaceholder")
+          : isVoicePlaybackActive
+            ? t("appInputBar.input.speakingPlaceholder")
+            : isSearchMode
+              ? t("appInputBar.input.searchPlaceholder")
+              : t("appInputBar.input.placeholder");
+
+    // Keyed by chat session id, or "new" until the session is created.
+    const chatSessionId = appPosition.chat();
+    const chatDraftStorageKey = draftKey("chat", chatSessionId ?? "new");
+    const {
+      draft: chatDraft,
+      loaded: chatDraftLoaded,
+      save: saveChatDraft,
+      clear: clearChatDraft,
+    } = useDraft<string>({ key: chatDraftStorageKey });
+    const draftSeededRef = useRef(false);
+    const skipNextDraftSaveRef = useRef(false);
+    const prevDraftKeyRef = useRef(chatDraftStorageKey);
+    // Snapshot of message, read non-reactively in the restore effect so seeding
+    // doesn't re-run on every keystroke.
+    const messageRef = useRef(message);
+    const isRecordingRef = useRef(isRecording);
+
+    useEffect(() => {
+      messageRef.current = message;
+    }, [message]);
+
+    useEffect(() => {
+      draftSeededRef.current = false;
+      // Clear the previous session's leftover text instead of leaking it into
+      // this one.
+      if (prevDraftKeyRef.current !== chatDraftStorageKey) {
+        prevDraftKeyRef.current = chatDraftStorageKey;
+        clearMessage();
+      }
+    }, [chatDraftStorageKey, clearMessage]);
+
+    // Restore once read: a URL prompt wins and a non-empty input is never
+    // clobbered.
+    useEffect(() => {
+      if (!chatDraftLoaded || draftSeededRef.current) return;
+      draftSeededRef.current = true;
+      if (chatDraft && !initialMessage && !messageRef.current) {
+        // Skip the save effect's next run; it would fire with the stale empty
+        // message and wipe what we just seeded.
+        skipNextDraftSaveRef.current = true;
+        setMessage(chatDraft);
+      }
+    }, [chatDraftLoaded, chatDraft, initialMessage, setMessage]);
+
+    useEffect(() => {
+      if (!chatDraftLoaded || !draftSeededRef.current) return;
+      if (skipNextDraftSaveRef.current) {
+        skipNextDraftSaveRef.current = false;
+        return;
+      }
+      saveChatDraft(message);
+    }, [message, chatDraftLoaded, saveChatDraft]);
+
     const handleRecordingChange = useCallback((nextIsRecording: boolean) => {
-      setIsRecording((prevIsRecording) => {
-        if (!prevIsRecording && nextIsRecording) {
-          setRecordingCycleCount((count) => count + 1);
-        }
-        return nextIsRecording;
-      });
+      const wasRecording = isRecordingRef.current;
+      isRecordingRef.current = nextIsRecording;
+      if (!wasRecording && nextIsRecording) {
+        setRecordingCycleCount((count) => count + 1);
+      }
+      setIsRecording(nextIsRecording);
     }, []);
 
     // Wrapper for onSubmit that stops TTS first to prevent overlapping voices
@@ -223,8 +301,9 @@ const AppInputBar = React.memo(
           return;
         }
         handleSubmit(text);
+        clearChatDraft();
       },
-      [handleSubmit]
+      [handleSubmit, clearChatDraft]
     );
 
     // Expose reset and focus methods to parent via ref
@@ -232,6 +311,7 @@ const AppInputBar = React.memo(
       reset: () => {
         if (!isAutoSending.current) {
           clearMessage();
+          clearChatDraft();
         }
       },
       focus: () => {
@@ -259,9 +339,11 @@ const AppInputBar = React.memo(
       }
     }, [isNewSession, initialMessage]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const { forcedToolIds, setForcedToolIds } = useForcedTools();
-    const { currentMessageFiles, setCurrentMessageFiles, currentProjectId } =
+    const { forcedToolId, clearForcedTool } = toolConfiguration;
+    const { currentMessageFiles, setCurrentMessageFiles } =
       useProjectsContext();
+    const { isLoading: isLoadingProjects } = useProjects();
+    const activeProject = useActiveProject();
 
     const currentIndexingFiles = useMemo(() => {
       return currentMessageFiles.filter(
@@ -274,6 +356,9 @@ const AppInputBar = React.memo(
         (file) => file.status === UserFileStatus.UPLOADING
       );
     }, [currentMessageFiles]);
+
+    // A file isn't queryable until indexing completes, so gate send on it.
+    const hasIndexingFiles = currentIndexingFiles.length > 0;
 
     // Convert ProjectFile to MinimalOnyxDocument format for viewing
     const handleFileClick = useCallback(
@@ -300,10 +385,9 @@ const AppInputBar = React.memo(
       [handleFileUpload]
     );
 
-    const combinedSettings = useContext(SettingsContext);
+    const combinedSettingsData = useSettings();
 
     const prevChatStateRef = useRef(chatState);
-    const prevAwaitingRef = useRef(awaitingPreferredSelection);
     const prevRenderCompleteRef = useRef(latestMessageRenderComplete);
 
     useEffect(() => {
@@ -312,16 +396,10 @@ const AppInputBar = React.memo(
       // gate, a queued follow-up fires while the smooth-streaming
       // typewriter is still flushing the prior answer.
       const wasReady =
-        prevChatStateRef.current === "input" &&
-        !prevAwaitingRef.current &&
-        prevRenderCompleteRef.current;
-      const isReady =
-        chatState === "input" &&
-        !awaitingPreferredSelection &&
-        latestMessageRenderComplete;
+        prevChatStateRef.current === "input" && prevRenderCompleteRef.current;
+      const isReady = chatState === "input" && latestMessageRenderComplete;
 
       prevChatStateRef.current = chatState;
-      prevAwaitingRef.current = awaitingPreferredSelection;
       prevRenderCompleteRef.current = latestMessageRenderComplete;
 
       if (!wasReady && isReady && queuedMessages.length > 0) {
@@ -334,21 +412,12 @@ const AppInputBar = React.memo(
       }
     }, [
       chatState,
-      awaitingPreferredSelection,
       latestMessageRenderComplete,
       queuedMessages,
       removeCurrentQueuedMessage,
       stopTTS,
       onSubmit,
     ]);
-
-    useEffect(() => {
-      setHighlightedQueueIndex((prev) => {
-        if (prev === null) return null;
-        if (queuedMessages.length === 0) return null;
-        return Math.min(prev, queuedMessages.length - 1);
-      });
-    }, [queuedMessages]);
 
     // Animate attached files wrapper to its content height so CSS transitions
     // can interpolate between concrete pixel values (0px ↔ Npx).
@@ -391,28 +460,14 @@ const AppInputBar = React.memo(
     );
 
     const { activePromptShortcuts } = usePromptShortcuts();
-    const vectorDbEnabled = useVectorDbEnabled();
-    const { ccPairs, isLoading: ccPairsLoading } = useCCPairs(vectorDbEnabled);
-    const { data: federatedConnectorsData, isLoading: federatedLoading } =
-      useFederatedConnectors();
+    // The list itself belongs to ToolsPopover, which reads it directly; only
+    // the loading flag is wanted here, to hold the controls back.
+    const { isLoading: sourcesLoading } = useAvailableSources();
 
     // Bottom controls are hidden until all data is loaded
     const controlsLoading =
-      ccPairsLoading ||
-      federatedLoading ||
-      !selectedAgent ||
-      llmManager.isLoadingProviders;
+      sourcesLoading || !activeAgent || llmManager.isLoadingProviders;
     const [showPrompts, setShowPrompts] = useState(false);
-
-    // Memoize availableSources to prevent unnecessary re-renders
-    const memoizedAvailableSources = useMemo(
-      () => [
-        ...ccPairs.map((ccPair) => ccPair.source),
-        ...(federatedConnectorsData?.map((connector) => connector.source) ||
-          []),
-      ],
-      [ccPairs, federatedConnectorsData]
-    );
 
     const [tabbingIconIndex, setTabbingIconIndex] = useState(0);
 
@@ -459,6 +514,14 @@ const AppInputBar = React.memo(
     // Determine if we should hide processing state based on context limits
     const hideProcessingState = useMemo(() => {
       if (currentMessageFiles.length > 0 && currentIndexingFiles.length > 0) {
+        // token_count is null until indexing finishes; don't hide the
+        // processing indicator while a file's size is still unknown.
+        const allTokenCountsKnown = currentIndexingFiles.every(
+          (file) => file.token_count !== null
+        );
+        if (!allTokenCountsKnown) {
+          return false;
+        }
         const currentFilesTokenTotal = currentMessageFiles.reduce(
           (acc, file) => acc + (file.token_count || 0),
           0
@@ -484,20 +547,29 @@ const AppInputBar = React.memo(
     // AND if deep research is globally enabled in admin settings
     const showDeepResearch = useMemo(() => {
       const deepResearchGloballyEnabled =
-        combinedSettings?.settings?.deep_research_enabled ?? true;
-      const isProjectWorkflow = currentProjectId !== null;
+        combinedSettingsData?.deep_research_enabled ?? true;
+
+      // Resolved from the chat, not the URL. `projectId` is dropped once a chat
+      // opens (`PARAMS_TO_SKIP` in `app/app/services/lib.tsx`), so a project
+      // chat carries no project context in its URL — reading the search param
+      // hid the toggle on the project page and left it showing in the one place
+      // it actually breaks.
+      // Loading counts as "unknown", and unknown withholds: an unloaded
+      // projects list makes a project chat look like a normal one.
+      const isProjectWorkflow = isLoadingProjects || activeProject !== null;
 
       // TODO(@yuhong): Re-enable Deep Research in Projects workflow once it is fully supported.
       // https://linear.app/onyx-app/issue/ENG-3818/re-enable-deep-research-in-projects
       return (
         !isProjectWorkflow &&
         deepResearchGloballyEnabled &&
-        hasSearchToolsAvailable(selectedAgent?.tools || [])
+        hasSearchToolsAvailable(activeAgent?.tools || [])
       );
     }, [
-      selectedAgent?.tools,
-      combinedSettings?.settings?.deep_research_enabled,
-      currentProjectId,
+      activeAgent?.tools,
+      combinedSettingsData?.deep_research_enabled,
+      activeProject,
+      isLoadingProjects,
     ]);
 
     function handleKeyDownForPromptShortcuts(
@@ -575,7 +647,7 @@ const AppInputBar = React.memo(
               <Button
                 disabled={disabled}
                 icon={SvgPaperclip}
-                tooltip="Attach Files"
+                tooltip={t("appInputBar.attachFilesButton.tooltip")}
                 interaction={open ? "hover" : "rest"}
                 prominence="tertiary"
               />
@@ -591,11 +663,13 @@ const AppInputBar = React.memo(
               controlsLoading && "invisible"
             )}
           >
-            {selectedAgent && selectedAgent.tools.length > 0 && (
-              <ActionsPopover
-                selectedAgent={selectedAgent}
-                filterManager={filterManager}
-                availableSources={memoizedAvailableSources}
+            {activeAgent && (
+              // Keyed, so switching agents starts clean rather than carrying
+              // the previous agent's open panel and search term across.
+              <ToolsPopover
+                key={activeAgent.id}
+                agent={activeAgent}
+                toolConfiguration={toolConfiguration}
                 disabled={disabled}
               />
             )}
@@ -615,8 +689,8 @@ const AppInputBar = React.memo(
                           return currentTabUrl;
                         }
                       })()
-                    : "Reading tab..."
-                  : "Read this tab"}
+                    : t("appInputBar.tabReadingButton.readingLabel")
+                  : t("appInputBar.tabReadingButton.readLabel")}
               </SelectButton>
             ) : (
               showDeepResearch && (
@@ -629,41 +703,34 @@ const AppInputBar = React.memo(
                   foldable={!deepResearchEnabled}
                   tooltip={
                     isMultiModelActive
-                      ? "Deep Research is disabled in multi-model mode"
+                      ? t("appInputBar.deepResearchButton.disabledTooltip")
                       : undefined
                   }
                 >
-                  Deep Research
+                  {t("appInputBar.deepResearchButton.label")}
                 </SelectButton>
               )
             )}
 
-            {selectedAgent &&
-              forcedToolIds.length > 0 &&
-              forcedToolIds.map((toolId) => {
-                const tool = selectedAgent.tools.find(
-                  (tool) => tool.id === toolId
-                );
-                if (!tool) {
-                  return null;
-                }
-                return (
-                  <Disabled disabled={disabled} key={toolId}>
-                    <SelectButton
-                      variant="select-light"
-                      icon={getIconForAction(tool)}
-                      onClick={() => {
-                        setForcedToolIds(
-                          forcedToolIds.filter((id) => id !== toolId)
-                        );
-                      }}
-                      state="selected"
-                    >
-                      {tool.display_name}
-                    </SelectButton>
-                  </Disabled>
-                );
-              })}
+            {(() => {
+              if (!activeAgent || forcedToolId === null) return null;
+              const tool = activeAgent.tools.find(
+                (tool) => tool.id === forcedToolId
+              );
+              if (!tool) return null;
+              return (
+                <Disabled disabled={disabled}>
+                  <SelectButton
+                    variant="select-light"
+                    icon={getIconForAction(tool)}
+                    onClick={clearForcedTool}
+                    state="selected"
+                  >
+                    {tool.display_name}
+                  </SelectButton>
+                </Disabled>
+              );
+            })()}
           </div>
         </div>
 
@@ -693,9 +760,9 @@ const AppInputBar = React.memo(
               <Button
                 disabled
                 icon={SvgMicrophone}
-                aria-label="Set up voice"
+                aria-label={t("appInputBar.voiceSetupButton.ariaLabel")}
                 prominence="tertiary"
-                tooltip="Voice not configured. Set up in admin settings."
+                tooltip={t("appInputBar.voiceSetupButton.tooltip")}
               />
             ))}
 
@@ -705,26 +772,33 @@ const AppInputBar = React.memo(
                 !isVoicePlaybackControllable &&
                 !message) ||
               hasUploadingFiles ||
+              hasIndexingFiles ||
               isClassifying
+            }
+            tooltip={
+              hasUploadingFiles || hasIndexingFiles
+                ? t("appInputBar.sendButton.processingFilesTooltip")
+                : undefined
             }
             id="onyx-chat-input-send-button"
             icon={
               isClassifying
-                ? SimpleLoader
-                : (chatState !== "input" || awaitingPreferredSelection) &&
-                    message.trim()
+                ? SvgSimpleLoader
+                : chatState !== "input" && message.trim()
                   ? SvgArrowUp
                   : chatState === "streaming" || isVoicePlaybackControllable
                     ? SvgStop
                     : SvgArrowUp
             }
             onClick={() => {
-              const canSubmitNormally =
-                chatState === "input" && !awaitingPreferredSelection;
+              const canSubmitNormally = chatState === "input";
               if (!canSubmitNormally && message.trim()) {
-                if (queuedMessages.length < 5) {
+                if (queuedMessages.length < MAX_QUEUED_MESSAGES) {
                   enqueueCurrentMessage(message.trim());
                   clearMessage();
+                  // Drop the draft now; a reload could outrace the debounced
+                  // empty-save.
+                  clearChatDraft();
                 }
               } else if (chatState == "streaming") {
                 stopTTS({ manual: true });
@@ -744,20 +818,19 @@ const AppInputBar = React.memo(
       <>
         <QueuedMessageBar
           messages={queuedMessages}
-          highlightedIndex={highlightedQueueIndex}
-          awaitingPreferredSelection={awaitingPreferredSelection}
+          highlightedIndex={queueNav.highlightedIndex}
           onDiscard={removeCurrentQueuedMessage}
-          onHighlight={setHighlightedQueueIndex}
+          onHighlight={queueNav.setHighlightedIndex}
         />
         <Disabled disabled={disabled} allowClick>
           <div
             ref={containerRef}
             id="onyx-chat-input"
             className={cn(
-              "relative w-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16"
+              "relative w-full flex flex-col shadow-box-01 bg-background-neutral-00 rounded-16"
               // # Note (from @raunakab):
               //
-              // `shadow-01` extends ~14px below the element (2px offset + 12px blur).
+              // `shadow-box-01` extends ~14px below the element (2px offset + 12px blur).
               // Because the content area in `Root` (app-layouts.tsx) uses `overflow-auto`,
               // shadows that exceed the container bounds are clipped.
               //
@@ -769,7 +842,7 @@ const AppInputBar = React.memo(
           >
             {/* Voice waveform overlay (positioned outside normal flow to avoid resizing input) */}
             {isTTSActuallySpeaking ? (
-              <div className="absolute bottom-full mb-1 left-1 z-10">
+              <div className="absolute bottom-full mb-1 start-1 z-10">
                 <Waveform
                   variant="speaking"
                   isActive={isTTSActuallySpeaking}
@@ -780,7 +853,7 @@ const AppInputBar = React.memo(
             ) : isRecording &&
               !isVoicePlaybackActive &&
               !shouldShowRecordingWaveformBelow ? (
-              <div className="absolute bottom-full mb-1 left-1 right-1 z-10">
+              <div className="absolute bottom-full mb-1 start-1 end-1 z-10">
                 <Waveform
                   variant="recording"
                   isActive={isRecording}
@@ -832,15 +905,23 @@ const AppInputBar = React.memo(
                       ref={inputRef}
                       id="onyx-chat-input-textbox"
                       role="textbox"
-                      aria-label="Message input"
+                      aria-label={t("appInputBar.input.ariaLabel")}
                       contentEditable={!disabled}
+                      // Direction follows what the user types. While empty
+                      // it follows the placeholder so its punctuation sits
+                      // on the correct side in every locale.
+                      dir={
+                        message
+                          ? "auto"
+                          : (firstStrongTextDir(activePlaceholder) ?? "auto")
+                      }
                       suppressContentEditableWarning
                       onPaste={handlePaste}
                       onCopy={handleCopy}
                       onCut={handleCut}
                       onMouseDown={handleTileMouseDown}
                       onClick={handleTileClick}
-                      onBlur={() => setHighlightedQueueIndex(null)}
+                      onBlur={() => queueNav.setHighlightedIndex(null)}
                       onKeyDownCapture={handleKeyDownForPromptShortcuts}
                       onInput={handleContentEditableInput}
                       onCompositionStart={handleCompositionStart}
@@ -853,99 +934,25 @@ const AppInputBar = React.memo(
                       }}
                       aria-multiline={true}
                       aria-disabled={disabled}
-                      aria-placeholder="How can I help you today?"
-                      data-placeholder={
-                        queuedMessages.length > 0 && !message
-                          ? "Press up to edit queued messages"
-                          : isRecording
-                            ? "Listening..."
-                            : isVoicePlaybackActive
-                              ? "Onyx is speaking..."
-                              : isSearchMode
-                                ? "Search connected sources"
-                                : "How can I help you today?"
-                      }
+                      aria-placeholder={t("appInputBar.input.placeholder")}
+                      data-placeholder={activePlaceholder}
                       data-empty={!message ? "" : undefined}
                       onKeyDown={(event) => {
-                        if (handleTileKeyDown(event)) return;
-
-                        // Queue navigation mode
-                        if (highlightedQueueIndex !== null) {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            const text =
-                              queuedMessages[highlightedQueueIndex]!.text;
-                            removeCurrentQueuedMessage(highlightedQueueIndex);
-                            setMessage(text);
-                            setHighlightedQueueIndex(null);
-                            return;
-                          }
-                          if (event.key === "ArrowUp") {
-                            event.preventDefault();
-                            setHighlightedQueueIndex((prev) =>
-                              Math.max((prev ?? 0) - 1, 0)
-                            );
-                            return;
-                          }
-                          if (event.key === "ArrowDown") {
-                            event.preventDefault();
-                            setHighlightedQueueIndex((prev) => {
-                              const next = (prev ?? 0) + 1;
-                              if (next >= queuedMessages.length) {
-                                return null; // exit navigation mode
-                              }
-                              return next;
-                            });
-                            return;
-                          }
-                          if (
-                            event.key === "Delete" ||
-                            event.key === "Backspace"
-                          ) {
-                            event.preventDefault();
-                            removeCurrentQueuedMessage(highlightedQueueIndex);
-                            return;
-                          }
-                          if (event.key === "Escape") {
-                            event.preventDefault();
-                            setHighlightedQueueIndex(null);
-                            return;
-                          }
-                          if (
-                            event.key === "Shift" ||
-                            event.key === "Alt" ||
-                            event.key === "Control" ||
-                            event.key === "Meta" ||
-                            event.key === "Tab"
-                          ) {
-                            return;
-                          }
-                          // Any other key: exit navigation mode, let keypress proceed
-                          setHighlightedQueueIndex(null);
-                        }
-
-                        // Up arrow to enter navigation mode
                         if (
-                          event.key === "ArrowUp" &&
-                          !message &&
-                          queuedMessages.length > 0
-                        ) {
-                          event.preventDefault();
-                          setHighlightedQueueIndex(queuedMessages.length - 1);
+                          handleInputNavKeys(event, queueNav, handleTileKeyDown)
+                        )
                           return;
-                        }
 
-                        // Enter to submit or queue (Shift+Enter falls through to browser default: inserts <br>)
+                        // Enter to submit or queue (Shift+Enter falls through
+                        // to browser default: inserts <br>).
                         if (
                           event.key === "Enter" &&
                           !showPrompts &&
                           !event.shiftKey &&
-                          !(event.nativeEvent as any).isComposing
+                          !event.nativeEvent.isComposing
                         ) {
                           event.preventDefault();
-                          const canSubmitNormally =
-                            chatState === "input" &&
-                            !awaitingPreferredSelection;
+                          const canSubmitNormally = chatState === "input";
                           if (canSubmitNormally) {
                             if (
                               message &&
@@ -960,10 +967,13 @@ const AppInputBar = React.memo(
                             !disabled &&
                             !isClassifying &&
                             !hasUploadingFiles &&
-                            queuedMessages.length < 5
+                            queuedMessages.length < MAX_QUEUED_MESSAGES
                           ) {
                             enqueueCurrentMessage(message.trim());
                             clearMessage();
+                            // Drop the draft now; a reload could outrace the
+                            // debounced empty-save.
+                            clearChatDraft();
                           }
                         }
                       }}
@@ -980,30 +990,42 @@ const AppInputBar = React.memo(
                   <Popover.Menu>
                     {[
                       ...sortedFilteredPrompts.map((prompt, index) => (
-                        <LineItem
+                        <LineItemButton
+                          sizePreset="main-ui"
+                          rounding={2}
                           key={prompt.id}
-                          selected={tabbingIconIndex === index}
-                          emphasized={tabbingIconIndex === index}
+                          state={
+                            tabbingIconIndex === index ? "selected" : "empty"
+                          }
+                          selectVariant={
+                            tabbingIconIndex === index
+                              ? "select-heavy"
+                              : "select-light"
+                          }
                           description={prompt.content?.trim()}
                           onClick={() => updateInputPrompt(prompt)}
-                        >
-                          {prompt.prompt}
-                        </LineItem>
+                          title={prompt.prompt}
+                        />
                       )),
                       sortedFilteredPrompts.length > 0 ? null : undefined,
-                      <LineItem
+                      <LineItemButton
+                        sizePreset="main-ui"
+                        rounding={2}
                         key="create-new"
                         href="/app/settings/chat-preferences"
                         icon={SvgPlus}
-                        selected={
+                        state={
                           tabbingIconIndex === sortedFilteredPrompts.length
+                            ? "selected"
+                            : "empty"
                         }
-                        emphasized={
+                        selectVariant={
                           tabbingIconIndex === sortedFilteredPrompts.length
+                            ? "select-heavy"
+                            : "select-light"
                         }
-                      >
-                        Create New Prompt
-                      </LineItem>,
+                        title={t("appInputBar.createPromptItem.title")}
+                      />,
                     ]}
                   </Popover.Menu>
                 </Popover.Content>
@@ -1020,7 +1042,7 @@ const AppInputBar = React.memo(
                   <Button
                     disabled={!message || isClassifying || hasUploadingFiles}
                     id="onyx-chat-input-send-button"
-                    icon={isClassifying ? SimpleLoader : SvgSearch}
+                    icon={isClassifying ? SvgSimpleLoader : SvgSearch}
                     onClick={() => {
                       if (chatState == "streaming") {
                         stopGenerating();
@@ -1030,7 +1052,7 @@ const AppInputBar = React.memo(
                     }}
                     prominence="tertiary"
                   />
-                  <Spacer horizontal rem={0.25} />
+                  <Spacer orientation="horizontal" rem={0.25} />
                 </Section>
               )}
             </div>
@@ -1039,7 +1061,7 @@ const AppInputBar = React.memo(
 
             {/* First recording cycle waveform below input */}
             {shouldShowRecordingWaveformBelow && (
-              <div className="absolute top-full mt-1 left-1 right-1 z-10">
+              <div className="absolute top-full mt-1 start-1 end-1 z-10">
                 <Waveform
                   variant="recording"
                   isActive={isRecording}
@@ -1057,10 +1079,29 @@ const AppInputBar = React.memo(
                 tileElement={tilePopover.tile}
                 onDismiss={dismissTilePopover}
                 onTextChange={updateTileText}
+                onExpand={() => expandTile(tilePopover.tile)}
               />
             )}
           </div>
         </Disabled>
+        {/* Stays for the whole session: the warning is most relevant
+            once the user is actually chatting. */}
+        {incognitoEnabled && (
+          <Section
+            flexDirection="column"
+            alignItems="center"
+            height="fit"
+            gap={0.125}
+            className="mt-3 text-center"
+          >
+            <Text font="secondary-body" color="text-02">
+              {t("appInputBar.incognitoNotice.text")}
+            </Text>
+            <Text font="secondary-body" color="text-02">
+              {t("appInputBar.incognitoPolicyNotice.text")}
+            </Text>
+          </Section>
+        )}
       </>
     );
   }

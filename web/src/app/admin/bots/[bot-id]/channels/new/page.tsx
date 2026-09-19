@@ -1,20 +1,22 @@
 "use client";
 
 import { use, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { SlackChannelConfigCreationForm } from "@/app/admin/bots/[bot-id]/channels/SlackChannelConfigCreationForm";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SvgSimpleLoader } from "@opal/icons";
+import { SettingsLayouts } from "@opal/layouts";
 import { SvgSlack } from "@opal/logos";
 import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
 import { useAgents } from "@/lib/agents/hooks";
 import { useStandardAnswerCategories } from "@/app/ee/admin/standard-answer/hooks";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 import type { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 import { useRouter } from "next/navigation";
 
 function NewChannelConfigContent({ slackBotId }: { slackBotId: number }) {
+  const t = useTranslations("admin.slackBots");
   const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
 
   const {
@@ -40,16 +42,16 @@ function NewChannelConfigContent({ slackBotId }: { slackBotId: number }) {
     isAgentsLoading ||
     (enterpriseTier && isStdAnswerLoading)
   ) {
-    return <SimpleLoader />;
+    return <SvgSimpleLoader />;
   }
 
   if (docSetsError || !documentSets) {
     return (
       <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch document sets - ${
-          docSetsError?.message ?? "unknown error"
-        }`}
+        errorTitle={t("error.generic.title")}
+        errorMsg={t("error.fetchDocumentSets.message", {
+          error: docSetsError?.message ?? t("error.unknown.message"),
+        })}
       />
     );
   }
@@ -57,10 +59,10 @@ function NewChannelConfigContent({ slackBotId }: { slackBotId: number }) {
   if (agentsError) {
     return (
       <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch agents - ${
-          agentsError?.message ?? "unknown error"
-        }`}
+        errorTitle={t("error.generic.title")}
+        errorMsg={t("error.fetchAgents.message", {
+          error: agentsError?.message ?? t("error.unknown.message"),
+        })}
       />
     );
   }
@@ -70,9 +72,9 @@ function NewChannelConfigContent({ slackBotId }: { slackBotId: number }) {
       ? {
           paidEnterpriseFeaturesEnabled: true,
           categories: standardAnswerCategories ?? [],
-          ...(stdAnswerError
-            ? { error: { message: String(stdAnswerError) } }
-            : {}),
+          error: stdAnswerError
+            ? { message: String(stdAnswerError) }
+            : undefined,
         }
       : { paidEnterpriseFeaturesEnabled: false };
 
@@ -87,6 +89,7 @@ function NewChannelConfigContent({ slackBotId }: { slackBotId: number }) {
 }
 
 export default function Page(props: { params: Promise<{ "bot-id": string }> }) {
+  const t = useTranslations("admin.slackBots");
   const unwrappedParams = use(props.params);
   const router = useRouter();
 
@@ -109,7 +112,7 @@ export default function Page(props: { params: Promise<{ "bot-id": string }> }) {
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgSlack}
-        title="Configure OnyxBot for Slack Channel"
+        title={t("newChannel.header.title")}
         divider
         backButton
       />

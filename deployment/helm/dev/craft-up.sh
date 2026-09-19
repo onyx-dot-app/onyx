@@ -6,7 +6,7 @@
 # image and bootstraps .vscode/.env.k8s from the tracked template. Safe to
 # re-run on a partially-set-up machine.
 #
-# See docs/dev/local-kubernetes.md for the full workflow.
+# See docs/craft/dev/local-kubernetes.md for the full workflow.
 #
 # Usage:
 #   deployment/helm/dev/craft-up.sh
@@ -33,15 +33,17 @@ PASSTHROUGH=()
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 SANDBOX_IMAGE="onyxdotapp/sandbox:dev"
-SANDBOX_DOCKER_DIR="$REPO_ROOT/backend/onyx/server/features/build/sandbox/kubernetes/docker"
+SANDBOX_IMAGE_DIR="$REPO_ROOT/backend/onyx/server/features/build/sandbox/image"
 ENV_K8S="$REPO_ROOT/.vscode/.env.k8s"
 ENV_K8S_TEMPLATE="$REPO_ROOT/.vscode/.env.k8s.template"
+ENV_WEB="$REPO_ROOT/.vscode/.env.web"
+ENV_WEB_TEMPLATE="$REPO_ROOT/.vscode/env.web_template.txt"
 
 require() {
   local bin="$1"
   if ! command -v "$bin" >/dev/null 2>&1; then
     echo "error: '$bin' is required but not on PATH" >&2
-    echo "see docs/dev/local-kubernetes.md for installation" >&2
+    echo "see docs/craft/dev/local-kubernetes.md for installation" >&2
     exit 1
   fi
 }
@@ -95,18 +97,29 @@ fi
 echo "==> bringing up kind cluster + helm install (k8s-up.sh) ..."
 "$SCRIPT_DIR/k8s-up.sh" ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}
 
-# ---- 2. bootstrap .vscode/.env.k8s if missing ----
+# ---- 2. bootstrap the vscode env files if missing ----
 
-if [[ -f "$ENV_K8S" ]]; then
-  echo "==> .vscode/.env.k8s already exists; leaving it untouched"
-else
-  if [[ ! -f "$ENV_K8S_TEMPLATE" ]]; then
-    echo "error: .vscode/.env.k8s.template missing — cannot bootstrap .env.k8s" >&2
+# Never overwrite an existing file: it holds dev-edited secrets.
+bootstrap_env_file() {
+  local dest="$1" template="$2" hint="${3:-}"
+  local name; name="$(basename "$dest")"
+
+  if [[ -f "$dest" ]]; then
+    echo "==> .vscode/$name already exists; leaving it untouched"
+    return
+  fi
+  if [[ ! -f "$template" ]]; then
+    echo "error: $(basename "$template") missing — cannot bootstrap $name" >&2
     exit 1
   fi
-  cp "$ENV_K8S_TEMPLATE" "$ENV_K8S"
-  echo "==> created .vscode/.env.k8s from template — edit <REPLACE THIS> values (at minimum GEN_AI_API_KEY)"
-fi
+  cp "$template" "$dest"
+  echo "==> created .vscode/$name from template${hint:+ — $hint}"
+}
+
+bootstrap_env_file "$ENV_K8S" "$ENV_K8S_TEMPLATE" \
+  "edit <REPLACE THIS> values (at minimum GEN_AI_API_KEY)"
+
+bootstrap_env_file "$ENV_WEB" "$ENV_WEB_TEMPLATE"
 
 # ---- 3. sandbox image build + load ----
 
@@ -114,7 +127,7 @@ if [[ "$SKIP_SANDBOX_IMAGE" -eq 1 ]]; then
   echo "==> skipping sandbox image build (--skip-sandbox-image)"
 else
   echo "==> building $SANDBOX_IMAGE ..."
-  docker build -t "$SANDBOX_IMAGE" "$SANDBOX_DOCKER_DIR"
+  docker build -t "$SANDBOX_IMAGE" "$SANDBOX_IMAGE_DIR"
 fi
 
 echo "==> loading $SANDBOX_IMAGE into kind node ($CLUSTER_NAME) ..."

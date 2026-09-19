@@ -3,8 +3,8 @@ package tui
 import (
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
 )
@@ -13,6 +13,11 @@ const (
 	MaxAPIKeyLength  = 512
 	MaxAPIKeyRetries = 5
 )
+
+// RemoteMode marks this process as serving the TUI to remote clients.
+// Commands that touch the host filesystem are refused while it is set,
+// because those paths resolve on the operator's machine, not the client's.
+var RemoteMode bool
 
 // --- auth prompt (bubbletea model) ---
 
@@ -49,7 +54,7 @@ func NewAuthModel(serverURL, initialErr string, validateFunc func(string, string
 	ti.EchoMode = textinput.EchoPassword
 	ti.EchoCharacter = '•'
 	ti.CharLimit = MaxAPIKeyLength
-	ti.Width = 80
+	ti.SetWidth(80)
 	ti.Focus()
 
 	return AuthModel{
@@ -64,11 +69,11 @@ func NewAuthModel(serverURL, initialErr string, validateFunc func(string, string
 func (m AuthModel) Update(msg tea.Msg) (AuthModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.input.Width = max(msg.Width-14, 20) // account for prompt width
+		m.input.SetWidth(max(msg.Width-14, 20)) // account for prompt width
 		return m, nil
-	case tea.KeyMsg:
-		switch msg.Type {
-		case tea.KeyCtrlC, tea.KeyCtrlD:
+	case tea.KeyPressMsg:
+		switch msg.String() {
+		case "ctrl+c", "ctrl+d":
 			m.Aborted = true
 			return m, nil
 		default:
@@ -76,7 +81,7 @@ func (m AuthModel) Update(msg tea.Msg) (AuthModel, tea.Cmd) {
 				return m, nil
 			}
 		}
-		if msg.Type == tea.KeyEnter {
+		if msg.String() == "enter" {
 			key := strings.TrimSpace(m.input.Value())
 			if key == "" {
 				m.errMsg = "No key entered."
@@ -125,7 +130,7 @@ func (m AuthModel) Update(msg tea.Msg) (AuthModel, tea.Cmd) {
 }
 
 // View renders the auth prompt.
-func (m AuthModel) View() string {
+func (m AuthModel) View() tea.View {
 	settingsURL := strings.TrimRight(m.serverURL, "/") + "/app/settings/accounts-access"
 
 	var b strings.Builder
@@ -154,7 +159,7 @@ func (m AuthModel) View() string {
 		b.WriteString(m.input.View() + "\n")
 	}
 
-	return b.String()
+	return tea.NewView(b.String())
 }
 
 // --- serve model (wraps auth -> TUI in a single bubbletea program) ---
@@ -208,8 +213,6 @@ func (m ServeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.authed = true
 			w, h := m.width, m.height
 			return m, tea.Batch(
-				tea.EnterAltScreen,
-				tea.EnableMouseCellMotion,
 				m.tui.Init(),
 				func() tea.Msg { return tea.WindowSizeMsg{Width: w, Height: h} },
 			)
@@ -223,7 +226,7 @@ func (m ServeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View renders the serve model.
-func (m ServeModel) View() string {
+func (m ServeModel) View() tea.View {
 	if !m.authed {
 		return m.auth.View()
 	}

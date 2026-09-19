@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from typing import Any
-from typing import TypeVar
+from typing import Any, TypeVar
 
-from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
     RateLimitTriedTooManyTimesError,
+    rate_limit_builder,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_after import parse_retry_after_seconds
 
 logger = setup_logger()
 
@@ -30,7 +30,7 @@ def _extract_header(headers: Any, key: str) -> str | None:
     if headers is None:
         return None
 
-    getter = getattr(headers, "get", None)
+    getter = getattr(headers, "get", None)  # ods: ignore[getattr]
     if callable(getter):
         value = getter(key)
         if value is not None:
@@ -45,11 +45,11 @@ def _extract_header(headers: Any, key: str) -> str | None:
 
 
 def is_rate_limit_error(exception: Exception) -> bool:
-    status = getattr(exception, "status", None)
+    status = getattr(exception, "status", None)  # ods: ignore[getattr]
     if status == 429:
         return True
 
-    headers = getattr(exception, "headers", None)
+    headers = getattr(exception, "headers", None)  # ods: ignore[getattr]
     if headers is not None:
         remaining = _extract_header(headers, "x-hubspot-ratelimit-remaining")
         if remaining == "0":
@@ -65,16 +65,11 @@ def is_rate_limit_error(exception: Exception) -> bool:
 
 
 def get_rate_limit_retry_delay_seconds(exception: Exception) -> float:
-    headers = getattr(exception, "headers", None)
+    headers = getattr(exception, "headers", None)  # ods: ignore[getattr]
 
-    retry_after = _extract_header(headers, "Retry-After")
-    if retry_after:
-        try:
-            return float(retry_after) + _SLEEP_PADDING_SECONDS
-        except ValueError:
-            logger.debug(
-                "Failed to parse Retry-After header '%s' as float", retry_after
-            )
+    retry_after = parse_retry_after_seconds(_extract_header(headers, "Retry-After"))
+    if retry_after is not None:
+        return retry_after + _SLEEP_PADDING_SECONDS
 
     interval_ms = _extract_header(headers, "x-hubspot-ratelimit-interval-milliseconds")
     if interval_ms:

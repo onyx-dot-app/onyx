@@ -1,11 +1,10 @@
 "use client";
 
-import * as Yup from "yup";
+import { useTranslations } from "next-intl";
 import { Dispatch, SetStateAction, useMemo, useState } from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
-import { InputDivider, InputVertical } from "@opal/layouts";
-import { markdown } from "@opal/utils";
+import { InputDivider, InputVertical, toast } from "@opal/layouts";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
   LLMProviderFormProps,
@@ -16,24 +15,22 @@ import {
   useInitialValues,
   buildValidationSchema,
   BaseLLMFormValues,
-  mergeFetchedModelConfigurations,
+  withFetchedModels,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
-import { LLMProviderConfiguredSource } from "@/lib/analytics";
+import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 import {
-  CONTAINERIZED_HOST_NOTE,
   ModelSelectionField,
   DisplayNameField,
   ModelAccessField,
   ModalWrapper,
+  useApiBaseSubDescription,
 } from "@/sections/modals/languageModels/shared";
 import { fetchOllamaModels } from "@/lib/languageModels/svc";
-import Tabs from "@/refresh-components/Tabs";
-import { Card } from "@opal/components";
-import { toast } from "@/hooks/useToast";
+import { Card, Tabs } from "@opal/components";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 const CLOUD_API_BASE = "https://ollama.com";
 
 enum Tab {
@@ -43,9 +40,6 @@ enum Tab {
 
 interface OllamaModalValues extends BaseLLMFormValues {
   api_base: string;
-  custom_config: {
-    OLLAMA_API_KEY?: string;
-  };
 }
 
 interface OllamaModalInternalsProps {
@@ -61,81 +55,76 @@ function OllamaModalInternals({
   tab,
   setTab,
 }: OllamaModalInternalsProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const formikProps = useFormikContext<OllamaModalValues>();
-  const { settings } = useSettingsContext();
+  const apiBaseSubDescription = useApiBaseSubDescription(
+    t("ollama.apiBaseField.description")
+  );
 
   const isFetchDisabled = useMemo(
     () =>
       tab === Tab.TAB_SELF_HOSTED
         ? !formikProps.values.api_base
-        : !formikProps.values.custom_config.OLLAMA_API_KEY,
+        : !formikProps.values.api_key,
     [tab, formikProps]
   );
 
   const handleFetchModels = async (signal?: AbortSignal) => {
     // Only Ollama cloud accepts API key
-    const apiBase = formikProps.values.custom_config?.OLLAMA_API_KEY
+    const apiBase = formikProps.values.api_key
       ? CLOUD_API_BASE
       : formikProps.values.api_base;
     const { models, error } = await fetchOllamaModels({
       api_base: apiBase,
-      provider_name: existingLlmProvider?.name ?? undefined,
+      provider_id: existingLlmProvider?.id ?? undefined,
       signal,
     });
     if (signal?.aborted) return;
     if (error) {
       throw new Error(error);
     }
-    formikProps.setFieldValue(
-      "model_configurations",
-      mergeFetchedModelConfigurations(
-        models,
-        formikProps.values.model_configurations
-      )
-    );
+    formikProps.setValues(withFetchedModels(models));
   };
 
   return (
     <>
-      <Card background="light" border="none" padding="sm">
+      <Card color="background-tint-00" border="none" padding={2}>
         <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)}>
           <Tabs.List>
             <Tabs.Trigger value={Tab.TAB_SELF_HOSTED}>
-              Self-hosted Ollama
+              {t("ollama.tabs.selfHosted.label")}
             </Tabs.Trigger>
-            <Tabs.Trigger value={Tab.TAB_CLOUD}>Ollama Cloud</Tabs.Trigger>
+            <Tabs.Trigger value={Tab.TAB_CLOUD}>
+              {t("ollama.tabs.cloud.label")}
+            </Tabs.Trigger>
           </Tabs.List>
-          <Tabs.Content value={Tab.TAB_SELF_HOSTED} padding={0}>
-            <InputVertical
-              withLabel="api_base"
-              title="API Base URL"
-              subDescription={
-                settings.is_containerized
-                  ? markdown(
-                      `The base URL for your Ollama instance. ${CONTAINERIZED_HOST_NOTE}`
-                    )
-                  : "The base URL for your Ollama instance."
-              }
-            >
-              <InputTypeInField
-                name="api_base"
-                placeholder="Your Ollama API base URL"
-              />
-            </InputVertical>
-          </Tabs.Content>
+          <div className="pt-4">
+            <Tabs.Content value={Tab.TAB_SELF_HOSTED}>
+              <InputVertical
+                withLabel="api_base"
+                title={t("setup.apiBaseField.title")}
+                subDescription={apiBaseSubDescription}
+              >
+                <InputTypeInField
+                  name="api_base"
+                  placeholder={t("ollama.apiBaseField.placeholder")}
+                />
+              </InputVertical>
+            </Tabs.Content>
 
-          <Tabs.Content value={Tab.TAB_CLOUD}>
-            <InputVertical
-              withLabel="custom_config.OLLAMA_API_KEY"
-              title="API Key"
-              subDescription="Your Ollama Cloud API key."
-            >
-              <PasswordInputTypeInField
-                name="custom_config.OLLAMA_API_KEY"
-                placeholder="API Key"
-              />
-            </InputVertical>
-          </Tabs.Content>
+            <Tabs.Content value={Tab.TAB_CLOUD}>
+              <InputVertical
+                withLabel="api_key"
+                title={t("setup.apiKeyField.title")}
+                subDescription={t("ollama.apiKeyField.description")}
+              >
+                <PasswordInputTypeInField
+                  name="api_key"
+                  placeholder={t("ollama.apiKeyField.placeholder")}
+                />
+              </InputVertical>
+            </Tabs.Content>
+          </div>
         </Tabs>
       </Card>
 
@@ -168,14 +157,16 @@ export default function OllamaModal({
   shouldMarkAsDefault,
   onOpenChange,
   onSuccess,
+  analyticsSource,
 }: LLMProviderFormProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
-  const { settings } = useSettingsContext();
+  const settings = useSettings();
   const defaultApiBase = settings.is_containerized
     ? "http://host.docker.internal:11434"
     : "http://127.0.0.1:11434";
-  const apiKey = existingLlmProvider?.custom_config?.OLLAMA_API_KEY;
+  const apiKey = existingLlmProvider?.api_key;
   const defaultTab =
     existingLlmProvider && !!apiKey ? Tab.TAB_CLOUD : Tab.TAB_SELF_HOSTED;
   const [tab, setTab] = useState<Tab>(defaultTab);
@@ -189,25 +180,15 @@ export default function OllamaModal({
       existingLlmProvider
     ),
     api_base: existingLlmProvider?.api_base ?? defaultApiBase,
-    custom_config: {
-      OLLAMA_API_KEY: apiKey,
-    },
-  } as OllamaModalValues;
+  };
 
   const validationSchema = useMemo(
     () =>
-      buildValidationSchema(isOnboarding, {
+      buildValidationSchema(t, isOnboarding, {
         apiBase: tab === Tab.TAB_SELF_HOSTED,
-        extra:
-          tab === Tab.TAB_CLOUD
-            ? {
-                custom_config: Yup.object({
-                  OLLAMA_API_KEY: Yup.string().required("API Key is required"),
-                }),
-              }
-            : undefined,
+        apiKey: tab === Tab.TAB_CLOUD,
       }),
-    [tab, isOnboarding]
+    [t, tab, isOnboarding]
   );
 
   return (
@@ -218,25 +199,19 @@ export default function OllamaModal({
       initialValues={initialValues}
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
-        const filteredCustomConfig = Object.fromEntries(
-          Object.entries(values.custom_config || {}).filter(([, v]) => v !== "")
-        );
-
         const submitValues = {
           ...values,
-          api_base: filteredCustomConfig.OLLAMA_API_KEY
-            ? CLOUD_API_BASE
-            : values.api_base,
-          custom_config:
-            Object.keys(filteredCustomConfig).length > 0
-              ? filteredCustomConfig
-              : undefined,
+          // Ollama Cloud is reached via a fixed base URL; the API key implies it.
+          api_base: values.api_key ? CLOUD_API_BASE : values.api_base,
         };
 
         await submitProvider({
-          analyticsSource: isOnboarding
-            ? LLMProviderConfiguredSource.CHAT_ONBOARDING
-            : LLMProviderConfiguredSource.ADMIN_PAGE,
+          t,
+          analyticsSource:
+            analyticsSource ??
+            (isOnboarding
+              ? LLMProviderConfiguredSource.CHAT_ONBOARDING
+              : LLMProviderConfiguredSource.ADMIN_PAGE),
           providerName: LLMProviderName.OLLAMA_CHAT,
           values: submitValues,
           initialValues,
@@ -252,8 +227,8 @@ export default function OllamaModal({
               await refreshLlmProviderCaches(mutate);
               toast.success(
                 existingLlmProvider
-                  ? "Provider updated successfully!"
-                  : "Provider enabled successfully!"
+                  ? t("toasts.providerUpdated")
+                  : t("toasts.providerEnabled")
               );
             }
           },

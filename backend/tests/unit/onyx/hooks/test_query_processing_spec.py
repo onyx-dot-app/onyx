@@ -1,5 +1,4 @@
-from onyx.db.enums import HookFailStrategy
-from onyx.db.enums import HookPoint
+from onyx.db.enums import HookFailStrategy, HookPoint
 from onyx.hooks.points.query_processing import QueryProcessingSpec
 
 

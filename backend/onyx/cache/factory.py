@@ -1,7 +1,6 @@
 from collections.abc import Callable
 
-from onyx.cache.interface import CacheBackend
-from onyx.cache.interface import CacheBackendType
+from onyx.cache.interface import CacheBackend, CacheBackendType
 from onyx.configs.app_configs import CACHE_BACKEND
 
 

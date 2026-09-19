@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { SvgImage } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 
@@ -16,6 +17,7 @@ interface ImagePreviewProps {
  * Includes proper accessibility attributes
  */
 export default function ImagePreview({ src, fileName }: ImagePreviewProps) {
+  const t = useTranslations("craft.imagePreview");
   const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
 
@@ -34,14 +36,14 @@ export default function ImagePreview({ src, fileName }: ImagePreviewProps) {
         height="full"
         alignItems="center"
         justifyContent="center"
-        padding={2}
+        padding={8}
       >
         <SvgImage size={48} className="stroke-text-02" />
-        <Text headingH3 text03>
-          Failed to load image
+        <Text font="heading-h3" color="text-03">
+          {t("error.title")}
         </Text>
-        <Text secondaryBody text02>
-          The image could not be displayed
+        <Text font="secondary-body" color="text-02">
+          {t("error.description")}
         </Text>
       </Section>
     );
@@ -52,16 +54,16 @@ export default function ImagePreview({ src, fileName }: ImagePreviewProps) {
       <div className="flex-1 flex items-center justify-center p-4">
         {imageLoading && (
           <div className="absolute">
-            <Text secondaryBody text03>
-              Loading image...
+            <Text font="secondary-body" color="text-03">
+              {t("loading.label")}
             </Text>
           </div>
         )}
         <img
           src={src}
           alt={displayName}
-          role="img"
-          aria-label={`Preview of ${displayName}`}
+
+          aria-label={t("preview.ariaLabel", { name: displayName })}
           className={cn(
             "max-w-full max-h-full object-contain transition-opacity",
             imageLoading ? "opacity-0" : "opacity-100"

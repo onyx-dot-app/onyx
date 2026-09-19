@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect } from "react";
+import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { fetchFileContent } from "@/app/craft/services/apiServices";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { SvgFileText } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import ImagePreview from "@/app/craft/components/output-panel/ImagePreview";
@@ -45,7 +46,7 @@ function ImageRendererWrapper({ content, fileName }: FileRendererProps) {
 const PREVIEW_REGISTRY: PreviewEntry[] = [
   {
     type: "standalone",
-    matches: (path) => /\.pptx$/i.test(path),
+    matches: (path) => /\.pptx?$/i.test(path),
     component: PptxPreview,
   },
   {
@@ -154,6 +155,7 @@ function FetchedFilePreview({
   fullHeight,
   refreshKey,
 }: FetchedFilePreviewProps) {
+  const t = useTranslations("craft.filePreview");
   const { data, error, isLoading, mutate } = useSWR(
     SWR_KEYS.buildSessionArtifactFile(sessionId, filePath),
     () => fetchFileContent(sessionId, filePath),
@@ -177,18 +179,18 @@ function FetchedFilePreview({
           height="full"
           alignItems="center"
           justifyContent="center"
-          padding={2}
+          padding={8}
         >
-          <Text secondaryBody text03>
-            Loading file...
+          <Text font="secondary-body" color="text-03">
+            {t("loading.label")}
           </Text>
         </Section>
       );
     }
     return (
       <div className="p-4">
-        <Text secondaryBody text03>
-          Loading file...
+        <Text font="secondary-body" color="text-03">
+          {t("loading.label")}
         </Text>
       </div>
     );
@@ -201,13 +203,13 @@ function FetchedFilePreview({
           height="full"
           alignItems="center"
           justifyContent="center"
-          padding={2}
+          padding={8}
         >
           <SvgFileText size={48} className="stroke-text-02" />
-          <Text headingH3 text03>
-            Error loading file
+          <Text font="heading-h3" color="text-03">
+            {t("error.title")}
           </Text>
-          <Text secondaryBody text02>
+          <Text font="secondary-body" color="text-02">
             {error.message}
           </Text>
         </Section>
@@ -215,8 +217,8 @@ function FetchedFilePreview({
     }
     return (
       <div className="p-4">
-        <Text secondaryBody text02>
-          Error: {error.message}
+        <Text font="secondary-body" color="text-02">
+          {t("error.inline", { message: error.message })}
         </Text>
       </div>
     );
@@ -229,18 +231,18 @@ function FetchedFilePreview({
           height="full"
           alignItems="center"
           justifyContent="center"
-          padding={2}
+          padding={8}
         >
-          <Text secondaryBody text03>
-            No content
+          <Text font="secondary-body" color="text-03">
+            {t("noContent.label")}
           </Text>
         </Section>
       );
     }
     return (
       <div className="p-4">
-        <Text secondaryBody text03>
-          No content
+        <Text font="secondary-body" color="text-03">
+          {t("noContent.label")}
         </Text>
       </div>
     );
@@ -253,21 +255,23 @@ function FetchedFilePreview({
           height="full"
           alignItems="center"
           justifyContent="center"
-          padding={2}
+          padding={8}
         >
           <SvgFileText size={48} className="stroke-text-02" />
-          <Text headingH3 text03>
-            Cannot preview file
+          <Text font="heading-h3" color="text-03">
+            {t("cannotPreview.title")}
           </Text>
-          <Text secondaryBody text02 className="text-center max-w-md">
-            {data.error}
-          </Text>
+          <div className="text-center max-w-md">
+            <Text font="secondary-body" color="text-02">
+              {data.error}
+            </Text>
+          </div>
         </Section>
       );
     }
     return (
-      <div className="p-4">
-        <Text secondaryBody text02 className="text-center">
+      <div className="p-4 text-center">
+        <Text font="secondary-body" color="text-02">
           {data.error}
         </Text>
       </div>

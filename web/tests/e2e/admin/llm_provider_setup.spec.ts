@@ -1,9 +1,10 @@
 import { expect, test } from "@playwright/test";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import type { Locator, Page } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
-const LLM_SETUP_URL = "/admin/configuration/language-models";
+const LLM_SETUP_URL = ADMIN_ROUTES.LLM_MODELS.path;
 const BASE_URL = process.env.BASE_URL || "http://localhost:3000";
 const PROVIDER_API_KEY =
   process.env.E2E_LLM_PROVIDER_API_KEY ||
@@ -120,7 +121,7 @@ async function createPublicProviderWithModels(
 
 async function navigateToAdminLlmPageFromChat(page: Page): Promise<void> {
   await page.goto(LLM_SETUP_URL);
-  await page.waitForURL("**/admin/configuration/language-models**");
+  await page.waitForURL(`**${ADMIN_ROUTES.LLM_MODELS.path}**`);
   await expect(page.getByLabel("admin-page-title")).toHaveText(
     /^Language Models/
   );
@@ -210,18 +211,13 @@ async function findProviderCard(
   page: Page,
   providerName: string
 ): Promise<Locator> {
-  return page
-    .locator("div.rounded-16")
-    .filter({ hasText: providerName })
-    .first();
+  // Exact, because the Edit and Delete buttons inside the card are labelled
+  // "Edit <name>" / "Delete <name>" and would match a substring.
+  return page.getByLabel(providerName, { exact: true }).first();
 }
 
 async function openOpenAiSetupModal(page: Page): Promise<Locator> {
-  const openAiCard = page
-    .locator("div.rounded-16")
-    .filter({ hasText: "OpenAI" })
-    .filter({ has: page.getByRole("button", { name: "Connect" }) })
-    .first();
+  const openAiCard = page.getByLabel(/^Add OpenAI/).first();
 
   await expect(openAiCard).toBeVisible({ timeout: 10000 });
   await openAiCard.getByRole("button", { name: "Connect" }).click();
@@ -352,8 +348,11 @@ test.describe("LLM Provider Setup @exclusive", () => {
 
     const firstProviderName = uniqueName("PW Baseline Provider");
     const secondProviderName = uniqueName("PW Target Provider");
-    const firstModelName = "gpt-4o";
-    const secondModelName = "gpt-4o-mini";
+    // Use unique model names so the search uniquely identifies the test-created
+    // model and doesn't collide with any pre-existing system provider.
+    const ts = Date.now();
+    const firstModelName = `pw-baseline-${ts}`;
+    const secondModelName = `pw-target-${ts}`;
 
     const firstProviderId = await createPublicProvider(
       page,
@@ -373,19 +372,21 @@ test.describe("LLM Provider Setup @exclusive", () => {
       await page.reload();
       await page.waitForLoadState("networkidle");
 
-      // Open the Default Model dropdown and select the model from the
-      // second provider's group (scoped to avoid picking a same-named model
-      // from another provider).
-      await page.getByRole("combobox").click();
-      const targetGroup = page
-        .locator('[role="group"]')
-        .filter({ hasText: secondProviderName });
+      // Open the Default Model dropdown
+      await page.locator('[data-testid="llm-popover-trigger"]').click();
+      const dialog = page.locator('[role="dialog"]').first();
+      await dialog.waitFor({ state: "visible", timeout: 10000 });
+
+      // Search for the target model to filter the list to just its entry
+      await dialog.getByPlaceholder("Search models...").fill(secondModelName);
+
       const defaultResponsePromise = page.waitForResponse(
         (response) =>
           response.url().includes("/api/admin/llm/default") &&
           response.request().method() === "POST"
       );
-      await targetGroup.locator('[role="option"]').click();
+      // After filtering, only the matching model button(s) remain — click the first
+      await dialog.getByRole("button").first().click();
       await defaultResponsePromise;
 
       // Verify the default switched to the second provider
@@ -453,7 +454,7 @@ test.describe("LLM Provider Setup @exclusive", () => {
     const editModal = await openProviderEditModal(page, providerName);
     await editModal
       .locator(`[data-model-name="${modelToEnable}"]`)
-      .locator("button")
+      .getByRole("button")
       .first()
       .click();
 
@@ -521,7 +522,7 @@ test.describe("LLM Provider Setup @exclusive", () => {
     const editModal = await openProviderEditModal(page, providerName);
     await editModal
       .locator(`[data-model-name="${modelToDisable}"]`)
-      .locator("button")
+      .getByRole("button")
       .first()
       .click();
 

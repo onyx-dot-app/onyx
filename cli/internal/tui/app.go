@@ -8,9 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/spinner"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
@@ -32,20 +33,23 @@ type Model struct {
 
 	// Chat state
 	chatSessionID   *string
-	agentID       int
-	agentName     string
-	agents        []models.AgentSummary
+	agentID         int
+	agentName       string
+	agents          []models.AgentSummary
+	llmModels       []modelOption
+	modelOverride   *models.LLMOverride
 	parentMessageID *int
-	isStreaming      bool
 	streamCancel    context.CancelFunc
 	streamCh        <-chan models.StreamEvent
 	citations       map[int]string
 	attachedFiles   []models.FileDescriptorPayload
-	needsRename     bool
-	agentStarted bool
 
 	// Configure state
 	configState *configState
+
+	isStreaming  bool
+	needsRename  bool
+	agentStarted bool
 
 	// Quit state
 	quitPending    bool
@@ -63,8 +67,8 @@ func NewModel(cfg config.OnyxCliConfig, client api.ClientAPI) Model {
 		viewport:        newViewport(80, cfg.Features.StreamMarkdownEnabled()),
 		input:           newInputModel(),
 		status:          newStatusBar(),
-		agentID:       cfg.DefaultAgentID,
-		agentName:     "Default",
+		agentID:         cfg.DefaultAgentID,
+		agentName:       "Default",
 		parentMessageID: &parentID,
 		citations:       make(map[int]string),
 	}
@@ -77,12 +81,19 @@ func NewFirstRunModel(cfg config.OnyxCliConfig) Model {
 	return model
 }
 
+// WithSessionAgent overrides the starting agent for this chat session without
+// changing the saved default (used by chat --agent-id / --agent-name).
+func (m Model) WithSessionAgent(agentID int) Model {
+	m.agentID = agentID
+	return m
+}
+
 // Init initializes the model.
 func (m Model) Init() tea.Cmd {
 	if m.client == nil {
 		return nil
 	}
-	return loadAgentsCmd(m.client)
+	return tea.Batch(loadAgentsCmd(m.client), loadModelsCmd(m.client))
 }
 
 // Update handles messages.
@@ -103,7 +114,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.viewport.setWidth(msg.Width)
 		m.status.setWidth(msg.Width)
-		m.input.textInput.Width = msg.Width - 4
+		m.input.textInput.SetWidth(msg.Width - 4)
 		if !m.splashShown {
 			m.splashShown = true
 			viewportHeight := msg.Height - 4
@@ -117,17 +128,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case tea.MouseMsg:
-		switch msg.Button {
-		case tea.MouseButtonWheelUp:
+	case tea.MouseWheelMsg:
+		switch msg.Mouse().Button {
+		case tea.MouseWheelUp:
 			m.viewport.scrollUp(3, m.viewportHeight())
 			return m, nil
-		case tea.MouseButtonWheelDown:
+		case tea.MouseWheelDown:
 			m.viewport.scrollDown(3)
 			return m, nil
 		}
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 
 	case submitMsg:
@@ -147,6 +158,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case AgentsLoadedMsg:
 		return m.handleAgentsLoaded(msg)
+
+	case ModelsLoadedMsg:
+		return m.handleModelsLoaded(msg)
 
 	case SessionsLoadedMsg:
 		return m.handleSessionsLoaded(msg)
@@ -169,9 +183,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.input.textInput.SetValue("")
 		if m.startMode == startFirstRun {
 			m, cmd := enterConfigureMode(m)
-			return m, tea.Batch(m.input.textInput.Cursor.BlinkCmd(), cmd)
+			return m, tea.Batch(textinput.Blink, cmd)
 		}
-		return m, m.input.textInput.Cursor.BlinkCmd()
+		return m, textinput.Blink
 
 	case resetQuitMsg:
 		m.quitPending = false
@@ -206,9 +220,9 @@ func (m Model) viewportHeight() int {
 	return h
 }
 
-func (m Model) View() string {
+func (m Model) View() tea.View {
 	if m.width == 0 || m.height == 0 {
-		return ""
+		return appView("")
 	}
 
 	separator := lipgloss.NewStyle().Foreground(separatorColor).Render(
@@ -228,13 +242,20 @@ func (m Model) View() string {
 	parts = append(parts, separator)
 	parts = append(parts, m.status.view())
 
-	return strings.Join(parts, "\n")
+	return appView(strings.Join(parts, "\n"))
+}
+
+func appView(content string) tea.View {
+	view := tea.NewView(content)
+	view.AltScreen = true
+	view.MouseMode = tea.MouseModeCellMotion
+	return view
 }
 
 // handleKey processes keyboard input.
-func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyEscape:
+func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
 		if m.input.menuVisible {
 			m.input.menuVisible = false
 			return m, nil
@@ -251,7 +272,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case tea.KeyCtrlD:
+	case "ctrl+d":
 		if m.configState != nil {
 			return m.cancelConfigure()
 		}
@@ -267,11 +288,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return resetQuitMsg{}
 		})
 
-	case tea.KeyCtrlO:
+	case "ctrl+o":
 		m.viewport.showSources = !m.viewport.showSources
 		return m, nil
 
-	case tea.KeyEnter:
+	case "enter":
 		if m.configState != nil {
 			text := strings.TrimSpace(m.input.textInput.Value())
 			m.input.textInput.SetValue("")
@@ -288,13 +309,15 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				case pickerSession:
 					return cmdResume(m, item.id)
 				case pickerAgent:
-					return cmdSelectAgent(m, item.id)
+					return cmdSelectAgentByID(m, item.id)
+				case pickerModel:
+					return cmdSelectModel(m, item.id)
 				}
 			}
 			return m, nil
 		}
 
-	case tea.KeyUp:
+	case "up":
 		if m.viewport.pickerActive {
 			if m.viewport.pickerIndex > 0 {
 				m.viewport.pickerIndex--
@@ -302,7 +325,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-	case tea.KeyDown:
+	case "down":
 		if m.viewport.pickerActive {
 			if m.viewport.pickerIndex < len(m.viewport.pickerItems)-1 {
 				m.viewport.pickerIndex++
@@ -310,19 +333,19 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-	case tea.KeyPgUp:
+	case "pgup":
 		m.viewport.scrollUp(m.viewportHeight()/2, m.viewportHeight())
 		return m, nil
 
-	case tea.KeyPgDown:
+	case "pgdown":
 		m.viewport.scrollDown(m.viewportHeight() / 2)
 		return m, nil
 
-	case tea.KeyShiftUp:
+	case "shift+up":
 		m.viewport.scrollUp(3, m.viewportHeight())
 		return m, nil
 
-	case tea.KeyShiftDown:
+	case "shift+down":
 		m.viewport.scrollDown(3)
 		return m, nil
 	}
@@ -386,6 +409,7 @@ func (m Model) sendMessage(message string) (Model, tea.Cmd) {
 		m.agentID,
 		m.parentMessageID,
 		fileDescs,
+		m.modelOverride,
 	)
 	m.streamCh = ch
 
@@ -563,6 +587,73 @@ func (m Model) handleAgentsLoaded(msg AgentsLoadedMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m Model) handleModelsLoaded(msg ModelsLoadedMsg) (tea.Model, tea.Cmd) {
+	if msg.Err != nil {
+		// Startup fetch failures are silent — the status bar just omits the
+		// model segment. Only report when the user asked for the picker.
+		if msg.ShowPicker {
+			m.viewport.addError("Could not load models: " + msg.Err.Error())
+		}
+		return m, nil
+	}
+
+	// A startup response that lands while the model picker is open must not
+	// replace the list the picker's indices point into.
+	if !msg.ShowPicker && m.viewport.pickerActive && m.viewport.pickerType == pickerModel {
+		return m, nil
+	}
+
+	m.llmModels = flattenModelOptions(msg.Response)
+	m.status.setModel(m.currentModelLabel())
+
+	if !msg.ShowPicker {
+		return m, nil
+	}
+	if len(m.llmModels) == 0 {
+		m.viewport.addInfo("No models available.")
+		return m, nil
+	}
+
+	m.viewport.addInfo("Select a model (Enter to select, Esc to cancel):")
+
+	var items []pickerItem
+	for i, opt := range m.llmModels {
+		label := opt.label
+		if m.isCurrentModel(opt) {
+			label += " *"
+		}
+		items = append(items, pickerItem{
+			id:     strconv.Itoa(i),
+			label:  label,
+			detail: opt.providerLabel,
+		})
+	}
+	m.viewport.showPicker(pickerModel, items)
+	return m, nil
+}
+
+// isCurrentModel reports whether opt is the model in effect: the explicit
+// override when one is set, otherwise the workspace default.
+func (m Model) isCurrentModel(opt modelOption) bool {
+	if m.modelOverride == nil {
+		return opt.isDefault
+	}
+	if m.modelOverride.ModelConfigurationID != nil && opt.configID != nil {
+		return *m.modelOverride.ModelConfigurationID == *opt.configID
+	}
+	return m.modelOverride.ModelVersion != nil && *m.modelOverride.ModelVersion == opt.name
+}
+
+// currentModelLabel returns the display label of the model in effect.
+func (m Model) currentModelLabel() string {
+	for _, opt := range m.llmModels {
+		if m.isCurrentModel(opt) {
+			return opt.label
+		}
+	}
+	return ""
+}
+
 func (m Model) handleSessionsLoaded(msg SessionsLoadedMsg) (tea.Model, tea.Cmd) {
 	if msg.Err != nil {
 		m.viewport.addError("Could not load sessions: " + msg.Err.Error())
@@ -667,4 +758,3 @@ func (m Model) handleFileUploaded(msg FileUploadedMsg) (tea.Model, tea.Cmd) {
 
 type inputReadyMsg struct{}
 type resetQuitMsg struct{}
-

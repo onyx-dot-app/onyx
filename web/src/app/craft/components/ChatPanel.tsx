@@ -1,25 +1,28 @@
 "use client";
 
-import { useCallback, useState, useEffect, useRef, useMemo } from "react";
+import { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { track, AnalyticsEvent } from "@/lib/analytics";
+import { useTranslations } from "next-intl";
+import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import {
   useSession,
   useSessionId,
   useHasSession,
   useIsRunning,
+  useIsInterrupting,
+  useWasInterrupted,
   useOutputPanelOpen,
   useToggleOutputPanel,
   useBuildSessionStore,
   useIsPreProvisioning,
   useIsPreProvisioningFailed,
   usePreProvisionedSessionId,
-  useFollowupSuggestions,
-  useSuggestionsLoading,
+  useQueuedMessages,
+  useViewedSubagentSessionId,
 } from "@/app/craft/hooks/useBuildSessionStore";
 import { useBuildStreaming } from "@/app/craft/hooks/useBuildStreaming";
-import { useUsageLimits } from "@/app/craft/hooks/useUsageLimits";
-import { SessionErrorCode } from "@/app/craft/types/streamingTypes";
+import { useWakeOnIntent } from "@/app/craft/hooks/useWakeOnIntent";
+import { BuildMessageAttachment } from "@/app/craft/types/streamingTypes";
 import {
   BuildFile,
   UploadFileStatus,
@@ -27,26 +30,56 @@ import {
 } from "@/app/craft/contexts/UploadFilesContext";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
-import { toast } from "@/hooks/useToast";
-import InputBar, { InputBarHandle } from "@/app/craft/components/InputBar";
-import ScheduledRunBanner from "@/app/craft/components/ScheduledRunBanner";
+import { isScheduledRunContextInFlight } from "@/app/craft/v1/tasks/utils";
+import { toast } from "@opal/layouts";
+import Dropzone from "react-dropzone";
+import CraftInputBar, {
+  CraftInputBarHandle,
+} from "@/app/craft/components/CraftInputBar";
+import ModelPickerButton from "@/app/craft/components/ModelPickerButton";
+import { useLLMProviders } from "@/lib/languageModels/hooks";
+import {
+  BuildLlmSelection,
+  hasSupportedCraftProvider,
+  resolveSessionLlmSelection,
+} from "@/app/craft/onboarding/constants";
+import { getPreferredLlmSelection } from "@/app/craft/utils/llmPreferences";
+import { useUser } from "@/providers/UserProvider";
+import ScheduledRunBanner, {
+  useScheduledRunContext,
+} from "@/app/craft/components/ScheduledRunBanner";
 import BuildWelcome from "@/app/craft/components/BuildWelcome";
 import BuildMessageList from "@/app/craft/components/BuildMessageList";
-import SuggestionBubbles from "@/app/craft/components/SuggestionBubbles";
-import ConnectorBannersRow from "@/app/craft/components/ConnectorBannersRow";
+import LiveApprovalsRegion from "@/app/craft/components/approvals/LiveApprovalsRegion";
+import AgentSwitcher from "@/app/craft/components/AgentSwitcher";
+import SubagentView from "@/app/craft/components/SubagentView";
 import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicator";
-import UpgradePlanModal from "@/app/craft/components/UpgradePlanModal";
-import IconButton from "@/refresh-components/buttons/IconButton";
-import { SvgSidebar, SvgChevronDown } from "@opal/icons";
-import { Button as OpalButton } from "@opal/components";
+import SandboxAsleepNotice from "@/app/craft/components/SandboxAsleepNotice";
+import SkillsStaleNotice from "@/app/craft/components/SkillsStaleNotice";
+import { SvgSidebar, SvgChevronDown, SvgStopCircle } from "@opal/icons";
+import { Button, Tooltip } from "@opal/components";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
 import useScreenSize from "@/hooks/useScreenSize";
 import { cn } from "@opal/utils";
-import { Tooltip } from "@opal/components";
+import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 
 interface BuildChatPanelProps {
   /** Session ID from URL - used to prevent welcome flash while loading */
   existingSessionId?: string | null;
+}
+
+function toMessageAttachments(files: BuildFile[]): BuildMessageAttachment[] {
+  return files.flatMap((file) =>
+    file.status === UploadFileStatus.COMPLETED && file.path
+      ? [
+          {
+            name: file.name,
+            path: file.path,
+            mimeType: file.file_type,
+          },
+        ]
+      : []
+  );
 }
 
 /**
@@ -61,45 +94,98 @@ interface BuildChatPanelProps {
 export default function BuildChatPanel({
   existingSessionId,
 }: BuildChatPanelProps) {
+  const t = useTranslations("craft.chatPanel");
   const router = useRouter();
   const outputPanelOpen = useOutputPanelOpen();
   const session = useSession();
   const sessionId = useSessionId();
+  const scheduledSessionId = sessionId ?? existingSessionId ?? null;
+  // Gate on origin so interactive sessions don't 404 on scheduled-run-context.
+  const scheduledRunSessionId =
+    session?.origin === "SCHEDULED" ? scheduledSessionId : null;
+  const { data: scheduledRunContext, mutate: mutateScheduledRunContext } =
+    useScheduledRunContext(scheduledRunSessionId);
+  const scheduledRunInFlight =
+    isScheduledRunContextInFlight(scheduledRunContext);
+  const shouldStreamScheduledRun = scheduledRunContext?.status === "RUNNING";
   const hasSession = useHasSession();
   const isRunning = useIsRunning();
-  const { setLeftSidebarFolded, leftSidebarFolded } = useBuildContext();
+  const displayIsRunning = isRunning || scheduledRunInFlight;
+  const hasInterruptibleTurn = session?.status === "running";
+  const wasInterrupted = useWasInterrupted();
+  const { setLeftSidebarFolded, leftSidebarFolded, videoBackgroundEnabled } =
+    useBuildContext();
   const { isMobile } = useScreenSize();
   const toggleOutputPanel = useToggleOutputPanel();
+  const onWakeIntent = useWakeOnIntent();
 
-  // Track when output panel is fully closed (after animation completes)
-  // This prevents the "open panel" button from appearing during the close animation
-  const [isOutputPanelFullyClosed, setIsOutputPanelFullyClosed] =
-    useState(!outputPanelOpen);
-
-  const { limits, refreshLimits } = useUsageLimits();
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const setCurrentError = useBuildSessionStore(
-    (state) => state.setCurrentError
+  const { llmProviders, defaultText, defaultCraft } = useLLMProviders();
+  // Sessions can outlive the org's supported providers — gate sends until one
+  // exists (the model picker stays enabled so admins can connect from it).
+  const hasProvider = hasSupportedCraftProvider(llmProviders);
+  // Picker shows the session's stored model unless the user picks another.
+  // The pick is keyed by session so it can't leak across sessions; only when
+  // neither exists does the user's persisted preference (or the recommended
+  // default) apply.
+  const sessionModel = useMemo<BuildLlmSelection | null>(
+    () =>
+      resolveSessionLlmSelection(
+        session?.agentProvider,
+        session?.agentModel,
+        llmProviders
+      ),
+    [session?.agentProvider, session?.agentModel, llmProviders]
+  );
+  const [modelBySession, setModelBySession] = useState<
+    Record<string, BuildLlmSelection>
+  >({});
+  const { user } = useUser();
+  const selectedModel = useMemo(
+    () =>
+      (sessionId ? modelBySession[sessionId] : undefined) ??
+      sessionModel ??
+      getPreferredLlmSelection(user?.id, llmProviders, [
+        defaultCraft,
+        defaultText,
+      ]),
+    [
+      sessionId,
+      modelBySession,
+      sessionModel,
+      user?.id,
+      llmProviders,
+      defaultCraft,
+      defaultText,
+    ]
   );
 
-  useEffect(() => {
-    if (session?.error === SessionErrorCode.RATE_LIMIT_EXCEEDED) {
-      setShowUpgradeModal(true);
-      setCurrentError(null);
-      refreshLimits();
+  const contextUsage = useMemo(() => {
+    const usage = session?.contextUsage;
+    if (!usage) return null;
+    let limit: number | null = null;
+    if (selectedModel) {
+      const provider = llmProviders?.find(
+        (candidate) => candidate.id === selectedModel.providerId
+      );
+      const config = provider?.model_configurations.find(
+        (m) => m.name === selectedModel.modelName
+      );
+      limit = config?.max_input_tokens ?? null;
     }
-  }, [session?.error, refreshLimits, setCurrentError]);
+    return {
+      usedTokens: usage.usedTokens,
+      contextLimit: limit,
+    };
+  }, [session?.contextUsage, selectedModel, llmProviders]);
 
-  useEffect(() => {
-    if (outputPanelOpen) {
-      // Panel opening - immediately mark as not fully closed
-      setIsOutputPanelFullyClosed(false);
-    } else {
-      // Panel closing - wait for 300ms animation to complete
-      const timer = setTimeout(() => setIsOutputPanelFullyClosed(true), 300);
-      return () => clearTimeout(timer);
-    }
-  }, [outputPanelOpen]);
+  // Main-column view mode: chat (main agent) vs a subagent transcript.
+  const viewedSubagentSessionId = useViewedSubagentSessionId();
+  const isViewingSubagent = viewedSubagentSessionId !== null;
+  const reduceMotion = useReducedMotion();
+
+  const updateSessionData = useBuildSessionStore(
+    (state) => state.updateSessionData
+  );
 
   // Access actions directly like chat does - these don't cause re-renders
   const consumePreProvisionedSession = useBuildSessionStore(
@@ -112,20 +198,41 @@ export default function BuildChatPanel({
   const nameBuildSession = useBuildSessionStore(
     (state) => state.nameBuildSession
   );
-  const { streamMessage } = useBuildStreaming();
+  const {
+    streamMessage,
+    interruptStreaming,
+    streamScheduledRunEvents,
+    streamTurnEvents,
+  } = useBuildStreaming();
+  const isInterrupting = useIsInterrupting();
+  const queuedMessages = useQueuedMessages();
+  const enqueueMessage = useBuildSessionStore((state) => state.enqueueMessage);
+  const removeQueuedMessage = useBuildSessionStore(
+    (state) => state.removeQueuedMessage
+  );
+  const attachedTurnRef = useRef<{
+    turnId: string;
+    controller: AbortController;
+  } | null>(null);
+  const attachCleanupTimerRef = useRef<{
+    turnId: string;
+    timer: ReturnType<typeof setTimeout>;
+  } | null>(null);
+  const nameSessionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
   const isPreProvisioning = useIsPreProvisioning();
   const isPreProvisioningFailed = useIsPreProvisioningFailed();
   const preProvisionedSessionId = usePreProvisionedSessionId();
 
   // Disable input when pre-provisioning is in progress or failed (waiting for retry)
   const sandboxNotReady = isPreProvisioning || isPreProvisioningFailed;
-  const { currentMessageFiles, hasUploadingFiles, setActiveSession } =
-    useUploadFilesContext();
-  const followupSuggestions = useFollowupSuggestions();
-  const suggestionsLoading = useSuggestionsLoading();
-  const clearFollowupSuggestions = useBuildSessionStore(
-    (state) => state.clearFollowupSuggestions
-  );
+  const {
+    currentMessageFiles,
+    hasUploadingFiles,
+    setActiveSession,
+    uploadFiles,
+  } = useUploadFilesContext();
 
   // Ref to access current file state in async callbacks
   const currentFilesRef = useRef(currentMessageFiles);
@@ -143,8 +250,122 @@ export default function BuildChatPanel({
     setActiveSession(activeSession);
   }, [existingSessionId, preProvisionedSessionId, setActiveSession]);
 
+  const maybeAutoOpenPanelForPreview = useBuildSessionStore(
+    (s) => s.maybeAutoOpenPanelForPreview
+  );
+
+  // Auto-open the panel the first time webappUrl becomes non-null this session.
+  const prevWebappUrlRef = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    const prev = prevWebappUrlRef.current;
+    const current = session?.webappUrl ?? null;
+    if (prev === null && current !== null && sessionId) {
+      maybeAutoOpenPanelForPreview(sessionId);
+    }
+    prevWebappUrlRef.current = current;
+  }, [session?.webappUrl, sessionId, maybeAutoOpenPanelForPreview]);
+
+  useEffect(() => {
+    if (!scheduledSessionId || !shouldStreamScheduledRun) return;
+
+    const controller = new AbortController();
+    void streamScheduledRunEvents(scheduledSessionId, controller.signal, () => {
+      void mutateScheduledRunContext();
+    });
+
+    return () => controller.abort();
+  }, [
+    scheduledSessionId,
+    shouldStreamScheduledRun,
+    streamScheduledRunEvents,
+    mutateScheduledRunContext,
+  ]);
+
+  const activeTurnId = session?.activeTurnId ?? null;
+  const activeTurnLocalOwner = session?.activeTurnLocalOwner ?? false;
+  useEffect(() => {
+    const pendingCleanup = attachCleanupTimerRef.current;
+    if (pendingCleanup?.turnId === activeTurnId) {
+      clearTimeout(pendingCleanup.timer);
+      attachCleanupTimerRef.current = null;
+    }
+
+    if (
+      !scheduledSessionId ||
+      !activeTurnId ||
+      activeTurnLocalOwner ||
+      scheduledRunInFlight
+    ) {
+      return;
+    }
+
+    const scheduleCleanup = (attachment: {
+      turnId: string;
+      controller: AbortController;
+    }) => {
+      attachCleanupTimerRef.current = {
+        turnId: attachment.turnId,
+        timer: setTimeout(() => {
+          attachment.controller.abort();
+          if (attachedTurnRef.current === attachment) {
+            attachedTurnRef.current = null;
+          }
+          if (attachCleanupTimerRef.current?.turnId === attachment.turnId) {
+            attachCleanupTimerRef.current = null;
+          }
+        }, 0),
+      };
+    };
+
+    const existingAttachment = attachedTurnRef.current;
+    if (existingAttachment?.turnId === activeTurnId) {
+      return () => scheduleCleanup(existingAttachment);
+    }
+
+    existingAttachment?.controller.abort();
+    const controller = new AbortController();
+    const attachment = { turnId: activeTurnId, controller };
+    attachedTurnRef.current = attachment;
+    void streamTurnEvents(
+      scheduledSessionId,
+      activeTurnId,
+      controller.signal,
+      () => {
+        if (attachedTurnRef.current === attachment) {
+          attachedTurnRef.current = null;
+        }
+      }
+    );
+
+    return () => scheduleCleanup(attachment);
+  }, [
+    scheduledSessionId,
+    activeTurnId,
+    activeTurnLocalOwner,
+    scheduledRunInFlight,
+    streamTurnEvents,
+  ]);
+
+  useEffect(() => {
+    if (
+      !scheduledSessionId ||
+      !scheduledRunContext ||
+      scheduledRunInFlight ||
+      activeTurnId
+    ) {
+      return;
+    }
+    updateSessionData(scheduledSessionId, { status: "active" });
+  }, [
+    scheduledSessionId,
+    scheduledRunContext,
+    scheduledRunInFlight,
+    activeTurnId,
+    updateSessionData,
+  ]);
+
   // Ref to access InputBar methods
-  const inputBarRef = useRef<InputBarHandle>(null);
+  const inputBarRef = useRef<CraftInputBarHandle>(null);
 
   // Scroll detection for auto-scroll "magnet"
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -228,44 +449,28 @@ export default function BuildChatPanel({
     setShowScrollButton(false);
   }, [sessionId]);
 
-  // Handle suggestion bubble click - populate InputBar with the suggestion
-  const handleSuggestionSelect = useCallback((text: string) => {
-    inputBarRef.current?.setMessage(text);
-  }, []);
-
-  // Check if agent has finished streaming at least one message
-  // Show banner only after first agent message completes streaming
-  const shouldShowConnectorBanner = useMemo(() => {
-    // Don't show if currently streaming
-    if (isRunning) {
-      return false;
-    }
-    // Check if there's at least one agent message in the session
-    const hasAgentMessage = session?.messages?.some(
-      (msg) => msg.type === "assistant"
-    );
-    return hasAgentMessage ?? false;
-  }, [isRunning, session?.messages]);
-
-  const handleSubmit = useCallback(
-    async (message: string, files: BuildFile[]) => {
-      if (limits?.isLimited) {
-        setShowUpgradeModal(true);
+  const sendMessage = useCallback(
+    async (
+      message: string,
+      attachments: BuildMessageAttachment[],
+      modelOverride?: BuildLlmSelection | null
+    ) => {
+      if (scheduledRunInFlight) {
+        toast.error(t("toast.scheduledRunWait"));
         return;
       }
 
       track(AnalyticsEvent.SENT_CRAFT_MESSAGE);
 
+      const chosen = modelOverride ?? selectedModel;
+
       if (hasSession && sessionId) {
         // Existing session flow
         // Check if response is still streaming - show toast like main chat does
         if (isRunning) {
-          toast.error("Please wait for the current operation to complete.");
+          toast.error(t("toast.operationWait"));
           return;
         }
-
-        // Clear follow-up suggestions when user sends a new message
-        clearFollowupSuggestions(sessionId);
 
         // Add user message to state
         appendMessageToCurrent({
@@ -273,10 +478,10 @@ export default function BuildChatPanel({
           type: "user",
           content: message,
           timestamp: new Date(),
+          attachments,
         });
         // Stream the response
-        await streamMessage(sessionId, message);
-        refreshLimits();
+        await streamMessage(sessionId, message, chosen, attachments);
       } else {
         // New session flow - ALWAYS use pre-provisioned session
         const newSessionId = await consumePreProvisionedSession();
@@ -284,7 +489,7 @@ export default function BuildChatPanel({
         if (!newSessionId) {
           // This should not happen if UI properly disables input until ready
           console.error("[ChatPanel] No pre-provisioned session available");
-          toast.error("Please wait for sandbox to initialize");
+          toast.error(t("toast.sandboxWait"));
           return;
         }
 
@@ -292,20 +497,6 @@ export default function BuildChatPanel({
         // The backend session already exists (created during pre-provisioning).
         // Files were already uploaded immediately when attached to the pre-provisioned session.
         // Here we initialize the LOCAL Zustand store entry with the right state.
-        const userMessage = {
-          id: `msg-${Date.now()}`,
-          type: "user" as const,
-          content: message,
-          timestamp: new Date(),
-        };
-        // Initialize local state (NOT an API call - backend session already exists)
-        // - status: "running" disables input immediately
-        // - isLoaded: false allows loadSession to fetch sandbox info while preserving messages
-        createSession(newSessionId, {
-          messages: [userMessage],
-          status: "running",
-        });
-
         // Handle files that weren't successfully uploaded yet
         // This handles edge cases where:
         // 1. File is still uploading when user sends message - wait for it
@@ -337,6 +528,20 @@ export default function BuildChatPanel({
         }
 
         // Note: PENDING files are auto-uploaded by the context when session becomes available
+        const userMessage = {
+          id: `msg-${Date.now()}`,
+          type: "user" as const,
+          content: message,
+          timestamp: new Date(),
+          attachments,
+        };
+        // Initialize local state (NOT an API call - backend session already exists)
+        // - status: "running" disables input immediately
+        // - isLoaded: false allows loadSession to fetch sandbox info while preserving messages
+        createSession(newSessionId, {
+          messages: [userMessage],
+          status: "running",
+        });
 
         // Navigate to URL - session controller will set currentSessionId
         router.push(
@@ -346,154 +551,320 @@ export default function BuildChatPanel({
         // Schedule naming after delay (message will be saved by then)
         // Note: Don't call refreshSessionHistory() here - it would overwrite the
         // optimistic update from consumePreProvisionedSession() before the message is saved
-        setTimeout(() => nameBuildSession(newSessionId), 1000);
+        if (nameSessionTimeoutRef.current !== null) {
+          clearTimeout(nameSessionTimeoutRef.current);
+        }
+        // Session naming is a store action that must survive unmount. Firing
+        // before the 1s save window would name against an unsaved message.
+        // oxlint-disable-next-line react-doctor/effect-needs-cleanup
+        nameSessionTimeoutRef.current = setTimeout(() => {
+          nameSessionTimeoutRef.current = null;
+          nameBuildSession(newSessionId);
+        }, 1000);
 
         // Stream the response (uses session ID directly, not currentSessionId)
-        await streamMessage(newSessionId, message);
-        refreshLimits();
+        await streamMessage(newSessionId, message, chosen, attachments);
       }
     },
     [
       hasSession,
       sessionId,
       isRunning,
+      scheduledRunInFlight,
       appendMessageToCurrent,
       streamMessage,
       consumePreProvisionedSession,
       createSession,
       nameBuildSession,
       router,
-      clearFollowupSuggestions,
       hasUploadingFiles,
-      limits,
-      refreshLimits,
+      selectedModel,
+      t,
     ]
   );
 
+  const handleSubmit = useCallback(
+    (
+      message: string,
+      files: BuildFile[],
+      modelOverride?: BuildLlmSelection | null
+    ) => sendMessage(message, toMessageAttachments(files), modelOverride),
+    [sendMessage]
+  );
+
+  const handleInterrupt = useCallback(() => {
+    if (sessionId) void interruptStreaming(sessionId);
+  }, [sessionId, interruptStreaming]);
+
+  const handleQueueMessage = useCallback(
+    (text: string, files: BuildFile[]) => {
+      if (sessionId) {
+        enqueueMessage(sessionId, text, toMessageAttachments(files));
+      }
+    },
+    [sessionId, enqueueMessage]
+  );
+
+  const handleRemoveQueuedMessage = useCallback(
+    (index: number) => {
+      if (sessionId) removeQueuedMessage(sessionId, index);
+    },
+    [sessionId, removeQueuedMessage]
+  );
+
+  // Auto-send the next queued message FIFO after a run cleanly succeeds (each
+  // send re-arms this for the message after). Only fire on a clean completion
+  // and when the send is actually eligible — otherwise we'd dequeue a message
+  // that a failed run never sends, silently dropping it. The sessionId guard
+  // avoids mistaking a session switch for a run completion.
+  const sessionStatus = session?.status;
+  const sessionError = session?.error;
+  const prevIsRunningRef = useRef(isRunning);
+  const prevSessionIdRef = useRef(sessionId);
+  useEffect(() => {
+    const wasRunning = prevIsRunningRef.current;
+    const prevSessionId = prevSessionIdRef.current;
+    prevIsRunningRef.current = isRunning;
+    prevSessionIdRef.current = sessionId;
+
+    const runSucceeded =
+      wasRunning &&
+      !isRunning &&
+      sessionId === prevSessionId &&
+      sessionStatus === "active" &&
+      !sessionError;
+    if (runSucceeded && sessionId && queuedMessages.length > 0) {
+      const next = queuedMessages[0];
+      if (next) {
+        removeQueuedMessage(sessionId, 0);
+        void sendMessage(next.text, next.attachments);
+      }
+    }
+  }, [
+    isRunning,
+    sessionId,
+    sessionStatus,
+    sessionError,
+    queuedMessages,
+    sendMessage,
+    removeQueuedMessage,
+  ]);
+
   return (
     <div className="h-full w-full">
-      <UpgradePlanModal
-        open={showUpgradeModal}
-        onClose={() => setShowUpgradeModal(false)}
-        limits={limits}
-      />
-      {/* Content wrapper - shrinks when output panel opens */}
-      <div
-        className={cn(
-          "flex flex-col h-full transition-all duration-300 ease-in-out",
-          outputPanelOpen ? "w-1/2 pl-4" : "w-full"
-        )}
+      {/* Content wrapper - shrinks when output panel opens. Wrapped in a
+          dropzone so files can be dropped anywhere in the chat area. */}
+      {/* noPaste: the input bar already uploads pasted files itself. */}
+      <Dropzone
+        noClick
+        noKeyboard
+        noPaste
+        onDrop={(accepted) => {
+          if (accepted.length > 0) uploadFiles(accepted);
+        }}
       >
-        {/* Banner shown only when the session was started by a scheduled task. */}
-        <ScheduledRunBanner
-          sessionId={sessionId ?? existingSessionId ?? null}
-        />
-        {/* Chat header */}
-        <div className="flex flex-row items-center justify-between pl-4 pr-4 py-3 relative overflow-visible">
-          <div className="flex flex-row items-center gap-2 max-w-[75%]">
-            {/* Mobile sidebar toggle - only show on mobile when sidebar is folded */}
-            {isMobile && leftSidebarFolded && (
-              <OpalButton
-                icon={SvgSidebar}
-                onClick={() => setLeftSidebarFolded(false)}
-                prominence="tertiary"
-                size="sm"
-              />
+        {({ getRootProps }) => (
+          <div
+            {...getRootProps()}
+            className={cn(
+              "flex flex-col h-full transition-all duration-300 ease-in-out outline-hidden",
+              outputPanelOpen ? "w-1/2 ps-4" : "w-full"
             )}
-            <SandboxStatusIndicator />
-          </div>
-          {/* Output panel toggle - only show when panel is fully closed (after animation) */}
-          {isOutputPanelFullyClosed && (
-            // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
-            <IconButton
-              icon={SvgSidebar}
-              onClick={toggleOutputPanel}
-              tooltip="Open output panel"
-              tertiary
-              className="bg-background-tint-00! border rounded-full"
-              iconClassName="stroke-text-04!"
-            />
-          )}
-          {/* Soft fade border at bottom */}
-          <div className="absolute bottom-0 left-0 right-0 h-10 bg-linear-to-b from-background-neutral-01 to-transparent pointer-events-none translate-y-full z-10" />
-        </div>
-
-        {/* Main content area */}
-        <div
-          ref={scrollContainerRef}
-          onScroll={handleScroll}
-          className="flex-1 overflow-auto"
-        >
-          {!hasSession && !existingSessionId ? (
-            <BuildWelcome
-              onSubmit={handleSubmit}
-              isRunning={isRunning}
-              sandboxInitializing={sandboxNotReady}
-            />
-          ) : (
-            <BuildMessageList
-              messages={session?.messages ?? []}
-              streamItems={session?.streamItems ?? []}
-              isStreaming={isRunning}
-              autoScrollEnabled={isAtBottom}
-            />
-          )}
-        </div>
-
-        {/* Input bar at bottom when session exists. */}
-        {(hasSession || existingSessionId) && (
-          <div className="px-4 pb-8 pt-4 relative">
-            {/* Soft fade border at top */}
-            <div className="absolute top-0 left-0 right-0 h-12 bg-linear-to-t from-background-neutral-01 to-transparent pointer-events-none -translate-y-full" />
-            <div className="max-w-2xl mx-auto">
-              {/* Scroll to bottom button - shown when user has scrolled away */}
-              {showScrollButton && (
-                <div className="absolute -top-12 left-1/2 -translate-x-1/2 z-10">
-                  <Tooltip tooltip="Scroll to bottom" delayDuration={200}>
-                    <button
-                      onClick={scrollToBottom}
-                      className={cn(
-                        "flex items-center justify-center",
-                        "w-8 h-8 rounded-full",
-                        "bg-background-neutral-inverted-00 border border-border-01",
-                        "shadow-01 hover:shadow-02",
-                        "transition-all duration-200",
-                        "hover:bg-background-tint-inverted-01"
-                      )}
-                      aria-label="Scroll to bottom"
-                    >
-                      <SvgChevronDown
-                        size={20}
-                        className="stroke-background-neutral-00"
-                      />
-                    </button>
-                  </Tooltip>
-                </div>
+          >
+            {/* Chat header */}
+            <div className="flex flex-row items-center justify-between ps-4 pe-4 py-3 relative overflow-visible">
+              <div className="flex min-w-0 flex-row items-center gap-2 max-w-[75%]">
+                {/* Mobile sidebar toggle - only show on mobile when sidebar is folded */}
+                {isMobile && leftSidebarFolded && (
+                  <Button
+                    icon={SvgSidebar}
+                    aria-label={t("openSidebar.ariaLabel")}
+                    onClick={() => setLeftSidebarFolded(false)}
+                    prominence="tertiary"
+                    size="sm"
+                  />
+                )}
+                <AgentSwitcher />
+                <ScheduledRunBanner
+                  sessionId={scheduledSessionId}
+                  context={scheduledRunContext ?? null}
+                />
+              </div>
+              {/* Right cluster: sandbox status sits left of the panel toggle. The
+              toggle stays pinned to the right edge, so the status chip's width
+              changes grow leftward into empty space without shifting anything. */}
+              <div className="flex flex-row items-center gap-2 shrink-0">
+                <SandboxStatusIndicator />
+                <SandboxAsleepNotice />
+                {/* Output panel toggle — same icon for open and close */}
+                <Button
+                  icon={SvgSidebar}
+                  onClick={toggleOutputPanel}
+                  tooltip={
+                    outputPanelOpen
+                      ? t("outputPanel.closeTooltip")
+                      : t("outputPanel.openTooltip")
+                  }
+                  prominence="tertiary"
+                  interaction={outputPanelOpen ? "hover" : undefined}
+                />
+              </div>
+              {/* Soft fade border at bottom */}
+              {!videoBackgroundEnabled && (
+                <div className="absolute bottom-0 start-0 end-0 h-10 bg-linear-to-b from-background-neutral-01 to-transparent pointer-events-none translate-y-full z-10" />
               )}
-              {/* Follow-up suggestion bubbles - show after first agent message */}
-              {(followupSuggestions || suggestionsLoading) && (
-                <div className="mb-3">
-                  <SuggestionBubbles
-                    suggestions={followupSuggestions ?? []}
-                    loading={suggestionsLoading}
-                    onSelect={handleSuggestionSelect}
+            </div>
+
+            {/* Main content area — cross-fades when switching between the main
+            agent and a subagent (keyed by the viewed agent). */}
+            <div
+              ref={scrollContainerRef}
+              onScroll={handleScroll}
+              className="flex flex-col flex-1 min-h-0 overflow-auto"
+            >
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div
+                  key={viewedSubagentSessionId ?? "main"}
+                  initial={reduceMotion ? false : { opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4 }}
+                  transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+                  className="flex flex-col flex-1"
+                >
+                  {isViewingSubagent && viewedSubagentSessionId ? (
+                    <SubagentView subagentSessionId={viewedSubagentSessionId} />
+                  ) : !hasSession && !existingSessionId ? (
+                    <BuildWelcome
+                      onSubmit={handleSubmit}
+                      isRunning={displayIsRunning}
+                      sandboxInitializing={sandboxNotReady}
+                    />
+                  ) : (
+                    <BuildMessageList
+                      sessionId={sessionId ?? existingSessionId ?? null}
+                      attachmentRefreshKey={session?.webappNeedsRefresh}
+                      messages={session?.messages ?? []}
+                      streamItems={session?.streamItems ?? []}
+                      isStreaming={displayIsRunning}
+                      autoScrollEnabled={isAtBottom}
+                      scrollContainerRef={scrollContainerRef}
+                      trailingAssistantSlot={
+                        <>
+                          {wasInterrupted && !displayIsRunning && (
+                            <div className="flex items-center gap-2 text-sm text-text-03">
+                              <SvgStopCircle className="size-4 shrink-0 stroke-text-03" />
+                              <span>{t("responseStopped.label")}</span>
+                            </div>
+                          )}
+                          <LiveApprovalsRegion
+                            sessionId={sessionId ?? existingSessionId ?? null}
+                          />
+                        </>
+                      }
+                    />
+                  )}
+                </motion.div>
+              </AnimatePresence>
+            </div>
+
+            {/* Input bar at bottom when session exists. */}
+            {(hasSession || existingSessionId) && (
+              <div className="px-4 pb-8 pt-4 relative">
+                {/* Soft fade border at top */}
+                {!videoBackgroundEnabled && (
+                  <div className="absolute top-0 start-0 end-0 h-12 bg-linear-to-t from-background-neutral-01 to-transparent pointer-events-none -translate-y-full" />
+                )}
+                <div
+                  className="max-w-[720px] mx-auto"
+                  onFocusCapture={onWakeIntent}
+                  onKeyDownCapture={onWakeIntent}
+                >
+                  {/* Scroll to bottom button - shown when user has scrolled away */}
+                  {showScrollButton && (
+                    <div className="absolute -top-12 left-1/2 -translate-x-1/2 z-10">
+                      <Tooltip
+                        tooltip={t("scrollToBottom.label")}
+                        delayDuration={200}
+                      >
+                        <button
+                          onClick={scrollToBottom}
+                          className={cn(
+                            "flex items-center justify-center",
+                            "w-8 h-8 rounded-full",
+                            "bg-background-neutral-inverted-00 border border-border-01",
+                            "shadow-box-01 hover:shadow-box-02",
+                            "transition-all duration-200",
+                            "hover:bg-background-tint-inverted-01"
+                          )}
+                          aria-label={t("scrollToBottom.label")}
+                        >
+                          <SvgChevronDown
+                            size={20}
+                            className="stroke-background-neutral-00"
+                          />
+                        </button>
+                      </Tooltip>
+                    </div>
+                  )}
+                  {sessionId && session?.skillsStale && (
+                    <div className="pb-2">
+                      <SkillsStaleNotice
+                        sessionId={sessionId}
+                        turnActive={isRunning}
+                      />
+                    </div>
+                  )}
+                  {/* The selected model is sent with each message, so a
+                  switch applies from the next turn. Subagent transcripts
+                  cannot send, so they get no picker. */}
+                  {session?.isLoaded && !isViewingSubagent && (
+                    <div className="flex justify-end pb-2">
+                      <ModelPickerButton
+                        selection={selectedModel}
+                        onChange={(model) => {
+                          if (sessionId) {
+                            setModelBySession((m) => ({
+                              ...m,
+                              [sessionId]: model,
+                            }));
+                          }
+                        }}
+                      />
+                    </div>
+                  )}
+                  {/* The composer stays in view for subagents (layout consistency)
+                  but is disabled — replying to subagents is not supported. */}
+                  <CraftInputBar
+                    ref={inputBarRef}
+                    onSubmit={handleSubmit}
+                    isRunning={displayIsRunning}
+                    isInterrupting={isInterrupting}
+                    onInterrupt={
+                      hasInterruptibleTurn && !scheduledRunInFlight
+                        ? handleInterrupt
+                        : undefined
+                    }
+                    disabled={
+                      isViewingSubagent || scheduledRunInFlight || !hasProvider
+                    }
+                    placeholder={
+                      isViewingSubagent
+                        ? t("input.subagentPlaceholder")
+                        : scheduledRunInFlight
+                          ? t("input.scheduledRunPlaceholder")
+                          : t("input.continuePlaceholder")
+                    }
+                    queuedMessages={queuedMessages}
+                    onQueueMessage={handleQueueMessage}
+                    onRemoveQueuedMessage={handleRemoveQueuedMessage}
+                    contextUsage={contextUsage}
                   />
                 </div>
-              )}
-              {/* Connector banners - show after first agent message finishes streaming */}
-              {shouldShowConnectorBanner && (
-                <ConnectorBannersRow className="" />
-              )}
-              <InputBar
-                ref={inputBarRef}
-                onSubmit={handleSubmit}
-                isRunning={isRunning}
-                placeholder="Continue the conversation..."
-              />
-            </div>
+              </div>
+            )}
           </div>
         )}
-      </div>
+      </Dropzone>
     </div>
   );
 }

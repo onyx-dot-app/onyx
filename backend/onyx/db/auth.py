@@ -1,34 +1,32 @@
-from collections.abc import AsyncGenerator
-from collections.abc import Callable
-from typing import Any
-from typing import Dict
-from typing import TypeVar
+from collections.abc import AsyncGenerator, Callable
+from typing import Any, TypeVar
 
 from fastapi import Depends
-from fastapi_users.models import ID
-from fastapi_users.models import UP
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from fastapi_users_db_sqlalchemy.access_token import SQLAlchemyAccessTokenDatabase
-from sqlalchemy import func
-from sqlalchemy import Select
+from sqlalchemy import Select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import UserRole
-from onyx.configs.constants import ANONYMOUS_USER_EMAIL
-from onyx.configs.constants import NO_AUTH_PLACEHOLDER_USER_EMAIL
+from onyx.configs.constants import ANONYMOUS_USER_EMAIL, NO_AUTH_PLACEHOLDER_USER_EMAIL
 from onyx.db.api_key import get_api_key_email_pattern
-from onyx.db.engine.async_sql_engine import get_async_session
-from onyx.db.engine.async_sql_engine import get_async_session_context_manager
-from onyx.db.models import AccessToken
-from onyx.db.models import OAuthAccount
-from onyx.db.models import User
+from onyx.db.engine.async_sql_engine import (
+    get_async_session,
+    get_async_session_context_manager,
+)
+from onyx.db.enums import AccountType, Permission
+from onyx.db.models import AccessToken, OAuthAccount, User
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
 )
 
 T = TypeVar("T", bound=tuple[Any, ...])
+
+
+async def reload_user_oidc_expiry(db_session: AsyncSession, user: User) -> None:
+    """Re-reads only oidc_expiry, which a concurrent request may have rewritten."""
+    await db_session.refresh(user, attribute_names=["oidc_expiry"])
 
 
 def get_default_admin_user_emails() -> list[str]:
@@ -68,10 +66,14 @@ def _add_live_user_count_where_clause(
     )
 
     if only_admin_users:
-        return select_stmt.where(User.role == UserRole.ADMIN)
+        return select_stmt.where(
+            User.effective_permissions.contains(
+                [Permission.FULL_ADMIN_PANEL_ACCESS.value]
+            )
+        )
 
     return select_stmt.where(
-        User.role != UserRole.EXT_PERM_USER,
+        User.account_type != AccountType.EXT_PERM_USER,
     )
 
 
@@ -81,7 +83,7 @@ def get_live_users_count(db_session: Session) -> int:
     This does NOT include invited users, "users" pulled in
     from external connectors, or API keys.
     """
-    count_stmt = func.count(User.id)
+    count_stmt = func.count(User.id)  # ty: ignore[invalid-argument-type]
     select_stmt = select(count_stmt)
     select_stmt_w_filters = _add_live_user_count_where_clause(select_stmt, False)
     user_count = db_session.scalar(select_stmt_w_filters)
@@ -92,7 +94,7 @@ def get_live_users_count(db_session: Session) -> int:
 
 async def get_user_count(only_admin_users: bool = False) -> int:
     async with get_async_session_context_manager() as session:
-        count_stmt = func.count(User.id)
+        count_stmt = func.count(User.id)  # ty: ignore[invalid-argument-type]
         stmt = select(count_stmt)
         stmt_w_filters = _add_live_user_count_where_clause(stmt, only_admin_users)
         user_count = await session.scalar(stmt_w_filters)
@@ -101,24 +103,10 @@ async def get_user_count(only_admin_users: bool = False) -> int:
         return user_count
 
 
-# Need to override this because FastAPI Users doesn't give flexibility for backend field creation logic in OAuth flow
-class SQLAlchemyUserAdminDB(SQLAlchemyUserDatabase[UP, ID]):
-    async def create(
-        self,
-        create_dict: Dict[str, Any],
-    ) -> UP:
-        user_count = await get_user_count()
-        if user_count == 0 or create_dict["email"] in get_default_admin_user_emails():
-            create_dict["role"] = UserRole.ADMIN
-        else:
-            create_dict["role"] = UserRole.BASIC
-        return await super().create(create_dict)
-
-
 async def get_user_db(
     session: AsyncSession = Depends(get_async_session),
-) -> AsyncGenerator[SQLAlchemyUserAdminDB, None]:
-    yield SQLAlchemyUserAdminDB(session, User, OAuthAccount)
+) -> AsyncGenerator[SQLAlchemyUserDatabase, None]:
+    yield SQLAlchemyUserDatabase(session, User, OAuthAccount)
 
 
 async def get_access_token_db(

@@ -1,69 +1,68 @@
 import { INDEX_ATTEMPT_STAGES, IndexAttemptStage } from "@/lib/types";
 
-// Human-readable label per stage. Explicit (rather than auto-cased) so that
-// acronyms like DB / RAG render correctly.
-export const STAGE_LABELS: Record<IndexAttemptStage, string> = {
-  CONNECTOR_VALIDATION: "Connector validation",
-  PERMISSION_VALIDATION: "Permission validation",
-  CHECKPOINT_LOAD: "Checkpoint load",
-  CONNECTOR_FETCH: "Connector fetch",
-  HIERARCHY_UPSERT: "Hierarchy upsert",
-  DOC_BATCH_STORE: "Doc batch store",
-  DOC_BATCH_ENQUEUE: "Doc batch enqueue",
-  QUEUE_WAIT: "Queue wait",
-  DOCPROCESSING_SETUP: "Docprocessing setup",
-  BATCH_LOAD: "Batch load",
-  DOC_DB_PREPARE: "Doc DB prepare",
-  IMAGE_PROCESSING: "Image processing",
-  CHUNKING: "Chunking",
-  CONTEXTUAL_RAG: "Contextual RAG",
-  EMBEDDING: "Embedding",
-  VECTOR_DB_WRITE: "Vector DB write",
-  POST_INDEX_DB_UPDATE: "Post-index DB update",
-  COORDINATION_UPDATE: "Coordination update",
-  BATCH_TOTAL: "Batch total",
-};
+// Message key (inside the `admin.connector` namespace) for the human-readable
+// label of each stage. Labels are explicit (rather than auto-cased) so that
+// acronyms like DB / RAG render correctly. Modules cannot call hooks, so the
+// maps hold keys and the consuming component resolves them with `t`.
+export const STAGE_LABEL_KEYS = {
+  CONNECTOR_VALIDATION: "stageMetrics.stages.connectorValidation.label",
+  PERMISSION_VALIDATION: "stageMetrics.stages.permissionValidation.label",
+  CHECKPOINT_LOAD: "stageMetrics.stages.checkpointLoad.label",
+  CONNECTOR_FETCH: "stageMetrics.stages.connectorFetch.label",
+  HIERARCHY_UPSERT: "stageMetrics.stages.hierarchyUpsert.label",
+  DOC_BATCH_STORE: "stageMetrics.stages.docBatchStore.label",
+  DOC_BATCH_ENQUEUE: "stageMetrics.stages.docBatchEnqueue.label",
+  QUEUE_WAIT: "stageMetrics.stages.queueWait.label",
+  DOCPROCESSING_SETUP: "stageMetrics.stages.docprocessingSetup.label",
+  BATCH_LOAD: "stageMetrics.stages.batchLoad.label",
+  DOC_DB_PREPARE: "stageMetrics.stages.docDbPrepare.label",
+  IMAGE_PROCESSING: "stageMetrics.stages.imageProcessing.label",
+  CHUNKING: "stageMetrics.stages.chunking.label",
+  CONTEXTUAL_RAG: "stageMetrics.stages.contextualRag.label",
+  EMBEDDING: "stageMetrics.stages.embedding.label",
+  DOC_LOCK_ACQUIRE_WAIT: "stageMetrics.stages.docLockAcquireWait.label",
+  ENRICHMENT_PREP: "stageMetrics.stages.enrichmentPrep.label",
+  VECTOR_DB_WRITE: "stageMetrics.stages.vectorDbWrite.label",
+  POST_INDEX_DB_UPDATE: "stageMetrics.stages.postIndexDbUpdate.label",
+  COORD_LOCK_ACQUIRE_WAIT: "stageMetrics.stages.coordLockAcquireWait.label",
+  COORDINATION_UPDATE: "stageMetrics.stages.coordinationUpdate.label",
+  FINALIZATION: "stageMetrics.stages.finalization.label",
+  GC_COLLECT: "stageMetrics.stages.gcCollect.label",
+  BATCH_UNACCOUNTED: "stageMetrics.stages.batchUnaccounted.label",
+  BATCH_TOTAL: "stageMetrics.stages.batchTotal.label",
+} as const satisfies Record<IndexAttemptStage, string>;
 
-// Short explainer per stage, shown in a tooltip next to each row in the
-// per-batch table so admins can interpret the timings without leaving the
-// modal.
-export const STAGE_DESCRIPTIONS: Record<IndexAttemptStage, string> = {
-  CONNECTOR_VALIDATION:
-    "Validates that the connector is configured correctly and reachable before fetching begins.",
-  PERMISSION_VALIDATION:
-    "Verifies the credential has the permissions needed to read documents from the source.",
-  CHECKPOINT_LOAD:
-    "Loads any prior checkpoint so a resumed attempt can pick up where the last one left off.",
-  CONNECTOR_FETCH:
-    "Time spent calling the upstream source to retrieve a batch of raw documents.",
-  HIERARCHY_UPSERT:
-    "Records hierarchy and metadata relationships (folders, parents, etc.) for the batch in Postgres.",
-  DOC_BATCH_STORE:
-    "Persists the fetched batch to the file store so the docprocessing worker can consume it asynchronously.",
-  DOC_BATCH_ENQUEUE:
-    "Submits a docprocessing task for the batch onto the Celery queue.",
-  QUEUE_WAIT:
-    "Time the docprocessing task spent waiting in the Celery queue before a worker picked it up.",
-  DOCPROCESSING_SETUP:
-    "One-time setup the docprocessing worker performs before processing batches (DB session, embedder, etc.).",
-  BATCH_LOAD:
-    "Reads the batch back from the file store inside the docprocessing worker.",
-  DOC_DB_PREPARE:
-    "Cleans, dedupes, and prepares documents for indexing — includes the DB lookups against existing document state.",
-  IMAGE_PROCESSING:
-    "Extracts and processes images embedded in document sections.",
-  CHUNKING: "Splits documents into chunks sized for the embedding model.",
-  CONTEXTUAL_RAG:
-    "Optional LLM call that adds short contextual summaries to each chunk to improve retrieval quality.",
-  EMBEDDING: "Calls the embedding model to produce vectors for each chunk.",
-  VECTOR_DB_WRITE: "Writes the embedded chunks and their metadata to Vespa.",
-  POST_INDEX_DB_UPDATE:
-    "Updates Postgres with final document state after indexing (last-indexed timestamps, hashes, etc.).",
-  COORDINATION_UPDATE:
-    "Bookkeeping updates after a batch — progress counters, checkpoint advances, and similar.",
-  BATCH_TOTAL:
-    "Total wall-clock time elapsed processing a single batch end-to-end.",
-};
+// Message key for the short explainer per stage, shown in a tooltip next to
+// each row in the per-batch table so admins can interpret the timings without
+// leaving the modal.
+export const STAGE_DESCRIPTION_KEYS = {
+  CONNECTOR_VALIDATION: "stageMetrics.stages.connectorValidation.description",
+  PERMISSION_VALIDATION: "stageMetrics.stages.permissionValidation.description",
+  CHECKPOINT_LOAD: "stageMetrics.stages.checkpointLoad.description",
+  CONNECTOR_FETCH: "stageMetrics.stages.connectorFetch.description",
+  HIERARCHY_UPSERT: "stageMetrics.stages.hierarchyUpsert.description",
+  DOC_BATCH_STORE: "stageMetrics.stages.docBatchStore.description",
+  DOC_BATCH_ENQUEUE: "stageMetrics.stages.docBatchEnqueue.description",
+  QUEUE_WAIT: "stageMetrics.stages.queueWait.description",
+  DOCPROCESSING_SETUP: "stageMetrics.stages.docprocessingSetup.description",
+  BATCH_LOAD: "stageMetrics.stages.batchLoad.description",
+  DOC_DB_PREPARE: "stageMetrics.stages.docDbPrepare.description",
+  IMAGE_PROCESSING: "stageMetrics.stages.imageProcessing.description",
+  CHUNKING: "stageMetrics.stages.chunking.description",
+  CONTEXTUAL_RAG: "stageMetrics.stages.contextualRag.description",
+  EMBEDDING: "stageMetrics.stages.embedding.description",
+  DOC_LOCK_ACQUIRE_WAIT: "stageMetrics.stages.docLockAcquireWait.description",
+  ENRICHMENT_PREP: "stageMetrics.stages.enrichmentPrep.description",
+  VECTOR_DB_WRITE: "stageMetrics.stages.vectorDbWrite.description",
+  POST_INDEX_DB_UPDATE: "stageMetrics.stages.postIndexDbUpdate.description",
+  COORD_LOCK_ACQUIRE_WAIT:
+    "stageMetrics.stages.coordLockAcquireWait.description",
+  COORDINATION_UPDATE: "stageMetrics.stages.coordinationUpdate.description",
+  FINALIZATION: "stageMetrics.stages.finalization.description",
+  GC_COLLECT: "stageMetrics.stages.gcCollect.description",
+  BATCH_UNACCOUNTED: "stageMetrics.stages.batchUnaccounted.description",
+  BATCH_TOTAL: "stageMetrics.stages.batchTotal.description",
+} as const satisfies Record<IndexAttemptStage, string>;
 
 // Distinct background classes for the per-row average-time bar. Cycled by
 // stage's pipeline-order index so the same stage gets the same color in both

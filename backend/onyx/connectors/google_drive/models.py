@@ -1,16 +1,10 @@
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
-from pydantic import Field
-from pydantic import field_serializer
-from pydantic import field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
-from onyx.connectors.interfaces import ConnectorCheckpoint
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.utils.threadpool_concurrency import ThreadSafeDict
-from onyx.utils.threadpool_concurrency import ThreadSafeSet
+from onyx.connectors.interfaces import ConnectorCheckpoint, SecondsSinceUnixEpoch
+from onyx.utils.threadpool_concurrency import ThreadSafeDict, ThreadSafeSet
 
 
 class GDriveMimeType(str, Enum):

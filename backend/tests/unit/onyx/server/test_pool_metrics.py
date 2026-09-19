@@ -1,20 +1,17 @@
 """Unit tests for SQLAlchemy connection pool Prometheus metrics."""
 
-import time
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from fastapi import FastAPI
 from sqlalchemy.pool import NullPool
 
-from onyx.server.metrics.postgres_connection_pool import _register_pool_events
-from onyx.server.metrics.postgres_connection_pool import PoolStateCollector
 from onyx.server.metrics.postgres_connection_pool import (
+    PoolStateCollector,
+    _register_pool_events,
     setup_postgres_connection_pool_metrics,
 )
-from onyx.utils.middleware import _build_route_map
-from onyx.utils.middleware import _match_route
+from onyx.utils.middleware import _build_route_map, _match_route
 
 # --- PoolStateCollector tests ---
 
@@ -149,7 +146,11 @@ def test_checkin_event_observes_hold_duration() -> None:
     conn_record = _make_conn_record()
     conn_record.info["_metrics_endpoint"] = "/api/search"
     conn_record.info["_metrics_tenant_id"] = "tenant_abc"
-    conn_record.info["_metrics_checkout_time"] = time.monotonic() - 0.5
+    # Use a deterministic, mocked monotonic clock so the observed hold
+    # duration is exact and not subject to wall-clock timing on slow CI.
+    checkout_time = 1000.0
+    checkin_time = checkout_time + 0.5
+    conn_record.info["_metrics_checkout_time"] = checkout_time
 
     with (
         patch(
@@ -159,6 +160,10 @@ def test_checkin_event_observes_hold_duration() -> None:
             "onyx.server.metrics.postgres_connection_pool._hold_seconds"
         ) as mock_hist,
         patch("onyx.server.metrics.postgres_connection_pool._checkin_total"),
+        patch(
+            "onyx.server.metrics.postgres_connection_pool.time.monotonic",
+            return_value=checkin_time,
+        ),
     ):
         mock_labels = MagicMock()
         mock_gauge.labels.return_value = mock_labels
@@ -173,9 +178,9 @@ def test_checkin_event_observes_hold_duration() -> None:
         mock_labels.dec.assert_called_once()
         mock_hist.labels.assert_called_with(handler="/api/search", engine="sync")
         mock_hist_labels.observe.assert_called_once()
-        # Verify the observed duration is roughly 0.5s
+        # Observed duration is exactly checkin_time - checkout_time == 0.5s
         observed = mock_hist_labels.observe.call_args[0][0]
-        assert 0.4 < observed < 1.0
+        assert observed == 0.5
 
     # conn_record.info should be cleaned up
     assert "_metrics_endpoint" not in conn_record.info
@@ -183,8 +188,9 @@ def test_checkin_event_observes_hold_duration() -> None:
     assert "_metrics_checkout_time" not in conn_record.info
 
 
-def test_checkin_with_missing_endpoint_uses_unknown() -> None:
-    """Verify checkin gracefully handles missing endpoint and tenant info."""
+def test_checkin_with_missing_endpoint_skips_held_gauge() -> None:
+    """A checkin without a checkout marker (connection checked out before the
+    listeners attached) must not decrement the held gauge below zero."""
     engine = MagicMock()
     engine.pool = MagicMock()
     listeners: dict[str, Any] = {}
@@ -215,27 +221,38 @@ def test_checkin_with_missing_endpoint_uses_unknown() -> None:
 
         listeners["checkin"](None, conn_record)
 
-        mock_gauge.labels.assert_called_with(
-            handler="unknown", engine="sync", tenant_id="unknown"
-        )
+        mock_gauge.labels.assert_not_called()
 
 
 # --- setup_postgres_connection_pool_metrics tests ---
 
 
-def test_setup_skips_null_pool_engines() -> None:
-    """Verify setup_postgres_connection_pool_metrics skips engines with NullPool."""
+def test_setup_registers_lifecycle_events_for_null_pool_engines() -> None:
+    """NullPool engines get lifecycle listeners; only the state gauges need a
+    QueuePool. External-pooler deployments rely on the lifecycle metrics."""
+    import onyx.db.engine.async_sql_engine as async_sql_engine
+    import onyx.db.engine.shard_registry as shard_registry
+    import onyx.server.metrics.postgres_connection_pool as pool_metrics
+
     with (
         patch("onyx.server.metrics.postgres_connection_pool.REGISTRY"),
         patch(
             "onyx.server.metrics.postgres_connection_pool._register_pool_events"
         ) as mock_register,
+        patch.object(pool_metrics._collector, "add_pool") as mock_add_pool,
+        # setup() subscribes to the process-global hooks; keep this test's
+        # subscriptions from leaking into later tests.
+        patch.object(shard_registry.shard_engine_hooks, "_callbacks", []),
+        patch.object(async_sql_engine.async_engine_hooks, "_callbacks", []),
+        patch.object(pool_metrics, "_registered_engines", {}),
+        patch.object(pool_metrics, "_collector_registered", False),
     ):
         null_engine = MagicMock()
         null_engine.pool = MagicMock(spec=NullPool)
 
         setup_postgres_connection_pool_metrics({"null": null_engine})
-        mock_register.assert_not_called()
+        mock_register.assert_called_once_with(null_engine, "null")
+        mock_add_pool.assert_not_called()
 
 
 # --- Route matching tests ---

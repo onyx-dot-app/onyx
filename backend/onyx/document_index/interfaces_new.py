@@ -1,15 +1,14 @@
 import abc
 from collections.abc import Iterable
+from datetime import datetime
 from typing import Self
 
-from pydantic import BaseModel
-from pydantic import model_validator
+from pydantic import BaseModel, model_validator
 
 from onyx.access.models import DocumentAccess
 from onyx.configs.constants import PUBLIC_DOC_PAT
 from onyx.context.search.enums import QueryType
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import InferenceChunk
+from onyx.context.search.models import IndexFilters, InferenceChunk
 from onyx.db.enums import EmbeddingPrecision
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
 from onyx.indexing.models import DocMetadataAwareIndexChunk
@@ -150,6 +149,22 @@ class MetadataUpdateRequest(BaseModel):
     secondary_index_updated: bool | None = None
     project_ids: set[int] | None = None
     persona_ids: set[int] | None = None
+    # Source creation time. Patched onto existing chunks without re-embedding when
+    # a connector supplies a creation time for an already-indexed document.
+    # TODO: Can be removed after some time - used for backfill sync
+    created_at: datetime | None = None
+
+
+class SecondaryIndexDocumentMissingError(Exception):
+    """A metadata update applied to the primary index but the doc isn't in the
+    secondary (FUTURE) index yet (e.g. mid reindex port). Carries the doc ids so
+    the caller can defer the secondary sync instead of failing."""
+
+    def __init__(self, document_ids: list[str]) -> None:
+        self.document_ids = document_ids
+        super().__init__(
+            f"{len(document_ids)} document(s) missing from the secondary index."
+        )
 
 
 class IndexRetrievalFilters(BaseModel):

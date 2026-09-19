@@ -1,8 +1,10 @@
 "use client";
 
+import { ReactNode } from "react";
+import { useTranslations } from "next-intl";
 import { ValidStatuses } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
-import { timeAgo } from "@/lib/time";
+import { timeAgo } from "@opal/time";
 import {
   FiAlertTriangle,
   FiCheckCircle,
@@ -16,6 +18,22 @@ import {
 } from "@/app/admin/connector/[ccPairId]/types";
 import { Tooltip } from "@opal/components";
 
+// Wrap a status badge in a hover tooltip carrying its error/reason text, or
+// return the bare badge when there is no message.
+function badgeWithErrorTooltip(
+  icon: ReactNode,
+  errorMsg?: string | null
+): ReactNode {
+  if (!errorMsg) {
+    return icon;
+  }
+  return (
+    <Tooltip tooltip={errorMsg}>
+      <div className="cursor-pointer">{icon}</div>
+    </Tooltip>
+  );
+}
+
 export function IndexAttemptStatus({
   status,
   errorMsg,
@@ -23,63 +41,65 @@ export function IndexAttemptStatus({
   status: ValidStatuses | null;
   errorMsg?: string | null;
 }) {
+  const t = useTranslations("admin.status.badges");
   let badge;
 
   if (status === "failed") {
-    const icon = (
+    badge = badgeWithErrorTooltip(
       <Badge variant="destructive" icon={FiAlertTriangle}>
-        Failed
-      </Badge>
+        {t("failed")}
+      </Badge>,
+      errorMsg
     );
-    if (errorMsg) {
-      badge = (
-        <Tooltip tooltip={errorMsg}>
-          <div className="cursor-pointer">{icon}</div>
-        </Tooltip>
-      );
-    } else {
-      badge = icon;
-    }
   } else if (status === "completed_with_errors") {
     badge = (
       <Badge variant="secondary" icon={FiAlertTriangle}>
-        Completed with errors
+        {t("completedWithErrors")}
       </Badge>
     );
   } else if (status === "success") {
     badge = (
       <Badge variant="success" icon={FiCheckCircle}>
-        Succeeded
+        {t("succeeded")}
       </Badge>
     );
   } else if (status === "in_progress") {
     badge = (
       <Badge variant="in_progress" icon={FiClock}>
-        In Progress
+        {t("inProgress")}
       </Badge>
     );
   } else if (status === "not_started") {
     badge = (
       <Badge variant="not_started" icon={FiClock}>
-        Scheduled
+        {t("scheduled")}
       </Badge>
     );
   } else if (status === "canceled") {
     badge = (
       <Badge variant="canceled" icon={FiClock}>
-        Canceled
+        {t("canceled")}
       </Badge>
+    );
+  } else if (status === "interrupted") {
+    // Stopped by infrastructure (deploy / autoscaling), not an error, so it
+    // resumes automatically. Neutral badge with the reason on hover, never red.
+    badge = badgeWithErrorTooltip(
+      <Badge variant="canceled" icon={FiClock}>
+        {t("interrupted")}
+      </Badge>,
+      errorMsg
     );
   } else if (status === "invalid") {
     badge = (
       <Badge variant="invalid" icon={FiAlertTriangle}>
-        Invalid
+        {t("invalid")}
       </Badge>
     );
   } else {
     badge = (
       <Badge variant="outline" icon={FiMinus}>
-        None
+        {t("none")}
       </Badge>
     );
   }
@@ -94,12 +114,13 @@ export function PermissionSyncStatus({
   status: PermissionSyncStatusEnum | null;
   errorMsg?: string | null;
 }) {
+  const t = useTranslations("admin.status.badges");
   let badge;
 
   if (status === PermissionSyncStatusEnum.FAILED) {
     const icon = (
       <Badge variant="destructive" icon={FiAlertTriangle}>
-        Failed
+        {t("failed")}
       </Badge>
     );
     if (errorMsg) {
@@ -114,31 +135,31 @@ export function PermissionSyncStatus({
   } else if (status === PermissionSyncStatusEnum.COMPLETED_WITH_ERRORS) {
     badge = (
       <Badge variant="secondary" icon={FiAlertTriangle}>
-        Completed with errors
+        {t("completedWithErrors")}
       </Badge>
     );
   } else if (status === PermissionSyncStatusEnum.SUCCESS) {
     badge = (
       <Badge variant="success" icon={FiCheckCircle}>
-        Succeeded
+        {t("succeeded")}
       </Badge>
     );
   } else if (status === PermissionSyncStatusEnum.IN_PROGRESS) {
     badge = (
       <Badge variant="in_progress" icon={FiClock}>
-        In Progress
+        {t("inProgress")}
       </Badge>
     );
   } else if (status === PermissionSyncStatusEnum.NOT_STARTED) {
     badge = (
       <Badge variant="not_started" icon={FiClock}>
-        Scheduled
+        {t("scheduled")}
       </Badge>
     );
   } else {
     badge = (
       <Badge variant="secondary" icon={FiClock}>
-        Not Started
+        {t("notStarted")}
       </Badge>
     );
   }
@@ -157,53 +178,52 @@ export function CCPairStatus({
   lastIndexAttemptStatus: ValidStatuses | undefined | null;
   size?: "xs" | "sm" | "md" | "lg";
 }) {
+  const t = useTranslations("admin.status.badges");
   let badge;
 
   if (ccPairStatus == ConnectorCredentialPairStatus.DELETING) {
     badge = (
       <Badge variant="destructive" icon={FiAlertTriangle}>
-        Deleting
+        {t("deleting")}
       </Badge>
     );
   } else if (ccPairStatus == ConnectorCredentialPairStatus.PAUSED) {
     badge = (
       <Badge variant="paused" icon={FiPauseCircle}>
-        Paused
+        {t("paused")}
       </Badge>
     );
-  } else if (inRepeatedErrorState) {
+  } else if (inRepeatedErrorState && lastIndexAttemptStatus !== "in_progress") {
+    // A live attempt reads as "Indexing". The sticky error state only shows
+    // once that attempt is no longer running.
     badge = (
       <Badge variant="destructive" icon={FiAlertTriangle}>
-        Error
+        {t("error")}
       </Badge>
     );
   } else if (ccPairStatus == ConnectorCredentialPairStatus.SCHEDULED) {
     badge = (
       <Badge variant="not_started" icon={FiClock}>
-        Scheduled
+        {t("scheduled")}
       </Badge>
     );
   } else if (ccPairStatus == ConnectorCredentialPairStatus.INITIAL_INDEXING) {
     badge = (
       <Badge variant="in_progress" icon={FiClock}>
-        Initial Indexing
+        {t("initialIndexing")}
       </Badge>
     );
   } else if (ccPairStatus == ConnectorCredentialPairStatus.INVALID) {
     badge = (
-      <Badge
-        tooltip="Connector is in an invalid state. Please update the credentials or create a new connector."
-        circle
-        variant="invalid"
-      >
-        Invalid
+      <Badge tooltip={t("invalidConnectorTooltip")} circle variant="invalid">
+        {t("invalid")}
       </Badge>
     );
   } else {
     if (lastIndexAttemptStatus && lastIndexAttemptStatus === "in_progress") {
       badge = (
         <Badge variant="in_progress" icon={FiClock}>
-          Indexing
+          {t("indexing")}
         </Badge>
       );
     } else if (
@@ -212,7 +232,7 @@ export function CCPairStatus({
     ) {
       badge = (
         <Badge variant="not_started" icon={FiClock}>
-          Scheduled
+          {t("scheduled")}
         </Badge>
       );
     } else if (
@@ -221,13 +241,20 @@ export function CCPairStatus({
     ) {
       badge = (
         <Badge variant="canceled" icon={FiClock}>
-          Canceled
+          {t("canceled")}
+        </Badge>
+      );
+    } else if (lastIndexAttemptStatus === "interrupted") {
+      // resumes automatically, so it's neutral rather than the green "Indexed"
+      badge = (
+        <Badge variant="canceled" icon={FiClock}>
+          {t("interrupted")}
         </Badge>
       );
     } else {
       badge = (
         <Badge variant="success" icon={FiCheckCircle}>
-          Indexed
+          {t("indexed")}
         </Badge>
       );
     }

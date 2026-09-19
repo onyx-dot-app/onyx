@@ -6,20 +6,22 @@ set -o allexport
 source .env.nginx
 set +o allexport
 
-# Function to determine correct docker compose command
 docker_compose_cmd() {
-  if command -v docker-compose >/dev/null 2>&1; then
-    echo "docker-compose"
-  elif command -v docker compose >/dev/null 2>&1; then
+  if docker compose version >/dev/null 2>&1; then
     echo "docker compose"
+  elif command -v docker-compose >/dev/null 2>&1; then
+    echo "docker-compose"
   else
-    echo 'Error: docker-compose or docker compose is not installed.' >&2
+    echo 'Error: docker compose (V2 plugin) or docker-compose is not installed.' >&2
     exit 1
   fi
 }
 
-# Assign appropriate Docker Compose command
 COMPOSE_CMD=$(docker_compose_cmd)
+
+# --wait/--wait-timeout are V2-only.
+WAIT_ARGS=(--wait --wait-timeout 300)
+[[ "$COMPOSE_CMD" == "docker-compose" ]] && WAIT_ARGS=()
 
 # Only add www to domain list if domain wasn't explicitly set as a subdomain
 if [[ ! $DOMAIN == www.* ]]; then
@@ -61,22 +63,8 @@ echo
 
 
 echo "### Starting nginx ..."
-$COMPOSE_CMD -f docker-compose.prod.yml up --force-recreate -d nginx
+$COMPOSE_CMD -f docker-compose.prod.yml up --force-recreate -d "${WAIT_ARGS[@]}" nginx
 echo
-
-echo "Waiting for nginx to be ready, this may take a minute..."
-while true; do
-  # Use curl to send a request and capture the HTTP status code
-  status_code=$(curl -o /dev/null -s -w "%{http_code}\n" "http://localhost/api/health")
-  
-  # Check if the status code is 200
-  if [ "$status_code" -eq 200 ]; then
-    break  # Exit the loop
-  else
-    echo "Nginx is not ready yet, retrying in 5 seconds..."
-    sleep 5  # Sleep for 5 seconds before retrying
-  fi
-done
 
 echo "### Deleting dummy certificate for $domains ..."
 $COMPOSE_CMD -f docker-compose.prod.yml run  --name onyx --rm --entrypoint "\

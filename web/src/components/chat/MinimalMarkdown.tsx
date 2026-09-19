@@ -6,12 +6,15 @@ import {
 } from "@/app/app/message/MemoizedTextComponents";
 import { useMemo, CSSProperties } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
+import type { PluggableList } from "unified";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
+import { useHighlightLanguages } from "@/hooks/useHighlightLanguages";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import { transformLinkUri } from "@/lib/utils";
+import { rehypeDirection } from "@/lib/rehypeDirection";
 import { cn } from "@opal/utils";
 
 type MinimalMarkdownComponentOverrides = Partial<Components>;
@@ -25,6 +28,8 @@ interface MinimalMarkdownProps {
    * Any renderer not provided will fall back to this component's defaults.
    */
   components?: MinimalMarkdownComponentOverrides;
+  /** Skip rehype-highlight while content is mid-stream. Flip false on completion. */
+  streaming?: boolean;
 }
 
 export default function MinimalMarkdown({
@@ -32,7 +37,20 @@ export default function MinimalMarkdown({
   className = "",
   showHeader = true,
   components,
+  streaming = false,
 }: MinimalMarkdownProps) {
+  const highlightLanguages = useHighlightLanguages(!streaming);
+  const rehypePlugins = useMemo<PluggableList>(
+    () =>
+      !streaming && highlightLanguages
+        ? [
+            [rehypeHighlight, { detect: true, languages: highlightLanguages }],
+            rehypeKatex,
+            rehypeDirection,
+          ]
+        : [rehypeKatex, rehypeDirection],
+    [streaming, highlightLanguages]
+  );
   const markdownComponents = useMemo(() => {
     const defaults: Components = {
       a: MemoizedLink,
@@ -62,17 +80,24 @@ export default function MinimalMarkdown({
   }, [content, components, showHeader]);
 
   return (
-    <ReactMarkdown
-      className={cn(
-        "prose dark:prose-invert max-w-full text-sm wrap-break-word",
-        className
-      )}
-      components={markdownComponents}
-      rehypePlugins={[rehypeHighlight, rehypeKatex]}
-      remarkPlugins={[remarkGfm, [remarkMath, { singleDollarTextMath: false }]]}
-      urlTransform={transformLinkUri}
-    >
-      {content}
-    </ReactMarkdown>
+    // dir="auto" backstops component overrides that do not forward the
+    // per-block dir stamped by rehypeDirection.
+    <div dir="auto">
+      <ReactMarkdown
+        className={cn(
+          "prose dark:prose-invert max-w-full text-sm wrap-break-word",
+          className
+        )}
+        components={markdownComponents}
+        rehypePlugins={rehypePlugins}
+        remarkPlugins={[
+          remarkGfm,
+          [remarkMath, { singleDollarTextMath: false }],
+        ]}
+        urlTransform={transformLinkUri}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
   );
 }

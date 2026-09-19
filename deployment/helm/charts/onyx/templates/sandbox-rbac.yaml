@@ -1,0 +1,105 @@
+{{- if eq (include "onyx.craftEnabled" .) "true" }}
+{{- $craft := .Values.craft | default dict }}
+{{- $sandboxNs := .Values.configMap.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
+{{- $saName := (index .Values.configMap "SANDBOX_SERVICE_ACCOUNT_NAME") | default "sandbox" }}
+{{- $proxyNs := (index .Values.configMap "SANDBOX_PROXY_NAMESPACE") | default .Release.Namespace }}
+{{- $boundSAs := prepend ((index $craft "extraBoundServiceAccounts") | default (list)) (include "onyx.serviceAccountName" .) }}
+{{- $rbacNameBase := printf "%s-%s" (include "onyx.fullname" .) .Release.Namespace }}
+{{- $rbacNamePrefix := $rbacNameBase }}
+{{- if gt (len $rbacNameBase) 47 }}
+{{- $rbacNamePrefix = printf "%s-%s" ($rbacNameBase | trunc 38 | trimSuffix "-") (sha256sum $rbacNameBase | trunc 8) }}
+{{- end }}
+{{- $sandboxManagerName := printf "%s-sandbox-manager" $rbacNamePrefix }}
+{{- $proxyResolveName := printf "%s-proxy-resolve" $rbacNamePrefix }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $saName }}
+  namespace: {{ $sandboxNs }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $sandboxManagerName }}
+  namespace: {{ $sandboxNs }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox-manager
+rules:
+  # watch is required: _wait_for_pod_ready streams pod events during provision.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  # _create_sandbox_pod reads the sandbox-pod PodTemplate to build the pod.
+  - apiGroups: [""]
+    resources: ["podtemplates"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create", "update", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create", "get"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $sandboxManagerName }}
+  namespace: {{ $sandboxNs }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox-manager
+subjects:
+  {{- range $boundSAs }}
+  - kind: ServiceAccount
+    name: {{ . }}
+    namespace: {{ $.Release.Namespace }}
+  {{- end }}
+roleRef:
+  kind: Role
+  name: {{ $sandboxManagerName }}
+  apiGroup: rbac.authorization.k8s.io
+---
+# api_server resolves SANDBOX_PROXY_HOST's ClusterIP for the sandbox pod's /etc/hosts alias.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $proxyResolveName }}
+  namespace: {{ $proxyNs }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox-manager
+rules:
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $proxyResolveName }}
+  namespace: {{ $proxyNs }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox-manager
+subjects:
+  {{- range $boundSAs }}
+  - kind: ServiceAccount
+    name: {{ . }}
+    namespace: {{ $.Release.Namespace }}
+  {{- end }}
+roleRef:
+  kind: Role
+  name: {{ $proxyResolveName }}
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

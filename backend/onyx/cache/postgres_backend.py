@@ -9,22 +9,18 @@ import struct
 import time
 import uuid
 from contextlib import AbstractContextManager
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import delete
-from sqlalchemy import func
-from sqlalchemy import or_
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from onyx.cache.interface import CacheBackend
-from onyx.cache.interface import CacheLock
-from onyx.cache.interface import TTL_KEY_NOT_FOUND
-from onyx.cache.interface import TTL_NO_EXPIRY
+from onyx.cache.interface import (
+    TTL_KEY_NOT_FOUND,
+    TTL_NO_EXPIRY,
+    CacheBackend,
+    CacheLock,
+)
 from onyx.db.models import CacheStore
 
 _LIST_KEY_PREFIX = "_q:"
@@ -110,6 +106,10 @@ class PostgresCacheLock(CacheLock):
             self._acquired = False
             self._close_session()
 
+    def extend(self, ttl_seconds: float) -> None:
+        # Advisory locks have no TTL; they live until release() or the connection dies.
+        pass
+
     def owned(self) -> bool:
         return self._acquired
 
@@ -163,6 +163,27 @@ class PostgresCacheBackend(CacheBackend):
             return None
         return bytes(value)
 
+    def getdel(self, key: str) -> bytes | None:
+        from onyx.db.engine.sql_engine import get_session_with_tenant
+
+        stmt = (
+            delete(CacheStore)
+            .where(
+                CacheStore.key == key,
+                or_(
+                    CacheStore.expires_at.is_(None),
+                    CacheStore.expires_at > func.now(),
+                ),
+            )
+            .returning(CacheStore.value)
+        )
+        with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            value = session.execute(stmt).scalar_one_or_none()
+            session.commit()
+        if value is None:
+            return None
+        return bytes(value)
+
     def set(
         self,
         key: str,
@@ -188,6 +209,38 @@ class PostgresCacheBackend(CacheBackend):
         with get_session_with_tenant(tenant_id=self._tenant_id) as session:
             session.execute(stmt)
             session.commit()
+
+    def set_if_absent(
+        self,
+        key: str,
+        value: str | bytes | int | float,
+        ex: int | None = None,
+    ) -> bool:
+        from onyx.db.engine.sql_engine import get_session_with_tenant
+
+        value_bytes = _to_bytes(value)
+        expires_at = (
+            datetime.now(timezone.utc) + timedelta(seconds=ex)
+            if ex is not None
+            else None
+        )
+        stmt = (
+            pg_insert(CacheStore)
+            .values(key=key, value=value_bytes, expires_at=expires_at)
+            .on_conflict_do_update(
+                index_elements=[CacheStore.key],
+                set_={"value": value_bytes, "expires_at": expires_at},
+                where=(
+                    CacheStore.expires_at.is_not(None)
+                    & (CacheStore.expires_at <= func.now())
+                ),
+            )
+            .returning(CacheStore.key)
+        )
+        with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            stored_key = session.execute(stmt).scalar_one_or_none()
+            session.commit()
+        return stored_key is not None
 
     def delete(self, key: str) -> None:
         from onyx.db.engine.sql_engine import get_session_with_tenant

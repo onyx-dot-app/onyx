@@ -1,12 +1,8 @@
 import re
 import time
-from collections.abc import Callable
-from collections.abc import Generator
-from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import cast
-from typing import TypeVar
+from collections.abc import Callable, Generator
+from datetime import datetime, timezone
+from typing import Any, TypeVar, cast
 
 import requests
 from hubspot import HubSpot
@@ -17,9 +13,7 @@ from hubspot.crm.companies.models import SimplePublicObjectId as CompanyObjectId
 from hubspot.crm.contacts.models import (
     BatchReadInputSimplePublicObjectId as ContactsBatchReadInput,
 )
-from hubspot.crm.contacts.models import Filter
-from hubspot.crm.contacts.models import FilterGroup
-from hubspot.crm.contacts.models import PublicObjectSearchRequest
+from hubspot.crm.contacts.models import Filter, FilterGroup, PublicObjectSearchRequest
 from hubspot.crm.contacts.models import SimplePublicObjectId as ContactObjectId
 from hubspot.crm.deals.models import (
     BatchReadInputSimplePublicObjectId as DealsBatchReadInput,
@@ -34,19 +28,22 @@ from hubspot.crm.tickets.models import (
 )
 from hubspot.crm.tickets.models import SimplePublicObjectId as TicketObjectId
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
+from onyx.configs.app_configs import INDEX_BATCH_SIZE, REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.hubspot.rate_limit import HubSpotRateLimiter
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import TextSection
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    HierarchyNode,
+    ImageSection,
+    TextSection,
+)
 from onyx.utils.logger import setup_logger
 
 HUBSPOT_BASE_URL = "https://app.hubspot.com"
@@ -134,6 +131,8 @@ class HubSpotConnector(LoadConnector, PollConnector):
         self._portal_id = value
 
     def _call_hubspot(self, func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
+        # The SDK sends requests with no timeout unless one is passed per call.
+        kwargs.setdefault("_request_timeout", REQUEST_TIMEOUT_SECONDS)
         return self._rate_limiter.call(func, *args, **kwargs)
 
     def _batch_read(
@@ -183,16 +182,20 @@ class HubSpotConnector(LoadConnector, PollConnector):
                 page_kwargs["after"] = after
 
             page = self._call_hubspot(fetch_page, **page_kwargs)
-            results = getattr(page, "results", [])
+            results = getattr(page, "results", [])  # ods: ignore[getattr]
             for result in results:
                 yield result
 
-            paging = getattr(page, "paging", None)
-            next_page = getattr(paging, "next", None) if paging else None
+            paging = getattr(page, "paging", None)  # ods: ignore[getattr]
+            next_page = (
+                getattr(paging, "next", None)  # ods: ignore[getattr]
+                if paging
+                else None
+            )
             if next_page is None:
                 break
 
-            after = getattr(next_page, "after", None)
+            after = getattr(next_page, "after", None)  # ods: ignore[getattr]
             if after is None:
                 break
 
@@ -238,15 +241,19 @@ class HubSpotConnector(LoadConnector, PollConnector):
                 sorts=sorts,
             )
             page = self._call_hubspot(search_fn, public_object_search_request=request)
-            results = getattr(page, "results", [])
+            results = getattr(page, "results", [])  # ods: ignore[getattr]
             for result in results:
                 yield result
 
-            paging = getattr(page, "paging", None)
-            next_page = getattr(paging, "next", None) if paging else None
+            paging = getattr(page, "paging", None)  # ods: ignore[getattr]
+            next_page = (
+                getattr(paging, "next", None)  # ods: ignore[getattr]
+                if paging
+                else None
+            )
             if next_page is None:
                 break
-            after = getattr(next_page, "after", None)
+            after = getattr(next_page, "after", None)  # ods: ignore[getattr]
             if after is None:
                 break
 
@@ -298,7 +305,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
         try:
             # Search API returns ISO 8601 strings; filter values use ms epoch.
-            next_start = datetime.fromisoformat(last_ts_ms.replace("Z", "+00:00"))
+            next_start = datetime.fromisoformat(last_ts_ms)
         except (ValueError, AttributeError):
             try:
                 next_start = datetime.fromtimestamp(
@@ -399,7 +406,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
         caller falls back to a dedicated v4 associations API call instead.
         Returns [] when the type simply has no associations.
         """
-        associations = getattr(obj, "associations", None)
+        associations = getattr(obj, "associations", None)  # ods: ignore[getattr]
         if not isinstance(associations, dict):
             return None
         assoc_collection = associations.get(assoc_type)
@@ -721,8 +728,9 @@ class HubSpotConnector(LoadConnector, PollConnector):
             associated_notes = self._get_associated_notes(
                 api_client, ticket.id, "tickets"
             )
-            for note in associated_notes:
-                sections.append(self._create_object_section(note, "notes"))
+            sections.extend(
+                self._create_object_section(note, "notes") for note in associated_notes
+            )
 
             # Add association IDs to metadata
             if associated_contact_ids:
@@ -738,6 +746,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
                     sections=cast(list[TextSection | ImageSection], sections),
                     source=DocumentSource.HUBSPOT,
                     semantic_identifier=title,
+                    doc_created_at=ticket.created_at.replace(tzinfo=timezone.utc),
                     doc_updated_at=ticket.updated_at.replace(tzinfo=timezone.utc),
                     metadata=metadata,
                     doc_metadata={
@@ -876,8 +885,9 @@ class HubSpotConnector(LoadConnector, PollConnector):
             associated_notes = self._get_associated_notes(
                 api_client, company.id, "companies"
             )
-            for note in associated_notes:
-                sections.append(self._create_object_section(note, "notes"))
+            sections.extend(
+                self._create_object_section(note, "notes") for note in associated_notes
+            )
 
             # Add association IDs to metadata
             if associated_contact_ids:
@@ -893,6 +903,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
                     sections=cast(list[TextSection | ImageSection], sections),
                     source=DocumentSource.HUBSPOT,
                     semantic_identifier=title,
+                    doc_created_at=company.created_at.replace(tzinfo=timezone.utc),
                     doc_updated_at=company.updated_at.replace(tzinfo=timezone.utc),
                     metadata=metadata,
                     doc_metadata={
@@ -1029,8 +1040,9 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
             # Get associated notes
             associated_notes = self._get_associated_notes(api_client, deal.id, "deals")
-            for note in associated_notes:
-                sections.append(self._create_object_section(note, "notes"))
+            sections.extend(
+                self._create_object_section(note, "notes") for note in associated_notes
+            )
 
             # Add association IDs to metadata
             if associated_contact_ids:
@@ -1046,6 +1058,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
                     sections=cast(list[TextSection | ImageSection], sections),
                     source=DocumentSource.HUBSPOT,
                     semantic_identifier=title,
+                    doc_created_at=deal.created_at.replace(tzinfo=timezone.utc),
                     doc_updated_at=deal.updated_at.replace(tzinfo=timezone.utc),
                     metadata=metadata,
                     doc_metadata={
@@ -1202,8 +1215,9 @@ class HubSpotConnector(LoadConnector, PollConnector):
             associated_notes = self._get_associated_notes(
                 api_client, contact.id, "contacts"
             )
-            for note in associated_notes:
-                sections.append(self._create_object_section(note, "notes"))
+            sections.extend(
+                self._create_object_section(note, "notes") for note in associated_notes
+            )
 
             # Add association IDs to metadata
             if associated_company_ids:
@@ -1219,6 +1233,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
                     sections=cast(list[TextSection | ImageSection], sections),
                     source=DocumentSource.HUBSPOT,
                     semantic_identifier=title,
+                    doc_created_at=contact.created_at.replace(tzinfo=timezone.utc),
                     doc_updated_at=contact.updated_at.replace(tzinfo=timezone.utc),
                     metadata=metadata,
                     doc_metadata={

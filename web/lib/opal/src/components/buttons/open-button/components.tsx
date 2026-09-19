@@ -8,9 +8,16 @@ import type {
   ExtremaSizeVariants,
   IconFunctionComponent,
   RichStr,
+  Rounding,
 } from "@opal/types";
-import { Text, Tooltip, type TooltipSide } from "@opal/components";
-import type { InteractiveContainerRoundingVariant } from "@opal/core";
+import {
+  Text,
+  Tooltip,
+  type TextColor,
+  type TextFont,
+  type TooltipSide,
+} from "@opal/components";
+
 import { cn } from "@opal/utils";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
 import { ChevronIcon } from "@opal/components/buttons/chevron";
@@ -22,13 +29,13 @@ import { ChevronIcon } from "@opal/components/buttons/chevron";
 /**
  * Content props — a discriminated union on `foldable` that enforces:
  *
- * - `foldable: true`  → `icon` and `children` are required (icon stays visible,
- *                        label + chevron fold away)
- * - `foldable?: false` → at least one of `icon` or `children` must be provided
+ * - `foldable: boolean` → `icon` and `children` are required (icon stays
+ *                          visible, label + chevron fold away when true)
+ * - `foldable?: false`  → at least one of `icon` or `children` must be provided
  */
 type OpenButtonContentProps =
   | {
-      foldable: true;
+      foldable: boolean;
       icon: IconFunctionComponent;
       children: string | RichStr;
     }
@@ -43,7 +50,7 @@ type OpenButtonContentProps =
       children?: string | RichStr;
     };
 
-type OpenButtonVariant = "select-light" | "select-heavy" | "select-tinted";
+type OpenButtonVariant = "select-light" | "select-heavy";
 
 type OpenButtonProps = Omit<InteractiveStatefulProps, "variant"> & {
   variant?: OpenButtonVariant;
@@ -63,6 +70,12 @@ type OpenButtonProps = Omit<InteractiveStatefulProps, "variant"> & {
      */
     justifyContent?: "between";
 
+    /** Override the label font (defaults to the size-derived body font). */
+    labelFont?: TextFont;
+
+    /** Override the label color (defaults to the variant's interactive color). */
+    labelColor?: TextColor;
+
     /** Tooltip text shown on hover. */
     tooltip?: string;
 
@@ -70,7 +83,7 @@ type OpenButtonProps = Omit<InteractiveStatefulProps, "variant"> & {
     tooltipSide?: TooltipSide;
 
     /** Override the default rounding derived from `size`. */
-    rounding?: InteractiveContainerRoundingVariant;
+    rounding?: Rounding;
 
     /** Applies disabled styling and suppresses clicks. */
     disabled?: boolean;
@@ -87,6 +100,8 @@ function OpenButton({
   foldable,
   width,
   justifyContent,
+  labelFont,
+  labelColor,
   tooltip,
   tooltipSide = "top",
   rounding: roundingOverride,
@@ -106,9 +121,9 @@ function OpenButton({
 
   const labelEl = children ? (
     <Text
-      font={isLarge ? "main-ui-body" : "secondary-body"}
-      color="inherit"
-      nowrap
+      font={labelFont ?? (isLarge ? "main-ui-body" : "secondary-body")}
+      color={labelColor ?? "inherit"}
+      wordWrap="whitespace-nowrap"
     >
       {children}
     </Text>
@@ -125,9 +140,7 @@ function OpenButton({
         type="button"
         size={size}
         width={width}
-        rounding={
-          roundingOverride ?? (isLarge ? "md" : size === "2xs" ? "xs" : "sm")
-        }
+        rounding={roundingOverride ?? (isLarge ? 3 : size === "2xs" ? 1 : 2)}
       >
         <div
           className={cn(

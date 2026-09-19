@@ -2,13 +2,11 @@
 
 import { useSearchParams } from "next/navigation";
 import { useBuildSessionController } from "@/app/craft/hooks/useBuildSessionController";
-import {
-  useOutputPanelOpen,
-  useToggleOutputPanel,
-} from "@/app/craft/hooks/useBuildSessionStore";
+import { useOutputPanelOpen } from "@/app/craft/hooks/useBuildSessionStore";
 import { getSessionIdFromSearchParams } from "@/app/craft/services/searchParams";
 import BuildChatPanel from "@/app/craft/components/ChatPanel";
 import BuildOutputPanel from "@/app/craft/components/OutputPanel";
+import VideoBackground from "@/app/craft/components/video-background/VideoBackground";
 
 /**
  * Build V1 Page - Entry point for builds
@@ -23,16 +21,18 @@ export default function BuildV1Page() {
   const sessionId = getSessionIdFromSearchParams(searchParams);
 
   const outputPanelOpen = useOutputPanelOpen();
-  const toggleOutputPanel = useToggleOutputPanel();
   useBuildSessionController({ existingSessionId: sessionId });
 
   return (
-    <div className="relative flex-1 h-full overflow-hidden">
-      {/* Chat panel - always full width for background */}
-      <BuildChatPanel existingSessionId={sessionId} />
+    // overflow-clip, not overflow-hidden: a hidden box is still programmatically
+    // scrollable, which would shove the chat column off-screen.
+    <div className="relative flex-1 h-full overflow-clip">
+      <VideoBackground />
 
-      {/* Output panel - floats over as a card */}
-      <BuildOutputPanel onClose={toggleOutputPanel} isOpen={outputPanelOpen} />
+      <div className="relative z-10 w-full h-full">
+        <BuildChatPanel existingSessionId={sessionId} />
+        <BuildOutputPanel isOpen={outputPanelOpen} />
+      </div>
     </div>
   );
 }

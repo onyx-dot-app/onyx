@@ -1,60 +1,128 @@
-/**
- * Shared types + utilities for the `/` skill picker.
- *
- * Used by the Craft chat input (`InputBar`) and the scheduled trigger prompt
- * (`ScheduleTaskForm`). Both surfaces read the same `GET /skills` payload via
- * `useUserSkills` and feed it through `toPickerSkills` to get the picker's
- * `{ slug, name, description }` shape.
- */
-
-import type { SkillsList } from "@/refresh-pages/admin/SkillsPage/interfaces";
+import type {
+  ExternalAppType,
+  ExternalAppUserResponse,
+} from "@/app/craft/v1/apps/registry";
+import type { SkillsList } from "@/lib/skills/types";
+import type { MCPServer } from "@/lib/tools/types";
+import { CRAFT_APPS_TAB_PARAM } from "@/app/craft/v1/apps/connectableApps";
+import { CRAFT_APPS_PATH } from "@/app/craft/v1/constants";
 
 export interface PickerSkill {
+  kind: "skill";
   slug: string;
   name: string;
   description: string;
 }
 
-/**
- * Normalize the user-facing skills payload to picker rows. The server already
- * filters to the user's accessible set; we defensively drop unavailable
- * builtins and disabled customs here too. Sorted by slug for stable ordering.
- */
-export function toPickerSkills(data: SkillsList | undefined): PickerSkill[] {
-  if (!data) return [];
-  const builtins = data.builtins
-    .filter((b) => b.is_available)
-    .map((b) => ({
-      slug: b.slug,
+export interface PickerApp {
+  kind: "app";
+  externalAppId: number;
+  name: string;
+  appType: ExternalAppType;
+  authenticated: boolean;
+}
+
+/** A craft-enabled MCP server. Kept a distinct kind from `PickerApp` rather
+ * than folded in: the two are connected differently, reach the agent by
+ * different channels, and the user is told which is which. */
+export interface PickerMcpServer {
+  kind: "mcp";
+  mcpServerId: number;
+  name: string;
+  serverUrl: string;
+  authenticated: boolean;
+}
+
+export type PickerEntry = PickerSkill | PickerApp | PickerMcpServer;
+
+export interface PickerSections {
+  skills: PickerSkill[];
+  apps: PickerApp[];
+  mcpServers: PickerMcpServer[];
+}
+
+const EMPTY_SECTIONS: PickerSections = { skills: [], apps: [], mcpServers: [] };
+
+/** Case-insensitive name ordering, shared so every surface listing apps and MCP
+ * servers sorts them the same way. */
+export function compareByName<T extends { name: string }>(a: T, b: T): number {
+  return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+}
+
+// Associated custom skills remain normal per-user selections, with app
+// readiness as an additional runtime requirement.
+export function toPickerSections(
+  skillsData: SkillsList | undefined,
+  externalApps: ExternalAppUserResponse[] | undefined,
+  mcpServers?: MCPServer[] | undefined
+): PickerSections {
+  if (!skillsData && !externalApps && !mcpServers) return EMPTY_SECTIONS;
+
+  const skills: PickerSkill[] = [];
+  const apps: PickerApp[] = [];
+  const mcp: PickerMcpServer[] = [];
+  for (const b of skillsData?.builtins ?? []) {
+    if (!b.is_available || !b.enabled) continue;
+    skills.push({
+      kind: "skill",
+      slug: b.name,
       name: b.name,
       description: b.description,
-    }));
-  const customs = data.customs
-    .filter((c) => c.enabled)
-    .map((c) => ({
-      slug: c.slug,
+    });
+  }
+
+  for (const c of skillsData?.customs ?? []) {
+    if (
+      !c.enabled ||
+      c.is_valid === false ||
+      (c.external_app !== null && !c.external_app.ready)
+    ) {
+      continue;
+    }
+    skills.push({
+      kind: "skill",
+      slug: c.name,
       name: c.name,
       description: c.description,
-    }));
-  return [...builtins, ...customs].sort((a, b) => a.slug.localeCompare(b.slug));
+    });
+  }
+
+  for (const app of externalApps ?? []) {
+    apps.push({
+      kind: "app",
+      externalAppId: app.id,
+      name: app.name,
+      appType: app.app_type,
+      authenticated: app.authenticated,
+    });
+  }
+
+  for (const server of mcpServers ?? []) {
+    mcp.push({
+      kind: "mcp",
+      mcpServerId: server.id,
+      name: server.name,
+      serverUrl: server.server_url,
+      // Whether Craft can actually authenticate this user against the server,
+      // not whether a credential row exists. See `craft_connected`.
+      authenticated: server.craft_connected ?? false,
+    });
+  }
+
+  skills.sort((a, b) => a.slug.localeCompare(b.slug));
+  apps.sort((a, b) => compareByName(a, b) || a.externalAppId - b.externalAppId);
+  mcp.sort((a, b) => compareByName(a, b) || a.mcpServerId - b.mcpServerId);
+
+  return { skills, apps, mcpServers: mcp };
 }
 
 export interface SlashTrigger {
-  /** Index of the active "/" character in the full text. */
   slashIndex: number;
-  /** Text typed between "/" and the cursor (exclusive of "/"). */
   query: string;
 }
 
-/**
- * Detect whether the cursor is currently inside a "/" trigger scope.
- *
- * Rules:
- * - The "/" must be at the start of the text or preceded by whitespace.
- * - Between the "/" and the cursor there must be no whitespace.
- * - The cursor must be at or after the "/" position (always true since the
- *   slash is found by lastIndexOf in `textBeforeCursor`).
- */
+// Trigger rules: "/" must be at start-of-text or after whitespace; the query
+// (chars between "/" and the cursor) must not contain whitespace.
 export function detectSlashTrigger(
   textBeforeCursor: string
 ): SlashTrigger | null {
@@ -72,19 +140,84 @@ export function detectSlashTrigger(
   return { slashIndex, query };
 }
 
-/**
- * Filter picker rows by a query string. Matches against slug, name, and
- * description (case-insensitive substring).
- */
-export function filterPickerSkills(
-  skills: PickerSkill[],
+function matchesQuery(entry: PickerEntry, query: string): boolean {
+  if (!query) return true;
+  let fields: string[];
+  switch (entry.kind) {
+    case "skill":
+      fields = [entry.slug, entry.name, entry.description];
+      break;
+    case "app":
+      fields = [String(entry.externalAppId), entry.name];
+      break;
+    case "mcp":
+      fields = [String(entry.mcpServerId), entry.name];
+      break;
+  }
+  return fields.some((field) => field.toLowerCase().includes(query));
+}
+
+export function pickerEntryKey(entry: PickerEntry): string {
+  switch (entry.kind) {
+    case "skill":
+      return `skill:${entry.slug}`;
+    case "app":
+      return `app:${entry.externalAppId}`;
+    case "mcp":
+      return `mcp:${entry.mcpServerId}`;
+  }
+}
+
+export function pickerEntryPromptPrefix(entry: PickerEntry): string {
+  switch (entry.kind) {
+    case "skill":
+      return `/${entry.slug}`;
+    case "app":
+      return `[Use external app ${JSON.stringify(entry.name)} (ID: ${entry.externalAppId})]`;
+    case "mcp":
+      // The server's tools are already wired into the session, so this only
+      // points the agent at them.
+      return `[Use the MCP server ${JSON.stringify(entry.name)} and its tools]`;
+  }
+}
+
+type PickerConnectionPath =
+  | `${typeof CRAFT_APPS_PATH}?connect=${number}`
+  | `${typeof CRAFT_APPS_PATH}?${typeof CRAFT_APPS_TAB_PARAM}=mcp`;
+
+export function pickerEntryConnectionPath(
+  entry: PickerEntry
+): PickerConnectionPath | null {
+  switch (entry.kind) {
+    case "skill":
+      return null;
+    case "app":
+      return entry.authenticated
+        ? null
+        : `${CRAFT_APPS_PATH}?connect=${entry.externalAppId}`;
+    // MCP servers have no per-server deep link; land on the MCP tab instead.
+    case "mcp":
+      return entry.authenticated
+        ? null
+        : `${CRAFT_APPS_PATH}?${CRAFT_APPS_TAB_PARAM}=mcp`;
+  }
+}
+
+export function filterPickerSections(
+  sections: PickerSections,
   query: string
-): PickerSkill[] {
+): PickerSections {
   const q = query.trim().toLowerCase();
-  if (!q) return skills;
-  return skills.filter((s) =>
-    [s.slug, s.name, s.description].some((field) =>
-      field.toLowerCase().includes(q)
-    )
-  );
+  if (!q) return sections;
+  return {
+    skills: sections.skills.filter((s) => matchesQuery(s, q)),
+    apps: sections.apps.filter((a) => matchesQuery(a, q)),
+    mcpServers: sections.mcpServers.filter((m) => matchesQuery(m, q)),
+  };
+}
+
+// Skills, then apps, then MCP servers; must match the popover's visual render
+// order so keyboard nav indices line up.
+export function flattenSections(sections: PickerSections): PickerEntry[] {
+  return [...sections.skills, ...sections.apps, ...sections.mcpServers];
 }

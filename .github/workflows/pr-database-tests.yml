@@ -6,9 +6,6 @@ concurrency:
 on:
   merge_group:
   pull_request:
-    branches:
-      - main
-      - "release/**"
   push:
     tags:
       - "v*.*.*"
@@ -20,15 +17,19 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # paths-filter needs pull-requests:read to list PR files on private repos (no-op on public).
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       db: ${{ steps.filter.outputs.db || 'true' }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         with:
           persist-credentials: false
-      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # ratchet:dorny/paths-filter@v3
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
         id: filter
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         with:
@@ -41,6 +42,7 @@ jobs:
               - 'deployment/docker_compose/docker-compose.dev.yml'
               - '.github/workflows/pr-database-tests.yml'
               - '.github/actions/setup-python-and-install-dependencies/**'
+              - '.github/actions/login-ecr-pullthrough-cache/**'
 
   database-tests:
     needs: changes
@@ -49,12 +51,12 @@ jobs:
       - runs-on
       - runner=2cpu-linux-arm64
       - "run-id=${{ github.run_id }}-database-tests"
-    timeout-minutes: 45
+    timeout-minutes: 12
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -65,22 +67,10 @@ jobs:
             backend/requirements/default.txt
             backend/requirements/dev.txt
 
-      - name: Generate OpenAPI schema and Python client
-        shell: bash
-        # OpenAPI client codegen does not handle some EE-only schema shapes;
-        # disable enforcement so the MIT route set is exported.
-        env:
-          LICENSE_ENFORCEMENT_ENABLED: "false"
-        run: |
-          ods openapi all
-
-      # needed for pulling external images otherwise, we hit the "Unauthenticated users" limit
-      # https://docs.docker.com/docker-hub/usage/
-      - name: Login to Docker Hub
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
 
       - name: Start Docker containers
         working-directory: ./deployment/docker_compose
@@ -91,3 +81,17 @@ jobs:
       - name: Run Database Tests
         working-directory: ./backend
         run: pytest tests/integration/tests/migrations/
+
+  # Keeps the pull request in the merge queue while RunsOn reruns database-tests
+  # after an EC2 Spot interruption. The gate fails when database-tests fails for
+  # any other reason. Require "database-tests-gate / pass" in the main ruleset,
+  # not "database-tests".
+  database-tests-gate:
+    if: ${{ always() && needs.changes.outputs.db == 'true' }}
+    needs: [changes, database-tests]
+    permissions:
+      actions: read
+      checks: read
+    uses: runs-on/spot-retry-gate/.github/workflows/merge-queue.yml@451eea7c3d2c58d14a1f80f0bbb99eaa347b9471 # ratchet:runs-on/spot-retry-gate/.github/workflows/merge-queue.yml@v1.0.0
+    with:
+      job_results: ${{ toJSON(needs) }}

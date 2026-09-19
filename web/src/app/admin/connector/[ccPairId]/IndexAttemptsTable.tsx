@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import {
   Table,
   TableHead,
@@ -15,7 +16,7 @@ import { CCPairFullInfo } from "./types";
 import { IndexAttemptSnapshot } from "@/lib/types";
 import { IndexAttemptStatus } from "@/components/Status";
 import { PageSelector } from "@/components/PageSelector";
-import { localizeAndPrettify } from "@/lib/time";
+import { localizeAndPrettify } from "@opal/time";
 import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
 import { SvgBarChartSmall, SvgClock, SvgInfo } from "@opal/icons";
 import ExceptionTraceModal from "@/sections/modals/PreviewModal/ExceptionTraceModal";
@@ -36,6 +37,8 @@ export function IndexAttemptsTable({
   totalPages,
   onPageChange,
 }: IndexingAttemptsTableProps) {
+  const t = useTranslations("admin.connector");
+  const locale = useLocale();
   const [indexAttemptTracePopupId, setIndexAttemptTracePopupId] = useState<
     number | null
   >(null);
@@ -45,11 +48,10 @@ export function IndexAttemptsTable({
     return (
       <Callout
         className="mt-4"
-        title="No indexing attempts scheduled yet"
+        title={t("indexAttemptsTable.empty.title")}
         type="notice"
       >
-        Index attempts are scheduled in the background, and may take some time
-        to appear. Try refreshing the page in ~30 seconds!
+        {t("indexAttemptsTable.empty.description")}
       </Callout>
     );
   }
@@ -77,21 +79,25 @@ export function IndexAttemptsTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Time Started</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="whitespace-nowrap">New Docs</TableHead>
+            <TableHead>{t("indexAttemptsTable.columns.timeStarted")}</TableHead>
+            <TableHead>{t("indexAttemptsTable.columns.status")}</TableHead>
+            <TableHead className="whitespace-nowrap">
+              {t("indexAttemptsTable.columns.newDocs")}
+            </TableHead>
             <TableHead>
               <Tooltip
-                tooltip="Total number of documents replaced in the index during this indexing attempt"
+                tooltip={t("indexAttemptsTable.columns.totalDocsTooltip")}
                 side="top"
               >
                 <span className="flex items-center">
-                  Total Docs
-                  <SvgInfo className="ml-1 w-4 h-4" />
+                  {t("indexAttemptsTable.columns.totalDocs")}
+                  <SvgInfo className="ms-1 w-4 h-4" />
                 </span>
               </Tooltip>
             </TableHead>
-            <TableHead>Error Message</TableHead>
+            <TableHead>
+              {t("indexAttemptsTable.columns.errorMessage")}
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -101,11 +107,9 @@ export function IndexAttemptsTable({
             const isReindexInProgress =
               indexAttempt.status === "in_progress" ||
               indexAttempt.status === "not_started";
-            const reindexTooltip = `This index attempt ${
-              isReindexInProgress ? "is" : "was"
-            } a full re-index. All documents from the source ${
-              isReindexInProgress ? "are being" : "were"
-            } synced into the system.`;
+            const reindexTooltip = isReindexInProgress
+              ? t("indexAttemptsTable.reindexTooltip.inProgress")
+              : t("indexAttemptsTable.reindexTooltip.completed");
             return (
               <TableRow
                 key={indexAttempt.id}
@@ -117,16 +121,11 @@ export function IndexAttemptsTable({
               >
                 <TableCell>
                   {indexAttempt.time_started
-                    ? localizeAndPrettify(indexAttempt.time_started)
+                    ? localizeAndPrettify(indexAttempt.time_started, locale)
                     : "-"}
                 </TableCell>
                 <TableCell>
-                  <Section
-                    alignItems="start"
-                    width="fit"
-                    height="fit"
-                    gap={0.25}
-                  >
+                  <Section alignItems="start" width="fit" height="fit" gap={1}>
                     <IndexAttemptStatus
                       status={indexAttempt.status || "not_started"}
                     />
@@ -137,27 +136,31 @@ export function IndexAttemptsTable({
                         alignItems="center"
                         width="fit"
                         height="fit"
-                        gap={0.25}
+                        gap={1}
                         // Stack above the row-wide trace overlay button so
                         // the metrics button stays clickable on rows with
                         // a full exception trace.
                         className="relative z-content"
                       >
                         <Text font="secondary-body" color="text-03">
-                          {`${docsPerMinute} docs / min`}
+                          {t("indexAttemptsTable.docsPerMinute", {
+                            rate: docsPerMinute,
+                          })}
                         </Text>
                         <Button
                           icon={SvgBarChartSmall}
                           prominence="tertiary"
                           size="sm"
-                          tooltip="View stage metrics"
+                          tooltip={t(
+                            "indexAttemptsTable.stageMetricsButton.tooltip"
+                          )}
                           onClick={() => setMetricsAttemptId(indexAttempt.id)}
                         />
                       </Section>
                     ) : (
                       indexAttempt.status === "success" && (
                         <Text font="secondary-body" color="text-03">
-                          No additional docs processed
+                          {t("indexAttemptsTable.noAdditionalDocs")}
                         </Text>
                       )
                     )}
@@ -165,12 +168,13 @@ export function IndexAttemptsTable({
                 </TableCell>
                 <TableCell>
                   <div className="flex">
-                    <div className="text-right">
+                    <div className="text-end">
                       <div>{indexAttempt.new_docs_indexed}</div>
                       {indexAttempt.docs_removed_from_index > 0 && (
                         <div className="text-xs w-52 text-wrap flex italic overflow-hidden whitespace-normal px-1">
-                          (also removed {indexAttempt.docs_removed_from_index}{" "}
-                          docs that were detected as deleted in the source)
+                          {t("indexAttemptsTable.docsRemoved", {
+                            count: indexAttempt.docs_removed_from_index,
+                          })}
                         </div>
                       )}
                     </div>
@@ -182,7 +186,7 @@ export function IndexAttemptsTable({
                     {indexAttempt.from_beginning && (
                       <Tooltip side="top" tooltip={reindexTooltip}>
                         <span className="cursor-help flex items-center">
-                          <SvgClock className="ml-2 h-3.5 w-3.5 stroke-current" />
+                          <SvgClock className="ms-2 h-3.5 w-3.5 stroke-current" />
                         </span>
                       </Tooltip>
                     )}
@@ -200,11 +204,11 @@ export function IndexAttemptsTable({
                   {indexAttempt.full_exception_trace && (
                     <button
                       type="button"
-                      aria-label="View full trace"
+                      aria-label={t("indexAttemptsTable.viewTrace.ariaLabel")}
                       onClick={() =>
                         setIndexAttemptTracePopupId(indexAttempt.id)
                       }
-                      className="absolute w-full h-full left-0 top-0"
+                      className="absolute w-full h-full start-0 top-0"
                     />
                   )}
                 </td>

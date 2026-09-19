@@ -10,11 +10,13 @@ SQLAlchemy connection pool metrics are registered separately via
 (after engines are created).
 """
 
+from fastapi import Depends
 from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_fastapi_instrumentator.metrics import default as default_metrics
 from sqlalchemy.exc import TimeoutError as SATimeoutError
 from starlette.applications import Starlette
 
+from onyx.server.metrics.metrics_auth import verify_metrics_token
 from onyx.server.metrics.per_tenant import per_tenant_request_callback
 from onyx.server.metrics.postgres_connection_pool import pool_timeout_handler
 from onyx.server.metrics.slow_requests import slow_request_callback
@@ -41,6 +43,31 @@ _LATENCY_BUCKETS = (
 )
 
 
+def create_prometheus_instrumentator() -> Instrumentator:
+    instrumentator = Instrumentator(
+        should_group_status_codes=False,
+        should_ignore_untemplated=False,
+        should_group_untemplated=True,
+        should_instrument_requests_inprogress=True,
+        inprogress_labels=True,
+        excluded_handlers=_EXCLUDED_HANDLERS,
+    )
+    default_callback = default_metrics(latency_lowr_buckets=_LATENCY_BUCKETS)
+    if default_callback:
+        instrumentator.add(default_callback)
+    return instrumentator
+
+
+def expose_prometheus_metrics(
+    app: Starlette,
+    instrumentator: Instrumentator,
+) -> None:
+    instrumentator.instrument(app, latency_lowr_buckets=_LATENCY_BUCKETS).expose(
+        app,
+        dependencies=[Depends(verify_metrics_token)],
+    )
+
+
 def setup_prometheus_metrics(app: Starlette) -> None:
     """Initialize HTTP request metrics for the Onyx API server.
 
@@ -52,24 +79,7 @@ def setup_prometheus_metrics(app: Starlette) -> None:
     """
     app.add_exception_handler(SATimeoutError, pool_timeout_handler)
 
-    instrumentator = Instrumentator(
-        should_group_status_codes=False,
-        should_ignore_untemplated=False,
-        should_group_untemplated=True,
-        should_instrument_requests_inprogress=True,
-        inprogress_labels=True,
-        excluded_handlers=_EXCLUDED_HANDLERS,
-    )
-
-    # Explicitly create the default metrics (http_requests_total,
-    # http_request_duration_seconds, etc.) and add them first.  The library
-    # skips creating defaults when ANY custom instrumentations are registered
-    # via .add(), so we must include them ourselves.
-    default_callback = default_metrics(latency_lowr_buckets=_LATENCY_BUCKETS)
-    if default_callback:
-        instrumentator.add(default_callback)
-
+    instrumentator = create_prometheus_instrumentator()
     instrumentator.add(slow_request_callback)
     instrumentator.add(per_tenant_request_callback)
-
-    instrumentator.instrument(app, latency_lowr_buckets=_LATENCY_BUCKETS).expose(app)
+    expose_prometheus_metrics(app, instrumentator)

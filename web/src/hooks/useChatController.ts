@@ -4,11 +4,20 @@ import {
   buildChatUrl,
   getAvailableContextTokens,
   nameChatSession,
+  setPreferredResponse,
   updateLlmOverrideForChatSession,
 } from "@/app/app/services/lib";
-import { getMaxSelectedDocumentTokens } from "@/app/app/projects/projectsService";
+import {
+  applyPreferredResponse,
+  chooseImplicitPreferred,
+  getMostVisibleResponseId,
+  getMultiModelChildren,
+  getUnresolvedMultiModelTurn,
+} from "@/app/app/message/multiModel";
+import { getMaxSelectedDocumentTokens } from "@/lib/projects/svc";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import { StreamStopInfo } from "@/lib/search/interfaces";
+import type { SourceMetadata } from "@/lib/search/interfaces";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";
 import {
@@ -22,9 +31,9 @@ import {
 } from "@/app/app/services/messageTree";
 import { MinimalAgent } from "@/lib/agents/types";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
-import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
+import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
 import { OnyxDocument } from "@/lib/search/interfaces";
-import { FilterManager, LlmDescriptor, LlmManager } from "@/lib/hooks";
+import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import {
   BackendMessage,
   ChatFileType,
@@ -51,15 +60,20 @@ import {
   CurrentMessageFIFO,
   updateCurrentMessageFIFO,
 } from "@/app/app/services/currentMessageFIFO";
-import { buildFilters } from "@/lib/search/utils";
-import { toast } from "@/hooks/useToast";
+import {
+  agentDeclaresOwnSources,
+  buildFilters,
+  effectiveAvailableSourcesFor,
+  selectedSourcesFrom,
+} from "@/lib/searchFilters/utils";
+import { toast } from "@opal/layouts";
 import {
   ReadonlyURLSearchParams,
   usePathname,
   useRouter,
   useSearchParams,
 } from "next/navigation";
-import { track, AnalyticsEvent } from "@/lib/analytics";
+import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import { getExtensionContext } from "@/lib/extension/utils";
 import useChatSessions from "@/hooks/useChatSessions";
 import { usePinnedAgents } from "@/lib/agents/hooks";
@@ -70,12 +84,13 @@ import {
   useCurrentMessageHistory,
 } from "@/app/app/stores/useChatSessionStore";
 import { Packet, MessageStart } from "@/app/app/services/streamingModels";
-import { SelectedModel } from "@/refresh-components/popovers/ModelSelector";
-import { useAgentPreferences } from "@/lib/agents/hooks";
-import { useForcedTools } from "@/lib/hooks/useForcedTools";
-import { ProjectFile, useProjectsContext } from "@/providers/ProjectsContext";
-import { useAppParams } from "@/hooks/appNavigation";
-import { projectFilesToFileDescriptors } from "@/app/app/services/fileUtils";
+import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
+import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
+import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
+import { useIncognito } from "@/providers/IncognitoProvider";
+import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
+import { useAvailableSources } from "@/lib/connectors/hooks";
+import { getConfiguredSources } from "@/lib/sources";
 
 const SYSTEM_MESSAGE_ID = -3;
 
@@ -107,15 +122,15 @@ interface RegenerationRequest {
 }
 
 interface UseChatControllerProps {
-  filterManager: FilterManager;
   llmManager: LlmManager;
-  liveAgent: MinimalAgent | undefined;
+  /** Owned by the surface, so the input bar and this read the same one. */
+  toolConfiguration: ToolConfigurationHandle;
+  activeAgent: MinimalAgent | undefined;
   availableAgents: MinimalAgent[];
   existingChatSessionId: string | null;
   selectedDocuments: OnyxDocument[];
   searchParams: ReadonlyURLSearchParams;
   resetInputBar: () => void;
-  setSelectedAgentFromId: (agentId: number | null) => void;
 }
 
 async function stopChatSession(chatSessionId: string): Promise<void> {
@@ -132,25 +147,41 @@ async function stopChatSession(chatSessionId: string): Promise<void> {
 }
 
 export default function useChatController({
-  filterManager,
   llmManager,
+  toolConfiguration,
   availableAgents,
-  liveAgent,
+  activeAgent,
   existingChatSessionId,
   selectedDocuments,
   resetInputBar,
-  setSelectedAgentFromId,
 }: UseChatControllerProps) {
+  // The chat's search filters ride the tool configuration, resolved against
+  // the sources the active agent can reach. An explicit selection resolves
+  // only against a complete roster — `settled` allows stale data (a failed
+  // revalidation must not drop a restriction) but never a partial first
+  // load, which would narrow the send wrongly. An agent declaring its own
+  // knowledge_sources carries its complete roster and never waits.
+  const { availableSources, settled: sourcesSettled } = useAvailableSources();
+  const selectedSearchSources = useMemo<SourceMetadata[] | null>(
+    () =>
+      activeAgent && (sourcesSettled || agentDeclaresOwnSources(activeAgent))
+        ? selectedSourcesFrom(
+            toolConfiguration.filters,
+            getConfiguredSources(
+              effectiveAvailableSourcesFor(activeAgent, availableSources)
+            )
+          )
+        : null,
+    [activeAgent, sourcesSettled, availableSources, toolConfiguration.filters]
+  );
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const params = useAppParams();
   const { refreshChatSessions, addPendingChatSession } = useChatSessions();
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
-  const { agentPreferences } = useAgentPreferences();
-  const { forcedToolIds } = useForcedTools();
   const { fetchProjects, setCurrentMessageFiles, beginUpload } =
     useProjectsContext();
+  const { incognitoEnabledRef, incognitoSessionId } = useIncognito();
 
   // Use selectors to access only the specific fields we need
   const currentSessionId = useChatSessionStore(
@@ -235,11 +266,16 @@ export default function useChatController({
     }
   };
 
-  const updateStatesWithNewSessionId = (newSessionId: string) => {
+  const updateStatesWithNewSessionId = (
+    newSessionId: string,
+    incognito = false
+  ) => {
     // Create new session in store if it doesn't exist
     const existingSession = sessions.get(newSessionId);
     if (!existingSession) {
-      createSession(newSessionId);
+      // Pinned here so vote suppression holds even before any backend
+      // session fetch stores the flag.
+      createSession(newSessionId, { incognito });
     }
 
     // Set as current session
@@ -262,6 +298,7 @@ export default function useChatController({
     const isOnChatPage = pathname === "/app";
 
     if (isOnChatPage && !navigatingAway.current) {
+      // SAFETY: buildChatUrl with search=false builds `/app?...`.
       router.push(newUrl as Route, { scroll: false });
     }
 
@@ -363,6 +400,8 @@ export default function useChatController({
     // The stream will close naturally when the backend sends the STOP packet
     setStreamingStartTime(currentSession, null);
     updateChatStateAction(currentSession, "input");
+    // On stop nothing else flips the queue gate, so release it here or queued follow-ups never auto-send.
+    setLatestMessageRenderComplete(currentSession, true);
   }, [currentMessageHistory, currentMessageTree]);
 
   const onSubmit = useCallback(
@@ -379,9 +418,11 @@ export default function useChatController({
       additionalContext,
       selectedModels,
     }: OnSubmitProps) => {
+      // Read at submit time so no caller can capture a stale value.
+      const incognito = incognitoEnabledRef.current ?? false;
       const isMultiModel =
         !regenerationRequest && (selectedModels?.length ?? 0) >= 2;
-      const projectId = params(SEARCH_PARAM_NAMES.PROJECT_ID);
+      const projectId = searchParams.get(SEARCH_PARAM_NAMES.PROJECT_ID);
       {
         const params = new URLSearchParams(searchParams?.toString() || "");
         if (params.has(SEARCH_PARAM_NAMES.PROJECT_ID)) {
@@ -389,6 +430,7 @@ export default function useChatController({
           const newUrl = params.toString()
             ? `${pathname}?${params.toString()}`
             : pathname;
+          // SAFETY: built from the current pathname, which is a route of this app.
           router.replace(newUrl as Route, { scroll: false });
         }
       }
@@ -408,11 +450,27 @@ export default function useChatController({
       let currentHistory = getLatestMessageChain(currentMessageTreeLocal);
       let lastMessage = currentHistory[currentHistory.length - 1];
 
+      // A multi-model turn whose chain-tip panel errored can still have usable
+      // siblings. Keep the turn so the implicit-preferred pick below can
+      // continue the chain through a successful sibling.
+      const errorTurnUserMsg =
+        lastMessage?.type === "error" && lastMessage.parentNodeId != null
+          ? currentMessageTreeLocal.get(lastMessage.parentNodeId)
+          : undefined;
+      const errorTurnHasUsableSibling = errorTurnUserMsg
+        ? (getMultiModelChildren(
+            errorTurnUserMsg,
+            currentMessageTreeLocal
+          )?.some((m) => m.type === "assistant" && m.messageId != null) ??
+          false)
+        : false;
+
       if (
         lastMessage &&
         lastMessage.type === "error" &&
         !messageIdToResend &&
-        !regenerationRequest
+        !regenerationRequest &&
+        !errorTurnHasUsableSibling
       ) {
         const newMessageTree = new Map(currentMessageTreeLocal);
         const parentNodeId = lastMessage.parentNodeId;
@@ -471,12 +529,12 @@ export default function useChatController({
       }
 
       // Auto-pin the agent to sidebar when sending a message if not already pinned
-      if (liveAgent) {
+      if (activeAgent) {
         const isAlreadyPinned = pinnedAgents.some(
-          (agent) => agent.id === liveAgent.id
+          (agent) => agent.id === activeAgent.id
         );
         if (!isAlreadyPinned) {
-          togglePinnedAgent(liveAgent, true).catch((err) => {
+          togglePinnedAgent(activeAgent, true).catch((err) => {
             console.error("Failed to auto-pin agent:", err);
           });
         }
@@ -496,19 +554,38 @@ export default function useChatController({
         (m) => m.type === "user"
       );
       if (isNewSession) {
+        // There is no incognito agent chat, so incognito pins the default
+        // assistant regardless of any selected agent.
         currChatSessionId = await createChatSession(
-          liveAgent?.id || 0,
+          incognito ? 0 : activeAgent?.id || 0,
           searchParamBasedChatSessionName,
-          projectId ? parseInt(projectId) : null
+          projectId ? parseInt(projectId) : null,
+          incognito,
+          incognito ? incognitoSessionId : null
         );
 
-        // Optimistically add the new chat session to the sidebar cache
-        // This ensures "New Chat" appears immediately, even before any messages are saved
-        addPendingChatSession({
-          chatSessionId: currChatSessionId,
-          personaId: liveAgent?.id || 0,
-          projectId: projectId ? parseInt(projectId) : null,
-        });
+        // This send is what created the chat, so the configuration chosen for
+        // it moves onto the session before the id reaches the composer.
+        toolConfiguration.handOffTo(currChatSessionId);
+
+        // Optimistically add the new chat session to the sidebar cache so
+        // "New Chat" appears immediately. Incognito sessions are excluded: they
+        // must never show in the sidebar, and the server filters them out too.
+        if (!incognito) {
+          addPendingChatSession({
+            chatSessionId: currChatSessionId,
+            personaId: activeAgent?.id || 0,
+            projectId: projectId ? parseInt(projectId) : null,
+          });
+        }
+
+        // The project's chat list is how the app answers "is this chat inside a
+        // project" once `projectId` leaves the URL. Without this the new chat is
+        // missing from that list until the next revalidation, and the cache is
+        // configured not to revalidate on stale or focus.
+        if (projectId) {
+          void fetchProjects();
+        }
       } else {
         // Use the existing session ID from props or from the store
         currChatSessionId =
@@ -528,12 +605,13 @@ export default function useChatController({
         structureValue(
           finalLLM.name || "",
           finalLLM.provider || "",
-          finalLLM.modelName || ""
+          finalLLM.modelName || "",
+          finalLLM.modelConfigurationId
         )
       );
 
       // mark the session as the current session
-      updateStatesWithNewSessionId(currChatSessionId);
+      updateStatesWithNewSessionId(currChatSessionId, incognito);
 
       // Navigate immediately for new sessions (before streaming starts)
       if (isNewSession) {
@@ -599,8 +677,82 @@ export default function useChatController({
           ? currentHistory.slice(0, messageToResendIndex)
           : currentHistory;
 
+      // Sending into an unresolved multi-model turn must not block: assume a
+      // preference, persist it, and continue the chain from it. An explicit
+      // pick already set preferredResponseId, making this a no-op.
+      let implicitPreference: {
+        message: Message;
+        persist: Promise<Response | null>;
+        revert: () => void;
+      } | null = null;
+      if (!regenerationRequest && !messageToResend) {
+        const unresolvedTurn = getUnresolvedMultiModelTurn(
+          currentHistory,
+          currentMessageTreeLocal
+        );
+        const chosen = unresolvedTurn
+          ? chooseImplicitPreferred(
+              currentHistory,
+              currentMessageTreeLocal,
+              unresolvedTurn,
+              getMostVisibleResponseId(unresolvedTurn.userMessage.nodeId)
+            )
+          : null;
+        if (
+          unresolvedTurn &&
+          chosen?.messageId != null &&
+          unresolvedTurn.userMessage.messageId != null
+        ) {
+          // Mirror into the local tree so the panel marks the selection and
+          // the chain walk below continues through the chosen response. A
+          // failed PUT must undo the mirror, or the turn reads resolved
+          // locally, retries skip the PUT, and the send's parent stays off
+          // the backend mainline until a reload.
+          const originalUserMessage = unresolvedTurn.userMessage;
+          implicitPreference = {
+            message: chosen,
+            persist: setPreferredResponse(
+              unresolvedTurn.userMessage.messageId,
+              chosen.messageId
+            ).catch(() => null),
+            revert: () => {
+              // A newer explicit pick may have replaced the assumption while
+              // the PUT was in flight. Never clobber it with this snapshot.
+              const live = useChatSessionStore
+                .getState()
+                .sessions.get(frozenSessionId)
+                ?.messageTree?.get(originalUserMessage.nodeId);
+              if (live && live.preferredResponseId !== chosen.messageId) {
+                return;
+              }
+              // Clear only the preference so the retry re-runs the PUT. The
+              // chain tip stays on the assumed response, keeping the failed
+              // follow-up reachable in the rendered chat.
+              const reverted = applyPreferredResponse(
+                currentMessageTreeLocal,
+                originalUserMessage.nodeId,
+                null
+              );
+              if (!reverted) return;
+              currentMessageTreeLocal = reverted;
+              updateSessionMessageTree(
+                frozenSessionId,
+                currentMessageTreeLocal
+              );
+            },
+          };
+          currentMessageTreeLocal =
+            applyPreferredResponse(
+              currentMessageTreeLocal,
+              originalUserMessage.nodeId,
+              chosen
+            ) ?? currentMessageTreeLocal;
+        }
+      }
+
       let parentMessage =
         messageToResendParent ||
+        implicitPreference?.message ||
         (currMessageHistory.length > 0
           ? currMessageHistory[currMessageHistory.length - 1]
           : null) ||
@@ -873,25 +1025,49 @@ export default function useChatController({
       let streamSucceeded = false;
 
       try {
+        // Selection-time override writes are best-effort. Await confirmation
+        // so the backend's session-row read during the send sees the current
+        // selections. A failed write surfaces as a chat error and the next
+        // send re-persists.
+        await llmManager.persistOverrides(currChatSessionId);
+
+        // The send's mainline walk must see the assumed preference. An
+        // unconfirmed write can 400 with "not on the latest mainline".
+        if (implicitPreference) {
+          const res = await implicitPreference.persist;
+          if (!res?.ok) {
+            implicitPreference.revert();
+            const data = res ? await res.json().catch(() => ({})) : {};
+            throw new Error(
+              data.detail ?? "Failed to set the preferred response"
+            );
+          }
+        }
+
         const lastSuccessfulMessageId = getLastSuccessfulMessageId(
           currentMessageTreeLocal
         );
-        const disabledToolIds = liveAgent
-          ? agentPreferences?.[liveAgent?.id]?.disabled_tool_ids
-          : undefined;
 
         // Find the search tool's numeric ID for forceSearch
-        const searchToolNumericId = liveAgent?.tools.find(
+        const searchToolNumericId = activeAgent?.tools.find(
           (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
         )?.id;
 
-        // Determine the forced tool ID:
-        // 1. If forceSearch is true, use the search tool's numeric ID
-        // 2. Otherwise, use the first forced tool ID from the forcedToolIds array
-        const effectiveForcedToolId = forceSearch
+        // The tool this message is made to use: the search tool when the
+        // caller asked for a search, otherwise whatever the chat has forced.
+        //
+        // Only if the agent still has it. A configuration outlives the agent
+        // being edited, and a chat can be handed one that named a tool this
+        // agent does not have; the backend raises on a forced tool it cannot
+        // find, so an id nobody can act on would fail the whole message rather
+        // than the model simply choosing for itself.
+        const requestedForcedToolId = forceSearch
           ? (searchToolNumericId ?? null)
-          : forcedToolIds.length > 0
-            ? forcedToolIds[0]
+          : toolConfiguration.forcedToolId;
+        const effectiveForcedToolId =
+          requestedForcedToolId !== null &&
+          activeAgent?.tools.some((tool) => tool.id === requestedForcedToolId)
+            ? requestedForcedToolId
             : null;
 
         // Determine origin for telemetry tracking (also used for frontend PostHog tracking below)
@@ -915,10 +1091,12 @@ export default function useChatController({
           })(),
           chatSessionId: currChatSessionId,
           filters: buildFilters(
-            filterManager.selectedSources,
-            filterManager.selectedDocumentSets,
-            filterManager.timeRange,
-            filterManager.selectedTags
+            selectedSearchSources,
+            toolConfiguration.filters.documentSets,
+            toolConfiguration.filters.timeRange
+              ? { from: toolConfiguration.filters.timeRange.from }
+              : null,
+            toolConfiguration.filters.tags
           ),
           modelProvider: isMultiModel
             ? undefined
@@ -929,12 +1107,29 @@ export default function useChatController({
               llmManager.currentLlm.modelName ||
               searchParams?.get(SEARCH_PARAM_NAMES.MODEL_VERSION) ||
               undefined,
-          temperature: llmManager.temperature || undefined,
+          modelConfigurationId: isMultiModel
+            ? undefined
+            : modelOverride
+              ? (modelOverride.modelConfigurationId ?? undefined)
+              : (llmManager.currentLlm.modelConfigurationId ?? undefined),
+          // Only a chosen temperature is sent, zero included. Without one the
+          // backend resolves the admin default, then GEN_AI_TEMPERATURE.
+          temperature: llmManager.hasTemperatureOverride
+            ? llmManager.temperature
+            : undefined,
           deepResearch,
+          // Only sent when something is actually disabled. To the backend an
+          // explicit list is a whitelist, and this one is built from the tools
+          // the frontend can see — which excludes those marked
+          // `expose_to_frontend=False`. Sending it always would quietly
+          // withhold tools nobody chose to disable.
           enabledToolIds:
-            disabledToolIds && liveAgent
-              ? liveAgent.tools
-                  .filter((tool) => !disabledToolIds?.includes(tool.id))
+            activeAgent && toolConfiguration.disabledToolIds.length > 0
+              ? activeAgent.tools
+                  .filter(
+                    (tool) =>
+                      !toolConfiguration.disabledToolIds.includes(tool.id)
+                  )
                   .map((tool) => tool.id)
               : undefined,
           forcedToolId: effectiveForcedToolId,
@@ -945,6 +1140,7 @@ export default function useChatController({
                 model_provider: m.name,
                 model_version: m.modelName,
                 display_name: m.displayName,
+                model_configuration_id: m.modelConfigurationId ?? undefined,
               }))
             : undefined,
         });
@@ -991,7 +1187,7 @@ export default function useChatController({
               if (isExtension) {
                 track(AnalyticsEvent.EXTENSION_CHAT_QUERY, {
                   extension_context: extensionContext,
-                  assistant_id: liveAgent?.id,
+                  assistant_id: activeAgent?.id,
                   has_files: effectiveFileDescriptors.length > 0,
                   deep_research: deepResearch,
                 });
@@ -1316,27 +1512,24 @@ export default function useChatController({
     },
     [
       // Narrow to stable fields from managers to avoid re-creation
-      filterManager.selectedSources,
-      filterManager.selectedDocumentSets,
-      filterManager.selectedTags,
-      filterManager.timeRange,
+      selectedSearchSources,
       llmManager.currentLlm,
       llmManager.temperature,
+      llmManager.hasTemperatureOverride,
+      llmManager.persistOverrides,
       // Others that affect logic
-      liveAgent,
+      activeAgent,
       availableAgents,
       existingChatSessionId,
       selectedDocuments,
       searchParams,
       resetInputBar,
-      setSelectedAgentFromId,
       updateSelectedNodeForDocDisplay,
       currentMessageTree,
       currentChatState,
-      // Ensure latest forced tools are used when submitting
-      forcedToolIds,
+      // Ensure the configuration the chat was given is what gets sent
+      toolConfiguration,
       // Keep tool preference-derived values fresh
-      agentPreferences,
       fetchProjects,
       // For auto-pinning agents
       pinnedAgents,
@@ -1348,7 +1541,7 @@ export default function useChatController({
     async (acceptedFiles: File[]) => {
       const [_, llmModel] = getFinalLLM(
         llmManager.llmProviders || [],
-        liveAgent || null,
+        activeAgent || null,
         llmManager.currentLlm
       );
       const llmAcceptsImages = modelSupportsImageInput(
@@ -1374,7 +1567,7 @@ export default function useChatController({
       setCurrentMessageFiles((prev) => [...prev, ...uploadedMessageFiles]);
       updateChatStateAction(getCurrentSessionId(), "input");
     },
-    [liveAgent, llmManager, forcedToolIds]
+    [activeAgent, llmManager, toolConfiguration]
   );
 
   useEffect(() => {
@@ -1388,14 +1581,6 @@ export default function useChatController({
       }
     };
   }, [pathname]);
-
-  // update chosen assistant if we navigate between pages
-  useEffect(() => {
-    if (currentMessageHistory.length === 0 && existingChatSessionId === null) {
-      // Select from available assistants so shared assistants appear.
-      setSelectedAgentFromId(null);
-    }
-  }, [existingChatSessionId, availableAgents, currentMessageHistory.length]);
 
   useEffect(() => {
     const handleSlackChatRedirect = async () => {
@@ -1460,12 +1645,15 @@ export default function useChatController({
     (async () => {
       try {
         if (sessionId) {
-          const available = await getAvailableContextTokens(sessionId);
+          const available = await getAvailableContextTokens(
+            sessionId,
+            llmManager.currentLlm.modelConfigurationId
+          );
           setIfActive(available ?? DEFAULT_CONTEXT_TOKENS);
           return;
         }
 
-        const personaId = liveAgent?.id;
+        const personaId = activeAgent?.id;
         if (personaId == null) {
           setIfActive(DEFAULT_CONTEXT_TOKENS);
           return;
@@ -1485,8 +1673,9 @@ export default function useChatController({
   }, [
     currentSessionId,
     existingChatSessionId,
-    liveAgent?.id,
+    activeAgent?.id,
     llmManager.hasAnyProvider,
+    llmManager.currentLlm.modelConfigurationId,
   ]);
 
   // check if there's an image file in the message history so that we know

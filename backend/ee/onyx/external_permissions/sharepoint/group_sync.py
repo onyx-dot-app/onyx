@@ -1,13 +1,11 @@
 from collections.abc import Generator
 
-from office365.sharepoint.client_context import ClientContext
-
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.sharepoint.permission_utils import (
     get_sharepoint_external_groups,
 )
+from ee.onyx.external_permissions.utils import credential_json
 from onyx.configs.app_configs import SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION
-from onyx.connectors.sharepoint.connector import acquire_token_for_rest
 from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.logger import setup_logger
@@ -26,12 +24,7 @@ def sharepoint_group_sync(
 
     # Create SharePoint connector instance and load credentials
     connector = SharepointConnector(**connector_config)
-    credential_json = (
-        cc_pair.credential.credential_json.get_value(apply_mask=False)
-        if cc_pair.credential.credential_json
-        else {}
-    )
-    connector.load_credentials(credential_json)
+    connector.load_credentials(credential_json(cc_pair))
 
     if not connector.msal_app:
         raise RuntimeError("MSAL app not initialized in connector")
@@ -51,21 +44,17 @@ def sharepoint_group_sync(
         "exhaustive_ad_enumeration", SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION
     )
 
-    msal_app = connector.msal_app
-    sp_tenant_domain = connector.sp_tenant_domain
-    sp_domain_suffix = connector.sharepoint_domain_suffix
     for site_descriptor in site_descriptors:
         logger.debug("Processing site: %s", site_descriptor.url)
 
-        ctx = ClientContext(site_descriptor.url).with_access_token(
-            lambda: acquire_token_for_rest(msal_app, sp_tenant_domain, sp_domain_suffix)
-        )
+        # Goes through the connector so the site host is checked against the
+        # tenant the REST token is minted for.
+        ctx = connector._create_rest_client_context(site_descriptor.url)
 
         external_groups = get_sharepoint_external_groups(
             ctx,
             connector.graph_client,
-            graph_api_base=connector.graph_api_base,
-            get_access_token=connector._get_graph_access_token,
+            graph_api=connector.graph_api,
             enumerate_all_ad_groups=enumerate_all,
         )
 

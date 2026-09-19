@@ -8,12 +8,14 @@ import React, {
   useRef,
   useMemo,
 } from "react";
+import { useFocusOnMount } from "@opal/hooks";
+import { useTranslations } from "next-intl";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import useContainerCenter from "@/hooks/useContainerCenter";
 import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Tag from "@/refresh-components/buttons/Tag";
 import { Button } from "@opal/components";
@@ -366,6 +368,7 @@ const CommandMenuContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
   CommandMenuContentProps
 >(({ children }, ref) => {
+  const t = useTranslations("common.commandMenu");
   const { handleKeyDown } = useCommandMenuContext();
   const { centerX, hasContainerCenter } = useContainerCenter();
 
@@ -411,7 +414,7 @@ const CommandMenuContent = React.forwardRef<
         )}
       >
         <VisuallyHidden.Root asChild>
-          <DialogPrimitive.Title>Command Menu</DialogPrimitive.Title>
+          <DialogPrimitive.Title>{t("dialog.title")}</DialogPrimitive.Title>
         </VisuallyHidden.Root>
         {children}
       </DialogPrimitive.Content>
@@ -431,7 +434,7 @@ CommandMenuContent.displayName = "CommandMenuContent";
  * Arrow keys preventDefault at input level (to stop cursor movement) then bubble to Content.
  */
 function CommandMenuHeader({
-  placeholder = "Search...",
+  placeholder,
   filters = [],
   value = "",
   onValueChange,
@@ -439,6 +442,9 @@ function CommandMenuHeader({
   onClose,
   onEmptyBackspace,
 }: CommandMenuHeaderProps) {
+  const t = useTranslations("common.commandMenu");
+  const focusOnMount = useFocusOnMount<HTMLInputElement>();
+
   // Prevent default for arrow/enter keys so they don't move cursor or submit forms
   // The actual handling happens in Root's centralized handler via event bubbling
   const handleInputKeyDown = useCallback(
@@ -458,12 +464,7 @@ function CommandMenuHeader({
     <div className="shrink-0">
       {/* Top row: Search icon, filters, close button */}
       <div className="px-3 pt-3 flex flex-row justify-between items-center">
-        <Section
-          flexDirection="row"
-          justifyContent="start"
-          gap={0.5}
-          width="fit"
-        >
+        <Section flexDirection="row" justifyContent="start" gap={2} width="fit">
           {/* Standalone search icon */}
           <SvgSearch className="w-6 h-6 stroke-text-04" />
           {filters.map((filter) => (
@@ -485,7 +486,7 @@ function CommandMenuHeader({
               prominence="tertiary"
               size="sm"
               onClick={onClose}
-              aria-label="Close menu"
+              aria-label={t("closeButton.ariaLabel")}
             />
           </DialogPrimitive.Close>
         )}
@@ -493,13 +494,12 @@ function CommandMenuHeader({
       {/* Search input - arrow/enter keys bubble up to Content for centralized handling */}
       <div className="px-2 pb-2 pt-0.5">
         <InputTypeIn
-          placeholder={placeholder}
+          variant="internal"
+          placeholder={placeholder ?? t("search.placeholder")}
           value={value}
           onChange={(e) => onValueChange?.(e.target.value)}
           onKeyDown={handleInputKeyDown}
-          autoFocus
-          className="w-full bg-transparent! border-transparent! [:hover,:active,:focus,:focus-within]:bg-background-neutral-00! [:hover]:border-border-01! [:focus,:focus-within]:shadow-none!"
-          showClearButton={false}
+          ref={focusOnMount}
         />
       </div>
     </div>
@@ -517,6 +517,7 @@ function CommandMenuHeader({
  * Uses ScrollIndicatorDiv for automatic scroll shadows.
  */
 function CommandMenuList({ children, emptyMessage }: CommandMenuListProps) {
+  const t = useTranslations("common.commandMenu");
   const { isKeyboardNav, onListMouseLeave } = useCommandMenuContext();
   const childCount = React.Children.count(children);
 
@@ -537,7 +538,8 @@ function CommandMenuList({ children, emptyMessage }: CommandMenuListProps) {
   return (
     <ScrollIndicatorDiv
       role="listbox"
-      aria-label="Command menu options"
+      tabIndex={-1}
+      aria-label={t("options.ariaLabel")}
       className="p-1 gap-1 max-h-[60vh] bg-background-tint-01"
       backgroundColor="var(--background-tint-01)"
       data-command-menu-list
@@ -746,12 +748,7 @@ function CommandMenuAction({
 function CommandMenuFooter({ leftActions }: CommandMenuFooterProps) {
   return (
     <div className="shrink-0">
-      <Section
-        flexDirection="row"
-        justifyContent="start"
-        gap={1}
-        padding={0.75}
-      >
+      <Section flexDirection="row" justifyContent="start" gap={4} padding={3}>
         {leftActions}
       </Section>
     </div>

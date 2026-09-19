@@ -19,7 +19,7 @@ def load_query_embedding_from_file(file_path: str) -> Embedding:
     """
     with open(file_path, "r") as f:
         dimension = int(f.readline().strip())
-        embedding = [float(line.strip()) for line in f.readlines()]
+        embedding = [float(line.strip()) for line in f]
         assert len(embedding) == dimension, "Embedding dimension mismatch."
         return embedding
 
@@ -39,5 +39,4 @@ def save_query_embedding_to_file(embedding: Embedding, file_path: str) -> None:
     """
     with open(file_path, "w") as f:
         f.write(f"{len(embedding)}\n")
-        for component in embedding:
-            f.write(f"{component}\n")
+        f.writelines(f"{component}\n" for component in embedding)

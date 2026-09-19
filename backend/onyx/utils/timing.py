@@ -1,21 +1,35 @@
+import inspect
 import time
-from collections.abc import Callable
-from collections.abc import Generator
-from collections.abc import Iterator
+from collections.abc import Callable, Generator, Iterator
 from functools import wraps
 from inspect import signature
-from typing import Any
-from typing import cast
-from typing import TypeVar
+from typing import Any, TypeVar, cast
 
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import optional_telemetry
-from onyx.utils.telemetry import RecordType
+from onyx.utils.telemetry import RecordType, optional_telemetry
+from shared_configs.contextvars import get_current_user_id
 
 logger = setup_logger()
 
 F = TypeVar("F", bound=Callable)
 FG = TypeVar("FG", bound=Callable[..., Generator | Iterator])
+
+
+def _telemetry_user_id(kwargs: dict[str, Any]) -> str:
+    """User id for a latency record.
+
+    Prefer an explicit ``user`` keyword argument. Otherwise use the request's
+    user contextvar, which the auth dependencies set for every API call.
+    Never raises: telemetry must not break the decorated function.
+    """
+    try:
+        user = kwargs.get("user")
+        if user is not None:
+            return str(user.id)
+        return get_current_user_id() or "Unknown"
+    except Exception:
+        logger.warning("Failed to resolve user id for latency telemetry", exc_info=True)
+        return "Unknown"
 
 
 def log_function_time(
@@ -45,14 +59,9 @@ def log_function_time(
     """
 
     def decorator(func: F) -> F:
-        @wraps(func)
-        def wrapped_func(*args: Any, **kwargs: Any) -> Any:
-            # Elapsed time should use monotonic.
-            start_time = time.monotonic()
-            result = func(*args, **kwargs)
-            elapsed_time = time.monotonic() - start_time
-            elapsed_time_str = f"{elapsed_time:.3f}"
-            log_name = func_name or func.__name__
+        def _log_elapsed(start_time: float, *args: Any, **kwargs: Any) -> None:
+            elapsed_time_str = f"{time.monotonic() - start_time:.3f}"
+            log_name = func_name or func.__name__  # ty: ignore[unresolved-attribute]
             args_str = ""
             if include_args:
                 args_str = f" args={args} kwargs={kwargs}"
@@ -68,18 +77,31 @@ def log_function_time(
             if debug_only:
                 logger.debug(final_log)
             else:
-                # These are generally more important logs so the level is a bit
-                # higher.
                 logger.notice(final_log)
 
             if not print_only:
-                user = kwargs.get("user")
                 optional_telemetry(
                     record_type=RecordType.LATENCY,
                     data={"function": log_name, "latency": str(elapsed_time_str)},
-                    user_id=str(user.id) if user else "Unknown",
+                    user_id=_telemetry_user_id(kwargs),
                 )
 
+        if inspect.iscoroutinefunction(func):
+
+            @wraps(func)
+            async def wrapped_async(*args: Any, **kwargs: Any) -> Any:
+                start_time = time.monotonic()
+                result = await func(*args, **kwargs)
+                _log_elapsed(start_time, *args, **kwargs)
+                return result
+
+            return cast(F, wrapped_async)
+
+        @wraps(func)
+        def wrapped_func(*args: Any, **kwargs: Any) -> Any:
+            start_time = time.monotonic()
+            result = func(*args, **kwargs)
+            _log_elapsed(start_time, *args, **kwargs)
             return result
 
         return cast(F, wrapped_func)
@@ -94,24 +116,22 @@ def log_generator_function_time(
         @wraps(func)
         def wrapped_func(*args: Any, **kwargs: Any) -> Any:
             start_time = time.monotonic()
-            user = kwargs.get("user")
-            gen = func(*args, **kwargs)
+            user_id = _telemetry_user_id(kwargs)
             try:
-                value = next(gen)
-                while True:
-                    yield value
-                    value = next(gen)
-            except StopIteration:
-                pass
+                # `yield from` delegates send/throw/close to the inner generator,
+                # so its own finally (cleanup) runs synchronously when an exception
+                # is thrown in — making this safe to stack under @contextmanager.
+                # The parenthesized form also propagates the generator's return value.
+                return (yield from func(*args, **kwargs))
             finally:
                 elapsed_time_str = f"{time.monotonic() - start_time:.3f}"
-                log_name = func_name or func.__name__
+                log_name = func_name or func.__name__  # ty: ignore[unresolved-attribute]
                 logger.info("%s took %s seconds", log_name, elapsed_time_str)
                 if not print_only:
                     optional_telemetry(
                         record_type=RecordType.LATENCY,
                         data={"function": log_name, "latency": str(elapsed_time_str)},
-                        user_id=str(user.id) if user else "Unknown",
+                        user_id=user_id,
                     )
 
         return cast(FG, wrapped_func)

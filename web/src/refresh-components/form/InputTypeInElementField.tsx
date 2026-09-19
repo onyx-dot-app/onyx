@@ -1,9 +1,8 @@
 "use client";
 
 import { useField } from "formik";
-import InputTypeIn, {
-  InputTypeInProps,
-} from "@/refresh-components/inputs/InputTypeIn";
+import { useTranslations } from "next-intl";
+import { InputTypeIn, type InputTypeInProps } from "@opal/components";
 import { Button } from "@opal/components";
 import { SvgMinusCircle } from "@opal/icons";
 import { useOnChangeEvent, useOnBlurEvent } from "@/hooks/formHooks";
@@ -11,7 +10,7 @@ import { Section } from "@/layouts/general-layouts";
 
 export interface InputTypeInElementFieldProps extends Omit<
   InputTypeInProps,
-  "value" | "onClear"
+  "value"
 > {
   name: string;
   onRemove?: () => void;
@@ -25,6 +24,7 @@ export default function InputTypeInElementField({
   onBlur: onBlurProp,
   ...inputProps
 }: InputTypeInElementFieldProps) {
+  const t = useTranslations("common.inputElement");
   const [field, meta] = useField(name);
   const onChange = useOnChangeEvent(name, onChangeProp);
   const onBlur = useOnBlurEvent(name, onBlurProp);
@@ -34,7 +34,7 @@ export default function InputTypeInElementField({
     inputProps.variant === "disabled" || inputProps.variant === "readOnly";
 
   return (
-    <Section flexDirection="row" gap={0.25}>
+    <Section flexDirection="row" gap={1}>
       {/* Input */}
       <InputTypeIn
         {...inputProps}
@@ -50,14 +50,13 @@ export default function InputTypeInElementField({
               ? "error"
               : inputProps.variant
         }
-        showClearButton={false}
       />
       <Button
         disabled={!onRemove || isEmpty}
         icon={SvgMinusCircle}
         prominence="tertiary"
         onClick={onRemove}
-        tooltip="Remove"
+        tooltip={t("removeButton.tooltip")}
       />
     </Section>
   );

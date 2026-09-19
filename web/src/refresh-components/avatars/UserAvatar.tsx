@@ -1,6 +1,6 @@
 import { SvgUser } from "@opal/icons";
 import { DEFAULT_AVATAR_SIZE_PX } from "@/lib/constants";
-import { getUserEmail, getUserInitials } from "@/lib/user";
+import { getUserEmail, getUserInitials } from "@/lib/users/svc";
 import Text from "@/refresh-components/texts/Text";
 import type { User } from "@/lib/types";
 

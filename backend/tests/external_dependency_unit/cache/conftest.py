@@ -14,8 +14,8 @@ from onyx.cache.interface import CacheBackend
 from onyx.cache.postgres_backend import PostgresCacheBackend
 from onyx.cache.redis_backend import RedisCacheBackend
 from onyx.db.engine.sql_engine import SqlEngine
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -27,7 +27,7 @@ def _init_db() -> Generator[None, None, None]:
 
 @pytest.fixture(autouse=True)
 def _tenant_context() -> Generator[None, None, None]:
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     try:
         yield
     finally:
@@ -36,14 +36,16 @@ def _tenant_context() -> Generator[None, None, None]:
 
 @pytest.fixture
 def pg_cache() -> PostgresCacheBackend:
-    return PostgresCacheBackend(TEST_TENANT_ID)
+    return PostgresCacheBackend(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
 
 @pytest.fixture
 def redis_cache() -> RedisCacheBackend:
     from onyx.redis.redis_pool import redis_pool
 
-    return RedisCacheBackend(redis_pool.get_client(TEST_TENANT_ID))
+    return RedisCacheBackend(
+        redis_pool.get_client(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    )
 
 
 @pytest.fixture(params=["postgres", "redis"], ids=["postgres", "redis"])

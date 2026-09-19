@@ -1,20 +1,21 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
-import type { Route } from "next";
 import { mutate as globalMutate } from "swr";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
-import Card from "@/refresh-components/cards/Card";
-import { Button, Text } from "@opal/components";
+import { SettingsLayouts } from "@opal/layouts";
+import { Button, Card, Text } from "@opal/components";
 import { SvgPlug } from "@opal/icons";
 import { CRAFT_APPS_PATH } from "@/app/craft/v1/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { completeExternalAppOAuthCallback } from "@/app/craft/services/externalAppsService";
+import { OAUTH_POPUP_MESSAGE_SOURCE } from "@/app/craft/types/setupRequests";
 
 type Status = "exchanging" | "success" | "error";
 
 export default function ExternalAppsOAuthCallbackPage() {
+  const t = useTranslations("craft.apps.oauthCallback");
   const router = useRouter();
   const params = useSearchParams();
   const code = params?.get("code") ?? null;
@@ -31,12 +32,12 @@ export default function ExternalAppsOAuthCallbackPage() {
   useEffect(() => {
     if (slackError) {
       setStatus("error");
-      setErrorMessage(`OAuth was cancelled or denied: ${slackError}`);
+      setErrorMessage(t("errors.cancelled", { reason: slackError }));
       return;
     }
     if (!code || !state) {
       setStatus("error");
-      setErrorMessage("Missing code or state in callback URL.");
+      setErrorMessage(t("errors.missingParams"));
       return;
     }
     if (hasExchanged.current) return;
@@ -44,10 +45,27 @@ export default function ExternalAppsOAuthCallbackPage() {
 
     async function exchange() {
       try {
-        await completeExternalAppOAuthCallback(code!, state!);
+        const { external_app_id } = await completeExternalAppOAuthCallback(
+          code!,
+          state!
+        );
         setStatus("success");
+        // Launched from the in-chat SetupCard popup: signal the opener and close
+        // immediately — before any await — so the opener's close-poll can't race
+        // ahead of the message and treat the close as a cancellation.
+        if (window.opener) {
+          window.opener.postMessage(
+            {
+              source: OAUTH_POPUP_MESSAGE_SOURCE,
+              externalAppId: external_app_id,
+            },
+            window.location.origin
+          );
+          window.close();
+          return;
+        }
         await globalMutate(SWR_KEYS.buildExternalApps);
-        setTimeout(() => router.push(CRAFT_APPS_PATH as Route), 800);
+        setTimeout(() => router.push(CRAFT_APPS_PATH), 800);
       } catch (e) {
         setStatus("error");
         setErrorMessage(e instanceof Error ? e.message : String(e));
@@ -55,39 +73,35 @@ export default function ExternalAppsOAuthCallbackPage() {
     }
 
     exchange();
-  }, [code, state, slackError, router]);
+  }, [code, state, slackError, router, t]);
 
   return (
     <SettingsLayouts.Root width="sm">
       <SettingsLayouts.Header
         icon={SvgPlug}
-        title="Connecting your app"
-        description="Finishing the OAuth handshake…"
+        title={t("title")}
+        description={t("description")}
       />
       <SettingsLayouts.Body>
-        <Card>
+        <Card color="background-tint-00" border="solid" rounding={4}>
           <div className="flex flex-col gap-2">
             {status === "exchanging" && (
-              <Text font="main-content-body">
-                Exchanging authorization code…
-              </Text>
+              <Text font="main-content-body">{t("exchanging.label")}</Text>
             )}
             {status === "success" && (
-              <Text font="main-content-body">
-                Connected. Redirecting back to your apps…
-              </Text>
+              <Text font="main-content-body">{t("success.label")}</Text>
             )}
             {status === "error" && (
               <>
-                <Text font="main-content-body">Connection failed.</Text>
+                <Text font="main-content-body">{t("errors.failed")}</Text>
                 {errorMessage && (
                   <Text font="secondary-body" color="text-03">
                     {errorMessage}
                   </Text>
                 )}
                 <div className="pt-2">
-                  <Button onClick={() => router.push(CRAFT_APPS_PATH as Route)}>
-                    Back to My Apps
+                  <Button onClick={() => router.push(CRAFT_APPS_PATH)}>
+                    {t("backButton")}
                   </Button>
                 </div>
               </>

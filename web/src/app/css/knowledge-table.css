@@ -17,7 +17,7 @@
   gap: 0.25rem;
   min-height: 2.25rem;
   padding: 0.5rem 0;
-  border-radius: var(--border-radius-08);
+  border-radius: var(--radius-08);
   width: 100%;
   min-width: 0;
 }
@@ -31,7 +31,7 @@
 }
 
 .table-row-layout[data-selected="true"] {
-  background-color: var(--action-link-01);
+  background-color: var(--action-selection-01);
 }
 
 /* Table Cell Layout
@@ -114,7 +114,7 @@
   display: none;
 }
 
-/* Checkbox Cell
+/* InputCheckbox Cell
    Figma specs:
    - Width: 24px (1.5rem)
    - Centered content

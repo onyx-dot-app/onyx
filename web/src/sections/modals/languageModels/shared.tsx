@@ -1,28 +1,29 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Formik, Form, useFormikContext } from "formik";
 import type { FormikConfig } from "formik";
 import { cn } from "@opal/utils";
 import { markdown } from "@opal/utils";
-import { Interactive } from "@opal/core";
+import { Hoverable, Interactive } from "@opal/core";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 import { useAgents } from "@/lib/agents/hooks";
 import { useUserGroups } from "@/lib/hooks";
 import type {
   LLMProviderView,
   ModelConfiguration,
 } from "@/lib/languageModels/types";
-import { Checkbox } from "@opal/components";
+import { InputCheckbox } from "@opal/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import InputComboBox from "@/refresh-components/inputs/InputComboBox";
+import { InputTypeIn } from "@opal/components";
+import { InputComboBox } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
-import Switch from "@/refresh-components/inputs/Switch";
+import { InputSwitch } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import { Button, LineItemButton } from "@opal/components";
+import { Button } from "@opal/components";
 import { BaseLLMFormValues } from "@/sections/modals/languageModels/utils";
 import type { RichStr } from "@opal/types";
 import { Section } from "@/layouts/general-layouts";
@@ -32,7 +33,17 @@ import {
   InputHorizontal,
   InputPadder,
   InputVertical,
+  Section as OpalSection,
+  toast,
 } from "@opal/layouts";
+import {
+  ModelSettingsPopover,
+  type ModelSettingsPatch,
+} from "@/sections/modals/languageModels/ModelSettingsPopover";
+import { setDefaultLlmModelAndRefresh } from "@/lib/languageModels/cache";
+import { modelDisplayName } from "@/lib/languageModels/utils";
+import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
+import { useSWRConfig } from "swr";
 import {
   SvgArrowExchange,
   SvgChevronDown,
@@ -44,17 +55,18 @@ import {
   SvgUserManage,
   SvgUsers,
   SvgX,
+  SvgSimpleLoader,
 } from "@opal/icons";
 import SvgOnyxLogo from "@opal/logos/onyx-logo";
 import { Card, EmptyMessageCard } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
+import type { ContentMdEditHandle } from "@opal/layouts/content/ContentMd";
+import { SvgEdit } from "@opal/icons";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import useUsers from "@/hooks/useUsers";
-import { toast } from "@/hooks/useToast";
-import { UserRole } from "@/lib/types";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { getProvider } from "@/lib/languageModels";
+import { useSettings } from "@/lib/settings/hooks";
 
 // ─── DisplayNameField ────────────────────────────────────────────────────────
 
@@ -63,17 +75,18 @@ export interface DisplayNameFieldProps {
 }
 
 export function DisplayNameField({ disabled }: DisplayNameFieldProps = {}) {
+  const t = useTranslations("admin.languageModels.modals");
   return (
     <InputPadder>
       <InputVertical
         withLabel="name"
-        title="Display Name"
-        suffix="optional"
-        subDescription="Used to identify this provider in the app."
+        title={t("setup.displayNameField.title")}
+        suffix={t("setup.optionalSuffix.label")}
+        subDescription={t("setup.displayNameField.description")}
       >
         <InputTypeInField
           name="name"
-          placeholder="Display Name"
+          placeholder={t("setup.displayNameField.placeholder")}
           variant={disabled ? "disabled" : undefined}
         />
       </InputVertical>
@@ -96,19 +109,22 @@ export function APIKeyField({
   providerName,
   subDescription,
 }: APIKeyFieldProps) {
+  const t = useTranslations("admin.languageModels.modals");
   return (
     <InputPadder>
       <InputVertical
         withLabel={name}
-        title="API Key"
+        title={t("setup.apiKeyField.title")}
         subDescription={
           subDescription
             ? subDescription
             : providerName
-              ? `Paste your API key from ${providerName} to access your models.`
-              : "Paste your API key to access your models."
+              ? t("setup.apiKeyField.providerDescription", {
+                  provider: providerName,
+                })
+              : t("setup.apiKeyField.description")
         }
-        suffix={optional ? "optional" : undefined}
+        suffix={optional ? t("setup.optionalSuffix.label") : undefined}
       >
         <PasswordInputTypeInField name={name} />
       </InputVertical>
@@ -119,32 +135,55 @@ export function APIKeyField({
 // ─── APIBaseField ───────────────────────────────────────────────────────────
 
 /**
- * Sentence appended to an API Base URL `subDescription` when Onyx is detected
- * to be running inside a container — explains why the default uses
- * `host.docker.internal`.
+ * Builds the API Base URL `subDescription` for self-hosted and custom
+ * providers. These point at a service on the admin's own machine, which
+ * `localhost` does not reach from inside a container — so when Onyx is
+ * containerized, a note about `host.docker.internal` goes between
+ * `description` and `suffix`.
  */
-export const CONTAINERIZED_HOST_NOTE =
-  "With Onyx running in a container, `host.docker.internal` acts like `localhost` inside the container.";
+export function useApiBaseSubDescription(
+  description?: string,
+  suffix?: string
+): RichStr | undefined {
+  const t = useTranslations("admin.languageModels.modals");
+  const settings = useSettings();
+  const sentences = [
+    description,
+    settings.is_containerized
+      ? t("setup.apiBaseField.containerizedNote")
+      : undefined,
+    suffix,
+  ].filter((sentence) => sentence !== undefined);
+  return sentences.length > 0 ? markdown(sentences.join(" ")) : undefined;
+}
 
 export interface APIBaseFieldProps {
   optional?: boolean;
   subDescription?: string | RichStr;
   placeholder?: string;
+  /** Rendered inside the input on the right (e.g. a restore-default control). */
+  rightChildren?: React.ReactNode;
 }
 export function APIBaseField({
   optional = false,
   subDescription,
   placeholder = "https://",
+  rightChildren,
 }: APIBaseFieldProps) {
+  const t = useTranslations("admin.languageModels.modals");
   return (
     <InputPadder>
       <InputVertical
         withLabel="api_base"
-        title="API Base URL"
+        title={t("setup.apiBaseField.title")}
         subDescription={subDescription}
-        suffix={optional ? "optional" : undefined}
+        suffix={optional ? t("setup.optionalSuffix.label") : undefined}
       >
-        <InputTypeInField name="api_base" placeholder={placeholder} />
+        <InputTypeInField
+          name="api_base"
+          placeholder={placeholder}
+          rightChildren={rightChildren}
+        />
       </InputVertical>
     </InputPadder>
   );
@@ -157,14 +196,14 @@ const GROUP_PREFIX = "group:";
 const AGENT_PREFIX = "agent:";
 
 export function ModelAccessField() {
+  const t = useTranslations("admin.languageModels.modals");
   const formikProps = useFormikContext<BaseLLMFormValues>();
   const { agents } = useAgents();
   const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
   const { data: usersData } = useUsers({ includeApiKeys: false });
   const businessTier = useTierAtLeast(Tier.BUSINESS);
 
-  const adminCount =
-    usersData?.accepted.filter((u) => u.role === UserRole.ADMIN).length ?? 0;
+  const adminCount = usersData?.accepted.filter((u) => u.is_admin).length ?? 0;
 
   const isPublic = formikProps.values.is_public;
   const selectedGroupIds = formikProps.values.groups ?? [];
@@ -176,14 +215,14 @@ export function ModelAccessField() {
       ? userGroups.map((g) => ({
           value: `${GROUP_PREFIX}${g.id}`,
           label: g.name,
-          description: "Group",
+          description: t("access.groupOption.description"),
         }))
       : [];
 
   const agentOptions = agents.map((a) => ({
     value: `${AGENT_PREFIX}${a.id}`,
     label: a.name,
-    description: "Agent",
+    description: t("access.agentOption.description"),
   }));
 
   // Exclude already-selected items from the dropdown
@@ -243,20 +282,20 @@ export function ModelAccessField() {
       <InputPadder>
         <InputHorizontal
           withLabel="is_public"
-          title="Models Access"
-          description="Who can access this provider."
+          title={t("access.field.title")}
+          description={t("access.field.description")}
         >
           <InputSelect
             value={isPublic ? "public" : "private"}
             onValueChange={handleAccessChange}
           >
-            <InputSelect.Trigger placeholder="Select access level" />
+            <InputSelect.Trigger placeholder={t("access.select.placeholder")} />
             <InputSelect.Content>
               <InputSelect.Item value="public" icon={SvgOrganization}>
-                All Users & Agents
+                {t("access.public.label")}
               </InputSelect.Item>
               <InputSelect.Item value="private" icon={SvgUsers}>
-                Named Groups & Agents
+                {t("access.private.label")}
               </InputSelect.Item>
             </InputSelect.Content>
           </InputSelect>
@@ -264,33 +303,33 @@ export function ModelAccessField() {
       </InputPadder>
 
       {!isPublic && (
-        <Card background="light" border="none" padding="sm">
-          <Section gap={0.5}>
+        <Card color="background-tint-00" border="none" padding={2}>
+          <Section gap={2}>
             <InputComboBox
-              placeholder="Add groups and agents"
+              placeholder={t("access.comboBox.placeholder")}
               value=""
               onChange={() => {}}
               onValueChange={handleSelect}
               options={availableOptions}
               strict
-              leftSearchIcon
+              searchIcon
             />
 
-            <Card background="heavy" border="none" padding="sm">
+            <Card color="background-tint-01" border="none" padding={2}>
               <ContentAction
                 icon={SvgUserManage}
-                title="Admin"
-                description={`${adminCount} ${
-                  adminCount === 1 ? "member" : "members"
-                }`}
+                title={t("access.admin.title")}
+                description={t("access.memberCount.label", {
+                  count: adminCount,
+                })}
                 sizePreset="main-ui"
                 variant="section"
                 rightChildren={
                   <Text secondaryBody text03>
-                    Always shared
+                    {t("access.admin.sharedNote")}
                   </Text>
                 }
-                padding="fit"
+                padding={0}
               />
             </Card>
             {selectedGroupIds.length > 0 && (
@@ -300,13 +339,17 @@ export function ModelAccessField() {
                   const memberCount = group?.users.length ?? 0;
                   return (
                     <div key={`group-${id}`} className="min-w-0">
-                      <Card background="heavy" border="none" padding="sm">
+                      <Card
+                        color="background-tint-01"
+                        border="none"
+                        padding={2}
+                      >
                         <ContentAction
                           icon={SvgUsers}
-                          title={group?.name ?? `Group ${id}`}
-                          description={`${memberCount} ${
-                            memberCount === 1 ? "member" : "members"
-                          }`}
+                          title={group?.name ?? t("access.group.name", { id })}
+                          description={t("access.memberCount.label", {
+                            count: memberCount,
+                          })}
                           sizePreset="main-ui"
                           variant="section"
                           rightChildren={
@@ -318,7 +361,7 @@ export function ModelAccessField() {
                               type="button"
                             />
                           }
-                          padding="fit"
+                          padding={0}
                         />
                       </Card>
                     </div>
@@ -335,15 +378,19 @@ export function ModelAccessField() {
                   const agent = agentMap.get(id);
                   return (
                     <div key={`agent-${id}`} className="min-w-0">
-                      <Card background="heavy" border="none" padding="sm">
+                      <Card
+                        color="background-tint-01"
+                        border="none"
+                        padding={2}
+                      >
                         <ContentAction
                           icon={
                             agent
                               ? () => <AgentAvatar agent={agent} size={20} />
                               : SvgSparkle
                           }
-                          title={agent?.name ?? `Agent ${id}`}
-                          description="Agent"
+                          title={agent?.name ?? t("access.agent.name", { id })}
+                          description={t("access.agentOption.description")}
                           sizePreset="main-ui"
                           variant="section"
                           rightChildren={
@@ -355,7 +402,7 @@ export function ModelAccessField() {
                               type="button"
                             />
                           }
-                          padding="fit"
+                          padding={0}
                         />
                       </Card>
                     </div>
@@ -366,8 +413,8 @@ export function ModelAccessField() {
               <div className="w-full p-2">
                 <Content
                   icon={SvgOnyxOctagon}
-                  title="No agents added"
-                  description="This provider will not be used by any agents."
+                  title={t("access.noAgents.title")}
+                  description={t("access.noAgents.description")}
                   variant="section"
                   sizePreset="main-ui"
                 />
@@ -390,6 +437,7 @@ interface RefetchButtonProps {
   onRefetch: (signal: AbortSignal) => Promise<void> | void;
 }
 function RefetchButton({ onRefetch }: RefetchButtonProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const abortRef = useRef<AbortController | null>(null);
   const [isFetching, setIsFetching] = useState(false);
 
@@ -400,7 +448,7 @@ function RefetchButton({ onRefetch }: RefetchButtonProps) {
   return (
     <Button
       prominence="tertiary"
-      icon={isFetching ? SimpleLoader : SvgRefreshCw}
+      icon={isFetching ? SvgSimpleLoader : SvgRefreshCw}
       onClick={async () => {
         abortRef.current?.abort();
         const controller = new AbortController();
@@ -411,7 +459,7 @@ function RefetchButton({ onRefetch }: RefetchButtonProps) {
         } catch (err) {
           if (err instanceof DOMException && err.name === "AbortError") return;
           toast.error(
-            err instanceof Error ? err.message : "Failed to fetch models"
+            err instanceof Error ? err.message : t("models.refetch.errorToast")
           );
         } finally {
           if (!controller.signal.aborted) {
@@ -428,18 +476,263 @@ function RefetchButton({ onRefetch }: RefetchButtonProps) {
 
 const FOLD_THRESHOLD = 3;
 
+// ─── Model metadata helpers (Nebius TokenFactory picker) ────────────────────
+
+function formatContextSize(tokens: number | null | undefined): string {
+  if (!tokens || tokens <= 0) return "";
+  if (tokens >= 1_000_000) {
+    const m = tokens / 1_000_000;
+    return `${Number.isInteger(m) ? m : m.toFixed(1)}M`;
+  }
+  if (tokens >= 1000) return `${Math.round(tokens / 1000)}K`;
+  return String(tokens);
+}
+
+// Common non-ISO-3166 codes the provider may report → the ISO alpha-2 code
+// whose regional-indicator sequence actually has a flag glyph.
+const COUNTRY_CODE_ALIASES: Record<string, string> = {
+  UK: "GB", // United Kingdom is "GB" in ISO 3166-1; "UK" has no flag glyph
+};
+
+function countryCodeToFlag(code: string | null | undefined): string {
+  if (!code || code.length !== 2) return "";
+  const upper = code.toUpperCase();
+  const normalized = COUNTRY_CODE_ALIASES[upper] ?? upper;
+  const first = 0x1f1e6 + normalized.charCodeAt(0) - 65;
+  const second = 0x1f1e6 + normalized.charCodeAt(1) - 65;
+  return String.fromCodePoint(first, second);
+}
+
+/** Models that ship extra picker metadata (e.g. Nebius TokenFactory); most
+ *  providers don't, in which case the row renders without a metadata line. */
+function hasModelMetadata(model: ModelConfiguration): boolean {
+  return (
+    model.quantization != null ||
+    model.country_code != null ||
+    (model.supported_features?.length ?? 0) > 0
+  );
+}
+
+/** Compact "128K · 🇫🇮 · fp8 · tools, reasoning" metadata line. */
+function buildModelDescription(model: ModelConfiguration): string | undefined {
+  if (!hasModelMetadata(model)) return undefined;
+  const parts: string[] = [];
+  const context = formatContextSize(model.max_input_tokens);
+  if (context) parts.push(context);
+  const flag = countryCodeToFlag(model.country_code);
+  if (flag) parts.push(flag);
+  if (model.quantization) parts.push(model.quantization);
+  if (model.supported_features?.length) {
+    parts.push(model.supported_features.join(", "));
+  }
+  return parts.length > 0 ? parts.join("  ·  ") : undefined;
+}
+
+/** Eye marker for vision models, shown on the right of the picker row. */
+function modelRightChildren(
+  model: ModelConfiguration,
+  visionTitle: string
+): React.ReactNode {
+  if (!hasModelMetadata(model) || !model.supports_image_input) return undefined;
+  return (
+    <Text secondaryBody text03 title={visionTitle}>
+      👁
+    </Text>
+  );
+}
+
+interface ModelRowProps {
+  model: ModelConfiguration;
+  isAutoMode: boolean;
+  isDefaultModel: boolean;
+  onToggleVisibility: (visible: boolean) => void;
+  onRename: (value: string | undefined) => void;
+  onSettingsChange: (patch: ModelSettingsPatch) => void;
+  onSetDefaultModel?: () => void;
+}
+
+/**
+ * A single selectable model row.
+ *
+ * The row is a clickable `<div role="button">` rather than a real `<button>`,
+ * because it hosts real action buttons (rename, settings, set as default) and
+ * a `<button>` inside a `<button>` is invalid HTML that triggers a React
+ * hydration error.
+ *
+ * This mirrors `LineItemButton`'s internals (Stateful → Container →
+ * ContentAction) but with a typeless `Interactive.Container`, which renders a
+ * `<div>` instead of a `<button>`.
+ */
+function ModelRow({
+  model,
+  isAutoMode,
+  isDefaultModel,
+  onToggleVisibility,
+  onRename,
+  onSettingsChange,
+  onSetDefaultModel,
+}: ModelRowProps) {
+  const t = useTranslations("admin.languageModels.modals");
+  const editHandle = useRef<ContentMdEditHandle>(null);
+  // Keeps the hover-revealed actions visible while the settings popover,
+  // which is portaled outside the row, is open.
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const displayName = modelDisplayName(model);
+  // In auto mode every model is shown, so the row is always "selected" and the
+  // visibility toggle is disabled.
+  const isSelected = isAutoMode || model.is_visible;
+  const toggleVisibility = isAutoMode
+    ? undefined
+    : () => onToggleVisibility(!model.is_visible);
+  // A click that blurs and commits an inline rename reaches the row after the
+  // edit input unmounts, so the input's presence is sampled at pointerdown.
+  const renamingAtPointerDown = useRef(false);
+  // The row is clickable, but it also hosts real buttons (rename, settings).
+  // Their clicks, including ones the browser synthesizes from Enter, must not
+  // toggle the model.
+  const toggleFromRow = toggleVisibility
+    ? (e: React.MouseEvent) => {
+        if (renamingAtPointerDown.current) return;
+        const interactive = (e.target as HTMLElement).closest(
+          'button, input, textarea, [contenteditable="true"]'
+        );
+        if (interactive) return;
+        toggleVisibility();
+      }
+    : undefined;
+
+  return (
+    <Hoverable.Root
+      group="model-row"
+      interaction={settingsOpen ? "hover" : "rest"}
+      data-model-name={model.name}
+    >
+      <Interactive.Stateful
+        variant="select-heavy"
+        state={isSelected ? "selected" : "empty"}
+        onPointerDownCapture={(e: React.PointerEvent) => {
+          // Scoped to the title row: the checkbox also owns a hidden input.
+          renamingAtPointerDown.current =
+            e.currentTarget.querySelector(".opal-content-md-title-row input") !=
+            null;
+        }}
+        onClick={toggleFromRow}
+        role={toggleVisibility ? "button" : undefined}
+        tabIndex={toggleVisibility ? 0 : undefined}
+        onKeyDown={
+          toggleVisibility
+            ? (e: React.KeyboardEvent) => {
+                // Only the row itself. React bubbles events from portaled
+                // children too, so a key inside the settings popover would
+                // otherwise toggle the model.
+                if (e.target !== e.currentTarget) return;
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  toggleVisibility();
+                }
+              }
+            : undefined
+        }
+      >
+        <Interactive.Container width="full" size="fit" rounding={3}>
+          <div className="w-full p-1.5">
+            <ContentAction
+              color="interactive"
+              variant="section"
+              sizePreset="main-ui"
+              center
+              icon={() => <InputCheckbox checked={isSelected} />}
+              title={displayName}
+              description={buildModelDescription(model)}
+              rightChildren={
+                <OpalSection
+                  flexDirection="row"
+                  width="fit"
+                  height="auto"
+                  gap={1}
+                >
+                  {modelRightChildren(
+                    model,
+                    t("models.row.visionMarker.title")
+                  )}
+                  <Hoverable.Item group="model-row" variant="appear-on-hover">
+                    <OpalSection
+                      flexDirection="row"
+                      width="fit"
+                      height="auto"
+                      gap={1}
+                    >
+                      <Button
+                        icon={SvgEdit}
+                        prominence="internal"
+                        size="sm"
+                        tooltip={t("models.row.renameButton.tooltip")}
+                        onClick={(e: React.MouseEvent) => {
+                          e.stopPropagation();
+                          editHandle.current?.startEditing();
+                        }}
+                      />
+                      <ModelSettingsPopover
+                        model={model}
+                        onChange={onSettingsChange}
+                        onOpenChange={setSettingsOpen}
+                      />
+                      {!isDefaultModel && onSetDefaultModel && (
+                        <Button
+                          prominence="internal"
+                          size="sm"
+                          onClick={(e: React.MouseEvent) => {
+                            e.stopPropagation();
+                            onSetDefaultModel();
+                          }}
+                        >
+                          {t("models.row.setDefaultButton.label")}
+                        </Button>
+                      )}
+                    </OpalSection>
+                  </Hoverable.Item>
+                  {isDefaultModel && (
+                    <Text
+                      secondaryAction
+                      nowrap
+                      className="px-1.5 py-1 text-action-selection-05"
+                    >
+                      {t("models.row.defaultLabel")}
+                    </Text>
+                  )}
+                </OpalSection>
+              }
+              editable
+              editHandle={editHandle}
+              onTitleChange={(newTitle) => onRename(newTitle || undefined)}
+              padding={0}
+            />
+          </div>
+        </Interactive.Container>
+      </Interactive.Stateful>
+    </Hoverable.Root>
+  );
+}
+
 export interface ModelSelectionFieldProps {
   shouldShowAutoUpdateToggle: boolean;
   onRefetch?: (signal: AbortSignal) => Promise<void> | void;
   /** Called when the user adds a custom model by name. Enables the "Add Model" input. */
   onAddModel?: (modelName: string) => void;
+  /** Overrides the empty-state copy shown when no models are loaded. */
+  emptyMessage?: string;
 }
 export function ModelSelectionField({
   shouldShowAutoUpdateToggle,
   onRefetch,
   onAddModel,
+  emptyMessage,
 }: ModelSelectionFieldProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const formikProps = useFormikContext<BaseLLMFormValues>();
+  const { mutate } = useSWRConfig();
+  const { defaultText } = useAdminLLMProviders();
+  const providerId = formikProps.values.id;
   const [newModelName, setNewModelName] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
   // When the auto-update toggle is hidden, auto mode should have no effect —
@@ -473,6 +766,18 @@ export function ModelSelectionField({
     formikProps.setFieldValue("model_configurations", updated);
   }
 
+  function setModelSettings(modelName: string, patch: ModelSettingsPatch) {
+    const updated = models.map((m) =>
+      m.name === modelName ? { ...m, ...patch } : m
+    );
+    formikProps.setFieldValue("model_configurations", updated);
+  }
+
+  async function setDefaultModel(modelName: string) {
+    if (providerId == null) return;
+    await setDefaultLlmModelAndRefresh(providerId, modelName, mutate);
+  }
+
   function setCustomDisplayName(modelName: string, value: string | undefined) {
     const updated = models.map((m) =>
       m.name === modelName
@@ -485,9 +790,19 @@ export function ModelSelectionField({
   function handleToggleAutoMode(nextIsAutoMode: boolean) {
     formikProps.setFieldValue("is_auto_mode", nextIsAutoMode);
     if (nextIsAutoMode) {
+      // Auto mode restores only the snapshot's visibility. Unsaved edits and
+      // models discovered after mount survive the toggle.
+      const originalByName = new Map(
+        originalModelsRef.current.map((m) => [m.name, m])
+      );
       formikProps.setFieldValue(
         "model_configurations",
-        originalModelsRef.current
+        models.map((current) => {
+          const original = originalByName.get(current.name);
+          return original
+            ? { ...current, is_visible: original.is_visible }
+            : current;
+        })
       );
     }
   }
@@ -506,11 +821,11 @@ export function ModelSelectionField({
   const visibleModels = models.filter((m) => m.is_visible);
 
   return (
-    <Card background="light" border="none" padding="sm">
-      <Section gap={0.5}>
+    <Card color="background-tint-00" border="none" padding={2}>
+      <Section gap={2}>
         <InputHorizontal
-          title="Models"
-          description="Select models to make available for this provider."
+          title={t("models.field.title")}
+          description={t("models.field.description")}
           center
         >
           <Section flexDirection="row" gap={0}>
@@ -520,76 +835,63 @@ export function ModelSelectionField({
               size="md"
               onClick={handleToggleSelectAll}
             >
-              {allSelected ? "Deselect All" : "Select All"}
+              {allSelected
+                ? t("models.deselectAllButton.label")
+                : t("models.selectAllButton.label")}
             </Button>
             {onRefetch && <RefetchButton onRefetch={onRefetch} />}
           </Section>
         </InputHorizontal>
 
         {models.length === 0 ? (
-          <EmptyMessageCard title="No models available." padding="sm" />
+          <EmptyMessageCard
+            title={emptyMessage ?? t("models.empty.title")}
+            padding={2}
+          />
         ) : (
-          <Section gap={0.25} alignItems="stretch">
+          <Section gap={1} alignItems="stretch">
             {(() => {
-              const displayModels = isAutoMode ? visibleModels : models;
+              const baseModels = isAutoMode ? visibleModels : models;
+              // Sort alphabetically by id for providers that ship rich model
+              // metadata (Nebius TokenFactory) so the order is stable across
+              // refetches; otherwise keep the given order.
+              const displayModels = baseModels.some((m) => hasModelMetadata(m))
+                ? [...baseModels].sort((a, b) => a.name.localeCompare(b.name))
+                : baseModels;
               const isFoldable = displayModels.length > FOLD_THRESHOLD;
               const shownModels =
                 isFoldable && !isExpanded
                   ? displayModels.slice(0, FOLD_THRESHOLD)
                   : displayModels;
+              const defaultModelName =
+                providerId != null && defaultText?.provider_id === providerId
+                  ? defaultText.model_name
+                  : undefined;
 
               return (
                 <>
-                  {shownModels.map((model) =>
-                    isAutoMode ? (
-                      <div key={model.name} data-model-name={model.name}>
-                        <LineItemButton
-                          variant="section"
-                          sizePreset="main-ui"
-                          selectVariant="select-heavy"
-                          state="selected"
-                          icon={() => <Checkbox checked />}
-                          title={
-                            model.custom_display_name ||
-                            model.display_name ||
-                            model.name
-                          }
-                          editable
-                          onTitleChange={(newTitle) =>
-                            setCustomDisplayName(
-                              model.name,
-                              newTitle || undefined
-                            )
-                          }
-                        />
-                      </div>
-                    ) : (
-                      <div key={model.name} data-model-name={model.name}>
-                        <LineItemButton
-                          variant="section"
-                          sizePreset="main-ui"
-                          selectVariant="select-heavy"
-                          state={model.is_visible ? "selected" : "empty"}
-                          icon={() => <Checkbox checked={model.is_visible} />}
-                          title={
-                            model.custom_display_name ||
-                            model.display_name ||
-                            model.name
-                          }
-                          onClick={() =>
-                            setVisibility(model.name, !model.is_visible)
-                          }
-                          editable
-                          onTitleChange={(newTitle) =>
-                            setCustomDisplayName(
-                              model.name,
-                              newTitle || undefined
-                            )
-                          }
-                        />
-                      </div>
-                    )
-                  )}
+                  {shownModels.map((model) => (
+                    <ModelRow
+                      key={model.name}
+                      model={model}
+                      isAutoMode={isAutoMode}
+                      onToggleVisibility={(visible) =>
+                        setVisibility(model.name, visible)
+                      }
+                      onRename={(value) =>
+                        setCustomDisplayName(model.name, value)
+                      }
+                      onSettingsChange={(patch) =>
+                        setModelSettings(model.name, patch)
+                      }
+                      isDefaultModel={model.name === defaultModelName}
+                      onSetDefaultModel={
+                        providerId != null && model.is_visible
+                          ? () => void setDefaultModel(model.name)
+                          : undefined
+                      }
+                    />
+                  ))}
                   {isFoldable && (
                     <Interactive.Stateless
                       prominence="tertiary"
@@ -599,7 +901,11 @@ export function ModelSelectionField({
                         <Content
                           sizePreset="secondary"
                           variant="body"
-                          title={isExpanded ? "Fold Models" : "More Models"}
+                          title={
+                            isExpanded
+                              ? t("models.foldButton.label")
+                              : t("models.moreButton.label")
+                          }
                           icon={() => (
                             <SvgChevronDown
                               className={cn(
@@ -620,10 +926,10 @@ export function ModelSelectionField({
         )}
 
         {onAddModel && !isAutoMode && (
-          <Section flexDirection="row" gap={0.5}>
+          <Section flexDirection="row" gap={2}>
             <div className="flex-1">
               <InputTypeIn
-                placeholder="Enter model name"
+                placeholder={t("models.addModelInput.placeholder")}
                 value={newModelName}
                 onChange={(e) => setNewModelName(e.target.value)}
                 onKeyDown={(e) => {
@@ -636,7 +942,6 @@ export function ModelSelectionField({
                     }
                   }
                 }}
-                showClearButton={false}
               />
             </div>
             <Button
@@ -655,18 +960,18 @@ export function ModelSelectionField({
                 }
               }}
             >
-              Add Model
+              {t("models.addModelButton.label")}
             </Button>
           </Section>
         )}
 
         {shouldShowAutoUpdateToggle && (
           <InputHorizontal
-            title="Auto Update"
-            description="Update the available models when new models are released."
+            title={t("models.autoUpdate.title")}
+            description={t("models.autoUpdate.description")}
             withLabel
           >
-            <Switch
+            <InputSwitch
               checked={isAutoMode}
               onCheckedChange={handleToggleAutoMode}
             />
@@ -739,6 +1044,7 @@ function ModalWrapperInner({
   children,
   description: descriptionOverride,
 }: ModalWrapperInnerProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const { isValid, dirty, isSubmitting, status, setFieldValue, values } =
     useFormikContext<BaseLLMFormValues>();
 
@@ -761,9 +1067,9 @@ function ModalWrapperInner({
   const disabledTooltip = busy
     ? undefined
     : !isValid
-      ? "Please fill in all required fields."
+      ? t("setup.submitButton.invalidTooltip")
       : !dirty
-        ? "No changes to save."
+        ? t("setup.submitButton.pristineTooltip")
         : undefined;
 
   const {
@@ -773,11 +1079,18 @@ function ModalWrapperInner({
   } = getProvider(providerName);
 
   const title = llmProvider
-    ? markdown(`Configure *${llmProvider.name ?? providerProductName}*`)
-    : `Set up ${providerProductName}`;
+    ? markdown(
+        t("setup.title.configure", {
+          provider: llmProvider.name ?? providerProductName,
+        })
+      )
+    : t("setup.title.create", { product: providerProductName });
   const description =
     descriptionOverride ??
-    `Connect to ${providerDisplayName} and set up your ${providerProductName} models.`;
+    t("setup.description", {
+      company: providerDisplayName,
+      product: providerProductName,
+    });
 
   return (
     <Modal open onOpenChange={onClose}>
@@ -791,20 +1104,22 @@ function ModalWrapperInner({
             description={description}
             onClose={onClose}
           />
-          <Modal.Body padding={0.5} gap={0}>
+          <Modal.Body padding={2} gap={0}>
             {children}
           </Modal.Body>
           <Modal.Footer>
             <Button prominence="secondary" onClick={onClose} type="button">
-              Cancel
+              {t("setup.cancelButton.label")}
             </Button>
             <Button
               disabled={!isValid || !dirty || busy}
               type="submit"
-              icon={busy ? SimpleLoader : undefined}
+              icon={busy ? SvgSimpleLoader : undefined}
               tooltip={disabledTooltip}
             >
-              {llmProvider ? "Update" : "Connect"}
+              {llmProvider
+                ? t("setup.updateButton.label")
+                : t("setup.connectButton.label")}
             </Button>
           </Modal.Footer>
         </Form>

@@ -1,23 +1,31 @@
 import json
-from abc import ABC
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from enum import Enum
 from io import StringIO
-from typing import List
-from typing import Optional
-from typing import TypeAlias
+from typing import List, Optional, TypeAlias
 
 from pydantic import BaseModel
 
 from onyx.configs.constants import FileOrigin
-from onyx.connectors.models import DocExtractionContext
-from onyx.connectors.models import DocIndexingContext
-from onyx.connectors.models import Document
-from onyx.file_store.file_store import FileStore
-from onyx.file_store.file_store import get_default_file_store
+from onyx.connectors.models import DocExtractionContext, DocIndexingContext, Document
+from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def _has_legacy_tabular_section(doc_dict: dict) -> bool:
+    """True if a section is a pre-`csv_file_id` tabular section (inline text only).
+    Such a section was staged by an older docfetcher and the current file-backed-only
+    `TabularSection` can't validate it; during rolling-deploy skew we skip the doc
+    rather than fail the whole batch on `model_validate`."""
+    sections = doc_dict.get("sections")
+    if not isinstance(sections, list):
+        return False
+    return any(
+        isinstance(s, dict) and s.get("type") == "tabular" and not s.get("csv_file_id")
+        for s in sections
+    )
 
 
 class DocumentBatchStorageStateType(str, Enum):
@@ -91,10 +99,19 @@ class DocumentBatchStorage(ABC):
     def _deserialize_documents(self, data: str) -> list[Document]:
         """Deserialize documents from JSON string."""
         doc_dicts = json.loads(data)
-        return [
-            Document.model_validate(self._normalize_doc_dict(doc_dict))
-            for doc_dict in doc_dicts
-        ]
+        documents: list[Document] = []
+        for doc_dict in doc_dicts:
+            if _has_legacy_tabular_section(doc_dict):
+                logger.warning(
+                    "Skipping doc %s with a legacy inline tabular section "
+                    "(no csv_file_id); it re-indexes on the next attempt",
+                    doc_dict.get("id", "unknown"),
+                )
+                continue
+            documents.append(
+                Document.model_validate(self._normalize_doc_dict(doc_dict))
+            )
+        return documents
 
     def _normalize_doc_dict(self, doc_dict: dict) -> dict:
         """Normalize document dict to handle legacy data with non-string metadata values.
@@ -232,7 +249,7 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
         return [
             file.file_id
             for file in self.file_store.list_files_by_prefix(
-                self._per_cc_pair_base_path()
+                f"{self._per_cc_pair_base_path()}/"
             )
         ]
 
@@ -243,6 +260,13 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
             if path_info is None:
                 logger.warning(
                     "Could not extract path info from batch file: %s", batch_file_name
+                )
+                continue
+            if path_info.cc_pair_id != self.cc_pair_id:
+                logger.warning(
+                    "Skipping batch file %s owned by cc_pair %s",
+                    batch_file_name,
+                    path_info.cc_pair_id,
                 )
                 continue
             new_batch_file_name = self._get_batch_file_name(path_info.batch_num)

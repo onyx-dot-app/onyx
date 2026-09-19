@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
 import { StopReason } from "@/app/app/services/streamingModels";
 import { FullChatState } from "../interfaces";
@@ -14,9 +15,8 @@ import {
   TimelineRendererComponent,
   TimelineRendererOutput,
 } from "./TimelineRendererComponent";
-import Tabs from "@/refresh-components/Tabs";
+import { Button, Tabs } from "@opal/components";
 import { SvgBranch, SvgFold, SvgExpand } from "@opal/icons";
-import { Button } from "@opal/components";
 import { TimelineRow } from "@/app/app/message/messageComponents/timeline/primitives/TimelineRow";
 import { TimelineSurface } from "@/app/app/message/messageComponents/timeline/primitives/TimelineSurface";
 import { TimelineTopSpacer } from "@/app/app/message/messageComponents/timeline/primitives/TimelineTopSpacer";
@@ -45,6 +45,7 @@ export function ParallelTimelineTabs({
   isLastTurnGroup,
   isFirstTurnGroup,
 }: ParallelTimelineTabsProps) {
+  const t = useTranslations("chat.messages.timeline");
   const [activeTab, setActiveTab] = useState(turnGroup.steps[0]?.key ?? "");
   const [isExpanded, setIsExpanded] = useState(true);
   const [isHover, setIsHover] = useState(false);
@@ -92,7 +93,7 @@ export function ParallelTimelineTabs({
     isLastTurnGroup && (!shouldShowResults || !hasActivePackets);
 
   return (
-    <Tabs value={activeTab} onValueChange={setActiveTab}>
+    <Tabs value={activeTab} onValueChange={setActiveTab} variant="pill">
       <div className="flex flex-col w-full">
         <TimelineRow
           railVariant="rail"
@@ -120,18 +121,16 @@ export function ParallelTimelineTabs({
             <TimelineTopSpacer variant={topSpacerVariant} />
 
             <div
-              className="flex items-center min-h-(--timeline-step-header-height) pl-(--timeline-header-padding-left) pr-(--timeline-header-padding-right)"
+              className={cn(
+                "flex items-center min-h-(--timeline-step-header-height) ps-(--timeline-header-padding-left) pe-(--timeline-header-padding-right) transition-colors duration-200",
+                isHover && "bg-background-tint-02"
+              )}
               onMouseEnter={handleHeaderEnter}
               onMouseLeave={handleHeaderLeave}
             >
               <Tabs.List
-                variant="pill"
                 enableScrollArrows
-                className={cn(
-                  isHover && "bg-background-tint-02",
-                  "transition-colors duration-200"
-                )}
-                rightContent={
+                rightChildren={
                   <Button
                     prominence="tertiary"
                     size="sm"
@@ -144,12 +143,11 @@ export function ParallelTimelineTabs({
                   <Tabs.Trigger
                     key={step.key}
                     value={step.key}
-                    variant="pill"
                     isLoading={loadingStates.get(step.key)}
                   >
                     <span className="flex items-center gap-1.5">
                       {getToolIcon(step.packets)}
-                      {getToolName(step.packets)}
+                      {getToolName(step.packets, t)}
                     </span>
                   </Tabs.Trigger>
                 ))}

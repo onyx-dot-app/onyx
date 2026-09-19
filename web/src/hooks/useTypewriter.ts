@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-// Mid-stream reveal rate stays fixed — any ceil(delta/N) formula
-// produces visible chunks on burst packet arrivals. 1 = 60 cps, 2 = 120 cps.
+// Mid-stream reveal rate, in chars per 60fps frame. 3 ≈ 180 cps.
 const CHARS_PER_FRAME = 3;
 // Once the stream is finished, the rate becomes adaptive so a long
 // backlog drains within ~CATCHUP_FRAMES frames. Bursty rendering after
@@ -34,18 +33,21 @@ export function useTypewriter(
 ): UseTypewriterResult {
   // Ref so the rAF loop reads latest length without restarting.
   const targetRef = useRef(target);
-  targetRef.current = target;
 
   // Mirror `enabled` so the restart effect can short-circuit when the
   // caller has turned animation off (e.g. voice-mode, where display is
   // driven by audio position — the typewriter must stay idle and not
   // animate a jump after audio ends).
   const enabledRef = useRef(enabled);
-  enabledRef.current = enabled;
 
   // Read inside the rAF loop without restarting it.
   const streamFinishedRef = useRef(streamFinished);
-  streamFinishedRef.current = streamFinished;
+
+  useEffect(() => {
+    targetRef.current = target;
+    enabledRef.current = enabled;
+    streamFinishedRef.current = streamFinished;
+  }, [target, enabled, streamFinished]);
 
   // Captured once when post-finish drain begins, so the per-frame step
   // size stays constant instead of decaying with the shrinking backlog.

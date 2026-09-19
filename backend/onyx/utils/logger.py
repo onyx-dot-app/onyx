@@ -7,32 +7,86 @@ from typing import Any
 
 from onyx.utils.platform_utils import is_running_in_container
 from onyx.utils.tenant import get_tenant_id_short_string
-from shared_configs.configs import DEV_LOGGING_ENABLED
-from shared_configs.configs import LOG_FILE_NAME
-from shared_configs.configs import LOG_LEVEL
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
-from shared_configs.configs import SLACK_CHANNEL_ID
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
-from shared_configs.contextvars import ONYX_REQUEST_ID_CONTEXTVAR
+from shared_configs.configs import (
+    DEV_LOGGING_ENABLED,
+    JSON_LOGGING,
+    LOG_FILE_NAME,
+    LOG_LEVEL,
+    LOG_THIRD_PARTY_DEBUG,
+    LOG_TO_FILE,
+    MULTI_TENANT,
+    POSTGRES_DEFAULT_SCHEMA,
+    SLACK_CHANNEL_ID,
+)
+from shared_configs.contextvars import (
+    CURRENT_TENANT_ID_CONTEXTVAR,
+    INDEX_ATTEMPT_INFO_CONTEXTVAR,
+    ONYX_REQUEST_ID_CONTEXTVAR,
+)
 
 logging.addLevelName(logging.INFO + 5, "NOTICE")
 
+# The shared default dicts are only ever read, never mutated in place: writers
+# copy, update, then `set()` a new dict.
 pruning_ctx: contextvars.ContextVar[dict[str, Any]] = contextvars.ContextVar(
-    "pruning_ctx", default=dict()
+    "pruning_ctx",
+    default={},  # noqa: B039
 )
 
 doc_permission_sync_ctx: contextvars.ContextVar[dict[str, Any]] = (
-    contextvars.ContextVar("doc_permission_sync_ctx", default=dict())
+    contextvars.ContextVar("doc_permission_sync_ctx", default={})  # noqa: B039
 )
 
 
 class LoggerContextVars:
     @staticmethod
     def reset() -> None:
-        pruning_ctx.set(dict())
-        doc_permission_sync_ctx.set(dict())
+        pruning_ctx.set({})
+        doc_permission_sync_ctx.set({})
+
+
+# Third-party loggers that are extremely chatty at DEBUG (LiteLLM logs several
+# records per streamed token; httpcore logs every network event; pdfminer logs
+# per PDF object). Capped at INFO unless LOG_THIRD_PARTY_DEBUG opts back in.
+THIRD_PARTY_CAPPED_LOGGER_NAMES: tuple[str, ...] = (
+    "LiteLLM",
+    "LiteLLM Proxy",
+    "LiteLLM Router",
+    "litellm",
+    "httpx",
+    "httpcore",
+    "openai",
+    "anthropic",
+    "urllib3",
+    "botocore",
+    "boto3",
+    "s3transfer",
+    "google",
+    "googleapiclient",
+    "opensearch",
+    "kombu",
+    "amqp",
+    "msal",
+    "asyncio",
+    "charset_normalizer",
+    "filelock",
+    "pdfminer",
+    "unstructured",
+)
+
+# Loggers LiteLLM attaches its own stream handler to at import time.
+LITELLM_NATIVE_LOGGER_NAMES: tuple[str, ...] = (
+    "LiteLLM",
+    "LiteLLM Proxy",
+    "LiteLLM Router",
+)
+
+_third_party_log_levels_capped = False
+
+# Levels this cap itself applied, per logger name. Lets a later re-cap at a
+# more permissive app level replace our own earlier, stricter cap while still
+# preserving levels that other modules raised explicitly.
+_cap_applied_levels: dict[str, int] = {}
 
 
 def get_log_level_from_str(log_level_str: str = LOG_LEVEL) -> int:
@@ -49,6 +103,56 @@ def get_log_level_from_str(log_level_str: str = LOG_LEVEL) -> int:
     return log_level_dict.get(log_level_str.upper(), logging.INFO)
 
 
+def cap_third_party_log_levels(
+    app_log_level: int | None = None,
+    allow_third_party_debug: bool | None = None,
+) -> None:
+    """Cap chatty third-party loggers at INFO, or at the app log level if that
+    is stricter. LOG_THIRD_PARTY_DEBUG=true opts back into their DEBUG output.
+
+    Levels are set explicitly by logger name, so the cap holds no matter which
+    handler tree the process uses (uvicorn, celery root logger, plain stdout)
+    and even when the root logger runs at DEBUG. Never lowers a level that
+    another module raised explicitly (e.g. httpx -> WARNING); levels this cap
+    applied itself are replaceable, so re-running at a more permissive app
+    level relaxes the cap instead of ratcheting.
+    """
+    global _third_party_log_levels_capped
+    _third_party_log_levels_capped = True
+
+    level = app_log_level if app_log_level is not None else get_log_level_from_str()
+    allow_debug = (
+        LOG_THIRD_PARTY_DEBUG
+        if allow_third_party_debug is None
+        else allow_third_party_debug
+    )
+    for logger_name in THIRD_PARTY_CAPPED_LOGGER_NAMES:
+        third_party_logger = logging.getLogger(logger_name)
+        existing_level = third_party_logger.level
+        # A level equal to what this cap last set is ours to replace; anything
+        # else was raised externally and is preserved.
+        if _cap_applied_levels.get(logger_name) == existing_level:
+            existing_level = logging.NOTSET
+        cap_target = level if allow_debug else max(logging.INFO, level)
+        third_party_logger.setLevel(max(cap_target, existing_level))
+        _cap_applied_levels[logger_name] = cap_target
+
+
+def remove_litellm_native_log_handlers() -> None:
+    """LiteLLM attaches its own colored StreamHandler to its loggers at import
+    time while leaving propagation on, so every record is emitted twice: once
+    by LiteLLM's handler and once by the app/root handlers. Drop LiteLLM's
+    handlers so the app logging pipeline is the single emission path.
+
+    Must be called after ``litellm`` has been imported (its handlers are
+    attached as an import side effect).
+    """
+    for logger_name in LITELLM_NATIVE_LOGGER_NAMES:
+        litellm_logger = logging.getLogger(logger_name)
+        litellm_logger.handlers.clear()
+        litellm_logger.propagate = True
+
+
 class OnyxRequestIDFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         from shared_configs.contextvars import ONYX_REQUEST_ID_CONTEXTVAR
@@ -61,6 +165,11 @@ class OnyxLoggingAdapter(logging.LoggerAdapter):
     def process(
         self, msg: str, kwargs: MutableMapping[str, Any]
     ) -> tuple[str, MutableMapping[str, Any]]:
+        # In JSON mode, emit context as discrete structured fields instead of
+        # prefixing the message string, so they can be queried by log aggregators.
+        if JSON_LOGGING:
+            return self._inject_context_fields(msg, kwargs)
+
         # If this is an indexing job, add the attempt ID to the log message
         # This helps filter the logs for this specific indexing
         while True:
@@ -110,6 +219,62 @@ class OnyxLoggingAdapter(logging.LoggerAdapter):
 
         return msg, kwargs
 
+    def _inject_context_fields(
+        self, msg: str, kwargs: MutableMapping[str, Any]
+    ) -> tuple[str, MutableMapping[str, Any]]:
+        """JSON mode counterpart to the message-prefixing in ``process``: collect
+        the same contextual values and attach them as structured record fields
+        (via ``extra``) so the JSON formatter promotes them to top-level keys."""
+        fields: dict[str, Any] = {}
+
+        # Mutually exclusive context groups, mirroring the text-prefix branches.
+        pruning_ctx_dict = pruning_ctx.get()
+        doc_permission_sync_ctx_dict = doc_permission_sync_ctx.get()
+        if pruning_ctx_dict:
+            if "request_id" in pruning_ctx_dict:
+                fields["prune_request_id"] = pruning_ctx_dict["request_id"]
+            if "cc_pair_id" in pruning_ctx_dict:
+                fields["cc_pair_id"] = pruning_ctx_dict["cc_pair_id"]
+        elif doc_permission_sync_ctx_dict:
+            if "request_id" in doc_permission_sync_ctx_dict:
+                fields["doc_permission_sync_request_id"] = doc_permission_sync_ctx_dict[
+                    "request_id"
+                ]
+            if "cc_pair_id" in doc_permission_sync_ctx_dict:
+                fields["cc_pair_id"] = doc_permission_sync_ctx_dict["cc_pair_id"]
+        else:
+            index_attempt_info = INDEX_ATTEMPT_INFO_CONTEXTVAR.get()
+            if index_attempt_info:
+                cc_pair_id, index_attempt_id = index_attempt_info
+                fields["index_attempt_id"] = index_attempt_id
+                fields["cc_pair_id"] = cc_pair_id
+
+        if MULTI_TENANT:
+            tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
+            if tenant_id != POSTGRES_DEFAULT_SCHEMA and tenant_id is not None:
+                fields["tenant_id"] = get_tenant_id_short_string(tenant_id)
+
+        fastapi_request_id = ONYX_REQUEST_ID_CONTEXTVAR.get()
+        if fastapi_request_id:
+            fields["request_id"] = fastapi_request_id
+
+        channel_id = self.extra.get(SLACK_CHANNEL_ID) if self.extra else None
+        if channel_id:
+            fields["slack_channel_id"] = channel_id
+
+        if fields:
+            # A caller may pass extra=None explicitly; normalize to a dict
+            # before merging so we never call .setdefault() on None.
+            extra = kwargs.get("extra")
+            if not isinstance(extra, dict):
+                extra = {}
+                kwargs["extra"] = extra
+            # An explicit extra passed by the caller wins over injected context.
+            for key, value in fields.items():
+                extra.setdefault(key, value)
+
+        return msg, kwargs
+
     def notice(self, msg: Any, *args: Any, **kwargs: Any) -> None:
         # Stacklevel is set to 2 to point to the actual caller of notice instead of here
         self.log(
@@ -153,53 +318,63 @@ class ColoredFormatter(logging.Formatter):
         return super().format(record)
 
 
-def get_uvicorn_standard_formatter() -> ColoredFormatter:
-    """Returns a standard colored logging formatter."""
+def get_json_formatter() -> logging.Formatter:
+    """Returns a structured single-line JSON formatter. Standard record
+    attributes are emitted as fields and any ``extra`` keys are merged in.
+
+    The ``pythonjsonlogger`` import is deferred to this call site (only reached
+    when ``LOG_FORMAT=json``) so that importing this module never hard-fails in
+    environments where the optional dependency is absent."""
+    from pythonjsonlogger.json import JsonFormatter
+
+    return JsonFormatter(
+        "%(asctime)s %(levelname)s %(name)s %(filename)s %(lineno)d %(message)s",
+        rename_fields={
+            "asctime": "timestamp",
+            "levelname": "level",
+            "name": "logger",
+        },
+        datefmt="%Y-%m-%dT%H:%M:%S%z",
+    )
+
+
+def get_uvicorn_standard_formatter() -> logging.Formatter:
+    """Returns the configured uvicorn access-log formatter (JSON or colored text)."""
+    if JSON_LOGGING:
+        return get_json_formatter()
     return ColoredFormatter(
         "%(asctime)s %(filename)30s %(lineno)4s: [%(request_id)s] %(message)s",
         datefmt="%m/%d/%Y %I:%M:%S %p",
     )
 
 
-def get_standard_formatter() -> ColoredFormatter:
-    """Returns a standard colored logging formatter."""
+def get_standard_formatter() -> logging.Formatter:
+    """Returns the configured standard formatter (JSON or colored text)."""
+    if JSON_LOGGING:
+        return get_json_formatter()
     return ColoredFormatter(
         "%(asctime)s %(filename)30s %(lineno)4s: %(message)s",
         datefmt="%m/%d/%Y %I:%M:%S %p",
     )
 
 
-def setup_logger(
-    name: str = __name__,
-    log_level: int = get_log_level_from_str(),
-    extra: MutableMapping[str, Any] | None = None,
-    propagate: bool = True,
-) -> OnyxLoggingAdapter:
-    logger = logging.getLogger(name)
-
-    # If the logger already has handlers, assume it was already configured and return it.
-    if logger.handlers:
-        return OnyxLoggingAdapter(logger, extra=extra)
-
-    logger.setLevel(log_level)
-
-    formatter = get_standard_formatter()
-
-    handler = logging.StreamHandler()
-    handler.setLevel(log_level)
-    handler.setFormatter(formatter)
-
-    logger.addHandler(handler)
+def _add_file_handlers(logger: logging.Logger, formatter: logging.Formatter) -> None:
+    # Opt-out via LOG_TO_FILE: pods that can't write log files (e.g. read-only-root
+    # containers) set it false and rely on the stdout handler.
+    if not LOG_TO_FILE:
+        return
 
     is_containerized = is_running_in_container()
-    if LOG_FILE_NAME and (is_containerized or DEV_LOGGING_ENABLED):
-        log_levels = ["debug", "info", "notice"]
-        for level in log_levels:
-            file_name = (
-                f"/var/log/onyx/{LOG_FILE_NAME}_{level}.log"
-                if is_containerized
-                else f"./log/{LOG_FILE_NAME}_{level}.log"
-            )
+    if not LOG_FILE_NAME or not (is_containerized or DEV_LOGGING_ENABLED):
+        return
+
+    for level in ["debug", "info", "notice"]:
+        file_name = (
+            f"/var/log/onyx/{LOG_FILE_NAME}_{level}.log"
+            if is_containerized
+            else f"./log/{LOG_FILE_NAME}_{level}.log"
+        )
+        try:
             # Ensure the log directory exists
             log_dir = os.path.dirname(file_name)
             if not os.path.exists(log_dir):
@@ -217,11 +392,49 @@ def setup_logger(
                 maxBytes=25 * 1024 * 1024,  # 25 MB
                 backupCount=5,  # Keep 5 backup files
             )
-            file_handler.setLevel(get_log_level_from_str(level))
-            file_handler.setFormatter(formatter)
-            logger.addHandler(file_handler)
+        except OSError:
+            # The log location isn't writable by this process — e.g. a nonroot
+            # container whose mounted /var/log/onyx volume is owned by another UID.
+            # Fall back to the stdout handler instead of crashing at import time.
+            logger.warning(
+                "Cannot write log files under %s; falling back to stdout logging.",
+                os.path.dirname(file_name),
+            )
+            return
 
-    logger.notice = (  # type: ignore
+        file_handler.setLevel(get_log_level_from_str(level))
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+
+
+def setup_logger(
+    name: str = __name__,
+    log_level: int = get_log_level_from_str(),
+    extra: MutableMapping[str, Any] | None = None,
+    propagate: bool = True,
+) -> OnyxLoggingAdapter:
+    if not _third_party_log_levels_capped:
+        cap_third_party_log_levels()
+
+    logger = logging.getLogger(name)
+
+    # If the logger already has handlers, assume it was already configured and return it.
+    if logger.handlers:
+        return OnyxLoggingAdapter(logger, extra=extra)
+
+    logger.setLevel(log_level)
+
+    formatter = get_standard_formatter()
+
+    handler = logging.StreamHandler()
+    handler.setLevel(log_level)
+    handler.setFormatter(formatter)
+
+    logger.addHandler(handler)
+
+    _add_file_handlers(logger, formatter)
+
+    logger.notice = (  # ty: ignore[unresolved-attribute]
         lambda msg, *args, **kwargs: logger.log(
             logging.getLevelName("NOTICE"), msg, *args, **kwargs
         )

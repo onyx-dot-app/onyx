@@ -3,13 +3,19 @@ validate_connector_settings RoleAssignments permission probe."""
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.sharepoint.connector import SharepointConnector
+from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
+from onyx.connectors.models import ExternalAccess
+from onyx.connectors.sharepoint.connector import (
+    SharepointConnector,
+    _convert_sitepage_to_document,
+    _convert_sitepage_to_slim_document,
+)
+from onyx.connectors.sharepoint.connector_utils import SharepointPermissionCache
 
 SITE_URL = "https://tenant.sharepoint.com/sites/MySite"
 
@@ -17,10 +23,51 @@ SITE_URL = "https://tenant.sharepoint.com/sites/MySite"
 def _make_connector() -> SharepointConnector:
     connector = SharepointConnector(sites=[SITE_URL])
     connector.msal_app = MagicMock()
+    connector.auth_method = MicrosoftAuthMethod.CERTIFICATE
     connector.sp_tenant_domain = "tenant"
     connector._credential_json = {"sp_client_id": "x", "sp_directory_id": "y"}
     connector._graph_client = MagicMock()
     return connector
+
+
+@patch("onyx.connectors.sharepoint.connector.get_sharepoint_external_access")
+def test_full_and_slim_site_pages_share_permission_resolution(
+    mock_get_access: MagicMock,
+) -> None:
+    access = ExternalAccess(
+        external_user_emails={"alice@contoso.com"},
+        external_user_group_ids={"engineering"},
+        is_public=False,
+    )
+    mock_get_access.return_value = access
+    permission_cache = SharepointPermissionCache()
+    site_page = {
+        "id": "page-1",
+        "webUrl": f"{SITE_URL}/SitePages/Home.aspx",
+        "title": "Home",
+        "name": "Home.aspx",
+    }
+
+    full_document = _convert_sitepage_to_document(
+        site_page,
+        "MySite",
+        MagicMock(),
+        MagicMock(),
+        permission_cache,
+        include_permissions=True,
+    )
+    slim_document = _convert_sitepage_to_slim_document(
+        site_page,
+        MagicMock(),
+        MagicMock(),
+        permission_cache,
+    )
+
+    assert full_document.external_access == slim_document.external_access == access
+    assert all(
+        call.kwargs["permission_cache"] is permission_cache
+        for call in mock_get_access.call_args_list
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -158,7 +205,10 @@ def test_fetch_site_pages_runtime_error_does_not_crash_slim_run(
     def _fetch_side_effect(
         site_descriptor: object, *_args: object, **_kwargs: object
     ) -> list[dict[str, str]]:
-        if getattr(site_descriptor, "url", None) == bad_site.url:
+        if (
+            getattr(site_descriptor, "url", None)  # ods: ignore[getattr]
+            == bad_site.url
+        ):
             raise RuntimeError("pages endpoint blew up")
         return [good_page]
 
@@ -197,8 +247,7 @@ def test_retrieve_all_slim_docs_does_not_fetch_permissions(
 ) -> None:
     """retrieve_all_slim_docs (pruning path) never calls _create_rest_client_context
     and returns SlimDocuments with empty ExternalAccess."""
-    from onyx.connectors.models import ExternalAccess
-    from onyx.connectors.models import SlimDocument
+    from onyx.connectors.models import ExternalAccess, SlimDocument
     from onyx.connectors.sharepoint.connector import DriveItemData
 
     connector = _make_connector()
@@ -213,6 +262,7 @@ def test_retrieve_all_slim_docs_does_not_fetch_permissions(
     driveitem.id = "item-1"
     driveitem.web_url = SITE_URL + "/doc.docx"
     driveitem.parent_reference_path = None
+    driveitem.created_datetime = None
     mock_fetch_driveitems.return_value = [
         (driveitem, "Documents", None),
     ]
@@ -399,3 +449,36 @@ def test_probe_group_members_passes_on_200(
 
     connector = _make_connector()
     connector.probe_group_members_permission()  # should not raise
+
+
+@patch("onyx.connectors.sharepoint.connector.acquire_token_for_rest")
+def test_probe_role_assignments_rejects_client_secret_auth(
+    mock_acquire: MagicMock,
+) -> None:
+    """A client secret can never reach the REST surface, so say that instead of
+    sending the admin to grant more permissions."""
+    connector = _make_connector()
+    connector.auth_method = MicrosoftAuthMethod.CLIENT_SECRET
+
+    with pytest.raises(ConnectorValidationError) as exc_info:
+        connector.probe_role_assignments_permission()
+
+    message = str(exc_info.value)
+    assert "certificate" in message.lower()
+    assert "Sites.FullControl.All" not in message
+    mock_acquire.assert_not_called()
+
+
+@patch("onyx.connectors.sharepoint.connector.acquire_token_for_rest")
+def test_probe_role_assignments_rejects_client_secret_in_all_sites_mode(
+    mock_acquire: MagicMock,
+) -> None:
+    """With no configured sites there is nothing to probe, but the credential
+    type is still wrong and permission sync would still fail later."""
+    connector = SharepointConnector(sites=[])
+    connector.auth_method = MicrosoftAuthMethod.CLIENT_SECRET
+
+    with pytest.raises(ConnectorValidationError):
+        connector.probe_role_assignments_permission()
+
+    mock_acquire.assert_not_called()

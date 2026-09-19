@@ -1,0 +1,77 @@
+[
+  {
+    "element_id": "5e26385e9688cd34233e6d36fd41840f",
+    "metadata": {
+      "category_depth": 0,
+      "filetype": "text/html",
+      "languages": [
+        "eng"
+      ]
+    },
+    "text": "Quarterly Report",
+    "type": "Title"
+  },
+  {
+    "element_id": "2b7a9e18f3f450735e308cc7ab1472e7",
+    "metadata": {
+      "filetype": "text/html",
+      "languages": [
+        "eng"
+      ],
+      "parent_id": "5e26385e9688cd34233e6d36fd41840f"
+    },
+    "text": "Revenue grew 12% this quarter.",
+    "type": "NarrativeText"
+  },
+  {
+    "element_id": "61dc3a95faa19e7c1832f4955e4285e6",
+    "metadata": {
+      "category_depth": 1,
+      "filetype": "text/html",
+      "languages": [
+        "eng"
+      ],
+      "parent_id": "5e26385e9688cd34233e6d36fd41840f"
+    },
+    "text": "North America: up 8%",
+    "type": "ListItem"
+  },
+  {
+    "element_id": "b65da13930f1cd18536472607d6e6417",
+    "metadata": {
+      "category_depth": 1,
+      "filetype": "text/html",
+      "languages": [
+        "eng"
+      ],
+      "parent_id": "5e26385e9688cd34233e6d36fd41840f"
+    },
+    "text": "EMEA: up 19%",
+    "type": "ListItem"
+  },
+  {
+    "element_id": "8df17bc7eab6cb86c0c0b1297dd9138b",
+    "metadata": {
+      "filetype": "text/html",
+      "languages": [
+        "eng"
+      ],
+      "parent_id": "5e26385e9688cd34233e6d36fd41840f",
+      "text_as_html": "<table><tr><td>Region</td><td>Total</td></tr><tr><td>NA</td><td>4.2M</td></tr></table>"
+    },
+    "text": "Region Total NA 4.2M",
+    "type": "Table"
+  },
+  {
+    "element_id": "18d4d9e4997bf5dac4a450e80cfac0d1",
+    "metadata": {
+      "filetype": "text/html",
+      "image_url": "chart.png",
+      "languages": [
+        "eng"
+      ]
+    },
+    "text": "chart",
+    "type": "Image"
+  }
+]

@@ -1,20 +1,24 @@
 import json
 import re
 
-from onyx.context.search.models import ContextExpansionType
-from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import InferenceSection
+from onyx.configs.chat_configs import SECONDARY_LLM_FLOW_TIMEOUT_S
+from onyx.context.search.models import (
+    ContextExpansionType,
+    InferenceChunk,
+    InferenceSection,
+)
 from onyx.llm.interfaces import LLM
-from onyx.llm.models import ReasoningEffort
-from onyx.llm.models import UserMessage
-from onyx.prompts.search_prompts import DOCUMENT_CONTEXT_SELECTION_PROMPT
-from onyx.prompts.search_prompts import DOCUMENT_SELECTION_PROMPT
-from onyx.prompts.search_prompts import TRY_TO_FILL_TO_MAX_INSTRUCTIONS
+from onyx.llm.models import ReasoningEffort, UserMessage
+from onyx.prompts.search_prompts import (
+    DOCUMENT_CONTEXT_SELECTION_PROMPT,
+    DOCUMENT_SELECTION_PROMPT,
+    TRY_TO_FILL_TO_MAX_INSTRUCTIONS,
+)
 from onyx.tools.tool_implementations.search.constants import MAX_CHUNKS_FOR_RELEVANCE
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.llm_utils import llm_generation_span
-from onyx.tracing.llm_utils import record_llm_response
+from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.logger import setup_logger
+from onyx.utils.timing import log_function_time
 
 logger = setup_logger()
 
@@ -90,6 +94,7 @@ def select_chunks_for_relevance(
     return all_chunks[start_index:end_index]
 
 
+@log_function_time(print_only=True)
 def classify_section_relevance(
     document_title: str,
     section_text: str,
@@ -114,8 +119,8 @@ def classify_section_relevance(
     prompt_text = DOCUMENT_CONTEXT_SELECTION_PROMPT.format(
         document_title=document_title,
         main_section=section_text,
-        section_above=section_above_text if section_above_text else "N/A",
-        section_below=section_below_text if section_below_text else "N/A",
+        section_above=section_above_text or "N/A",
+        section_below=section_below_text or "N/A",
         user_query=user_query,
     )
 
@@ -133,6 +138,7 @@ def classify_section_relevance(
             response = llm.invoke(
                 prompt=prompt_msg,
                 reasoning_effort=ReasoningEffort.OFF,
+                timeout_override=SECONDARY_LLM_FLOW_TIMEOUT_S,
             )
             record_llm_response(span_generation, response)
             llm_response = response.choice.message.content
@@ -177,6 +183,33 @@ def classify_section_relevance(
         classification = ContextExpansionType.MAIN_SECTION_ONLY
 
     return classification
+
+
+@log_function_time(print_only=True)
+def _parse_section_ids(llm_response: str) -> tuple[list[str], set[str]]:
+    """Read section IDs from a response like "[1, 2!, 3]" or "1, 2!, 3".
+
+    Only tokens made of digits, with an optional trailing "!", count as IDs.
+    Returns the IDs in response order and the set of IDs marked with "!".
+    """
+    text = llm_response
+    if "[" in text and "]" in text[text.index("[") :]:
+        open_idx = text.index("[")
+        text = text[open_idx + 1 : text.index("]", open_idx)]
+
+    section_ids: list[str] = []
+    sections_with_exclamation: set[str] = set()
+    for token in text.replace(",", " ").split():
+        token = token.rstrip(".")
+        has_exclamation = token.endswith("!")
+        if has_exclamation:
+            token = token[:-1]
+        if not token.isdigit():
+            continue
+        section_ids.append(token)
+        if has_exclamation:
+            sections_with_exclamation.add(token)
+    return section_ids, sections_with_exclamation
 
 
 def select_sections_for_expansion(
@@ -283,7 +316,9 @@ def select_sections_for_expansion(
             input_messages=[prompt_text],
         ) as span_generation:
             response = llm.invoke(
-                prompt=[prompt_text], reasoning_effort=ReasoningEffort.OFF
+                prompt=[prompt_text],
+                reasoning_effort=ReasoningEffort.OFF,
+                timeout_override=SECONDARY_LLM_FLOW_TIMEOUT_S,
             )
             record_llm_response(span_generation, response)
             llm_response = response.choice.message.content
@@ -294,64 +329,7 @@ def select_sections_for_expansion(
             )
             return sections[:max_sections], None
 
-        # Parse the response to extract section IDs
-        # Look for patterns like [1, 2, 3] or [1,2,3] with flexible whitespace/newlines
-        # Also handle unbracketed comma-separated lists like "1, 2, 3"
-        # Track which sections have "!" marker (e.g., "1, 2!, 3" or "[1, 2!, 3]")
-        section_ids = []
-        sections_with_exclamation = set()  # Track section IDs that have "!" marker
-
-        # First try to find a bracketed list
-        bracket_pattern = r"\[([^\]]+)\]"
-        bracket_match = re.search(bracket_pattern, llm_response)
-
-        if bracket_match:
-            # Extract the content between brackets
-            list_content = bracket_match.group(1)
-            # Split by comma, preserving the parts
-            parts = [part.strip() for part in list_content.split(",")]
-            for part in parts:
-                # Check if this part has an exclamation mark
-                has_exclamation = "!" in part
-                # Extract the number (digits only)
-                numbers = re.findall(r"\d+", part)
-                if numbers:
-                    section_id = numbers[0]
-                    section_ids.append(section_id)
-                    if has_exclamation:
-                        sections_with_exclamation.add(section_id)
-        else:
-            # Try to find an unbracketed comma-separated list
-            # Look for patterns like "1, 2, 3" or "1, 2!, 3"
-            # This regex finds sequences of digits optionally followed by "!" and separated by commas
-            comma_list_pattern = r"\b\d+!?\b(?:\s*,\s*\b\d+!?\b)*"
-            comma_match = re.search(comma_list_pattern, llm_response)
-
-            if comma_match:
-                # Extract the matched comma-separated list
-                list_content = comma_match.group(0)
-                parts = [part.strip() for part in list_content.split(",")]
-                for part in parts:
-                    # Check if this part has an exclamation mark
-                    has_exclamation = "!" in part
-                    # Extract the number (digits only)
-                    numbers = re.findall(r"\d+", part)
-                    if numbers:
-                        section_id = numbers[0]
-                        section_ids.append(section_id)
-                        if has_exclamation:
-                            sections_with_exclamation.add(section_id)
-            else:
-                # Fallback: try to extract all numbers from the response
-                # Also check for "!" after numbers
-                number_pattern = r"\b(\d+)(!)?\b"
-                matches = re.finditer(number_pattern, llm_response)
-                for match in matches:
-                    section_id = match.group(1)
-                    has_exclamation = match.group(2) == "!"
-                    section_ids.append(section_id)
-                    if has_exclamation:
-                        sections_with_exclamation.add(section_id)
+        section_ids, sections_with_exclamation = _parse_section_ids(llm_response)
 
         if not section_ids:
             logger.warning(
@@ -416,13 +394,11 @@ def select_sections_for_expansion(
             len(selected_sections),
             len(sections),
             selected_document_ids,
-            document_ids_with_exclamation if document_ids_with_exclamation else [],
+            document_ids_with_exclamation or [],
         )
 
         # Return document_ids if any sections had exclamation marks, otherwise None
-        return selected_sections, (
-            document_ids_with_exclamation if document_ids_with_exclamation else None
-        )
+        return selected_sections, (document_ids_with_exclamation or None)
 
     except Exception as e:
         logger.error("Error calling LLM for document selection: %s", e)

@@ -5,8 +5,7 @@ Coverage is intentionally narrow — the heavy lifting lives in
 file exists to lock in the wiring this Tool wrapper is responsible for.
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
     CodingAgentTool,

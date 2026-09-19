@@ -10,23 +10,23 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/docker"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 )
 
 var validProfiles = []string{"dev", "multitenant"}
 
-const composeProjectName = "onyx"
-
-// ComposeOptions holds options for the compose command
 type ComposeOptions struct {
+	Tag           string
 	Down          bool
 	Wait          bool
 	ForceRecreate bool
-	Tag           string
 	NoEE          bool
+	Infra         bool
 }
 
-// NewComposeCommand creates a new compose command for launching docker containers
+// NewComposeCommand creates a new compose command for launching docker
+// containers.
 func NewComposeCommand() *cobra.Command {
 	opts := &ComposeOptions{}
 
@@ -40,7 +40,7 @@ Enterprise Edition features are enabled by default for development.
 
 Available profiles:
   dev          Use dev configuration (exposes service ports for development)
-  multitenant  Use multitenant configuration
+  multitenant  Dev configuration plus multi-tenant (Onyx Cloud) mode
 
 Examples:
   # Start containers with default configuration (EE enabled)
@@ -49,10 +49,12 @@ Examples:
   # Start containers with dev configuration (exposes service ports)
   ods compose dev
 
-  # Start containers with multitenant configuration
+  # Start containers in multi-tenant mode (dev configuration plus the
+  # docker-compose.multitenant.yml overlay)
   ods compose multitenant
 
-  # Start containers without Enterprise Edition features
+  # Start containers without Enterprise Edition features (not available with
+  # the multitenant profile, which requires them)
   ods compose --no-ee
 
   # Stop running containers
@@ -65,6 +67,9 @@ Examples:
   # Force recreate containers
   ods compose --force-recreate
 
+  # Start only infrastructure containers (no api_server, background, etc.)
+  ods compose dev --infra
+
   # Use a specific image tag
   ods compose --tag edge`,
 		Args:      cobra.MaximumNArgs(1),
@@ -74,7 +79,9 @@ Examples:
 			if len(args) > 0 {
 				profile = args[0]
 			}
-			runCompose(profile, opts)
+			if err := runCompose(profile, opts); err != nil {
+				log.Fatal(err)
+			}
 		},
 	}
 
@@ -83,22 +90,35 @@ Examples:
 	cmd.Flags().BoolVar(&opts.ForceRecreate, "force-recreate", false, "Force recreate containers even if unchanged")
 	cmd.Flags().StringVar(&opts.Tag, "tag", "", "Set the IMAGE_TAG for docker compose (e.g. edge, v2.10.4)")
 	cmd.Flags().BoolVar(&opts.NoEE, "no-ee", false, "Disable Enterprise Edition features (enabled by default)")
+	cmd.Flags().BoolVar(&opts.Infra, "infra", false, "Start only infrastructure containers (db, cache, search, model servers)")
 
 	return cmd
 }
 
 // validateProfile checks that the given profile is valid.
-func validateProfile(profile string) {
+func validateProfile(profile string) error {
 	if profile != "" && profile != "dev" && profile != "multitenant" {
-		log.Fatalf("Invalid profile %q. Valid profiles: dev, multitenant", profile)
+		return fatalErrorf("Invalid profile %q. Valid profiles: dev, multitenant", profile)
 	}
+	return nil
+}
+
+// checkComposeOptions rejects flag combinations the compose files cannot
+// honor. The multitenant overlay pins Enterprise Edition features on because
+// tenant provisioning is EE code, so --no-ee would be silently ignored.
+func checkComposeOptions(profile string, opts *ComposeOptions) error {
+	if profile == "multitenant" && opts.NoEE {
+		return fmt.Errorf("--no-ee cannot be used with the multitenant profile: multi-tenant mode requires Enterprise Edition features")
+	}
+	return nil
 }
 
 // composeFiles returns the list of docker compose files for the given profile.
+// "multitenant" stacks a small overlay on the dev configuration.
 func composeFiles(profile string) []string {
 	switch profile {
 	case "multitenant":
-		return []string{"docker-compose.multitenant-dev.yml"}
+		return []string{"docker-compose.yml", "docker-compose.dev.yml", "docker-compose.multitenant.yml"}
 	case "dev":
 		return []string{"docker-compose.yml", "docker-compose.dev.yml"}
 	default:
@@ -106,11 +126,27 @@ func composeFiles(profile string) []string {
 	}
 }
 
-// baseArgs builds the common "docker compose -p <project> -f ... -f ..." argument prefix.
+// composeProfiles returns Docker Compose profile names to activate. Minio is
+// defined with profiles: ["s3-filestore"] in docker-compose.yml, so it must be
+// activated explicitly for commands like "down" that don't name services.
+func composeProfiles(profile string) []string {
+	switch profile {
+	case "dev", "multitenant":
+		return []string{"s3-filestore"}
+	default:
+		return nil
+	}
+}
+
+// baseArgs builds the common "docker compose -p <project> -f ... -f ...
+// --profile ..." argument prefix.
 func baseArgs(profile string) []string {
-	args := []string{"compose", "-p", composeProjectName}
+	args := []string{"compose", "-p", docker.ProjectName()}
 	for _, f := range composeFiles(profile) {
 		args = append(args, "-f", f)
+	}
+	for _, p := range composeProfiles(profile) {
+		args = append(args, "--profile", p)
 	}
 	return args
 }
@@ -125,11 +161,15 @@ func profileLabel(profile string) string {
 
 // execDockerCompose runs a docker compose command in the correct directory with
 // optional extra environment variables.
-func execDockerCompose(args []string, extraEnv []string) {
+func execDockerCompose(args []string, extraEnv []string) error {
 	log.Debugf("Running: docker %v", args)
 
+	dir, err := composeDir()
+	if err != nil {
+		return err
+	}
 	dockerCmd := exec.Command("docker", args...)
-	dockerCmd.Dir = composeDir()
+	dockerCmd.Dir = dir
 	dockerCmd.Stdout = os.Stdout
 	dockerCmd.Stderr = os.Stderr
 	dockerCmd.Stdin = os.Stdin
@@ -138,8 +178,9 @@ func execDockerCompose(args []string, extraEnv []string) {
 	}
 
 	if err := dockerCmd.Run(); err != nil {
-		log.Fatalf("Docker compose failed: %v", err)
+		return fatalErrorf("Docker compose failed: %w", err)
 	}
+	return nil
 }
 
 // runningServiceNames returns the names of currently running services in the
@@ -151,7 +192,7 @@ func runningServiceNames() []string {
 		return nil
 	}
 
-	args := []string{"compose", "-p", composeProjectName, "ps", "--services"}
+	args := []string{"compose", "-p", docker.ProjectName(), "ps", "--services"}
 
 	cmd := exec.Command("docker", args...)
 	cmd.Dir = filepath.Join(gitRoot, "deployment", "docker_compose")
@@ -178,23 +219,27 @@ func envForTag(tag string) []string {
 }
 
 // composeDir returns the path to the docker compose directory.
-func composeDir() string {
+func composeDir() (string, error) {
 	gitRoot, err := paths.GitRoot()
 	if err != nil {
-		log.Fatalf("Failed to find git root: %v", err)
+		return "", fatalErrorf("Failed to find git root: %w", err)
 	}
-	return filepath.Join(gitRoot, "deployment", "docker_compose")
+	return filepath.Join(gitRoot, "deployment", "docker_compose"), nil
 }
 
 // setEnvValue sets a key=value pair in the .env file within the compose
-// directory. If the key already exists its value is updated in place;
-// otherwise the entry is appended. The file is created if it does not exist.
-func setEnvValue(key, value string) {
-	envPath := filepath.Join(composeDir(), ".env")
+// directory. If the key already exists its value is updated in place; otherwise
+// the entry is appended. The file is created if it does not exist.
+func setEnvValue(key, value string) error {
+	dir, err := composeDir()
+	if err != nil {
+		return err
+	}
+	envPath := filepath.Join(dir, ".env")
 
 	data, err := os.ReadFile(envPath)
 	if err != nil && !os.IsNotExist(err) {
-		log.Fatalf("Failed to read %s: %v", envPath, err)
+		return fatalErrorf("Failed to read %s: %w", envPath, err)
 	}
 
 	entry := fmt.Sprintf("%s=%s", key, value)
@@ -203,9 +248,9 @@ func setEnvValue(key, value string) {
 	if len(data) == 0 {
 		// File missing or empty – create with just this entry.
 		if err := os.WriteFile(envPath, []byte(entry+"\n"), 0644); err != nil {
-			log.Fatalf("Failed to write %s: %v", envPath, err)
+			return fatalErrorf("Failed to write %s: %w", envPath, err)
 		}
-		return
+		return nil
 	}
 
 	lines := strings.Split(string(data), "\n")
@@ -219,8 +264,8 @@ func setEnvValue(key, value string) {
 	}
 
 	if !found {
-		// Insert before the trailing empty line (if the file ended with \n)
-		// so we don't accumulate blank lines.
+		// Insert before the trailing empty line (if the file ended with \n) so
+		// we don't accumulate blank lines.
 		if lines[len(lines)-1] == "" {
 			lines = append(lines[:len(lines)-1], entry, "")
 		} else {
@@ -229,21 +274,47 @@ func setEnvValue(key, value string) {
 	}
 
 	if err := os.WriteFile(envPath, []byte(strings.Join(lines, "\n")), 0644); err != nil {
-		log.Fatalf("Failed to write %s: %v", envPath, err)
+		return fatalErrorf("Failed to write %s: %w", envPath, err)
 	}
+	return nil
 }
 
-func runCompose(profile string, opts *ComposeOptions) {
-	validateProfile(profile)
+// runCompose starts or stops Docker Compose containers for the current docker.
+// For profiles that expose host ports ("dev", "multitenant"), it scans for
+// available ports and writes them to the compose .env file before starting
+// containers. EE licensing env vars are also written on startup.
+func runCompose(profile string, opts *ComposeOptions) error {
+	if err := validateProfile(profile); err != nil {
+		return err
+	}
+	if err := checkComposeOptions(profile, opts); err != nil {
+		return err
+	}
 
 	if !opts.Down {
 		eeValue := "true"
 		if opts.NoEE {
 			eeValue = "false"
 		}
-		setEnvValue("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", eeValue)
+		if err := setEnvValue("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", eeValue); err != nil {
+			return err
+		}
 		if !opts.NoEE {
-			setEnvValue("LICENSE_ENFORCEMENT_ENABLED", "false")
+			if err := setEnvValue("LICENSE_ENFORCEMENT_ENABLED", "false"); err != nil {
+				return err
+			}
+		}
+
+		if profile == "dev" || profile == "multitenant" {
+			ports, err := docker.FindAvailablePorts()
+			if err != nil {
+				return fatalErrorf("Failed to find available ports: %w", err)
+			}
+			for k, v := range ports.ComposeEnv() {
+				if err := setEnvValue(k, v); err != nil {
+					return err
+				}
+			}
 		}
 	}
 
@@ -251,6 +322,9 @@ func runCompose(profile string, opts *ComposeOptions) {
 
 	if opts.Down {
 		args = append(args, "down")
+		if opts.Infra {
+			args = append(args, docker.InfraServiceNames()...)
+		}
 	} else {
 		args = append(args, "up", "-d")
 		if opts.Wait {
@@ -259,22 +333,28 @@ func runCompose(profile string, opts *ComposeOptions) {
 		if opts.ForceRecreate {
 			args = append(args, "--force-recreate")
 		}
+		if opts.Infra {
+			args = append(args, docker.InfraServiceNames()...)
+		}
 	}
 
+	projName := docker.ProjectName()
 	action := "Starting"
 	if opts.Down {
 		action = "Stopping"
 	}
-	log.Infof("%s containers with %s configuration...", action, profileLabel(profile))
+	log.Infof("%s containers for project %q with %s configuration...", action, projName, profileLabel(profile))
 	if !opts.Down && !opts.NoEE {
 		log.Info("Enterprise Edition features enabled (use --no-ee to disable)")
 	}
-
-	execDockerCompose(args, envForTag(opts.Tag))
+	if err := execDockerCompose(args, envForTag(opts.Tag)); err != nil {
+		return err
+	}
 
 	if opts.Down {
 		log.Info("Containers stopped successfully")
 	} else {
 		log.Info("Containers started successfully")
 	}
+	return nil
 }

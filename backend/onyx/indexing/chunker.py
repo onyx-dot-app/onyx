@@ -1,21 +1,20 @@
 from chonkie import SentenceChunker
 
-from onyx.configs.app_configs import AVERAGE_SUMMARY_EMBEDDINGS
-from onyx.configs.app_configs import BLURB_SIZE
-from onyx.configs.app_configs import LARGE_CHUNK_RATIO
-from onyx.configs.app_configs import MINI_CHUNK_SIZE
-from onyx.configs.app_configs import SKIP_METADATA_IN_CHUNK
-from onyx.configs.app_configs import USE_CHUNK_SUMMARY
-from onyx.configs.app_configs import USE_DOCUMENT_SUMMARY
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import RETURN_SEPARATOR
-from onyx.configs.constants import SECTION_SEPARATOR
+from onyx.configs.app_configs import (
+    AVERAGE_SUMMARY_EMBEDDINGS,
+    BLURB_SIZE,
+    LARGE_CHUNK_RATIO,
+    MINI_CHUNK_SIZE,
+    SKIP_METADATA_IN_CHUNK,
+    USE_CHUNK_SUMMARY,
+    USE_DOCUMENT_SUMMARY,
+)
+from onyx.configs.constants import RETURN_SEPARATOR, SECTION_SEPARATOR, DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_metadata_keys_to_ignore,
 )
 from onyx.connectors.models import IndexingDocument
-from onyx.indexing.chunking import DocumentChunker
-from onyx.indexing.chunking import extract_blurb
+from onyx.indexing.chunking import DocumentChunker, extract_blurb
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.models import DocAwareChunk
 from onyx.llm.utils import MAX_CONTEXT_TOKENS
@@ -30,11 +29,16 @@ CHUNK_OVERLAP = 0
 # overwhelm the actual contents of the chunk
 MAX_METADATA_PERCENTAGE = 0.25
 CHUNK_MIN_CONTENT = 256
+# Tokens reserved per chunk for the contextual-RAG doc summary + chunk context.
+# Single source of truth — the reindex port reuses it to mirror indexing budgets.
+DEFAULT_CONTEXTUAL_RAG_RESERVED_TOKENS = MAX_CONTEXT_TOKENS * (
+    int(USE_CHUNK_SUMMARY) + int(USE_DOCUMENT_SUMMARY)
+)
 
 logger = setup_logger()
 
 
-def _get_metadata_suffix_for_document_index(
+def get_metadata_suffix_for_document_index(
     metadata: dict[str, str | list[str]], include_separator: bool = False
 ) -> tuple[str, str]:
     """
@@ -144,8 +148,8 @@ class Chunker:
             assert USE_CHUNK_SUMMARY or USE_DOCUMENT_SUMMARY, (
                 "Contextual RAG requires at least one of chunk summary and document summary enabled"
             )
-        self.default_contextual_rag_reserved_tokens = MAX_CONTEXT_TOKENS * (
-            int(USE_CHUNK_SUMMARY) + int(USE_DOCUMENT_SUMMARY)
+        self.default_contextual_rag_reserved_tokens = (
+            DEFAULT_CONTEXTUAL_RAG_RESERVED_TOKENS
         )
         self.tokenizer = tokenizer
         self.callback = callback
@@ -209,7 +213,7 @@ class Chunker:
             (
                 metadata_suffix_semantic,
                 metadata_suffix_keyword,
-            ) = _get_metadata_suffix_for_document_index(
+            ) = get_metadata_suffix_for_document_index(
                 document.metadata, include_separator=True
             )
             metadata_tokens = len(self.tokenizer.encode(metadata_suffix_semantic))

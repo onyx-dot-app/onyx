@@ -9,8 +9,7 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from onyx.db.slack_bot import insert_slack_bot
-from onyx.db.slack_bot import update_slack_bot
+from onyx.db.slack_bot import insert_slack_bot, update_slack_bot
 from onyx.server.manage.models import SlackBot
 from onyx.utils.sensitive import SensitiveValue
 

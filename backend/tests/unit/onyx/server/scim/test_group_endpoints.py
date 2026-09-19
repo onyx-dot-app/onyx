@@ -2,30 +2,35 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 from fastapi import Response
 
-from ee.onyx.server.scim.api import create_group
-from ee.onyx.server.scim.api import delete_group
-from ee.onyx.server.scim.api import get_group
-from ee.onyx.server.scim.api import list_groups
-from ee.onyx.server.scim.api import patch_group
-from ee.onyx.server.scim.api import replace_group
-from ee.onyx.server.scim.models import ScimGroupMember
-from ee.onyx.server.scim.models import ScimGroupResource
-from ee.onyx.server.scim.models import ScimPatchOperation
-from ee.onyx.server.scim.models import ScimPatchOperationType
-from ee.onyx.server.scim.models import ScimPatchRequest
+from ee.onyx.server.scim.api import (
+    create_group,
+    delete_group,
+    get_group,
+    list_groups,
+    patch_group,
+    replace_group,
+)
+from ee.onyx.server.scim.models import (
+    ScimGroupMember,
+    ScimGroupResource,
+    ScimPatchOperation,
+    ScimPatchOperationType,
+    ScimPatchRequest,
+)
 from ee.onyx.server.scim.patch import ScimPatchError
 from ee.onyx.server.scim.providers.base import ScimProvider
-from tests.unit.onyx.server.scim.conftest import assert_scim_error
-from tests.unit.onyx.server.scim.conftest import make_db_group
-from tests.unit.onyx.server.scim.conftest import make_scim_group
-from tests.unit.onyx.server.scim.conftest import parse_scim_group
-from tests.unit.onyx.server.scim.conftest import parse_scim_list
+from tests.unit.onyx.server.scim.conftest import (
+    assert_scim_error,
+    make_db_group,
+    make_scim_group,
+    parse_scim_group,
+    parse_scim_list,
+)
 
 
 class TestListGroups:

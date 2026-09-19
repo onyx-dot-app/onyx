@@ -8,16 +8,18 @@ from unittest.mock import patch
 import pytest
 
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import HierarchyNode
-from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    ALL_EXPECTED_HIERARCHY_NODES,
+from onyx.connectors.models import (
+    ConnectorFailure,
+    Document,
+    DocumentFailure,
+    HierarchyNode,
 )
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_ID
-from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_1_ID
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    ADMIN_EMAIL,
+    ALL_EXPECTED_HIERARCHY_NODES,
+    FOLDER_1_ID,
+    SHARED_DRIVE_1_ID,
+)
 from tests.utils.secret_names import TestSecret
 
 _DRIVE_ID_MAPPING_PATH = os.path.join(

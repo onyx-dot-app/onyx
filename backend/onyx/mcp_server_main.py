@@ -2,9 +2,11 @@
 
 import uvicorn
 
-from onyx.configs.app_configs import MCP_SERVER_ENABLED
-from onyx.configs.app_configs import MCP_SERVER_HOST
-from onyx.configs.app_configs import MCP_SERVER_PORT
+from onyx.configs.app_configs import (
+    MCP_SERVER_ENABLED,
+    MCP_SERVER_HOST,
+    MCP_SERVER_PORT,
+)
 from onyx.tracing.setup import setup_tracing
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable

@@ -1,0 +1,470 @@
+"use client";
+
+import { useState, useMemo } from "react";
+import { useTranslations } from "next-intl";
+import { SvgEmpty, SvgFiles, SvgXOctagon } from "@opal/icons";
+import { Content } from "@opal/layouts";
+import { Section } from "@/layouts/general-layouts";
+import Text from "@/refresh-components/texts/Text";
+import { LineItemButton } from "@opal/components";
+import { Card, Divider } from "@opal/components";
+import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
+import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
+import { useConnectorStatus } from "@/lib/hooks";
+import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
+import { useAdminAgents } from "@/lib/agents/hooks";
+import { getSourceMetadata } from "@/lib/sources";
+import type { Agent } from "@/lib/agents/types";
+import type { ValidSources } from "@/lib/types";
+import ResourceContent from "@/views/admin/GroupsPage/SharedGroupResources/ResourceContent";
+import ResourcePopover from "@/views/admin/GroupsPage/SharedGroupResources/ResourcePopover";
+import type { PopoverSection } from "@/views/admin/GroupsPage/SharedGroupResources/interfaces";
+
+interface SharedGroupResourcesProps {
+  selectedCcPairIds: number[];
+  onCcPairIdsChange: (ids: number[]) => void;
+  selectedDocSetIds: number[];
+  onDocSetIdsChange: (ids: number[]) => void;
+  selectedAgentIds: number[];
+  onAgentIdsChange: (ids: number[]) => void;
+  /** Already shared with this group; merged in so an agent the caller can't otherwise
+   *  see still renders as a chip. */
+  attachedAgents?: Agent[];
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+// Stable identity for the default — an inline [] would re-run the merge every render.
+const NO_ATTACHED_AGENTS: Agent[] = [];
+
+function SharedBadge() {
+  const t = useTranslations("admin.groups");
+  return (
+    <Text as="span" secondaryBody text03>
+      {t("sharedResources.sharedBadge.label")}
+    </Text>
+  );
+}
+
+interface SourceIconStackProps {
+  sources: { source: ValidSources }[];
+}
+
+function SourceIconStack({ sources }: SourceIconStackProps) {
+  if (sources.length === 0) return null;
+
+  const unique = Array.from(
+    new Map(sources.map((s) => [s.source, s])).values()
+  ).slice(0, 3);
+
+  return (
+    <Section
+      flexDirection="row"
+      alignItems="center"
+      width="auto"
+      height="auto"
+      gap={0}
+      className="shrink-0 p-0.5"
+    >
+      {unique.map((s, i) => {
+        const Icon = getSourceMetadata(s.source).icon;
+        return (
+          <div
+            key={s.source}
+            className="flex items-center justify-center size-4 rounded-04 bg-background-tint-00 border border-border-01 overflow-hidden [&_img]:size-4! [&_img]:m-0! [&_svg]:size-4"
+            style={{ zIndex: unique.length - i, marginLeft: i > 0 ? -6 : 0 }}
+          >
+            <Icon />
+          </div>
+        );
+      })}
+    </Section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+function SharedGroupResources({
+  selectedCcPairIds,
+  onCcPairIdsChange,
+  selectedDocSetIds,
+  onDocSetIdsChange,
+  selectedAgentIds,
+  onAgentIdsChange,
+  attachedAgents = NO_ATTACHED_AGENTS,
+}: SharedGroupResourcesProps) {
+  const t = useTranslations("admin.groups");
+  const [connectorSearch, setConnectorSearch] = useState("");
+  const [agentSearch, setAgentSearch] = useState("");
+
+  const { data: connectors = [] } = useConnectorStatus();
+  const { documentSets } = useDocumentSets();
+  // Admin list, not the chat list: a global holder gets every agent, a scoped manager
+  // only the ones they can edit. Built-ins are already public, so sharing one is a no-op.
+  const { agents: allAgents } = useAdminAgents();
+  const agents = useMemo(() => {
+    const shareable = allAgents.filter((agent) => !agent.builtin_persona);
+    const known = new Set(shareable.map((agent) => agent.id));
+    return [
+      ...shareable,
+      ...attachedAgents.filter(
+        (agent) => !known.has(agent.id) && !agent.builtin_persona
+      ),
+    ];
+  }, [allAgents, attachedAgents]);
+
+  // --- Derived data ---
+
+  const selectedCcPairSet = useMemo(
+    () => new Set(selectedCcPairIds),
+    [selectedCcPairIds]
+  );
+  const selectedDocSetSet = useMemo(
+    () => new Set(selectedDocSetIds),
+    [selectedDocSetIds]
+  );
+  const selectedAgentSet = useMemo(
+    () => new Set(selectedAgentIds),
+    [selectedAgentIds]
+  );
+
+  const selectedPairs = useMemo(
+    () => connectors.filter((p) => selectedCcPairSet.has(p.cc_pair_id)),
+    [connectors, selectedCcPairSet]
+  );
+  const selectedDocSets = useMemo(
+    () => documentSets.filter((ds) => selectedDocSetSet.has(ds.id)),
+    [documentSets, selectedDocSetSet]
+  );
+  const selectedAgentObjects = useMemo(
+    () => agents.filter((a) => selectedAgentSet.has(a.id)),
+    [agents, selectedAgentSet]
+  );
+
+  // --- Popover sections ---
+
+  const connectorDocSetSections: PopoverSection[] = useMemo(() => {
+    const q = connectorSearch.toLowerCase();
+
+    const connectorItems = connectors
+      .filter((p) => !q || (p.name ?? "").toLowerCase().includes(q))
+      .map((p) => {
+        const isSelected = selectedCcPairSet.has(p.cc_pair_id);
+        return {
+          key: `c-${p.cc_pair_id}`,
+          label:
+            p.name ??
+            t("sharedResources.connectorFallback.label", {
+              id: p.cc_pair_id,
+            }),
+          disabled: isSelected,
+          onSelect: () =>
+            isSelected
+              ? onCcPairIdsChange(
+                  selectedCcPairIds.filter((id) => id !== p.cc_pair_id)
+                )
+              : onCcPairIdsChange([...selectedCcPairIds, p.cc_pair_id]),
+          render: (dimmed: boolean) => (
+            <LineItemButton
+              presentational
+              sizePreset="main-ui"
+              variant="section"
+              color={dimmed ? "muted" : undefined}
+              icon={getSourceMetadata(p.connector.source).icon}
+              title={
+                p.name ??
+                t("sharedResources.connectorFallback.label", {
+                  id: p.cc_pair_id,
+                })
+              }
+              titleMaxLines={1}
+              rightChildren={
+                p.groups.length > 0 || dimmed ? <SharedBadge /> : undefined
+              }
+            />
+          ),
+        };
+      });
+
+    const docSetItems = documentSets
+      .filter((ds) => !q || ds.name.toLowerCase().includes(q))
+      .map((ds) => {
+        const isSelected = selectedDocSetSet.has(ds.id);
+        return {
+          key: `d-${ds.id}`,
+          label: ds.name,
+          disabled: isSelected,
+          onSelect: () =>
+            isSelected
+              ? onDocSetIdsChange(
+                  selectedDocSetIds.filter((id) => id !== ds.id)
+                )
+              : onDocSetIdsChange([...selectedDocSetIds, ds.id]),
+          render: (dimmed: boolean) => (
+            <LineItemButton
+              presentational
+              sizePreset="main-ui"
+              variant="section"
+              color={dimmed ? "muted" : undefined}
+              icon={SvgFiles}
+              title={ds.name}
+              titleMaxLines={1}
+              rightChildren={
+                ds.groups.length > 0 || dimmed ? <SharedBadge /> : undefined
+              }
+            />
+          ),
+        };
+      });
+
+    return [
+      ...(connectorItems.length > 0
+        ? [
+            {
+              label: t("sharedResources.popover.connectors.label"),
+              items: connectorItems,
+            },
+          ]
+        : []),
+      ...(docSetItems.length > 0
+        ? [
+            {
+              label: t("sharedResources.popover.documentSets.label"),
+              items: docSetItems,
+            },
+          ]
+        : []),
+    ];
+  }, [
+    connectors,
+    documentSets,
+    connectorSearch,
+    selectedCcPairSet,
+    selectedDocSetSet,
+    selectedCcPairIds,
+    selectedDocSetIds,
+    onCcPairIdsChange,
+    onDocSetIdsChange,
+    t,
+  ]);
+
+  const agentSections: PopoverSection[] = useMemo(() => {
+    const q = agentSearch.toLowerCase();
+
+    const items = agents
+      .filter((a) => !q || a.name.toLowerCase().includes(q))
+      .map((a) => {
+        const isSelected = selectedAgentSet.has(a.id);
+        return {
+          key: `a-${a.id}`,
+          label: a.name,
+          disabled: isSelected,
+          onSelect: () =>
+            isSelected
+              ? onAgentIdsChange(selectedAgentIds.filter((id) => id !== a.id))
+              : onAgentIdsChange([...selectedAgentIds, a.id]),
+          render: (dimmed: boolean) => (
+            <LineItemButton
+              presentational
+              sizePreset="main-ui"
+              variant="section"
+              color={dimmed ? "muted" : undefined}
+              icon={(_props) => <AgentAvatar agent={a} size={16} />}
+              title={a.name}
+              titleMaxLines={1}
+              description={t("sharedResources.agent.description")}
+              descriptionMaxLines={1}
+              rightChildren={
+                !a.is_public || dimmed ? <SharedBadge /> : undefined
+              }
+            />
+          ),
+        };
+      });
+
+    return items.length > 0 ? [{ items }] : [];
+  }, [
+    agents,
+    agentSearch,
+    selectedAgentSet,
+    selectedAgentIds,
+    onAgentIdsChange,
+    t,
+  ]);
+
+  // --- Handlers ---
+
+  function removeConnector(id: number) {
+    onCcPairIdsChange(selectedCcPairIds.filter((cid) => cid !== id));
+  }
+
+  function removeDocSet(id: number) {
+    onDocSetIdsChange(selectedDocSetIds.filter((did) => did !== id));
+  }
+
+  function removeAgent(id: number) {
+    onAgentIdsChange(selectedAgentIds.filter((aid) => aid !== id));
+  }
+
+  const hasSelectedResources =
+    selectedPairs.length > 0 || selectedDocSets.length > 0;
+
+  return (
+    <SimpleCollapsible>
+      <SimpleCollapsible.Header
+        title={t("sharedResources.section.title")}
+        description={t("sharedResources.section.description")}
+      />
+      <SimpleCollapsible.Content>
+        <Card border="solid" rounding={4}>
+          <Section alignItems="start" height="fit">
+            <Section
+              gap={4}
+              height="auto"
+              alignItems="stretch"
+              justifyContent="start"
+              width="full"
+            >
+              {/* Connectors & Document Sets */}
+              <Section
+                gap={2}
+                height="auto"
+                alignItems="stretch"
+                justifyContent="start"
+              >
+                <Section
+                  gap={1}
+                  height="auto"
+                  alignItems="stretch"
+                  justifyContent="start"
+                >
+                  <Text mainUiAction text04>
+                    {t("sharedResources.connectors.label")}
+                  </Text>
+                  <ResourcePopover
+                    placeholder={t("sharedResources.connectors.placeholder")}
+                    searchValue={connectorSearch}
+                    onSearchChange={setConnectorSearch}
+                    sections={connectorDocSetSections}
+                  />
+                </Section>
+                {hasSelectedResources ? (
+                  <Section
+                    flexDirection="row"
+                    wrap
+                    gap={1}
+                    height="auto"
+                    alignItems="start"
+                    justifyContent="start"
+                  >
+                    {selectedPairs.map((pair) => (
+                      <ResourceContent
+                        key={`c-${pair.cc_pair_id}`}
+                        icon={getSourceMetadata(pair.connector.source).icon}
+                        title={
+                          pair.name ??
+                          t("sharedResources.connectorFallback.label", {
+                            id: pair.cc_pair_id,
+                          })
+                        }
+                        description={t("sharedResources.connector.description")}
+                        onRemove={() => removeConnector(pair.cc_pair_id)}
+                      />
+                    ))}
+                    {selectedDocSets.map((ds) => (
+                      <ResourceContent
+                        key={`d-${ds.id}`}
+                        icon={SvgFiles}
+                        title={ds.name}
+                        description={t(
+                          "sharedResources.documentSet.description"
+                        )}
+                        infoContent={
+                          <SourceIconStack sources={ds.cc_pair_summaries} />
+                        }
+                        onRemove={() => removeDocSet(ds.id)}
+                      />
+                    ))}
+                  </Section>
+                ) : (
+                  <Content
+                    icon={SvgEmpty}
+                    title={t("sharedResources.noConnectors.title")}
+                    description={t("sharedResources.noConnectors.description")}
+                    sizePreset="secondary"
+                    variant="section"
+                  />
+                )}
+              </Section>
+
+              <Divider paddingParallel={0} paddingPerpendicular={0} />
+
+              {/* Agents */}
+              <Section
+                gap={2}
+                height="auto"
+                alignItems="stretch"
+                justifyContent="start"
+              >
+                <Section
+                  gap={1}
+                  height="auto"
+                  alignItems="stretch"
+                  justifyContent="start"
+                >
+                  <Text mainUiAction text04>
+                    {t("sharedResources.agents.label")}
+                  </Text>
+                  <ResourcePopover
+                    placeholder={t("sharedResources.agents.placeholder")}
+                    searchValue={agentSearch}
+                    onSearchChange={setAgentSearch}
+                    sections={agentSections}
+                  />
+                </Section>
+                {selectedAgentObjects.length > 0 ? (
+                  <Section
+                    flexDirection="row"
+                    wrap
+                    gap={1}
+                    height="auto"
+                    alignItems="start"
+                    justifyContent="start"
+                  >
+                    {selectedAgentObjects.map((agent) => (
+                      <ResourceContent
+                        key={agent.id}
+                        leftContent={
+                          <div className="flex items-center justify-center shrink-0 size-5 p-0.5 rounded-04">
+                            <AgentAvatar agent={agent} size={16} />
+                          </div>
+                        }
+                        title={agent.name}
+                        description={t("sharedResources.agent.description")}
+                        onRemove={() => removeAgent(agent.id)}
+                      />
+                    ))}
+                  </Section>
+                ) : (
+                  <Content
+                    icon={SvgXOctagon}
+                    title={t("sharedResources.noAgents.title")}
+                    description={t("sharedResources.noAgents.description")}
+                    sizePreset="secondary"
+                    variant="section"
+                  />
+                )}
+              </Section>
+            </Section>
+          </Section>
+        </Card>
+      </SimpleCollapsible.Content>
+    </SimpleCollapsible>
+  );
+}
+
+export default SharedGroupResources;

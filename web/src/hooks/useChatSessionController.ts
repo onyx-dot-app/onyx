@@ -6,7 +6,9 @@ import {
   nameChatSession,
   processRawChatHistory,
   patchMessageToBeLatest,
+  resumeStream,
 } from "@/app/app/services/lib";
+import { Packet } from "@/app/app/services/streamingModels";
 import {
   getLatestMessageChain,
   setMessageAsLatest,
@@ -14,31 +16,37 @@ import {
 import {
   BackendChatSession,
   ChatSessionSharedStatus,
+  Message,
 } from "@/app/app/interfaces";
 import {
   SEARCH_PARAM_NAMES,
   shouldSubmitOnLoad,
 } from "@/app/app/services/searchParams";
-import { FilterManager } from "@/lib/hooks";
+
 import { OnyxDocument } from "@/lib/search/interfaces";
 import {
   useChatSessionStore,
   useCurrentMessageHistory,
 } from "@/app/app/stores/useChatSessionStore";
-import { useForcedTools } from "@/lib/hooks/useForcedTools";
-import { ProjectFile } from "@/app/app/projects/projectsService";
-import { getSessionProjectTokenCount } from "@/app/app/projects/projectsService";
-import { getProjectFilesForSession } from "@/app/app/projects/projectsService";
+import { useIncognito } from "@/providers/IncognitoProvider";
+import type { ProjectFile } from "@/lib/projects/types";
+import {
+  getSessionProjectTokenCount,
+  getProjectFilesForSession,
+} from "@/lib/projects/svc";
 import { AppInputBarHandle } from "@/sections/input/AppInputBar";
+import type { ErrorResponseBody } from "@/lib/fetcher";
+
+// Runs currently being re-attached; module-level so effect re-runs (incl.
+// strict mode) can't start a second tail for the same run.
+const resumingRuns = new Set<number>();
 
 interface UseChatSessionControllerProps {
   existingChatSessionId: string | null;
   searchParams: ReadonlyURLSearchParams;
-  filterManager: FilterManager;
   firstMessage?: string;
 
   // UI state setters
-  setSelectedAgentFromId: (agentId: number | null) => void;
   setSelectedDocuments: (documents: OnyxDocument[]) => void;
   setCurrentMessageFiles: (
     files: ProjectFile[] | ((prev: ProjectFile[]) => ProjectFile[])
@@ -69,9 +77,7 @@ export type SessionFetchError = {
 export default function useChatSessionController({
   existingChatSessionId,
   searchParams,
-  filterManager,
   firstMessage,
-  setSelectedAgentFromId,
   setSelectedDocuments,
   setCurrentMessageFiles,
   chatSessionIdRef,
@@ -115,7 +121,7 @@ export default function useChatSessionController({
   );
   const currentChatHistory = useCurrentMessageHistory();
   const chatSessions = useChatSessionStore((state) => state.sessions);
-  const { setForcedToolIds } = useForcedTools();
+  const { setIncognitoEnabled, setIncognitoSessionId } = useIncognito();
 
   // Fetch chat messages for the chat session
   useEffect(() => {
@@ -137,12 +143,11 @@ export default function useChatSessionController({
       setCurrentMessageFiles([]);
     }
 
-    // Only reset filters/selections when switching between existing sessions
+    // Only reset selections when switching between existing sessions. The
+    // search filters need no reset: they live on the chat's tool
+    // configuration, so the next chat reads its own.
     if (isSwitchingBetweenSessions) {
       setSelectedDocuments([]);
-      filterManager.setSelectedDocumentSets([]);
-      filterManager.setSelectedTags([]);
-      filterManager.setTimeRange(null);
 
       // Remove uploaded files
       setCurrentMessageFiles([]);
@@ -151,9 +156,6 @@ export default function useChatSessionController({
       // If we're creating a brand new chat, then don't need to scroll
       if (priorChatSessionId !== null) {
         setSelectedDocuments([]);
-
-        // Clear forced tool ids if and only if we're switching to a new chat session
-        setForcedToolIds([]);
       }
     }
 
@@ -164,8 +166,6 @@ export default function useChatSessionController({
         // Clear the current session in the store to show intro messages
         setCurrentSession(null);
 
-        // Reset the selected agent back to default
-        setSelectedAgentFromId(null);
         updateCurrentChatSessionSharedStatus(ChatSessionSharedStatus.Private);
 
         // If we're supposed to submit on initial load, then do that here
@@ -209,7 +209,7 @@ export default function useChatSessionController({
         setIsFetchingChatMessages(existingChatSessionId, false);
         let detail = "An unexpected error occurred.";
         try {
-          const errorBody = await response.json();
+          const errorBody: ErrorResponseBody = await response.json();
           detail = errorBody.detail || detail;
         } catch {
           // ignore parse errors
@@ -224,9 +224,14 @@ export default function useChatSessionController({
         return;
       }
 
-      const session = await response.json();
-      const chatSession = session as BackendChatSession;
-      setSelectedAgentFromId(chatSession.persona_id);
+      const session: BackendChatSession = await response.json();
+      const chatSession = session;
+      // Restore the incognito UI state on reload of a live incognito session.
+      // The id must come back too, or a later upload would be sent with none
+      // and land as an ordinary indexed file.
+      const isIncognito = chatSession.incognito ?? false;
+      setIncognitoEnabled(isIncognito);
+      setIncognitoSessionId(isIncognito ? chatSession.chat_session_id : null);
 
       // Ensure the current session is set to the actual session ID from the response
       setCurrentSession(chatSession.chat_session_id);
@@ -262,6 +267,122 @@ export default function useChatSessionController({
       }
 
       setIsFetchingChatMessages(chatSession.chat_session_id, false);
+
+      // Re-attach to an in-flight run: replay its buffered stream and tail it
+      // live instead of leaving a stale placeholder. Single-model only — a
+      // multi-model run_id is the user message, not an assistant node, so it
+      // fails the node-type check and keeps the refresh-after-completion
+      // behavior.
+      async function resumeInFlightRun(
+        sessionId: string,
+        runId: number,
+        messageMap: Map<number, Message>
+      ) {
+        const node = messageMap.get(runId);
+        if (!node || resumingRuns.has(runId)) {
+          return;
+        }
+        // Added and deleted in this function only, so an entry can never
+        // outlive its tail.
+        resumingRuns.add(runId);
+        // The reserved row's placeholder text would render above the live
+        // timeline.
+        node.message = "";
+        const accumulated: Packet[] = [];
+        let lastFlush = 0;
+        let trailingFlush: ReturnType<typeof setTimeout> | null = null;
+        // updateSessionAndMessageTree re-points currentSessionId at this
+        // session; once the user navigates elsewhere, any further store write
+        // from this tail would hijack their new session's sends.
+        const stillCurrent = () =>
+          useChatSessionStore.getState().currentSessionId === sessionId;
+        const flush = () => {
+          if (!stillCurrent()) {
+            return;
+          }
+          node.packets = [...accumulated];
+          // AgentMessage's memo compares packetCount, not the packets array.
+          node.packetCount = accumulated.length;
+          updateSessionAndMessageTree(sessionId, new Map(messageMap));
+        };
+        // handleSSEStream only releases the connection via this signal —
+        // bailing out of the loop alone leaves the SSE response open.
+        const abortController = new AbortController();
+        try {
+          for await (const rawPacket of resumeStream(
+            sessionId,
+            0,
+            abortController.signal
+          )) {
+            if (!stillCurrent()) {
+              return;
+            }
+            if (!Object.hasOwn(rawPacket, "obj")) {
+              continue;
+            }
+            const packet = rawPacket as Packet;
+            // Heartbeats are liveness ticks for the stillCurrent check above,
+            // not run state — never render them.
+            if (packet.obj.type === "chat_heartbeat") {
+              continue;
+            }
+            accumulated.push(packet);
+            const now = Date.now();
+            if (now - lastFlush >= 100) {
+              lastFlush = now;
+              flush();
+            } else if (trailingFlush === null) {
+              // A burst's last packets would otherwise wait for the NEXT
+              // packet to render — during quiet phases that's minutes.
+              trailingFlush = setTimeout(() => {
+                trailingFlush = null;
+                lastFlush = Date.now();
+                flush();
+              }, 120);
+            }
+          }
+        } catch (error) {
+          console.error("Failed to resume in-flight run", { runId, error });
+        } finally {
+          abortController.abort();
+          if (trailingFlush !== null) {
+            clearTimeout(trailingFlush);
+          }
+          resumingRuns.delete(runId);
+          if (stillCurrent()) {
+            flush();
+            // Settle final state (message text, citations, documents) from
+            // the persisted session.
+            try {
+              const settledResponse = await fetch(
+                `/api/chat/get-chat-session/${sessionId}`
+              );
+              if (settledResponse.ok && stillCurrent()) {
+                const settled: BackendChatSession =
+                  await settledResponse.json();
+                updateSessionAndMessageTree(
+                  sessionId,
+                  processRawChatHistory(settled.messages, settled.packets)
+                );
+              }
+            } catch (error) {
+              console.error("Post-resume session refresh failed", { error });
+            }
+          }
+        }
+      }
+
+      const currentRun = chatSession.current_run;
+      if (
+        currentRun &&
+        newMessageMap.get(currentRun.run_id)?.type === "assistant"
+      ) {
+        void resumeInFlightRun(
+          chatSession.chat_session_id,
+          currentRun.run_id,
+          newMessageMap
+        );
+      }
 
       // Fetch token count for this chat session's project (if any)
       try {
@@ -359,7 +480,7 @@ export default function useChatSessionController({
     }
   }, [
     existingChatSessionId,
-    searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID),
+    searchParams?.get(SEARCH_PARAM_NAMES.AGENT_ID),
     // Note: We're intentionally not including all dependencies to avoid infinite loops
     // This effect should only run when existingChatSessionId or persona ID changes
   ]);

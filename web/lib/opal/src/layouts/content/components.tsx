@@ -15,6 +15,7 @@ import {
 } from "@opal/layouts/content/ContentLg";
 import {
   ContentMd,
+  type ContentMdEditHandle,
   type ContentMdProps,
 } from "@opal/layouts/content/ContentMd";
 import type { TagProps } from "@opal/components";
@@ -45,8 +46,24 @@ interface ContentBaseProps {
   /** Optional description below the title. */
   description?: string | RichStr;
 
+  /** Clamp the title to N lines with ellipsis. Omit to wrap freely. */
+  titleMaxLines?: number;
+
+  /**
+   * Strike the title through — a presentational state (e.g. an option that is
+   * switched off), not content, so callers keep passing a plain string.
+   */
+  strikethrough?: boolean;
+
+  /** Clamp the description to N lines. Maps to Text's maxLines prop. */
+  descriptionMaxLines?: number;
+
   /** Enable inline editing of the title. */
   editable?: boolean;
+
+  /** Handle for starting a title edit from an external control. Setting it
+   *  hides the built-in pencil. */
+  editHandle?: React.Ref<ContentMdEditHandle>;
 
   /** Called when the user commits an edit. */
   onTitleChange?: (newTitle: string) => void;
@@ -110,6 +127,8 @@ type MdContentProps = ContentBaseProps & {
   auxIcon?: "info-gray" | "info-blue" | "warning" | "error";
   /** Tag rendered beside the title. */
   tag?: TagProps;
+  /** Slot for a control rendered to the right (desktop) / between title and description (mobile). See ContentMd. */
+  rightChildren?: React.ReactNode;
 };
 
 /** ContentSm does not support descriptions or inline editing. */
@@ -121,6 +140,8 @@ type SmContentProps = Omit<
   variant: "body";
   /** Layout orientation. Default: `"inline"`. */
   orientation?: ContentSmOrientation;
+  /** ARIA role forwarded to the title text element. */
+  role?: string;
 };
 
 type ContentProps =

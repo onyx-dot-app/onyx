@@ -6,9 +6,6 @@ concurrency:
 on:
   merge_group:
   pull_request:
-    branches:
-      - main
-      - "release/**"
   push:
     tags:
       - "v*.*.*"
@@ -20,15 +17,19 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # paths-filter needs pull-requests:read to list PR files on private repos (no-op on public).
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       python: ${{ steps.filter.outputs.python || 'true' }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         with:
           persist-credentials: false
-      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # ratchet:dorny/paths-filter@v3
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
         id: filter
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         with:
@@ -52,12 +53,12 @@ jobs:
         "run-id=${{ github.run_id }}-mypy-check",
         "extras=s3-cache",
       ]
-    timeout-minutes: 15
+    timeout-minutes: 8
 
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -74,3 +75,17 @@ jobs:
         env:
           TERM: xterm-256color
         run: ty check --output-format github
+
+  # Keeps the pull request in the merge queue while RunsOn reruns mypy-check
+  # after an EC2 Spot interruption. The gate fails when mypy-check fails for any
+  # other reason. Require "mypy-check-gate / pass" in the main ruleset, not
+  # "mypy-check".
+  mypy-check-gate:
+    if: ${{ always() && needs.changes.outputs.python == 'true' }}
+    needs: [changes, mypy-check]
+    permissions:
+      actions: read
+      checks: read
+    uses: runs-on/spot-retry-gate/.github/workflows/merge-queue.yml@451eea7c3d2c58d14a1f80f0bbb99eaa347b9471 # ratchet:runs-on/spot-retry-gate/.github/workflows/merge-queue.yml@v1.0.0
+    with:
+      job_results: ${{ toJSON(needs) }}

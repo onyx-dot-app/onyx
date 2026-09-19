@@ -1,20 +1,18 @@
 @import "@onyx-ai/opal/root.css";
-@import "./css/attachment-button.css" layer(base);
-@import "./css/button.css" layer(base);
 @import "./css/content-editable.css" layer(base);
 @import "./css/card.css" layer(base);
-@import "./css/code.css" layer(base);
+@import "./css/comet.css" layer(base);
 @import "./css/color-swatch.css" layer(base);
 @import "./css/divider.css" layer(base);
 @import "./css/general-layouts.css" layer(base);
 @import "./css/inputs.css" layer(base);
 @import "./css/knowledge-table.css" layer(base);
 @import "./css/line-item.css" layer(base);
-@import "./css/sizes.css" layer(base);
 @import "./css/square-button.css" layer(base);
-@import "./css/switch.css" layer(base);
 @import "./css/z-index.css" layer(base);
-
+/* Imported unlayered (and gated on html.onyx-desktop) so it overrides the
+   frozen desktop-wrapper shim regardless of source order. */
+@import "./css/desktop-titlebar.css";
 @config '../../tailwind.config.js';
 
 /*
@@ -39,23 +37,6 @@
   scrollbar-width: none;
 }
 
-@utility shadow-00 {
-  /* SHADOWS */
-  box-shadow: 0px 0px 2px 1px var(--shadow-01);
-}
-
-@utility shadow-01 {
-  box-shadow:
-    0px 2px 12px 0px var(--shadow-02),
-    0px 0px 4px 1px var(--shadow-02);
-}
-
-@utility shadow-02 {
-  box-shadow:
-    0px 2px 24px 0px var(--shadow-03),
-    0px 0px 12px 1px var(--shadow-03);
-}
-
 @utility radial-00 {
   /* RADIAL GRADIENTS */
   background: radial-gradient(
@@ -63,22 +44,6 @@
     var(--background-tint-00) 0%,
     var(--background-tint-01) 100%
   );
-}
-
-@utility dbg-red {
-  /* DEBUGGING UTILITIES
-  If you ever want to highlight a component for debugging purposes, just type in `className="dbg-red ..."`, and a red box should appear around it.
-  This helps with placing things properly on the screen and seeing how they look during active development.
-  */
-  border: 1px solid red;
-}
-
-@utility dbg-blue {
-  border: 1px solid blue;
-}
-
-@utility dbg-green {
-  border: 1px solid green;
 }
 
 @layer base {
@@ -96,6 +61,46 @@
     display: flex;
     flex-direction: column;
     align-items: start;
+  }
+
+  /* CJK system-font tail for the app font variables (composed into
+     --font-hanken-grotesk / --font-dm-mono in src/app/layout.tsx). Font
+     selection is per-character and first-match-wins, and macOS/Windows
+     preinstall the fonts for every CJK language — so the active locale's
+     fonts must come first or shared Han codepoints render with another
+     language's glyph variants (e.g. Japanese forms on a Chinese UI). The
+     default order serves ja and non-CJK locales. */
+  :root {
+    --font-cjk-sans:
+      "Hiragino Sans", "Yu Gothic UI", "PingFang SC", "Microsoft YaHei",
+      "Apple SD Gothic Neo", "Malgun Gothic";
+  }
+
+  :root:lang(zh) {
+    --font-cjk-sans:
+      "PingFang SC", "Microsoft YaHei", "Hiragino Sans", "Yu Gothic UI",
+      "Apple SD Gothic Neo", "Malgun Gothic";
+  }
+
+  :root:lang(ko) {
+    --font-cjk-sans:
+      "Apple SD Gothic Neo", "Malgun Gothic", "PingFang SC", "Microsoft YaHei",
+      "Hiragino Sans", "Yu Gothic UI";
+  }
+
+  /* CJK line breaking. The server layout sets <html lang> per locale, so
+     :lang() matches the whole document in that UI language.
+     - ja/zh: no word spaces; `strict` applies full kinsoku rules (no line
+       starting with a small kana or closing bracket, etc.).
+     - ko: spaces separate words; `keep-all` breaks at spaces like Latin
+       instead of inside words. */
+  :lang(ja),
+  :lang(zh) {
+    line-break: strict;
+  }
+
+  :lang(ko) {
+    word-break: keep-all;
   }
 }
 
@@ -132,14 +137,19 @@
 
   .prose ol {
     list-style-type: decimal;
-    padding-left: 1.5rem;
-    margin-left: 0;
+    padding-inline-start: 1.5rem;
+    margin-inline-start: 0;
+  }
+
+  /* Arabic reads Eastern Arabic-Indic digits, list markers included. */
+  :lang(ar) .prose ol {
+    list-style-type: arabic-indic;
   }
 
   .prose ul {
     list-style-type: disc;
-    padding-left: 1.5rem;
-    margin-left: 0;
+    padding-inline-start: 1.5rem;
+    margin-inline-start: 0;
   }
 
   .prose li {
@@ -188,18 +198,41 @@
     scrollbar-width: none;
   }
 }
+
 @layer base {
   * {
     scrollbar-width: auto;
   }
 }
 
+/* DBG */
+
+@utility dbg-red {
+  /* DEBUGGING UTILITIES
+  If you ever want to highlight a component for debugging purposes, just type in `className="dbg-red ..."`, and a red box should appear around it.
+  This helps with placing things properly on the screen and seeing how they look during active development.
+  */
+  border: 1px solid red;
+}
+
+@utility dbg-blue {
+  border: 1px solid blue;
+}
+
+@utility dbg-green {
+  border: 1px solid green;
+}
+
 /* TEXTAREA */
 
-textarea {
-  resize: vertical;
-  scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+/* In `base` so utility classes (e.g. `resize-none`) can override; an
+   unlayered rule would beat every layered Tailwind utility. */
+@layer base {
+  textarea {
+    resize: vertical;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  }
 }
 
 .nextjs-portal {
@@ -224,6 +257,71 @@ textarea {
   /* Preserves whitespace and wraps text */
 }
 
+/* Text shimmer for streaming status lines (see ShimmerText.tsx). The base
+   text renders normally; an inert clone above it is masked to its own glyphs,
+   and a highlight bar slides across the clone. Only `translate` animates, so
+   the effect composites on the GPU instead of repainting every frame. */
+.shimmer-text {
+  position: relative;
+  color: var(--shimmer-base);
+}
+
+.shimmer-text-overlay {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  color: transparent;
+  contain: strict;
+  pointer-events: none;
+  mask-image: linear-gradient(#fff, #fff);
+  -webkit-mask-clip: text;
+}
+
+.shimmer-text-overlay::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(
+    90deg,
+    transparent 35%,
+    var(--shimmer-highlight) 50%,
+    transparent 65%
+  );
+  will-change: transform;
+  animation: shimmer-slide 1s ease-out infinite;
+}
+
+@keyframes shimmer-slide {
+  from {
+    translate: -100% 0;
+  }
+  to {
+    translate: 100% 0;
+  }
+}
+
+/* Browsers without text mask clipping (Firefox) fall back to the animated
+   background gradient. It repaints each frame but looks the same. */
+@supports not (-webkit-mask-clip: text) {
+  .shimmer-text {
+    animation: shimmer 1s ease-out infinite;
+    background-size: 300% 100%;
+    background-image: linear-gradient(
+      90deg,
+      var(--shimmer-base) 35%,
+      var(--shimmer-highlight) 50%,
+      var(--shimmer-base) 65%
+    );
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+  }
+
+  .shimmer-text-overlay {
+    display: none;
+  }
+}
+
 @keyframes shimmer {
   0% {
     background-position: 100% 0;
@@ -233,18 +331,18 @@ textarea {
   }
 }
 
-.shimmer-text {
-  animation: shimmer 1s ease-out infinite;
-  background-size: 300% 100%;
-  background-image: linear-gradient(
-    90deg,
-    var(--shimmer-base) 35%,
-    var(--shimmer-highlight) 50%,
-    var(--shimmer-base) 65%
-  );
-  background-clip: text;
-  -webkit-background-clip: text;
-  color: transparent;
+@media (prefers-reduced-motion: reduce) {
+  .shimmer-text {
+    animation: none;
+    background-image: none;
+    background-clip: border-box;
+    -webkit-background-clip: border-box;
+    color: var(--shimmer-base);
+  }
+
+  .shimmer-text-overlay {
+    display: none;
+  }
 }
 
 .collapsible {

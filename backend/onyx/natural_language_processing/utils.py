@@ -1,10 +1,8 @@
 import os
-from abc import ABC
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from copy import copy
 
-from tokenizers import Encoding
-from tokenizers import Tokenizer
+from tokenizers import Encoding, Tokenizer
 
 from onyx.configs.model_configs import DOCUMENT_ENCODER_MODEL
 from onyx.context.search.models import InferenceChunk
@@ -77,7 +75,7 @@ class HuggingFaceTokenizer(BaseTokenizer):
         """
         Encode a string using the HuggingFaceTokenizer, but if it fails,
         encode the string as ASCII and decode it back to a string. This helps
-        in cases where the string has weird characters like \udeb4.
+        in cases where the string has weird characters like U+DEB4.
         """
         try:
             return self.encoder.encode(string, add_special_tokens=False)

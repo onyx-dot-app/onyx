@@ -104,15 +104,21 @@ test.describe("Appearance Theme Settings @exclusive", () => {
       }
     }
 
-    // Save reset
+    // Save reset. Arm the PUT waiter *before* clicking — a post-click
+    // waitForResponse can miss a fast response and then hang until the test
+    // timeout (the whole point of saveAndWaitForPut in AppearanceThemePage).
+    // This is best-effort cleanup, so bound it and swallow a missed/absent PUT
+    // rather than letting afterEach blow the 100s test budget.
     const saveButton = page.getByRole("button", { name: "Apply Changes" });
     if (await saveButton.isEnabled()) {
-      await saveButton.click();
-      await page.waitForResponse(
+      const putPromise = page.waitForResponse(
         (r) =>
           r.url().includes("/api/admin/enterprise-settings") &&
-          r.request().method() === "PUT"
+          r.request().method() === "PUT",
+        { timeout: 10_000 }
       );
+      await saveButton.click();
+      await putPromise.catch(() => {});
     }
 
     // Clear localStorage

@@ -6,9 +6,39 @@ import type {
 } from "@/lib/languageModels/types";
 import { LlmDescriptor } from "@/lib/hooks";
 
+/**
+ * Find the provider that owns a given model configuration.
+ *
+ * `llm_provider.name` has no unique constraint, so two providers can share a
+ * display name. Matching a provider by name and then posting its id sends the
+ * wrong `provider_id` whenever the first name match is not the row that owns
+ * the model. `model_configuration.id` is a primary key, so it always is.
+ */
+export function findProviderOwningModelConfig<
+  T extends { id: number; model_configurations: ModelConfiguration[] },
+>(
+  llmProviders: T[] | undefined,
+  modelConfigurationId: number | null | undefined
+): T | undefined {
+  if (modelConfigurationId == null) return undefined;
+  return llmProviders?.find((provider) =>
+    provider.model_configurations.some((mc) => mc.id === modelConfigurationId)
+  );
+}
+
+export function hasVisibleLLMModel(
+  llmProviders: LLMProviderDescriptor[] | undefined
+): boolean {
+  return (
+    llmProviders?.some((provider) =>
+      provider.model_configurations.some((model) => model.is_visible)
+    ) ?? false
+  );
+}
+
 export function getFinalLLM(
   llmProviders: LLMProviderDescriptor[],
-  persona: MinimalAgent | null,
+  agent: MinimalAgent | null,
   currentLlm: LlmDescriptor | null,
   defaultText?: DefaultModel | null
 ): [string, string] {
@@ -24,12 +54,12 @@ export function getFinalLLM(
     defaultProvider?.model_configurations.find((m) => m.is_visible)?.name ||
     "";
 
-  if (persona) {
-    if (persona.default_model_configuration_id != null) {
+  if (agent) {
+    if (agent.default_model_configuration_id != null) {
       // Canonical path: resolve provider and model from the model config ID.
       for (const p of llmProviders) {
         const mc = p.model_configurations.find(
-          (m) => m.id === persona.default_model_configuration_id
+          (m) => m.id === agent.default_model_configuration_id
         );
         if (mc) {
           provider = p.provider;
@@ -48,21 +78,22 @@ export function getFinalLLM(
   return [provider, model];
 }
 
-export function getProviderOverrideForPersona(
-  liveAgent: MinimalAgent,
+export function getProviderOverrideForAgent(
+  activeAgent: MinimalAgent,
   llmProviders: LLMProviderDescriptor[]
 ): LlmDescriptor | null {
   // Canonical path: resolve from model configuration ID.
-  if (liveAgent.default_model_configuration_id != null) {
+  if (activeAgent.default_model_configuration_id != null) {
     for (const provider of llmProviders) {
       const mc = provider.model_configurations.find(
-        (m) => m.id === liveAgent.default_model_configuration_id
+        (m) => m.id === activeAgent.default_model_configuration_id
       );
       if (mc) {
         return {
           name: provider.name ?? "",
           provider: provider.provider,
           modelName: mc.name,
+          modelConfigurationId: mc.id,
         };
       }
     }
@@ -74,21 +105,36 @@ export function getProviderOverrideForPersona(
 export const structureValue = (
   name: string,
   provider: string,
-  modelName: string
+  modelName: string,
+  modelConfigurationId?: number | null
 ) => {
-  return `${name}__${provider}__${modelName}`;
+  const base = `${name}__${provider}__${modelName}`;
+  // "mc:" marks the segment as an id so legacy model names that happen to
+  // contain "__<digits>" can never be misread as one.
+  return modelConfigurationId != null
+    ? `${base}__mc:${modelConfigurationId}`
+    : base;
 };
 
 export const parseLlmDescriptor = (value: string): LlmDescriptor => {
-  const [displayName, provider, modelName] = value.split("__");
+  const parts = value.split("__");
+  const displayName = parts[0];
   if (displayName === undefined) {
     return { name: "Unknown", provider: "", modelName: "" };
   }
 
+  // The id is always the marked last segment; everything between the provider
+  // and it belongs to the model name, which may itself contain "__".
+  const last = parts[parts.length - 1];
+  const hasId =
+    parts.length >= 4 && last !== undefined && /^mc:\d+$/.test(last);
+  const modelName = parts.slice(2, hasId ? -1 : undefined).join("__");
+
   return {
     name: displayName,
-    provider: provider ?? "",
-    modelName: modelName ?? "",
+    provider: parts[1] ?? "",
+    modelName,
+    modelConfigurationId: hasId ? parseInt(last!.slice(3), 10) : undefined,
   };
 };
 
@@ -137,6 +183,17 @@ export const modelSupportsImageInput = (
   return modelConfiguration?.supports_image_input || false;
 };
 
+/** Display name for form-state model rows, which do not reliably carry
+ *  effectiveDisplayName. Everything else should read that field instead. */
+export function modelDisplayName(
+  model: Pick<
+    ModelConfiguration,
+    "name" | "display_name" | "custom_display_name"
+  >
+): string {
+  return model.custom_display_name || model.display_name || model.name;
+}
+
 export function getDisplayName(
   agent: MinimalAgent,
   llmProviders: LLMProviderDescriptor[]
@@ -146,7 +203,7 @@ export function getDisplayName(
     const mc = p.model_configurations.find(
       (m) => m.id === agent.default_model_configuration_id
     );
-    if (mc) return mc.display_name;
+    if (mc) return mc.effectiveDisplayName;
   }
   return undefined;
 }

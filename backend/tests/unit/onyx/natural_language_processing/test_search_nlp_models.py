@@ -1,10 +1,7 @@
 from collections.abc import AsyncGenerator
 from threading import Lock
-from typing import Any
-from typing import cast
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from typing import Any, cast
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import AsyncClient
@@ -12,12 +9,13 @@ from litellm.exceptions import RateLimitError
 from tenacity import wait_none
 
 from onyx.llm.constants import LlmProviderNames
-from onyx.natural_language_processing.search_nlp_models import CloudEmbedding
-from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
-from shared_configs.enums import EmbeddingProvider
-from shared_configs.enums import EmbedTextType
-from shared_configs.model_server_models import EmbedRequest
-from shared_configs.model_server_models import EmbedResponse
+from onyx.natural_language_processing.search_nlp_models import (
+    CloudEmbedding,
+    EmbeddingModel,
+    clean_model_name,
+)
+from shared_configs.enums import EmbeddingProvider, EmbedTextType
+from shared_configs.model_server_models import EmbedRequest, EmbedResponse
 
 
 @pytest.fixture
@@ -33,6 +31,15 @@ async def mock_http_client() -> AsyncGenerator[AsyncMock, None]:
 @pytest.fixture
 def sample_embeddings() -> list[list[float]]:
     return [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
+
+
+def test_clean_model_name_lowercases_names_for_opensearch_index() -> None:
+    cleaned_model_name = clean_model_name("Qwen3-VL-Embedding-8B")
+
+    assert cleaned_model_name == "qwen3_vl_embedding_8b"
+    assert (
+        f"danswer_chunk_{cleaned_model_name}" == "danswer_chunk_qwen3_vl_embedding_8b"
+    )
 
 
 @pytest.mark.asyncio
@@ -127,6 +134,10 @@ async def test_vertex_embed_keeps_task_type_for_existing_models(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
+    "model_name",
+    ["gemini-embedding-2", "gemini-embedding-2-preview"],
+)
+@pytest.mark.parametrize(
     ("embedding_type", "expected_text"),
     [
         ("RETRIEVAL_QUERY", "task: search result | query: hello world"),
@@ -134,6 +145,7 @@ async def test_vertex_embed_keeps_task_type_for_existing_models(
     ],
 )
 async def test_vertex_embed_uses_instruction_prefix_for_gemini_embedding_2(
+    model_name: str,
     embedding_type: str,
     expected_text: str,
     sample_embeddings: list[list[float]],
@@ -159,7 +171,7 @@ async def test_vertex_embed_uses_instruction_prefix_for_gemini_embedding_2(
             try:
                 result = await embedding._embed_vertex(
                     ["hello world"],
-                    "gemini-embedding-2-preview",
+                    model_name,
                     embedding_type,
                     None,
                 )

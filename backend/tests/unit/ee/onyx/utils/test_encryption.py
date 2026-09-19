@@ -8,11 +8,13 @@ from unittest.mock import patch
 
 import pytest
 
-from ee.onyx.utils.encryption import _decrypt_bytes
-from ee.onyx.utils.encryption import _encrypt_string
-from ee.onyx.utils.encryption import _get_trimmed_key
-from ee.onyx.utils.encryption import decrypt_bytes_to_string
-from ee.onyx.utils.encryption import encrypt_string_to_bytes
+from ee.onyx.utils.encryption import (
+    _decrypt_bytes,
+    _encrypt_string,
+    _get_trimmed_key,
+    decrypt_bytes_to_string,
+    encrypt_string_to_bytes,
+)
 
 EE_MODULE = "ee.onyx.utils.encryption"
 

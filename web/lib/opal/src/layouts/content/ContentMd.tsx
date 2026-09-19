@@ -10,7 +10,8 @@ import SvgXOctagon from "@opal/icons/x-octagon";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState, useImperativeHandle } from "react";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -39,6 +40,10 @@ interface ContentMdPresetConfig {
   descriptionIndent: string;
 }
 
+export interface ContentMdEditHandle {
+  startEditing: () => void;
+}
+
 interface ContentMdProps {
   /** Optional icon component. */
   icon?: IconFunctionComponent;
@@ -49,8 +54,22 @@ interface ContentMdProps {
   /** Optional description text below the title. */
   description?: string | RichStr;
 
+  /**
+   * Slot for a control/action (e.g. an input) rendered to the right of the
+   * title and description on desktop, and stacked between them on narrow
+   * viewports.
+   */
+  rightChildren?: React.ReactNode;
+
+  /** Clamp the description to N lines. Maps to Text's maxLines prop. */
+  descriptionMaxLines?: number;
+
   /** Enable inline editing of the title. */
   editable?: boolean;
+
+  /** Handle for starting a title edit from an external control. Setting it
+   *  hides the built-in pencil. */
+  editHandle?: React.Ref<ContentMdEditHandle>;
 
   /** Called when the user commits an edit. */
   onTitleChange?: (newTitle: string) => void;
@@ -66,6 +85,12 @@ interface ContentMdProps {
 
   /** Tag rendered beside the title. */
   tag?: TagProps;
+
+  /** Clamp the title to N lines with ellipsis. Omit to wrap freely. */
+  titleMaxLines?: number;
+
+  /** Strike the title through, for a row whose option is switched off. */
+  strikethrough?: boolean;
 
   /** Size preset. Default: `"main-ui"`. */
   sizePreset?: ContentMdSizePreset;
@@ -129,23 +154,41 @@ function ContentMd({
   icon: Icon,
   title,
   description,
+  rightChildren,
+  descriptionMaxLines,
   editable,
   onTitleChange,
   suffix,
   auxIcon,
   tag,
+  titleMaxLines,
+  strikethrough,
   sizePreset = "main-ui",
   ref,
+  editHandle,
 }: ContentMdProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(toPlainString(title));
+  const strings = useOpalStrings();
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Move focus to the edit input as soon as editing starts.
+  useEffect(() => {
+    if (editing) inputRef.current?.focus();
+  }, [editing]);
 
   const config = CONTENT_MD_PRESETS[sizePreset];
 
   function startEditing() {
     setEditValue(toPlainString(title));
     setEditing(true);
+  }
+  useImperativeHandle(editHandle, () => ({ startEditing }), [title]);
+
+  // Starting an edit must not double as a click on the parent row.
+  function handleTitleClick(e: React.MouseEvent) {
+    e.stopPropagation();
+    startEditing();
   }
 
   function commit() {
@@ -155,7 +198,19 @@ function ContentMd({
   }
 
   return (
-    <div ref={ref} className="opal-content-md" data-opal-content>
+    <div
+      ref={ref}
+      className="opal-content-md"
+      data-opal-content
+      data-stacked={rightChildren ? true : undefined}
+      style={
+        rightChildren && Icon
+          ? ({
+              "--opal-content-md-desc-indent": config.descriptionIndent,
+            } as React.CSSProperties)
+          : undefined
+      }
+    >
       <div
         className="opal-content-md-header"
         data-editing={editing || undefined}
@@ -193,7 +248,6 @@ function ContentMd({
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
                 size={1}
-                autoFocus
                 onFocus={(e) => e.currentTarget.select()}
                 onBlur={commit}
                 onKeyDown={(e) => {
@@ -210,18 +264,21 @@ function ContentMd({
             <Text
               font={config.titleFont}
               color="inherit"
-              maxLines={1}
+              maxLines={titleMaxLines}
+              strikethrough={strikethrough}
               title={toPlainString(title)}
-              onClick={editable ? startEditing : undefined}
+              onClick={editable ? handleTitleClick : undefined}
             >
               {title}
             </Text>
           )}
 
           {suffix && (
-            <Text font={config.optionalFont} color="text-03">
-              {suffix === "optional" ? "(Optional)" : suffix}
-            </Text>
+            <span className="opal-content-md-suffix">
+              <Text font={config.optionalFont} color="inherit">
+                {suffix === "optional" ? "(Optional)" : suffix}
+              </Text>
+            </span>
           )}
 
           {auxIcon &&
@@ -245,7 +302,7 @@ function ContentMd({
 
           {tag && <Tag {...tag} />}
 
-          {editable && !editing && (
+          {editable && !editing && editHandle == null && (
             <div
               className={cn(
                 "opal-content-md-edit-button",
@@ -256,7 +313,7 @@ function ContentMd({
                 icon={SvgEdit}
                 prominence="internal"
                 size={config.editButtonSize}
-                tooltip="Edit"
+                tooltip={strings.edit}
                 tooltipSide="right"
                 onClick={startEditing}
               />
@@ -265,12 +322,25 @@ function ContentMd({
         </div>
       </div>
 
+      {rightChildren && (
+        <div className="opal-content-md-right-children">{rightChildren}</div>
+      )}
+
       {description && toPlainString(description) && (
         <div
           className="opal-content-md-description"
-          style={Icon ? { paddingLeft: config.descriptionIndent } : undefined}
+          style={
+            Icon && !rightChildren
+              ? { paddingLeft: config.descriptionIndent }
+              : undefined
+          }
         >
-          <Text font="secondary-body" color="text-03" as="p">
+          <Text
+            font="secondary-body"
+            color="inherit"
+            as="p"
+            maxLines={descriptionMaxLines}
+          >
             {description}
           </Text>
         </div>

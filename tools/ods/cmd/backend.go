@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/portutil"
 )
 
 // NewBackendCommand creates the parent "backend" command with subcommands for
@@ -64,7 +64,9 @@ Examples:
   ods backend api --port 9090
   ods backend api --no-ee`,
 		Run: func(cmd *cobra.Command, args []string) {
-			runBackendService("api", "onyx.main:app", port, opts)
+			if err := runBackendService("api", "onyx.main:app", port, opts); err != nil {
+				exitBackendService(err)
+			}
 		},
 	}
 
@@ -85,7 +87,9 @@ Examples:
   ods backend model_server
   ods backend model_server --port 9001`,
 		Run: func(cmd *cobra.Command, args []string) {
-			runBackendService("model_server", "model_server.main:app", port, opts)
+			if err := runBackendService("model_server", "model_server.main:app", port, opts); err != nil {
+				exitBackendService(err)
+			}
 		},
 	}
 
@@ -94,59 +98,53 @@ Examples:
 	return cmd
 }
 
-func isPortAvailable(port int) bool {
-	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
-	if err != nil {
-		return false
-	}
-	_ = ln.Close()
-	return true
-}
-
-func getProcessOnPort(port int) string {
-	out, err := exec.Command("lsof", "-i", fmt.Sprintf(":%d", port), "-t").Output()
-	if err != nil || len(strings.TrimSpace(string(out))) == 0 {
-		return "an unknown process"
-	}
-	pid := strings.Split(strings.TrimSpace(string(out)), "\n")[0]
-	nameOut, err := exec.Command("ps", "-p", pid, "-o", "comm=").Output()
-	if err != nil || len(strings.TrimSpace(string(nameOut))) == 0 {
-		return fmt.Sprintf("process (PID %s)", pid)
-	}
-	return fmt.Sprintf("%s (PID %s)", strings.TrimSpace(string(nameOut)), pid)
-}
-
-func resolvePort(port string) string {
+func resolvePort(port string) (string, error) {
 	portNum, err := strconv.Atoi(port)
 	if err != nil {
-		log.Fatalf("Invalid port %q: %v", port, err)
+		return "", fatalErrorf("Invalid port %q: %v", port, err)
 	}
-	if isPortAvailable(portNum) {
-		return port
+	resolved, err := portutil.FindAvailable(portNum, 65535-portNum, nil)
+	if err != nil {
+		return "", fatalErrorf("No available ports found starting from %d", portNum)
 	}
-	proc := getProcessOnPort(portNum)
-	candidate := portNum + 1
-	for candidate <= 65535 {
-		if isPortAvailable(candidate) {
-			log.Warnf("⚠ Port %d is in use by %s, using available port %d instead.", portNum, proc, candidate)
-			return strconv.Itoa(candidate)
-		}
-		candidate++
-	}
-	log.Fatalf("No available ports found starting from %d", portNum)
-	return port
+	return strconv.Itoa(resolved), nil
 }
 
-func runBackendService(name, module, port string, opts *BackendOptions) {
+// exitBackendService ends the process after runBackendService fails. A service
+// that ran and exited passes its exit code through, so the stderr it already
+// printed is not repeated.
+func exitBackendService(err error) {
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		if code := exitErr.ExitCode(); code != -1 {
+			os.Exit(code)
+		}
+	}
+	log.Fatal(err)
+}
+
+// runBackendService runs the service with uv. Only the service's own failure
+// wraps its *exec.ExitError. Setup errors format theirs with %v, so a failing
+// git call is logged rather than passed through as an exit code.
+func runBackendService(name, module, port string, opts *BackendOptions) error {
 	root, err := paths.GitRoot()
 	if err != nil {
-		log.Fatalf("Failed to find git root: %v", err)
+		return fatalErrorf("Failed to find git root: %v", err)
 	}
 
-	port = resolvePort(port)
+	port, err = resolvePort(port)
+	if err != nil {
+		return err
+	}
 
-	envFile := ensureBackendEnvFile(root)
-	fileVars := loadBackendEnvFile(envFile)
+	envFile, err := ensureBackendEnvFile(root)
+	if err != nil {
+		return err
+	}
+	fileVars, err := loadBackendEnvFile(envFile)
+	if err != nil {
+		return err
+	}
 
 	eeDefaults := eeEnvDefaults(opts.NoEE)
 	fileVars = append(fileVars, eeDefaults...)
@@ -175,14 +173,9 @@ func runBackendService(name, module, port string, opts *BackendOptions) {
 	svcCmd.Env = mergedEnv
 
 	if err := svcCmd.Run(); err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			if code := exitErr.ExitCode(); code != -1 {
-				os.Exit(code)
-			}
-		}
-		log.Fatalf("Failed to run %s: %v", name, err)
+		return fatalErrorf("Failed to run %s: %w", name, err)
 	}
+	return nil
 }
 
 // eeEnvDefaults returns env entries for EE and license enforcement settings.
@@ -201,35 +194,35 @@ func eeEnvDefaults(noEE bool) []string {
 }
 
 // ensureBackendEnvFile copies env_template.txt to .env if .env doesn't exist.
-func ensureBackendEnvFile(root string) string {
+func ensureBackendEnvFile(root string) (string, error) {
 	vscodeDir := filepath.Join(root, ".vscode")
 	envFile := filepath.Join(vscodeDir, ".env")
 	templateFile := filepath.Join(vscodeDir, "env_template.txt")
 
 	if _, err := os.Stat(envFile); err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
-			log.Fatalf("Failed to stat env file %s: %v", envFile, err)
+			return "", fatalErrorf("Failed to stat env file %s: %v", envFile, err)
 		}
 	} else {
 		log.Debugf("Using existing env file: %s", envFile)
-		return envFile
+		return envFile, nil
 	}
 
 	templateData, err := os.ReadFile(templateFile)
 	if err != nil {
-		log.Fatalf("Failed to read env template %s: %v", templateFile, err)
+		return "", fatalErrorf("Failed to read env template %s: %v", templateFile, err)
 	}
 
 	if err := os.MkdirAll(vscodeDir, 0755); err != nil {
-		log.Fatalf("Failed to create .vscode directory: %v", err)
+		return "", fatalErrorf("Failed to create .vscode directory: %v", err)
 	}
 
 	if err := os.WriteFile(envFile, templateData, 0644); err != nil {
-		log.Fatalf("Failed to write env file %s: %v", envFile, err)
+		return "", fatalErrorf("Failed to write env file %s: %v", envFile, err)
 	}
 
 	log.Infof("Created %s from template (review and fill in <REPLACE THIS> values)", envFile)
-	return envFile
+	return envFile, nil
 }
 
 // mergeEnv combines shell environment with file-based defaults. Shell values
@@ -259,10 +252,10 @@ func mergeEnv(shellEnv, fileVars []string) []string {
 
 // loadBackendEnvFile parses a .env file into KEY=VALUE entries suitable for
 // appending to os.Environ(). Blank lines and comments are skipped.
-func loadBackendEnvFile(path string) []string {
+func loadBackendEnvFile(path string) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		log.Fatalf("Failed to open env file %s: %v", path, err)
+		return nil, fatalErrorf("Failed to open env file %s: %v", path, err)
 	}
 	defer func() { _ = f.Close() }()
 
@@ -282,8 +275,8 @@ func loadBackendEnvFile(path string) []string {
 	}
 
 	if err := scanner.Err(); err != nil {
-		log.Fatalf("Failed to read env file %s: %v", path, err)
+		return nil, fatalErrorf("Failed to read env file %s: %v", path, err)
 	}
 
-	return envVars
+	return envVars, nil
 }

@@ -7,18 +7,21 @@ import os
 import httpx
 import pytest
 
-from onyx.db.enums import AccessType
+from onyx.db.enums import AccessType, Permission
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
+from tests.integration.common_utils.managers.pat import PATManager
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
-from tests.integration.common_utils.test_models import DATestAPIKey
-from tests.integration.common_utils.test_models import DATestLLMProvider
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import (
+    DATestAPIKey,
+    DATestLLMProvider,
+    DATestUser,
+)
 
 SEARCH_URL = f"{API_SERVER_URL}/search"
 
@@ -188,3 +191,29 @@ def test_unauthenticated_returns_401() -> None:
         json={"query": "test"},
     )
     assert resp.status_code == 403
+
+
+def test_read_search_scoped_pat_can_search(
+    admin_user: DATestUser,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
+    api_key: DATestAPIKey,
+) -> None:
+    cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
+    doc_content = "scoped pat search api unique document"
+    DocumentManager.seed_doc_with_content(cc_pair, doc_content, api_key)
+
+    raw_token = PATManager.create_scoped(
+        name="search-scoped-pat",
+        expiration_days=7,
+        user_performing_action=admin_user,
+        scopes=[Permission.READ_SEARCH],
+    )
+    resp = client.post(
+        SEARCH_URL,
+        json={"query": doc_content},
+        headers=PATManager.get_auth_headers(raw_token),
+    )
+    assert resp.status_code == 200
+
+    matches = [r for r in resp.json()["results"] if doc_content in r["content"]]
+    assert len(matches) == 1

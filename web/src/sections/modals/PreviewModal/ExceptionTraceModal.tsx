@@ -1,7 +1,8 @@
-import Modal from "@/refresh-components/Modal";
+import { useTranslations } from "next-intl";
+import { Modal } from "@opal/components";
 import { SvgAlertTriangle } from "@opal/icons";
 import { CodePreview } from "@/sections/modals/PreviewModal/variants/CodePreview";
-import { CopyButton } from "@/sections/modals/PreviewModal/variants/shared";
+import { CopyButton } from "@opal/components";
 import FloatingFooter from "@/sections/modals/PreviewModal/FloatingFooter";
 
 interface ExceptionTraceModalProps {
@@ -21,14 +22,16 @@ export default function ExceptionTraceModal({
   onOutsideClick,
   exceptionTrace,
   language = "python",
-  title = "Full Exception Trace",
+  title,
 }: ExceptionTraceModalProps) {
+  const t = useTranslations("chat.modals.preview");
+
   return (
     <Modal open onOpenChange={onOutsideClick}>
       <Modal.Content width="full" height="full">
         <Modal.Header
           icon={SvgAlertTriangle}
-          title={title}
+          title={title ?? t("exceptionTrace.defaultTitle")}
           onClose={onOutsideClick}
           height="fit"
         />
@@ -38,7 +41,13 @@ export default function ExceptionTraceModal({
         </div>
 
         <FloatingFooter
-          right={<CopyButton getText={() => exceptionTrace} />}
+          right={
+            <CopyButton
+              size="sm"
+              tooltip={t("copyButton.tooltip")}
+              getCopyText={() => exceptionTrace}
+            />
+          }
           codeBackground
         />
       </Modal.Content>

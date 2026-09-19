@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
+import { Text } from "@opal/components";
 import {
   Collapsible,
   CollapsibleContent,
@@ -54,15 +56,13 @@ function TodoItemRow({ todo }: { todo: TodoItem }) {
       {getStatusIcon(todo.status)}
 
       {/* Task text - show activeForm when in_progress, otherwise content */}
-      <span
-        className={cn(
-          "text-sm",
-          todo.status === "completed"
-            ? "text-text-03 line-through"
-            : "text-text-04"
-        )}
-      >
-        {todo.status === "in_progress" ? todo.activeForm : todo.content}
+      <span className={cn(todo.status === "completed" && "line-through")}>
+        <Text
+          font="main-ui-body"
+          color={todo.status === "completed" ? "text-03" : "text-04"}
+        >
+          {todo.status === "in_progress" ? todo.activeForm : todo.content}
+        </Text>
       </span>
     </div>
   );
@@ -81,6 +81,7 @@ export default function TodoListCard({
   todoList,
   defaultOpen = true,
 }: TodoListCardProps) {
+  const t = useTranslations("craft.todoList");
   const [isOpen, setIsOpen] = useState(defaultOpen);
 
   // Update isOpen when defaultOpen changes (for auto-collapse behavior)
@@ -112,7 +113,7 @@ export default function TodoListCard({
           <button
             className={cn(
               "w-full flex items-center justify-between px-3 py-2",
-              "hover:bg-background-tint-02 transition-colors text-left"
+              "hover:bg-background-tint-02 transition-colors text-start"
             )}
           >
             <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -126,12 +127,22 @@ export default function TodoListCard({
               )}
 
               {/* Title */}
-              <span className="text-sm font-medium text-text-04">Tasks</span>
+              <Text
+                font="main-ui-action"
+                color="text-04"
+                wordWrap="whitespace-nowrap"
+              >
+                {t("header.title")}
+              </Text>
 
               {/* Progress count */}
-              <span className="text-xs text-text-03">
-                {completed}/{total} completed
-              </span>
+              <Text
+                font="secondary-body"
+                color="text-03"
+                wordWrap="whitespace-nowrap"
+              >
+                {t("progress.label", { completed, total })}
+              </Text>
             </div>
 
             {/* Expand arrow */}
@@ -150,7 +161,11 @@ export default function TodoListCard({
               <TodoItemRow key={`${todoList.id}-${index}`} todo={todo} />
             ))}
             {todoList.todos.length === 0 && (
-              <span className="text-sm text-text-03 italic">No tasks</span>
+              <span className="italic">
+                <Text font="main-ui-body" color="text-03">
+                  {t("empty.label")}
+                </Text>
+              </span>
             )}
           </div>
         </CollapsibleContent>

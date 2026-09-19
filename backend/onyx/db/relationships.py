@@ -6,19 +6,23 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 import onyx.db.document as dbdocument
-from onyx.db.models import KGEntity
-from onyx.db.models import KGEntityExtractionStaging
-from onyx.db.models import KGRelationship
-from onyx.db.models import KGRelationshipExtractionStaging
-from onyx.db.models import KGRelationshipType
-from onyx.db.models import KGRelationshipTypeExtractionStaging
-from onyx.db.models import KGStage
-from onyx.kg.utils.formatting_utils import extract_relationship_type_id
-from onyx.kg.utils.formatting_utils import format_relationship_id
-from onyx.kg.utils.formatting_utils import get_entity_type
-from onyx.kg.utils.formatting_utils import make_relationship_id
-from onyx.kg.utils.formatting_utils import make_relationship_type_id
-from onyx.kg.utils.formatting_utils import split_relationship_id
+from onyx.db.models import (
+    KGEntity,
+    KGEntityExtractionStaging,
+    KGRelationship,
+    KGRelationshipExtractionStaging,
+    KGRelationshipType,
+    KGRelationshipTypeExtractionStaging,
+    KGStage,
+)
+from onyx.kg.utils.formatting_utils import (
+    extract_relationship_type_id,
+    format_relationship_id,
+    get_entity_type,
+    make_relationship_id,
+    make_relationship_type_id,
+    split_relationship_id,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -74,9 +78,10 @@ def upsert_staging_relationship(
         )
         .on_conflict_do_update(
             index_elements=["id_name", "source_document"],
-            set_=dict(
-                occurrences=KGRelationshipExtractionStaging.occurrences + occurrences,
-            ),
+            set_={
+                "occurrences": KGRelationshipExtractionStaging.occurrences
+                + occurrences,
+            },
         )
         .returning(KGRelationshipExtractionStaging)
     )
@@ -149,9 +154,9 @@ def upsert_relationship(
         )
         .on_conflict_do_update(
             index_elements=["id_name", "source_document"],
-            set_=dict(
-                occurrences=KGRelationship.occurrences + occurrences,
-            ),
+            set_={
+                "occurrences": KGRelationship.occurrences + occurrences,
+            },
         )
         .returning(KGRelationship)
     )
@@ -196,9 +201,9 @@ def transfer_relationship(
         )
         .on_conflict_do_update(
             index_elements=["id_name", "source_document"],
-            set_=dict(
-                occurrences=KGRelationship.occurrences + relationship.occurrences,
-            ),
+            set_={
+                "occurrences": KGRelationship.occurrences + relationship.occurrences,
+            },
         )
         .returning(KGRelationship)
     )
@@ -262,10 +267,10 @@ def upsert_staging_relationship_type(
         )
         .on_conflict_do_update(
             index_elements=["id_name"],
-            set_=dict(
-                occurrences=KGRelationshipTypeExtractionStaging.occurrences
+            set_={
+                "occurrences": KGRelationshipTypeExtractionStaging.occurrences
                 + extraction_count,
-            ),
+            },
         )
         .returning(KGRelationshipTypeExtractionStaging)
     )
@@ -323,9 +328,9 @@ def upsert_relationship_type(
         )
         .on_conflict_do_update(
             index_elements=["id_name"],
-            set_=dict(
-                occurrences=KGRelationshipType.occurrences + extraction_count,
-            ),
+            set_={
+                "occurrences": KGRelationshipType.occurrences + extraction_count,
+            },
         )
         .returning(KGRelationshipType)
     )
@@ -360,10 +365,10 @@ def transfer_relationship_type(
         )
         .on_conflict_do_update(
             index_elements=["id_name"],
-            set_=dict(
-                occurrences=KGRelationshipType.occurrences
+            set_={
+                "occurrences": KGRelationshipType.occurrences
                 + relationship_type.occurrences,
-            ),
+            },
         )
         .returning(KGRelationshipType)
     )
@@ -552,8 +557,7 @@ def get_relationship_types_of_entity_types(
         List of relationship ID names where the entity is either source or target
     """
 
-    if entity_types_id.endswith(":*"):
-        entity_types_id = entity_types_id[:-2]
+    entity_types_id = entity_types_id.removesuffix(":*")
 
     return [
         row[0]

@@ -1,0 +1,83 @@
+name: Dependency Audit
+
+concurrency:
+  group: audit-${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    branches: ["**"]
+    paths:
+      - "web/bun.lock"
+      - "web/package.json"
+      - "bun.lock"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/dependabot.yml"
+      # Any workflow or composite-action change can bump a pinned action to a
+      # vulnerable version, so gate the PR that makes the change (not just nightly).
+      - ".github/workflows/**"
+      - ".github/actions/**"
+      - "tools/ods/**"
+      - "tools/ods-audit/**"
+  schedule:
+    # Nightly at 09:00 UTC.
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  audit:
+    name: audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read # checkout + read lockfiles
+      id-token: write # OIDC for fetching the S3 allowlist
+      security-events: write # SARIF upload (nightly) + read Dependabot alerts
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # ratchet:astral-sh/setup-uv@v10.0.1
+        with:
+          version: "0.11.25"
+          enable-cache: false
+
+      - name: Install ods from uv.lock
+        run: uv sync --frozen --no-install-project --only-group ods
+
+      - name: Configure AWS credentials
+        id: aws
+        continue-on-error: true # the audit still runs (with no suppressions) if creds are unavailable
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # ratchet:aws-actions/configure-aws-credentials@v6.2.3
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      # PR runs gate on criticals; nightly/dispatch runs upload a SARIF report.
+      - name: Run audit (gate)
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: uv run --no-sync ods audit --fail-on=critical
+
+      - name: Run audit (SARIF report)
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Don't fail the report job on findings; the SARIF upload surfaces them.
+        # SARIF goes to stdout (the uploaded file); the text report goes to stderr
+        # so the run's findings are also readable in the log.
+        run: uv run --no-sync ods audit --format=sarif,text > audit.sarif || true
+
+      - name: Upload SARIF file
+        if: github.event_name != 'pull_request'
+        uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab # ratchet:github/codeql-action/upload-sarif@codeql-bundle-v2.23.5
+        with:
+          sarif_file: audit.sarif
+          category: ods-audit

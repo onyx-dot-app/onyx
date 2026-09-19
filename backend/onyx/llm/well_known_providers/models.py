@@ -1,7 +1,6 @@
 from enum import Enum
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from onyx.server.manage.llm.models import ModelConfigurationView
 

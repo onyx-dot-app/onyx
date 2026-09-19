@@ -1,23 +1,18 @@
 import time
 from collections.abc import Sequence
-from dataclasses import dataclass
-from dataclasses import field
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from urllib.parse import urlparse
 
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import Document, HierarchyNode, TextSection
 from onyx.db.enums import HierarchyNodeType
-from tests.daily.connectors.utils import ConnectorOutput
-from tests.daily.connectors.utils import load_all_from_connector
+from tests.daily.connectors.utils import ConnectorOutput, load_all_from_connector
 
-ALL_FILES = list(range(0, 60))
+ALL_FILES = list(range(60))
 SHARED_DRIVE_FILES = list(range(20, 25))
 
 
-ADMIN_FILE_IDS = list(range(0, 5))
+ADMIN_FILE_IDS = list(range(5))
 ADMIN_FOLDER_3_FILE_IDS = list(range(65, 70))  # This folder is shared with test_user_1
 TEST_USER_1_FILE_IDS = list(range(5, 10))
 TEST_USER_2_FILE_IDS = list(range(10, 15))
@@ -34,6 +29,8 @@ SECTIONS_FILE_IDS = [61]
 FOLDER_3_FILE_IDS = list(range(62, 65))
 
 DONWLOAD_REVOKED_FILE_ID = 21
+RESOURCE_KEY_SHORTCUT_TARGET_DOC_ID = "0Bw48MNL4gSBwWEt2V3BURXVnRnM"
+RESOURCE_KEY_SHORTCUT_TARGET_NAME = "config.yml"
 
 PUBLIC_FOLDER_RANGE = FOLDER_1_2_FILE_IDS
 PUBLIC_FILE_IDS = list(range(55, 57))
@@ -301,6 +298,14 @@ ADMIN_MY_DRIVE_ID = "0ABTZwt798K7MUk9PVA"  # Admin's My Drive
 TEST_USER_2_MY_DRIVE = "0ADjBZv2nEvJNUk9PVA"  # Test user 2's My Drive
 TEST_USER_3_MY_DRIVE_ID = "0AKl0e4Wr5NW7Uk9PVA"  # Test user 3's My Drive
 PILL_FOLDER_ID = "1FWzfA369tx9VT8scJ3LCOPBBuTBgt0OH"  # contains file with date pills
+SHORTCUTS_GALORE_FOLDER_ID = "1oBDLgN21c3PX9pPGPWvdp7S1gVqt5-iQ"
+SHORTCUTTED_FOLDER_ID = "1_SzLQFnmMcS6BoB5VqgRYQz_Xg89j0t9"
+SHORTCUTTED_2_FOLDER_ID = "12L8p_dJnaHlPwULuMvWgn9s-zaAmubRw"
+ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS = (
+    SHORTCUTS_GALORE_FOLDER_ID,
+    SHORTCUTTED_FOLDER_ID,
+    SHORTCUTTED_2_FOLDER_ID,
+)
 
 PADDING_DRIVE_URLS = [
     "0AOorXE6AfJRAUk9PVA",
@@ -308,6 +313,52 @@ PADDING_DRIVE_URLS = [
     "0ANI_NFCPzaRwUk9PVA",
     "0ABu8fYjvA21dUk9PVA",
 ]
+
+# ============================================================================
+# PARTIAL-VISIBILITY FIXTURES
+# ============================================================================
+# Pre-provisioned in the shared test tenant; the test run does not create them.
+# Each one makes a target where no single principal sees everything, so the
+# connector must pick the owner/organizer or fall back to a union of users.
+#
+# - The two external folders sit under EXTERNAL_SHARED_FOLDER_ID and have
+#   inherited permissions disabled, so admin and test_user_1 each see exactly
+#   one of them.
+# - The two My Drive folders belong to test_user_1; only the owner sees the child.
+# - NO_ORGANIZER_DRIVE has a content manager but no organizer, so it is skipped
+#   unless the connector impersonates that member.
+# - GROUP_ORGANIZER_DRIVE's only organizer is a group, which cannot be impersonated.
+# ============================================================================
+
+EXTERNAL_ONLY_USER_1_FOLDER_ID = "1MbFJyywFS9gD1b9MXUz45kuBjRprtz-L"
+EXTERNAL_ONLY_ADMIN_FOLDER_ID = "1Gb12omc1RVfUy13So5wdEc2Au3XxBxuq"
+LIMITED_ACCESS_MY_DRIVE_FOLDER_ID = "1j9CV0VXHFUNRKrc4sS5L8H4DRwdjLHq-"
+LIMITED_ACCESS_MY_DRIVE_CHILD_ID = "1P_IbhYk8gruNqYospGJq134KMqDFGoOZ"
+NO_ORGANIZER_DRIVE_ID = "0AFkuw4r_dVs9Uk9PVA"
+GROUP_ORGANIZER_DRIVE_ID = "0ADgUQ3lo072RUk9PVA"
+
+# Name of the placeholder document inside each fixture folder.
+FIXTURE_SENTINEL_DOC_NAME = "sentinel"
+
+# The sentinel in each external branch. Only one principal can read each, so
+# retrieving both is what proves the connector unioned over users.
+EXTERNAL_ONLY_USER_1_SENTINEL_DOC_ID = "1RsdYIpQhj9fZKCZPqw1kaskhCtkMPdT9MSsPADV18LU"
+EXTERNAL_ONLY_ADMIN_SENTINEL_DOC_ID = "1HZeUsWImC-Ao4Qx2qr5GWk8zQV5Xi6Sgrt9Ub0RBbHA"
+
+# Resolving the My Drive shortcut surfaces its shared drive ancestors even when a
+# run excludes shared drives. Tolerated rather than asserted: this looks like a
+# scoping leak, so fixing it must not break these tests.
+SHORTCUT_ANCESTOR_NODE_IDS = (SHARED_DRIVE_1_ID, FOLDER_1_ID)
+
+# Every fixture node, for tests that walk the whole tenant.
+PARTIAL_VISIBILITY_FIXTURE_NODE_IDS = (
+    EXTERNAL_ONLY_USER_1_FOLDER_ID,
+    EXTERNAL_ONLY_ADMIN_FOLDER_ID,
+    LIMITED_ACCESS_MY_DRIVE_FOLDER_ID,
+    LIMITED_ACCESS_MY_DRIVE_CHILD_ID,
+    NO_ORGANIZER_DRIVE_ID,
+    GROUP_ORGANIZER_DRIVE_ID,
+)
 
 ADMIN_EMAIL = "admin@onyx-test.com"
 TEST_USER_1_EMAIL = "test_user_1@onyx-test.com"
@@ -395,8 +446,58 @@ EXPECTED_TEST_USER_1_EXTRA_FOLDER = _node(
 EXPECTED_PILL_FOLDER = _node(
     PILL_FOLDER_ID, "pill_folder", HierarchyNodeType.FOLDER, ADMIN_MY_DRIVE_ID
 )
+EXPECTED_SHORTCUTS_GALORE_FOLDER = _node(
+    SHORTCUTS_GALORE_FOLDER_ID,
+    "shortcuts galore",
+    HierarchyNodeType.FOLDER,
+    ADMIN_MY_DRIVE_ID,
+)
+EXPECTED_SHORTCUTTED_FOLDER = _node(
+    SHORTCUTTED_FOLDER_ID,
+    "shortcutted",
+    HierarchyNodeType.FOLDER,
+    SHORTCUTS_GALORE_FOLDER_ID,
+)
+EXPECTED_SHORTCUTTED_2_FOLDER = _node(
+    SHORTCUTTED_2_FOLDER_ID,
+    "shortcutted2",
+    HierarchyNodeType.FOLDER,
+    SHORTCUTS_GALORE_FOLDER_ID,
+)
 EXPECTED_EXTERNAL_SHARED_FOLDER = _node(
     EXTERNAL_SHARED_FOLDER_ID, "Onyx-test", HierarchyNodeType.FOLDER
+)
+EXPECTED_EXTERNAL_ONLY_USER_1_FOLDER = _node(
+    EXTERNAL_ONLY_USER_1_FOLDER_ID,
+    "Only user 1",
+    HierarchyNodeType.FOLDER,
+    EXTERNAL_SHARED_FOLDER_ID,
+)
+EXPECTED_EXTERNAL_ONLY_ADMIN_FOLDER = _node(
+    EXTERNAL_ONLY_ADMIN_FOLDER_ID,
+    "onyx_fixture_only_admin",
+    HierarchyNodeType.FOLDER,
+    EXTERNAL_SHARED_FOLDER_ID,
+)
+EXPECTED_LIMITED_ACCESS_MY_DRIVE_FOLDER = _node(
+    LIMITED_ACCESS_MY_DRIVE_FOLDER_ID,
+    "onyx_fixture_limited_access",
+    HierarchyNodeType.FOLDER,
+    TEST_USER_1_MY_DRIVE_ID,
+)
+EXPECTED_LIMITED_ACCESS_MY_DRIVE_CHILD = _node(
+    LIMITED_ACCESS_MY_DRIVE_CHILD_ID,
+    "limited_to_owner",
+    HierarchyNodeType.FOLDER,
+    LIMITED_ACCESS_MY_DRIVE_FOLDER_ID,
+)
+EXPECTED_NO_ORGANIZER_DRIVE = _node(
+    NO_ORGANIZER_DRIVE_ID, "onyx_fixture_no_organizer", HierarchyNodeType.SHARED_DRIVE
+)
+EXPECTED_GROUP_ORGANIZER_DRIVE = _node(
+    GROUP_ORGANIZER_DRIVE_ID,
+    "onyx_fixture_group_organizer",
+    HierarchyNodeType.SHARED_DRIVE,
 )
 
 # Comprehensive mapping of ALL known hierarchy nodes.
@@ -419,7 +520,16 @@ ALL_EXPECTED_HIERARCHY_NODES: dict[str, ExpectedHierarchyNode] = {
     TEST_USER_1_EXTRA_DRIVE_2_ID: EXPECTED_TEST_USER_1_EXTRA_DRIVE_2,
     TEST_USER_1_EXTRA_FOLDER_ID: EXPECTED_TEST_USER_1_EXTRA_FOLDER,
     PILL_FOLDER_ID: EXPECTED_PILL_FOLDER,
+    SHORTCUTS_GALORE_FOLDER_ID: EXPECTED_SHORTCUTS_GALORE_FOLDER,
+    SHORTCUTTED_FOLDER_ID: EXPECTED_SHORTCUTTED_FOLDER,
+    SHORTCUTTED_2_FOLDER_ID: EXPECTED_SHORTCUTTED_2_FOLDER,
     EXTERNAL_SHARED_FOLDER_ID: EXPECTED_EXTERNAL_SHARED_FOLDER,
+    EXTERNAL_ONLY_USER_1_FOLDER_ID: EXPECTED_EXTERNAL_ONLY_USER_1_FOLDER,
+    EXTERNAL_ONLY_ADMIN_FOLDER_ID: EXPECTED_EXTERNAL_ONLY_ADMIN_FOLDER,
+    LIMITED_ACCESS_MY_DRIVE_FOLDER_ID: EXPECTED_LIMITED_ACCESS_MY_DRIVE_FOLDER,
+    LIMITED_ACCESS_MY_DRIVE_CHILD_ID: EXPECTED_LIMITED_ACCESS_MY_DRIVE_CHILD,
+    NO_ORGANIZER_DRIVE_ID: EXPECTED_NO_ORGANIZER_DRIVE,
+    GROUP_ORGANIZER_DRIVE_ID: EXPECTED_GROUP_ORGANIZER_DRIVE,
 }
 
 # Dictionary for access permissions
@@ -450,7 +560,7 @@ ACCESS_MAPPING: dict[str, list[int]] = {
         # This user has been given shared access to folder 3 in Admin's My Drive
         + ADMIN_FOLDER_3_FILE_IDS
         # This user has been given shared access to files 0 and 1 in Admin's My Drive
-        + list(range(0, 2))
+        + list(range(2))
     ),
     TEST_USER_2_EMAIL: (
         TEST_USER_2_FILE_IDS
@@ -559,21 +669,19 @@ def assert_expected_docs_in_retrieved_docs(
         for doc in retrieved_docs
         if doc.semantic_identifier.startswith(_VALID_PREFIX)
     ]
-    valid_retrieved_file_names = set(
-        [doc.semantic_identifier for doc in valid_retrieved_docs]
-    )
-    valid_retrieved_texts = set(
-        [
-            " - ".join(
-                [
-                    section.text
-                    for section in doc.sections
-                    if isinstance(section, TextSection) and section.text is not None
-                ]
-            )
-            for doc in valid_retrieved_docs
-        ]
-    )
+    valid_retrieved_file_names = {
+        doc.semantic_identifier for doc in valid_retrieved_docs
+    }
+    valid_retrieved_texts = {
+        " - ".join(
+            [
+                section.text
+                for section in doc.sections
+                if isinstance(section, TextSection) and section.text is not None
+            ]
+        )
+        for doc in valid_retrieved_docs
+    }
 
     # Check file names
     print_discrepancies(
@@ -588,6 +696,17 @@ def assert_expected_docs_in_retrieved_docs(
         retrieved=valid_retrieved_texts,
     )
     assert expected_file_texts == valid_retrieved_texts
+
+
+def assert_resource_key_shortcut_target_in_retrieved_docs(
+    retrieved_docs: list[Document],
+) -> None:
+    docs_by_name = {doc.semantic_identifier: doc for doc in retrieved_docs}
+    assert RESOURCE_KEY_SHORTCUT_TARGET_NAME in docs_by_name
+    assert (
+        RESOURCE_KEY_SHORTCUT_TARGET_DOC_ID
+        in docs_by_name[RESOURCE_KEY_SHORTCUT_TARGET_NAME].id
+    )
 
 
 def load_connector_outputs(
@@ -747,6 +866,12 @@ def get_expected_hierarchy_for_test_user_1() -> dict[str, ExpectedHierarchyNode]
             TEST_USER_1_EXTRA_DRIVE_1_ID,
             TEST_USER_1_EXTRA_DRIVE_2_ID,
             TEST_USER_1_EXTRA_FOLDER_ID,
+            # test_user_1 belongs to the group that organizes this drive
+            GROUP_ORGANIZER_DRIVE_ID,
+            EXTERNAL_SHARED_FOLDER_ID,
+            EXTERNAL_ONLY_USER_1_FOLDER_ID,
+            LIMITED_ACCESS_MY_DRIVE_FOLDER_ID,
+            LIMITED_ACCESS_MY_DRIVE_CHILD_ID,
         )
     )
     return _clear_parents(result, FOLDER_3_ID)
@@ -762,6 +887,10 @@ def get_expected_hierarchy_for_test_user_1_shared_drives_only() -> dict[
         TEST_USER_1_MY_DRIVE_FOLDER_ID,
         FOLDER_3_ID,
         TEST_USER_1_EXTRA_FOLDER_ID,
+        EXTERNAL_SHARED_FOLDER_ID,
+        EXTERNAL_ONLY_USER_1_FOLDER_ID,
+        LIMITED_ACCESS_MY_DRIVE_FOLDER_ID,
+        LIMITED_ACCESS_MY_DRIVE_CHILD_ID,
     ):
         result.pop(nid, None)
     return result
@@ -770,9 +899,13 @@ def get_expected_hierarchy_for_test_user_1_shared_drives_only() -> dict[
 def get_expected_hierarchy_for_test_user_1_shared_with_me_only() -> dict[
     str, ExpectedHierarchyNode
 ]:
-    """Expected hierarchy nodes when test_user_1 runs with include_files_shared_with_me=True only."""
+    """Expected hierarchy nodes when test_user_1 runs with include_files_shared_with_me=True only.
+
+    Only the external root appears, not the branch inside it that test_user_1 holds a
+    direct grant on: this run surfaces the shared ancestor, not each shared descendant.
+    """
     return _clear_parents(
-        _pick(FOLDER_3_ID, TEST_USER_1_EXTRA_FOLDER_ID),
+        _pick(FOLDER_3_ID, TEST_USER_1_EXTRA_FOLDER_ID, EXTERNAL_SHARED_FOLDER_ID),
         FOLDER_3_ID,
     )
 
@@ -781,4 +914,12 @@ def get_expected_hierarchy_for_test_user_1_my_drive_only() -> dict[
     str, ExpectedHierarchyNode
 ]:
     """Expected hierarchy nodes when test_user_1 runs with include_my_drives=True only."""
-    return _pick(TEST_USER_1_MY_DRIVE_ID, TEST_USER_1_MY_DRIVE_FOLDER_ID)
+    return _pick(
+        TEST_USER_1_MY_DRIVE_ID,
+        TEST_USER_1_MY_DRIVE_FOLDER_ID,
+        LIMITED_ACCESS_MY_DRIVE_FOLDER_ID,
+        LIMITED_ACCESS_MY_DRIVE_CHILD_ID,
+        # Reached through test_user_1's direct grant inside the external folder.
+        EXTERNAL_SHARED_FOLDER_ID,
+        EXTERNAL_ONLY_USER_1_FOLDER_ID,
+    )

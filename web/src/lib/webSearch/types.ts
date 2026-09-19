@@ -1,4 +1,11 @@
+import type { useTranslations } from "next-intl";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
+
+// Registry text (content subtitles, config fields) lives in "admin.webSearch".
+export type WebSearchTranslate = ReturnType<
+  typeof useTranslations<"admin.webSearch">
+>;
+export type WebSearchMessageKey = Parameters<WebSearchTranslate>[0];
 
 // ── Provider type literals ────────────────────────────────────────────────────
 
@@ -7,12 +14,14 @@ export type WebSearchProviderType =
   | "serper"
   | "exa"
   | "searxng"
-  | "brave";
+  | "brave"
+  | "tavily";
 
 export type WebContentProviderType =
   | "firecrawl"
   | "onyx_web_crawler"
   | "exa"
+  | "tavily"
   | (string & {});
 
 /** Which web-search provider category we are configuring. */
@@ -95,15 +104,14 @@ export interface ConfigFieldSpec {
 
 export interface SearchProviderDetail {
   label: string;
+  // Brand or product name, not translated.
   subtitle: string;
-  helper: string;
   logo?: IconFunctionComponent;
   apiKeyUrl?: string;
 }
 
 export interface ContentProviderDetail {
   label: string;
-  subtitle: string;
-  description: string;
+  subtitleKey: WebSearchMessageKey;
   logo?: IconFunctionComponent;
 }

@@ -3,7 +3,9 @@
 /* ===========================================================================
    Content — Shared color properties
 
-   Two registered CSS custom properties drive all Content title + icon colors.
+   Three registered CSS custom properties drive every Content color. Nothing
+   inside a layout hardcodes one: a caller overriding the variables on the
+   wrapper reaches the title, the icon and the secondary text alike.
    The `data-content-color` attribute on the Content dispatcher's wrapper div
    selects the color mode. Since the properties use `inherits: true`, all
    descendant layout elements pick up the values automatically.
@@ -25,9 +27,22 @@
   initial-value: transparent;
 }
 
+/* Description and suffix — the muted text beside and below the title. */
+@property --content-foreground-secondary {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: transparent;
+}
+
 /* ---------------------------------------------------------------------------
    Color modes — driven by `data-content-color` on the dispatcher wrapper
    --------------------------------------------------------------------------- */
+
+/* Set once rather than per mode: the secondary text is `text-03` in all of
+   them. A mode that needs its own can still override below. */
+[data-content-color] {
+  --content-foreground-secondary: var(--text-03);
+}
 
 [data-content-color="default"] {
   --content-foreground: var(--text-04);
@@ -41,15 +56,59 @@
   color: var(--content-foreground);
 }
 
+[data-content-color="success"] {
+  --content-foreground: var(--text-04);
+  --content-foreground-icon: var(--status-success-05);
+  color: var(--content-foreground);
+}
+
 [data-content-color="danger"] {
   --content-foreground: var(--status-error-05);
   --content-foreground-icon: var(--status-error-05);
   color: var(--content-foreground);
 }
 
+[data-content-color="warning"] {
+  --content-foreground: var(--status-warning-05);
+  --content-foreground-icon: var(--status-warning-05);
+  color: var(--content-foreground);
+}
+
+/* Status glyph against muted body text: the field-message pairing, where the
+   icon carries the state and the text stays secondary. */
+[data-content-color="muted-success"] {
+  --content-foreground: var(--text-03);
+  --content-foreground-icon: var(--status-success-05);
+  color: var(--content-foreground);
+}
+
+[data-content-color="muted-warning"] {
+  --content-foreground: var(--text-03);
+  --content-foreground-icon: var(--status-warning-05);
+  color: var(--content-foreground);
+}
+
 [data-content-color="interactive"] {
   color: inherit;
   --content-foreground-icon: var(--interactive-foreground-icon);
+}
+
+/* Disabled is a state, so it outranks whatever the content normally looks
+   like.
+
+   An interactive surface dims through the interactive colour variables rather
+   than the blanket `opacity-50` that `core/disabled` gives everything else, so
+   a `Content` inside one has to follow those variables. Only the `interactive`
+   mode does on its own — every other mode pins `color` and stops inheriting,
+   which is what left a disabled row still showing its resting colour.
+
+   Keyed off `.interactive[data-disabled]` rather than any one component, so it
+   holds for everything that puts a `Content` inside an interactive surface. */
+.interactive[data-disabled] [data-content-color] {
+  --content-foreground: var(--interactive-foreground);
+  --content-foreground-icon: var(--interactive-foreground-icon);
+  --content-foreground-secondary: var(--interactive-foreground);
+  color: var(--content-foreground);
 }
 
 /* ===========================================================================
@@ -141,8 +200,15 @@
    Description
    --------------------------------------------------------------------------- */
 
+.opal-content-xl-description,
+.opal-content-lg-description,
+.opal-content-md-description,
+.opal-content-md-suffix {
+  color: var(--content-foreground-secondary);
+}
+
 .opal-content-xl-description {
-  @apply text-left w-full;
+  @apply text-start w-full;
 }
 
 /* ===========================================================================
@@ -230,7 +296,7 @@
    --------------------------------------------------------------------------- */
 
 .opal-content-lg-description {
-  @apply text-left w-full;
+  @apply text-start w-full;
 }
 
 /* ===========================================================================
@@ -246,6 +312,61 @@
 
 .opal-content-md {
   @apply flex flex-col items-start;
+}
+
+/* Responsive layout — active only when a `rightChildren` slot is passed.
+   Mobile-first: the title row, the slot (e.g. an input), and the description
+   stack full-width (see the onboarding name card in Figma). At the `sm`
+   breakpoint (724px) it reflows to the desktop layout — title + description on
+   the left, the slot on the right spanning both rows. */
+.opal-content-md[data-stacked] {
+  display: grid;
+  width: 100%;
+  gap: 0.25rem;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "title"
+    "aux"
+    "description";
+}
+
+.opal-content-md[data-stacked] > .opal-content-md-header {
+  grid-area: title;
+}
+
+.opal-content-md[data-stacked] > .opal-content-md-right-children {
+  grid-area: aux;
+}
+
+.opal-content-md[data-stacked] > .opal-content-md-description {
+  grid-area: description;
+}
+
+@media (min-width: 724px) {
+  .opal-content-md[data-stacked] {
+    /* Title and description sit flush on desktop, matching the non-responsive
+       layout; the 4px stacking gap only applies to the mobile column. */
+    row-gap: 0;
+    column-gap: 1rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "title       aux"
+      "description aux";
+  }
+
+  .opal-content-md[data-stacked] > .opal-content-md-right-children {
+    min-width: 12rem;
+  }
+
+  /* Keep the description aligned under the title (past the icon), matching the
+     non-responsive desktop layout. */
+  .opal-content-md[data-stacked] > .opal-content-md-description {
+    padding-inline-start: var(--opal-content-md-desc-indent, 0);
+  }
+}
+
+.opal-content-md-right-children {
+  @apply w-full;
 }
 
 .opal-content-md-header {
@@ -275,7 +396,10 @@
    --------------------------------------------------------------------------- */
 
 .opal-content-md-title-row {
-  @apply flex items-center w-full;
+  /* min-w-0: as a flex item next to the icon, the row's automatic minimum
+     width would push a clamped title past the container edge, clipping the
+     ellipsis out of view. */
+  @apply flex items-center w-full min-w-0;
   gap: 0.25rem;
 }
 
@@ -327,7 +451,7 @@
    --------------------------------------------------------------------------- */
 
 .opal-content-md-description {
-  @apply text-left w-full;
+  @apply text-start w-full;
 }
 
 /* ===========================================================================

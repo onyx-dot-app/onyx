@@ -14,15 +14,9 @@ We haven't explored all of the cloud APIs' pagination strategies. @raunakab take
 
 import json
 import time
-from collections.abc import Callable
-from collections.abc import Generator
-from collections.abc import Iterator
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
-from typing import Any
-from typing import cast
-from typing import TypeVar
+from collections.abc import Callable, Generator, Iterator
+from datetime import datetime, timedelta, timezone
+from typing import Any, TypeVar, cast
 from urllib.parse import quote
 
 import bs4
@@ -30,20 +24,26 @@ import requests
 from atlassian import Confluence
 from requests import HTTPError
 
-from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE
-from onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_ID
-from onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET
+from onyx.configs.app_configs import (
+    CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE,
+    OAUTH_CONFLUENCE_CLOUD_CLIENT_ID,
+    OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET,
+)
 from onyx.connectors.confluence.models import ConfluenceUser
 from onyx.connectors.confluence.user_profile_override import (
     process_confluence_user_profiles_override,
 )
-from onyx.connectors.confluence.utils import _handle_http_error
-from onyx.connectors.confluence.utils import confluence_refresh_tokens
-from onyx.connectors.confluence.utils import get_start_param_from_url
-from onyx.connectors.confluence.utils import update_param_in_path
+from onyx.connectors.confluence.utils import (
+    _handle_http_error,
+    confluence_refresh_tokens,
+    get_start_param_from_url,
+    update_param_in_path,
+)
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import scoped_url
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import InsufficientPermissionsError
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    InsufficientPermissionsError,
+)
 from onyx.connectors.interfaces import CredentialsProviderInterface
 from onyx.file_processing.html_utils import format_document_soup
 from onyx.redis.redis_pool import get_redis_client
@@ -60,13 +60,26 @@ F = TypeVar("F", bound=Callable[..., Any])
 _PROBLEMATIC_EXPANSIONS = "body.storage.value"
 _REPLACEMENT_EXPANSIONS = "body.view.value"
 
+# CONFCLOUD-77618 / CONFCLOUD-76424: ancestor-restrictions expand on
+# content/search 404s the whole batch when an ancestor is unreadable
+# (draft / outdated / trashed). We detect the body signature and raise.
+_ANCESTOR_RESTRICTIONS_EXPAND_PREFIX = "ancestors.restrictions.read.restrictions."
+_CONFCLOUD_77618_404_BODY_SIGNATURES = (
+    "No content with id",
+    "Cannot find content. Outdated version/old_draft/trashed",
+)
+
 _USER_NOT_FOUND = "Unknown Confluence User"
-_USER_ID_TO_DISPLAY_NAME_CACHE: dict[str, str | None] = {}
-_USER_EMAIL_CACHE: dict[str, str | None] = {}
+# All three caches are keyed by (confluence instance base url, identifier). The
+# Confluence Server/DC username and userKey namespaces are per-instance, so a bare
+# identifier key would let one instance's user resolve to another instance's email
+# when several Confluence connectors run in the same multi-tenant worker process.
+_USER_ID_TO_DISPLAY_NAME_CACHE: dict[tuple[str, str], str | None] = {}
+_USER_EMAIL_CACHE: dict[tuple[str, str], str | None] = {}
 # Separate cache from _USER_EMAIL_CACHE: the DC 9.1+ REST space-permissions
 # response only includes a user's userKey (CONFSERVER-100505), not their
 # username, so we have to resolve email by a different identifier.
-_USER_KEY_TO_EMAIL_CACHE: dict[str, str | None] = {}
+_USER_KEY_TO_EMAIL_CACHE: dict[tuple[str, str], str | None] = {}
 _DEFAULT_PAGINATION_LIMIT = 1000
 _MINIMUM_PAGINATION_LIMIT = 5
 
@@ -107,12 +120,35 @@ class ConfluenceRateLimitError(Exception):
     pass
 
 
+class Confcloud77618Error(Exception):
+    """Signal to the perm-sync caller that the ancestor-restrictions
+    expand 404'd on a draft / outdated / trashed ancestor and the run
+    must restart with per-page restriction lookups."""
+
+    def __init__(self, url: str, body: str) -> None:
+        super().__init__(
+            f"CONFCLOUD-77618: ancestor-restrictions expand 404 from "
+            f"{url}: {body[:500]}"
+        )
+        self.url = url
+        self.body = body
+
+
 class ConfluenceRestSpacePermissionsNotAvailableError(Exception):
     """Raised by REST-API space-permissions calls when the endpoint is missing
     on the upstream Confluence DC instance (e.g. DC < 9.1.0 returning 404).
 
     Callers use this as a signal to fall back to the legacy JSON-RPC path.
     """
+
+
+def _is_confcloud_77618_response(response: requests.Response) -> bool:
+    """Body-signature match for the CONFCLOUD-77618 / CONFCLOUD-76424 404
+    so unrelated 404s still propagate."""
+    if response.status_code != 404:
+        return False
+    body = response.text
+    return any(sig in body for sig in _CONFCLOUD_77618_404_BODY_SIGNATURES)
 
 
 class OnyxConfluence:
@@ -498,7 +534,9 @@ class OnyxConfluence:
                                 self._confluence = self._initialize_connection_helper(
                                     credentials, **self._kwargs
                                 )
-                            attr = getattr(self._confluence, name, None)
+                            attr = getattr(  # ods: ignore[getattr]
+                                self._confluence, name, None
+                            )
                             if attr is None:
                                 # The underlying Confluence client doesn't have this attribute
                                 raise AttributeError(
@@ -507,7 +545,9 @@ class OnyxConfluence:
 
                             return attr(*args, **kwargs)
                     else:
-                        attr = getattr(self._confluence, name, None)
+                        attr = getattr(  # ods: ignore[getattr]
+                            self._confluence, name, None
+                        )
                         if attr is None:
                             # The underlying Confluence client doesn't have this attribute
                             raise AttributeError(
@@ -540,7 +580,7 @@ class OnyxConfluence:
 
     def __getattr__(self, name: str) -> Any:
         """Dynamically intercept attribute/method access."""
-        attr = getattr(self._confluence, name, None)
+        attr = getattr(self._confluence, name, None)  # ods: ignore[getattr]
         if attr is None:
             # The underlying Confluence client doesn't have this attribute
             raise AttributeError(
@@ -676,6 +716,16 @@ class OnyxConfluence:
                     )
                     continue
 
+                # CONFCLOUD-77618 / 76424: typed signal so the perm-sync
+                # caller can restart in per-page restriction-fetch mode.
+                if (
+                    _ANCESTOR_RESTRICTIONS_EXPAND_PREFIX in url_suffix
+                    and _is_confcloud_77618_response(raw_response)
+                ):
+                    raise Confcloud77618Error(
+                        url=url_suffix, body=raw_response.text
+                    ) from e
+
                 if raw_response.status_code in _SERVER_ERROR_CODES:
                     # Try reducing the page size -- Confluence often times out
                     # on large result sets (especially Cloud 504s).
@@ -792,6 +842,24 @@ class OnyxConfluence:
         expand_string = f"&expand={expand}" if expand else ""
         return f"rest/api/content/search?cql={cql}{expand_string}"
 
+    def fetch_content_read_restrictions(
+        self,
+        content_id: str,
+    ) -> dict[str, Any] | None:
+        """Fetch a single page's restrictions via the dedicated
+        ``content/{id}/restriction/byOperation`` endpoint. Returns
+        ``None`` on 403/404 so unreadable ancestors (drafts owned by
+        another user) resolve as "no inheritable restriction here".
+        ``advanced_mode=True`` bypasses the rate-limit wrapper's 7x
+        403-retry loop which would otherwise burn ~70s per draft."""
+        path = f"rest/api/content/{quote(content_id, safe='')}/restriction/byOperation"
+        response: requests.Response = self.get(path, advanced_mode=True)
+        if response.status_code in (403, 404):
+            return None
+        response.raise_for_status()
+        body = response.json()
+        return cast(dict[str, Any], body or {})
+
     def paginated_cql_retrieval(
         self,
         cql: str,
@@ -830,10 +898,8 @@ class OnyxConfluence:
         expand: str | None = None,
         limit: int | None = None,
     ) -> Iterator[dict[str, Any]]:
-        """
-        This function will paginate through the top level query first, then
-        paginate through all of the expansions.
-        """
+        """Paginate the top-level query, then each `_links.next` discovered
+        in the expansions."""
 
         def _traverse_and_update(data: dict | list) -> None:
             if isinstance(data, dict):
@@ -1240,7 +1306,8 @@ def get_user_email_from_username__server(
     confluence_client: OnyxConfluence, user_name: str
 ) -> str | None:
     global _USER_EMAIL_CACHE
-    if _USER_EMAIL_CACHE.get(user_name) is None:
+    cache_key = (confluence_client._url, user_name)
+    if _USER_EMAIL_CACHE.get(cache_key) is None:
         try:
             response = confluence_client.get_mobile_parameters(user_name)
             email = response.get("email")
@@ -1263,8 +1330,8 @@ def get_user_email_from_username__server(
                 e,
             )
             email = None
-        _USER_EMAIL_CACHE[user_name] = email
-    return _USER_EMAIL_CACHE[user_name]
+        _USER_EMAIL_CACHE[cache_key] = email
+    return _USER_EMAIL_CACHE[cache_key]
 
 
 def get_user_email_from_userkey__server(
@@ -1281,7 +1348,8 @@ def get_user_email_from_userkey__server(
     different (userKey is opaque hex, username is human-readable).
     """
     global _USER_KEY_TO_EMAIL_CACHE
-    if user_key not in _USER_KEY_TO_EMAIL_CACHE:
+    cache_key = (confluence_client._url, user_key)
+    if cache_key not in _USER_KEY_TO_EMAIL_CACHE:
         try:
             response = confluence_client.get_user_details_by_userkey(user_key)
             email = response.get("email") if isinstance(response, dict) else None
@@ -1302,8 +1370,8 @@ def get_user_email_from_userkey__server(
                 e,
             )
             email = None
-        _USER_KEY_TO_EMAIL_CACHE[user_key] = email
-    return _USER_KEY_TO_EMAIL_CACHE[user_key]
+        _USER_KEY_TO_EMAIL_CACHE[cache_key] = email
+    return _USER_KEY_TO_EMAIL_CACHE[cache_key]
 
 
 def _parse_dc_version(version_str: str) -> tuple[int, int] | None:
@@ -1330,7 +1398,8 @@ def _get_user(confluence_client: OnyxConfluence, user_id: str) -> str:
         str: The User Display Name. 'Unknown User' if the user is deactivated or not found
     """
     global _USER_ID_TO_DISPLAY_NAME_CACHE
-    if _USER_ID_TO_DISPLAY_NAME_CACHE.get(user_id) is None:
+    cache_key = (confluence_client._url, user_id)
+    if _USER_ID_TO_DISPLAY_NAME_CACHE.get(cache_key) is None:
         try:
             result = confluence_client.get_user_details_by_userkey(user_id)
             found_display_name = result.get("displayName")
@@ -1344,9 +1413,9 @@ def _get_user(confluence_client: OnyxConfluence, user_id: str) -> str:
             except Exception:
                 found_display_name = None
 
-        _USER_ID_TO_DISPLAY_NAME_CACHE[user_id] = found_display_name
+        _USER_ID_TO_DISPLAY_NAME_CACHE[cache_key] = found_display_name
 
-    return _USER_ID_TO_DISPLAY_NAME_CACHE.get(user_id) or _USER_NOT_FOUND
+    return _USER_ID_TO_DISPLAY_NAME_CACHE.get(cache_key) or _USER_NOT_FOUND
 
 
 def sanitize_attachment_title(title: str) -> str:

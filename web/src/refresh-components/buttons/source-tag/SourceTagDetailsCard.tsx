@@ -12,7 +12,8 @@ import {
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
 import { ValidSources } from "@/lib/types";
-import { timeAgo } from "@/lib/time";
+import { timeAgo } from "@opal/time";
+import { useLocale } from "next-intl";
 import type { IconProps } from "@opal/types";
 import { SubQuestionDetail } from "@/app/app/interfaces";
 
@@ -70,6 +71,7 @@ const SourceTagDetailsCardInner = ({
   onPrev,
   onNext,
 }: SourceTagDetailsCardProps) => {
+  const locale = useLocale();
   const currentSource = sources[currentIndex];
   if (!currentSource) return null;
 
@@ -81,11 +83,12 @@ const SourceTagDetailsCardInner = ({
   const relativeDate = timeAgo(
     currentSource.metadata?.date instanceof Date
       ? currentSource.metadata.date.toISOString()
-      : currentSource.metadata?.date
+      : currentSource.metadata?.date,
+    locale
   );
 
   return (
-    <div className="w-70 bg-background-neutral-00 border border-border-01 rounded-12 shadow-01 overflow-hidden">
+    <div className="w-70 bg-background-neutral-00 border border-border-01 rounded-12 shadow-box-01 overflow-hidden">
       {/* Navigation header - only shown for multiple sources */}
       {showNavigation && (
         <div className="flex items-center justify-between p-2 bg-background-tint-01 border-b border-border-01">
@@ -113,7 +116,7 @@ const SourceTagDetailsCardInner = ({
 
       <div className="p-1 flex flex-col gap-1">
         {/* Header with icon and title */}
-        <div className="flex items-start gap-1 p-0.5 min-h-7 w-full text-left hover:bg-background-tint-01 rounded-08 transition-colors">
+        <div className="flex items-start gap-1 p-0.5 min-h-7 w-full text-start hover:bg-background-tint-01 rounded-08 transition-colors">
           <div className="flex items-center justify-center p-0.5 shrink-0 w-5 h-5">
             {isQuestion ? (
               <SvgQuestionMarkSmall size={16} className="text-text-03" />

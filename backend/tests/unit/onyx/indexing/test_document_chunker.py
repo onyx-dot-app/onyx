@@ -1,11 +1,15 @@
+import io
+
 import pytest
 from chonkie import SentenceChunker
 
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import SECTION_SEPARATOR
-from onyx.connectors.models import IndexingDocument
-from onyx.connectors.models import Section
-from onyx.connectors.models import SectionType
+from onyx.configs.constants import SECTION_SEPARATOR, DocumentSource
+from onyx.connectors.models import (
+    IndexingDocument,
+    Section,
+    SectionType,
+    TabularSection,
+)
 from onyx.indexing.chunking import DocumentChunker
 from onyx.indexing.chunking import text_section_chunker as text_chunker_module
 from onyx.natural_language_processing.utils import BaseTokenizer
@@ -671,6 +675,22 @@ def test_first_empty_section_with_title_is_processed_not_skipped() -> None:
 # --- clean_text is applied to section text -----------------------------------
 
 
+def test_chunking_preserves_numeric_ranges() -> None:
+    dc = _make_document_chunker()
+    text = "Collect for 1–2 weeks at 1–5%; use 3–6 clusters."
+    doc = _make_doc(sections=[Section(type=SectionType.TEXT, text=text, link="l1")])
+    chunks = dc.chunk(
+        document=doc,
+        sections=doc.processed_sections,
+        title_prefix="",
+        metadata_suffix_semantic="",
+        metadata_suffix_keyword="",
+        content_token_limit=CHUNK_LIMIT,
+    )
+    assert len(chunks) == 1
+    assert chunks[0].content == text
+
+
 def test_clean_text_strips_control_chars_from_section_content() -> None:
     """clean_text() should remove control chars before the text enters the
     accumulator — verifies the call isn't dropped by a refactor."""
@@ -785,3 +805,45 @@ def test_no_trailing_empty_chunk_when_last_section_was_oversized() -> None:
 
     # Every chunk should be non-empty — no dangling "" chunk at the tail.
     assert all(c.content.strip() for c in chunks)
+
+
+# --- File-backed tabular sections are not filtered as empty ------------------
+
+
+def test_file_backed_tabular_section_in_untitled_doc_is_chunked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A file-backed TabularSection holds its content in csv_file_id, not text,
+    so the empty-section guard would otherwise drop it in a no-title doc. It
+    must instead reach the tabular chunker and produce row chunks."""
+    import onyx.indexing.chunking.tabular_section_chunker.tabular_section_chunker as tab_mod
+
+    csv_text = "name,score\n" + "\n".join(f"rowval{i},{i}" for i in range(30))
+
+    class _FakeStore:
+        def read_file(
+            self, file_id: str, mode: str | None = None, use_tempfile: bool = False
+        ) -> io.BytesIO:
+            del file_id, mode, use_tempfile  # stub: signature parity only
+            return io.BytesIO(csv_text.encode("utf-8"))
+
+    monkeypatch.setattr(tab_mod, "get_default_file_store", lambda: _FakeStore())
+
+    dc = _make_document_chunker()
+    doc = _make_doc(
+        sections=[TabularSection(link="x", csv_file_id="csv-1", heading="Sheet1")],
+        title=None,
+    )
+
+    chunks = dc.chunk(
+        document=doc,
+        sections=doc.processed_sections,
+        title_prefix="",
+        metadata_suffix_semantic="",
+        metadata_suffix_keyword="",
+        content_token_limit=CHUNK_LIMIT,
+    )
+
+    joined = "\n".join(c.content for c in chunks)
+    assert "rowval0" in joined
+    assert "rowval29" in joined

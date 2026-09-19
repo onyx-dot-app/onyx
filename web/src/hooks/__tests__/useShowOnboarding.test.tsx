@@ -24,13 +24,13 @@ jest.mock("@/components/chat/ProviderContext", () => ({
   useProviderStatus: () => mockProviderStatus,
 }));
 
-jest.mock("@/hooks/useLanguageModels", () => ({
+jest.mock("@/lib/languageModels/hooks", () => ({
   useLLMProviders: () => ({
     refetch: jest.fn(),
   }),
 }));
 
-jest.mock("@/lib/userSettings", () => ({
+jest.mock("@/lib/users/svc", () => ({
   updateUserPersonalization: jest.fn(),
 }));
 
@@ -51,7 +51,7 @@ function renderUseShowOnboarding(
     : [];
 
   const defaultParams = {
-    liveAgent: undefined as undefined,
+    activeAgent: undefined as undefined,
     isLoadingChatSessions: overrides.isLoadingChatSessions ?? false,
     chatSessionsCount: overrides.chatSessionsCount ?? 0,
     userId: "userId" in overrides ? overrides.userId : "user-1",
@@ -130,7 +130,7 @@ describe("useShowOnboarding", () => {
     mockProviderStatus.llmProviders = [{ provider: "openai" }];
 
     rerender({
-      liveAgent: undefined,
+      activeAgent: undefined,
       isLoadingChatSessions: false,
       chatSessionsCount: 0,
       userId: "user-1",
@@ -153,7 +153,7 @@ describe("useShowOnboarding", () => {
     mockProviderStatus.llmProviders = [{ provider: "openai" }];
 
     rerender({
-      liveAgent: undefined,
+      activeAgent: undefined,
       isLoadingChatSessions: false,
       chatSessionsCount: 0,
       userId: "user-2",

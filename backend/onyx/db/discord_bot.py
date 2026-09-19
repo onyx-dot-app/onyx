@@ -1,25 +1,22 @@
 """CRUD operations for Discord bot models."""
 
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
-from sqlalchemy import delete
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import joinedload
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
-from onyx.auth.api_key import build_displayable_api_key
-from onyx.auth.api_key import generate_api_key
-from onyx.auth.api_key import hash_api_key
-from onyx.auth.schemas import UserRole
+from onyx.auth.api_key import build_displayable_api_key, generate_api_key, hash_api_key
 from onyx.configs.constants import DISCORD_SERVICE_API_KEY_NAME
 from onyx.db.api_key import insert_api_key
-from onyx.db.models import ApiKey
-from onyx.db.models import DiscordBotConfig
-from onyx.db.models import DiscordChannelConfig
-from onyx.db.models import DiscordGuildConfig
-from onyx.db.models import User
+from onyx.db.models import (
+    ApiKey,
+    DiscordBotConfig,
+    DiscordChannelConfig,
+    DiscordGuildConfig,
+    User,
+)
+from onyx.db.users import delete_user_from_db__no_commit
 from onyx.db.utils import DiscordChannelView
 from onyx.server.api_key.models import APIKeyArgs
 from onyx.utils.logger import setup_logger
@@ -113,7 +110,6 @@ def get_or_create_discord_service_api_key(
     logger.info("Creating Discord service API key for tenant %s", tenant_id)
     api_key_args = APIKeyArgs(
         name=DISCORD_SERVICE_API_KEY_NAME,
-        role=UserRole.LIMITED,  # Limited role is sufficient for chat requests
     )
     api_key_descriptor = insert_api_key(
         db_session=db_session,
@@ -155,8 +151,7 @@ def delete_discord_service_api_key(db_session: Session) -> bool:
 
     db_session.delete(existing_key)
     if api_key_user:
-        db_session.delete(api_key_user)
-
+        delete_user_from_db__no_commit(api_key_user, db_session)
     db_session.flush()
     logger.info("Deleted Discord service API key")
     return True

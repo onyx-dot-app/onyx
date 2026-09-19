@@ -1,8 +1,6 @@
 import time
 from collections.abc import Callable
-from typing import Any
-from typing import Dict
-from typing import Optional
+from typing import Any, Dict, Optional
 from urllib.parse import quote
 
 from onyx.utils.logger import setup_logger

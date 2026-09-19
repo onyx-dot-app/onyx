@@ -56,8 +56,12 @@ module.exports = {
         "collapsible-up": "collapsible-up 0.2s ease-out",
       },
       fontFamily: {
-        sans: ["Hanken Grotesk", "sans-serif"],
-        hanken: ["Hanken Grotesk", "sans-serif"],
+        // Resolve through the shared variable (root.css default; the web app
+        // overrides it with the loaded webfont plus locale-aware CJK
+        // fallbacks). A literal "Hanken Grotesk" stack never matches the
+        // next/font-loaded font, which registers under a hashed family name.
+        sans: ['var(--font-hanken-grotesk, "Hanken Grotesk", sans-serif)'],
+        hanken: ['var(--font-hanken-grotesk, "Hanken Grotesk", sans-serif)'],
       },
       colors: {
         "text-05": "var(--text-05)",
@@ -112,13 +116,13 @@ module.exports = {
         "border-inverted-03": "var(--border-inverted-03)",
         "border-inverted-02": "var(--border-inverted-02)",
         "border-inverted-01": "var(--border-inverted-01)",
-        "action-link-06": "var(--action-link-06)",
-        "action-link-05": "var(--action-link-05)",
-        "action-link-04": "var(--action-link-04)",
-        "action-link-03": "var(--action-link-03)",
-        "action-link-02": "var(--action-link-02)",
-        "action-link-01": "var(--action-link-01)",
-        "action-link-00": "var(--action-link-00)",
+        "action-selection-06": "var(--action-selection-06)",
+        "action-selection-05": "var(--action-selection-05)",
+        "action-selection-04": "var(--action-selection-04)",
+        "action-selection-03": "var(--action-selection-03)",
+        "action-selection-02": "var(--action-selection-02)",
+        "action-selection-01": "var(--action-selection-01)",
+        "action-selection-00": "var(--action-selection-00)",
         "action-danger-06": "var(--action-danger-06)",
         "action-danger-05": "var(--action-danger-05)",
         "action-danger-04": "var(--action-danger-04)",
@@ -224,12 +228,13 @@ module.exports = {
         text: "var(--text-04)",
       },
       borderRadius: {
-        "02": "var(--border-radius-02)",
-        "04": "var(--border-radius-04)",
-        "08": "var(--border-radius-08)",
-        12: "var(--border-radius-12)",
-        16: "var(--border-radius-16)",
-        full: "var(--border-radius-full)",
+        "02": "var(--radius-02)",
+        "04": "var(--radius-04)",
+        "08": "var(--radius-08)",
+        12: "var(--radius-12)",
+        16: "var(--radius-16)",
+        20: "var(--radius-20)",
+        full: "var(--radius-round)",
       },
       fontSize: {
         "2xs": "0.625rem",
@@ -238,10 +243,20 @@ module.exports = {
         description: "375",
         "token-bold": "bold",
       },
+      boxShadow: {
+        "box-00": "var(--shadow-box-00)",
+        "box-01": "var(--shadow-box-01)",
+        "box-02": "var(--shadow-box-02)",
+      },
       backdropBlur: {
         "01": "var(--backdrop-blur-01)",
         "02": "var(--backdrop-blur-02)",
         "03": "var(--backdrop-blur-03)",
+      },
+      zIndex: {
+        "settings-header": "var(--z-settings-header)",
+        popover: "var(--z-popover)",
+        tooltip: "var(--z-tooltip)",
       },
     },
   },

@@ -1,38 +1,32 @@
 "use client";
 
 import { useMemo } from "react";
-import Text from "@/refresh-components/texts/Text";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { useTranslations } from "next-intl";
+import { InputTypeIn, Tabs, Text } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import SimpleTabs from "@/refresh-components/SimpleTabs";
 import { Section } from "@/layouts/general-layouts";
 import { cn } from "@opal/utils";
 import type {
-  AdvancedPayload,
   DailyWeeklyPayload,
   EditorMode,
   EditorPayload,
   IntervalPayload,
   IntervalUnit,
 } from "@/app/craft/v1/tasks/interfaces";
-import { compileToCron } from "@/app/craft/v1/tasks/schedule";
 
-// 0=Sun..6=Sat (cron convention).
-const WEEKDAY_LABELS: ReadonlyArray<{ value: number; short: string }> = [
-  { value: 0, short: "Sun" },
-  { value: 1, short: "Mon" },
-  { value: 2, short: "Tue" },
-  { value: 3, short: "Wed" },
-  { value: 4, short: "Thu" },
-  { value: 5, short: "Fri" },
-  { value: 6, short: "Sat" },
-];
+// 0=Sun..6=Sat (cron convention). Short labels come from the
+// craft.tasks.scheduleEditor.weekdays message namespace.
+const WEEKDAY_LABELS = [
+  { value: 0, key: "sun" },
+  { value: 1, key: "mon" },
+  { value: 2, key: "tue" },
+  { value: 3, key: "wed" },
+  { value: 4, key: "thu" },
+  { value: 5, key: "fri" },
+  { value: 6, key: "sat" },
+] as const;
 
-const INTERVAL_UNITS: ReadonlyArray<{ value: IntervalUnit; label: string }> = [
-  { value: "minutes", label: "minutes" },
-  { value: "hours", label: "hours" },
-  { value: "days", label: "days" },
-];
+const INTERVAL_UNITS: ReadonlyArray<IntervalUnit> = ["minutes", "hours"];
 
 export interface ScheduleEditorProps {
   mode: EditorMode;
@@ -50,12 +44,13 @@ export default function ScheduleEditor({
   onPayloadChange,
   error,
 }: ScheduleEditorProps) {
+  const t = useTranslations("craft.tasks.scheduleEditor");
   // Cache the active payload per mode so flipping tabs back and forth doesn't
   // wipe out a partially-filled form on the other tab.
   const tabContent = useMemo(
     () => ({
       interval: {
-        name: "Interval",
+        name: t("tabs.interval"),
         content: (
           <IntervalEditor
             payload={
@@ -68,7 +63,7 @@ export default function ScheduleEditor({
         ),
       },
       daily_weekly: {
-        name: "Daily / Weekly",
+        name: t("tabs.dailyWeekly"),
         content: (
           <DailyWeeklyEditor
             payload={
@@ -80,29 +75,15 @@ export default function ScheduleEditor({
           />
         ),
       },
-      advanced: {
-        name: "Advanced",
-        content: (
-          <AdvancedEditor
-            payload={
-              mode === "advanced"
-                ? (payload as AdvancedPayload)
-                : DEFAULT_ADVANCED
-            }
-            onChange={onPayloadChange}
-          />
-        ),
-      },
     }),
-    [mode, payload, onPayloadChange]
+    [mode, payload, onPayloadChange, t]
   );
 
-  const compiled = compileToCron(mode, payload);
+  const tabEntries = Object.entries(tabContent);
 
   return (
-    <Section gap={0.5}>
-      <SimpleTabs
-        tabs={tabContent}
+    <Section gap={2}>
+      <Tabs
         value={mode}
         onValueChange={(value) => {
           const next = value as EditorMode;
@@ -116,20 +97,27 @@ export default function ScheduleEditor({
             !isDailyWeeklyPayload(payload)
           ) {
             onPayloadChange(DEFAULT_DAILY_WEEKLY);
-          } else if (next === "advanced" && !isAdvancedPayload(payload)) {
-            onPayloadChange(DEFAULT_ADVANCED);
           }
         }}
-      />
-      {error ? (
-        <Text mainUiBody text03 className="text-status-error-05">
+      >
+        <Tabs.List>
+          {tabEntries.map(([key, tab]) => (
+            <Tabs.Trigger key={key} value={key}>
+              {tab.name}
+            </Tabs.Trigger>
+          ))}
+        </Tabs.List>
+        {tabEntries.map(([key, tab]) => (
+          <Tabs.Content key={key} value={key}>
+            {tab.content}
+          </Tabs.Content>
+        ))}
+      </Tabs>
+      {error && (
+        <Text font="main-ui-body" color="status-error-05">
           {error}
         </Text>
-      ) : compiled.ok ? (
-        <Text secondaryBody text03>
-          Cron: <code className="font-mono">{compiled.cron}</code>
-        </Text>
-      ) : null}
+      )}
     </Section>
   );
 }
@@ -143,7 +131,6 @@ const DEFAULT_DAILY_WEEKLY: DailyWeeklyPayload = {
   time_of_day: "09:00",
   weekdays: [1, 2, 3, 4, 5],
 };
-const DEFAULT_ADVANCED: AdvancedPayload = { cron: "0 9 * * 1" };
 
 function isIntervalPayload(p: EditorPayload): p is IntervalPayload {
   return (
@@ -156,10 +143,6 @@ function isDailyWeeklyPayload(p: EditorPayload): p is DailyWeeklyPayload {
   return Array.isArray((p as DailyWeeklyPayload).weekdays);
 }
 
-function isAdvancedPayload(p: EditorPayload): p is AdvancedPayload {
-  return typeof (p as AdvancedPayload).cron === "string";
-}
-
 // ---------------------------------------------------------------------------
 // Interval
 // ---------------------------------------------------------------------------
@@ -170,14 +153,14 @@ interface IntervalEditorProps {
 }
 
 function IntervalEditor({ payload, onChange }: IntervalEditorProps) {
-  const showTimeOfDay = payload.unit === "days";
+  const t = useTranslations("craft.tasks.scheduleEditor");
   return (
-    <Section gap={0.5}>
+    <Section gap={2}>
       <div className="flex items-center gap-2 flex-wrap">
-        <Text mainUiBody text05>
-          Every
+        <Text font="main-ui-body" color="text-05">
+          {t("interval.everyLabel")}
         </Text>
-        <div className="w-20">
+        <div className="w-28">
           <InputTypeIn
             type="number"
             min={1}
@@ -197,32 +180,15 @@ function IntervalEditor({ payload, onChange }: IntervalEditorProps) {
           >
             <InputSelect.Trigger />
             <InputSelect.Content>
-              {INTERVAL_UNITS.map((u) => (
-                <InputSelect.Item key={u.value} value={u.value}>
-                  {u.label}
+              {INTERVAL_UNITS.map((unit) => (
+                <InputSelect.Item key={unit} value={unit}>
+                  {t(`intervalUnits.${unit}`)}
                 </InputSelect.Item>
               ))}
             </InputSelect.Content>
           </InputSelect>
         </div>
       </div>
-      {showTimeOfDay && (
-        <div className="flex items-center gap-2">
-          <Text mainUiBody text05>
-            At
-          </Text>
-          <div className="w-32">
-            <InputTypeIn
-              type="time"
-              value={payload.time_of_day ?? "09:00"}
-              onChange={(e) =>
-                onChange({ ...payload, time_of_day: e.target.value })
-              }
-              data-testid="interval-time"
-            />
-          </div>
-        </div>
-      )}
     </Section>
   );
 }
@@ -237,14 +203,22 @@ interface DailyWeeklyEditorProps {
 }
 
 function DailyWeeklyEditor({ payload, onChange }: DailyWeeklyEditorProps) {
+  const t = useTranslations("craft.tasks.scheduleEditor");
   const weekdaySet = new Set(payload.weekdays ?? []);
+  const selectedDays = WEEKDAY_LABELS.filter((d) =>
+    weekdaySet.has(d.value)
+  ).map((d) => t(`weekdays.${d.key}`));
+  const scheduleNote =
+    selectedDays.length === 0
+      ? t("dailyWeekly.runsEveryDay")
+      : t("dailyWeekly.runsOn", { days: selectedDays.join(", ") });
   return (
-    <Section gap={0.5}>
+    <Section gap={2}>
       <div className="flex items-center gap-2">
-        <Text mainUiBody text05>
-          At
+        <Text font="main-ui-body" color="text-05">
+          {t("dailyWeekly.atLabel")}
         </Text>
-        <div className="w-32">
+        <div className="w-44">
           <InputTypeIn
             type="time"
             value={payload.time_of_day ?? "09:00"}
@@ -256,8 +230,8 @@ function DailyWeeklyEditor({ payload, onChange }: DailyWeeklyEditorProps) {
         </div>
       </div>
       <div className="flex flex-col gap-1">
-        <Text secondaryBody text03>
-          On these days (leave all unchecked for every day):
+        <Text font="secondary-body" color="text-03">
+          {t("dailyWeekly.daysLabel")}
         </Text>
         <div className="flex items-center gap-1 flex-wrap">
           {WEEKDAY_LABELS.map((day) => {
@@ -280,41 +254,19 @@ function DailyWeeklyEditor({ payload, onChange }: DailyWeeklyEditorProps) {
                 className={cn(
                   "px-3 py-1 rounded-08 border text-sm transition-colors",
                   selected
-                    ? "bg-action-link-01 border-action-link-03 text-text-05"
+                    ? "bg-action-selection-01 border-action-selection-03 text-text-05"
                     : "bg-background-neutral-00 border-border-02 text-text-03 hover:bg-background-tint-01"
                 )}
               >
-                {day.short}
+                {t(`weekdays.${day.key}`)}
               </button>
             );
           })}
         </div>
+        <Text font="secondary-body" color="text-03">
+          {scheduleNote}
+        </Text>
       </div>
-    </Section>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Advanced (raw cron)
-// ---------------------------------------------------------------------------
-
-interface AdvancedEditorProps {
-  payload: AdvancedPayload;
-  onChange: (payload: AdvancedPayload) => void;
-}
-
-function AdvancedEditor({ payload, onChange }: AdvancedEditorProps) {
-  return (
-    <Section gap={0.5}>
-      <Text secondaryBody text03>
-        Five-field cron expression (minute hour day-of-month month day-of-week).
-      </Text>
-      <InputTypeIn
-        value={payload.cron ?? ""}
-        onChange={(e) => onChange({ cron: e.target.value })}
-        placeholder="0 9 * * 1"
-        data-testid="advanced-cron"
-      />
     </Section>
   );
 }

@@ -28,12 +28,12 @@ variable "public_cluster_enabled" {
 variable "private_cluster_enabled" {
   type        = bool
   description = "Whether to enable private cluster access"
-  default     = false
+  default     = true
 }
 
 variable "cluster_endpoint_public_access_cidrs" {
   type        = list(string)
-  description = "List of CIDR blocks allowed to access the public EKS API endpoint"
+  description = "List of CIDR blocks allowed to access the public EKS API endpoint. Empty denies all public access; set this if public_cluster_enabled is true."
   default     = []
 }
 
@@ -41,6 +41,12 @@ variable "main_node_instance_types" {
   type        = list(string)
   description = "Instance types for the main node group"
   default     = ["m7i.4xlarge"]
+}
+
+variable "vespa_node_enabled" {
+  type        = bool
+  description = "Whether to create the dedicated Vespa/document-index node group. Disable when the index runs off-cluster (managed OpenSearch) or fits on the main node group."
+  default     = true
 }
 
 variable "vespa_node_instance_types" {
@@ -57,8 +63,89 @@ variable "vespa_node_subnet_ids" {
 
 variable "main_node_subnet_ids" {
   type        = list(string)
-  description = "Subnet IDs for the main node group. If not specified, uses all cluster subnets. Pin to private subnets to keep node egress on the NAT gateway IP across replacements."
+  description = "Subnet IDs for the main node group. If not specified, uses all cluster subnets. Pin to private subnets to keep node egress on the NAT EIP across replacements."
   default     = []
+}
+
+variable "main_node_min_size" {
+  type        = number
+  description = "Minimum number of nodes in the main node group. The cluster-autoscaler will not scale below this, so raise it to guarantee always-on baseline capacity for bursty workloads. Null keeps the node-group default."
+  default     = null
+}
+
+variable "vespa_node_disk_size_gb" {
+  type        = number
+  description = "Root EBS volume (GiB) for the Vespa/document-index node. Null keeps the node-group default."
+  default     = null
+}
+
+variable "main_node_max_size" {
+  type        = number
+  description = "Maximum number of nodes the main node group may scale up to. Null keeps the node-group default."
+  default     = null
+}
+
+variable "enable_gpu_node" {
+  type        = bool
+  description = "Whether to create a dedicated, tainted GPU node group for the embedding model server. Opt-in per customer."
+  default     = false
+
+  validation {
+    condition     = !var.enable_gpu_node || !contains(keys(var.eks_managed_node_groups), "gpu")
+    error_message = "enable_gpu_node injects a node group under the key \"gpu\", which eks_managed_node_groups already defines. Rename your group so the GPU group does not replace it."
+  }
+}
+
+variable "gpu_node_instance_types" {
+  type        = list(string)
+  description = "Instance types for the GPU node group. g4dn.xlarge (1x NVIDIA T4) is sufficient for the embedding model."
+  default     = ["g4dn.xlarge"]
+}
+
+variable "enable_craft" {
+  type        = bool
+  description = "Create a dedicated Craft sandbox node group (labeled onyx.app/workload=sandbox, tainted workload=sandbox:NoSchedule, IMDSv2 hop-limit 1). Opt-in per workspace."
+  default     = false
+
+  validation {
+    condition     = !var.enable_craft || !contains(keys(var.eks_managed_node_groups), "sandbox")
+    error_message = "enable_craft injects a node group under the key \"sandbox\", which eks_managed_node_groups already defines. Rename your group so the Craft group does not replace it."
+  }
+}
+
+variable "craft_sandbox_node_instance_types" {
+  type        = list(string)
+  description = "Instance types for the Craft sandbox node group."
+  default     = ["m8i.2xlarge"]
+}
+
+variable "craft_sandbox_node_min_size" {
+  type        = number
+  description = "Min size of the Craft sandbox node group."
+  default     = 1
+}
+
+variable "craft_sandbox_node_max_size" {
+  type        = number
+  description = "Max size of the Craft sandbox node group (cluster-autoscaler scales between min and max)."
+  default     = 7
+}
+
+variable "craft_sandbox_node_desired_size" {
+  type        = number
+  description = "Desired size of the Craft sandbox node group."
+  default     = 1
+}
+
+variable "craft_sandbox_node_disk_size_gb" {
+  type        = number
+  description = "Root EBS volume (GiB) for Craft sandbox nodes. Size so ephemeral-storage is NOT the binding scheduling dimension: each sandbox pod reserves ~5.5Gi eph, so allow (max_sandboxes_per_node * 5.5Gi) + system/image headroom. The AMI default (~20Gi) caps a node at ~3 sandboxes despite ~7 by CPU."
+  default     = 200
+
+  validation {
+    condition     = var.craft_sandbox_node_disk_size_gb >= 20
+    error_message = "craft_sandbox_node_disk_size_gb must be at least 20 GiB; the AL2023 AMI and OS overlay consume ~8 GiB, leaving too little ephemeral storage for even one sandbox pod (5Gi request) below that threshold."
+  }
 }
 
 variable "eks_managed_node_groups" {
@@ -76,7 +163,7 @@ variable "eks_managed_node_groups" {
         xvda = {
           device_name = "/dev/xvda"
           ebs = {
-            volume_size           = 50
+            volume_size           = 100
             volume_type           = "gp3"
             encrypted             = true
             delete_on_termination = true
@@ -150,6 +237,12 @@ variable "irsa_service_account_name" {
   default     = "onyx-workload-access"
 }
 
+variable "irsa_additional_service_account_names" {
+  type        = list(string)
+  description = "Additional service accounts in irsa_service_account_namespace that may assume the workload IRSA role. Use this for chart-created workloads, such as <release>-sandbox-proxy, that also need RDS IAM auth. The role is created when s3_bucket_names is non-empty or RDS IAM auth is enabled."
+  default     = []
+}
+
 variable "enable_rds_iam_for_service_account" {
   type        = bool
   description = "Whether to create a dedicated RDS IRSA role and service account (grants rds-db:connect)"
@@ -181,11 +274,23 @@ variable "cluster_enabled_log_types" {
 
 variable "cloudwatch_log_group_retention_in_days" {
   type        = number
-  description = "Number of days to retain EKS control plane logs in CloudWatch (0 = never expire)"
-  default     = 30
+  description = "Number of days to retain EKS control plane logs in CloudWatch (0 = never expire). Default 400 = 12 months + 30-day buffer for the common twelve-month log-retention control."
+  default     = 400
 
   validation {
     condition     = contains([0, 1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827, 2192, 2557, 2922, 3288, 3653], var.cloudwatch_log_group_retention_in_days)
     error_message = "Must be a valid CloudWatch retention value (0, 1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827, 2192, 2557, 2922, 3288, 3653)."
   }
+}
+
+variable "enable_network_policy" {
+  type        = bool
+  description = "Adopt the VPC CNI addon and turn on NetworkPolicy enforcement. Updates use resolve_conflicts_on_update = PRESERVE so out-of-band aws-node settings survive; the trade-off is that a cluster whose addon already sets enableNetworkPolicy=false explicitly keeps that value, and enforcement stays off. Check the addon's configuration_values after the first apply."
+  default     = false
+}
+
+variable "vpc_cni_addon_version" {
+  type        = string
+  description = "VPC CNI addon version to pin when enable_network_policy is true. Set to the cluster's currently-running version (set CLUSTER_NAME, then: aws eks describe-addon --cluster-name \"$CLUSTER_NAME\" --addon-name vpc-cni --query 'addon.addonVersion') to avoid an unintended CNI upgrade on adoption."
+  default     = "v1.20.4-eksbuild.2"
 }

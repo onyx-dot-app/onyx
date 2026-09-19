@@ -2,7 +2,6 @@
 
 /* Disabled — baseline disabled visuals applied via a wrapper <div>.
  *
- * .opal-disabled                         → wrapper stretches to fill parent cross-axis
  * [data-opal-disabled]                   → cursor + pointer-events for all
  * [data-opal-disabled]:not(.interactive) → opacity for non-Interactive elements
  * [data-opal-disabled][data-allow-click] → re-enables clicks
@@ -11,10 +10,6 @@
  * variant CSS — no blanket opacity is applied to them. Pointer-events are
  * re-enabled so the JS layer can suppress onClick.
  */
-
-.opal-disabled {
-  @apply self-stretch;
-}
 
 [data-opal-disabled] {
   @apply cursor-not-allowed select-none;

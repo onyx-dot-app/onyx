@@ -1,32 +1,38 @@
 "use client";
 
-import Modal from "@/refresh-components/Modal";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import { Modal } from "@opal/components";
+import { useSettings } from "@/lib/settings/hooks";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { FormField } from "@/refresh-components/form/FormField";
-import { Checkbox } from "@opal/components";
-import { useContext, useEffect, useState } from "react";
+import { InputCheckbox } from "@opal/components";
+import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { transformLinkUri } from "@/lib/utils";
 import { SvgAlertCircle } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
 import type { IconProps } from "@opal/types";
+import { useTranslations } from "next-intl";
 
 const ALL_USERS_INITIAL_POPUP_FLOW_COMPLETED =
   "allUsersInitialPopupFlowCompleted";
 
-const CustomLogoHeaderIcon = ({ className, size = 24 }: IconProps) => (
-  <img
-    src="/api/enterprise-settings/logo"
-    alt="Logo"
-    style={{ width: size, height: size, objectFit: "contain" }}
-    className={className}
-  />
-);
+const CustomLogoHeaderIcon = ({ className, size = 24 }: IconProps) => {
+  const t = useTranslations("chat.popup");
+
+  return (
+    <img
+      src="/api/enterprise-settings/logo"
+      alt={t("logoIcon.alt")}
+      style={{ width: size, height: size, objectFit: "contain" }}
+      className={className}
+    />
+  );
+};
 
 export function AppPopup() {
+  const t = useTranslations("chat.popup");
   const [completedFlow, setCompletedFlow] = useState(true);
   const [showConsentError, setShowConsentError] = useState(false);
   const [consentChecked, setConsentChecked] = useState(false);
@@ -37,27 +43,26 @@ export function AppPopup() {
     );
   }, []);
 
-  const settings = useContext(SettingsContext);
-  const enterpriseSettings = settings?.enterpriseSettings;
-  const isConsentScreen = enterpriseSettings?.enable_consent_screen;
+  const settings = useSettings();
+  const isConsentScreen = settings.enterprise?.enable_consent_screen;
 
   if (
-    !enterpriseSettings?.custom_popup_content ||
+    !settings.enterprise?.custom_popup_content ||
     completedFlow ||
-    !enterpriseSettings?.show_first_visit_notice
+    !settings.enterprise?.show_first_visit_notice
   ) {
     return null;
   }
 
-  const popupTitle = enterpriseSettings?.custom_popup_header;
+  const popupTitle = settings.enterprise?.custom_popup_header;
 
-  const popupContent = enterpriseSettings?.custom_popup_content;
+  const popupContent = settings.enterprise?.custom_popup_content;
 
   const hasApplicationName = Boolean(
-    enterpriseSettings?.application_name?.trim()
+    settings.enterprise?.application_name?.trim()
   );
-  const hasCustomLogo = Boolean(enterpriseSettings?.use_custom_logo);
-  const logoDisplayStyle = enterpriseSettings?.logo_display_style;
+  const hasCustomLogo = Boolean(settings.enterprise?.use_custom_logo);
+  const logoDisplayStyle = settings.enterprise?.logo_display_style;
 
   // Header icon rules:
   // - If neither app name nor custom logo exists -> show Onyx icon
@@ -77,20 +82,22 @@ export function AppPopup() {
       <Modal.Content width="sm" height="lg">
         <Modal.Header
           icon={headerIcon}
-          title={popupTitle || "Welcome to Onyx!"}
+          title={popupTitle || t("header.title")}
         />
         <Modal.Body>
-          <div className="overflow-y-auto text-left">
+          <div className="overflow-y-auto text-start">
             <ReactMarkdown
               className="prose prose-neutral dark:prose-invert max-w-full"
               components={{
-                a: ({ node, ...props }) => (
+                a: ({ node, children, ...props }) => (
                   <a
                     {...props}
                     className="text-link hover:text-link-hover"
                     target="_blank"
                     rel="noopener noreferrer"
-                  />
+                  >
+                    {children}
+                  </a>
                 ),
                 p: ({ node, ...props }) => (
                   <Text as="p" mainUiBody text03 {...props} />
@@ -116,15 +123,15 @@ export function AppPopup() {
             >
               {popupContent}
             </ReactMarkdown>
-            {isConsentScreen && enterpriseSettings?.consent_screen_prompt && (
+            {isConsentScreen && settings.enterprise?.consent_screen_prompt && (
               <FormField
                 state={showConsentError ? "error" : "idle"}
                 className="mt-6"
               >
                 <div className="flex items-center gap-1">
                   <FormField.Control>
-                    <Checkbox
-                      aria-label="Consent checkbox"
+                    <InputCheckbox
+                      aria-label={t("consentCheckbox.label")}
                       checked={consentChecked}
                       onCheckedChange={(checked) => {
                         setConsentChecked(checked);
@@ -138,13 +145,15 @@ export function AppPopup() {
                     <ReactMarkdown
                       className="prose prose-neutral dark:prose-invert max-w-full"
                       components={{
-                        a: ({ node, ...props }) => (
+                        a: ({ node, children, ...props }) => (
                           <a
                             {...props}
                             className="text-link hover:text-link-hover"
                             target="_blank"
                             rel="noopener noreferrer"
-                          />
+                          >
+                            {children}
+                          </a>
                         ),
                         p: ({ node, ...props }) => (
                           <Text
@@ -165,15 +174,12 @@ export function AppPopup() {
                       remarkPlugins={[remarkGfm]}
                       urlTransform={transformLinkUri}
                     >
-                      {enterpriseSettings.consent_screen_prompt}
+                      {settings.enterprise.consent_screen_prompt}
                     </ReactMarkdown>
                   </FormField.Label>
                 </div>
                 <FormField.Message
-                  messages={{
-                    error:
-                      "You need to agree to the terms to access the application.",
-                  }}
+                  messages={{ error: t("consentRequired.error") }}
                 />
               </FormField>
             )}
@@ -193,7 +199,7 @@ export function AppPopup() {
               setCompletedFlow(true);
             }}
           >
-            Start
+            {t("startButton.label")}
           </Button>
         </Modal.Footer>
       </Modal.Content>

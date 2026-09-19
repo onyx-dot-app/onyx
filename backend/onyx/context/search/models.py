@@ -1,16 +1,13 @@
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel
-from pydantic import Field
-from pydantic import field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.models import SearchSettings
-from onyx.indexing.models import BaseChunk
-from onyx.indexing.models import IndexingSetting
+from onyx.indexing.models import BaseChunk, IndexingSetting
 from onyx.tools.tool_implementations.web_search.models import WEB_SEARCH_PREFIX
 
 
@@ -25,6 +22,10 @@ class QueryExpansionType(Enum):
 
 
 class SearchSettingsCreationRequest(IndexingSetting):
+    # cc_pairs the admin consented to delete (shown as "won't be ported"). Gates deletion:
+    # the server rejects if its authoritative recompute includes an unacknowledged cc_pair.
+    acknowledged_wont_port_cc_pair_ids: list[int] | None = None
+
     @classmethod
     def from_db_model(
         cls, search_settings: SearchSettings
@@ -36,6 +37,8 @@ class SearchSettingsCreationRequest(IndexingSetting):
 class SavedSearchSettings(IndexingSetting):
     # Previously this contained also Inference time settings. Keeping this wrapper class around
     # as there may again be inference time settings that may get added.
+    use_port_flow: bool | None = None
+
     @classmethod
     def from_db_model(cls, search_settings: SearchSettings) -> "SavedSearchSettings":
         return cls(
@@ -51,9 +54,14 @@ class SavedSearchSettings(IndexingSetting):
             embedding_precision=search_settings.embedding_precision,
             reduced_dimension=search_settings.reduced_dimension,
             switchover_type=search_settings.switchover_type,
+            use_port_flow=search_settings.use_port_flow,
             enable_contextual_rag=search_settings.enable_contextual_rag,
             contextual_rag_model_configuration_id=search_settings.contextual_rag_model_configuration_id,
         )
+
+
+class ContextualRagModelUpdateResponse(BaseModel):
+    contextual_rag_model_configuration_id: int
 
 
 class Tag(BaseModel):
@@ -61,11 +69,59 @@ class Tag(BaseModel):
     tag_value: str
 
 
+class TimeRange(BaseModel):
+    """An inclusive [start, end] window; either bound may be None (open).
+    Naive (timezone-less) bounds are treated as UTC."""
+
+    start: datetime | None = None
+    end: datetime | None = None
+
+    @field_validator("start", "end")
+    @classmethod
+    def _assume_utc_when_naive(cls, value: datetime | None) -> datetime | None:
+        if value is None or value.tzinfo is not None:
+            return value
+        return value.replace(tzinfo=timezone.utc)
+
+    def has_bounds(self) -> bool:
+        return self.start is not None or self.end is not None
+
+    def is_empty(self) -> bool:
+        """True when the window cannot match anything (start after end)."""
+        return self.start is not None and self.end is not None and self.start > self.end
+
+    def intersect(self, other: "TimeRange | None") -> "TimeRange":
+        """The overlap of the two windows (later start, earlier end); None is
+        unbounded."""
+        if other is None:
+            return self
+        return TimeRange(
+            start=max(filter(None, (self.start, other.start)), default=None),
+            end=min(filter(None, (self.end, other.end)), default=None),
+        )
+
+
 class BaseFilters(BaseModel):
     source_type: list[DocumentSource] | None = None
     document_set: list[str] | None = None
-    time_cutoff: datetime | None = None
+    created_at_range: TimeRange | None = None
+    updated_at_range: TimeRange | None = None
     tags: list[Tag] | None = None
+
+    # Deprecated wire-compat alias for updated_at_range.start. Folded into
+    # updated_at_range on validation and cleared; internal code must never read
+    # it. Excluded from serialization so it doesn't propagate further.
+    time_cutoff: datetime | None = Field(default=None, exclude=True)
+
+    @model_validator(mode="after")
+    def _fold_legacy_time_cutoff(self) -> "BaseFilters":
+        if self.time_cutoff is None:
+            return self
+        # An explicitly provided updated_at_range wins over the legacy alias.
+        if self.updated_at_range is None:
+            self.updated_at_range = TimeRange(start=self.time_cutoff)
+        self.time_cutoff = None
+        return self
 
 
 class UserFileFilters(BaseModel):
@@ -98,6 +154,11 @@ class IndexFilters(BaseFilters, UserFileFilters, AssistantKnowledgeFilters):
     # DocumentAccess::to_acl.
     access_control_list: list[str] | None
     tenant_id: str | None = None
+    # Operator-forced document-set scope (NAMES, not IDs). When set, retrieval is
+    # restricted to these sets via a standalone AND clause — distinct from
+    # `document_set` (a user/persona OR-scope). Set only on the Search UI path
+    # (from FORCED_DOCUMENT_SET_NAMES); None = no restriction.
+    forced_document_set: list[str] | None = None
 
 
 class BasicChunkRequest(BaseModel):
@@ -226,8 +287,7 @@ class InferenceChunkUncleaned(InferenceChunk):
         inference_chunk_data = {
             k: v
             for k, v in self.model_dump().items()
-            if k
-            not in ["metadata_suffix"]  # May be other fields to throw out in the future
+            if k != "metadata_suffix"  # May be other fields to throw out in the future
         }
         return InferenceChunk(**inference_chunk_data)
 
@@ -341,6 +401,48 @@ class SearchDoc(BaseModel):
         return initial_dict
 
 
+class RetrievalCandidateChunk(BaseModel):
+    document_id: str
+    chunk_id: int
+    # 1-based position in the lane's ranked result list
+    rank: int
+
+
+class RetrievalCandidateLane(BaseModel):
+    """One executed retrieval query, captured before rank fusion.
+
+    Lanes are not deduplicated: the same query text can run with a different
+    hybrid alpha.
+    """
+
+    query: str
+    hybrid_alpha: float | None
+    returned_chunks: list[RetrievalCandidateChunk]
+
+
+class SearchReceiptScope(BaseModel):
+    """Scope facts reported in a search receipt. Only set when every filter
+    that narrowed retrieval is representable by these three fields."""
+
+    user_filters: dict[str, Any] | None
+    persona_document_sets: list[str]
+    acl_enforced: bool
+
+
+class SearchRetrievalDiagnostics(BaseModel):
+    """Optional retrieval metadata, only collected when requested via
+    `SearchToolOverrideKwargs.include_retrieval_candidates`."""
+
+    retrieval_candidates: list[RetrievalCandidateLane]
+    # Distinct document ids, in order, after fusion + adjacent-chunk merge + the
+    # num_hits cap, before LLM section selection.
+    merged_candidate_document_ids_after_cap: list[str]
+    # None when the effective scope has parts SearchReceiptScope cannot express
+    # (auto-detected source/time filters, project or persona-attached scope,
+    # federated sources).
+    receipt_scope: SearchReceiptScope | None
+
+
 class SearchDocsResponse(BaseModel):
     search_docs: list[SearchDoc]
     # Maps the citation number to the document id
@@ -351,6 +453,9 @@ class SearchDocsResponse(BaseModel):
     # For cases where the frontend only needs to display a subset of the search docs
     # The whole list is typically still needed for later steps but this set should be saved separately
     displayed_docs: list[SearchDoc] | None = None
+
+    # Never sent to the model directly; consumed by onyx.chat.search_receipts.
+    retrieval_diagnostics: SearchRetrievalDiagnostics | None = None
 
     @field_validator("displayed_docs", mode="before")
     @classmethod

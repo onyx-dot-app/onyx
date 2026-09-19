@@ -3,10 +3,12 @@ from typing import cast
 
 import httpx
 
-from onyx.configs.app_configs import MANAGED_VESPA
-from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
-from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
-from onyx.configs.app_configs import VESPA_REQUEST_TIMEOUT
+from onyx.configs.app_configs import (
+    MANAGED_VESPA,
+    VESPA_CLOUD_CERT_PATH,
+    VESPA_CLOUD_KEY_PATH,
+    VESPA_REQUEST_TIMEOUT,
+)
 from onyx.document_index.vespa_constants import VESPA_APP_CONTAINER_URL
 from onyx.utils.logger import setup_logger
 

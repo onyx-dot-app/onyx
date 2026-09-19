@@ -1,12 +1,11 @@
 import ipaddress
 import socket
+import unicodedata
 from typing import Any
-from urllib.parse import parse_qs
-from urllib.parse import urlencode
-from urllib.parse import urlparse
-from urllib.parse import urlunparse
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import requests
+from requests.adapters import HTTPAdapter
 
 from onyx.utils.logger import setup_logger
 
@@ -57,38 +56,33 @@ def _is_ip_private_or_reserved(ip_str: str) -> bool:
         return True
 
 
-def _is_always_blocked_ip(
+def _is_targeted_blocked_ip(
     ip_obj: ipaddress.IPv4Address | ipaddress.IPv6Address,
+    *,
+    block_loopback: bool,
+    block_link_local: bool,
 ) -> bool:
-    """True if ``ip_obj`` falls into a class that must be blocked even when
-    private networks are otherwise allowed.
+    """IP classes to reject even when private networks are allowed. Unspecified
+    (0.0.0.0, ::) always — the kernel aliases it to loopback. Loopback and
+    link-local (169.254.0.0/16, the cloud-metadata range) per flag, so MCP
+    opt-ins can permit loopback while IMDS stays unreachable."""
+    if ip_obj.is_unspecified:
+        return True
+    if block_loopback and ip_obj.is_loopback:
+        return True
+    if block_link_local and ip_obj.is_link_local:
+        return True
+    return False
 
-    - Loopback (127.0.0.0/8, ::1): the application host's own loopback.
-      Reaching it exposes admin APIs, sidecars, etc.
-    - Unspecified (0.0.0.0, ::): commonly aliased to loopback by the kernel.
-    - Link-local (169.254.0.0/16, fe80::/10): cloud-metadata endpoints
-      (169.254.169.254 on AWS/GCP/Azure) live here. Opting into RFC1918
-      should NEVER open up IMDS — that's a credential exfiltration path.
-    """
-    return ip_obj.is_loopback or ip_obj.is_unspecified or ip_obj.is_link_local
 
-
-def _hostname_resolves_to_always_blocked_ip(hostname: str) -> str | None:
-    """Resolve ``hostname`` via DNS and return the first address in an
-    always-blocked class (loopback / unspecified / link-local), or None.
-
-    Used on the ``allow_private_network=True`` path to maintain the
-    always-blocked floor for DNS names — e.g. an attacker-controlled
-    record like ``loopback.attacker.com`` → 127.0.0.1, or
-    ``imds.attacker.com`` → 169.254.169.254, must not be reachable just
-    because private networks are otherwise allowed. RFC1918 results are
-    *not* flagged here; opting into those is the whole point of the flag.
-
-    Returns None on DNS failure — the actual request will fail naturally
-    if the name is unresolvable, and an internal-only name that's
-    legitimately reachable from the runtime but not from the validation
-    context shouldn't get spuriously rejected here.
-    """
+def _hostname_resolves_to_targeted_blocked_ip(
+    hostname: str, *, block_loopback: bool, block_link_local: bool
+) -> str | None:
+    """Resolve ``hostname`` and return the first targeted-blocked address (see
+    ``_is_targeted_blocked_ip``), keeping the floor for DNS names like
+    ``imds.attacker.com`` → 169.254.169.254. None on DNS failure — the real
+    request fails on its own, and a name reachable from the runtime but not the
+    validation context shouldn't be spuriously rejected."""
     try:
         addr_info = socket.getaddrinfo(hostname, None)
     except socket.gaierror:
@@ -100,7 +94,9 @@ def _hostname_resolves_to_always_blocked_ip(hostname: str) -> str | None:
             ip_obj = ipaddress.ip_address(ip_str)
         except ValueError:
             continue
-        if _is_always_blocked_ip(ip_obj):
+        if _is_targeted_blocked_ip(
+            ip_obj, block_loopback=block_loopback, block_link_local=block_link_local
+        ):
             return ip_str
     return None
 
@@ -188,40 +184,68 @@ def _validate_and_resolve_url(url: str) -> tuple[str, str, int]:
     return validated_ip, hostname, port  # ty: ignore[invalid-return-type]
 
 
+def _enforce_targeted_block(
+    display_host: str,
+    hostname: str,
+    *,
+    block_loopback: bool,
+    block_link_local: bool,
+    resolve_dns: bool,
+) -> None:
+    """Reject ``hostname`` if it (or its DNS resolution) lands in a targeted-
+    blocked class, used on the ``allow_private_network=True`` path. Literal IPs
+    are classified directly; DNS names are resolved only when ``resolve_dns``."""
+    try:
+        ip_obj: ipaddress.IPv4Address | ipaddress.IPv6Address | None = (
+            ipaddress.ip_address(hostname)
+        )
+    except ValueError:
+        ip_obj = None
+
+    if ip_obj is not None:
+        if _is_targeted_blocked_ip(
+            ip_obj, block_loopback=block_loopback, block_link_local=block_link_local
+        ):
+            raise SSRFException(
+                f"Access to loopback/unspecified/link-local IP "
+                f"'{display_host}' is not allowed."
+            )
+        return
+
+    if not resolve_dns:
+        return
+
+    blocked_ip = _hostname_resolves_to_targeted_blocked_ip(
+        hostname, block_loopback=block_loopback, block_link_local=block_link_local
+    )
+    if blocked_ip is not None:
+        raise SSRFException(
+            f"Hostname '{display_host}' resolves to loopback/"
+            f"unspecified/link-local IP '{blocked_ip}'. Access is not allowed."
+        )
+
+
 def validate_outbound_http_url(
     url: str,
     *,
     allow_private_network: bool = False,
     https_only: bool = False,
     block_loopback_and_link_local: bool = False,
+    block_link_local_only: bool = False,
+    resolve_dns: bool = True,
 ) -> str:
-    """
-    Validate a URL that will be used by backend outbound HTTP calls.
+    """Validate a URL for backend outbound HTTP calls; returns the whitespace-
+    stripped URL or raises ``SSRFException``/``ValueError``.
 
-    Args:
-        url: The URL to validate.
-        allow_private_network: If True, skip private/reserved IP checks.
-        https_only: If True, reject http:// URLs (only https:// is allowed).
-        block_loopback_and_link_local: When ``allow_private_network=True``,
-            additionally reject URLs whose host (or DNS resolution) is in the
-            always-dangerous IP classes — loopback (127.0.0.0/8, ::1),
-            unspecified (0.0.0.0, ::), and link-local (169.254.0.0/16,
-            fe80::/10, which contains cloud-metadata endpoints). Default
-            False to preserve behavior for admin-configured callers (voice
-            API, sharepoint, hooks) where the operator typed the URL
-            themselves and reaching a local container at 127.0.0.1 is a
-            feature. Pass True for LLM-controlled paths like ``open_url``
-            where prompt-supplied URLs need a stricter floor regardless of
-            the network opt-out. No-op when ``allow_private_network=False``,
-            since the standard private-IP guard already covers these.
-
-    Returns:
-        A normalized URL string with surrounding whitespace removed.
-
-    Raises:
-        ValueError: If URL is malformed.
-        SSRFException: If URL fails SSRF checks.
-    """
+    ``allow_private_network`` skips the private/reserved-IP guard for trusted
+    networks. When it's on, ``block_loopback_and_link_local`` keeps the strict
+    floor (loopback + unspecified + link-local) for LLM-controlled paths like
+    ``open_url``, while ``block_link_local_only`` permits loopback but still
+    blocks cloud-metadata — for MCP opt-ins where a local/sidecar server is
+    legitimate. ``https_only`` rejects http://. ``resolve_dns=False`` skips the
+    DNS lookup (structural + literal-IP checks only), for config-save time where
+    a placeholder/transient host shouldn't block a save; fetch time still
+    resolves."""
     normalized_url = url.strip()
     if not normalized_url:
         raise ValueError("URL cannot be empty")
@@ -248,29 +272,36 @@ def validate_outbound_http_url(
     if hostname in BLOCKED_HOSTNAMES:
         raise SSRFException(f"Access to hostname '{parsed.hostname}' is not allowed.")
 
-    if allow_private_network and block_loopback_and_link_local:
-        # Loopback / unspecified / link-local addresses are always rejected
-        # on this path even when private networks are otherwise allowed.
-        # Applies to both IP literals and DNS names — closes the cloud-
-        # metadata SSRF surface and the "DNS rebinding to loopback" surface.
-        try:
-            ip_obj = ipaddress.ip_address(hostname)
-        except ValueError:
-            blocked_ip = _hostname_resolves_to_always_blocked_ip(hostname)
-            if blocked_ip is not None:
-                raise SSRFException(
-                    f"Hostname '{parsed.hostname}' resolves to loopback/"
-                    f"unspecified/link-local IP '{blocked_ip}'. Access is "
-                    f"not allowed."
-                )
-        else:
-            if _is_always_blocked_ip(ip_obj):
-                raise SSRFException(
-                    f"Access to loopback/unspecified/link-local IP "
-                    f"'{parsed.hostname}' is not allowed."
-                )
+    block_loopback = block_loopback_and_link_local
+    block_link_local = block_loopback_and_link_local or block_link_local_only
 
-    if not allow_private_network:
+    if allow_private_network:
+        if block_loopback or block_link_local:
+            _enforce_targeted_block(
+                parsed.hostname,
+                hostname,
+                block_loopback=block_loopback,
+                block_link_local=block_link_local,
+                resolve_dns=resolve_dns,
+            )
+        return normalized_url
+
+    # allow_private_network is False: reject all private/reserved targets.
+    try:
+        ip_obj = ipaddress.ip_address(hostname)
+    except ValueError:
+        ip_obj = None
+
+    if ip_obj is not None:
+        if _is_ip_private_or_reserved(str(ip_obj)):
+            raise SSRFException(
+                f"Access to internal/private IP address '{parsed.hostname}' "
+                "is not allowed."
+            )
+        return normalized_url
+
+    # Hostname (not a literal IP); skip the DNS-resolving guard at save time.
+    if resolve_dns:
         _validate_and_resolve_url(normalized_url)
 
     return normalized_url
@@ -279,11 +310,100 @@ def validate_outbound_http_url(
 MAX_REDIRECTS = 10
 
 
+class _PinnedHostAdapter(HTTPAdapter):
+    """Connects to a pre-validated IP while doing TLS against the real
+    hostname (SNI and certificate verification), so the request cannot
+    re-resolve DNS after validation (rebinding defense)."""
+
+    def __init__(self, hostname: str, **kwargs: Any) -> None:
+        self._hostname = hostname
+        super().__init__(**kwargs)
+
+    def init_poolmanager(self, *args: Any, **kwargs: Any) -> None:
+        kwargs["server_hostname"] = self._hostname
+        kwargs["assert_hostname"] = self._hostname
+        super().init_poolmanager(*args, **kwargs)
+
+
+def _pinned_get(
+    url: str,
+    validated_ip: str,
+    hostname: str,
+    port: int,
+    headers: dict[str, str] | None,
+    timeout: float | tuple[float, float],
+    **kwargs: Any,
+) -> requests.Response:
+    """GET the already-validated IP directly, presenting ``hostname`` for the
+    Host header and (on https) SNI + certificate verification."""
+    parsed = urlparse(url)
+    ip_literal = f"[{validated_ip}]" if ":" in validated_ip else validated_ip
+    default_port = 443 if parsed.scheme == "https" else 80
+    netloc = f"{ip_literal}:{port}" if port != default_port else ip_literal
+    request_url = urlunparse(
+        (parsed.scheme, netloc, parsed.path, parsed.params, parsed.query, "")
+    )
+    request_headers = headers.copy() if headers else {}
+    request_headers["Host"] = f"{hostname}:{port}" if port != default_port else hostname
+
+    if parsed.scheme != "https":
+        return requests.get(
+            request_url,
+            headers=request_headers,
+            timeout=timeout,
+            allow_redirects=False,
+            **kwargs,
+        )
+
+    with requests.Session() as session:
+        session.mount("https://", _PinnedHostAdapter(hostname))
+        return session.get(
+            request_url,
+            headers=request_headers,
+            timeout=timeout,
+            allow_redirects=False,
+            **kwargs,
+        )
+
+
+def _resolve_permissive_ip(
+    hostname: str,
+    port: int,
+    *,
+    block_loopback: bool,
+    block_link_local: bool,
+) -> str:
+    """One DNS resolution for the permissive path: any address is acceptable
+    except the targeted-blocked classes the caller keeps."""
+    try:
+        return str(ipaddress.ip_address(hostname))
+    except ValueError:
+        pass
+    try:
+        addr_info = socket.getaddrinfo(hostname, port)
+    except socket.gaierror as e:
+        raise SSRFException(f"Could not resolve hostname '{hostname}': {e}")
+    for info in addr_info:
+        ip_str = str(info[4][0])
+        if not _is_targeted_blocked_ip(
+            ipaddress.ip_address(ip_str),
+            block_loopback=block_loopback,
+            block_link_local=block_link_local,
+        ):
+            return ip_str
+    raise SSRFException(
+        f"Hostname '{hostname}' resolves only to blocked address classes."
+    )
+
+
 def _make_ssrf_safe_request(
     url: str,
     headers: dict[str, str] | None = None,
     timeout: float | tuple[float, float] = 15,
     allow_private_network: bool = False,
+    block_loopback_and_link_local: bool = True,
+    block_link_local_only: bool = False,
+    https_only: bool = False,
     **kwargs: Any,
 ) -> requests.Response:
     """
@@ -291,72 +411,49 @@ def _make_ssrf_safe_request(
 
     Returns the response which may be a redirect (3xx status).
 
+    The hostname is resolved exactly once, validated, and the request is made
+    directly to the validated IP (with Host/SNI set to the hostname), so a
+    rebinding DNS server cannot swap the destination after validation.
+
     When ``allow_private_network`` is True, the private-IP guard is skipped
     so operators on trusted networks can fetch URLs that resolve to RFC1918
-    addresses (e.g. internal docs sites behind split-horizon DNS). Scheme,
-    credential, and blocked-hostname checks still apply, and the always-
-    dangerous IP classes (loopback / unspecified / link-local, which contains
-    cloud-metadata endpoints) remain blocked on this path since callers are
-    LLM-controlled and need a stricter floor than admin-configured paths.
+    addresses. ``block_loopback_and_link_local`` (default True) keeps the
+    strict floor for LLM-controlled callers; admin-configured paths may lower
+    it to ``block_link_local_only`` so loopback services are reachable while
+    cloud-metadata stays blocked.
     """
+    if https_only and urlparse(url).scheme != "https":
+        raise SSRFException(
+            f"Invalid URL scheme '{urlparse(url).scheme}'. Only https is allowed."
+        )
+
     if allow_private_network:
         validate_outbound_http_url(
             url,
             allow_private_network=True,
-            block_loopback_and_link_local=True,
+            block_loopback_and_link_local=block_loopback_and_link_local,
+            block_link_local_only=block_link_local_only,
+            https_only=https_only,
         )
-        return requests.get(
-            url,
-            headers=headers,
-            timeout=timeout,
-            allow_redirects=False,
-            **kwargs,
+        parsed = urlparse(url)
+        hostname = parsed.hostname or ""
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        block_loopback = block_loopback_and_link_local
+        block_link_local = block_loopback_and_link_local or block_link_local_only
+        validated_ip = _resolve_permissive_ip(
+            hostname,
+            port,
+            block_loopback=block_loopback,
+            block_link_local=block_link_local,
+        )
+        return _pinned_get(
+            url, validated_ip, hostname, port, headers, timeout, **kwargs
         )
 
     # Validate and resolve the URL to get a safe IP
     validated_ip, original_hostname, port = _validate_and_resolve_url(url)
-
-    # Parse the URL to rebuild it with the IP
-    parsed = urlparse(url)
-
-    # Build the new URL using the validated IP
-    # For HTTPS, we need to use the original hostname for TLS verification
-    if parsed.scheme == "https":
-        # For HTTPS, make request to original URL but we've validated the IP
-        # The TLS handshake needs the hostname for SNI
-        # We rely on the short time window between validation and request
-        # A more robust solution would require custom SSL context
-        request_url = url
-    else:
-        # For HTTP, we can safely request directly to the IP
-        netloc = f"{validated_ip}:{port}" if port not in (80, 443) else validated_ip
-        request_url = urlunparse(
-            (
-                parsed.scheme,
-                netloc,
-                parsed.path,
-                parsed.params,
-                parsed.query,
-                parsed.fragment,
-            )
-        )
-
-    # Prepare headers
-    request_headers = headers.copy() if headers else {}
-
-    # Set Host header to original hostname (required for virtual hosting)
-    if parsed.scheme == "http":
-        request_headers["Host"] = (
-            f"{original_hostname}:{port}" if port != 80 else original_hostname
-        )
-
-    # Disable automatic redirects to prevent SSRF bypass via redirect
-    return requests.get(
-        request_url,
-        headers=request_headers,
-        timeout=timeout,
-        allow_redirects=False,
-        **kwargs,
+    return _pinned_get(
+        url, validated_ip, original_hostname, port, headers, timeout, **kwargs
     )
 
 
@@ -366,6 +463,9 @@ def ssrf_safe_get(
     timeout: float | tuple[float, float] = 15,
     follow_redirects: bool = True,
     allow_private_network: bool = False,
+    block_loopback_and_link_local: bool = True,
+    block_link_local_only: bool = False,
+    https_only: bool = False,
     **kwargs: Any,
 ) -> requests.Response:
     """
@@ -399,6 +499,9 @@ def ssrf_safe_get(
         headers,
         timeout,
         allow_private_network=allow_private_network,
+        block_loopback_and_link_local=block_loopback_and_link_local,
+        block_link_local_only=block_link_local_only,
+        https_only=https_only,
         **kwargs,
     )
 
@@ -436,6 +539,9 @@ def ssrf_safe_get(
             headers,
             timeout,
             allow_private_network=allow_private_network,
+            block_loopback_and_link_local=block_loopback_and_link_local,
+            block_link_local_only=block_link_local_only,
+            https_only=https_only,
             **kwargs,
         )
 
@@ -510,3 +616,46 @@ def add_url_params(url: str, params: dict) -> str:
     )
 
     return new_url
+
+
+def sanitize_next_url(next_url: str | None) -> str:
+    """Validate a post-login redirect target, returning a safe value.
+
+    Only same-origin relative paths are permitted. Anything carrying a scheme
+    (e.g. ``javascript:``), a network location (``https://evil.com``), or a
+    protocol-relative form (``//evil.com``, ``/\\evil.com``) falls back to
+    ``"/"``. This prevents open-redirect / post-auth phishing through the OAuth
+    ``next`` parameter.
+    """
+    if not next_url:
+        return "/"
+
+    # Leading/trailing whitespace is ignored by browsers; strip so the checks
+    # below see what the browser will actually navigate to.
+    next_url = next_url.strip()
+    if not next_url:
+        return "/"
+
+    # Some browsers strip a leading control character and then reinterpret the
+    # remainder as scheme-relative (e.g. "\x01//evil.com" -> "//evil.com").
+    if unicodedata.category(next_url[0])[0] == "C":
+        return "/"
+
+    # Browsers treat backslashes as forward slashes, so normalize before the
+    # checks below — otherwise tricks like "/\\evil.com" slip past as a path.
+    normalized = next_url.replace("\\", "/")
+
+    # Reject protocol-relative ("//evil.com") and Chrome's absolute "///" form.
+    if not normalized.startswith("/") or normalized.startswith("//"):
+        return "/"
+
+    try:
+        parsed = urlparse(normalized)
+    except ValueError:
+        # Malformed input (e.g. invalid IPv6 literal) — fall back to safe default.
+        return "/"
+
+    if parsed.scheme or parsed.netloc:
+        return "/"
+
+    return next_url

@@ -1,43 +1,46 @@
 import "./globals.css";
 
+import type { Metadata } from "next";
 import { GTM_ENABLED, MODAL_ROOT_ID } from "@/lib/constants";
-import { Metadata } from "next";
-
+import { generateFaviconMetadata } from "@/lib/app/svcSS";
 import AppProvider from "@/providers/AppProvider";
-import DynamicMetadata from "@/providers/DynamicMetadata";
 import { PHProvider } from "./providers";
-import { Suspense } from "react";
-import PostHogPageView from "./PostHogPageView";
+import {
+  PostHogPageTracker,
+  PostHogRuntimeInitializer,
+  CustomAnalyticsScript,
+  WebVitals,
+} from "@/lib/analytics/shared";
 import Script from "next/script";
 import { DM_Mono, Hanken_Grotesk } from "next/font/google";
-import { WebVitals } from "./web-vitals";
 import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
 import StatsOverlayLoader from "@/components/dev/StatsOverlayLoader";
-import { cn } from "@opal/utils";
-import AppHealthBanner from "@/sections/AppHealthBanner";
-import LicenseExpiryBanner from "@/sections/LicenseExpiryBanner";
-import CustomAnalyticsScript from "@/providers/CustomAnalyticsScript";
+import AppHealthBanner from "@/sections/banners/HealthBanner";
+import BannerQueue from "@/sections/banners/BannerQueue";
+import { AuthenticationShell } from "@/lib/auth/components";
 import ProductGatingWrapper from "@/providers/ProductGatingWrapper";
 import SWRConfigProvider from "@/providers/SWRConfigProvider";
+import { NextIntlClientProvider } from "next-intl";
+import OpalStringsBridge from "@/i18n/OpalStringsBridge";
+import { getLocale, getMessages } from "next-intl/server";
+import { DirectionProvider } from "@radix-ui/react-direction";
+import { cookies } from "next/headers";
+import { htmlDirForLocale, messageLocale, type HtmlDir } from "@/i18n/config";
 
+// No generic at the end of either fallback list: the generic comes last in
+// the composed --font-* variables on <html> below, after the per-locale CJK
+// tail (--font-cjk-sans, defined in globals.css). A generic here would sit
+// before the CJK fonts and swallow every CJK codepoint.
 const hankenGrotesk = Hanken_Grotesk({
   subsets: ["latin"],
-  variable: "--font-hanken-grotesk",
   display: "swap",
-  fallback: [
-    "-apple-system",
-    "BlinkMacSystemFont",
-    "Segoe UI",
-    "Roboto",
-    "sans-serif",
-  ],
+  fallback: ["-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto"],
 });
 
 const dmMono = DM_Mono({
   weight: "400",
   subsets: ["latin"],
-  variable: "--font-dm-mono",
   display: "swap",
   fallback: [
     "SF Mono",
@@ -46,36 +49,89 @@ const dmMono = DM_Mono({
     "Roboto Mono",
     "Consolas",
     "Courier New",
-    "monospace",
   ],
 });
 
-export const metadata: Metadata = {
-  title: "Onyx",
-  description: "Question answering for your documents",
-};
-
 // force-dynamic prevents Next.js from statically prerendering pages at build
 // time — many child routes use cookies() which requires dynamic rendering.
-// This is safe because the layout itself has no server-side data fetching;
-// all data is fetched client-side via SWR in the provider tree.
 export const dynamic = "force-dynamic";
 
-export default function RootLayout({
-  children,
-}: {
+export async function generateMetadata(): Promise<Metadata> {
+  return { icons: await generateFaviconMetadata() };
+}
+
+interface LayoutProps {
   children: React.ReactNode;
-}) {
+}
+
+export default async function Layout({ children }: LayoutProps) {
+  // The runtime tag comes from the NEXT_LOCALE cookie (see src/i18n/request.ts),
+  // which the backend sets from the stored language.
+  const locale = await getLocale();
+  const messages = await getMessages();
+  // <html lang> and the direction follow the stored language, not the runtime
+  // tag: UserProvider refreshes whenever <html lang> differs from the stored
+  // language, and the numbering system belongs to Intl, not the document.
+  const language = messageLocale(locale);
+
+  let dir: HtmlDir = htmlDirForLocale(language);
+  // Dev-only escape hatch so QA can preview either direction without
+  // switching account language: set an "onyx-dir" cookie to "rtl" or
+  // "ltr" (with path=/) and reload.
+  if (process.env.NODE_ENV === "development") {
+    const dirOverride = (await cookies()).get("onyx-dir")?.value;
+    if (dirOverride === "rtl" || dirOverride === "ltr") {
+      dir = dirOverride;
+    }
+  }
+
   return (
     <html
-      lang="en"
-      className={cn(hankenGrotesk.variable, dmMono.variable)}
+      lang={language}
+      dir={dir}
+      // The app-wide font variables are composed here instead of with
+      // next/font's `variable` option: the CJK tail (--font-cjk-sans,
+      // globals.css) must vary with the locale, so the loaded-webfont chain
+      // and the tail have to be joined in one declaration. Every
+      // `var(--font-hanken-grotesk)` / `var(--font-dm-mono)` consumer (Opal
+      // text presets, the font-hanken/font-sans utilities, app CSS) resolves
+      // through these.
+      style={
+        {
+          "--font-hanken-grotesk": `${hankenGrotesk.style.fontFamily}, var(--font-cjk-sans), sans-serif`,
+          "--font-dm-mono": `${dmMono.style.fontFamily}, var(--font-cjk-sans), monospace`,
+        } as React.CSSProperties
+      }
       suppressHydrationWarning
     >
       <head>
         <meta
           name="viewport"
           content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0, interactive-widget=resizes-content"
+        />
+
+        {/* When running inside the Tauri desktop wrapper on macOS, tag <html>
+            as desktop so the native title-bar reservation in
+            css/desktop-titlebar.css engages before paint. macOS is the only
+            platform with an overlay title bar (traffic lights float over the
+            content); Linux and Windows keep native window decorations, so
+            reserving the strip there would only push content down. Tauri
+            injects its IPC globals via an init script that runs before page
+            scripts, so this synchronous check sees them; the class then
+            persists across client-side navigations. No-op in a browser. */}
+        <Script
+          id="onyx-desktop-detector"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              if (
+                ('__TAURI_INTERNALS__' in window || '__TAURI__' in window) &&
+                navigator.platform.startsWith('Mac')
+              ) {
+                document.documentElement.classList.add('onyx-desktop');
+              }
+            `,
+          }}
         />
 
         {GTM_ENABLED && (
@@ -96,37 +152,49 @@ export default function RootLayout({
       </head>
 
       <body className={`relative font-hanken`}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <div className="text-text min-h-screen bg-background">
-            <TooltipProvider>
-              <PHProvider>
-                <SWRConfigProvider>
-                  <AppHealthBanner />
-                  <LicenseExpiryBanner />
-                  <AppProvider>
-                    <DynamicMetadata />
-                    <CustomAnalyticsScript />
-                    <Suspense fallback={null}>
-                      <PostHogPageView />
-                    </Suspense>
-                    <div id={MODAL_ROOT_ID} className="h-screen w-screen">
-                      <ProductGatingWrapper>{children}</ProductGatingWrapper>
-                    </div>
-                    {process.env.NEXT_PUBLIC_POSTHOG_KEY && <WebVitals />}
-                    {process.env.NEXT_PUBLIC_ENABLE_STATS === "true" && (
-                      <StatsOverlayLoader />
-                    )}
-                  </AppProvider>
-                </SWRConfigProvider>
-              </PHProvider>
-            </TooltipProvider>
-          </div>
-        </ThemeProvider>
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <OpalStringsBridge>
+            {/* Radix reads direction from context, not the DOM, so popovers,
+              menus and roving focus need this alongside <html dir>. */}
+            <DirectionProvider dir={dir}>
+              <ThemeProvider
+                attribute="class"
+                defaultTheme="system"
+                enableSystem
+                disableTransitionOnChange
+              >
+                <div className="text-text min-h-screen bg-background">
+                  <TooltipProvider>
+                    <PHProvider>
+                      <SWRConfigProvider>
+                        <AppHealthBanner />
+                        <BannerQueue />
+                        <AuthenticationShell>
+                          <AppProvider>
+                            <PostHogRuntimeInitializer />
+                            <CustomAnalyticsScript />
+                            <PostHogPageTracker />
+                            <div
+                              id={MODAL_ROOT_ID}
+                              className="h-screen w-screen"
+                            >
+                              <ProductGatingWrapper>
+                                {children}
+                              </ProductGatingWrapper>
+                            </div>
+                            <WebVitals />
+                            {process.env.NEXT_PUBLIC_ENABLE_STATS ===
+                              "true" && <StatsOverlayLoader />}
+                          </AppProvider>
+                        </AuthenticationShell>
+                      </SWRConfigProvider>
+                    </PHProvider>
+                  </TooltipProvider>
+                </div>
+              </ThemeProvider>
+            </DirectionProvider>
+          </OpalStringsBridge>
+        </NextIntlClientProvider>
       </body>
     </html>
   );

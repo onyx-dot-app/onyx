@@ -6,16 +6,16 @@ concurrency:
 on:
   merge_group:
   pull_request:
-    branches: [main]
     paths:
       - "backend/**"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/pr-external-dependency-unit-tests.yml"
       - ".github/actions/setup-python-and-install-dependencies/**"
-      - ".github/actions/setup-playwright/**"
+      - ".github/actions/login-ecr-pullthrough-cache/**"
       - "deployment/docker_compose/docker-compose.yml"
       - "deployment/docker_compose/docker-compose.dev.yml"
+      - "deployment/helm/**"
   push:
     tags:
       - "v*.*.*"
@@ -44,8 +44,8 @@ env:
   CONFLUENCE_ACCESS_TOKEN_SCOPED: ${{ secrets.CONFLUENCE_ACCESS_TOKEN_SCOPED }}
 
   # Jira
-  JIRA_ADMIN_USER_EMAIL: ${{ vars.JIRA_ADMIN_USER_EMAIL }}
-  JIRA_ADMIN_API_TOKEN: ${{ secrets.JIRA_ADMIN_API_TOKEN }}
+  JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
+  JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
 
   # LLMs
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -61,12 +61,12 @@ jobs:
   discover-test-dirs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
-    timeout-minutes: 45
+    timeout-minutes: 5
     outputs:
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -85,7 +85,7 @@ jobs:
       - runner=2cpu-linux-arm64
       - ${{ format('run-id={0}-external-dependency-unit-tests-job-{1}', github.run_id, strategy['job-index']) }}
       - extras=s3-cache
-    timeout-minutes: 45
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -97,10 +97,10 @@ jobs:
       DISABLE_TELEMETRY: "true"
 
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -112,17 +112,29 @@ jobs:
             backend/requirements/dev.txt
             backend/requirements/ee.txt
 
-      - name: Setup Playwright
-        uses: ./.github/actions/setup-playwright
-
-      # needed for pulling Vespa, Redis, Postgres, and Minio images
-      # otherwise, we hit the "Unauthenticated users" limit
-      # https://docs.docker.com/docker-hub/usage/
-      - name: Login to Docker Hub
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+      - name: Setup Helm
+        if: matrix.test-dir == 'craft_helm'
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # ratchet:azure/setup-helm@v5.0.1
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
+          version: v3.19.0
+
+      - name: Build Helm chart dependencies
+        if: matrix.test-dir == 'craft_helm'
+        run: |
+          # Register every repo the lockfile pins, then vendor the deps the
+          # pod-spec tests need to render the chart (charts/*.tgz is gitignored).
+          i=0
+          awk '$1 == "repository:" && $2 ~ /^https/ {print $2}' \
+              deployment/helm/charts/onyx/Chart.lock | sort -u |
+            while read -r repo; do
+              helm repo add "dep-$((i+=1))" "$repo"
+            done
+          helm dependency build deployment/helm/charts/onyx
+
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
+        with:
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
 
       - name: Create .env file for Docker Compose
         run: |
@@ -145,11 +157,24 @@ jobs:
             code-interpreter
 
       - name: Run migrations
+        working-directory: backend
         run: |
-          cd backend
-          # Run migrations to head
           alembic upgrade head
-          alembic heads --verbose
+
+      # A real OIDC server for the live multi-provider login test. Auth leg only.
+      # Fail if it never becomes ready, otherwise the live tests would silently skip.
+      - name: Start mock OIDC server
+        if: matrix.test-dir == 'auth'
+        run: |
+          docker run -d --name mock-oidc -p 8086:8080 \
+            ghcr.io/navikt/mock-oauth2-server:2.1.10
+          ready="http://localhost:8086/issuer-a/.well-known/openid-configuration"
+          for _ in $(seq 1 30); do
+            curl -sf "$ready" >/dev/null && break
+            sleep 1
+          done
+          curl -sf "$ready" >/dev/null \
+            || { echo "mock OIDC server never became ready"; exit 1; }
 
       - name: Run Tests for ${{ matrix.test-dir }}
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"

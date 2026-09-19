@@ -91,7 +91,7 @@ Onyx being a fully functional app, relies on some external software, specificall
 
 ### Prerequisites
 
-- **Python 3.11** — If using a lower version, modifications will have to be made to the code. Higher versions may have library compatibility issues.
+- **Python 3.13** — Other versions may require code or dependency changes; 3.14 is not yet supported (some dependencies, e.g. `onnxruntime` and CUDA `torch`, do not yet ship 3.14 wheels).
 - **Docker** — Required for running external services (Postgres, OpenSearch, Redis, MinIO).
 - **Bun** — We use [bun](https://bun.sh) as the JavaScript package manager. Install it from https://bun.sh/docs/installation.
 
@@ -100,7 +100,7 @@ Onyx being a fully functional app, relies on some external software, specificall
 We use [uv](https://docs.astral.sh/uv/) and recommend creating a [virtual environment](https://docs.astral.sh/uv/pip/environments/#using-a-virtual-environment).
 
 ```bash
-uv venv .venv --python 3.11
+uv venv .venv --python 3.13
 source .venv/bin/activate
 ```
 
@@ -286,7 +286,7 @@ You've successfully set up a local Onyx instance!
 
 ### Running on a Local Kubernetes Cluster
 
-For Onyx Craft (Build) development, sandboxes are real Kubernetes pods — run `make craft-up` to bring up a local kind cluster in one shot. See [Local Kubernetes Development](/docs/dev/local-kubernetes.md) for the full workflow.
+For Onyx Craft (Build) development, sandboxes are real Kubernetes pods — run `make craft-up` to bring up a local kind cluster in one shot. See [Local Kubernetes Development](/docs/craft/dev/local-kubernetes.md) for the full workflow.
 
 ### Running in Docker
 
@@ -306,22 +306,32 @@ If you want to make changes to Onyx and run those changes in Docker, you can als
 docker compose up -d --build
 ```
 
+> **Note:** Local builds use the public Docker Hub base images, so they need no extra
+> registry access. Our release builds override the base images with the Docker Hardened
+> Image (`dhi.io`) equivalents, so the published `onyxdotapp/onyx-web-server` and
+> `onyxdotapp/onyx-model-server` images differ from a local `--build` in their base layers.
+
+> **Note:** `docker-compose.yml`, `docker-compose.prod.yml` and
+> `docker-compose.prod-no-letsencrypt.yml` are generated from `docker-compose.template.yml`
+> by `ods generate-compose` (enforced by the `docker-compose-sync` pre-commit hook) — edit
+> the template, not the generated files. See `deployment/docker_compose/README.md`.
+
 ---
 
 ## macOS-Specific Notes
 
 ### Setting up Python
 
-Ensure [Homebrew](https://brew.sh/) is already set up, then install Python 3.11:
+Ensure [Homebrew](https://brew.sh/) is already set up, then install Python 3.13:
 
 ```bash
-brew install python@3.11
+brew install python@3.13
 ```
 
-Add Python 3.11 to your path by adding the following line to `~/.zshrc`:
+Add Python 3.13 to your path by adding the following line to `~/.zshrc`:
 
 ```
-export PATH="$(brew --prefix)/opt/python@3.11/libexec/bin:$PATH"
+export PATH="$(brew --prefix)/opt/python@3.13/libexec/bin:$PATH"
 ```
 
 > **Note:** You will need to open a new terminal for the path change above to take effect.

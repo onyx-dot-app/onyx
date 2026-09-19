@@ -2,14 +2,14 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "onyx.fullname" . }}-celery-worker-scheduled-tasks
+  name: {{ include "onyx.resourceName" (list . "celery-worker-scheduled-tasks") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "onyx.fullname" . }}-celery-worker-scheduled-tasks
+    name: {{ include "onyx.resourceName" (list . "celery-worker-scheduled-tasks") }}
   minReplicas: {{ .Values.celery_worker_scheduled_tasks.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.celery_worker_scheduled_tasks.autoscaling.maxReplicas }}
   metrics:

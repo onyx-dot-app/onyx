@@ -135,12 +135,12 @@ class TestMergeToolCalls:
         """Non-mergeable tools (e.g., python) are returned as separate calls."""
         calls = [
             _make_tool_call(
-                tool_name="python",
+                tool_name="run_python",
                 tool_args={"code": "print(1)"},
                 tool_call_id="call_1",
             ),
             _make_tool_call(
-                tool_name="python",
+                tool_name="run_python",
                 tool_args={"code": "print(2)"},
                 tool_call_id="call_2",
             ),
@@ -160,7 +160,7 @@ class TestMergeToolCalls:
                 tool_call_id="search_1",
             ),
             _make_tool_call(
-                tool_name="python",
+                tool_name="run_python",
                 tool_args={"code": "x = 1"},
                 tool_call_id="python_1",
             ),
@@ -176,12 +176,12 @@ class TestMergeToolCalls:
         assert len(result) == 2
 
         tool_names = {r.tool_name for r in result}
-        assert tool_names == {"internal_search", "python"}
+        assert tool_names == {"internal_search", "run_python"}
 
         search_result = next(r for r in result if r.tool_name == "internal_search")
         assert search_result.tool_args["queries"] == ["q1", "q2"]
 
-        python_result = next(r for r in result if r.tool_name == "python")
+        python_result = next(r for r in result if r.tool_name == "run_python")
         assert python_result.tool_args["code"] == "x = 1"
 
     def test_multiple_different_mergeable_tools(self) -> None:

@@ -1,70 +1,197 @@
 name: Preview Deployment
-env:
-  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-  VERCEL_CLI: vercel@50.14.1
+
+# Per-commit full-stack previews on the self-hosted preview server: the
+# Next.js frontend and the FastAPI backend running together at
+# <sha>-onyx.<the server's preview domain>. Which server that is lives
+# entirely in vars.PREVIEW_URL, managed in onyx-infra
+# (internal-tools/terraform/github-org) — nothing here names a host, so
+# pointing this at a different deployment is a variable change, not a PR.
+#
+# The server does not watch this repo: it deploys only what this workflow
+# hands it, so a commit that never runs this job never gets a preview.
+# Previews are keyed to pull requests, not to branches. On `push` this built
+# for every branch anyone pushed, whether or not a PR existed and whether or
+# not a preview would ever be opened — and a preview is not free: each distinct
+# backend clones its own ~1.7 GB Postgres database on the server, on top of the
+# artifacts it stores. That volume is what filled the server's data volume on
+# 2026-09-16 and took every preview deploy down with it (ENG-4338).
+#
+# A PR is the point at which someone intends others to look at the change, so
+# it is the right unit to spend a preview on. `synchronize` covers each
+# subsequent push, so an open PR still gets a preview per commit.
 on:
-  push:
-    branches-ignore:
-      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
     paths:
       - "web/**"
+      - "backend/**"
+  # Redeploy without pushing — for a preview lost to a server rebuild, or a
+  # commit whose only changes fell outside the paths above. Path filters do
+  # not apply to a dispatch, so this always builds.
+  #
+  # GitHub resolves dispatchable workflows from the default branch, so this
+  # appears in the Actions tab only once this file is on main; the ref picker
+  # then still runs the chosen branch's copy.
+  workflow_dispatch:
+
+# One deploy per branch at a time. Without this, two commits deploying
+# together can finish out of order and leave the PR comment on the older
+# commit's URL. Cancelling the older run also frees the server sooner.
+#
+# Keyed on the branch, not github.ref, because ref differs by event:
+# `refs/pull/<n>/merge` for a pull_request against `refs/heads/<branch>` for a
+# dispatch. Keying on ref would put a manual redeploy and the PR's own run in
+# separate groups — which is the out-of-order case this block exists to stop.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
-  pull-requests: write
+
 jobs:
   Deploy-Preview:
+    # A dispatch carries no PR and is always honoured. For pull_request:
+    #
+    # - Forks are excluded. GitHub hands a fork's workflow a read-only token
+    #   whatever the permissions block says, so minting the OIDC token and
+    #   writing the PR comment would both fail. Beyond that, previews run
+    #   against a seeded st-dev snapshot, so deploying a fork's code is not
+    #   something to hand an untrusted contributor. `push` never fired for
+    #   forks either, so this keeps the existing boundary rather than widening
+    #   it.
+    # - Bot-authored PRs land without anyone opening a preview of them, so they
+    #   only cost server capacity. Keyed on the PR *author*: github.actor is
+    #   whoever triggered the event, so on synchronize/reopened a maintainer
+    #   touching a bot's PR would otherwise deploy it.
+    if: >-
+      ${{ vars.PREVIEW_URL != ''
+      && (github.event_name == 'workflow_dispatch'
+      || (github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.user.login != 'dependabot[bot]'
+      && github.event.pull_request.user.login != 'onyx-cherry-pick[bot]')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    env:
+      PREVIEW_URL: ${{ vars.PREVIEW_URL }}
+      # Matches the server's --github-oidc-audience (terraform sets it to the
+      # server URL). The CLI would default to exactly this; naming it keeps
+      # the two ends visibly pinned to each other.
+      PREVIEW_GITHUB_OIDC_AUDIENCE: ${{ vars.PREVIEW_URL }}
+      # On `pull_request`, github.sha is the *merge* commit — a commit nobody
+      # pushed and nobody wants a preview of. The PR's head commit is the one
+      # to build, upload under, and report. A dispatch has no PR, so it falls
+      # back to the dispatched ref.
+      PREVIEW_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
+          # Same reason as PREVIEW_SHA: without this, `pull_request` checks out
+          # the merge commit and the preview would not match the PR's tip.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2
         with:
           bun-version: "1.3.13"
 
-      - name: Pull Vercel Environment Information
-        run: bunx ${{ env.VERCEL_CLI }} pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Cache bun install cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('web/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
 
-      - name: Install dependencies and build Opal
+      # next build's incremental compilation cache — the bulk of this job's
+      # runtime is that one command, and without this every run compiles the
+      # whole app from cold. Keyed on the sources so an unchanged tree restores
+      # exactly; the restore-keys prefix means a changed one still starts from
+      # the last build rather than from nothing.
+      - name: Cache the Next.js build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: web/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('web/bun.lock') }}-${{ hashFiles('web/**/*.[jt]s', 'web/**/*.[jt]sx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('web/bun.lock') }}-
+            ${{ runner.os }}-nextjs-
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # ratchet:astral-sh/setup-uv@v10.0.1
+
+      - name: Install the preview CLI
+        run: uv tool install local-preview==0.9.0
+
+      # Must match the frontend build in the server's own manifest for this
+      # repo (manifests/onyx.toml in the terraform workspace) step for step —
+      # an upload replaces what the server would have built, so a divergence
+      # here is a preview that doesn't match what a rebuild would produce.
+      #
+      # @onyx-ai/opal depends on @onyx-ai/shared, so shared builds first.
+      - name: Build the frontend
         working-directory: ./web
-        run: bun install --frozen-lockfile && bun run --filter './lib/opal' build
+        run: |
+          bun install --frozen-lockfile
+          bun run --filter './lib/shared' build
+          bun run --filter './lib/opal' build
+          bun run build:fast
+          cp -r .next/static .next/standalone/.next/static
+          if [ -d public ]; then
+            cp -r public .next/standalone/public
+          fi
 
-      - name: Build Project Artifacts
-        run: bunx ${{ env.VERCEL_CLI }} build --token=${{ secrets.VERCEL_TOKEN }}
+      # The published tree becomes the process's working directory and the
+      # manifest runs `node .next/standalone/server.js` in it, so the upload
+      # has to keep that path — but nothing else. Shipping web/ wholesale
+      # would mean uploading node_modules for no reason.
+      - name: Assemble the upload tree
+        run: |
+          mkdir -p upload/.next
+          cp -r web/.next/standalone upload/.next/standalone
 
-      - name: Deploy Project Artifacts to Vercel
+      - name: Upload the frontend and deploy
         id: deploy
         run: |
-          DEPLOYMENT_URL=$(bunx ${{ env.VERCEL_CLI }} deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
-          echo "url=$DEPLOYMENT_URL" >> "$GITHUB_OUTPUT"
+          # Without pipefail the tee below would mask a failed upload.
+          set -o pipefail
+          preview upload frontend upload "$PREVIEW_SHA" \
+            --repo onyx --server "$PREVIEW_URL" --oidc --deploy | tee out.txt
+          URL=$(sed -n 's/^ready: //p' out.txt)
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
 
-      - name: Update PR comment with deployment URL
+      - name: Update PR comment with preview URL
         if: always() && steps.deploy.outputs.url
         env:
           GH_TOKEN: ${{ github.token }}
-          DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
+          PREVIEW_DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
         run: |
-          # Find the PR for this branch
-          PR_NUMBER=$(gh pr list --head "$GITHUB_REF_NAME" --json number --jq '.[0].number')
+          # On pull_request the number is handed to us. A dispatch has no PR,
+          # and GITHUB_REF_NAME is the branch there, so the lookup still works.
           if [ -z "$PR_NUMBER" ]; then
-            echo "No open PR found for branch $GITHUB_REF_NAME, skipping comment."
+            PR_NUMBER=$(gh pr list --head "$GITHUB_REF_NAME" --json number --jq '.[0].number')
+          fi
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No open PR found for $GITHUB_REF_NAME, skipping comment."
             exit 0
           fi
 
           COMMENT_MARKER="<!-- preview-deployment -->"
           COMMENT_BODY="$COMMENT_MARKER
-          **Preview Deployment**
+          **Full-stack Preview** (frontend + backend)
 
           | Status | Preview | Commit | Updated |
           | --- | --- | --- | --- |
-          | ✅ |  $DEPLOYMENT_URL | \`${GITHUB_SHA::7}\` | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |"
+          | ✅ | $PREVIEW_DEPLOYMENT_URL | \`${PREVIEW_SHA::7}\` | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |"
 
-          # Find existing comment by marker
-          EXISTING_COMMENT_ID=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+          # --paginate: on a long PR the marker can sit past the first page.
+          EXISTING_COMMENT_ID=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
             --jq ".[] | select(.body | startswith(\"$COMMENT_MARKER\")) | .id" | head -1)
 
           if [ -n "$EXISTING_COMMENT_ID" ]; then

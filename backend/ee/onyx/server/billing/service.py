@@ -15,13 +15,15 @@ from typing import Literal
 import httpx
 
 from ee.onyx.configs.app_configs import CLOUD_DATA_PLANE_URL
-from ee.onyx.server.billing.models import BillingInformationResponse
-from ee.onyx.server.billing.models import CreateCheckoutSessionResponse
-from ee.onyx.server.billing.models import CreateCustomerPortalSessionResponse
-from ee.onyx.server.billing.models import EndTrialResponse
-from ee.onyx.server.billing.models import SeatUpdateResponse
-from ee.onyx.server.billing.models import StripePortalFlowType
-from ee.onyx.server.billing.models import SubscriptionStatusResponse
+from ee.onyx.server.billing.models import (
+    BillingInformationResponse,
+    CreateCheckoutSessionResponse,
+    CreateCustomerPortalSessionResponse,
+    EndTrialResponse,
+    SeatUpdateResponse,
+    StripePortalFlowType,
+    SubscriptionStatusResponse,
+)
 from ee.onyx.server.tenants.access import generate_data_plane_token
 from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -174,7 +176,16 @@ async def create_checkout_session(
         body=body,
         error_message="Failed to create checkout session",
     )
-    return CreateCheckoutSessionResponse(stripe_checkout_url=data["url"])
+    # A success response always carries a url; a missing one is a contract
+    # violation we surface loudly rather than passing null to the client.
+    url = data.get("url")
+    if not url:
+        logger.error("Control plane returned no checkout URL")
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "Control plane returned no checkout URL",
+        )
+    return CreateCheckoutSessionResponse(stripe_checkout_url=url)
 
 
 async def create_customer_portal_session(

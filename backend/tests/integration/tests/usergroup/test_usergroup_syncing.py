@@ -9,9 +9,11 @@ from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
-from tests.integration.common_utils.test_models import DATestAPIKey
-from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.common_utils.test_models import DATestUserGroup
+from tests.integration.common_utils.test_models import (
+    DATestAPIKey,
+    DATestUser,
+    DATestUserGroup,
+)
 from tests.integration.common_utils.vespa import vespa_fixture
 
 
@@ -26,9 +28,13 @@ def test_removing_connector(
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(name="admin_user")
 
-    # create api key
+    # create api key with admin scope so it can hit the ingestion API
+    admin_group = UserGroupManager.get_default(
+        user_performing_action=admin_user, name="Admin"
+    )
     api_key: DATestAPIKey = APIKeyManager.create(
         user_performing_action=admin_user,
+        group_ids=[admin_group.id],
     )
 
     # create connectors

@@ -20,7 +20,8 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           IGNORED_AUTHORS: |
-            jmelahman
+            dependabot[bot]
+            onyx-cherry-pick[bot]
         run: |
           normalized_author="$(printf '%s' "${PR_AUTHOR}" | tr '[:upper:]' '[:lower:]')"
           normalized_ignored="$(printf '%s\n' "${IGNORED_AUTHORS}" | tr '[:upper:]' '[:lower:]')"

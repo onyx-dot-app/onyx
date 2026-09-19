@@ -3,9 +3,7 @@ import time
 from ee.onyx.db.external_perm import fetch_external_groups_for_user_email_and_group_ids
 from ee.onyx.external_permissions.salesforce.utils import (
     get_any_salesforce_client_for_doc_id,
-)
-from ee.onyx.external_permissions.salesforce.utils import get_objects_access_for_user_id
-from ee.onyx.external_permissions.salesforce.utils import (
+    get_objects_access_for_user_id,
     get_salesforce_user_id_from_email,
 )
 from onyx.configs.app_configs import BLURB_SIZE
@@ -111,6 +109,9 @@ def _create_empty_censored_chunk(uncensored_chunk: InferenceChunk) -> InferenceC
     empty_censored_chunk.content = ""
     empty_censored_chunk.blurb = ""
     empty_censored_chunk.source_links = {}
+    empty_censored_chunk.match_highlights = []
+    empty_censored_chunk.doc_summary = ""
+    empty_censored_chunk.chunk_context = ""
     return empty_censored_chunk
 
 

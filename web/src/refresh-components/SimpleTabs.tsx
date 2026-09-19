@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import Tabs from "./Tabs";
+import { Tabs } from "@opal/components";
 import { IconProps } from "@opal/types";
 
 /**
