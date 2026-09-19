@@ -17,7 +17,11 @@ from onyx.configs.chat_configs import (
     LLM_FIRST_CHUNK_MAX_RETRIES,
     LLM_SOCKET_READ_TIMEOUT,
 )
-from onyx.configs.model_configs import GEN_AI_TEMPERATURE, LITELLM_EXTRA_BODY
+from onyx.configs.model_configs import (
+    GEN_AI_NUM_RESERVED_OUTPUT_TOKENS,
+    GEN_AI_TEMPERATURE,
+    LITELLM_EXTRA_BODY,
+)
 from onyx.llm.api_surfaces import (
     OPENAI_COMPATIBLE_SURFACES,
     LlmApiSurface,
@@ -40,6 +44,7 @@ from onyx.llm.interfaces import (
 from onyx.llm.model_capabilities import (
     OPENAI_API_PROVIDERS,
     ReasoningParamStyle,
+    anthropic_identity_is_always_thinking,
     anthropic_omits_sampling_params,
     anthropic_supports_thinking,
     anthropic_uses_adaptive_thinking,
@@ -48,6 +53,7 @@ from onyx.llm.model_capabilities import (
     openai_chat_tools_require_reasoning_none,
     openai_chat_variant_rejects_reasoning,
     openai_model_rejects_reasoning_effort,
+    openai_model_supports_reasoning_none,
     resolve_reasoning_param_style,
 )
 from onyx.llm.model_capabilities import (
@@ -95,6 +101,7 @@ _VERTEX_ANTHROPIC_MODELS_REJECTING_STREAM_OPTIONS = (
     "claude-opus-4-7",
     "claude-opus-4-8",
 )
+_ANTHROPIC_MIN_THINKING_BUDGET_TOKENS = 1024
 
 # Best-effort tuning kwargs, never worth failing a chat over. _completion
 # retries provider rejections without them (reasoning keys first, then all),
@@ -799,26 +806,49 @@ class LitellmLLM(LLM):
             required_kwarg_keys = frozenset({"reasoning_effort"})
             _log_chat_completions_tools_disable_reasoning(model, self._api_base)
 
+        reasoning_style = resolve_reasoning_param_style(
+            self.config.model_provider,
+            model_identity_names,
+            self._api_surface,
+        )
+
+        # Fable and Mythos never stop thinking, so off there means the least
+        # reasoning they take rather than the API's own default.
+        if (
+            reasoning_effort is ReasoningEffort.OFF
+            and reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE
+            and anthropic_identity_is_always_thinking(model_identity_names)
+        ):
+            reasoning_effort = ReasoningEffort.LOW
+
+        # The tools block above already forced reasoning_effort "none".
+        sends_explicit_reasoning_none = (
+            reasoning_effort is ReasoningEffort.OFF
+            and "reasoning_effort" not in optional_kwargs
+            and any(
+                openai_model_supports_reasoning_none(name)
+                for name in model_identity_names
+            )
+        )
+
         # Note, there is a reasoning_effort parameter in LiteLLM but it is completely jank and does not work for any
         # of the major providers. Not setting it sets it to OFF.
         if (
             is_reasoning
             # The default of this parameter not set is surprisingly not the equivalent of an Auto but is actually Off
-            and reasoning_effort != ReasoningEffort.OFF
+            and (
+                reasoning_effort != ReasoningEffort.OFF or sends_explicit_reasoning_none
+            )
             and not any(
                 openai_model_rejects_reasoning_effort(name)
                 for name in model_identity_names
             )
         ):
-            openai_style_reasoning = {
+            openai_style_reasoning: dict[str, str] = {
                 "effort": OPENAI_REASONING_EFFORT[reasoning_effort],
-                "summary": "auto",
             }
-            reasoning_style = resolve_reasoning_param_style(
-                self.config.model_provider,
-                model_identity_names,
-                self._api_surface,
-            )
+            if not sends_explicit_reasoning_none:
+                openai_style_reasoning["summary"] = "auto"
 
             if reasoning_style is ReasoningParamStyle.OPENAI:
                 if is_claude_model:
@@ -836,6 +866,14 @@ class LitellmLLM(LLM):
                     )
                 if send_reasoning:
                     optional_kwargs["reasoning"] = openai_style_reasoning
+                    if (
+                        sends_explicit_reasoning_none
+                        and self.config.model_provider == LlmProviderNames.OPENAI
+                    ):
+                        # A retry without "none" runs at the medium default.
+                        # Gateways may reject "none", so only OpenAI itself
+                        # pins it.
+                        required_kwarg_keys = required_kwarg_keys | {"reasoning"}
 
             elif reasoning_style in (
                 ReasoningParamStyle.ANTHROPIC_ADAPTIVE,
@@ -851,16 +889,13 @@ class LitellmLLM(LLM):
                 has_tool_call_history = _prompt_contains_tool_call_history(prompt)
 
                 if reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE:
-                    # Newer Anthropic models (Claude Opus 4.7+) reject
-                    # thinking.type.enabled — they require the adaptive
-                    # thinking config with output_config.effort.
+                    # No signed blocks to lose, and without it Claude 5 picks
+                    # its own effort rather than ours.
+                    optional_kwargs["output_config"] = {
+                        "effort": ANTHROPIC_ADAPTIVE_REASONING_EFFORT[reasoning_effort],
+                    }
                     if not has_tool_call_history:
                         optional_kwargs["thinking"] = {"type": "adaptive"}
-                        optional_kwargs["output_config"] = {
-                            "effort": ANTHROPIC_ADAPTIVE_REASONING_EFFORT[
-                                reasoning_effort
-                            ],
-                        }
                 else:
                     budget_tokens: int | None = ANTHROPIC_REASONING_EFFORT_BUDGET.get(
                         reasoning_effort
@@ -874,16 +909,21 @@ class LitellmLLM(LLM):
                         and not isinstance(tool_choice, NamedToolChoice)
                     ):
                         if max_tokens is not None:
-                            # Anthropic has a weird rule where max token has to be at least as much as budget tokens if set
-                            # and the minimum budget tokens is 1024
-                            # Will note that overwriting a developer set max tokens is not ideal but is the best we can do for now
-                            # It is better to allow the LLM to output more reasoning tokens even if it results in a fairly small tool
-                            # call as compared to reducing the budget for reasoning.
-                            max_tokens = max(budget_tokens + 1, max_tokens)
-                        optional_kwargs["thinking"] = {
-                            "type": "enabled",
-                            "budget_tokens": budget_tokens,
-                        }
+                            response_reserve = max(1, GEN_AI_NUM_RESERVED_OUTPUT_TOKENS)
+                            budget_tokens = min(
+                                budget_tokens, max_tokens - response_reserve
+                            )
+                        if budget_tokens >= _ANTHROPIC_MIN_THINKING_BUDGET_TOKENS:
+                            optional_kwargs["thinking"] = {
+                                "type": "enabled",
+                                "budget_tokens": budget_tokens,
+                            }
+                        else:
+                            logger.warning(
+                                "Skipping Anthropic thinking: max_tokens=%s cannot "
+                                "fit the minimum thinking budget and answer reserve",
+                                max_tokens,
+                            )
 
             else:
                 # Hope for the best from LiteLLM
@@ -899,8 +939,20 @@ class LitellmLLM(LLM):
                     # picker greys the level out for these models, so reaching
                     # here means a stored override outliving a model switch.
                     optional_kwargs["reasoning_effort"] = ReasoningEffort.HIGH.value
+                elif reasoning_effort is ReasoningEffort.OFF:
+                    optional_kwargs["reasoning_effort"] = _OPENAI_REASONING_NONE
                 else:
                     optional_kwargs["reasoning_effort"] = ReasoningEffort.MEDIUM.value
+
+        # Claude 5 thinks unless told not to, and 4.7/4.8 take the same param.
+        # No effort with it, which Opus 5 caps, and no signed-block guard like
+        # the sibling branch: that one binds only while thinking is on.
+        if (
+            is_reasoning
+            and reasoning_effort is ReasoningEffort.OFF
+            and reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE
+        ):
+            optional_kwargs["thinking"] = {"type": "disabled"}
 
         if tools:
             # OpenAI will error if parallel_tool_calls is True and tools are not specified

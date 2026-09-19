@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -64,6 +65,7 @@ func TestResolveGoTargets(t *testing.T) {
 		"cli/internal/tui/tui_test.go",
 		"terraform-provider-onyx/internal/provider/provider_test.go",
 	)
+	outside := filepath.Join(newRepo(t, "other/x_test.go"), "other")
 
 	cases := []struct {
 		name      string
@@ -138,6 +140,30 @@ func TestResolveGoTargets(t *testing.T) {
 			args:      []string{"ods", "cli/internal/tui"},
 			wantSuite: "ods",
 			want:      []string{"cli/internal/tui"},
+		},
+		{
+			name:      "missing path is left for the runner to report",
+			args:      []string{"ods", "tools/ods/missing"},
+			wantSuite: "ods",
+			want:      []string{"tools/ods/missing"},
+		},
+		{
+			name:      "bare node id is left alone",
+			args:      []string{"ods", "::TestResolve"},
+			wantSuite: "ods",
+			want:      []string{"::TestResolve"},
+		},
+		{
+			name:      "absolute path inside the repo",
+			args:      []string{filepath.Join(root, "tools", "ods", "cmd")},
+			wantSuite: "ods",
+			want:      []string{"./cmd"},
+		},
+		{
+			name:      "absolute path outside the repo is left alone",
+			args:      []string{"ods", outside},
+			wantSuite: "ods",
+			want:      []string{outside},
 		},
 	}
 
@@ -215,6 +241,13 @@ func TestResolveErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("bare node id", func(t *testing.T) {
+		root := t.TempDir()
+		if _, _, err := Resolve(root, root, []string{"::TestResolve"}); err == nil {
+			t.Fatal("expected an error for a node id without a file")
+		}
+	})
+
 	t.Run("path outside every suite", func(t *testing.T) {
 		root := newRepo(t, "backend/tests/unit/test_foo.py")
 		_, _, err := Resolve(root, root, []string{"backend/tests/unit/test_foo.py"})
@@ -245,5 +278,25 @@ func TestHasTarget(t *testing.T) {
 				t.Errorf("HasTarget(%v) = %v, want %v", tc.args, got, tc.want)
 			}
 		})
+	}
+}
+
+// All hands out a copy, so a caller cannot rewrite the routing table.
+func TestAll_returnsACopy(t *testing.T) {
+	all := All()
+	for i := range all {
+		all[i].Dir = "elsewhere"
+		for j := range all[i].Aliases {
+			all[i].Aliases[j] = "changed"
+		}
+		for j := range all[i].DefaultArgs {
+			all[i].DefaultArgs[j] = "changed"
+		}
+	}
+
+	for _, s := range All() {
+		if s.Dir == "elsewhere" || slices.Contains(s.Aliases, "changed") || slices.Contains(s.DefaultArgs, "changed") {
+			t.Fatalf("expected the routing table unchanged, got %+v", s)
+		}
 	}
 }

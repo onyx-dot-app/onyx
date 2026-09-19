@@ -4,6 +4,9 @@ from uuid import UUID
 
 from onyx.db.models import User
 
+# Distinct id used for anonymous/unauthenticated users in flag evaluation.
+ANONYMOUS_USER_FLAG_ID = UUID("caa1e0cd-6ee6-4550-b1ec-8affaef4bf83")
+
 
 class FeatureFlagProvider(abc.ABC):
     """
@@ -43,12 +46,27 @@ class FeatureFlagProvider(abc.ABC):
         return self.feature_enabled(
             flag_key,
             # For anonymous/unauthenticated users, use a fixed UUID as fallback
-            user.id if user else UUID("caa1e0cd-6ee6-4550-b1ec-8affaef4bf83"),
+            user.id if user else ANONYMOUS_USER_FLAG_ID,
             user_properties={
                 "tenant_id": tenant_id,
                 "email": user.email if user else "anonymous@onyx.app",
             },
         )
+
+    def feature_enabled_for_user_tenant_or_default(
+        self,
+        flag_key: str,  # noqa: ARG002
+        user: User | None,  # noqa: ARG002
+        tenant_id: str,  # noqa: ARG002
+        default: bool,
+    ) -> bool:
+        """
+        Like feature_enabled_for_user_tenant, but for flags with a non-False
+        default: returns `default` whenever the flag cannot be evaluated (no
+        provider, flag not defined in the vendor, or an evaluation error), so
+        the vendor can only override the default, never silently disable.
+        """
+        return default
 
     def feature_variant_for_tenant(
         self,

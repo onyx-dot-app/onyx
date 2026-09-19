@@ -7,6 +7,7 @@ import ErrorPageLayout from "@/components/errorPages/ErrorPageLayout";
 import { Button } from "@opal/components";
 import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import { logout } from "@/lib/users/svc";
+import { loginPath } from "@/lib/auth/paths";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { useLicense } from "@/hooks/useLicense";
 import { useSettings } from "@/lib/settings/hooks";
@@ -43,6 +44,13 @@ export default function AccessRestricted() {
   const [error, setError] = useState<string | null>(null);
   const { data: license } = useLicense();
   const settings = useSettings();
+
+  // Lands on the held login page: with SSO as the only way in, a reload would
+  // sign the user straight back in through the IdP session.
+  async function handleLogout() {
+    await logout();
+    window.location.href = loginPath({ autoRedirectToSso: false });
+  }
 
   const isSeatLimitExceeded =
     settings.application_status === ApplicationStatus.SEAT_LIMIT_EXCEEDED;
@@ -111,12 +119,7 @@ export default function AccessRestricted() {
           </Text>
 
           <div className="flex flex-row gap-2">
-            <Button
-              onClick={async () => {
-                await logout();
-                window.location.reload();
-              }}
-            >
+            <Button onClick={handleLogout}>
               {t("accessRestricted.logoutButton.label")}
             </Button>
           </div>
@@ -135,13 +138,7 @@ export default function AccessRestricted() {
                 ? t("accessRestricted.resubscribeButton.loading")
                 : t("accessRestricted.resubscribeButton.label")}
             </Button>
-            <Button
-              prominence="secondary"
-              onClick={async () => {
-                await logout();
-                window.location.reload();
-              }}
-            >
+            <Button prominence="secondary" onClick={handleLogout}>
               {t("accessRestricted.logoutButton.label")}
             </Button>
           </div>
@@ -173,12 +170,7 @@ export default function AccessRestricted() {
           </Text>
 
           <div className="flex flex-row gap-2">
-            <Button
-              onClick={async () => {
-                await logout();
-                window.location.reload();
-              }}
-            >
+            <Button onClick={handleLogout}>
               {t("accessRestricted.logoutButton.label")}
             </Button>
           </div>

@@ -31,7 +31,16 @@ function getBillingBaseUrl(): string {
   return NEXT_PUBLIC_CLOUD_ENABLED ? "/api/tenants" : "/api/admin/billing";
 }
 
-async function billingPost<T>(endpoint: string, body?: unknown): Promise<T> {
+/** Every JSON body the billing endpoints below accept. */
+type BillingRequestBody =
+  | CreateCheckoutSessionRequest
+  | CreateCustomerPortalSessionRequest
+  | SeatUpdateRequest;
+
+async function billingPost<T>(
+  endpoint: string,
+  body?: BillingRequestBody
+): Promise<T> {
   const response = await fetch(`${getBillingBaseUrl()}${endpoint}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

@@ -329,29 +329,34 @@ def verify_user_files(
     from onyx.db.models import Project__UserFile
     from onyx.db.projects import check_project_ownership
 
-    # Extract user_file_ids and project file_ids from the file descriptors
-    user_file_ids = []
+    user_file_descriptors: list[tuple[UUID, str]] = []
     project_file_ids = []
 
     for file_descriptor in user_files:
-        # Check if this file descriptor has a user_file_id
-        if file_descriptor.get("user_file_id"):
+        descriptor_user_file_id = file_descriptor.get("user_file_id")
+        if descriptor_user_file_id:
             try:
-                user_file_ids.append(UUID(file_descriptor["user_file_id"]))
-            except (ValueError, TypeError):
-                logger.warning(
-                    "Invalid user_file_id in file descriptor: %s",
-                    file_descriptor["user_file_id"],
-                )
-                continue
+                parsed_user_file_id = UUID(descriptor_user_file_id)
+            except (ValueError, TypeError) as e:
+                raise ValueError("Invalid user_file_id in file descriptor") from e
+            user_file_descriptors.append((parsed_user_file_id, file_descriptor["id"]))
         else:
             # This is a project file - use the 'id' field which is the file_id
             if file_descriptor.get("id"):
                 project_file_ids.append(file_descriptor["id"])
 
-    # Verify user files (existing logic)
-    if user_file_ids:
-        validate_user_files_ownership(user_file_ids, user_id, db_session)
+    if user_file_descriptors:
+        owned = validate_user_files_ownership(
+            [user_file_id for user_file_id, _ in user_file_descriptors],
+            user_id,
+            db_session,
+        )
+        file_id_by_user_file_id = {uf.id: uf.file_id for uf in owned}
+        for user_file_id, descriptor_file_id in user_file_descriptors:
+            if file_id_by_user_file_id.get(user_file_id) != descriptor_file_id:
+                raise ValueError(
+                    f"File descriptor id does not match user file {user_file_id}"
+                )
 
     # Verify project files
     if project_file_ids:

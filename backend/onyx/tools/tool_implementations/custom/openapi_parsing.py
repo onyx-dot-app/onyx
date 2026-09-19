@@ -1,4 +1,5 @@
 from typing import Any, cast
+from urllib.parse import quote, urlencode
 
 from pydantic import BaseModel
 
@@ -51,16 +52,16 @@ class MethodSpec(BaseModel):
     def build_url(
         self, base_url: str, path_params: dict[str, str], query_params: dict[str, str]
     ) -> str:
+        encoded_path_params = {
+            name: quote(str(value), safe="") for name, value in path_params.items()
+        }
         url = f"{base_url}{self.path}"
         try:
-            url = url.format(**path_params)
+            url = url.format(**encoded_path_params)
         except KeyError as e:
             raise ValueError(f"Missing path parameter: {e}")
         if query_params:
-            url += "?"
-            for param, value in query_params.items():
-                url += f"{param}={value}&"
-            url = url[:-1]
+            url += f"?{urlencode(query_params)}"
         return url
 
     def to_tool_definition(self) -> dict[str, Any]:

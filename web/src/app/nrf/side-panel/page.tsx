@@ -1,7 +1,6 @@
 import { unstable_noStore as noStore } from "next/cache";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import NRFPage from "@/app/nrf/NRFPage";
-import { SearchFiltersProvider } from "@/lib/searchFilters/providers";
 import { NRFPreferencesProvider } from "@/components/context/NRFPreferencesContext";
 
 /**
@@ -18,9 +17,7 @@ export default async function Page() {
     <>
       <InstantSSRAutoRefresh />
       <NRFPreferencesProvider>
-        <SearchFiltersProvider>
-          <NRFPage isSidePanel />
-        </SearchFiltersProvider>
+        <NRFPage isSidePanel />
       </NRFPreferencesProvider>
     </>
   );

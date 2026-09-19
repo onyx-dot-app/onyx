@@ -250,8 +250,18 @@ export interface AsanaCredentialJson {
 
 export interface TeamsCredentialJson {
   teams_client_id: string;
-  teams_client_secret: string;
+  teams_client_secret?: string;
   teams_directory_id: string;
+  teams_certificate_password?: string;
+  teams_private_key?: TypedFile;
+}
+
+export interface OutlookCredentialJson {
+  outlook_client_id: string;
+  outlook_client_secret?: string;
+  outlook_directory_id: string;
+  outlook_certificate_password?: string;
+  outlook_private_key?: TypedFile;
 }
 
 export interface DiscourseCredentialJson {
@@ -345,7 +355,8 @@ type CredentialTemplateMap = Record<ValidSources, object | null> & {
   salesforce: SalesforceCredentialJson;
   sharepoint: CredentialTemplateWithAuth<SharepointCredentialJson>;
   asana: AsanaCredentialJson;
-  teams: TeamsCredentialJson;
+  teams: CredentialTemplateWithAuth<TeamsCredentialJson>;
+  outlook: CredentialTemplateWithAuth<OutlookCredentialJson>;
   zendesk: ZendeskCredentialJson;
   discourse: DiscourseCredentialJson;
   axero: AxeroCredentialJson;
@@ -475,11 +486,64 @@ export const credentialTemplates: Record<ValidSources, any> = {
   asana: {
     asana_api_token_secret: "",
   },
+  // SAFETY: the certificate template seeds teams_private_key with null, which TypedFile does not allow.
   teams: {
-    teams_client_id: "",
-    teams_client_secret: "",
-    teams_directory_id: "",
-  },
+    authentication_method: "client_secret",
+    authMethods: [
+      {
+        value: "client_secret",
+        label: "Client Secret",
+        fields: {
+          teams_client_id: "",
+          teams_client_secret: "",
+          teams_directory_id: "",
+        },
+        description:
+          "The connector signs in with a client secret of the app registration. Provide the client ID, directory ID and secret. Channel messages and members only: SharePoint refuses a secret, so Include Attachments needs the certificate option.",
+      },
+      {
+        value: "certificate",
+        label: "Certificate Authentication",
+        fields: {
+          teams_client_id: "",
+          teams_directory_id: "",
+          teams_certificate_password: "",
+          teams_private_key: null,
+        },
+        description:
+          "The connector signs in with a certificate uploaded to the app registration. Provide the client ID, directory ID, the PFX bundle and its password. Required for Include Attachments, which reads channel files and their readers from SharePoint.",
+      },
+    ],
+  } as CredentialTemplateWithAuth<TeamsCredentialJson>,
+  // SAFETY: the certificate template seeds outlook_private_key with null, which TypedFile does not allow.
+  outlook: {
+    authentication_method: "client_secret",
+    authMethods: [
+      {
+        value: "client_secret",
+        label: "Client Secret",
+        fields: {
+          outlook_client_id: "",
+          outlook_client_secret: "",
+          outlook_directory_id: "",
+        },
+        description:
+          "The connector signs in with a client secret of the app registration. Provide the client ID, directory ID and secret.",
+      },
+      {
+        value: "certificate",
+        label: "Certificate Authentication",
+        fields: {
+          outlook_client_id: "",
+          outlook_directory_id: "",
+          outlook_certificate_password: "",
+          outlook_private_key: null,
+        },
+        description:
+          "The connector signs in with a certificate uploaded to the app registration. Provide the client ID, directory ID, the PFX bundle and its password.",
+      },
+    ],
+  } as CredentialTemplateWithAuth<OutlookCredentialJson>,
   zendesk: {
     zendesk_subdomain: "",
     zendesk_email: "",
@@ -750,6 +814,15 @@ export const credentialDisplayNames: Record<string, string> = {
   teams_client_id: "Microsoft Teams Client ID",
   teams_client_secret: "Microsoft Teams Client Secret",
   teams_directory_id: "Microsoft Teams Directory ID",
+  teams_certificate_password: "Microsoft Teams Certificate Password",
+  teams_private_key: "Microsoft Teams Private Key (PFX)",
+
+  // Outlook
+  outlook_client_id: "Microsoft Outlook Client ID",
+  outlook_client_secret: "Microsoft Outlook Client Secret",
+  outlook_directory_id: "Microsoft Outlook Directory ID",
+  outlook_certificate_password: "Microsoft Outlook Certificate Password",
+  outlook_private_key: "Microsoft Outlook Private Key (PFX)",
 
   // Discourse
   discourse_api_key: "Discourse API Key",

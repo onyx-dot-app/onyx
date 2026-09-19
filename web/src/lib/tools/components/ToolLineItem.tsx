@@ -153,7 +153,7 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
   const authStatus = getToolAuthStatus(tool);
   const connectorsLabel = needsConnectors
     ? t("actionLineItem.addConnectors.label")
-    : t("actionLineItem.configureConnectors.label");
+    : t("actionLineItem.selectSearchSources.label");
 
   function handleClick() {
     if (isUnavailable) {

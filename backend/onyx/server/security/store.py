@@ -185,9 +185,7 @@ def _store_overrides_unlocked(overrides: SecuritySettingsOverrides) -> None:
     fields to None before write.
     """
     if MULTI_TENANT:
-        overrides = overrides.model_copy(
-            update={field: None for field in OPERATOR_LOCKED_FIELDS}
-        )
+        overrides = overrides.model_copy(update=dict.fromkeys(OPERATOR_LOCKED_FIELDS))
     with get_session_with_current_tenant() as db_session:
         _db_upsert_overrides(db_session, overrides)
     kv_store: KeyValueStore = get_kv_store()
