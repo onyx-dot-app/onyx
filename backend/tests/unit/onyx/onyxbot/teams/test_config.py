@@ -20,6 +20,8 @@ from onyx.server.manage.teams_bot import api
 
 PATH = "/manage/admin/teams-bot/config"
 SECRET = "test-teams-credential"
+PERSONA_ID = 41
+UPDATED_PERSONA_ID = 42
 CREATE = {
     "app_id": "11111111-1111-4111-8111-11111111111a",
     "directory_id": "22222222-2222-4222-8222-22222222222b",
@@ -34,8 +36,16 @@ def session() -> Generator[Session, None, None]:
     )
     with engine.begin() as connection:
         connection.execute(text("PRAGMA foreign_keys=ON"))
-    Table("persona", MetaData(), Column("id", Integer, primary_key=True)).create(engine)
+    persona_table = Table(
+        "persona", MetaData(), Column("id", Integer, primary_key=True)
+    )
+    persona_table.create(engine)
     cast(Table, TeamsBotConfig.__table__).create(engine)
+    with engine.begin() as connection:
+        connection.execute(
+            persona_table.insert(),
+            [{"id": PERSONA_ID}, {"id": UPDATED_PERSONA_ID}],
+        )
     try:
         with Session(engine) as db_session:
             yield db_session
@@ -161,6 +171,27 @@ def test_persona_access_checked_before_save(client: TestClient) -> None:
     with patch.object(api, "get_persona_by_id", side_effect=ValueError("Unavailable")):
         assert client.post(PATH, json={**CREATE, "persona_id": 99}).status_code == 404
     assert client.get(PATH).json() is None
+
+
+def test_persona_id_round_trip(client: TestClient, session: Session) -> None:
+    with patch.object(api, "get_persona_by_id"):
+        created = client.post(PATH, json={**CREATE, "persona_id": PERSONA_ID})
+        assert created.status_code == 200
+        assert created.json()["persona_id"] == PERSONA_ID
+        assert client.get(PATH).json()["persona_id"] == PERSONA_ID
+
+        updated = client.put(
+            PATH,
+            json={"enabled": False, "persona_id": UPDATED_PERSONA_ID},
+        )
+        assert updated.status_code == 200
+        assert updated.json()["persona_id"] == UPDATED_PERSONA_ID
+
+    session.expire_all()
+    config = get_teams_bot_config(session)
+    assert config is not None
+    assert config.persona_id == UPDATED_PERSONA_ID
+    assert client.get(PATH).json()["persona_id"] == UPDATED_PERSONA_ID
 
 
 @pytest.mark.usefixtures("enable_ee")
