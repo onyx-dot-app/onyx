@@ -22,6 +22,7 @@ from onyx.tools.tool_implementations.web_search.clients.searxng_client import (
 )
 from onyx.tools.tool_implementations.web_search.clients.serper_client import (
     SerperClient,
+    SerperSearchClient,
 )
 from onyx.tools.tool_implementations.web_search.clients.tavily_client import (
     TavilyClient,
@@ -109,6 +110,13 @@ def build_search_provider_from_config(
         )
     if provider_type == WebSearchProviderType.SERPER:
         return SerperClient(api_key=api_key, num_results=num_results)
+    if provider_type == WebSearchProviderType.LITESCRAPE:
+        return SerperSearchClient(
+            api_key=api_key,
+            num_results=num_results,
+            search_url="https://api.litescrape.com/search",
+            provider_name="Litescrape",
+        )
     if provider_type == WebSearchProviderType.TAVILY:
         return TavilyClient(
             api_key=api_key,
