@@ -1,17 +1,20 @@
-from __future__ import annotations
-
 import json
 from collections.abc import Iterator
 from datetime import datetime, timezone
-from typing import Any, Protocol, cast
+from typing import Any
 
+from google.auth.exceptions import GoogleAuthError
 from google.oauth2 import service_account
-from googleapiclient.discovery import build
+from googleapiclient.discovery import Resource, build
 from googleapiclient.errors import HttpError
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.exceptions import CredentialInvalidError
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialInvalidError,
+    InsufficientPermissionsError,
+)
 from onyx.connectors.interfaces import (
     GenerateDocumentsOutput,
     LoadConnector,
@@ -35,50 +38,12 @@ _GOOGLE_CHAT_PAGE_SIZE = 1000
 _SNIPPET_LENGTH = 80
 
 
-class _ExecutableRequest(Protocol):
-    def execute(self) -> dict[str, Any]: ...
-
-
-class _GoogleChatMessagesResource(Protocol):
-    def list(
-        self,
-        *,
-        parent: str,
-        pageSize: int,
-        pageToken: str | None,
-        filter: str | None,
-        orderBy: str,
-    ) -> _ExecutableRequest: ...
-
-
-class _GoogleChatSpacesResource(Protocol):
-    def list(
-        self,
-        *,
-        pageSize: int,
-        pageToken: str | None = None,
-    ) -> _ExecutableRequest: ...
-
-    def messages(self) -> _GoogleChatMessagesResource: ...
-
-
-class _GoogleChatService(Protocol):
-    def spaces(self) -> _GoogleChatSpacesResource: ...
-
-
 def _parse_timestamp(value: str | None) -> datetime | None:
-    if not value:
-        return None
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return datetime.fromisoformat(value) if value else None
 
 
 def _format_timestamp(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-
-
-def _message_link(space_name: str) -> str:
-    space_id = space_name.removeprefix("spaces/")
-    return f"https://chat.google.com/room/{space_id}"
 
 
 def _message_to_document(message: dict[str, Any], space: dict[str, Any]) -> Document:
@@ -108,7 +73,7 @@ def _message_to_document(message: dict[str, Any], space: dict[str, Any]) -> Docu
         sections=[
             TextSection(
                 text=text,
-                link=_message_link(space_name),
+                link=f"https://chat.google.com/room/{space_name.removeprefix('spaces/')}",
             )
         ],
         metadata=metadata,
@@ -123,12 +88,12 @@ def _message_to_document(message: dict[str, Any], space: dict[str, Any]) -> Docu
 class GoogleChatConnector(PollConnector, LoadConnector):
     def __init__(
         self,
-        space_names: list[str] = [],
+        space_names: list[str] | None = None,
         start_date: str | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
         self.space_names = {
-            name.strip().casefold() for name in space_names if name.strip()
+            name.strip().casefold() for name in space_names or [] if name.strip()
         }
         self.start_date = (
             datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
@@ -142,22 +107,21 @@ class GoogleChatConnector(PollConnector, LoadConnector):
         raw_service_account = credentials.get("google_chat_service_account_secret")
         if isinstance(raw_service_account, str):
             try:
-                service_account_info = json.loads(raw_service_account)
+                raw_service_account = json.loads(raw_service_account)
             except json.JSONDecodeError as error:
                 raise CredentialInvalidError(
                     "Google Chat service account key must be valid JSON."
                 ) from error
-        elif isinstance(raw_service_account, dict):
-            service_account_info = raw_service_account
-        else:
+
+        if not isinstance(raw_service_account, dict):
             raise CredentialInvalidError(
                 "Google Chat service account key must be a JSON object."
             )
 
-        self._service_account_info = service_account_info
+        self._service_account_info = raw_service_account
         return None
 
-    def _chat_service(self) -> _GoogleChatService:
+    def _chat_service(self) -> Resource:
         if self._service_account_info is None:
             raise ConnectorMissingCredentialError("Google Chat")
         try:
@@ -165,14 +129,11 @@ class GoogleChatConnector(PollConnector, LoadConnector):
                 self._service_account_info,
                 scopes=_GOOGLE_CHAT_SCOPES,
             )
-            return cast(
-                _GoogleChatService,
-                build(
-                    "chat",
-                    "v1",
-                    credentials=credentials,
-                    cache_discovery=False,
-                ),
+            return build(
+                "chat",
+                "v1",
+                credentials=credentials,
+                cache_discovery=False,
             )
         except (ValueError, TypeError) as error:
             raise CredentialInvalidError(
@@ -181,29 +142,60 @@ class GoogleChatConnector(PollConnector, LoadConnector):
 
     def validate_connector_settings(self) -> None:
         try:
-            self._chat_service().spaces().list(pageSize=1).execute()
+            chat_service = self._chat_service()
+            space = next(self._selected_spaces(chat_service), None)
+            if space is None:
+                raise ConnectorValidationError(
+                    "No accessible Google Chat spaces matched the connector settings. "
+                    "Add the Chat app to a space or update the space filter."
+                )
+
+            space_name = space.get("name")
+            if not isinstance(space_name, str) or not space_name:
+                raise ConnectorValidationError(
+                    "Google Chat returned a space without a resource name."
+                )
+
+            chat_service.spaces().messages().list(  # ty: ignore[unresolved-attribute]
+                parent=space_name,
+                pageSize=1,
+                pageToken=None,
+                filter=None,
+                orderBy="ASC",
+            ).execute()
         except HttpError as error:
+            status_code = error.resp.status if error.resp else None
+            if status_code == 401:
+                raise CredentialInvalidError(
+                    "Google Chat rejected the service account credentials."
+                ) from error
+            if status_code == 403:
+                raise InsufficientPermissionsError(
+                    "The Google Chat app cannot read messages. Confirm that a "
+                    "Workspace administrator approved the Chat app message-read scope."
+                ) from error
+            raise ConnectorValidationError(
+                f"Unable to validate Google Chat access (status={status_code}): {error}"
+            ) from error
+        except GoogleAuthError as error:
             raise CredentialInvalidError(
-                f"Unable to access Google Chat spaces: {error}"
+                f"Google Chat rejected the service account credentials: {error}"
             ) from error
 
-    def _selected_spaces(
-        self, chat_service: _GoogleChatService
-    ) -> Iterator[dict[str, Any]]:
+    def _selected_spaces(self, chat_service: Resource) -> Iterator[dict[str, Any]]:
         page_token: str | None = None
         while True:
             response = (
-                chat_service.spaces()
+                chat_service.spaces()  # ty: ignore[unresolved-attribute]
                 .list(pageSize=_GOOGLE_CHAT_PAGE_SIZE, pageToken=page_token)
                 .execute()
             )
             for space in response.get("spaces", []):
                 resource_name = str(space.get("name") or "").casefold()
                 display_name = str(space.get("displayName") or "").casefold()
-                if self.space_names and not {
-                    resource_name,
-                    display_name,
-                }.intersection(self.space_names):
+                if self.space_names and self.space_names.isdisjoint(
+                    (resource_name, display_name)
+                ):
                     continue
                 yield space
 
@@ -213,7 +205,7 @@ class GoogleChatConnector(PollConnector, LoadConnector):
 
     def _messages(
         self,
-        chat_service: _GoogleChatService,
+        chat_service: Resource,
         space: dict[str, Any],
         start: datetime | None,
         end: datetime | None,
@@ -227,7 +219,7 @@ class GoogleChatConnector(PollConnector, LoadConnector):
         page_token: str | None = None
         while True:
             response = (
-                chat_service.spaces()
+                chat_service.spaces()  # ty: ignore[unresolved-attribute]
                 .messages()
                 .list(
                     parent=space["name"],

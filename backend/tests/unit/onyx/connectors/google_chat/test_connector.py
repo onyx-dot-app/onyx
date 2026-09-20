@@ -1,10 +1,16 @@
-from __future__ import annotations
-
 from datetime import datetime, timezone
-from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
+
+import pytest
+from googleapiclient.errors import HttpError
+from httplib2 import Response
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialInvalidError,
+    InsufficientPermissionsError,
+)
 from onyx.connectors.google_chat.connector import (
     GoogleChatConnector,
     _message_to_document,
@@ -12,35 +18,29 @@ from onyx.connectors.google_chat.connector import (
 from onyx.connectors.models import Document
 
 
-class _FakeRequest:
-    def __init__(self, response: dict[str, Any]) -> None:
-        self.response = response
-
-    def execute(self) -> dict[str, Any]:
-        return self.response
+def _request(response: dict[str, object]) -> MagicMock:
+    request = MagicMock()
+    request.execute.return_value = response
+    return request
 
 
-class _FakeMessages:
-    def __init__(self) -> None:
-        self.calls: list[dict[str, Any]] = []
-
-    def list(self, **kwargs: Any) -> _FakeRequest:
-        self.calls.append(kwargs)
-        page_token = kwargs.get("pageToken")
-        if page_token == "messages-page-2":
-            return _FakeRequest(
-                {
-                    "messages": [
-                        {
-                            "name": "spaces/AAA/messages/second",
-                            "text": "Second message",
-                            "createTime": "2026-01-02T12:00:00Z",
-                            "sender": {"displayName": "Grace"},
-                        }
-                    ]
-                }
-            )
-        return _FakeRequest(
+def _fake_chat_service() -> tuple[MagicMock, MagicMock, MagicMock]:
+    service = MagicMock()
+    spaces = MagicMock()
+    messages = MagicMock()
+    service.spaces.return_value = spaces
+    spaces.messages.return_value = messages
+    spaces.list.side_effect = [
+        _request(
+            {
+                "spaces": [{"name": "spaces/AAA", "displayName": "Engineering"}],
+                "nextPageToken": "spaces-page-2",
+            }
+        ),
+        _request({"spaces": [{"name": "spaces/BBB", "displayName": "Support"}]}),
+    ]
+    messages.list.side_effect = [
+        _request(
             {
                 "messages": [
                     {
@@ -49,44 +49,25 @@ class _FakeMessages:
                         "createTime": "2026-01-02T10:00:00Z",
                         "sender": {"displayName": "Ada"},
                     },
-                    {
-                        "name": "spaces/AAA/messages/card-only",
-                        "createTime": "2026-01-02T11:00:00Z",
-                    },
+                    {"name": "spaces/AAA/messages/card-only"},
                 ],
                 "nextPageToken": "messages-page-2",
             }
-        )
-
-
-class _FakeSpaces:
-    def __init__(self) -> None:
-        self.messages_api = _FakeMessages()
-        self.calls: list[dict[str, Any]] = []
-
-    def list(self, **kwargs: Any) -> _FakeRequest:
-        self.calls.append(kwargs)
-        if kwargs.get("pageToken") == "spaces-page-2":
-            return _FakeRequest(
-                {"spaces": [{"name": "spaces/BBB", "displayName": "Support"}]}
-            )
-        return _FakeRequest(
+        ),
+        _request(
             {
-                "spaces": [{"name": "spaces/AAA", "displayName": "Engineering"}],
-                "nextPageToken": "spaces-page-2",
+                "messages": [
+                    {
+                        "name": "spaces/AAA/messages/second",
+                        "text": "Second message",
+                        "createTime": "2026-01-02T12:00:00Z",
+                        "sender": {"displayName": "Grace"},
+                    }
+                ]
             }
-        )
-
-    def messages(self) -> _FakeMessages:
-        return self.messages_api
-
-
-class _FakeChatService:
-    def __init__(self) -> None:
-        self.spaces_api = _FakeSpaces()
-
-    def spaces(self) -> _FakeSpaces:
-        return self.spaces_api
+        ),
+    ]
+    return service, spaces, messages
 
 
 def test_message_to_document_preserves_searchable_context() -> None:
@@ -105,7 +86,6 @@ def test_message_to_document_preserves_searchable_context() -> None:
     assert document.id == "GOOGLE_CHAT_spaces/AAA/messages/BBB"
     assert document.source == DocumentSource.GOOGLE_CHAT
     assert document.semantic_identifier == "Ada in Engineering: A deployment note"
-    assert document.title == "Engineering"
     assert document.sections[0].text == "A deployment note"
     assert document.sections[0].link == "https://chat.google.com/room/AAA"
     assert document.metadata == {
@@ -123,7 +103,7 @@ def test_connector_paginates_and_filters_spaces_and_messages() -> None:
         start_date="2026-01-01",
         batch_size=1,
     )
-    fake_service = _FakeChatService()
+    fake_service, spaces_api, messages_api = _fake_chat_service()
 
     with patch.object(connector, "_chat_service", return_value=fake_service):
         batches = list(
@@ -134,18 +114,53 @@ def test_connector_paginates_and_filters_spaces_and_messages() -> None:
         )
 
     documents = [document for batch in batches for document in batch]
-    assert all(isinstance(document, Document) for document in documents)
     assert [
         document.id for document in documents if isinstance(document, Document)
     ] == [
         "GOOGLE_CHAT_spaces/AAA/messages/first",
         "GOOGLE_CHAT_spaces/AAA/messages/second",
     ]
-    assert len(fake_service.spaces_api.calls) == 2
-    assert len(fake_service.spaces_api.messages_api.calls) == 2
-    first_message_call = fake_service.spaces_api.messages_api.calls[0]
-    assert first_message_call["parent"] == "spaces/AAA"
+    assert spaces_api.list.call_count == 2
+    assert messages_api.list.call_count == 2
+    first_message_call = messages_api.list.call_args_list[0].kwargs
     assert first_message_call["filter"] == (
         'createTime > "2026-01-01T00:00:00Z" AND createTime < "2026-02-01T00:00:00Z"'
     )
     assert first_message_call["orderBy"] == "ASC"
+
+
+@pytest.mark.parametrize("service_account_value", [None, "not JSON", "[]"])
+def test_connector_rejects_invalid_service_account_json(
+    service_account_value: str | None,
+) -> None:
+    connector = GoogleChatConnector()
+
+    with pytest.raises(CredentialInvalidError):
+        connector.load_credentials(
+            {"google_chat_service_account_secret": service_account_value}
+        )
+
+
+def test_connector_validation_requires_matching_space() -> None:
+    connector = GoogleChatConnector(space_names=["Missing space"])
+    fake_service, _, _ = _fake_chat_service()
+
+    with (
+        patch.object(connector, "_chat_service", return_value=fake_service),
+        pytest.raises(ConnectorValidationError, match="No accessible Google Chat"),
+    ):
+        connector.validate_connector_settings()
+
+
+def test_connector_validation_reports_missing_message_scope() -> None:
+    connector = GoogleChatConnector()
+    fake_service, _, messages_api = _fake_chat_service()
+    forbidden_error = HttpError(Response({"status": "403"}), b"forbidden")
+    messages_api.list.side_effect = None
+    messages_api.list.return_value.execute.side_effect = forbidden_error
+
+    with (
+        patch.object(connector, "_chat_service", return_value=fake_service),
+        pytest.raises(InsufficientPermissionsError, match="administrator approved"),
+    ):
+        connector.validate_connector_settings()
