@@ -129,12 +129,7 @@ class GoogleChatConnector(PollConnector, LoadConnector):
                 self._service_account_info,
                 scopes=_GOOGLE_CHAT_SCOPES,
             )
-            return build(
-                "chat",
-                "v1",
-                credentials=credentials,
-                cache_discovery=False,
-            )
+            return build("chat", "v1", credentials=credentials, cache_discovery=False)
         except (ValueError, TypeError) as error:
             raise CredentialInvalidError(
                 f"Invalid Google Chat service account key: {error}"

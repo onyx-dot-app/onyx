@@ -93,6 +93,7 @@ def test_message_to_document_preserves_searchable_context() -> None:
         "Sender": "Ada",
         "Thread": "spaces/AAA/threads/CCC",
     }
+    assert document.doc_created_at == datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
     assert document.doc_updated_at == datetime(2026, 1, 2, 10, 5, tzinfo=timezone.utc)
 
 
