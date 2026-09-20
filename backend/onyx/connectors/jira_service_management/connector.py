@@ -290,13 +290,15 @@ class JiraServiceManagementConnector(JiraConnector):
             if not emitted_issue_node:
                 # The issue becomes a hierarchy node so its attachments hang
                 # under it; raw_node_id matches the document id for the
-                # document<->node link.
+                # document<->node link. document.external_access is already
+                # source-prefixed for the indexing path.
                 yield HierarchyNode(
                     raw_node_id=document.id,
                     raw_parent_id=document.parent_hierarchy_raw_node_id,
                     display_name=document.semantic_identifier,
                     link=document.id,
                     node_type=HierarchyNodeType.PAGE,
+                    external_access=document.external_access,
                 )
                 emitted_issue_node = True
 
@@ -345,6 +347,14 @@ class JiraServiceManagementConnector(JiraConnector):
             )
 
             if not emitted_issue_node:
+                # Hierarchy-node group ids are stored verbatim (unlike slim
+                # docs, which get prefixed during the permissions upsert), so
+                # the node carries the source-prefixed variant.
+                node_external_access = (
+                    self._get_project_permissions(project_key, add_prefix=True)
+                    if include_permissions
+                    else None
+                )
                 yield HierarchyNode(
                     raw_node_id=issue_doc_id,
                     raw_parent_id=self._get_parent_hierarchy_raw_node_id(
@@ -353,7 +363,7 @@ class JiraServiceManagementConnector(JiraConnector):
                     display_name=issue.key,
                     link=issue_doc_id,
                     node_type=HierarchyNodeType.PAGE,
-                    external_access=external_access,
+                    external_access=node_external_access,
                 )
                 emitted_issue_node = True
 

@@ -426,6 +426,48 @@ def test_slim_attachment_perms_inherit_project(
     assert all(d.external_access == expected_access for d in slim_docs)
 
 
+def test_slim_issue_node_uses_prefixed_permissions(
+    jsm_connector: JiraServiceManagementConnector,
+    create_mock_jsm_issue: Callable[..., MagicMock],
+) -> None:
+    """Hierarchy-node group ids are stored verbatim by the permission sync
+    (slim docs are prefixed downstream instead), so the issue node must carry
+    the source-prefixed access variant."""
+    issue = create_mock_jsm_issue(key="IT-1", attachments=[create_mock_attachment()])
+    jira_client = cast(JIRA, jsm_connector._jira_client)
+    cast(MagicMock, jira_client.search_issues).return_value = [issue]
+
+    prefixed_access = ExternalAccess(
+        external_user_emails={"agent@example.com"},
+        external_user_group_ids={"jira_service_management_agents"},
+        is_public=False,
+    )
+    unprefixed_access = ExternalAccess(
+        external_user_emails={"agent@example.com"},
+        external_user_group_ids={"agents"},
+        is_public=False,
+    )
+    jsm_connector._project_permissions_cache["IT:prefixed"] = prefixed_access
+    jsm_connector._project_permissions_cache["IT:unprefixed"] = unprefixed_access
+
+    items = [
+        i
+        for batch in jsm_connector.retrieve_all_slim_docs_perm_sync(0, time.time())
+        for i in batch
+    ]
+
+    issue_node = next(
+        i
+        for i in items
+        if isinstance(i, HierarchyNode) and i.raw_node_id.endswith("/browse/IT-1")
+    )
+    assert issue_node.external_access == prefixed_access
+
+    slim_docs = [i for i in items if isinstance(i, SlimDocument)]
+    assert len(slim_docs) == 2
+    assert all(d.external_access == unprefixed_access for d in slim_docs)
+
+
 def test_attachment_doc_permissions_follow_ticket(
     jsm_connector: JiraServiceManagementConnector,
     create_mock_jsm_issue: Callable[..., MagicMock],
@@ -444,14 +486,20 @@ def test_attachment_doc_permissions_follow_ticket(
     )
     jsm_connector._project_permissions_cache["IT:prefixed"] = expected_access
 
-    documents = [
-        d
-        for d in _collect_all_items(jsm_connector, perm_sync=True)
-        if isinstance(d, Document)
-    ]
+    items = _collect_all_items(jsm_connector, perm_sync=True)
+    documents = [d for d in items if isinstance(d, Document)]
     assert len(documents) == 2
     attachment_doc = next(d for d in documents if "attachment" in d.id)
     assert attachment_doc.external_access == expected_access
+
+    # the issue node carries the same (already source-prefixed) access so the
+    # indexed and slim representations agree
+    issue_node = next(
+        i
+        for i in items
+        if isinstance(i, HierarchyNode) and i.raw_node_id.endswith("/browse/IT-1")
+    )
+    assert issue_node.external_access == expected_access
 
 
 def test_image_attachment_gated_by_allow_images(
