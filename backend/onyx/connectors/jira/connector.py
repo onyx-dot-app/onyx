@@ -593,6 +593,9 @@ class JiraConnector(
                 jira_client=self.jira_client,
                 jira_project=project_key,
                 add_prefix=add_prefix,
+                # Group ids must carry this connector's source prefix so they
+                # match the groups written by the source's group sync.
+                source=self.document_source,
             )
         return self._project_permissions_cache[cache_key]
 
@@ -994,6 +997,7 @@ class JiraConnector(
                 project_name = project.name if project else None
 
                 if not project_key or self._issue_is_skipped(issue):
+                    current_offset += 1
                     continue
 
                 # Yield hierarchy nodes BEFORE the slim document (parent-before-child)

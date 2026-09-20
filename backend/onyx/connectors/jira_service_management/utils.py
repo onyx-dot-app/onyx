@@ -203,7 +203,7 @@ def get_jsm_comment_strs(
         comments = issue.fields.comment.comments
     except Exception as e:
         logger.error("Failed to fetch comments due to an error: %s", e)
-        comments = []
+        raise
 
     for comment in comments:
         try:

@@ -6,7 +6,10 @@ import pytest
 from jira import JIRA
 from jira.resources import Issue
 
-from onyx.connectors.jira.utils import JIRA_SERVER_API_VERSION
+from onyx.connectors.jira.utils import (
+    JIRA_CLOUD_API_VERSION,
+    JIRA_SERVER_API_VERSION,
+)
 from onyx.connectors.jira_service_management.connector import (
     JiraServiceManagementConnector,
 )
@@ -39,6 +42,18 @@ def mock_jira_client() -> MagicMock:
     mock._options = {"rest_api_version": JIRA_SERVER_API_VERSION}
     mock._session = MagicMock()
     return mock
+
+
+@pytest.fixture
+def mock_jira_client_cloud(mock_jira_client: MagicMock) -> MagicMock:
+    """Mock client for the Cloud (v3) path: enhanced_search_ids via
+    session.get(search/jql) and bulk_fetch_issues via session.post
+    (issue/bulkfetch)."""
+    mock_jira_client._options["rest_api_version"] = JIRA_CLOUD_API_VERSION
+    mock_jira_client._get_url = MagicMock(
+        side_effect=lambda path: f"https://jira.example.com/rest/api/3/{path}"
+    )
+    return mock_jira_client
 
 
 @pytest.fixture
@@ -137,6 +152,84 @@ def create_mock_comment(
     raw["author"] = {"emailAddress": author_email}
     comment.raw = raw
     return comment
+
+
+def create_raw_jsm_issue(
+    key: str = "IT-123",
+    issue_id: str = "10001",
+    summary: str = "Printer broken",
+    project_key: str = "IT",
+    project_name: str = "IT Service Desk",
+    labels: list[str] | None = None,
+    comments: list[dict[str, Any]] | None = None,
+    attachments: list[dict[str, Any]] | None = None,
+    jsm_fields: dict[str, Any] | None = None,
+    jira_base_url: str = "https://jira.example.com",
+) -> dict[str, Any]:
+    """Raw issue payload for the Cloud bulkfetch path, where the connector
+    builds real jira.resources.Issue objects via Issue(raw=...)."""
+    raw_fields: dict[str, Any] = {
+        "summary": summary,
+        "updated": "2023-01-01T12:00:00.000+0000",
+        "created": "2023-01-01T12:00:00.000+0000",
+        # Cloud payloads carry descriptions as Atlassian Document Format.
+        "description": {
+            "type": "doc",
+            "version": 1,
+            "content": [
+                {
+                    "type": "paragraph",
+                    "content": [{"type": "text", "text": "cloud description"}],
+                }
+            ],
+        },
+        "labels": labels or [],
+        "project": {"key": project_key, "name": project_name},
+        "issuetype": {"name": "Service Request"},
+        "parent": None,
+        "comment": {"comments": comments or [], "total": len(comments or [])},
+        "reporter": {
+            "displayName": "Test Reporter",
+            "emailAddress": "reporter@example.com",
+        },
+        "assignee": {
+            "displayName": "Test Agent",
+            "emailAddress": "agent@example.com",
+        },
+        "priority": {"name": "High"},
+        "status": {"name": "Waiting for support"},
+        "resolution": None,
+        "duedate": None,
+        "resolutiondate": None,
+        "attachment": attachments or [],
+    }
+    raw_fields.update(jsm_fields or {})
+    return {
+        "id": issue_id,
+        "key": key,
+        "self": f"{jira_base_url}/rest/api/3/issue/{issue_id}",
+        "fields": raw_fields,
+    }
+
+
+def create_raw_jsm_comment(
+    body: str,
+    author_email: str = "customer@example.com",
+    jsd_public: bool | None = None,
+    comment_id: str = "9001",
+    jira_base_url: str = "https://jira.example.com",
+) -> dict[str, Any]:
+    """Raw cloud comment; the "self" link is required for the jira client to
+    parse it into a resource carrying .raw (where jsdPublic lives)."""
+    raw: dict[str, Any] = {
+        "id": comment_id,
+        "self": f"{jira_base_url}/rest/api/3/comment/{comment_id}",
+        "body": body,
+        "author": {"displayName": "Test Author", "emailAddress": author_email},
+    }
+    if jsd_public is not None:
+        raw["jsdPublic"] = jsd_public
+    return raw
 
 
 def create_mock_attachment(

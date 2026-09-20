@@ -1,7 +1,7 @@
 import time
 from collections.abc import Callable
-from typing import cast
-from unittest.mock import MagicMock
+from typing import Any, cast
+from unittest.mock import MagicMock, patch
 
 import pytest
 from jira import JIRA, JIRAError
@@ -27,6 +27,8 @@ from onyx.utils.logger import setup_logger
 from tests.unit.onyx.connectors.jira_service_management.conftest import (
     create_mock_attachment,
     create_mock_comment,
+    create_raw_jsm_comment,
+    create_raw_jsm_issue,
 )
 from tests.unit.onyx.connectors.utils import (
     load_everything_from_checkpoint_connector,
@@ -317,7 +319,7 @@ def test_attachments_disabled_by_default(
     mock_jira_client._session.get.assert_not_called()
 
 
-def test_attachment_download_failure_skips_attachment(
+def test_attachment_download_failure_emits_stub_document(
     jsm_connector: JiraServiceManagementConnector,
     create_mock_jsm_issue: Callable[..., MagicMock],
 ) -> None:
@@ -331,8 +333,15 @@ def test_attachment_download_failure_skips_attachment(
     items = _collect_all_items(jsm_connector)
     documents = [i for i in items if isinstance(i, Document)]
 
-    # The ticket is still indexed; the attachment is skipped.
-    assert [d.id for d in documents] == ["https://jira.example.com/browse/IT-1"]
+    # The ticket is indexed and the attachment emits a stub document so the
+    # slim pass (which only sees attachment metadata) stays in sync.
+    assert [d.id for d in documents] == [
+        "https://jira.example.com/browse/IT-1",
+        "https://jira.example.com/rest/api/3/attachment/content/10001",
+    ]
+    attachment_doc = next(d for d in documents if "attachment" in d.id)
+    assert attachment_doc.metadata["filename"] == "report.pdf"
+    assert "Attachment report.pdf on IT-1" in (attachment_doc.sections[0].text or "")
 
 
 def test_attachment_processing_error_yields_connector_failure(
@@ -501,6 +510,38 @@ def test_validate_connector_settings_rejects_non_service_desk_project(
         jsm_connector.validate_connector_settings()
 
 
+def test_validate_connector_settings_rejects_missing_project_type(
+    jsm_connector: JiraServiceManagementConnector,
+) -> None:
+    """A project payload without projectTypeKey fails closed — the connector
+    must not silently run against a non-JSM project."""
+    jira_client = cast(JIRA, jsm_connector._jira_client)
+    project_mock = cast(MagicMock, jira_client.project)
+    project = MagicMock()
+    project.raw = {"key": "IT"}
+    project_mock.return_value = project
+
+    with pytest.raises(ConnectorValidationError, match="service desk"):
+        jsm_connector.validate_connector_settings()
+
+
+def test_prefixed_permissions_use_jsm_source_prefix(
+    jsm_connector: JiraServiceManagementConnector,
+) -> None:
+    """Group ids stamped during initial indexing must carry the JSM source
+    prefix so they match the groups written by the JSM group sync."""
+    with patch(
+        "onyx.connectors.jira.connector.get_project_permissions",
+        return_value=None,
+    ) as mock_get_permissions:
+        jsm_connector._get_project_permissions("IT", add_prefix=True)
+
+    mock_get_permissions.assert_called_once()
+    assert mock_get_permissions.call_args.kwargs["source"] == (
+        DocumentSource.JIRA_SERVICE_MANAGEMENT
+    )
+
+
 def test_validate_connector_settings_accepts_service_desk_project(
     jsm_connector: JiraServiceManagementConnector,
 ) -> None:
@@ -517,6 +558,93 @@ def test_validate_connector_settings_accepts_service_desk_project(
     # the validation JQL is project-scoped
     search_kwargs = cast(MagicMock, jira_client.search_issues).call_args.kwargs
     assert 'project = "IT"' in search_kwargs["jql_str"]
+
+
+def test_load_from_checkpoint_cloud_api_path(
+    jira_base_url: str,
+    project_key: str,
+    mock_jira_client_cloud: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Jira Cloud (v3) drives pagination via enhanced_search_ids
+    (session.get search/jql) + bulk_fetch_issues (session.post
+    issue/bulkfetch), never search_issues."""
+    connector = JiraServiceManagementConnector(
+        jira_base_url=jira_base_url,
+        project_key=project_key,
+        comment_email_blacklist=[],
+        include_attachments=True,
+    )
+    connector._jira_client = mock_jira_client_cloud
+
+    raw_issues = {
+        "1001": create_raw_jsm_issue(
+            key="IT-1",
+            issue_id="1001",
+            summary="Issue 1",
+            comments=[
+                create_raw_jsm_comment("public reply", jsd_public=True),
+                create_raw_jsm_comment(
+                    "internal note", jsd_public=False, comment_id="9002"
+                ),
+            ],
+            attachments=[create_mock_attachment(attachment_id="201")],
+            jsm_fields={"customfield_10010": "1/37"},
+        ),
+        "1002": create_raw_jsm_issue(key="IT-2", issue_id="1002", summary="Issue 2"),
+        "1003": create_raw_jsm_issue(key="IT-3", issue_id="1003", summary="Issue 3"),
+    }
+
+    session = cast(MagicMock, mock_jira_client_cloud._session)
+    session.get.return_value.json.return_value = {
+        "issues": [{"id": i} for i in raw_issues],
+        "nextPageToken": None,
+    }
+    session.get.return_value.raise_for_status = MagicMock()
+    session.get.return_value.content = b"attachment bytes"
+
+    def _bulk_fetch(*args: Any, **kwargs: Any) -> MagicMock:  # noqa: ARG001
+        response = MagicMock()
+        response.json.return_value = {
+            "issues": [raw_issues[i] for i in kwargs["json"]["issueIdsOrKeys"]]
+        }
+        return response
+
+    session.post.side_effect = _bulk_fetch
+    monkeypatch.setattr(
+        "onyx.connectors.jira_service_management.connector.extract_file_text",
+        MagicMock(return_value="attachment text"),
+    )
+
+    items = _collect_all_items(connector)
+
+    failures = [i for i in items if isinstance(i, ConnectorFailure)]
+    assert not failures
+    documents = [i for i in items if isinstance(i, Document)]
+    assert {d.id for d in documents} == {
+        "https://jira.example.com/browse/IT-1",
+        "https://jira.example.com/browse/IT-2",
+        "https://jira.example.com/browse/IT-3",
+        "https://jira.example.com/rest/api/3/attachment/content/201",
+    }
+    assert all(d.source == DocumentSource.JIRA_SERVICE_MANAGEMENT for d in documents)
+
+    issue_doc = next(d for d in documents if d.id.endswith("/browse/IT-1"))
+    issue_text = issue_doc.sections[0].text or ""
+    assert "cloud description" in issue_text
+    assert "public reply" in issue_text
+    assert "internal note" not in issue_text
+    assert issue_doc.metadata["customer_request_type"] == "1/37"
+
+    mock_jira_client_cloud.search_issues.assert_not_called()
+    session.get.assert_called()
+    session.post.assert_called()
+    posted_ids = {
+        issue_id
+        for call in session.post.call_args_list
+        for issue_id in call.kwargs["json"]["issueIdsOrKeys"]
+    }
+    assert posted_ids == set(raw_issues)
 
 
 def test_validate_connector_settings_project_error(

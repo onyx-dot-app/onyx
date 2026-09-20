@@ -178,8 +178,10 @@ class JiraServiceManagementConnector(JiraConnector):
         attachment: dict[str, Any],
         issue_document: Document,
     ) -> Document | None:
-        """Build a Document for a single issue attachment. Returns None when
-        the download fails or produces no usable content."""
+        """Build a Document for a single issue attachment. A failed download
+        still produces a minimal stub document so the slim pass, which can
+        only see attachment metadata, stays in sync with the indexed set.
+        Returns None only when no usable content sections can be built."""
         attachment_doc_id = build_jsm_attachment_doc_id(self.jira_base, attachment)
         if attachment_doc_id is None:
             logger.warning("Skipping JSM attachment on %s with no usable id", issue.key)
@@ -190,12 +192,16 @@ class JiraServiceManagementConnector(JiraConnector):
         media_type = attachment.get("mimeType")
         media_type = media_type if isinstance(media_type, str) else ""
 
+        sections: list[TextSection | ImageSection | TabularSection] = []
         raw_bytes = self._download_attachment(attachment)
         if raw_bytes is None:
-            return None
-
-        sections: list[TextSection | ImageSection | TabularSection] = []
-        if media_type in OnyxMimeTypes.IMAGE_MIME_TYPES:
+            sections.append(
+                TextSection(
+                    link=attachment_doc_id,
+                    text=f"Attachment {file_name} on {issue.key}",
+                )
+            )
+        elif media_type in OnyxMimeTypes.IMAGE_MIME_TYPES:
             if not self.allow_images:
                 return None
             image_section, _ = store_image_and_create_section(
@@ -223,8 +229,6 @@ class JiraServiceManagementConnector(JiraConnector):
                 break_on_unprocessable=False,
             )
             if not text.strip():
-                # Keep a minimal document so the slim pass, which can only see
-                # attachment metadata, stays in sync with the indexed set.
                 text = f"Attachment {file_name} on {issue.key}"
             sections.append(TextSection(link=attachment_doc_id, text=text))
 
@@ -379,7 +383,7 @@ class JiraServiceManagementConnector(JiraConnector):
 
         project_raw = project.raw if isinstance(project.raw, dict) else {}
         project_type = project_raw.get("projectTypeKey")
-        if project_type is not None and project_type != "service_desk":
+        if project_type != "service_desk":
             raise ConnectorValidationError(
                 f"Project {self.jira_project} is not a Jira Service Management "
                 "(service desk) project. Use the Jira connector for classic "

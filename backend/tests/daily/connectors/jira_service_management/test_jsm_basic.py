@@ -71,4 +71,10 @@ def test_jsm_connector_basic(
 
     assert len(docs) > 0
     assert all(doc.source == DocumentSource.JIRA_SERVICE_MANAGEMENT for doc in docs)
-    assert all(doc.metadata["project"] == jsm_connector.jira_project for doc in docs)
+    # Attachment documents don't carry the "project" key; the scoping property
+    # only applies to issue documents.
+    issue_docs = [doc for doc in docs if "project" in doc.metadata]
+    assert len(issue_docs) > 0
+    assert all(
+        doc.metadata["project"] == jsm_connector.jira_project for doc in issue_docs
+    )
