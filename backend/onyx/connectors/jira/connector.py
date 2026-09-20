@@ -589,6 +589,7 @@ class JiraConnector(
                 jira_client=self.jira_client,
                 jira_project=project_key,
                 add_prefix=add_prefix,
+                source=self.source,
             )
         return self._project_permissions_cache[cache_key]
 
