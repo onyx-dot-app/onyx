@@ -51,7 +51,6 @@ export default function CopyAnswerWithReferencesButton({
         })
       }
       size="sm"
-      data-testid="copy-answer-with-references"
     >
       {t("copyWithReferences.label")}
     </CopyButton>

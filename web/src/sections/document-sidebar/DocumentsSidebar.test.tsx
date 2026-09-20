@@ -114,6 +114,9 @@ test("copies the answer with cited sources in citation order, once each", async 
   const write = jest.spyOn(navigator.clipboard, "writeText");
   renderSidebar(message());
 
+  expect(screen.getByText("Cited Sources")).toBeInTheDocument();
+  expect(screen.getByText("More")).toBeInTheDocument();
+
   await user.click(
     screen.getByRole("button", { name: "Copy with references" })
   );
@@ -160,19 +163,36 @@ test("copies the newly selected answer and its sources", async () => {
   );
 });
 
-test("keeps missing source details explicit without exposing document IDs", async () => {
-  const user = setupUser();
-  const write = jest.spyOn(navigator.clipboard, "writeText");
-  renderSidebar(message({ documents: [] }));
-  await user.click(
-    screen.getByRole("button", { name: "Copy with references" })
-  );
-  expect(write).toHaveBeenCalledWith(
-    expect.stringContaining(
-      "## Cited Sources\n\n- Source details unavailable\n- Source details unavailable"
-    )
-  );
-});
+test.each([
+  { name: "no documents", documents: [] },
+  {
+    name: "only uncited documents",
+    documents: [document("uncited", "Uncited source")],
+  },
+])(
+  "copies missing references with $name without an empty cited section",
+  async ({ documents }) => {
+    const user = setupUser();
+    const write = jest.spyOn(navigator.clipboard, "writeText");
+    renderSidebar(message({ documents }));
+    expect(screen.queryByText("Cited Sources")).not.toBeInTheDocument();
+    expect(screen.queryByText("More")).not.toBeInTheDocument();
+    if (documents.length > 0) {
+      expect(screen.getByText("Found Sources")).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Uncited source" })
+      ).toBeInTheDocument();
+    }
+    await user.click(
+      screen.getByRole("button", { name: "Copy with references" })
+    );
+    expect(write).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "## Cited Sources\n\n- Source details unavailable\n- Source details unavailable"
+      )
+    );
+  }
+);
 
 test.each([
   ["generating", message({ is_generating: true })],

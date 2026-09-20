@@ -160,7 +160,7 @@ const DocumentsSidebar = memo(
         doc.document_id === undefined ||
         !citedDocumentIds.has(doc.document_id)
     );
-    const hasCited = citedDocumentIds.size > 0;
+    const hasCited = citedDocuments.length > 0;
     const hasOther = otherDocuments.length > 0;
 
     return (
@@ -169,13 +169,13 @@ const DocumentsSidebar = memo(
         className="bg-background-tint-01 overflow-y-scroll h-full w-full border-s"
       >
         <div className="flex flex-col px-3 gap-6">
+          <CopyAnswerWithReferencesButton
+            key={selectedMessage.nodeId}
+            message={selectedMessage}
+          />
           {hasCited && (
             <div>
               <Header onClose={closeSidebar}>{t("citedSources.title")}</Header>
-              <CopyAnswerWithReferencesButton
-                key={selectedMessage.nodeId}
-                message={selectedMessage}
-              />
               <ChatDocumentDisplayWrapper>
                 {citedDocuments.map((document) => (
                   <ChatDocumentDisplay
