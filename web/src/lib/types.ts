@@ -657,6 +657,7 @@ export enum ValidSources {
   Braintrust = "braintrust",
   Lumapps = "lumapps",
   Canvas = "canvas",
+  JiraServiceManagement = "jira_service_management",
 
   // Craft-specific sources
   CraftFile = "craft_file",
