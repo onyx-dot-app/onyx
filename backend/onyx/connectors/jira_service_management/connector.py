@@ -1,3 +1,4 @@
+import io
 from typing import Any, ClassVar
 
 from jira.resources import Issue
@@ -7,11 +8,15 @@ from onyx.configs.app_configs import (
     JIRA_CONNECTOR_LABELS_TO_SKIP,
 )
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+)
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.jira.connector import (
     JiraConnector,
     _perform_jql_search,
+    build_jira_url,
     process_jira_issue,
 )
 from onyx.connectors.jira_service_management.utils import (
@@ -20,7 +25,15 @@ from onyx.connectors.jira_service_management.utils import (
     discover_jsm_fields,
     get_jsm_comment_strs,
 )
-from onyx.connectors.models import ConnectorMissingCredentialError, Document
+from onyx.connectors.models import (
+    ConnectorFailure,
+    ConnectorMissingCredentialError,
+    Document,
+    DocumentFailure,
+    SlimDocument,
+    TextSection,
+)
+from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -56,6 +69,7 @@ class JiraServiceManagementConnector(JiraConnector):
         jql_query: str | None = None,
         scoped_token: bool = False,
         include_internal_comments: bool = False,
+        include_attachments: bool = False,
     ) -> None:
         super().__init__(
             jira_base_url=jira_base_url,
@@ -67,6 +81,7 @@ class JiraServiceManagementConnector(JiraConnector):
             scoped_token=scoped_token,
         )
         self.include_internal_comments = include_internal_comments
+        self.include_attachments = include_attachments
         self._jsm_field_map: JsmFieldMap | None = None
 
     @property
@@ -127,6 +142,159 @@ class JiraServiceManagementConnector(JiraConnector):
                 issue.key,
             )
         return document
+
+    def _fetch_issue_attachments(self, issue_key: str) -> list[Any]:
+        """Fetch the attachment resources of an issue.
+
+        The JQL search payload does not include the attachment field, so the
+        attachment set is fetched with a dedicated per-issue call. Only
+        reached when ``include_attachments`` is enabled, keeping the default
+        path free of extra API traffic.
+        """
+        fetched = self.jira_client.issue(issue_key, fields="attachment")
+        attachments = fetched.fields.attachment or []
+        return list(attachments)
+
+    def _process_issue_attachments(
+        self,
+        issue: Issue,
+        parent_hierarchy_raw_node_id: str | None,
+        ticket_document_id: str,
+    ) -> list[Document | ConnectorFailure]:
+        if not self.include_attachments:
+            return []
+
+        try:
+            attachments = self._fetch_issue_attachments(issue.key)
+        except Exception as e:
+            # Listing failed entirely: record one failure for the issue's
+            # attachment set without losing the ticket itself.
+            logger.exception("Failed to list attachments for %s", issue.key)
+            return [
+                ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=f"{ticket_document_id}/attachments",
+                        document_link=build_jira_url(self.jira_base, issue.key),
+                    ),
+                    failure_message=(
+                        f"Failed to list attachments for JSM issue {issue.key}"
+                    ),
+                    exception=e,
+                )
+            ]
+
+        return [
+            self._build_attachment_output(
+                issue=issue,
+                attachment=attachment,
+                parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+                ticket_document_id=ticket_document_id,
+            )
+            for attachment in attachments
+        ]
+
+    def _build_attachment_output(
+        self,
+        issue: Issue,
+        attachment: Any,
+        parent_hierarchy_raw_node_id: str | None,
+        ticket_document_id: str,
+    ) -> Document | ConnectorFailure:
+        """Download and convert a single attachment into a Document.
+
+        Failures are isolated per attachment: they are reported as
+        ConnectorFailure and never fail the ticket or sibling attachments.
+        """
+        filename = str(getattr(attachment, "filename", "") or "")
+        attachment_id = str(getattr(attachment, "id", "") or "")
+        doc_id = f"{ticket_document_id}/attachment/{attachment_id}"
+
+        try:
+            file_bytes = attachment.get()
+            text = (
+                extract_file_text(
+                    io.BytesIO(file_bytes or b""),
+                    file_name=filename or f"attachment-{attachment_id}",
+                    break_on_unprocessable=False,
+                )
+                or ""
+            )
+        except Exception as e:
+            logger.exception(
+                "Failed to process attachment %s (%s) of %s",
+                filename,
+                attachment_id,
+                issue.key,
+            )
+            return ConnectorFailure(
+                failed_document=DocumentFailure(
+                    document_id=doc_id,
+                    document_link=build_jira_url(self.jira_base, issue.key),
+                ),
+                failure_message=(
+                    f"Failed to process attachment '{filename}' ({attachment_id}) "
+                    f"of JSM issue {issue.key}"
+                ),
+                exception=e,
+            )
+
+        sections = []
+        if text:
+            sections.append(
+                TextSection(text=text, link=str(getattr(attachment, "content", "")))
+            )
+
+        return Document(
+            id=doc_id,
+            source=self.document_source,
+            semantic_identifier=(
+                f"{issue.key} attachment: {filename}" if filename else f"{issue.key} attachment {attachment_id}"
+            ),
+            sections=sections,
+            parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+            metadata={
+                "jira_issue_key": issue.key,
+                "attachment_filename": filename,
+                "attachment_id": attachment_id,
+            },
+        )
+
+    def _process_issue_attachments_slim(
+        self,
+        issue: Issue,
+        parent_hierarchy_raw_node_id: str | None,
+        ticket_document_id: str,
+    ) -> list[SlimDocument]:
+        if not self.include_attachments:
+            return []
+
+        try:
+            attachments = self._fetch_issue_attachments(issue.key)
+        except Exception:
+            # Mirrors the main pass: when listing fails, no attachment IDs
+            # are admitted there either (the whole set is recorded as a
+            # failure), so emitting nothing here keeps the ID sets aligned.
+            logger.exception("Failed to list attachment slim docs for %s", issue.key)
+            return []
+
+        slim_docs: list[SlimDocument] = []
+        for attachment in attachments:
+            attachment_id = str(getattr(attachment, "id", "") or "")
+            if not attachment_id:
+                continue
+            created = str(getattr(attachment, "created", "") or "")
+            slim_docs.append(
+                SlimDocument(
+                    # Must exactly match the main-pass attachment document ID
+                    id=f"{ticket_document_id}/attachment/{attachment_id}",
+                    # Permission sync path - don't prefix,
+                    # upsert_document_external_perms handles it
+                    external_access=None,
+                    parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+                    doc_created_at=time_str_to_utc(created) if created else None,
+                )
+            )
+        return slim_docs
 
     @staticmethod
     def _best_effort_project_type(project: Any) -> str | None:

@@ -748,6 +748,35 @@ class JiraConnector(
             source=self.document_source,
         )
 
+    def _process_issue_attachments(
+        self,
+        issue: Issue,  # noqa: ARG002
+        parent_hierarchy_raw_node_id: str | None,  # noqa: ARG002
+        ticket_document_id: str,  # noqa: ARG002
+    ) -> list[Document | ConnectorFailure]:
+        """Hook: attachment documents for a single issue.
+
+        The base connector indexes none. Connectors with attachment support
+        override this and gate enumeration on their own
+        ``include_attachments`` flag. Returned ``ConnectorFailure`` items are
+        recorded per attachment without failing the ticket itself.
+        """
+        return []
+
+    def _process_issue_attachments_slim(
+        self,
+        issue: Issue,  # noqa: ARG002
+        parent_hierarchy_raw_node_id: str | None,  # noqa: ARG002
+        ticket_document_id: str,  # noqa: ARG002
+    ) -> list[SlimDocument]:
+        """Hook: slim counterparts of ``_process_issue_attachments``.
+
+        IDs must exactly match the main-pass attachment document IDs: extra
+        slim docs become permanent ``chunk_count IS NULL`` rows, while
+        missing ones stop pruning from cleaning up de-indexed attachments.
+        """
+        return []
+
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self._jira_client = build_jira_client(
             credentials=credentials,
@@ -883,6 +912,23 @@ class JiraConnector(
                             add_prefix=True,  # Indexing path - prefix here
                         )
                     yield document
+
+                    # Attachment documents are children of the issue. The
+                    # base connector yields none; connectors with attachment
+                    # support override `_process_issue_attachments`.
+                    for attachment_output in self._process_issue_attachments(
+                        issue=issue,
+                        parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+                        ticket_document_id=document.id,
+                    ):
+                        if isinstance(attachment_output, ConnectorFailure):
+                            yield attachment_output
+                            continue
+                        if include_permissions:
+                            attachment_output.external_access = (
+                                document.external_access
+                            )
+                        yield attachment_output
 
             except Exception as e:
                 yield ConnectorFailure(
@@ -1036,6 +1082,21 @@ class JiraConnector(
                         ),
                         # NOTE: doc_created_at population not yet verified against live data
                         doc_created_at=time_str_to_utc(created) if created else None,
+                    )
+                )
+
+                # Attachment slim docs must mirror the main indexing pass
+                # exactly (same IDs, same admission) — see the
+                # `_process_issue_attachments_slim` contract.
+                slim_doc_batch.extend(
+                    self._process_issue_attachments_slim(
+                        issue=issue,
+                        parent_hierarchy_raw_node_id=(
+                            self._get_parent_hierarchy_raw_node_id(issue, project_key)
+                            if project_key
+                            else None
+                        ),
+                        ticket_document_id=doc_id,
                     )
                 )
                 current_offset += 1

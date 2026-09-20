@@ -902,6 +902,10 @@ export const connectorConfigs: Record<
         description:
           "Jira Service Management comments can be public (visible to customers) or internal agent notes. Enable this to also index internal notes; they will be tagged with '[Internal Note]'.",
       },
+      buildIncludeAttachmentsOption(
+        false,
+        "Also index ticket attachments (documents and files). New connectors default to off; attachments are indexed as separate documents linked to their ticket and are pruned when this setting is turned off.",
+      ),
       {
         type: "list",
         query: "Enter email addresses to blacklist from comments:",
@@ -2362,6 +2366,7 @@ export interface JiraServiceManagementConfig {
   comment_email_blacklist?: string[];
   jql_query?: string;
   include_internal_comments?: boolean;
+  include_attachments?: boolean;
 }
 
 export interface SalesforceConfig {
