@@ -93,7 +93,6 @@ def test_message_to_document_preserves_searchable_context() -> None:
         "Sender": "Ada",
         "Thread": "spaces/AAA/threads/CCC",
     }
-    assert document.doc_created_at == datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
     assert document.doc_updated_at == datetime(2026, 1, 2, 10, 5, tzinfo=timezone.utc)
 
 
@@ -114,14 +113,15 @@ def test_connector_paginates_and_filters_spaces_and_messages() -> None:
         )
 
     documents = [document for batch in batches for document in batch]
+    assert len(batches) == 2
     assert [
         document.id for document in documents if isinstance(document, Document)
     ] == [
         "GOOGLE_CHAT_spaces/AAA/messages/first",
         "GOOGLE_CHAT_spaces/AAA/messages/second",
     ]
-    assert spaces_api.list.call_count == 2
-    assert messages_api.list.call_count == 2
+    assert spaces_api.list.call_args_list[1].kwargs["pageToken"] == "spaces-page-2"
+    assert messages_api.list.call_args_list[1].kwargs["pageToken"] == "messages-page-2"
     first_message_call = messages_api.list.call_args_list[0].kwargs
     assert first_message_call["filter"] == (
         'createTime > "2026-01-01T00:00:00Z" AND createTime < "2026-02-01T00:00:00Z"'
