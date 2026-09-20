@@ -115,6 +115,9 @@ def get_default_entity_types(vendor_name: str) -> dict[str, KGEntityTypeDefiniti
                     "organizations": KGAttributeProperty(
                         name="organizations", keep=True
                     ),
+                    "request_participants": KGAttributeProperty(
+                        name="request_participants", keep=True
+                    ),
                     "sla_status": KGAttributeProperty(name="sla", keep=True),
                     "reporter_email": KGAttributeProperty(
                         name="creator",
