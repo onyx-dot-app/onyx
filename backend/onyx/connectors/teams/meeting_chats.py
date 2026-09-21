@@ -304,6 +304,7 @@ def _chat_refusal(error: requests.HTTPError) -> str:
 
 class ChatSource(OrganizerSource):
     option = "Include Meeting Chats"
+    document_id_prefix = MEETING_CHAT_DOCUMENT_ID_PREFIX
 
     def __init__(self, session: TeamsSession, include_inline_images: bool) -> None:
         self._session = session

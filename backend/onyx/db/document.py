@@ -361,7 +361,10 @@ def get_documents_for_connector_credential_pair_limited_columns(
     )
 
     stmt = select(
-        DbDocument.id, DbDocument.doc_metadata, DbDocument.external_user_group_ids
+        DbDocument.id,
+        DbDocument.doc_metadata,
+        DbDocument.external_user_group_ids,
+        DbDocument.external_user_emails,
     )
 
     stmt = stmt.where(DbDocument.id.in_(doc_ids_subquery))
@@ -379,6 +382,7 @@ def get_documents_for_connector_credential_pair_limited_columns(
             id=row.id,
             doc_metadata=row.doc_metadata,
             external_user_group_ids=row.external_user_group_ids or [],
+            external_user_emails=row.external_user_emails or [],
         )
         doc_rows.append(doc_row)
     return doc_rows

@@ -25,7 +25,7 @@ from onyx.connectors.models import (
 )
 from onyx.connectors.teams.refusals import graph_said, status
 from onyx.connectors.teams.session import TeamsSession
-from onyx.connectors.teams.sources import SLIM_WALK, SlimWalk
+from onyx.connectors.teams.sources import SlimWalk
 from onyx.connectors.teams.utils import (
     GraphRetriesExhausted,
     escape_odata_string,
@@ -33,7 +33,6 @@ from onyx.connectors.teams.utils import (
     iter_values,
     next_page_url,
 )
-from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import parallel_yield
 
@@ -136,6 +135,9 @@ class OrganizerSource(abc.ABC):
 
     # The form option that turns the source on, for setup messages.
     option: str
+    # What every document id of the source starts with, so the connector can
+    # tell its documents from a thread's bare id.
+    document_id_prefix: str
 
     @abc.abstractmethod
     def validate(self, organizer: Organizer) -> None:
@@ -255,16 +257,11 @@ class OrganizerStage:
             self._principal_names,
             before_page=walk.raise_if_stopped,
         )
-        for batch in batch_generator(organizers, ORGANIZER_WORKERS):
-            # One stop check and one progress report per batch. Each source
-            # honors a stop before every page of its own.
-            walk.raise_if_stopped()
-            if walk.callback:
-                walk.callback.progress(SLIM_WALK, len(batch))
-            yield from parallel_yield(
-                [self._slim_one(organizer, walk) for organizer in batch],
-                max_workers=ORGANIZER_WORKERS,
-            )
+        yield from walk.fan_out(
+            organizers,
+            lambda organizer: self._slim_one(organizer, walk),
+            ORGANIZER_WORKERS,
+        )
 
     def _index_one(
         self,

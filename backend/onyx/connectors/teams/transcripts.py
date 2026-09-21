@@ -283,6 +283,7 @@ def _transcript_refusal(error: requests.HTTPError) -> str:
 
 class TranscriptSource(OrganizerSource):
     option = "Include Meeting Transcripts"
+    document_id_prefix = TRANSCRIPT_DOCUMENT_ID_PREFIX
 
     def __init__(self, session: TeamsSession, covers_every_user: bool) -> None:
         self._session = session

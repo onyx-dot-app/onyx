@@ -32,13 +32,13 @@ from onyx.connectors.models import (
     ConnectorFailure,
     ConnectorMissingCredentialError,
     Document,
-    HierarchyNode,
     SlimDocument,
 )
-from onyx.connectors.teams import listing
+from onyx.connectors.teams import groups, listing, threads
 from onyx.connectors.teams.files import FileSource
-from onyx.connectors.teams.groups import channel_member_groups, group_sync_channels
-from onyx.connectors.teams.meeting_chats import ChatSource
+from onyx.connectors.teams.meeting_chats import (
+    ChatSource,
+)
 from onyx.connectors.teams.models import ChannelRef
 from onyx.connectors.teams.organizers import (
     Organizer,
@@ -49,7 +49,9 @@ from onyx.connectors.teams.refusals import channel_failure, is_permanent, status
 from onyx.connectors.teams.session import TeamsSession
 from onyx.connectors.teams.sources import SlimWalk
 from onyx.connectors.teams.threads import ThreadSource
-from onyx.connectors.teams.transcripts import TranscriptSource
+from onyx.connectors.teams.transcripts import (
+    TranscriptSource,
+)
 from onyx.connectors.teams.utils import ChannelFilesUnavailable
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.batching import batch_generator
@@ -59,6 +61,22 @@ from onyx.utils.threadpool_concurrency import run_with_timeout
 logger = setup_logger()
 
 _SLIM_DOC_BATCH_SIZE = 5000
+
+# Every content type Graph lists per meeting organizer.
+ORGANIZER_SOURCE_TYPES: tuple[type[OrganizerSource], ...] = (
+    TranscriptSource,
+    ChatSource,
+)
+
+# What the ids of every content type but threads start with.
+PREFIXED_DOCUMENT_ID_PREFIXES = (
+    FileSource.document_id_prefix,
+    *(source.document_id_prefix for source in ORGANIZER_SOURCE_TYPES),
+)
+
+
+def is_thread_document_id(document_id: str) -> bool:
+    return threads.is_thread_document_id(document_id, PREFIXED_DOCUMENT_ID_PREFIXES)
 
 
 class TeamsCheckpoint(ConnectorCheckpoint):
@@ -145,6 +163,11 @@ class TeamsConnector(
             if organizer_sources
             else None
         )
+        # The permission sync turns this off once every indexed thread names its
+        # group: the group a thread names never changes, so it is not read again.
+        self._perm_sync_lists_threads = True
+        # The group sync lists members and sites over the same channels.
+        self._group_sync_channel_refs: list[ChannelRef] | None = None
 
     # impls for BaseConnector
 
@@ -359,7 +382,7 @@ class TeamsConnector(
             self._leave_channel(checkpoint)
             return
 
-        yield from self._threads.documents(channel, roots)
+        yield from self._threads.documents(channel, roots, start)
 
         checkpoint.next_messages_url = next_url
         if next_url is not None:
@@ -387,7 +410,7 @@ class TeamsConnector(
         leaves out a team whose channel listing is refused, where the slim walk
         raises: a channel missing from that walk would have its documents pruned."""
         list_channels = (
-            group_sync_channels
+            groups.group_sync_channels
             if for_group_sync
             else listing.collect_all_channels_from_team
         )
@@ -414,11 +437,25 @@ class TeamsConnector(
         for the group sync."""
         if self._files is None:
             return iter(())
-        return self._files.site_urls(self._channels(for_group_sync=True))
+        return self._files.site_urls(self._group_sync_channels())
 
     def channel_member_groups(self) -> Iterator[tuple[str, list[str]]]:
         """Each group a thread names and the emails in it, for the group sync."""
-        return channel_member_groups(self, self._channels(for_group_sync=True))
+        return groups.channel_member_groups(self, self._group_sync_channels())
+
+    def _group_sync_channels(self) -> Iterator[ChannelRef]:
+        """Listed once per run. The first listing streams, so the groups ahead of
+        a failure are still synced, and the second replays a finished one. A
+        first listing that stopped early is not kept, so the next call lists
+        again rather than replay a part."""
+        if self._group_sync_channel_refs is not None:
+            yield from self._group_sync_channel_refs
+            return
+        refs: list[ChannelRef] = []
+        for channel in self._channels(for_group_sync=True):
+            refs.append(channel)
+            yield channel
+        self._group_sync_channel_refs = refs
 
     def rest_context(self, site_url: str) -> ClientContext:
         if self._files is None:
@@ -453,33 +490,62 @@ class TeamsConnector(
         end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        yield from self._slim_docs(start, callback, with_readers=True)
+        yield from self._slim_docs(
+            start,
+            callback,
+            with_readers=True,
+            lists_threads=self._perm_sync_lists_threads,
+        )
+
+    def skip_threads_in_perm_sync(self) -> None:
+        """For the permission sync, once every indexed thread names its group.
+        The sync then leaves threads out of the walk and out of the step that
+        empties the access of what a walk did not list."""
+        self._perm_sync_lists_threads = False
 
     def _slim_docs(
         self,
         start: SecondsSinceUnixEpoch | None,
         callback: IndexingHeartbeatInterface | None,
         with_readers: bool,
+        lists_threads: bool = True,
     ) -> GenerateSlimDocumentOutput:
-        walk = SlimWalk(start=start or 0, callback=callback, with_readers=with_readers)
-        for channel in self._channels():
-            slim_docs: Iterator[SlimDocument | HierarchyNode] = self._threads.slim(
-                channel, walk
-            )
-            if self._files is not None:
-                slim_docs = chain(slim_docs, self._files.slim(channel, walk))
-            # A batch never spans two channels.
-            yield from batch_generator(
-                slim_docs,
-                _SLIM_DOC_BATCH_SIZE,
-                pre_batch_yield=lambda _: walk.batch_signals(),
-            )
+        walk = SlimWalk(
+            start=start or 0,
+            callback=callback,
+            with_readers=with_readers,
+            lists_threads=lists_threads,
+        )
+        yield from batch_generator(
+            chain(self._slim_channels(walk), self._slim_organizers(walk)),
+            _SLIM_DOC_BATCH_SIZE,
+            pre_batch_yield=lambda _: walk.batch_signals(),
+        )
+
+    def _slim_channels(self, walk: SlimWalk) -> Iterator[SlimDocument]:
+        """Every channel's documents. With no thread and no file to list, no
+        team or channel is listed either."""
+        if not walk.lists_threads and self._files is None:
+            return
+        # A file's readers come from SharePoint REST, whose client is not safe
+        # across threads, so only the ids-alone walk reads channels side by side.
+        yield from walk.fan_out(
+            self._channels(),
+            lambda channel: self._slim_channel(channel, walk),
+            1 if walk.with_readers else self.max_workers,
+        )
+
+    def _slim_organizers(self, walk: SlimWalk) -> Iterator[SlimDocument]:
         if self._organizers is not None:
-            yield from batch_generator(
-                self._organizers.slim(walk),
-                _SLIM_DOC_BATCH_SIZE,
-                pre_batch_yield=lambda _: walk.batch_signals(),
-            )
+            yield from self._organizers.slim(walk)
+
+    def _slim_channel(
+        self, channel: ChannelRef, walk: SlimWalk
+    ) -> Iterator[SlimDocument]:
+        if walk.lists_threads:
+            yield from self._threads.slim(channel, walk)
+        if self._files is not None:
+            yield from self._files.slim(channel, walk)
 
 
 def _rejects_saved_cursor(
