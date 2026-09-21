@@ -54,7 +54,7 @@ describe("InputSingleSelect", () => {
       expect(input).toBeInTheDocument();
     });
 
-    test("renders without options (input mode)", () => {
+    test("renders with an empty option set", () => {
       render(
         <InputSingleSelect placeholder="Type here" value="" options={[]} />
       );
@@ -103,11 +103,12 @@ describe("InputSingleSelect", () => {
       expect(screen.getByRole("listbox")).toBeInTheDocument();
     });
 
-    test("does not open dropdown on focus when no options", () => {
+    test("opens on focus with an empty option set and shows the empty state", () => {
       render(<InputSingleSelect placeholder="Select" value="" options={[]} />);
       const input = screen.getByPlaceholderText("Select");
       fireEvent.focus(input);
-      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+      expect(screen.getByRole("listbox")).toBeInTheDocument();
+      expect(screen.queryAllByRole("option")).toHaveLength(0);
     });
 
     test("closes dropdown on escape", async () => {

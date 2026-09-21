@@ -19,21 +19,15 @@ export type SelectSection = {
 };
 
 /**
- * Without options the field is a plain input — inherently an open set — so
- * only `"open"` may be stated there. With options, `mode` picks the set's
- * openness: "closed" (default) permits only option values; "open" also
- * commits raw text via the create row.
+ * `mode` picks the set's openness: "closed" (default) permits only option
+ * values; "open" also commits raw text via the create row. A select always
+ * has a set; for a plain text input use `InputTypeIn`.
  */
-export type InputSingleSelectOptionsProps =
-  | {
-      options?: never;
-      mode?: "open";
-    }
-  | {
-      /** Options, flat or sectioned. Sections render with a Divider between them. */
-      options: SelectOption[] | SelectSection[];
-      mode?: "closed" | "open";
-    };
+export type InputSingleSelectOptionsProps = {
+  /** Options, flat or sectioned. Sections render with a Divider between them. */
+  options: SelectOption[] | SelectSection[];
+  mode?: "closed" | "open";
+};
 
 export type InputSingleSelectProps = InputSingleSelectOptionsProps &
   Omit<React.InputHTMLAttributes<HTMLInputElement>, "onChange" | "value"> & {

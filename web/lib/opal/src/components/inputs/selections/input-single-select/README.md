@@ -5,7 +5,7 @@
 The single-arity member of the `input-select` family: an input-shaped trigger
 over the family's unified dropdown. Typing always filters the option set;
 keyboard navigation (arrows, Enter, Escape) and ARIA combobox semantics are
-built in. With no options it degrades to a plain input.
+built in. `options` is required; for a plain text input use `InputTypeIn`.
 
 The set-openness axis:
 

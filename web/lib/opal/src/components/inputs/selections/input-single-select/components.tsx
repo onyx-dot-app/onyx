@@ -70,10 +70,7 @@ const InputSingleSelect = ({
   ...rest
 }: WithoutStyles<InputSingleSelectProps>) => {
   const strict = mode !== "open";
-  const sections = useMemo(
-    () => normalizeSections(optionsProp ?? []),
-    [optionsProp]
-  );
+  const sections = useMemo(() => normalizeSections(optionsProp), [optionsProp]);
   const options = useMemo(() => flattenSections(sections), [sections]);
   const strings = useOpalStrings();
   const {
@@ -90,11 +87,6 @@ const InputSingleSelect = ({
     floatingStyles,
   } = useSelectOverlay();
   const fieldContext = useContext(FieldContext);
-
-  // The prop's PRESENCE drives the select machinery (chevron, dropdown,
-  // combobox aria): an empty or still-loading set is still a select. Only
-  // an absent prop degrades to a plain input.
-  const hasOptionSet = optionsProp !== undefined;
 
   // The selection's visible text — the ONLY value-to-text crossing point.
   const selectedLabel = useMemo(() => {
@@ -214,7 +206,6 @@ const InputSingleSelect = ({
   const { isValid, errorMessage } = useValidation({
     value,
     options,
-    hasOptionSet,
     strict,
     externalIsError,
     onValidationError,
@@ -254,8 +245,8 @@ const InputSingleSelect = ({
       // onValueChange is only called when selecting from dropdown
       onChange?.(e);
 
-      // Open dropdown when user starts typing and there are options
-      if (hasOptionSet && !isOpen) {
+      // Open dropdown when user starts typing
+      if (!isOpen) {
         setIsOpen(true);
       }
 
@@ -265,7 +256,6 @@ const InputSingleSelect = ({
     },
     [
       onChange,
-      hasOptionSet,
       isOpen,
       setInputValue,
       setIsOpen,
@@ -333,23 +323,20 @@ const InputSingleSelect = ({
     setIsKeyboardNav,
     allVisibleOptions,
     onSelect: handleOptionSelect,
-    hasOptions: hasOptionSet,
+    hasOptions: true,
   });
 
   const handleFocus = useCallback(() => {
-    if (hasOptionSet) {
-      setInputValue(selectedLabel);
-      setIsOpen(true);
-      setHighlightedIndex(-1);
-      setIsKeyboardNav(false);
-      // Caret at the end, ready to modify.
-      requestAnimationFrame(() => {
-        const el = inputRef.current;
-        if (el) el.setSelectionRange(el.value.length, el.value.length);
-      });
-    }
+    setInputValue(selectedLabel);
+    setIsOpen(true);
+    setHighlightedIndex(-1);
+    setIsKeyboardNav(false);
+    // Caret at the end, ready to modify.
+    requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (el) el.setSelectionRange(el.value.length, el.value.length);
+    });
   }, [
-    hasOptionSet,
     selectedLabel,
     setInputValue,
     setIsOpen,
@@ -358,25 +345,24 @@ const InputSingleSelect = ({
   ]);
 
   const toggleDropdown = useCallback(() => {
-    if (!disabled && hasOptionSet) {
-      setIsOpen((prev) => {
-        const newOpen = !prev;
-        if (newOpen) {
-          setInputValue("");
-          setHighlightedIndex(-1);
-        }
-        return newOpen;
-      });
-      inputRef.current?.focus();
-    }
-  }, [disabled, hasOptionSet, setIsOpen, setInputValue, setHighlightedIndex]);
+    if (disabled) return;
+    setIsOpen((prev) => {
+      const newOpen = !prev;
+      if (newOpen) {
+        setInputValue("");
+        setHighlightedIndex(-1);
+      }
+      return newOpen;
+    });
+    inputRef.current?.focus();
+  }, [disabled, setIsOpen, setInputValue, setHighlightedIndex]);
 
   const autoId = useId();
   const fieldId = fieldContext?.baseId || name || `combo-box-${autoId}`;
 
   // ARIA Attributes Builder
   const ariaProps = buildAriaAttributes({
-    hasOptions: hasOptionSet,
+    hasOptions: true,
     isOpen,
     isValid,
     highlightedIndex,
@@ -398,7 +384,7 @@ const InputSingleSelect = ({
           onClick={() => {
             // Reopen on click while already focused (e.g. after Escape) —
             // focus alone won't fire again. The text stays for editing.
-            if (hasOptionSet && !isOpen) {
+            if (!isOpen) {
               setInputValue(selectedLabel);
               setIsOpen(true);
               setHighlightedIndex(-1);
@@ -446,13 +432,11 @@ const InputSingleSelect = ({
                   {rightChildren}
                 </div>
               )}
-              {hasOptionSet && (
-                <SelectChevron
-                  isOpen={isOpen}
-                  disabled={disabled}
-                  onToggle={toggleDropdown}
-                />
-              )}
+              <SelectChevron
+                isOpen={isOpen}
+                disabled={disabled}
+                onToggle={toggleDropdown}
+              />
             </>
           }
           {...ariaProps}
@@ -469,7 +453,7 @@ const InputSingleSelect = ({
           fieldId={fieldId}
           placeholder={placeholder}
           sections={visibleSections}
-          emptySet={hasOptionSet && options.length === 0}
+          emptySet={options.length === 0}
           value={value}
           highlightedIndex={highlightedIndex}
           onSelect={handleOptionSelect}

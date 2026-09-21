@@ -43,19 +43,6 @@ export const Default: Story = {
   },
 };
 
-export const InputModeNoOptions: Story = {
-  render: function InputModeStory() {
-    const [value, setValue] = React.useState("");
-    return (
-      <InputSingleSelect
-        placeholder="Type anything..."
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-      />
-    );
-  },
-};
-
 export const StrictMode: Story = {
   render: function StrictStory() {
     const [value, setValue] = React.useState("");

@@ -5,8 +5,6 @@ import { SelectOption } from "../types";
 interface UseValidationProps {
   value: string;
   options: SelectOption[];
-  /** The options prop was supplied — an empty set still validates. */
-  hasOptionSet: boolean;
   strict: boolean;
   externalIsError?: boolean;
   onValidationError?: (errorMessage: string | null) => void;
@@ -26,7 +24,6 @@ interface ValidationResult {
 export function useValidation({
   value,
   options,
-  hasOptionSet,
   strict,
   externalIsError,
   onValidationError,
@@ -40,9 +37,9 @@ export function useValidation({
       return { isValid: !externalIsError, errorMessage: null };
     }
 
-    // Otherwise use internal validation. Presence-gated: an empty closed
-    // set rejects any committed value rather than accepting everything.
-    if (!strict || !hasOptionSet || !value) {
+    // Otherwise use internal validation. An empty closed set rejects any
+    // committed value rather than accepting everything.
+    if (!strict || !value) {
       return { isValid: true, errorMessage: null };
     }
 
@@ -56,7 +53,7 @@ export function useValidation({
     }
 
     return { isValid: true, errorMessage: null };
-  }, [externalIsError, strict, hasOptionSet, value, options, strings]);
+  }, [externalIsError, strict, value, options, strings]);
 
   // Notify parent of error state
   useEffect(() => {
