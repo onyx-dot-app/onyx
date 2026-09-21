@@ -579,7 +579,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
               <div
                 className={cn(
                   "flex-1 w-full max-w-(--app-page-main-content-width) px-4 min-h-0 overflow-hidden flex flex-col",
-                  !isSidePanel && "pb-10"
+                  !isSidePanel &&
+                    "pb-[calc(var(--nrf-footer-height,0px)_+_0.5rem)]"
                 )}
               >
                 <Spacer rem={0.75} />
