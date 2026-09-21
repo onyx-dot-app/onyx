@@ -70,10 +70,9 @@ func writeAgentsLocal(
 	// A file of this name the user wrote themselves is never silently replaced.
 	if err == nil && !strings.Contains(string(existing), generatedRuleMarker) {
 		if ui.resolveConflict(dest) == conflictKeepBoth {
-			if err := os.Rename(dest, backupPath(dest)); err != nil {
-				return fmt.Errorf("could not back up %s: %w", dest, err)
+			if err := backUpFile(cmd, dest); err != nil {
+				return err
 			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Renamed %s -> %s\n", dest, backupPath(dest))
 		}
 	}
 	if err := os.WriteFile(dest, []byte(content), 0o644); err != nil {
@@ -155,19 +154,20 @@ func installCodexPrompts(
 			manual = append(manual, skill)
 		}
 	}
-	if len(manual) == 0 {
-		return nil
-	}
 
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("could not determine home directory: %w", err)
 	}
-	promptsDir, err := ui.resolveTargetDir(
-		"Codex prompts", filepath.Join(home, codexPromptsDir),
-	)
-	if err != nil {
-		return err
+	promptsDir := filepath.Join(home, codexPromptsDir)
+	if _, err := os.Stat(promptsDir); os.IsNotExist(err) {
+		// Nothing installed here before, so nothing to clean up either.
+		if len(manual) == 0 {
+			return nil
+		}
+		if promptsDir, err = ui.resolveTargetDir("Codex prompts", promptsDir); err != nil {
+			return err
+		}
 	}
 
 	current := make(map[string]bool, len(manual))
@@ -210,10 +210,9 @@ func installCodexPrompts(
 		// A hand-written prompt of the same name is never silently replaced.
 		if err == nil && !strings.Contains(string(existing), generatedRuleMarker) {
 			if ui.resolveConflict(dest) == conflictKeepBoth {
-				if err := os.Rename(dest, backupPath(dest)); err != nil {
-					return fmt.Errorf("could not back up %s: %w", dest, err)
+				if err := backUpFile(cmd, dest); err != nil {
+					return err
 				}
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Renamed %s -> %s\n", dest, backupPath(dest))
 			}
 		}
 		if err := os.WriteFile(dest, []byte(content), 0o644); err != nil {

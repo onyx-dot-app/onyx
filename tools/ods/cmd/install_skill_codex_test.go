@@ -158,3 +158,28 @@ func TestInstallCodexSkillsExcludesBeforeWriting(t *testing.T) {
 		t.Fatalf("compiled file must not be written before the exclusion: %v", statErr)
 	}
 }
+
+func TestInstallCodexSkillsRemovesStalePromptsWhenSkillsVanish(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	repoRoot := gitRepo(t)
+	stale := filepath.Join(home, codexPromptsDir, "removed-skill.md")
+	deployWriteFile(t, stale, generatedRuleMarker+"\nold")
+
+	if err := installCodexSkills(discardCmd(), testUI(), nil, repoRoot); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatalf("stale generated prompt should be removed: %v", err)
+	}
+
+	// Without a prompts directory, nothing is created.
+	freshHome := t.TempDir()
+	t.Setenv("HOME", freshHome)
+	if err := installCodexSkills(discardCmd(), testUI(), nil, gitRepo(t)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(freshHome, ".codex")); !os.IsNotExist(err) {
+		t.Fatalf("expected no .codex directory, got %v", err)
+	}
+}
