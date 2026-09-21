@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { FullAgent } from "@/lib/agents/types";
 import { Modal } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
-import { Content, ContentAction, InputHorizontal } from "@opal/layouts";
+import { Content, ContentAction, InputHorizontal, toast } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Card, Divider } from "@opal/components";
@@ -32,6 +32,10 @@ import { useLlmManager } from "@/lib/hooks";
 import { useToolConfiguration } from "@/lib/tools/hooks";
 import { formatMmDdYyyy } from "@/lib/dateUtils";
 import { useProjectsContext } from "@/lib/projects/providers";
+import {
+  getFinalLLM,
+  modelSupportsImageInput,
+} from "@/lib/languageModels/utils";
 import { FileCard } from "@/sections/cards/FileCard";
 import DocumentSetCard from "@/sections/cards/DocumentSetCard";
 import { getDisplayName } from "@/lib/languageModels/utils";
@@ -130,6 +134,7 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
   // Over the listing, so the URL says nothing about the chat this would
   // start; the agent is named here instead.
   const toolConfiguration = useToolConfiguration(agent.id);
+  const { setCurrentMessageFiles, beginUpload } = useProjectsContext();
 
   // This send navigates in order to send, so the configuration is left where
   // that page will find it rather than travelling with the call. Closing the
@@ -142,6 +147,39 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
     [toolConfiguration, agent.id, onSubmit]
   );
 
+  // Mirrors the chat page's upload path (useChatController's
+  // handleMessageSpecificFileUpload): vision-gate images, upload through the
+  // shared projects provider, and stage the results in the global
+  // currentMessageFiles so the chat the modal hands off to picks them up.
+  const handleFileUpload = useCallback(
+    async (acceptedFiles: File[]) => {
+      const [_, llmModel] = getFinalLLM(
+        llmManager.llmProviders || [],
+        agent,
+        llmManager.currentLlm
+      );
+      const llmAcceptsImages = modelSupportsImageInput(
+        llmManager.llmProviders || [],
+        llmModel
+      );
+
+      const imageFiles = acceptedFiles.filter((file) =>
+        file.type.startsWith("image/")
+      );
+
+      if (imageFiles.length > 0 && !llmAcceptsImages) {
+        toast.error(
+          "The current model does not support image input. Please select a model with Vision support."
+        );
+        return;
+      }
+
+      const uploadedMessageFiles = await beginUpload(acceptedFiles, null);
+      setCurrentMessageFiles((prev) => [...prev, ...uploadedMessageFiles]);
+    },
+    [llmManager, agent, beginUpload, setCurrentMessageFiles]
+  );
+
   return (
     // Its own instance, so source toggles made while previewing an agent do not
     // reach the chat this modal opened over.
@@ -152,7 +190,7 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
       chatState="input"
       activeAgent={agent}
       stopGenerating={() => {}}
-      handleFileUpload={() => {}}
+      handleFileUpload={handleFileUpload}
       currentSessionFileTokenCount={0}
       availableContextTokens={Infinity}
       deepResearchEnabled={false}
