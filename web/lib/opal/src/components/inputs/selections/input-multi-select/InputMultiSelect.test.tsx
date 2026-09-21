@@ -76,10 +76,11 @@ describe("InputMultiSelect", () => {
     test("no option set still opens and lists free-form tags", async () => {
       const handleAdd = jest.fn();
       const user = setupUser();
-      render(
+      const tags = [{ id: "kiwi-1", label: "Kiwi" }];
+      const { rerender } = render(
         <InputMultiSelect
-          tags={[{ id: "kiwi-1", label: "Kiwi" }]}
-          value="pear"
+          tags={tags}
+          value=""
           onChange={jest.fn()}
           placeholder="Tag"
           onAdd={handleAdd}
@@ -93,6 +94,18 @@ describe("InputMultiSelect", () => {
       expect(screen.getByRole("option", { name: /Kiwi/ })).toHaveAttribute(
         "aria-selected",
         "true"
+      );
+
+      // Typed text is the filter, so the tag row hides and the create row shows.
+      rerender(
+        <InputMultiSelect
+          tags={tags}
+          value="pear"
+          onChange={jest.fn()}
+          placeholder="Tag"
+          onAdd={handleAdd}
+          onRemoveTag={jest.fn()}
+        />
       );
       await user.click(screen.getByLabelText('Create "pear"'));
       expect(handleAdd).toHaveBeenCalledWith("pear");

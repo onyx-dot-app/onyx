@@ -129,7 +129,7 @@ describe("InputSingleSelect", () => {
       expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
     });
 
-    test("shows all options on focus when a value is already selected", () => {
+    test("focus with a selection keeps the label as the filter", () => {
       render(
         <InputSingleSelect
           placeholder="Select"
@@ -140,8 +140,26 @@ describe("InputSingleSelect", () => {
       const input = screen.getByDisplayValue("Apple");
       fireEvent.focus(input);
 
+      // The selected label stays in the trigger and filters the list, so
+      // only the selection shows, painted as the exact match.
       const options = screen.getAllByRole("option");
-      expect(options.length).toBe(3);
+      expect(options.length).toBe(1);
+      expect(options[0]).toHaveAttribute("aria-selected", "true");
+    });
+
+    test("chevron shows all options when a value is already selected", async () => {
+      const user = setupUser();
+      render(
+        <InputSingleSelect
+          placeholder="Select"
+          value="apple"
+          options={mockOptions}
+        />
+      );
+
+      await user.click(screen.getByRole("button"));
+
+      expect(screen.getAllByRole("option").length).toBe(3);
     });
 
     test("closes dropdown on tab", async () => {
@@ -231,13 +249,14 @@ describe("InputSingleSelect", () => {
           placeholder="Select"
           value=""
           options={mockOptions}
+          mode="open"
         />
       );
       const input = screen.getByPlaceholderText("Select");
 
       await user.type(input, "app");
 
-      // In non-strict mode, searching shows:
+      // In open mode, searching shows:
       // 1) a create option for the current input and
       // 2) matched options.
       const options = screen.getAllByRole("option");
@@ -517,8 +536,8 @@ describe("InputSingleSelect", () => {
 
       await user.type(input, "app");
 
-      // Look for the bold/highlighted text
-      const boldText = container.querySelector(".font-semibold");
+      // Look for the highlighted match span
+      const boldText = container.querySelector(".opal-select-match");
       expect(boldText).toBeInTheDocument();
       expect(boldText?.textContent).toBe("App");
     });

@@ -209,17 +209,12 @@ function InputMultiSelect({
   // The filter is transient UI state, like the single's: closing the
   // dropdown drops whatever was typed (the caller owns the text, so the
   // component clears it through onChange).
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
-  const valueRef = useRef(value);
-  valueRef.current = value;
+  // Only the open→closed transition acts; other dep changes just no-op.
   const wasOpenRef = useRef(false);
   useEffect(() => {
-    if (wasOpenRef.current && !isOpen) {
-      if (valueRef.current !== "") onChangeRef.current("");
-    }
+    if (wasOpenRef.current && !isOpen && value !== "") onChange("");
     wasOpenRef.current = isOpen;
-  }, [isOpen]);
+  }, [isOpen, value, onChange]);
 
   const hasSearchTerm = value.trim() !== "";
   const visibleSections = useMemo(
