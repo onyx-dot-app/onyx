@@ -541,7 +541,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         query: str,
         hybrid_alpha: float | None,
         num_hits: int,
-        acl_filters: list[str] | None,
+        acl_filters: list[str],
         embedding_model: EmbeddingModel,
         federated_retrieval_infos: list[FederatedRetrievalInfo],
         effective_filters: BaseFilters | None,
