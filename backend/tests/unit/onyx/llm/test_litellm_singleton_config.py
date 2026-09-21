@@ -78,12 +78,18 @@ def test_initialize_litellm_runs_once() -> None:
         patch.object(config, "register_ollama_models") as register,
         patch.object(config, "load_model_metadata_enrichments") as enrich,
     ):
-        config.initialize_litellm()
-        config.initialize_litellm()
+        # Importing the package already initialized litellm. Reset so this
+        # covers the first call and the second one, not just the second.
+        config._initialized = False
+        try:
+            config.initialize_litellm()
+            config.initialize_litellm()
+        finally:
+            config._initialized = True
 
-    configure.assert_not_called()
-    register.assert_not_called()
-    enrich.assert_not_called()
+    assert configure.call_count == 1
+    assert register.call_count == 1
+    assert enrich.call_count == 1
 
 
 @pytest.mark.usefixtures("configured_litellm")
