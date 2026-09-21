@@ -609,7 +609,6 @@ def build_chat_turn(
     litellm_additional_headers: dict[str, str] | None = None,
     custom_tool_additional_headers: dict[str, str] | None = None,
     mcp_headers: dict[str, str] | None = None,
-    bypass_acl: bool = False,
     # Slack context for federated Slack search
     slack_context: SlackContext | None = None,
     # Additional context to include in the chat history, e.g. Slack threads where the
@@ -1113,7 +1112,6 @@ def build_chat_turn(
         skip_clarification=skip_clarification,
         check_is_connected=check_is_connected,
         cache=cache,
-        bypass_acl=bypass_acl,
         slack_context=slack_context,
         custom_tool_additional_headers=custom_tool_additional_headers,
         mcp_headers=mcp_headers,
@@ -1360,7 +1358,6 @@ def _run_models(
                     user_selected_filters=setup.new_msg_req.internal_search_filters,
                     project_id_filter=setup.search_params.project_id_filter,
                     persona_id_filter=setup.search_params.persona_id_filter,
-                    bypass_acl=setup.bypass_acl,
                     slack_context=setup.slack_context,
                     enable_slack_search=_should_enable_slack_search(
                         setup.persona, setup.new_msg_req.internal_search_filters
@@ -1665,7 +1662,6 @@ def _stream_chat_turn(
     litellm_additional_headers: dict[str, str] | None = None,
     custom_tool_additional_headers: dict[str, str] | None = None,
     mcp_headers: dict[str, str] | None = None,
-    bypass_acl: bool = False,
     additional_context: str | None = None,
     slack_context: SlackContext | None = None,
     external_state_container: ChatStateContainer | None = None,
@@ -1690,7 +1686,6 @@ def _stream_chat_turn(
         litellm_additional_headers: Extra headers forwarded to the LLM provider.
         custom_tool_additional_headers: Extra headers for custom tool HTTP calls.
         mcp_headers: Extra headers for MCP tool calls.
-        bypass_acl: If ``True``, document ACL checks are skipped (used by Slack bot).
         additional_context: Extra context prepended to the LLM's chat history, not
             stored in the DB (used for Slack thread hydration).
         slack_context: Federated Slack search context passed through to the search tool.
@@ -1717,8 +1712,7 @@ def _stream_chat_turn(
         with get_session_with_current_tenant() as setup_db_session:
             try:
                 if (
-                    not bypass_acl
-                    and not user.is_anonymous
+                    not user.is_anonymous
                     and new_msg_req.internal_search_filters is not None
                     and new_msg_req.internal_search_filters.document_set is not None
                 ):
@@ -1753,7 +1747,6 @@ def _stream_chat_turn(
                     litellm_additional_headers=litellm_additional_headers,
                     custom_tool_additional_headers=custom_tool_additional_headers,
                     mcp_headers=mcp_headers,
-                    bypass_acl=bypass_acl,
                     slack_context=slack_context,
                     additional_context=additional_context,
                 )
@@ -1910,7 +1903,6 @@ def handle_stream_message_objects(
     litellm_additional_headers: dict[str, str] | None = None,
     custom_tool_additional_headers: dict[str, str] | None = None,
     mcp_headers: dict[str, str] | None = None,
-    bypass_acl: bool = False,
     additional_context: str | None = None,
     slack_context: SlackContext | None = None,
     external_state_container: ChatStateContainer | None = None,
@@ -1928,7 +1920,6 @@ def handle_stream_message_objects(
         litellm_additional_headers=litellm_additional_headers,
         custom_tool_additional_headers=custom_tool_additional_headers,
         mcp_headers=mcp_headers,
-        bypass_acl=bypass_acl,
         additional_context=additional_context,
         slack_context=slack_context,
         external_state_container=external_state_container,

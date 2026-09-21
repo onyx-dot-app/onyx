@@ -63,14 +63,12 @@ def _make_tool(
     user_selected_filters: BaseFilters | None = None,
     project_id_filter: int | None = None,
     persona_id_filter: int | None = None,
-    bypass_acl: bool = False,
 ) -> SearchTool:
     tool = SearchTool.__new__(SearchTool)
     tool.persona_search_info = persona or _persona()
     tool.user_selected_filters = user_selected_filters
     tool.project_id_filter = project_id_filter
     tool.persona_id_filter = persona_id_filter
-    tool.bypass_acl = bypass_acl
     return tool
 
 
@@ -130,7 +128,6 @@ class TestReceiptScope:
             user_selected_filters=BaseFilters(
                 source_type=[DocumentSource.CONFLUENCE], document_set=["Eng"]
             ),
-            bypass_acl=True,
         )
         scope = _scope(tool)
         assert scope is not None
@@ -142,7 +139,7 @@ class TestReceiptScope:
             "tags": None,
         }
         assert scope.persona_document_sets == ["Eng"]
-        assert scope.acl_enforced is False
+        assert scope.acl_enforced is True
 
     def test_default_scope_matches_evaluated_values(self) -> None:
         scope = _scope(_make_tool())

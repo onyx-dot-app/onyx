@@ -321,7 +321,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # fit in the LLM context and need to be searched via vector DB.
         project_id_filter: int | None,
         persona_id_filter: int | None = None,
-        bypass_acl: bool = False,
         # Slack context for federated Slack search (tokens fetched internally)
         slack_context: SlackContext | None = None,
         # Whether to enable Slack federated search
@@ -339,7 +338,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self.user_selected_filters = user_selected_filters
         self.project_id_filter = project_id_filter
         self.persona_id_filter = persona_id_filter
-        self.bypass_acl = bypass_acl
         self.slack_context = slack_context
         self.enable_slack_search = enable_slack_search
         self.auto_detect_filters = auto_detect_filters
@@ -487,7 +485,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 else None
             ),
             persona_document_sets=list(persona.document_set_names),
-            acl_enforced=not self.bypass_acl,
+            acl_enforced=True,
         )
 
     def _run_slack_search(
@@ -557,7 +555,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             query: The search query string
             hybrid_alpha: Hybrid search alpha parameter (None for default)
             num_hits: Maximum number of hits to return
-            acl_filters: Pre-fetched ACL filters (None when bypass_acl)
+            acl_filters: Pre-fetched ACL filters for the acting user
             embedding_model: Pre-fetched embedding model
             federated_retrieval_infos: Pre-fetched federated retrieval functions
             effective_filters: Filters for THIS search, with the per-call source
@@ -574,7 +572,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 user_selected_filters=(
                     effective_filters if self.project_id_filter is None else None
                 ),
-                bypass_acl=self.bypass_acl,
                 limit=num_hits,
             ),
             project_id_filter=self.project_id_filter,
@@ -780,17 +777,14 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # parallel search workers need zero DB connections.
         with get_session_with_current_tenant() as db_session:
             # ACL filters
-            acl_filters: list[str] | None = (
-                None
-                if self.bypass_acl
-                else build_access_filters_for_user(self.user, db_session)
+            acl_filters: list[str] = build_access_filters_for_user(
+                self.user, db_session
             )
 
             # Validate document-set access for user-supplied filters.
             if (
                 self.user_selected_filters
                 and self.user_selected_filters.document_set
-                and not self.bypass_acl
                 and self.user
                 and not self.user.is_anonymous
             ):

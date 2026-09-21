@@ -69,7 +69,6 @@ class SearchToolConfig(BaseModel):
     # must be found via vector DB search instead.
     project_id_filter: int | None = None
     persona_id_filter: int | None = None
-    bypass_acl: bool = False
     additional_context: str | None = None
     slack_context: SlackContext | None = None
     enable_slack_search: bool = True
@@ -222,7 +221,6 @@ def _construct_tools_impl(
             user_selected_filters=config.user_selected_filters,
             project_id_filter=config.project_id_filter,
             persona_id_filter=config.persona_id_filter,
-            bypass_acl=config.bypass_acl,
             slack_context=config.slack_context,
             enable_slack_search=config.enable_slack_search,
             auto_detect_filters=config.auto_detect_filters,
