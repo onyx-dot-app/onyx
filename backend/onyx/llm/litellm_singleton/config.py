@@ -16,6 +16,11 @@ def configure_litellm_settings() -> None:
     litellm.modify_params = True
     litellm.add_function_to_prompt = False
     litellm.suppress_debug_info = True
+    # LiteLLM submits a threadpool task per streamed chunk that spins up a new
+    # asyncio event loop to run success callbacks and cache writes. Onyx
+    # registers neither (tracing and cost accounting are our own), so skip it.
+    # Removing it cuts ~60% of the CPU spent consuming a stream.
+    litellm.disable_streaming_logging = True
     # LiteLLM records must flow only through the app logging pipeline, not also
     # through the stream handler LiteLLM attaches at import.
     remove_litellm_native_log_handlers()
