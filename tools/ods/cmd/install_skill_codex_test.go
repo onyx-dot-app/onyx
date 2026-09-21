@@ -2,20 +2,17 @@ package cmd
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/gittest"
 )
 
 func gitRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	gitCmd := exec.Command("git", "init", "-q")
-	gitCmd.Dir = dir
-	if err := gitCmd.Run(); err != nil {
-		t.Skipf("git unavailable: %v", err)
-	}
+	gittest.Git(t, dir, "init", "--quiet")
 	return dir
 }
 

@@ -112,6 +112,16 @@ func excludeAgentsLocal(repoRoot string) error {
 // stripped rather than symlinked. Stale generated prompts are removed by their
 // marker, so hand-written prompts survive.
 func installCodexPrompts(cmd *cobra.Command, skills []llmContextSkill) error {
+	var manual []llmContextSkill
+	for _, skill := range skills {
+		if !skill.Enforced {
+			manual = append(manual, skill)
+		}
+	}
+	if len(manual) == 0 {
+		return nil
+	}
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("could not determine home directory: %w", err)
@@ -121,13 +131,8 @@ func installCodexPrompts(cmd *cobra.Command, skills []llmContextSkill) error {
 		return fmt.Errorf("could not create %s: %w", promptsDir, err)
 	}
 
-	current := make(map[string]bool, len(skills))
-	var manual []llmContextSkill
-	for _, skill := range skills {
-		if skill.Enforced {
-			continue
-		}
-		manual = append(manual, skill)
+	current := make(map[string]bool, len(manual))
+	for _, skill := range manual {
 		current[skill.Name+".md"] = true
 	}
 
