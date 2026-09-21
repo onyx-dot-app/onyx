@@ -26,13 +26,13 @@ const (
 // knownAgents maps each supported --agent value to its installer. Every
 // installer regenerates its output, so reruns update in place.
 var knownAgents = map[string]func(
-	cmd *cobra.Command, skills []llmContextSkill, repoRoot string, copyMode bool,
+	cmd *cobra.Command, ui *installUI, skills []llmContextSkill, repoRoot string, copyMode bool,
 ) error{
 	agentClaudeCode: installClaudeSkills,
 	agentCursor: func(
-		cmd *cobra.Command, skills []llmContextSkill, repoRoot string, _ bool,
+		cmd *cobra.Command, ui *installUI, skills []llmContextSkill, repoRoot string, _ bool,
 	) error {
-		return installCursorSkills(cmd, skills, repoRoot)
+		return installCursorSkills(cmd, ui, skills, repoRoot)
 	},
 }
 
@@ -100,8 +100,9 @@ By default, looks for onyx-llm-context at ~/.claude/skills/onyx-llm-context.`,
 			if err != nil {
 				return err
 			}
+			ui := newInstallUI(cmd.OutOrStdout())
 			for _, install := range installers {
-				if err := install(cmd, skills, repoRoot, copyMode); err != nil {
+				if err := install(cmd, ui, skills, repoRoot, copyMode); err != nil {
 					return err
 				}
 			}
@@ -121,9 +122,9 @@ By default, looks for onyx-llm-context at ~/.claude/skills/onyx-llm-context.`,
 // deduplicated. An unknown agent is an error rather than a skip, so a typo
 // never reads as a successful install.
 func resolveAgents(agents []string) (
-	[]func(*cobra.Command, []llmContextSkill, string, bool) error, error,
+	[]func(*cobra.Command, *installUI, []llmContextSkill, string, bool) error, error,
 ) {
-	var installers []func(*cobra.Command, []llmContextSkill, string, bool) error
+	var installers []func(*cobra.Command, *installUI, []llmContextSkill, string, bool) error
 	seen := make(map[string]bool, len(agents))
 	for _, agent := range agents {
 		if seen[agent] {
@@ -146,12 +147,12 @@ func resolveAgents(agents []string) (
 }
 
 func installClaudeSkills(
-	cmd *cobra.Command, skills []llmContextSkill, repoRoot string, copyMode bool,
+	cmd *cobra.Command, ui *installUI, skills []llmContextSkill, repoRoot string, copyMode bool,
 ) error {
 	if err := installEnforcedSkills(cmd, skills, repoRoot); err != nil {
 		return err
 	}
-	return installManualSkills(cmd, skills, copyMode)
+	return installManualSkills(cmd, ui, skills, copyMode)
 }
 
 // installEnforcedSkills writes @imports for all enforced skills into .claude/CLAUDE.md at the repo root.
@@ -192,7 +193,7 @@ func installEnforcedSkills(
 
 // installManualSkills symlinks each on-demand skill directory into ~/.claude/skills/.
 func installManualSkills(
-	cmd *cobra.Command, skills []llmContextSkill, copyMode bool,
+	cmd *cobra.Command, ui *installUI, skills []llmContextSkill, copyMode bool,
 ) error {
 	var manual []llmContextSkill
 	for _, skill := range skills {
@@ -209,9 +210,11 @@ func installManualSkills(
 		return fmt.Errorf("could not determine home directory: %w", err)
 	}
 
-	claudeSkills := filepath.Join(home, claudeSkillsDir)
-	if err := os.MkdirAll(claudeSkills, 0o755); err != nil {
-		return fmt.Errorf("could not create %s: %w", claudeSkills, err)
+	claudeSkills, err := ui.resolveTargetDir(
+		"Claude skills", filepath.Join(home, claudeSkillsDir),
+	)
+	if err != nil {
+		return err
 	}
 
 	for _, skill := range manual {

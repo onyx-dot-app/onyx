@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 // llmContextSkill is one skill directory of onyx-llm-context, parsed enough to
@@ -27,6 +29,13 @@ type llmContextSkill struct {
 // discoverLLMContextSkills reads the enforced/ and skills/ tiers of an
 // onyx-llm-context checkout. A missing tier directory is not an error.
 func discoverLLMContextSkills(source string) ([]llmContextSkill, error) {
+	// The Claude installer builds symlinks and @imports from these paths, so a
+	// relative --source must not leak into them.
+	source, err := filepath.Abs(source)
+	if err != nil {
+		return nil, fmt.Errorf("could not resolve source path: %w", err)
+	}
+
 	var skills []llmContextSkill
 	for _, tier := range []struct {
 		dir      string
@@ -55,7 +64,10 @@ func discoverLLMContextSkills(source string) ([]llmContextSkill, error) {
 			if err != nil {
 				return nil, fmt.Errorf("could not read %s: %w", skillFile, err)
 			}
-			description, body := parseSkillMarkdown(string(content))
+			description, body, err := parseSkillMarkdown(string(content))
+			if err != nil {
+				return nil, fmt.Errorf("could not parse %s: %w", skillFile, err)
+			}
 			skills = append(skills, llmContextSkill{
 				Name:        entry.Name(),
 				Dir:         filepath.Join(tierDir, entry.Name()),
@@ -69,21 +81,24 @@ func discoverLLMContextSkills(source string) ([]llmContextSkill, error) {
 	return skills, nil
 }
 
-// parseSkillMarkdown splits a SKILL.md into its `description` frontmatter value
-// and its body. A file with no frontmatter block is all body.
-func parseSkillMarkdown(content string) (description string, body string) {
+// parseSkillMarkdown splits a SKILL.md into its `description` frontmatter
+// value and its body. The frontmatter is real YAML, so folded and quoted
+// values parse the way skill authors wrote them. A file with no frontmatter
+// block is all body.
+func parseSkillMarkdown(content string) (description string, body string, err error) {
 	rest, found := strings.CutPrefix(content, "---\n")
 	if !found {
-		return "", content
+		return "", content, nil
 	}
 	frontmatter, body, found := strings.Cut(rest, "\n---\n")
 	if !found {
-		return "", content
+		return "", content, nil
 	}
-	for _, line := range strings.Split(frontmatter, "\n") {
-		if value, ok := strings.CutPrefix(line, "description:"); ok {
-			description = strings.TrimSpace(value)
-		}
+	var parsed struct {
+		Description string `yaml:"description"`
 	}
-	return description, strings.TrimLeft(body, "\n")
+	if err := yaml.Unmarshal([]byte(frontmatter), &parsed); err != nil {
+		return "", "", fmt.Errorf("invalid frontmatter: %w", err)
+	}
+	return parsed.Description, strings.TrimLeft(body, "\n"), nil
 }
