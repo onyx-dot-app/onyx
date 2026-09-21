@@ -168,16 +168,9 @@ jobs:
           URL=$(sed -n 's/^ready: //p' out.txt)
           echo "url=$URL" >> "$GITHUB_OUTPUT"
 
-      # Reports failure as well as success. This was gated on the deploy having
-      # produced a URL, so a failed deploy updated nothing and left the PR's last
-      # successful comment standing: a ✅ next to an older commit's URL, on a PR
-      # whose current preview does not exist. Through the 2026-09-16 and 09-18
-      # server outages that stale ✅ was all any PR said, which is part of why
-      # three days passed before anyone looked at the host.
-      #
-      # !cancelled() rather than always(): concurrency cancels the superseded run
-      # when commits land together, and a cancelled run must not stamp ❌ over the
-      # newer run's result.
+      # Reports failure as well as success. Gated on the deploy's URL, a failed
+      # deploy updated nothing and left the previous ✅ standing beside an older
+      # commit's preview, on a PR whose current preview does not exist.
       - name: Report the preview status on the PR
         if: ${{ !cancelled() }}
         env:
@@ -196,6 +189,17 @@ jobs:
             exit 0
           fi
 
+          # Only the run that built the PR's current head may write the comment.
+          # concurrency cancels a superseded run, but `if: !cancelled()` is
+          # evaluated before this step starts, so cancellation can land mid-step
+          # and an older run could still overwrite a newer result. Comparing the
+          # head is the actual invariant: report the preview, or say nothing.
+          HEAD_SHA=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha)
+          if [ -n "$HEAD_SHA" ] && [ "$HEAD_SHA" != "$PREVIEW_SHA" ]; then
+            echo "PR head is now ${HEAD_SHA::7}; not reporting ${PREVIEW_SHA::7}."
+            exit 0
+          fi
+
           if [ "$DEPLOY_OUTCOME" = "success" ] && [ -n "$PREVIEW_DEPLOYMENT_URL" ]; then
             STATUS="✅"
             TARGET="$PREVIEW_DEPLOYMENT_URL"
@@ -204,9 +208,8 @@ jobs:
             TARGET="[no preview — see the run]($RUN_URL)"
           fi
 
-          # The reason, next to the ❌. A reviewer who can read "no space left on
-          # device" off the PR does not have to open the run to know this is the
-          # server and not their branch.
+          # The reason next to the ❌, so a server-side failure is legible from the
+          # PR without opening the run.
           DETAIL=""
           if [ "$STATUS" = "❌" ] && [ -s out.txt ]; then
             DETAIL="
