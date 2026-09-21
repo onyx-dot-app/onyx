@@ -688,6 +688,26 @@ def anthropic_omits_sampling_params(model_name: str) -> bool:
     )
 
 
+_GEMINI_FLASH_NO_MINIMAL_MIN_VERSION = (3, 7)
+
+_GEMINI_VERSION_PATTERN = re.compile(r"gemini-(\d+)(?:\.(\d+))?")
+
+
+def parse_gemini_version(model_name: str) -> tuple[int, int] | None:
+    match = _GEMINI_VERSION_PATTERN.search(model_name.lower())
+    if match is None:
+        return None
+    return (int(match.group(1)), int(match.group(2) or 0))
+
+
+def gemini_lowest_thinking_level_is_low(model_name: str) -> bool:
+    name = model_name.lower().split("/")[-1]
+    if "flash" not in name or "lite" in name:
+        return False
+    version = parse_gemini_version(name)
+    return version is not None and version >= _GEMINI_FLASH_NO_MINIMAL_MIN_VERSION
+
+
 def model_identity_names(model_name: str, deployment_name: str | None) -> list[str]:
     """Every string that could carry a model's identity: model_name, plus a
     custom provider's deployment alias when set (e.g. Azure AI Foundry, where
@@ -781,7 +801,9 @@ def supported_reasoning_efforts(
     style = resolve_reasoning_param_style(model_provider, model_names, api_surface)
     # A model that always thinks honors no off on any route, gateway included,
     # so offering the level would promise a saving that never arrives.
-    always_thinking = anthropic_identity_is_always_thinking(model_names)
+    always_thinking = anthropic_identity_is_always_thinking(model_names) or any(
+        gemini_lowest_thinking_level_is_low(name) for name in model_names
+    )
     efforts = [] if always_thinking else [ReasoningEffort.OFF]
     efforts += [ReasoningEffort.LOW, ReasoningEffort.MEDIUM, ReasoningEffort.HIGH]
     if style in _XHIGH_REASONING_STYLES:

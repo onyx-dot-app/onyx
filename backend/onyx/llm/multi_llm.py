@@ -48,6 +48,7 @@ from onyx.llm.model_capabilities import (
     anthropic_omits_sampling_params,
     anthropic_supports_thinking,
     anthropic_uses_adaptive_thinking,
+    gemini_lowest_thinking_level_is_low,
     is_true_openai_model,
     model_is_reasoning_model,
     openai_chat_tools_require_reasoning_none,
@@ -818,6 +819,16 @@ class LitellmLLM(LLM):
             reasoning_effort is ReasoningEffort.OFF
             and reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE
             and anthropic_identity_is_always_thinking(model_identity_names)
+        ):
+            reasoning_effort = ReasoningEffort.LOW
+
+        if (
+            reasoning_effort is ReasoningEffort.OFF
+            and reasoning_style is ReasoningParamStyle.LITELLM_EFFORT
+            and any(
+                gemini_lowest_thinking_level_is_low(name)
+                for name in model_identity_names
+            )
         ):
             reasoning_effort = ReasoningEffort.LOW
 

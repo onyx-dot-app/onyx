@@ -6,9 +6,11 @@ from onyx.llm.model_capabilities import (
     ReasoningParamStyle,
     anthropic_identity_is_always_thinking,
     anthropic_thinking_is_always_on,
+    gemini_lowest_thinking_level_is_low,
     is_openai_registry_model_name,
     openai_chat_tools_require_reasoning_none,
     parse_anthropic_model_version,
+    parse_gemini_version,
     parse_openai_gpt_version,
     resolve_reasoning_param_style,
     supported_reasoning_efforts,
@@ -331,6 +333,61 @@ def test_chat_variants_support_no_levels(model_name: str) -> None:
     assert (
         supported_reasoning_efforts(LlmProviderNames.OPENAI, [model_name], None) == []
     )
+
+
+@pytest.mark.parametrize(
+    "model_name, expected",
+    [
+        ("gemini-3.8-flash", (3, 8)),
+        ("vertex_ai/gemini-3.7-flash", (3, 7)),
+        ("gemini-3-flash-preview", (3, 0)),
+        ("gemini-2.5-pro", (2, 5)),
+        ("google/gemini-3.1-pro-preview", (3, 1)),
+        ("claude-sonnet-5", None),
+        ("gpt-5.5", None),
+    ],
+)
+def test_parse_gemini_version(
+    model_name: str, expected: tuple[int, int] | None
+) -> None:
+    assert parse_gemini_version(model_name) == expected
+
+
+@pytest.mark.parametrize(
+    "model_name, expected",
+    [
+        ("gemini-3.8-flash", True),
+        ("vertex_ai/gemini-3.8-flash", True),
+        ("gemini-3.7-flash", True),
+        ("gemini-3.6-flash", False),
+        ("gemini-3.5-flash", False),
+        ("gemini-3.5-flash-lite", False),
+        ("gemini-3-flash-preview", False),
+        ("gemini-3.1-pro-preview", False),
+        ("gemini-2.5-flash", False),
+        ("claude-sonnet-5", False),
+    ],
+)
+def test_gemini_lowest_thinking_level_is_low(model_name: str, expected: bool) -> None:
+    assert gemini_lowest_thinking_level_is_low(model_name) is expected
+
+
+@pytest.mark.parametrize(
+    "model_provider, model_name, offers_off",
+    [
+        (LlmProviderNames.VERTEX_AI, "gemini-3.8-flash", False),
+        (LlmProviderNames.OPENROUTER, "google/gemini-3.8-flash", False),
+        (LlmProviderNames.VERTEX_AI, "gemini-3.5-flash", True),
+        (LlmProviderNames.VERTEX_AI, "gemini-3.1-pro-preview", True),
+    ],
+)
+def test_gemini_flash_without_off_level_hides_off(
+    model_provider: str, model_name: str, offers_off: bool
+) -> None:
+    efforts = supported_reasoning_efforts(model_provider, [model_name], None)
+    assert (ReasoningEffort.OFF in efforts) is offers_off
+    assert ReasoningEffort.XHIGH not in efforts
+    assert efforts[-1] is ReasoningEffort.HIGH
 
 
 def test_model_identity_taken_from_any_name() -> None:

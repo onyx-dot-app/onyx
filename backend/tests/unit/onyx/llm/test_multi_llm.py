@@ -698,6 +698,42 @@ def _anthropic_completion_kwargs(
         return mock_completion.call_args.kwargs
 
 
+@pytest.mark.parametrize(
+    "model_provider, model_name, expected_effort",
+    [
+        (LlmProviderNames.VERTEX_AI, "gemini-3.8-flash", "low"),
+        (LlmProviderNames.VERTEX_AI, "gemini-3.7-flash", "low"),
+        (LlmProviderNames.OPENROUTER, "google/gemini-3.8-flash", "low"),
+        (LlmProviderNames.VERTEX_AI, "gemini-3.5-flash", None),
+        (LlmProviderNames.VERTEX_AI, "gemini-3-flash-preview", None),
+        (LlmProviderNames.VERTEX_AI, "gemini-3.1-pro-preview", None),
+    ],
+)
+def test_reasoning_off_for_gemini_uses_lowest_accepted_level(
+    model_provider: str, model_name: str, expected_effort: str | None
+) -> None:
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=model_provider,
+        model_name=model_name,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=model_provider,
+            model_name=model_name,
+        ),
+    )
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
+    ):
+        mock_completion.return_value = []
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.OFF))
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs.get("reasoning_effort") == expected_effort
+        assert "reasoning" not in kwargs
+
+
 def test_keeps_temperature_for_other_models(default_multi_llm: LitellmLLM) -> None:
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
