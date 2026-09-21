@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from onyx.db.models import ModelCostOverride
 from onyx.llm import cost as cost_mod
 from onyx.llm import cost_overrides
-from onyx.llm.cost import compute_cost_cents
+from onyx.llm.cost import compute_cost_cents, get_model_price_per_million
 from onyx.tracing.flows import LLMFlow
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
@@ -169,6 +169,148 @@ class TestComputeCostCents:
         )
         assert in_cents == pytest.approx(0.025)
         assert out_cents == pytest.approx(0.125)
+
+
+class TestUnmappedGatewayModels:
+    """Gateways name models `vendor/model`. Those miss every exact cost-map
+    lookup, so litellm resolves them from capability generalization rules,
+    which carry no pricing, and coerces the rates to 0 instead of raising."""
+
+    GATEWAY_CASES = [
+        ("anthropic/claude-sonnet-4.5", "portkey"),
+        ("openai/gpt-5", "openai_compatible"),
+        ("google/gemini-2.5-pro", "bifrost"),
+        ("anthropic/claude-sonnet-4.5", "nebius_tokenfactory"),
+    ]
+
+    @pytest.mark.parametrize("model,provider", GATEWAY_CASES)
+    def test_unmapped_gateway_model_uses_fallback_rates_not_zero(
+        self, model: str, provider: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_INPUT_COST_PER_MTOK", 2.0)
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_OUTPUT_COST_PER_MTOK", 6.0)
+        in_cents, out_cents = compute_cost_cents(
+            model=model,
+            provider=provider,
+            prompt_tokens=1_000_000,
+            completion_tokens=1_000_000,
+        )
+        assert in_cents == pytest.approx(200.0)
+        assert out_cents == pytest.approx(600.0)
+
+    @pytest.mark.parametrize("model,provider", GATEWAY_CASES)
+    def test_unmapped_gateway_model_reports_unknown_rates(
+        self, model: str, provider: str
+    ) -> None:
+        price = get_model_price_per_million(model, provider)
+        assert price.input_per_mtok is None
+        assert price.output_per_mtok is None
+
+    def test_unmapped_gateway_model_warns_when_no_fallback_configured(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_INPUT_COST_PER_MTOK", 0.0)
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_OUTPUT_COST_PER_MTOK", 0.0)
+        with caplog.at_level(logging.WARNING):
+            result = compute_cost_cents(
+                model="anthropic/claude-sonnet-4.5",
+                provider="portkey",
+                prompt_tokens=1_000_000,
+                completion_tokens=1_000_000,
+            )
+        assert result == (0.0, 0.0)
+        assert "No price for model" in caplog.text
+
+    @pytest.mark.parametrize(
+        "model,provider",
+        [
+            ("anthropic/claude-sonnet-4.5", "vercel_ai_gateway"),
+            ("anthropic/claude-sonnet-4.5", "openrouter"),
+        ],
+    )
+    def test_mapped_gateway_model_keeps_its_real_price(
+        self, model: str, provider: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Gateways litellm does map must not be diverted to fallback rates."""
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_INPUT_COST_PER_MTOK", 2.0)
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_OUTPUT_COST_PER_MTOK", 6.0)
+        in_cents, out_cents = compute_cost_cents(
+            model=model,
+            provider=provider,
+            prompt_tokens=1000,
+            completion_tokens=1000,
+        )
+        assert in_cents == pytest.approx(0.3)
+        assert out_cents == pytest.approx(1.5)
+
+
+class TestLocallyHostedProviders:
+    """Self-hosted inference has no per-token vendor charge, so it must bill
+    zero rather than pick up the unpriced-model fallback rates."""
+
+    @pytest.mark.parametrize(
+        "model,provider",
+        [
+            ("gpt-oss:20b", "ollama_chat"),
+            ("llama3.3", "ollama"),
+            ("qwen/qwen3-4b", "lm_studio"),
+        ],
+    )
+    def test_local_provider_bills_zero_despite_fallback_rates(
+        self, model: str, provider: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_INPUT_COST_PER_MTOK", 2.0)
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_OUTPUT_COST_PER_MTOK", 6.0)
+        assert compute_cost_cents(
+            model=model,
+            provider=provider,
+            prompt_tokens=1_000_000,
+            completion_tokens=1_000_000,
+        ) == (0.0, 0.0)
+
+    def test_local_provider_reports_zero_rates(self) -> None:
+        price = get_model_price_per_million("gpt-oss:20b", "ollama_chat")
+        assert price.input_per_mtok == 0.0
+        assert price.output_per_mtok == 0.0
+
+    @pytest.mark.parametrize("model", ["gpt-oss:20b-cloud", "deepseek-v3.1:671b-cloud"])
+    def test_ollama_cloud_model_is_not_billed_as_local(
+        self, model: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Ollama Cloud is hosted, billable inference served under the same
+        provider name as local Ollama. litellm has no `ollama_chat/*-cloud`
+        entry, so it must reach the fallback rates, not the zero-cost path."""
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_INPUT_COST_PER_MTOK", 2.0)
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_OUTPUT_COST_PER_MTOK", 6.0)
+        in_cents, out_cents = compute_cost_cents(
+            model=model,
+            provider="ollama_chat",
+            prompt_tokens=1_000_000,
+            completion_tokens=1_000_000,
+        )
+        assert in_cents == pytest.approx(200.0)
+        assert out_cents == pytest.approx(600.0)
+
+    def test_ollama_cloud_model_reports_unknown_rates(self) -> None:
+        price = get_model_price_per_million("gpt-oss:20b-cloud", "ollama_chat")
+        assert price.input_per_mtok is None
+        assert price.output_per_mtok is None
+
+    @pytest.mark.parametrize("model", ["gpt-oss:20b-cloud", "gpt-oss:120b-cloud"])
+    def test_bare_ollama_cloud_model_defers_to_the_litellm_entry(
+        self, model: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """litellm carries explicit `ollama/*-cloud` entries priced at 0. That is
+        a mapped price rather than an invented one, so it wins over the fallback
+        rates; an admin who disagrees pins it with a ModelCostOverride row."""
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_INPUT_COST_PER_MTOK", 2.0)
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_OUTPUT_COST_PER_MTOK", 6.0)
+        assert compute_cost_cents(
+            model=model,
+            provider="ollama",
+            prompt_tokens=1_000_000,
+            completion_tokens=1_000_000,
+        ) == (0.0, 0.0)
 
 
 class TestImageFlow:
