@@ -3329,13 +3329,17 @@ def _invoke_stream_flag(
         patch(
             "onyx.llm.multi_llm._env_injection_enabled",
             return_value=injection_enabled,
-        ),
+        ) as mock_injection_setting,
         patch("onyx.llm.multi_llm.LLM_INVOKE_FORCE_STREAMING", force_streaming),
     ):
         response = llm.invoke(
             [UserMessage(content="Hi")],
             total_timeout_override=total_timeout_override,
         )
+
+    # One snapshot drives both the stream choice and the env lock, so the two
+    # cannot diverge if an admin flips the setting mid-call.
+    assert mock_injection_setting.call_count == 1
 
     kwargs = mock_completion.call_args.kwargs
     if kwargs["stream"]:

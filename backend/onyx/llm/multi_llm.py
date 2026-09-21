@@ -650,11 +650,18 @@ class LitellmLLM(LLM):
         max_tokens: int | None = None,
         user_identity: LLMUserIdentity | None = None,
         client: "HTTPHandler | None" = None,
+        env_injection_enabled: bool | None = None,
     ) -> Union["ModelResponse", "CustomStreamWrapper"]:
         # Lazy loading to avoid memory bloat for non-inference flows
         from litellm.exceptions import BadRequestError, RateLimitError, Timeout
 
         from onyx.llm.litellm_singleton import litellm
+
+        # One snapshot of the setting for the whole call. A caller that made a
+        # decision on it (invoke's stream choice) passes its own value so the
+        # two cannot diverge if an admin flips the setting mid-call.
+        if env_injection_enabled is None:
+            env_injection_enabled = _env_injection_enabled()
 
         #########################
         # Flags that modify the final arguments
@@ -1079,7 +1086,7 @@ class LitellmLLM(LLM):
                 else:
                     optional_kwargs["tool_choice"] = tool_choice
 
-            if not _env_injection_enabled() and self._env_only_custom_config:
+            if not env_injection_enabled and self._env_only_custom_config:
                 _warn_dropped_env_only_keys(
                     self._model_provider,
                     tuple(sorted(self._env_only_custom_config)),
@@ -1091,7 +1098,7 @@ class LitellmLLM(LLM):
                 # because the context manager is single-use.
                 env_ctx: AbstractContextManager[None] = (
                     temporary_env_and_lock(self._env_only_custom_config)
-                    if _env_injection_enabled()
+                    if env_injection_enabled
                     else nullcontext()
                 )
                 with env_ctx:
@@ -1281,10 +1288,11 @@ class LitellmLLM(LLM):
         # - env injection (self-hosted only): env-only custom_config keys are
         #   set under a global lock, and streaming keeps the lock to connection
         #   setup instead of the full inference.
+        env_injection_enabled = _env_injection_enabled()
         use_stream = (
             total_timeout_override is not None
             or LLM_INVOKE_FORCE_STREAMING
-            or _env_injection_enabled()
+            or env_injection_enabled
         )
 
         try:
@@ -1308,6 +1316,7 @@ class LitellmLLM(LLM):
                         reasoning_effort=reasoning_effort,
                         user_identity=user_identity,
                         client=client,
+                        env_injection_enabled=env_injection_enabled,
                     ),
                 )
                 chunks = _consume_stream_with_timeout(
@@ -1332,6 +1341,7 @@ class LitellmLLM(LLM):
                         reasoning_effort=reasoning_effort,
                         user_identity=user_identity,
                         client=client,
+                        env_injection_enabled=env_injection_enabled,
                     ),
                 )
 
