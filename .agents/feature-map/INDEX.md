@@ -107,11 +107,11 @@ Ways to reach Onyx that are not the web chat UI.
 |---|---|---|
 | ✅ | [slack-bot](components/slack-bot.md) | Slack app, channel config, the bot turn runner. |
 | ✅ | [discord-bot](components/discord-bot.md) | Discord equivalent. |
-| 🚧 | [onyx-api](components/onyx-api.md) | The public HTTP API. |
-| 🚧 | [mcp-server](components/mcp-server.md) | Onyx exposed as an MCP server. |
+| ✅ | [onyx-api](components/onyx-api.md) | The public HTTP API. |
+| ✅ | [mcp-server](components/mcp-server.md) | Onyx exposed as an MCP server. |
 | ✅ | [llm-gateway](components/llm-gateway.md) | OpenAI-compatible gateway with cost tracking. |
-| 🚧 | [mobile-app](components/mobile-app.md) | React Native + Expo client. |
-| 🚧 | [desktop-widget-extensions](components/desktop-widget-extensions.md) | Tauri desktop shell, embeddable widget, browser extensions. |
+| ✅ | [mobile-app](components/mobile-app.md) | React Native + Expo client. |
+| ✅ | [desktop-widget-extensions](components/desktop-widget-extensions.md) | Tauri desktop shell, embeddable widget, browser extensions. |
 | ✅ | [voice](components/voice.md) | Voice input and output. |
 | ✅ | [image-generation](components/image-generation.md) | The image generation tool and its admin config. |
 | ✅ | [code-execution](components/code-execution.md) | Code interpreter, bash, and python tools. |

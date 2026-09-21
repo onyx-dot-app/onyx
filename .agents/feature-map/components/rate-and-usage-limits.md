@@ -462,10 +462,18 @@ See `backend/AGENTS.md` for required env and secrets.
   `check_token_rate_limits` on both send-message endpoints but never
   `check_api_key_usage`.** A Craft turn driven by an API key/PAT does not
   count against the tenant's API-call cap.
-- **The MCP surface in `backend/onyx/mcp_server/` does not drive an LLM
-  turn at all**; it exposes search/read tools to an external MCP client. It
-  is not a gap for this component because it never reaches
-  `process_message.py`.
+- **The MCP surface in `backend/onyx/mcp_server/` never reaches
+  `process_message.py`, but it still spends LLM tokens, and nothing here
+  meters it.** Its `search_indexed_documents` tool calls `POST /search` on the
+  API server, and `search/api.py:search` declares only
+  `check_llm_cost_limit_for_provider`, which applies solely when the tenant
+  uses an Onyx-managed default key. Neither `check_token_rate_limits` nor
+  `check_api_key_usage` is declared there. The retrieval pipeline itself then
+  makes LLM calls: `SearchTool.run` reaches `select_sections_for_expansion`
+  every time, and `keyword_query_expansion` and `decide_time_filter` unless
+  query expansion is skipped. The MCP server also exposes `search_web` and
+  `open_urls`, so it drives outbound egress as well. Treat "does not drive a
+  chat turn" as true but not sufficient. See [[mcp-server]] §9.
 - **Community Edition cannot create or edit any `TokenRateLimit`, including
   GLOBAL scope, through the admin API.** `ee/onyx/server/token_rate_limits/api.py`
   says so directly: "Spending limits are an Enterprise feature, so every
