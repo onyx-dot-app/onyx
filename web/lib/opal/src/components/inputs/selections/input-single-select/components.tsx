@@ -188,8 +188,10 @@ const InputSingleSelect = ({
   const allVisibleOptions = useMemo(() => {
     const baseOptions = flattenSections(visibleSections);
     if (showCreateOption) {
-      // Prepend a synthetic option for the "create new" item
-      return [{ value: inputValue, label: inputValue }, ...baseOptions];
+      // Prepend a synthetic option for the "create new" item. Trimmed to
+      // match what the rendered create row commits.
+      const createText = inputValue.trim();
+      return [{ value: createText, label: createText }, ...baseOptions];
     }
     return baseOptions;
   }, [visibleSections, showCreateOption, inputValue]);

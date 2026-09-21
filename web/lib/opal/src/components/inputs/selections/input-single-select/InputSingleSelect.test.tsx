@@ -322,6 +322,47 @@ describe("InputSingleSelect", () => {
       // Should show "Apple" (label) not "apple" (value)
       expect(screen.getByDisplayValue("Apple")).toBeInTheDocument();
     });
+
+    test("clicking the create row commits trimmed free-form text", async () => {
+      const handleValueChange = jest.fn();
+      const user = setupUser();
+      render(
+        <InputSingleSelect
+          placeholder="Select"
+          value=""
+          options={mockOptions}
+          mode="open"
+          onValueChange={handleValueChange}
+        />
+      );
+      const input = screen.getByPlaceholderText("Select");
+
+      await user.type(input, "kiwi ");
+      await user.click(screen.getByLabelText('Create "kiwi"'));
+
+      expect(handleValueChange).toHaveBeenCalledWith("kiwi");
+    });
+
+    test("Enter on the create row commits trimmed free-form text", async () => {
+      const handleValueChange = jest.fn();
+      const user = setupUser();
+      render(
+        <InputSingleSelect
+          placeholder="Select"
+          value=""
+          options={mockOptions}
+          mode="open"
+          onValueChange={handleValueChange}
+        />
+      );
+      const input = screen.getByPlaceholderText("Select");
+
+      // Typing auto-highlights the first row, which is the create row.
+      await user.type(input, "kiwi ");
+      await user.keyboard("{Enter}");
+
+      expect(handleValueChange).toHaveBeenCalledWith("kiwi");
+    });
   });
 
   describe("Strict Mode", () => {

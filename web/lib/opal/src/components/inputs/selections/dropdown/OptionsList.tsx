@@ -81,26 +81,30 @@ export const OptionsList: React.FC<OptionsListProps> = ({
     );
   }
 
+  // Free-form text commits trimmed: every match check trims the input side,
+  // so an untrimmed value would never match itself on reopen.
+  const createText = inputValue.trim();
+
   return (
     <>
       {/* Create New Option */}
       {showCreateOption && (
         <div
-          id={`${fieldId}-option-${sanitizeOptionId(inputValue)}`}
+          id={`${fieldId}-option-${sanitizeOptionId(createText)}`}
           data-index={0}
           role="option"
           tabIndex={-1}
           aria-selected={false}
           aria-label={strings.comboBoxCreateOption(
             strings.comboBoxCreate,
-            inputValue
+            createText
           )}
           onClick={(e) => {
             e.stopPropagation();
-            onSelect({ value: inputValue, label: inputValue });
+            onSelect({ value: createText, label: createText });
           }}
           onKeyDown={clickOnKeyDown(() =>
-            onSelect({ value: inputValue, label: inputValue })
+            onSelect({ value: createText, label: createText })
           )}
           onMouseDown={(e) => {
             e.preventDefault();
@@ -110,7 +114,7 @@ export const OptionsList: React.FC<OptionsListProps> = ({
           className="opal-select-create"
           data-highlighted={highlightedIndex === 0 || undefined}
         >
-          <span className="opal-select-create-label">{inputValue}</span>
+          <span className="opal-select-create-label">{createText}</span>
           <SvgPlus className="opal-select-create-icon" />
         </div>
       )}
