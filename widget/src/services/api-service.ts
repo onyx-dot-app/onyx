@@ -8,6 +8,7 @@ import {
   CreateSessionResponse,
   SendMessageRequest,
 } from "@/types/api-types";
+import { TokenProvider } from "@/types/widget-types";
 
 export class ApiService {
   private maxRetries = 3;
@@ -15,7 +16,7 @@ export class ApiService {
 
   constructor(
     private backendUrl: string,
-    private apiKey: string
+    private resolveToken: TokenProvider
   ) {}
 
   /**
@@ -31,7 +32,7 @@ export class ApiService {
       `${this.backendUrl}/chat/create-chat-session`,
       {
         method: "POST",
-        headers: this.getHeaders(),
+        headers: await this.getHeaders(),
         body: JSON.stringify(request),
       }
     );
@@ -76,7 +77,7 @@ export class ApiService {
       `${this.backendUrl}/chat/send-chat-message`,
       {
         method: "POST",
-        headers: this.getHeaders(),
+        headers: await this.getHeaders(),
         body: JSON.stringify(request),
         signal: params.signal,
       }
@@ -219,12 +220,19 @@ export class ApiService {
   }
 
   /**
-   * Get common headers for API requests
+   * Get common headers for API requests.
+   * The credential is resolved per call so an expiring token can be refreshed
+   * by the host between requests.
    */
-  private getHeaders(): Record<string, string> {
+  private async getHeaders(): Promise<Record<string, string>> {
+    const token = await this.resolveToken();
+    if (!token) {
+      throw new Error("Onyx credential resolved to an empty value");
+    }
+
     return {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${this.apiKey}`,
+      Authorization: `Bearer ${token}`,
     };
   }
 }

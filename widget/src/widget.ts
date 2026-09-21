@@ -8,9 +8,9 @@ import { customElement, property, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
-import { WidgetConfig, ChatMessage } from "./types/widget-types";
+import { WidgetConfig, ChatMessage, TokenProvider } from "./types/widget-types";
 import { SearchDocument, ResolvedCitation } from "./types/api-types";
-import { resolveConfig } from "./config/config";
+import { resolveConfig, resolveAuthToken } from "./config/config";
 import { theme } from "./styles/theme";
 import { widgetStyles } from "./styles/widget-styles";
 import { ApiService } from "./services/api-service";
@@ -34,6 +34,10 @@ export class OnyxChatWidget extends LitElement {
   @property() mode?: "launcher" | "inline";
   @property({ attribute: "include-citations", type: Boolean })
   includeCitations?: boolean;
+
+  // Assigned as a JS property, since a function cannot ride an HTML attribute.
+  // Takes precedence over `api-key` and keeps the credential out of the markup.
+  @property({ attribute: false }) tokenProvider?: TokenProvider;
 
   // Internal state
   @state() private isOpen = false;
@@ -103,10 +107,10 @@ export class OnyxChatWidget extends LitElement {
     // Apply custom colors
     this.applyCustomColors();
 
-    // Initialize API service
-    this.apiService = new ApiService(
-      this.config.backendUrl,
-      this.config.apiKey
+    // Initialize API service. Auth is read at request time so a `tokenProvider`
+    // assigned after the element mounts is still picked up.
+    this.apiService = new ApiService(this.config.backendUrl, () =>
+      resolveAuthToken(this.tokenProvider, this.config.apiKey)
     );
 
     // Load persisted session

@@ -4,7 +4,10 @@ An embeddable, lightweight chat widget that brings AI-powered conversations to a
 
 ## Security Note
 
-⚠️ **Always use a limited-scope API key for the widget.** The API key is visible in client-side code, so it should have restricted permissions and rate limits. Never use admin or full-access keys.
+The widget runs in the browser, so whatever credential it holds is visible to the visitor. Pick one of the two modes below.
+
+- **JWT passthrough** — the host page supplies the visitor's own identity-provider token, and each visitor acts as their own Onyx user. No shared secret goes in the page. Use this when the host page already signs the visitor in with the same IdP as Onyx. See [docs/WIDGET_JWT_PASSTHROUGH.md](../docs/WIDGET_JWT_PASSTHROUGH.md).
+- **API key** — ⚠️ **always use a limited-scope API key.** The key is visible in client-side code, so it should have restricted permissions and rate limits. Never use admin or full-access keys.
 
 ## Features
 
@@ -104,7 +107,7 @@ That's it! The widget will appear as a floating button in the bottom-right corne
 | Attribute     | Type   | Description                                                          |
 | ------------- | ------ | -------------------------------------------------------------------- |
 | `backend-url` | string | Your Onyx backend API URL (or set `VITE_WIDGET_BACKEND_URL` in .env) |
-| `api-key`     | string | API key for authentication (or set `VITE_WIDGET_API_KEY` in .env)    |
+| `api-key`     | string | API key for authentication (or set `VITE_WIDGET_API_KEY` in .env). Omit it when you use a `tokenProvider` — see [Authentication](#authentication). |
 
 **Note**: For cloud deployment, these must be provided as HTML attributes. For self-hosted deployment, they can be set in `.env` file during build and will be baked into the bundle.
 
@@ -161,6 +164,39 @@ That's it! The widget will appear as a floating button in the bottom-right corne
   </onyx-chat-widget>
 </div>
 ```
+
+## Authentication
+
+The widget sends a bearer credential on every backend call. It gets that credential one of two ways.
+
+### API key
+
+Set the `api-key` attribute. The same key is used for every visitor, so all conversations run as one Onyx service account.
+
+### JWT passthrough (`tokenProvider`)
+
+Assign a `tokenProvider` function and leave `api-key` off. The widget calls it before every request, so the host controls expiry and refresh. Each visitor is a separate Onyx user, and per-user document permissions apply.
+
+```html
+<onyx-chat-widget id="onyx-widget" backend-url="https://onyx.example.com/api">
+</onyx-chat-widget>
+
+<script type="module">
+  const widget = document.getElementById("onyx-widget");
+  widget.tokenProvider = async () => {
+    const result = await msalInstance.acquireTokenSilent({
+      scopes: ["api://onyx/.default"],
+    });
+    return result.accessToken;
+  };
+</script>
+```
+
+`tokenProvider` is a JavaScript property, not an HTML attribute, because attributes cannot hold functions. Assign it at any time — the widget reads the property when it sends a request, not when it mounts.
+
+Onyx must be configured to accept these tokens. The setup, the required claims, and the CORS and provisioning caveats are in [docs/WIDGET_JWT_PASSTHROUGH.md](../docs/WIDGET_JWT_PASSTHROUGH.md).
+
+**Precedence**: when both are present, `tokenProvider` wins. When neither resolves to a credential, the widget shows an error instead of sending the request.
 
 ## Display Modes
 

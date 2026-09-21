@@ -1,4 +1,8 @@
-import { WidgetConfig } from "@/types/widget-types";
+import { TokenProvider, WidgetConfig } from "@/types/widget-types";
+
+const MISSING_CREDENTIAL_MESSAGE =
+  "No Onyx credential available. Set the `api-key` attribute, or assign a " +
+  "`tokenProvider` function on the <onyx-chat-widget> element.";
 
 /**
  * Resolve widget configuration from attributes and environment variables
@@ -19,11 +23,27 @@ export function resolveConfig(attributes: Partial<WidgetConfig>): WidgetConfig {
     includeCitations: attributes.includeCitations ?? false,
   };
 
-  if (!config.backendUrl || !config.apiKey) {
-    throw new Error(
-      "backendUrl and apiKey are required for the widget to function"
-    );
+  if (!config.backendUrl) {
+    throw new Error("backendUrl is required for the widget to function");
   }
 
   return config;
+}
+
+/**
+ * Pick the credential for one request. A `tokenProvider` wins over `apiKey`.
+ * Credentials are resolved here rather than at mount because a host usually
+ * assigns `tokenProvider` after the element has already been parsed.
+ */
+export function resolveAuthToken(
+  tokenProvider: TokenProvider | undefined,
+  apiKey: string | undefined
+): string | Promise<string> {
+  if (tokenProvider) {
+    return tokenProvider();
+  }
+  if (apiKey) {
+    return apiKey;
+  }
+  throw new Error(MISSING_CREDENTIAL_MESSAGE);
 }
