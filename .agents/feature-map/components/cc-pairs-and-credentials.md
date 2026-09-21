@@ -6,7 +6,7 @@
 > system actually operates on.
 
 **Domain:** ingestion
-**Edition:** CE, with EE additions for real encryption and sync-type access
+**Edition:** CE, with EE providing real encryption (loaded by default) and sync-type access
 **Owns:**
 `backend/onyx/db/connector_credential_pair.py`, `connector.py`, `credentials.py`,
 `credential_capability.py`, `connector_alerts.py`, `deletion_attempt.py`,
@@ -94,7 +94,7 @@ deletion units.
 
 | Variable | Effect |
 |---|---|
-| `ENCRYPTION_KEY_SECRET` | EE-only. If unset, credential JSON is stored base64-adjacent (encoded, not encrypted). See §5. |
+| `ENCRYPTION_KEY_SECRET` | The AES key. Encryption needs both this value and EE code loaded, which is the default. If unset, credential JSON is stored unencrypted. See §4.2. |
 | `MASK_CREDENTIAL_PREFIX` | Default `True`. Gates whether credential-listing endpoints mask secret values. See §5. |
 | `DEFAULT_PRUNING_FREQ` | `connector.py:update_connector` default when `prune_freq` is omitted. |
 
@@ -231,15 +231,28 @@ then inserts the `ConnectorCredentialPair` row with `status=SCHEDULED`.
 `encrypt_string_to_bytes` (`utils/encryption.py`), which is a
 `fetch_versioned_implementation` dispatch:
 
-- **CE (`backend/onyx/utils/encryption.py:_encrypt_string`)**: does **not**
-  encrypt. It logs a warning if `ENCRYPTION_KEY_SECRET` is set and returns
-  `input_str.encode()` unchanged. Ciphertext at rest in the MIT edition is
-  plain UTF-8 bytes.
 - **EE (`backend/ee/onyx/utils/encryption.py:_encrypt_string`)**: real AES-CBC
   with a random IV per value, keyed off `ENCRYPTION_KEY_SECRET` trimmed to a
-  valid AES key size (`_get_trimmed_key`). This only runs when the EE codepath
-  is loaded (`fetch_versioned_implementation` resolves to `ee.onyx...` when EE
-  is installed and licensed).
+  valid AES key size (`_get_trimmed_key`).
+- **CE (`backend/onyx/utils/encryption.py:_encrypt_string`)**: a passthrough.
+  It logs a warning if `ENCRYPTION_KEY_SECRET` is set and returns
+  `input_str.encode()` unchanged, so the value is stored as plain UTF-8 bytes.
+
+**Which one runs is not what the edition names suggest.** The EE implementation
+is the default in a standard deployment. `set_is_ee_based_on_env_variable`
+(`onyx/utils/variable_functionality.py`) calls `global_version.set_ee()` when
+**either** `ENABLE_PAID_ENTERPRISE_EDITION_FEATURES` is true **or**
+`LICENSE_ENFORCEMENT_ENABLED` is true, and the latter **defaults to `"true"`**.
+The `ee` package ships in the standard backend image (`backend/Dockerfile`
+copies `./ee` to `/app/ee`), so `fetch_versioned_implementation` resolves the
+EE symbol and real AES encryption runs even with
+`ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=false`.
+
+The CE passthrough is therefore reached only when EE code is genuinely absent
+or disabled: an image built without `ee/`, or a deployment that sets both
+`LICENSE_ENFORCEMENT_ENABLED=false` and
+`ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=false`. In that configuration
+credentials are stored unencrypted and the only signal is a log warning.
 
 On read, `process_result_value` never decrypts eagerly. It wraps the encrypted
 bytes in `SensitiveValue` (`utils/sensitive.py:SensitiveValue`), which raises
@@ -363,11 +376,16 @@ made it redundant). Treat it as dead code, not an active gate; see §9.
    is a single global toggle, not per-request. A change that adds a new
    credential-reading endpoint must call `.get_value(apply_mask=...)`
    explicitly (the type system forces this) and must default to masked.
-3. **CE does not actually encrypt credentials at rest.** `_encrypt_string` in
-   `onyx/utils/encryption.py` is a passthrough. Real AES-CBC encryption is an
-   EE-only implementation (`ee/onyx/utils/encryption.py`) dispatched through
-   `fetch_versioned_implementation`. Do not describe CE credential storage as
-   "encrypted" without this caveat.
+3. **Encryption depends on whether EE code is loaded, not on the paid feature
+   flag.** Real AES-CBC lives only in `ee/onyx/utils/encryption.py`; the
+   `onyx/utils/encryption.py` implementation is a passthrough. Dispatch goes
+   through `fetch_versioned_implementation`, and EE code loads by default
+   because `LICENSE_ENFORCEMENT_ENABLED` defaults to `"true"` and the image
+   ships `ee/`. So a standard deployment does encrypt. A build without `ee/`,
+   or one that disables both EE flags, silently stores plaintext. Any change
+   to `set_is_ee_based_on_env_variable`, to the Dockerfile's `ee` copy, or to
+   those defaults changes credential encryption for every existing deployment.
+   See §4.2.
 4. **Deleting a cc-pair must not delete a document another cc-pair still
    indexes.** Verified in `document_by_cc_pair_cleanup_task`: deletion from the
    document index only happens when `get_document_connector_count() == 1`;
