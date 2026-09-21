@@ -608,7 +608,10 @@ class ConfluenceConnector(
                 raise
             return ConnectorFailure(
                 failed_document=DocumentFailure(
-                    document_id=page_id,
+                    # Must equal the Document.id the success path builds
+                    # (page_url), because consumers match failures to documents
+                    # by this value.
+                    document_id=page_url,
                     document_link=page_url,
                 ),
                 failure_message=f"Error converting page {page.get('id', 'unknown')}: {e}",
