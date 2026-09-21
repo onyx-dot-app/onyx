@@ -36,9 +36,9 @@ var knownAgents = map[string]func(
 		return installCursorSkills(cmd, ui, skills, repoRoot)
 	},
 	agentCodex: func(
-		cmd *cobra.Command, skills []llmContextSkill, repoRoot string, _ bool,
+		cmd *cobra.Command, ui *installUI, skills []llmContextSkill, repoRoot string, _ bool,
 	) error {
-		return installCodexSkills(cmd, skills, repoRoot)
+		return installCodexSkills(cmd, ui, skills, repoRoot)
 	},
 }
 

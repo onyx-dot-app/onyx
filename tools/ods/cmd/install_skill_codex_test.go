@@ -28,7 +28,7 @@ func TestInstallCodexSkillsCompilesEnforcedAndExcludesTheFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := installCodexSkills(discardCmd(), skills, repoRoot); err != nil {
+	if err := installCodexSkills(discardCmd(), testUI(), skills, repoRoot); err != nil {
 		t.Fatal(err)
 	}
 
@@ -54,7 +54,7 @@ func TestInstallCodexSkillsCompilesEnforcedAndExcludesTheFile(t *testing.T) {
 	}
 
 	// A rerun must not duplicate the exclude entry.
-	if err := installCodexSkills(discardCmd(), skills, repoRoot); err != nil {
+	if err := installCodexSkills(discardCmd(), testUI(), skills, repoRoot); err != nil {
 		t.Fatal(err)
 	}
 	exclude, _ = os.ReadFile(filepath.Join(repoRoot, ".git", "info", "exclude"))
@@ -87,7 +87,7 @@ func TestInstallCodexSkillsWritesPromptsAndRemovesStaleOnes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := installCodexSkills(discardCmd(), skills, repoRoot); err != nil {
+	if err := installCodexSkills(discardCmd(), testUI(), skills, repoRoot); err != nil {
 		t.Fatal(err)
 	}
 

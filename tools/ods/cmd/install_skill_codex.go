@@ -23,19 +23,19 @@ const (
 // .agents-local.md at the repo root (the committed AGENTS.md tells agents to
 // read it) and installs each on-demand skill as a Codex custom prompt.
 func installCodexSkills(
-	cmd *cobra.Command, skills []llmContextSkill, repoRoot string,
+	cmd *cobra.Command, ui *installUI, skills []llmContextSkill, repoRoot string,
 ) error {
-	if err := writeAgentsLocal(cmd, skills, repoRoot); err != nil {
+	if err := writeAgentsLocal(cmd, ui, skills, repoRoot); err != nil {
 		return err
 	}
 	if err := excludeAgentsLocal(repoRoot); err != nil {
 		return err
 	}
-	return installCodexPrompts(cmd, skills)
+	return installCodexPrompts(cmd, ui, skills)
 }
 
 func writeAgentsLocal(
-	cmd *cobra.Command, skills []llmContextSkill, repoRoot string,
+	cmd *cobra.Command, ui *installUI, skills []llmContextSkill, repoRoot string,
 ) error {
 	var sections []string
 	for _, skill := range skills {
@@ -61,6 +61,15 @@ func writeAgentsLocal(
 	if err == nil && string(existing) == content {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Up to date %s\n", dest)
 		return nil
+	}
+	// A file of this name the user wrote themselves is never silently replaced.
+	if err == nil && !strings.Contains(string(existing), generatedRuleMarker) {
+		if ui.resolveConflict(dest) == conflictKeepBoth {
+			if err := os.Rename(dest, backupPath(dest)); err != nil {
+				return fmt.Errorf("could not back up %s: %w", dest, err)
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Renamed %s -> %s\n", dest, backupPath(dest))
+		}
 	}
 	if err := os.WriteFile(dest, []byte(content), 0o644); err != nil {
 		return fmt.Errorf("could not write %s: %w", dest, err)
@@ -111,7 +120,9 @@ func excludeAgentsLocal(repoRoot string) error {
 // Prompts are single files, so the SKILL.md body is copied with the frontmatter
 // stripped rather than symlinked. Stale generated prompts are removed by their
 // marker, so hand-written prompts survive.
-func installCodexPrompts(cmd *cobra.Command, skills []llmContextSkill) error {
+func installCodexPrompts(
+	cmd *cobra.Command, ui *installUI, skills []llmContextSkill,
+) error {
 	var manual []llmContextSkill
 	for _, skill := range skills {
 		if !skill.Enforced {
@@ -126,9 +137,11 @@ func installCodexPrompts(cmd *cobra.Command, skills []llmContextSkill) error {
 	if err != nil {
 		return fmt.Errorf("could not determine home directory: %w", err)
 	}
-	promptsDir := filepath.Join(home, codexPromptsDir)
-	if err := os.MkdirAll(promptsDir, 0o755); err != nil {
-		return fmt.Errorf("could not create %s: %w", promptsDir, err)
+	promptsDir, err := ui.resolveTargetDir(
+		"Codex prompts", filepath.Join(home, codexPromptsDir),
+	)
+	if err != nil {
+		return err
 	}
 
 	current := make(map[string]bool, len(manual))
@@ -146,7 +159,12 @@ func installCodexPrompts(cmd *cobra.Command, skills []llmContextSkill) error {
 		}
 		path := filepath.Join(promptsDir, entry.Name())
 		content, err := os.ReadFile(path)
-		if err != nil || !strings.Contains(string(content), generatedRuleMarker) {
+		if err != nil {
+			// An unreadable prompt cannot be told apart from a stale one, so
+			// leaving it silently would break the regeneration contract.
+			return fmt.Errorf("could not read %s: %w", path, err)
+		}
+		if !strings.Contains(string(content), generatedRuleMarker) {
 			continue
 		}
 		if err := os.Remove(path); err != nil {
@@ -162,6 +180,15 @@ func installCodexPrompts(cmd *cobra.Command, skills []llmContextSkill) error {
 		if err == nil && string(existing) == content {
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Up to date %s\n", dest)
 			continue
+		}
+		// A hand-written prompt of the same name is never silently replaced.
+		if err == nil && !strings.Contains(string(existing), generatedRuleMarker) {
+			if ui.resolveConflict(dest) == conflictKeepBoth {
+				if err := os.Rename(dest, backupPath(dest)); err != nil {
+					return fmt.Errorf("could not back up %s: %w", dest, err)
+				}
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Renamed %s -> %s\n", dest, backupPath(dest))
+			}
 		}
 		if err := os.WriteFile(dest, []byte(content), 0o644); err != nil {
 			return fmt.Errorf("could not write %s: %w", dest, err)
