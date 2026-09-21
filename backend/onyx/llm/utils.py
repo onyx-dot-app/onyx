@@ -426,7 +426,9 @@ def test_llm(llm: LLM) -> str | None:
     # try for up to 2 timeouts (e.g. 10 seconds in total)
     for _ in range(2):
         try:
-            llm.invoke(UserMessage(content="Do not respond"), max_tokens=50)
+            llm.invoke(
+                UserMessage(content="Do not respond"), max_tokens=50, plain_request=True
+            )
             return None
         except Exception as e:
             logger.warning("Failed to call LLM with the following error: %s", e)

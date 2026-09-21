@@ -1132,6 +1132,7 @@ class LitellmLLM(LLM):
                     "model_provider": self.config.model_provider,
                     "reasoning_effort": reasoning_effort.value,
                     "max_tokens": max_tokens,
+                    "stream": stream,
                     "sent_kwargs": {
                         k: _json_safe(opts[k])
                         for k in sorted(_BEST_EFFORT_KWARG_KEYS & opts.keys())
@@ -1226,7 +1227,18 @@ class LitellmLLM(LLM):
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
         total_timeout_override: float | None = None,
+        plain_request: bool = False,
     ) -> ModelResponse:
+        """One complete response, streamed from the provider and reassembled
+        unless the caller opts into a plain request.
+
+        plain_request skips the streaming round trip (2-4x less CPU) and is
+        meant for short answers: without chunks the socket read timeout bounds
+        the whole response. It is ignored when total_timeout_override is set
+        (the deadline is checked between chunks) or when env injection of
+        custom_config is enabled (the env rwlock must not be held for a full
+        inference; self-hosted default).
+        """
         from litellm import HTTPHandler
         from litellm import ModelResponse as LiteLLMModelResponse
 
@@ -1280,60 +1292,41 @@ class LitellmLLM(LLM):
         if self._uses_isolated_client():
             client = HTTPHandler(timeout=read_timeout)
 
-        # Stream only when needed: a total timeout is enforced between chunks,
-        # and env injection must not hold its lock for the full inference.
         env_injection_enabled = _env_injection_enabled()
-        use_stream = total_timeout_override is not None or env_injection_enabled
+        use_stream = (
+            not plain_request
+            or total_timeout_override is not None
+            or env_injection_enabled
+        )
 
         try:
+            raw_response = self._completion(
+                prompt=prompt,
+                tools=tools,
+                tool_choice=tool_choice,
+                stream=use_stream,
+                structured_response_format=structured_response_format,
+                timeout_override=read_timeout,
+                max_tokens=max_tokens,
+                parallel_tool_calls=True,
+                reasoning_effort=reasoning_effort,
+                user_identity=user_identity,
+                client=client,
+                env_injection_enabled=env_injection_enabled,
+            )
             if use_stream:
                 from litellm import (
                     CustomStreamWrapper as LiteLLMCustomStreamWrapper,
                 )
                 from litellm import stream_chunk_builder
 
-                stream_response = cast(
-                    LiteLLMCustomStreamWrapper,
-                    self._completion(
-                        prompt=prompt,
-                        tools=tools,
-                        tool_choice=tool_choice,
-                        stream=True,
-                        structured_response_format=structured_response_format,
-                        timeout_override=read_timeout,
-                        max_tokens=max_tokens,
-                        parallel_tool_calls=True,
-                        reasoning_effort=reasoning_effort,
-                        user_identity=user_identity,
-                        client=client,
-                        env_injection_enabled=env_injection_enabled,
-                    ),
-                )
                 chunks = _consume_stream_with_timeout(
-                    stream_response, total_timeout_override
+                    cast(LiteLLMCustomStreamWrapper, raw_response),
+                    total_timeout_override,
                 )
-                response = cast(
-                    LiteLLMModelResponse,
-                    stream_chunk_builder(chunks),
-                )
+                response = cast(LiteLLMModelResponse, stream_chunk_builder(chunks))
             else:
-                response = cast(
-                    LiteLLMModelResponse,
-                    self._completion(
-                        prompt=prompt,
-                        tools=tools,
-                        tool_choice=tool_choice,
-                        stream=False,
-                        structured_response_format=structured_response_format,
-                        timeout_override=read_timeout,
-                        max_tokens=max_tokens,
-                        parallel_tool_calls=True,
-                        reasoning_effort=reasoning_effort,
-                        user_identity=user_identity,
-                        client=client,
-                        env_injection_enabled=env_injection_enabled,
-                    ),
-                )
+                response = cast(LiteLLMModelResponse, raw_response)
 
             model_response = from_litellm_model_response(response)
 

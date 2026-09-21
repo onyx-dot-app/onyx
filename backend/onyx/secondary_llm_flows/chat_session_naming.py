@@ -61,7 +61,9 @@ def generate_chat_session_name(
         flow=LLMFlow.CHAT_SESSION_NAMING,
         input_messages=llm_facing_history,
     ) as span_generation:
-        response = llm.invoke(llm_facing_history, reasoning_effort=ReasoningEffort.OFF)
+        response = llm.invoke(
+            llm_facing_history, reasoning_effort=ReasoningEffort.OFF, plain_request=True
+        )
         record_llm_response(span_generation, response)
         new_name_raw = llm_response_to_string(response)
 

@@ -28,6 +28,7 @@ def classify_is_search_flow(
         # Well more than necessary but just to ensure completion and in case it succeeds with classifying but
         # ends up rambling
         max_tokens=20,
+        plain_request=True,
     )
 
     content = llm_response_to_string(response).strip().lower()

@@ -98,17 +98,15 @@ class LLM(abc.ABC):
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
         total_timeout_override: float | None = None,
+        plain_request: bool = False,
     ) -> "ModelResponse":
         """Return one complete response.
 
         timeout_override bounds each socket read. total_timeout_override caps
-        the whole call in wall-clock time; keepalive pings defeat the read
-        timeout, so the cap is enforced between streamed chunks.
-
-        Callers always get one assembled response, but the implementation
-        streams from the provider internally when total_timeout_override is
-        set or when env injection of provider custom_config is enabled (the
-        self-hosted default). Otherwise it sends a plain request.
+        the whole call in wall-clock time. plain_request asks for the answer
+        in one non-streamed response when the implementation supports it; use
+        it only for short answers, because the read timeout then bounds the
+        whole response rather than the gap between chunks.
         """
         raise NotImplementedError
 

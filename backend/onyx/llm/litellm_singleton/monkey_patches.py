@@ -40,7 +40,8 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
      empty message for the same reply.
    STATUS: STILL NEEDED - Upstream now uses " ".join() instead of discarding earlier
            parts, but we override to use "\\n\\n".join() for readable section breaks.
-           Upstream still raises on incomplete responses without a message item.
+           The incomplete-reply handling is fixed upstream in v1.99.0 (BerriAI/litellm
+           PR #37710); drop _incomplete_response_as_empty_message once we are on >= 1.99.0.
 
 4. Responses API Fake Streaming (_patch_openai_responses_should_fake_stream):
    - LiteLLM fake-streams (MockResponsesAPIStreamingIterator) any responses-API
@@ -404,7 +405,9 @@ def _incomplete_response_as_empty_message(
     details = raw_response.incomplete_details
     if details is None or not details.reason:
         return None
-    if not all(isinstance(item, ResponseReasoningItem) for item in raw_response.output):
+    if not raw_response.output or not all(
+        isinstance(item, ResponseReasoningItem) for item in raw_response.output
+    ):
         return None
 
     summary_texts: list[str] = [
@@ -433,6 +436,16 @@ def _incomplete_response_as_empty_message(
             raw_response.usage
         )
     )
+    # Same as upstream's completed path: keep provider headers (x-request-id)
+    # so a truncated reply is as traceable as a complete one.
+    hidden_params = getattr(  # ods: ignore[getattr]
+        raw_response, "_hidden_params", None
+    )
+    if hidden_params:
+        model_response._hidden_params = {
+            **(model_response._hidden_params or {}),
+            **hidden_params,
+        }
     return model_response
 
 
