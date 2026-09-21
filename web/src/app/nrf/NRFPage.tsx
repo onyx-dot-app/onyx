@@ -576,7 +576,12 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
             {/* Search results - shown when query is classified as search */}
             {isSearch && (
-              <div className="flex-1 w-full max-w-(--app-page-main-content-width) px-4 min-h-0 overflow-hidden flex flex-col">
+              <div
+                className={cn(
+                  "flex-1 w-full max-w-(--app-page-main-content-width) px-4 min-h-0 overflow-hidden flex flex-col",
+                  !isSidePanel && "pb-10"
+                )}
+              >
                 <Spacer rem={0.75} />
                 <SearchUI onDocumentClick={handleSearchDocumentClick} />
               </div>
