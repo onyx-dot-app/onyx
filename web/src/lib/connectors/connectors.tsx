@@ -1043,9 +1043,22 @@ export const connectorConfigs: Record<
         false,
         "Index the files in each channel's Files tab as their own documents, " +
           "with the readers SharePoint grants them. Needs a certificate " +
-          "credential and read access to the channel sites, through " +
-          "Sites.Read.All or a Sites.Selected grant on each channel site."
+          "credential, Files.Read.All or Sites.Read.All on Graph, and " +
+          "Sites.FullControl.All on the SharePoint API to read each file's " +
+          "readers. With Sites.Selected, grant the app full control on each " +
+          "channel site."
       ),
+      {
+        type: "checkbox",
+        query: "Include inline images?",
+        label: "Include Inline Images",
+        name: "include_inline_images",
+        description:
+          "Index the images pasted into channel messages with their thread. " +
+          "Needs no extra permission. Nothing is downloaded while image " +
+          "extraction and analysis is off in the search settings.",
+        default: false,
+      },
     ],
     advanced_values: [
       {
@@ -2309,6 +2322,7 @@ export interface SharepointConfig {
 export interface TeamsConfig {
   teams?: string[];
   include_attachments?: boolean;
+  include_inline_images?: boolean;
   authority_host?: string;
   graph_api_host?: string;
 }
