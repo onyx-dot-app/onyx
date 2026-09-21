@@ -15,7 +15,8 @@ from onyx.connectors.models import (
     Section,
     TextSection,
 )
-from onyx.connectors.teams import connector as connector_module
+from onyx.connectors.teams import images as images_module
+from onyx.connectors.teams import threads as threads_module
 from onyx.connectors.teams.utils import hosted_content_urls
 from tests.unit.onyx.connectors.teams.helpers import (
     CHANNEL_ID,
@@ -72,7 +73,7 @@ def downloads(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
             raise answer
         return answer
 
-    monkeypatch.setattr(connector_module, "download_graph_url_with_cap", download)
+    monkeypatch.setattr(images_module, "download_graph_url_with_cap", download)
     return {"served": served, "asked": asked}
 
 
@@ -86,7 +87,7 @@ def stored(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
         section = ImageSection(link=kwargs["link"], image_file_id=kwargs["file_id"])
         return section, kwargs["file_id"]
 
-    monkeypatch.setattr(connector_module, "store_image_and_create_section", store)
+    monkeypatch.setattr(images_module, "store_image_and_create_section", store)
     return saved
 
 
@@ -176,7 +177,7 @@ def test_images_follow_their_message_and_link_to_it(
 def test_the_thread_cap_counts_downloads_not_kept_images(
     downloads: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(connector_module, "_MAX_IMAGES_PER_THREAD", 2)
+    monkeypatch.setattr(threads_module, "_MAX_IMAGES_PER_THREAD", 2)
     urls = [_hosted("m1", f"H{n}") for n in range(3)]
     reply_url = _hosted("r1", "H9", reply_of="m1")
     downloads["served"].update(
@@ -196,7 +197,7 @@ def test_the_thread_cap_counts_downloads_not_kept_images(
     # Three images the document does not carry: the oversized one, the third of
     # the root, and the one the reply pasted with the budget spent.
     document = next(item for item in items if isinstance(item, Document))
-    assert document.metadata[connector_module.IMAGES_NOT_INDEXED] == "3"
+    assert document.metadata[images_module.IMAGES_NOT_INDEXED] == "3"
 
 
 @pytest.mark.usefixtures("stored")
@@ -211,7 +212,7 @@ def test_a_thread_within_the_cap_says_nothing_about_missing_images(
     items = walk_channel(connector(client, include_inline_images=True))
 
     document = next(item for item in items if isinstance(item, Document))
-    assert connector_module.IMAGES_NOT_INDEXED not in document.metadata
+    assert images_module.IMAGES_NOT_INDEXED not in document.metadata
 
 
 def test_nothing_is_downloaded_while_image_analysis_is_off(
@@ -247,7 +248,7 @@ def test_a_refused_image_is_skipped_and_an_outage_fails_the_attempt(
     assert not any(isinstance(item, ConnectorFailure) for item in items)
     # The refused one is an image the document does not carry, and says so.
     document = next(item for item in items if isinstance(item, Document))
-    assert document.metadata[connector_module.IMAGES_NOT_INDEXED] == "1"
+    assert document.metadata[images_module.IMAGES_NOT_INDEXED] == "1"
 
     outage = _hosted("m1", "OUT")
     downloads["served"][outage] = _refusal(503)

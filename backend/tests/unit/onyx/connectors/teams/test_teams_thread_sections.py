@@ -315,7 +315,7 @@ def test_members_are_read_once_per_channel_per_attempt() -> None:
     requested = [call.args[0] for call in client.execute_request_direct.call_args_list]
     assert requested.count(MEMBERS_URL) == 1
     assert requested.count(other_members) == 1
-    assert teams_connector._channel_state == {}
+    assert teams_connector._threads._readers == {}
 
     step(connector(client), channel_checkpoint())
     requested = [call.args[0] for call in client.execute_request_direct.call_args_list]
@@ -500,13 +500,13 @@ def test_the_walk_lists_teams_then_channels_then_pages_and_ends(
     team = MagicMock()
     team.id = TEAM_ID
     monkeypatch.setattr(
-        "onyx.connectors.teams.connector._collect_all_teams", lambda **_: [team]
+        "onyx.connectors.teams.listing.collect_all_teams", lambda **_: [team]
     )
     monkeypatch.setattr(
-        "onyx.connectors.teams.connector._get_team_by_id", lambda **_: team
+        "onyx.connectors.teams.listing.get_team_by_id", lambda **_: team
     )
     monkeypatch.setattr(
-        "onyx.connectors.teams.connector._collect_all_channels_from_team",
+        "onyx.connectors.teams.listing.collect_all_channels_from_team",
         lambda **_: [
             _sdk_channel(CHANNEL.id, "General"),
             _sdk_channel("19:b@thread.tacv2", "B"),
@@ -555,7 +555,7 @@ def test_a_dummy_checkpoint_with_no_teams_ends_at_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "onyx.connectors.teams.connector._collect_all_teams", lambda **_: []
+        "onyx.connectors.teams.listing.collect_all_teams", lambda **_: []
     )
 
     _, checkpoint = step(connector(graph_client({})), TeamsCheckpoint(has_more=True))
@@ -570,10 +570,10 @@ def test_a_checkpoint_saved_before_channel_cursors_existed_still_walks(
     team = MagicMock()
     team.id = TEAM_ID
     monkeypatch.setattr(
-        "onyx.connectors.teams.connector._get_team_by_id", lambda **_: team
+        "onyx.connectors.teams.listing.get_team_by_id", lambda **_: team
     )
     monkeypatch.setattr(
-        "onyx.connectors.teams.connector._collect_all_channels_from_team",
+        "onyx.connectors.teams.listing.collect_all_channels_from_team",
         lambda **_: [_sdk_channel(CHANNEL.id, "General")],
     )
     teams_connector = connector(
@@ -610,10 +610,10 @@ def test_the_slim_walk_lists_the_same_roots_the_indexing_walk_keeps(
     team = MagicMock()
     team.id = TEAM_ID
     monkeypatch.setattr(
-        "onyx.connectors.teams.connector._collect_all_teams", lambda **_: [team]
+        "onyx.connectors.teams.listing.collect_all_teams", lambda **_: [team]
     )
     monkeypatch.setattr(
-        "onyx.connectors.teams.connector._collect_all_channels_from_team",
+        "onyx.connectors.teams.listing.collect_all_channels_from_team",
         lambda **_: [_sdk_channel(CHANNEL.id, "General")],
     )
     client = graph_client(

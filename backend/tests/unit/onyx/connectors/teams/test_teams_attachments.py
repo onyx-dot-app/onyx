@@ -25,8 +25,11 @@ from onyx.connectors.microsoft_utils.drive_items import (
 )
 from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
 from onyx.connectors.models import ConnectorFailure, Document, SlimDocument, TextSection
-from onyx.connectors.teams import connector as connector_module
-from onyx.connectors.teams.connector import TeamsConnector, file_document_id
+from onyx.connectors.teams import files as files_module
+from onyx.connectors.teams import listing as listing_module
+from onyx.connectors.teams import session as session_module
+from onyx.connectors.teams.connector import TeamsConnector
+from onyx.connectors.teams.files import FileSource, file_document_id
 from onyx.connectors.teams.utils import GraphRetriesExhausted, message_delta_url
 from tests.unit.onyx.connectors.teams.helpers import (
     CHANNEL_ID,
@@ -119,14 +122,14 @@ def library(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         seen["access"].append((kwargs["drive_item"].id, kwargs["drive_name"]))
         return SHAREPOINT_READERS
 
-    monkeypatch.setattr(connector_module, "iter_drive_items_paged", iter_items)
-    monkeypatch.setattr(connector_module, "extract_drive_item_content", extract)
-    monkeypatch.setattr(connector_module, "get_sharepoint_external_access", access)
+    monkeypatch.setattr(files_module, "iter_drive_items_paged", iter_items)
+    monkeypatch.setattr(files_module, "extract_drive_item_content", extract)
+    monkeypatch.setattr(files_module, "get_sharepoint_external_access", access)
     # A ClientContext double that builds a distinct context per call.
     monkeypatch.setattr(
-        connector_module, "ClientContext", MagicMock(side_effect=lambda _: MagicMock())
+        files_module, "ClientContext", MagicMock(side_effect=lambda _: MagicMock())
     )
-    monkeypatch.setattr(connector_module, "acquire_token_for_rest", MagicMock())
+    monkeypatch.setattr(files_module, "acquire_token_for_rest", MagicMock())
     monkeypatch.setattr(DriveItemData, "to_sdk_driveitem", lambda self, _client: self)
     return seen
 
@@ -144,7 +147,7 @@ def _rest_refusing(status: int) -> Callable[..., ExternalAccess]:
 
 
 def _rest_context_calls() -> list[Any]:
-    context_class = connector_module.ClientContext
+    context_class = files_module.ClientContext
     assert isinstance(context_class, MagicMock)
     return [call.args for call in context_class.call_args_list]
 
@@ -166,6 +169,11 @@ def _requested(client: MagicMock) -> list[str]:
 
 def _document_ids(items: list[Document | ConnectorFailure]) -> list[str]:
     return [item.id for item in items if isinstance(item, Document)]
+
+
+def _files(teams_connector: TeamsConnector) -> FileSource:
+    assert teams_connector._files is not None
+    return teams_connector._files
 
 
 def _sdk_team_and_channel() -> tuple[MagicMock, MagicMock]:
@@ -267,9 +275,9 @@ def test_files_extraction_would_skip_are_listed_by_neither_walk(
     untyped.mime_type = None
     library["files"] = [oversized, untyped, _item("item-3", "Plan.pdf")]
     team, sdk_channel = _sdk_team_and_channel()
-    monkeypatch.setattr(connector_module, "_collect_all_teams", lambda **_: [team])
+    monkeypatch.setattr(listing_module, "collect_all_teams", lambda **_: [team])
     monkeypatch.setattr(
-        connector_module, "_collect_all_channels_from_team", lambda **_: [sdk_channel]
+        listing_module, "collect_all_channels_from_team", lambda **_: [sdk_channel]
     )
     routes = _channel_routes(message("m1", "Plan"))
 
@@ -321,9 +329,9 @@ def test_the_slim_walk_lists_files_with_their_own_readers(
 ) -> None:
     library["files"] = [_item("item-1", "Plan.pdf")]
     team, sdk_channel = _sdk_team_and_channel()
-    monkeypatch.setattr(connector_module, "_collect_all_teams", lambda **_: [team])
+    monkeypatch.setattr(listing_module, "collect_all_teams", lambda **_: [team])
     monkeypatch.setattr(
-        connector_module, "_collect_all_channels_from_team", lambda **_: [sdk_channel]
+        listing_module, "collect_all_channels_from_team", lambda **_: [sdk_channel]
     )
     routes = {**MEMBERS, **LIBRARY_ROUTES, DELTA_URL: {"value": [message("m1", "P")]}}
     teams_connector = connector(graph_client(routes), include_attachments=True)
@@ -347,9 +355,9 @@ def test_the_pruning_walk_lists_the_same_ids_without_reading_readers(
 ) -> None:
     library["files"] = [_item("item-1", "Plan.pdf")]
     team, sdk_channel = _sdk_team_and_channel()
-    monkeypatch.setattr(connector_module, "_collect_all_teams", lambda **_: [team])
+    monkeypatch.setattr(listing_module, "collect_all_teams", lambda **_: [team])
     monkeypatch.setattr(
-        connector_module, "_collect_all_channels_from_team", lambda **_: [sdk_channel]
+        listing_module, "collect_all_channels_from_team", lambda **_: [sdk_channel]
     )
     routes = {**MEMBERS, **LIBRARY_ROUTES, DELTA_URL: {"value": [message("m1", "P")]}}
     client = graph_client(routes)
@@ -375,7 +383,7 @@ def test_the_rest_context_is_reused_per_site_until_its_token_ages(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     clock = MagicMock(monotonic=MagicMock(side_effect=[0.0, 10.0, 2000.0, 2001.0]))
-    monkeypatch.setattr(connector_module, "time", clock)
+    monkeypatch.setattr(files_module, "time", clock)
     teams_connector = connector(graph_client({}), include_attachments=True)
 
     first = teams_connector.rest_context(SITE_URL)
@@ -396,9 +404,9 @@ def test_channel_site_urls_are_distinct_and_a_refused_channel_fails_the_sync(
     refused.id = "19:refused@thread.tacv2"
     refused.properties = {"displayName": "Refused"}
     channels = [general, private]
-    monkeypatch.setattr(connector_module, "_collect_all_teams", lambda **_: [team])
+    monkeypatch.setattr(listing_module, "collect_all_teams", lambda **_: [team])
     monkeypatch.setattr(
-        connector_module, "_collect_all_channels_from_team", lambda **_: channels
+        listing_module, "collect_all_channels_from_team", lambda **_: channels
     )
     private_folder = f"teams/{TEAM_ID}/channels/{private.id}/filesFolder"
     refused_folder = f"teams/{TEAM_ID}/channels/{refused.id}/filesFolder"
@@ -426,7 +434,7 @@ def test_a_site_that_refuses_the_readers_is_one_channel_failure(
 ) -> None:
     library["files"] = [_item("item-1", "Plan.pdf")]
     monkeypatch.setattr(
-        connector_module, "get_sharepoint_external_access", _rest_refusing(status)
+        files_module, "get_sharepoint_external_access", _rest_refusing(status)
     )
     client = graph_client(_channel_routes(message("m1", "Plan")))
 
@@ -444,7 +452,7 @@ def test_a_site_outage_during_the_readers_fails_the_attempt(
 ) -> None:
     library["files"] = [_item("item-1", "Plan.pdf")]
     monkeypatch.setattr(
-        connector_module, "get_sharepoint_external_access", _rest_refusing(503)
+        files_module, "get_sharepoint_external_access", _rest_refusing(503)
     )
     client = graph_client(_channel_routes(message("m1", "Plan")))
 
@@ -469,7 +477,7 @@ def test_the_certificate_credential_is_parsed_and_passed_to_msal(
         built.update(kwargs)
         return MagicMock()
 
-    monkeypatch.setattr(connector_module, "build_msal_app", build)
+    monkeypatch.setattr(session_module, "build_msal_app", build)
     teams_connector = TeamsConnector(include_attachments=True)
 
     teams_connector.load_credentials(
@@ -492,7 +500,7 @@ def test_the_certificate_credential_is_parsed_and_passed_to_msal(
 def test_a_client_secret_credential_without_its_secret_is_refused(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(connector_module, "build_msal_app", MagicMock())
+    monkeypatch.setattr(session_module, "build_msal_app", MagicMock())
 
     with pytest.raises(KeyError, match="teams_client_secret"):
         TeamsConnector().load_credentials(
@@ -513,7 +521,7 @@ def _validation_connector(
     channel of the tenant teams handed to it."""
     team, sdk_channel = _sdk_team_and_channel()
     monkeypatch.setattr(
-        connector_module, "_collect_all_channels_from_team", lambda **_: [sdk_channel]
+        listing_module, "collect_all_channels_from_team", lambda **_: [sdk_channel]
     )
     teams_connector = connector(
         graph_client(routes, refused=refused), include_attachments=True
@@ -534,7 +542,7 @@ def _rest_answering(monkeypatch: pytest.MonkeyPatch, status: int) -> list[str]:
             )
         return response
 
-    monkeypatch.setattr(connector_module.requests, "get", rest_get)
+    monkeypatch.setattr(files_module.requests, "get", rest_get)
     return probes
 
 
@@ -545,7 +553,7 @@ def test_validation_probes_the_channel_site_over_sharepoint_rest(
     probes = _rest_answering(monkeypatch, 200)
     teams_connector, teams = _validation_connector(monkeypatch, LIBRARY_ROUTES)
 
-    teams_connector._validate_attachment_access(teams)
+    _files(teams_connector).validate(teams)
 
     assert probes == [f"{SITE_URL}/_api/web/roleassignments?$top=1"]
 
@@ -563,7 +571,7 @@ def test_a_site_that_refuses_its_role_assignments_names_full_control(
     with pytest.raises(
         InsufficientPermissionsError, match="Sites.FullControl.All"
     ) as refusal:
-        teams_connector._validate_attachment_access(teams)
+        _files(teams_connector).validate(teams)
     assert "Sites.Read.All" not in str(refusal.value)
 
 
@@ -588,7 +596,7 @@ def test_a_library_that_names_no_site_keeps_the_pair_active(
     teams_connector, teams = _validation_connector(monkeypatch, routes)
 
     with pytest.raises(UnexpectedValidationError, match="without its name or its site"):
-        teams_connector._validate_attachment_access(teams)
+        _files(teams_connector).validate(teams)
 
 
 def test_a_files_folder_that_names_no_library_keeps_the_pair_active(
@@ -598,7 +606,7 @@ def test_a_files_folder_that_names_no_library_keeps_the_pair_active(
     teams_connector, teams = _validation_connector(monkeypatch, routes)
 
     with pytest.raises(UnexpectedValidationError, match="names no document library"):
-        teams_connector._validate_attachment_access(teams)
+        _files(teams_connector).validate(teams)
 
 
 def test_a_library_that_names_no_site_is_one_channel_failure(
@@ -630,7 +638,7 @@ def test_a_refused_files_folder_names_the_grant(
     )
 
     with pytest.raises(InsufficientPermissionsError, match="Sites.Read.All"):
-        teams_connector._validate_attachment_access(teams)
+        _files(teams_connector).validate(teams)
 
 
 def test_a_listing_outage_during_validation_keeps_the_pair_active(
@@ -642,12 +650,10 @@ def test_a_listing_outage_during_validation_keeps_the_pair_active(
         raise ClientRequestException(response=gateway_error)
 
     teams_connector, teams = _validation_connector(monkeypatch, {})
-    monkeypatch.setattr(
-        connector_module, "_collect_all_channels_from_team", listing_fails
-    )
+    monkeypatch.setattr(listing_module, "collect_all_channels_from_team", listing_fails)
 
     with pytest.raises(UnexpectedValidationError):
-        teams_connector._validate_attachment_access(teams)
+        _files(teams_connector).validate(teams)
 
 
 def test_validation_reports_when_no_channel_can_be_probed(
@@ -655,8 +661,8 @@ def test_validation_reports_when_no_channel_can_be_probed(
 ) -> None:
     teams_connector, teams = _validation_connector(monkeypatch, {})
     monkeypatch.setattr(
-        connector_module, "_collect_all_channels_from_team", lambda **_: []
+        listing_module, "collect_all_channels_from_team", lambda **_: []
     )
 
     with pytest.raises(UnexpectedValidationError, match="Could not find"):
-        teams_connector._validate_attachment_access(teams)
+        _files(teams_connector).validate(teams)
