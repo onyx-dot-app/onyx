@@ -65,7 +65,7 @@ def _probe(description: str, call: Callable[[], _T]) -> _T | None:
 def _probe_transcript_scope(client: ZoomClient, uuid: str) -> None:
     """Every path reads transcripts through this endpoint. A 404 only means the
     sample session was never cloud-recorded, which says nothing about scopes."""
-    _probe(f"the recording files of {uuid}", lambda: client.get_transcript(uuid))
+    _probe(f"the recording files of {uuid}", lambda: client.get_recording(uuid))
 
 
 def probe_zoom(

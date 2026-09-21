@@ -24,7 +24,7 @@ from onyx.connectors.zoom.models import (
     ZOOM_NOT_FOUND_CODE,
     ZoomRegistrant,
 )
-from onyx.connectors.zoom.recordings.models import OccurrenceWork
+from onyx.connectors.zoom.recordings.models import OccurrenceWork, zoom_error_code
 from onyx.utils.logger import setup_logger
 
 if TYPE_CHECKING:
@@ -35,19 +35,6 @@ logger = setup_logger()
 _GONE_ERROR_CODES = frozenset({ZOOM_MEETING_TOO_OLD_CODE, ZOOM_NOT_FOUND_CODE})
 
 
-def _zoom_error_code(error: requests.HTTPError) -> str | None:
-    response = error.response
-    if response is None:
-        return None
-    try:
-        body = response.json()
-    except ValueError:
-        return None
-    if not isinstance(body, dict) or body.get("code") is None:
-        return None
-    return str(body["code"])
-
-
 def is_plan_denial(error: Exception) -> bool:
     """Zoom refuses on plan or licence grounds two different ways: a typed error
     on the webinar endpoints, and a code on the rest."""
@@ -55,13 +42,18 @@ def is_plan_denial(error: Exception) -> bool:
         return True
     return (
         isinstance(error, requests.HTTPError)
-        and _zoom_error_code(error) == ZOOM_NOT_ENTITLED_CODE
+        and zoom_error_code(error) == ZOOM_NOT_ENTITLED_CODE
     )
 
 
 def session_is_gone(error: Exception) -> bool:
     """Zoom deleted the session, or it is past the retention window. Zoom says
     so with a 404 on some endpoints and with its own code under a 400 on others.
+
+    This is for access lists, where both readings mean the same thing: nobody
+    can be named. It is NOT a deletion oracle. Code 12702 is in the set below,
+    and it means Zoom refuses to describe a session it may still be storing, so
+    anything that deletes documents wants `definitely_absent` instead.
     """
     if not isinstance(error, requests.HTTPError) or error.response is None:
         return False
@@ -69,7 +61,7 @@ def session_is_gone(error: Exception) -> bool:
         return True
     return (
         error.response.status_code == 400
-        and _zoom_error_code(error) in _GONE_ERROR_CODES
+        and zoom_error_code(error) in _GONE_ERROR_CODES
     )
 
 

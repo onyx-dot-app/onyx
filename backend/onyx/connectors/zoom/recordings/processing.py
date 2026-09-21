@@ -68,7 +68,7 @@ def process_occurrence(
     occurrence_uuid = work.occurrence_uuid
 
     try:
-        transcript = client.get_transcript(occurrence_uuid)
+        transcript = client.get_recording(occurrence_uuid).transcript
     except Exception as e:
         if fails_the_whole_run(e):
             raise
