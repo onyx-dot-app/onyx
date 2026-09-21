@@ -286,3 +286,62 @@ func TestRemoveStaleAgentsLocalFailsOnAnUnreadableFile(t *testing.T) {
 		t.Fatal("expected an unreadable file to fail loudly")
 	}
 }
+
+func TestLinkManualSkillsRemovesStaleLinksIntoTheSourceOnly(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	source := t.TempDir()
+	repoRoot := gitRepo(t)
+	writeSkill(t, source, "enforced", "rule-a", "first", "Do A.")
+	writeSkill(t, source, "skills", "kept", "still here", "Body.")
+	// A link into the source whose skill is gone, a link elsewhere, and a
+	// real directory the user made themselves.
+	skillsDir := filepath.Join(home, agentsSkillsDir)
+	deployWriteFile(t, filepath.Join(source, "skills", "removed", "SKILL.md"), "old")
+	staleTarget := filepath.Join(source, "skills", "removed")
+	stale := filepath.Join(skillsDir, "removed")
+	foreign := filepath.Join(skillsDir, "foreign")
+	if err := os.MkdirAll(skillsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(staleTarget, stale); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(t.TempDir(), foreign); err != nil {
+		t.Fatal(err)
+	}
+	handWritten := filepath.Join(skillsDir, "mine")
+	deployWriteFile(t, filepath.Join(handWritten, "SKILL.md"), "hand-written")
+	// The removed skill vanishes from the source after it was linked.
+	if err := os.RemoveAll(staleTarget); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := installCodexSkills(discardCmd(), testUI(), discover(t, source), repoRoot, false); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Lstat(stale); !os.IsNotExist(err) {
+		t.Fatalf("stale link into the source should be removed: %v", err)
+	}
+	if _, err := os.Lstat(foreign); err != nil {
+		t.Fatalf("a link to somewhere else must survive: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(handWritten, "SKILL.md")); err != nil {
+		t.Fatalf("a hand-written directory must survive: %v", err)
+	}
+	if _, err := os.Readlink(filepath.Join(skillsDir, "kept")); err != nil {
+		t.Fatalf("the current skill should be linked: %v", err)
+	}
+
+	// With the manual tier emptied, the kept link goes stale and is removed too.
+	if err := os.RemoveAll(filepath.Join(source, "skills")); err != nil {
+		t.Fatal(err)
+	}
+	if err := installCodexSkills(discardCmd(), testUI(), discover(t, source), repoRoot, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(filepath.Join(skillsDir, "kept")); !os.IsNotExist(err) {
+		t.Fatalf("links of an emptied manual tier should be removed: %v", err)
+	}
+}

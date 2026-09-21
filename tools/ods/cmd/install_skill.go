@@ -119,7 +119,7 @@ By default, looks for onyx-llm-context at ~/.claude/skills/onyx-llm-context.`,
 	}
 
 	cmd.Flags().StringVar(&source, "source", "", "Path to onyx-llm-context (default: ~/.claude/skills/onyx-llm-context)")
-	cmd.Flags().BoolVar(&copyMode, "copy", false, "Copy files instead of symlinking (claude-code manual skills only)")
+	cmd.Flags().BoolVar(&copyMode, "copy", false, "Copy files instead of symlinking (claude-code and codex manual skills)")
 	cmd.Flags().BoolVar(&cloneRepo, "clone", false, fmt.Sprintf("Clone onyx-llm-context from %s if not already present", llmContextCloneURL))
 	cmd.Flags().StringSliceVar(&agents, "agent", []string{agentClaudeCode}, "Agents to install for (repeatable): claude-code, cursor, codex")
 
@@ -206,14 +206,14 @@ func linkManualSkills(
 	cmd *cobra.Command, ui *installUI, skills []llmContextSkill,
 	kind, homeRelativeDir string, copyMode bool,
 ) error {
+	if len(skills) == 0 {
+		return nil
+	}
 	var manual []llmContextSkill
 	for _, skill := range skills {
 		if !skill.Enforced {
 			manual = append(manual, skill)
 		}
-	}
-	if len(manual) == 0 {
-		return nil
 	}
 
 	home, err := os.UserHomeDir()
@@ -221,10 +221,22 @@ func linkManualSkills(
 		return fmt.Errorf("could not determine home directory: %w", err)
 	}
 
-	skillsDir, err := ui.resolveTargetDir(
-		kind, filepath.Join(home, homeRelativeDir),
-	)
-	if err != nil {
+	skillsDir := filepath.Join(home, homeRelativeDir)
+	if _, err := os.Stat(skillsDir); os.IsNotExist(err) {
+		// Nothing installed here before, so nothing to clean up either.
+		if len(manual) == 0 {
+			return nil
+		}
+		if skillsDir, err = ui.resolveTargetDir(kind, skillsDir); err != nil {
+			return err
+		}
+	}
+
+	// Every skill sits at <source>/<tier>/<name>, so any of them names the
+	// source checkout that stale links of past installs point into. Cleanup
+	// runs even when the manual tier emptied, so its old links go too.
+	source := filepath.Dir(filepath.Dir(skills[0].Dir))
+	if err := removeStaleSkillLinks(cmd, skillsDir, source, manual); err != nil {
 		return err
 	}
 
@@ -262,6 +274,45 @@ func linkManualSkills(
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Linked  %s -> %s\n", dstDir, rel)
 	}
 
+	return nil
+}
+
+// removeStaleSkillLinks deletes symlinks in skillsDir that resolve into the
+// source checkout but no longer match an on-demand skill — the ownership test
+// for a link, since only this command links from there. Hand-written entries,
+// links to other places and past --copy installs are left alone.
+func removeStaleSkillLinks(
+	cmd *cobra.Command, skillsDir, source string, manual []llmContextSkill,
+) error {
+	current := make(map[string]bool, len(manual))
+	for _, skill := range manual {
+		current[skill.Name] = true
+	}
+	entries, err := os.ReadDir(skillsDir)
+	if err != nil {
+		return fmt.Errorf("could not read %s: %w", skillsDir, err)
+	}
+	for _, entry := range entries {
+		if current[entry.Name()] || entry.Type()&os.ModeSymlink == 0 {
+			continue
+		}
+		path := filepath.Join(skillsDir, entry.Name())
+		target, err := os.Readlink(path)
+		if err != nil {
+			return fmt.Errorf("could not read link %s: %w", path, err)
+		}
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(skillsDir, target)
+		}
+		rel, err := filepath.Rel(source, filepath.Clean(target))
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			continue
+		}
+		if err := os.Remove(path); err != nil {
+			return fmt.Errorf("could not remove stale skill link %s: %w", path, err)
+		}
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Removed %s\n", path)
+	}
 	return nil
 }
 
