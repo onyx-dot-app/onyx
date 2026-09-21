@@ -57,7 +57,6 @@ Turning a query into ranked, access-filtered context.
 | ✅ | [access-control](components/access-control.md) | Document ACLs, user groups, document sets, external permission sync, curator scoping. |
 | ✅ | [web-search](components/web-search.md) | External web search and page fetch as a tool. |
 | 🚧 | [federated-search](components/federated-search.md) | Query-time search against a source you have not indexed. |
-| 🚧 | [knowledge-graph](components/knowledge-graph.md) | Entity and relationship extraction, and the KG tool. |
 | ✅ | [search-receipts](components/search-receipts.md) | The retrieval-quality evidence trail. |
 
 ## Domain: Ingestion
@@ -126,14 +125,23 @@ these components are the map into it.
 | | Component | What it covers |
 |---|---|---|
 | ✅ | [craft-admin](components/craft-admin.md) | The three Craft admin pages: access, apps, preferences. Map into `docs/craft/`. |
-| 🚧 | [craft-sessions](components/craft-sessions.md) | Craft session lifecycle, turns, history. |
-| 🚧 | [craft-sandboxes](components/craft-sandboxes.md) | Kubernetes sandbox provisioning, snapshot and restore. |
-| 🚧 | [craft-streaming](components/craft-streaming.md) | The opencode-serve client and event stream. |
-| 🚧 | [craft-webapp-proxy](components/craft-webapp-proxy.md) | Previewing the app a sandbox is running. |
-| 🚧 | [craft-external-apps](components/craft-external-apps.md) | Egress proxy, action policies, credential injection. |
-| 🚧 | [craft-scheduled-tasks](components/craft-scheduled-tasks.md) | Recurring agent runs. |
+| ✅ | [craft-sessions](components/craft-sessions.md) | Craft session lifecycle, turns, history. |
+| ✅ | [craft-sandboxes](components/craft-sandboxes.md) | Kubernetes sandbox provisioning, snapshot and restore. |
+| ✅ | [craft-streaming](components/craft-streaming.md) | The opencode-serve client and event stream. |
+| ✅ | [craft-webapp-proxy](components/craft-webapp-proxy.md) | Previewing the app a sandbox is running. |
+| ✅ | [craft-external-apps](components/craft-external-apps.md) | Egress proxy, action policies, credential injection. |
+| ✅ | [craft-scheduled-tasks](components/craft-scheduled-tasks.md) | Recurring agent runs. |
 
 ---
+
+## Retired features
+
+These have code in the tree but are not part of the product. Do not build on them,
+and do not treat their code as a live surface when reviewing a diff.
+
+| Feature | State |
+|---|---|
+| Knowledge graph | Removed from the product. `backend/onyx/kg/`, `db/entities.py`, `db/entity_type.py`, `db/relationships.py`, `db/kg_config.py` and `tools/tool_implementations/knowledge_graph/` still exist. `KnowledgeGraphTool` is in `BUILT_IN_TOOL_MAP`, but its branch in `tool_constructor.py:_construct_tools_impl` is commented out with "disabling for now because it's broken in the refactor", and the if/elif chain has no trailing `else`, so a persona referencing it silently gets no tool. See [[tools-framework]] §9. |
 
 ## Admin panel coverage
 

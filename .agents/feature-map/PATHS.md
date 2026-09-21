@@ -34,7 +34,7 @@ Some paths map to more than one component. Read all of them.
 | `backend/onyx/tools/interface.py`, `models.py`, `tool_constructor.py`, `tool_runner.py`, `built_in_tools.py`, `tool_name.py` | tools-framework |
 | `backend/onyx/tools/tool_implementations/search/`, `search_like_tool_utils.py` | internal-search, tools-framework |
 | `backend/onyx/tools/tool_implementations/web_search/`, `open_url/` | web-search |
-| `backend/onyx/tools/tool_implementations/knowledge_graph/` | knowledge-graph |
+| `backend/onyx/tools/tool_implementations/knowledge_graph/` | **retired.** The knowledge graph is not part of the product. See INDEX.md, Retired features. |
 | `backend/onyx/tools/tool_implementations/images/` | image-generation |
 | `backend/onyx/tools/tool_implementations/bash/`, `python/` | code-execution |
 | `backend/onyx/tools/tool_implementations/mcp/`, `custom/` | mcp-and-custom-tools |
@@ -56,7 +56,7 @@ Some paths map to more than one component. Read all of them.
 | `backend/onyx/access/`, `backend/ee/onyx/access/`, `backend/onyx/db/document_access.py`, `db/permissions.py`, `db/scoped_permissions.py` | access-control |
 | `backend/onyx/db/document_set.py`, `db/user_group.py`, `server/features/document_set/` | access-control |
 | `backend/ee/onyx/external_permissions/`, `backend/onyx/db/permission_sync_attempt.py` | permission-sync |
-| `backend/onyx/kg/`, `backend/onyx/db/entities.py`, `db/entity_type.py`, `db/relationships.py`, `db/kg_config.py` | knowledge-graph |
+| `backend/onyx/kg/`, `backend/onyx/db/entities.py`, `db/entity_type.py`, `db/relationships.py`, `db/kg_config.py` | **retired.** Knowledge graph code with no live surface. See INDEX.md, Retired features. |
 | `backend/onyx/federated_connectors/`, `backend/onyx/db/federated.py`, `server/federated/` | federated-search |
 | `backend/onyx/server/features/web_search/`, `server/manage/web_search/`, `db/web_search.py` | web-search |
 
