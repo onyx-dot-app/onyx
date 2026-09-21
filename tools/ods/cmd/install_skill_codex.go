@@ -11,19 +11,23 @@ import (
 )
 
 const (
-	// Compiled enforced skills at the repo root. Codex only auto-discovers
-	// files literally named AGENTS.md, and the committed AGENTS.md is public,
-	// so it carries a pointer to this untracked file instead of the content.
+	// Compiled enforced skills at the repo root. Codex reads AGENTS.md (plus
+	// AGENTS.override.md, ~/.codex/AGENTS.md and configured fallback names),
+	// but the committed AGENTS.md is public and an override file replaces it
+	// rather than extending it, and Codex skills cannot be always-on. So the
+	// committed AGENTS.md carries a pointer to this untracked file.
 	agentsLocalFile = ".agents-local.md"
-	// Codex custom prompts, invoked as /name like Claude's manual skills.
-	codexPromptsDir = ".codex/prompts"
+	// Codex's native skill directory: SKILL.md-format skills, symlinks
+	// followed, invoked as $skill-name.
+	agentsSkillsDir = ".agents/skills"
 )
 
 // installCodexSkills compiles the enforced skills into a git-excluded
 // .agents-local.md at the repo root (the committed AGENTS.md tells agents to
-// read it) and installs each on-demand skill as a Codex custom prompt.
+// read it) and symlinks each on-demand skill into Codex's native skill
+// directory, the way the claude-code installer does with ~/.claude/skills.
 func installCodexSkills(
-	cmd *cobra.Command, ui *installUI, skills []llmContextSkill, repoRoot string,
+	cmd *cobra.Command, ui *installUI, skills []llmContextSkill, repoRoot string, copyMode bool,
 ) error {
 	// The exclusion comes first: a file written before a failed exclusion
 	// would sit unignored, one `git add .` away from publishing the private
@@ -34,7 +38,7 @@ func installCodexSkills(
 	if err := writeAgentsLocal(cmd, ui, skills, repoRoot); err != nil {
 		return err
 	}
-	return installCodexPrompts(cmd, ui, skills)
+	return linkManualSkills(cmd, ui, skills, "Agent skills", agentsSkillsDir, copyMode)
 }
 
 func writeAgentsLocal(
@@ -137,88 +141,6 @@ func excludeAgentsLocal(repoRoot string) error {
 	content += agentsLocalFile + "\n"
 	if err := os.WriteFile(excludePath, []byte(content), 0o644); err != nil {
 		return fmt.Errorf("could not write %s: %w", excludePath, err)
-	}
-	return nil
-}
-
-// installCodexPrompts writes each on-demand skill as ~/.codex/prompts/<name>.md.
-// Prompts are single files, so the SKILL.md body is copied with the frontmatter
-// stripped rather than symlinked. Stale generated prompts are removed by their
-// marker, so hand-written prompts survive.
-func installCodexPrompts(
-	cmd *cobra.Command, ui *installUI, skills []llmContextSkill,
-) error {
-	var manual []llmContextSkill
-	for _, skill := range skills {
-		if !skill.Enforced {
-			manual = append(manual, skill)
-		}
-	}
-
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("could not determine home directory: %w", err)
-	}
-	promptsDir := filepath.Join(home, codexPromptsDir)
-	if _, err := os.Stat(promptsDir); os.IsNotExist(err) {
-		// Nothing installed here before, so nothing to clean up either.
-		if len(manual) == 0 {
-			return nil
-		}
-		if promptsDir, err = ui.resolveTargetDir("Codex prompts", promptsDir); err != nil {
-			return err
-		}
-	}
-
-	current := make(map[string]bool, len(manual))
-	for _, skill := range manual {
-		current[skill.Name+".md"] = true
-	}
-
-	entries, err := os.ReadDir(promptsDir)
-	if err != nil {
-		return fmt.Errorf("could not read %s: %w", promptsDir, err)
-	}
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") || current[entry.Name()] {
-			continue
-		}
-		path := filepath.Join(promptsDir, entry.Name())
-		content, err := os.ReadFile(path)
-		if err != nil {
-			// An unreadable prompt cannot be told apart from a stale one, so
-			// leaving it silently would break the regeneration contract.
-			return fmt.Errorf("could not read %s: %w", path, err)
-		}
-		if !strings.Contains(string(content), generatedRuleMarker) {
-			continue
-		}
-		if err := os.Remove(path); err != nil {
-			return fmt.Errorf("could not remove stale prompt %s: %w", path, err)
-		}
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Removed %s\n", path)
-	}
-
-	for _, skill := range manual {
-		dest := filepath.Join(promptsDir, skill.Name+".md")
-		content := fmt.Sprintf("%s\n\n%s", generatedRuleMarker, skill.Body)
-		existing, err := os.ReadFile(dest)
-		if err == nil && string(existing) == content {
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Up to date %s\n", dest)
-			continue
-		}
-		// A hand-written prompt of the same name is never silently replaced.
-		if err == nil && !strings.Contains(string(existing), generatedRuleMarker) {
-			if ui.resolveConflict(dest) == conflictKeepBoth {
-				if err := backUpFile(cmd, dest); err != nil {
-					return err
-				}
-			}
-		}
-		if err := os.WriteFile(dest, []byte(content), 0o644); err != nil {
-			return fmt.Errorf("could not write %s: %w", dest, err)
-		}
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Installed %s\n", dest)
 	}
 	return nil
 }

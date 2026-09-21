@@ -35,11 +35,7 @@ var knownAgents = map[string]func(
 	) error {
 		return installCursorSkills(cmd, ui, skills, repoRoot)
 	},
-	agentCodex: func(
-		cmd *cobra.Command, ui *installUI, skills []llmContextSkill, repoRoot string, _ bool,
-	) error {
-		return installCodexSkills(cmd, ui, skills, repoRoot)
-	},
+	agentCodex: installCodexSkills,
 }
 
 func NewInstallSkillCommand() *cobra.Command {
@@ -67,8 +63,9 @@ cursor:
 
 codex:
   Enforced skills are compiled into .agents-local.md at the repo root
-  (git-excluded; the committed AGENTS.md points agents at it). Manual skills
-  are installed as custom prompts in ~/.codex/prompts/, invoked via /skill-name.
+  (git-excluded; the committed AGENTS.md points agents at it), since Codex
+  skills cannot be always-on. Manual skills are symlinked into
+  ~/.agents/skills/, Codex's native skill directory, invoked via $skill-name.
 
 By default, looks for onyx-llm-context at ~/.claude/skills/onyx-llm-context.`,
 		Example: `  ods install-skill --clone
@@ -163,7 +160,7 @@ func installClaudeSkills(
 	if err := installEnforcedSkills(cmd, skills, repoRoot); err != nil {
 		return err
 	}
-	return installManualSkills(cmd, ui, skills, copyMode)
+	return linkManualSkills(cmd, ui, skills, "Claude skills", claudeSkillsDir, copyMode)
 }
 
 // installEnforcedSkills writes @imports for all enforced skills into .claude/CLAUDE.md at the repo root.
@@ -202,9 +199,12 @@ func installEnforcedSkills(
 	return nil
 }
 
-// installManualSkills symlinks each on-demand skill directory into ~/.claude/skills/.
-func installManualSkills(
-	cmd *cobra.Command, ui *installUI, skills []llmContextSkill, copyMode bool,
+// linkManualSkills symlinks each on-demand skill directory into the given
+// skills directory under the home directory (~/.claude/skills for Claude,
+// ~/.agents/skills for agents that read the universal layout, such as Codex).
+func linkManualSkills(
+	cmd *cobra.Command, ui *installUI, skills []llmContextSkill,
+	kind, homeRelativeDir string, copyMode bool,
 ) error {
 	var manual []llmContextSkill
 	for _, skill := range skills {
@@ -221,8 +221,8 @@ func installManualSkills(
 		return fmt.Errorf("could not determine home directory: %w", err)
 	}
 
-	claudeSkills, err := ui.resolveTargetDir(
-		"Claude skills", filepath.Join(home, claudeSkillsDir),
+	skillsDir, err := ui.resolveTargetDir(
+		kind, filepath.Join(home, homeRelativeDir),
 	)
 	if err != nil {
 		return err
@@ -230,7 +230,7 @@ func installManualSkills(
 
 	for _, skill := range manual {
 		srcDir := skill.Dir
-		dstDir := filepath.Join(claudeSkills, skill.Name)
+		dstDir := filepath.Join(skillsDir, skill.Name)
 
 		if copyMode {
 			if err := copySkill(srcDir, dstDir); err != nil {
@@ -247,7 +247,7 @@ func installManualSkills(
 				return fmt.Errorf("could not remove existing %s: %w", dstDir, err)
 			}
 		}
-		rel, err := filepath.Rel(claudeSkills, srcDir)
+		rel, err := filepath.Rel(skillsDir, srcDir)
 		if err != nil {
 			return fmt.Errorf("could not compute relative path for %s: %w", skill.Name, err)
 		}

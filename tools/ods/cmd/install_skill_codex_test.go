@@ -28,7 +28,7 @@ func TestInstallCodexSkillsCompilesEnforcedAndExcludesTheFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := installCodexSkills(discardCmd(), testUI(), skills, repoRoot); err != nil {
+	if err := installCodexSkills(discardCmd(), testUI(), skills, repoRoot, false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -54,7 +54,7 @@ func TestInstallCodexSkillsCompilesEnforcedAndExcludesTheFile(t *testing.T) {
 	}
 
 	// A rerun must not duplicate the exclude entry.
-	if err := installCodexSkills(discardCmd(), testUI(), skills, repoRoot); err != nil {
+	if err := installCodexSkills(discardCmd(), testUI(), skills, repoRoot, false); err != nil {
 		t.Fatal(err)
 	}
 	exclude, err = os.ReadFile(filepath.Join(repoRoot, ".git", "info", "exclude"))
@@ -66,50 +66,29 @@ func TestInstallCodexSkillsCompilesEnforcedAndExcludesTheFile(t *testing.T) {
 	}
 }
 
-func TestInstallCodexSkillsWritesPromptsAndRemovesStaleOnes(t *testing.T) {
+func TestInstallCodexSkillsSymlinksNativeSkills(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	source := t.TempDir()
 	repoRoot := gitRepo(t)
 	writeSkill(t, source, "skills", "on-demand", "db work", "Use sessions.")
 
-	promptsDir := filepath.Join(home, codexPromptsDir)
-	if err := os.MkdirAll(promptsDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	stale := filepath.Join(promptsDir, "removed-skill.md")
-	if err := os.WriteFile(stale, []byte(generatedRuleMarker+"\nold"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	handWritten := filepath.Join(promptsDir, "my-prompt.md")
-	if err := os.WriteFile(handWritten, []byte("mine"), 0o644); err != nil {
+	skills := discover(t, source)
+	if err := installCodexSkills(discardCmd(), testUI(), skills, repoRoot, false); err != nil {
 		t.Fatal(err)
 	}
 
-	skills, err := discoverLLMContextSkills(source)
+	link := filepath.Join(home, agentsSkillsDir, "on-demand")
+	target, err := os.Readlink(link)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("expected %s to be a symlink: %v", link, err)
 	}
-	if err := installCodexSkills(discardCmd(), testUI(), skills, repoRoot); err != nil {
-		t.Fatal(err)
+	if filepath.IsAbs(target) {
+		t.Fatalf("expected a relative link target, got %q", target)
 	}
-
-	prompt, err := os.ReadFile(filepath.Join(promptsDir, "on-demand.md"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(prompt), "Use sessions.") {
-		t.Fatalf("prompt body missing:\n%s", prompt)
-	}
-	// The skill's frontmatter must not ride into the prompt.
-	if strings.Contains(string(prompt), "description:") {
-		t.Fatalf("frontmatter leaked into the prompt:\n%s", prompt)
-	}
-	if _, err := os.Stat(stale); !os.IsNotExist(err) {
-		t.Fatalf("stale generated prompt should be removed: %v", err)
-	}
-	if _, err := os.Stat(handWritten); err != nil {
-		t.Fatalf("hand-written prompt must survive: %v", err)
+	// Codex reads the SKILL.md format directly, frontmatter included.
+	if got := skillReadFile(t, filepath.Join(link, "SKILL.md")); !strings.Contains(got, "description: db work") {
+		t.Fatalf("expected the linked skill to keep its frontmatter, got %q", got)
 	}
 	// No enforced skills, so no compiled file is written.
 	if _, err := os.Stat(filepath.Join(repoRoot, agentsLocalFile)); !os.IsNotExist(err) {
@@ -123,7 +102,7 @@ func TestInstallCodexSkillsRemovesTheCompiledFileWhenEnforcedSkillsVanish(t *tes
 	generated := filepath.Join(repoRoot, agentsLocalFile)
 	deployWriteFile(t, generated, generatedRuleMarker+"\nold rules")
 
-	if err := installCodexSkills(discardCmd(), testUI(), nil, repoRoot); err != nil {
+	if err := installCodexSkills(discardCmd(), testUI(), nil, repoRoot, false); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(generated); !os.IsNotExist(err) {
@@ -132,7 +111,7 @@ func TestInstallCodexSkillsRemovesTheCompiledFileWhenEnforcedSkillsVanish(t *tes
 
 	// A hand-written file of the same name survives the same rerun.
 	deployWriteFile(t, generated, "my own local notes")
-	if err := installCodexSkills(discardCmd(), testUI(), nil, repoRoot); err != nil {
+	if err := installCodexSkills(discardCmd(), testUI(), nil, repoRoot, false); err != nil {
 		t.Fatal(err)
 	}
 	if got := skillReadFile(t, generated); got != "my own local notes" {
@@ -147,7 +126,7 @@ func TestInstallCodexSkillsExcludesBeforeWriting(t *testing.T) {
 	// Not a git repo, so establishing the exclusion fails.
 	repoRoot := t.TempDir()
 
-	err := installCodexSkills(discardCmd(), testUI(), discover(t, source), repoRoot)
+	err := installCodexSkills(discardCmd(), testUI(), discover(t, source), repoRoot, false)
 
 	if err == nil {
 		t.Fatal("expected the failed exclusion to fail the install")
@@ -156,31 +135,6 @@ func TestInstallCodexSkillsExcludesBeforeWriting(t *testing.T) {
 	// public diff is exactly what the exclusion prevents.
 	if _, statErr := os.Stat(filepath.Join(repoRoot, agentsLocalFile)); !os.IsNotExist(statErr) {
 		t.Fatalf("compiled file must not be written before the exclusion: %v", statErr)
-	}
-}
-
-func TestInstallCodexSkillsRemovesStalePromptsWhenSkillsVanish(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	repoRoot := gitRepo(t)
-	stale := filepath.Join(home, codexPromptsDir, "removed-skill.md")
-	deployWriteFile(t, stale, generatedRuleMarker+"\nold")
-
-	if err := installCodexSkills(discardCmd(), testUI(), nil, repoRoot); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(stale); !os.IsNotExist(err) {
-		t.Fatalf("stale generated prompt should be removed: %v", err)
-	}
-
-	// Without a prompts directory, nothing is created.
-	freshHome := t.TempDir()
-	t.Setenv("HOME", freshHome)
-	if err := installCodexSkills(discardCmd(), testUI(), nil, gitRepo(t)); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(freshHome, ".codex")); !os.IsNotExist(err) {
-		t.Fatalf("expected no .codex directory, got %v", err)
 	}
 }
 
@@ -196,54 +150,44 @@ func TestInstallSkill_agentCodexEndToEnd(t *testing.T) {
 
 	compiled := skillReadFile(t, filepath.Join(repoRoot, agentsLocalFile))
 	if !strings.Contains(compiled, "## style") {
-		t.Fatalf("enforced skill missing from the compiled file:\n%s", compiled)
+		t.Fatalf("enforced skill missing from the compiled file: %q", compiled)
 	}
-	if got := skillReadFile(t, filepath.Join(home, codexPromptsDir, "review.md")); !strings.Contains(got, "review") {
-		t.Fatalf("prompt missing: %q", got)
+	link := filepath.Join(home, agentsSkillsDir, "review")
+	if _, err := os.Readlink(link); err != nil {
+		t.Fatalf("expected the on-demand skill to be symlinked: %v", err)
 	}
-	if !strings.Contains(out, "Installed "+filepath.Join(repoRoot, agentsLocalFile)) {
+	if !strings.Contains(out, "Installed "+filepath.Join(repoRoot, agentsLocalFile)) ||
+		!strings.Contains(out, "Linked  "+link) {
 		t.Fatalf("expected install output, got %q", out)
 	}
 
-	// A rerun reports both outputs as up to date.
+	// A rerun reports the compiled file as up to date and re-links the skill.
 	out, err = skillRun(t, "--source", source, "--agent", "codex")
 	if err != nil {
 		t.Fatalf("second install-skill: %v", err)
 	}
-	for _, want := range []string{
-		"Up to date " + filepath.Join(repoRoot, agentsLocalFile),
-		"Up to date " + filepath.Join(home, codexPromptsDir, "review.md"),
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("expected %q, got %q", want, out)
-		}
+	if !strings.Contains(out, "Up to date "+filepath.Join(repoRoot, agentsLocalFile)) ||
+		!strings.Contains(out, "Linked  "+link) {
+		t.Fatalf("expected an up-to-date rerun, got %q", out)
 	}
 }
 
-func TestInstallCodexSkillsKeepsConflictingHandWrittenFiles(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+func TestInstallCodexSkillsKeepsAHandWrittenAgentsLocal(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	source := t.TempDir()
 	repoRoot := gitRepo(t)
 	writeSkill(t, source, "enforced", "rule-a", "first", "Do A.")
-	writeSkill(t, source, "skills", "on-demand", "db work", "Use sessions.")
-	// Both destinations already hold files the user wrote.
 	deployWriteFile(t, filepath.Join(repoRoot, agentsLocalFile), "my local notes")
-	prompt := filepath.Join(home, codexPromptsDir, "on-demand.md")
-	deployWriteFile(t, prompt, "my own prompt")
 
-	if err := installCodexSkills(discardCmd(), testUI(), discover(t, source), repoRoot); err != nil {
+	if err := installCodexSkills(discardCmd(), testUI(), discover(t, source), repoRoot, false); err != nil {
 		t.Fatal(err)
 	}
 
 	if got := skillReadFile(t, filepath.Join(repoRoot, ".agents-local_old.md")); got != "my local notes" {
 		t.Fatalf("hand-written local file was not preserved: %q", got)
 	}
-	if got := skillReadFile(t, filepath.Join(home, codexPromptsDir, "on-demand_old.md")); got != "my own prompt" {
-		t.Fatalf("hand-written prompt was not preserved: %q", got)
-	}
-	if got := skillReadFile(t, prompt); !strings.Contains(got, "Use sessions.") {
-		t.Fatalf("generated prompt was not installed: %q", got)
+	if got := skillReadFile(t, filepath.Join(repoRoot, agentsLocalFile)); !strings.Contains(got, "Do A.") {
+		t.Fatalf("compiled file was not installed: %q", got)
 	}
 }
 
@@ -323,7 +267,7 @@ func TestInstallCodexSkillsFailsWhenTheCompiledFileCannotBeWritten(t *testing.T)
 	}
 	t.Cleanup(func() { _ = os.Chmod(repoRoot, 0o755) })
 
-	if err := installCodexSkills(discardCmd(), testUI(), discover(t, source), repoRoot); err == nil {
+	if err := installCodexSkills(discardCmd(), testUI(), discover(t, source), repoRoot, false); err == nil {
 		t.Fatal("expected the unwritable repo root to fail the install")
 	}
 }
