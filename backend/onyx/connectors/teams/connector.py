@@ -38,6 +38,7 @@ from onyx.connectors.models import (
 from onyx.connectors.teams import listing
 from onyx.connectors.teams.files import FileSource
 from onyx.connectors.teams.groups import channel_member_groups, group_sync_channels
+from onyx.connectors.teams.meeting_chats import ChatSource
 from onyx.connectors.teams.models import ChannelRef
 from onyx.connectors.teams.organizers import (
     Organizer,
@@ -106,7 +107,12 @@ class TeamsConnector(
         # and an application access policy. Empty organizers means every
         # enabled user with a Teams license.
         include_meeting_transcripts: bool = False,
+        meeting_organizers: list[str] | None = None,
+        # The key a connector saved before the option covered chats too.
         transcript_organizers: list[str] | None = None,
+        # Off by default: a meeting's chat needs Chat.Read.All. Walked through
+        # the same organizers as the transcripts.
+        include_meeting_chats: bool = False,
     ) -> None:
         TeamsSession.__init__(self, graph_api_host, authority_host)
         self.max_workers = max_workers
@@ -114,7 +120,10 @@ class TeamsConnector(
         self.include_attachments = include_attachments
         self.include_inline_images = include_inline_images
         self.include_meeting_transcripts = include_meeting_transcripts
-        self.transcript_organizers: list[str] = transcript_organizers or []
+        self.meeting_organizers: list[str] = (
+            meeting_organizers or transcript_organizers or []
+        )
+        self.include_meeting_chats = include_meeting_chats
         # Channels walked again from their first page in this attempt: a saved
         # page url Graph rejects recovers once per attempt and can never loop.
         self._restarted_channel_ids: set[str] = set()
@@ -127,10 +136,12 @@ class TeamsConnector(
         organizer_sources: list[OrganizerSource] = []
         if include_meeting_transcripts:
             organizer_sources.append(
-                TranscriptSource(self, covers_every_user=not self.transcript_organizers)
+                TranscriptSource(self, covers_every_user=not self.meeting_organizers)
             )
+        if include_meeting_chats:
+            organizer_sources.append(ChatSource(self, include_inline_images))
         self._organizers: OrganizerStage | None = (
-            OrganizerStage(self, self.transcript_organizers, organizer_sources)
+            OrganizerStage(self, self.meeting_organizers, organizer_sources)
             if organizer_sources
             else None
         )

@@ -1076,15 +1076,28 @@ export const connectorConfigs: Record<
         default: false,
       },
       {
+        type: "checkbox",
+        query: "Include meeting chats?",
+        label: "Include Meeting Chats",
+        name: "include_meeting_chats",
+        description:
+          "Index what people write in the chat of a scheduled meeting, a " +
+          "document per day, readable by the members of the chat. Needs the " +
+          "Chat.Read.All and User.Read.All application permissions. Covers " +
+          "meetings organized in this tenant: Microsoft does not serve the " +
+          "chat of a meeting another organization set up.",
+        default: false,
+      },
+      {
         type: "list",
         query: "Enter meeting organizers to include:",
-        label: "Transcript Organizers",
-        name: "transcript_organizers",
+        label: "Meeting Organizers",
+        name: "meeting_organizers",
         optional: true,
         description:
           "User principal names of the organizers whose meeting transcripts " +
-          "to index. Leave empty to include every enabled user with a Teams " +
-          "license.",
+          "and chats to index. Leave empty to include every enabled user with " +
+          "a Teams license.",
       },
     ],
     advanced_values: [
@@ -2351,7 +2364,8 @@ export interface TeamsConfig {
   include_attachments?: boolean;
   include_inline_images?: boolean;
   include_meeting_transcripts?: boolean;
-  transcript_organizers?: string[];
+  include_meeting_chats?: boolean;
+  meeting_organizers?: string[];
   authority_host?: string;
   graph_api_host?: string;
 }

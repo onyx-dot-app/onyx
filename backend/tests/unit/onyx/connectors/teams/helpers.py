@@ -167,13 +167,15 @@ def connector(
     include_attachments: bool = False,
     include_inline_images: bool = False,
     include_meeting_transcripts: bool = False,
-    transcript_organizers: list[str] | None = None,
+    meeting_organizers: list[str] | None = None,
+    include_meeting_chats: bool = False,
 ) -> TeamsConnector:
     teams_connector = TeamsConnector(
         include_attachments=include_attachments,
         include_inline_images=include_inline_images,
         include_meeting_transcripts=include_meeting_transcripts,
-        transcript_organizers=transcript_organizers,
+        meeting_organizers=meeting_organizers,
+        include_meeting_chats=include_meeting_chats,
     )
     teams_connector.graph_client = client
     # The factory grants this from the image analysis setting.

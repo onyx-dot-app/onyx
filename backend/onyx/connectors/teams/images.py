@@ -27,6 +27,10 @@ logger = setup_logger()
 # than the conversation had can tell why.
 IMAGES_NOT_INDEXED = "images_not_indexed"
 
+# Each pasted image costs a download now and a vision-model call at indexing,
+# so a document stops well past what a working conversation holds.
+MAX_IMAGES_PER_DOCUMENT = 100
+
 # The images of one message within a budget, and the downloads charged to it.
 MessageImages = Callable[[Message, int], "ImageHarvest"]
 
@@ -50,7 +54,7 @@ def _image_media_type(data: bytes) -> str:
 
 
 def harvest_message_images(
-    session: TeamsSession, message: Message, limit: int
+    session: TeamsSession, message: Message, limit: int, link: str | None = None
 ) -> ImageHarvest:
     """Up to ``limit`` images pasted into one message, stored for the vision
     model. Nothing is downloaded while image analysis is off. A refused or
@@ -85,7 +89,7 @@ def harvest_message_images(
             # Deterministic, so a re-index overwrites instead of piling up.
             file_id=f"teams-image-{sha256(url.encode()).hexdigest()[:32]}",
             display_name=f"Image in a message of {message.created_date_time:%Y-%m-%d}",
-            link=message.web_url,
+            link=link or message.web_url,
             media_type=_image_media_type(data),
             file_origin=FileOrigin.CONNECTOR,
         )

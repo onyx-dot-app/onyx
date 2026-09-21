@@ -288,7 +288,7 @@ def test_configured_organizers_are_resolved_by_name() -> None:
         connector(
             client,
             include_meeting_transcripts=True,
-            transcript_organizers=["ada@example.com"],
+            meeting_organizers=["ada@example.com"],
         )
     )
 
@@ -651,7 +651,7 @@ def test_an_apostrophe_in_a_configured_organizer_is_doubled_for_odata() -> None:
         connector(
             client,
             include_meeting_transcripts=True,
-            transcript_organizers=["o'neal@example.com"],
+            meeting_organizers=["o'neal@example.com"],
         )
     )
 
@@ -892,7 +892,7 @@ class TestValidation:
         return connector(
             graph_client(routes, refused=refused, contents=contents),
             include_meeting_transcripts=True,
-            transcript_organizers=organizers,
+            meeting_organizers=organizers,
         )
 
     def test_an_empty_listing_proves_the_grant_and_passes(self) -> None:
