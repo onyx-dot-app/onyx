@@ -838,10 +838,8 @@ def run_llm_loop(
             user_id=user_identity.user_id if user_identity else None,
         ).model_dump(),
     ):
-        # Fix some LiteLLM issues,
-        from onyx.llm.litellm_singleton.config import (
-            initialize_litellm,
-        )  # Here for lazy load LiteLLM
+        # Here for lazy load LiteLLM. initialize_litellm runs once per process.
+        from onyx.llm.litellm_singleton.config import initialize_litellm
 
         initialize_litellm()
 
