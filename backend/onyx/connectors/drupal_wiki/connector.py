@@ -866,10 +866,19 @@ class DrupalWikiConnector(
                         if callback:
                             callback.progress("retrieve_all_slim_docs", 1)
 
-                except Exception as e:
-                    logger.error(
-                        "Error processing page ID %s for slim documents: %s", page_id, e
+                except Exception:
+                    # Do not swallow this. The slim document list is the
+                    # authoritative "what still exists" set for pruning
+                    # (celery_utils.extract_ids_from_runnable_connector), and a
+                    # page omitted from it is deleted from the index. Logging and
+                    # continuing turns a transient fetch error into data loss.
+                    # The spaces branch below already lets errors propagate.
+                    logger.exception(
+                        "Failed to retrieve page ID %s for slim documents; "
+                        "aborting so pruning does not delete it",
+                        page_id,
                     )
+                    raise
 
         # Process spaces if include_all_spaces is True or spaces are provided
         if self.include_all_spaces or self.spaces:
