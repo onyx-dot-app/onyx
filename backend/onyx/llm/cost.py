@@ -9,10 +9,61 @@ from onyx.configs.app_configs import (
     DEFAULT_LLM_OUTPUT_COST_PER_MTOK,
 )
 from onyx.llm import cost_overrides
+from onyx.llm.constants import LlmProviderNames
 from onyx.tracing.flows import IMAGE_FLOWS, LLMFlow
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+# Self-hosted inference has no per-token vendor charge, so zero is the real
+# price rather than a missing one.
+_LOCALLY_HOSTED_PROVIDERS = frozenset(
+    {
+        LlmProviderNames.OLLAMA_CHAT.value,
+        LlmProviderNames.LM_STUDIO.value,
+        "ollama",
+    }
+)
+
+
+def _is_mapped_by_litellm(model: str, provider: str | None) -> bool:
+    """Whether litellm prices this model from its cost map.
+
+    When every exact lookup misses, litellm falls back to capability
+    generalization rules. Those carry no pricing, and litellm coerces the
+    missing rates to 0 instead of raising, so an unpriced model is
+    indistinguishable from a free one by cost alone. Gateway providers hit this
+    on their usual `vendor/model` names.
+    """
+    try:
+        import litellm
+
+        key = litellm.get_model_info(model=model, custom_llm_provider=provider).get(
+            "key"
+        )
+    except Exception:
+        return False
+    return key is not None and key in litellm.model_cost
+
+
+def _default_rate_cents(
+    model: str,
+    provider: str | None,
+    prompt_tokens: int,
+    completion_tokens: int,
+) -> tuple[float, float]:
+    """Configured fallback rates for a model litellm cannot price."""
+    input_cents = prompt_tokens / 1_000_000 * DEFAULT_LLM_INPUT_COST_PER_MTOK * 100
+    output_cents = (
+        completion_tokens / 1_000_000 * DEFAULT_LLM_OUTPUT_COST_PER_MTOK * 100
+    )
+    if not (DEFAULT_LLM_INPUT_COST_PER_MTOK or DEFAULT_LLM_OUTPUT_COST_PER_MTOK):
+        logger.warning(
+            "No price for model %s (provider %s); recording 0 cost.",
+            model,
+            provider,
+        )
+    return input_cents, output_cents
 
 
 class ModelPrice(BaseModel):
@@ -44,10 +95,21 @@ def get_model_price_per_million(
                 cache_per_mtok=rates.cache_read_cost_per_mtok,
             )
 
+    if provider in _LOCALLY_HOSTED_PROVIDERS:
+        return ModelPrice(
+            model=model,
+            provider=provider,
+            input_per_mtok=0.0,
+            output_per_mtok=0.0,
+            cache_per_mtok=None,
+        )
+
     try:
         import litellm
 
         entry = litellm.get_model_info(model=model, custom_llm_provider=provider)
+        if entry.get("key") not in litellm.model_cost:
+            raise ValueError("rule-derived entry carries no pricing")
         input_per_tok = entry.get("input_cost_per_token")
         output_per_tok = entry.get("output_cost_per_token")
         cache_per_tok = entry.get("cache_read_input_token_cost")
@@ -171,6 +233,9 @@ def compute_cost_cents(
                 cache_read_tokens,
             )
 
+    if provider in _LOCALLY_HOSTED_PROVIDERS:
+        return 0.0, 0.0
+
     try:
         import litellm
 
@@ -187,7 +252,18 @@ def compute_cost_cents(
             cache_read_input_tokens=cache_read_tokens,
             cache_creation_input_tokens=cache_creation_tokens,
         )
-        return prompt_cost_usd * 100, completion_cost_usd * 100
+        if prompt_cost_usd or completion_cost_usd:
+            return prompt_cost_usd * 100, completion_cost_usd * 100
+        # Zero is only trustworthy from a mapped model; otherwise litellm
+        # invented it for a model it cannot price.
+        if _is_mapped_by_litellm(model, provider):
+            return 0.0, 0.0
+        logger.debug(
+            "litellm priced model %s (provider %s) at 0 without a cost-map entry; "
+            "using default rates",
+            model,
+            provider,
+        )
     except Exception:
         # Unpriced model: configurable default rates; debug log distinguishes
         # transient litellm failure from a genuinely unpriced model.
@@ -197,14 +273,5 @@ def compute_cost_cents(
             provider,
             exc_info=True,
         )
-        input_cents = prompt_tokens / 1_000_000 * DEFAULT_LLM_INPUT_COST_PER_MTOK * 100
-        output_cents = (
-            completion_tokens / 1_000_000 * DEFAULT_LLM_OUTPUT_COST_PER_MTOK * 100
-        )
-        if not (DEFAULT_LLM_INPUT_COST_PER_MTOK or DEFAULT_LLM_OUTPUT_COST_PER_MTOK):
-            logger.warning(
-                "No price for model %s (provider %s); recording 0 cost.",
-                model,
-                provider,
-            )
-        return input_cents, output_cents
+
+    return _default_rate_cents(model, provider, prompt_tokens, completion_tokens)
