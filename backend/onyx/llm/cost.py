@@ -15,8 +15,6 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# Self-hosted inference has no per-token vendor charge, so zero is the real
-# price rather than a missing one.
 _LOCALLY_HOSTED_PROVIDERS = frozenset(
     {
         LlmProviderNames.OLLAMA_CHAT.value,
@@ -24,16 +22,34 @@ _LOCALLY_HOSTED_PROVIDERS = frozenset(
         LlmProviderNames.OLLAMA.value,
     }
 )
+# Ollama Cloud serves hosted, billable inference under the same provider names
+# as local Ollama, distinguished only by this suffix on the model. See the
+# `-cloud` entries in onyx/llm/litellm_singleton/config.py.
+_OLLAMA_CLOUD_MODEL_SUFFIX = "-cloud"
 
 
-def _is_mapped_by_litellm(model: str, provider: str | None) -> bool:
-    """Whether litellm prices this model from its cost map.
+def _is_locally_hosted(model: str, provider: str | None) -> bool:
+    """Whether inference runs on the deployment's own hardware.
 
-    When every exact lookup misses, litellm falls back to capability
-    generalization rules. Those carry no pricing, and litellm coerces the
-    missing rates to 0 instead of raising, so an unpriced model is
-    indistinguishable from a free one by cost alone. Gateway providers hit this
-    on their usual `vendor/model` names.
+    Self-hosted inference has no per-token vendor charge, so zero is the real
+    price rather than a missing one. Hosted models served by these providers
+    are billable and must price normally.
+    """
+    if provider not in _LOCALLY_HOSTED_PROVIDERS:
+        return False
+    return not model.endswith(_OLLAMA_CLOUD_MODEL_SUFFIX)
+
+
+def _has_litellm_token_price(model: str, provider: str | None) -> bool:
+    """Whether litellm's cost map states a token price for this model.
+
+    A zero from litellm is not evidence of a free model. When every exact
+    lookup misses, litellm resolves the model from capability generalization
+    rules, which carry no pricing, then coerces the missing rates to 0 rather
+    than raising. Gateway providers hit this on their usual `vendor/model`
+    names. Entries can also be metadata-only, including the ones Onyx
+    registers itself through its model metadata enrichments, so requiring a
+    cost-map hit is not enough. An explicit 0.0 is a real price and stays valid.
     """
     try:
         import litellm
@@ -41,9 +57,15 @@ def _is_mapped_by_litellm(model: str, provider: str | None) -> bool:
         key = litellm.get_model_info(model=model, custom_llm_provider=provider).get(
             "key"
         )
+        entry = litellm.model_cost.get(key) if isinstance(key, str) else None
     except Exception:
         return False
-    return key is not None and key in litellm.model_cost
+    if entry is None:
+        return False
+    return (
+        entry.get("input_cost_per_token") is not None
+        or entry.get("output_cost_per_token") is not None
+    )
 
 
 def _default_rate_cents(
@@ -95,7 +117,7 @@ def get_model_price_per_million(
                 cache_per_mtok=rates.cache_read_cost_per_mtok,
             )
 
-    if provider in _LOCALLY_HOSTED_PROVIDERS:
+    if _is_locally_hosted(model, provider):
         return ModelPrice(
             model=model,
             provider=provider,
@@ -107,9 +129,9 @@ def get_model_price_per_million(
     try:
         import litellm
 
+        if not _has_litellm_token_price(model, provider):
+            raise ValueError("no stated token price for this model")
         entry = litellm.get_model_info(model=model, custom_llm_provider=provider)
-        if entry.get("key") not in litellm.model_cost:
-            raise ValueError("rule-derived entry carries no pricing")
         input_per_tok = entry.get("input_cost_per_token")
         output_per_tok = entry.get("output_cost_per_token")
         cache_per_tok = entry.get("cache_read_input_token_cost")
@@ -233,7 +255,7 @@ def compute_cost_cents(
                 cache_read_tokens,
             )
 
-    if provider in _LOCALLY_HOSTED_PROVIDERS:
+    if _is_locally_hosted(model, provider):
         return 0.0, 0.0
 
     try:
@@ -256,11 +278,11 @@ def compute_cost_cents(
             return prompt_cost_usd * 100, completion_cost_usd * 100
         # Zero is only trustworthy from a mapped model; otherwise litellm
         # invented it for a model it cannot price.
-        if _is_mapped_by_litellm(model, provider):
+        if _has_litellm_token_price(model, provider):
             return 0.0, 0.0
         logger.debug(
-            "litellm priced model %s (provider %s) at 0 without a cost-map entry; "
-            "using default rates",
+            "litellm priced model %s (provider %s) at 0 without a stated token "
+            "price; using default rates",
             model,
             provider,
         )

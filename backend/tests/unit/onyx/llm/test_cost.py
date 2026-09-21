@@ -273,6 +273,45 @@ class TestLocallyHostedProviders:
         assert price.input_per_mtok == 0.0
         assert price.output_per_mtok == 0.0
 
+    @pytest.mark.parametrize("model", ["gpt-oss:20b-cloud", "deepseek-v3.1:671b-cloud"])
+    def test_ollama_cloud_model_is_not_billed_as_local(
+        self, model: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Ollama Cloud is hosted, billable inference served under the same
+        provider name as local Ollama. litellm has no `ollama_chat/*-cloud`
+        entry, so it must reach the fallback rates, not the zero-cost path."""
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_INPUT_COST_PER_MTOK", 2.0)
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_OUTPUT_COST_PER_MTOK", 6.0)
+        in_cents, out_cents = compute_cost_cents(
+            model=model,
+            provider="ollama_chat",
+            prompt_tokens=1_000_000,
+            completion_tokens=1_000_000,
+        )
+        assert in_cents == pytest.approx(200.0)
+        assert out_cents == pytest.approx(600.0)
+
+    def test_ollama_cloud_model_reports_unknown_rates(self) -> None:
+        price = get_model_price_per_million("gpt-oss:20b-cloud", "ollama_chat")
+        assert price.input_per_mtok is None
+        assert price.output_per_mtok is None
+
+    @pytest.mark.parametrize("model", ["gpt-oss:20b-cloud", "gpt-oss:120b-cloud"])
+    def test_bare_ollama_cloud_model_defers_to_the_litellm_entry(
+        self, model: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """litellm carries explicit `ollama/*-cloud` entries priced at 0. That is
+        a mapped price rather than an invented one, so it wins over the fallback
+        rates; an admin who disagrees pins it with a ModelCostOverride row."""
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_INPUT_COST_PER_MTOK", 2.0)
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_OUTPUT_COST_PER_MTOK", 6.0)
+        assert compute_cost_cents(
+            model=model,
+            provider="ollama",
+            prompt_tokens=1_000_000,
+            completion_tokens=1_000_000,
+        ) == (0.0, 0.0)
+
 
 class TestImageFlow:
     def test_image_flow_uses_image_pricing(self) -> None:
