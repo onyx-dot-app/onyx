@@ -53,11 +53,7 @@ from onyx.context.search.models import (
     InferenceChunk,
     InferenceSection,
     PersonaSearchInfo,
-    RetrievalCandidateChunk,
-    RetrievalCandidateLane,
     SearchDocsResponse,
-    SearchReceiptScope,
-    SearchRetrievalDiagnostics,
 )
 from onyx.context.search.pipeline import merge_individual_chunks, search_pipeline
 from onyx.context.search.preprocessing.access_filters import (
@@ -271,34 +267,6 @@ def _trim_sections_by_tokens(
     return trimmed_sections
 
 
-def _build_retrieval_candidate_lanes(
-    lane_specs: list[tuple[str, float | None]],
-    lane_results: list[list[InferenceChunk]],
-) -> list[RetrievalCandidateLane]:
-    """One lane per executed query, in execution order, before rank fusion."""
-    lanes: list[RetrievalCandidateLane] = []
-    for (query, hybrid_alpha), chunks in zip(lane_specs, lane_results, strict=True):
-        lanes.append(
-            RetrievalCandidateLane(
-                query=query,
-                hybrid_alpha=hybrid_alpha,
-                returned_chunks=[
-                    RetrievalCandidateChunk(
-                        document_id=chunk.document_id,
-                        chunk_id=chunk.chunk_id,
-                        rank=rank,
-                    )
-                    for rank, chunk in enumerate(chunks, start=1)
-                ],
-            )
-        )
-    return lanes
-
-
-def _distinct_section_document_ids(sections: list[InferenceSection]) -> list[str]:
-    return list(dict.fromkeys(section.center_chunk.document_id for section in sections))
-
-
 class SearchTool(Tool[SearchToolOverrideKwargs]):
     NAME = "internal_search"
     DISPLAY_NAME = "Internal Search"
@@ -456,39 +424,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 logger.warning("Could not fetch Slack OAuth token: %s", e)
 
         return access_token, bot_token, entities
-
-    def _build_receipt_scope(
-        self,
-        auto_source_scope: list[DocumentSource] | None,
-        time_filter: TimeFilter | None,
-        federated_retrieval_infos: list[FederatedRetrievalInfo],
-        slack_lane_ran: bool,
-    ) -> SearchReceiptScope | None:
-        """Scope facts for a search receipt, or None when retrieval was narrowed by
-        something the receipt schema cannot express. A receipt must not claim a
-        scope it does not fully describe."""
-        persona = self.persona_search_info
-        if (
-            auto_source_scope is not None
-            or time_filter is not None
-            or federated_retrieval_infos
-            or slack_lane_ran
-            or self.project_id_filter is not None
-            or self.persona_id_filter is not None
-            or persona.search_start_date is not None
-            or persona.attached_document_ids
-            or persona.hierarchy_node_ids
-        ):
-            return None
-        return SearchReceiptScope(
-            user_filters=(
-                self.user_selected_filters.model_dump(mode="json")
-                if self.user_selected_filters
-                else None
-            ),
-            persona_document_sets=list(persona.document_set_names),
-            acl_enforced=not self.bypass_acl,
-        )
 
     def _run_slack_search(
         self,
@@ -1064,12 +999,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # Other queries use default hybrid_alpha (balanced semantic/keyword)
         search_functions: list[tuple[Callable, tuple]] = []
         search_weights: list[float] = []
-        # (query, hybrid_alpha) for each non-federated lane, parallel to search_functions
-        lane_specs: list[tuple[str, float | None]] = []
 
         # Add deduplicated semantic queries (use hybrid_alpha=None)
         for query, weight in deduplicated_semantic_queries:
-            lane_specs.append((query, None))
             search_functions.append(
                 (
                     self._run_search_for_query,
@@ -1088,7 +1020,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
         # Add deduplicated keyword queries (use hybrid_alpha=0.2)
         for query, weight in deduplicated_keyword_queries:
-            lane_specs.append((query, KEYWORD_QUERY_HYBRID_ALPHA))
             search_functions.append(
                 (
                     self._run_search_for_query,
@@ -1109,8 +1040,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # This avoids the query multiplication problem where each Vespa query
         # would trigger a separate Slack search.
         # Only run if pre-fetch found a valid Slack access token.
-        slack_lane_ran = bool(slack_access_token and override_kwargs.original_query)
-        if slack_lane_ran:
+        if slack_access_token and override_kwargs.original_query:
             search_functions.append(
                 (
                     self._run_slack_search,
@@ -1143,23 +1073,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # documents/contents from things that aren't returned to the user on the frontend
         top_sections = merge_individual_chunks(top_chunks)[: override_kwargs.num_hits]
 
-        retrieval_diagnostics: SearchRetrievalDiagnostics | None = None
-        if override_kwargs.include_retrieval_candidates:
-            retrieval_diagnostics = SearchRetrievalDiagnostics(
-                retrieval_candidates=_build_retrieval_candidate_lanes(
-                    lane_specs, all_search_results[: len(lane_specs)]
-                ),
-                merged_candidate_document_ids_after_cap=_distinct_section_document_ids(
-                    top_sections
-                ),
-                receipt_scope=self._build_receipt_scope(
-                    auto_source_scope=plan_scope,
-                    time_filter=time_filter,
-                    federated_retrieval_infos=federated_retrieval_infos,
-                    slack_lane_ran=slack_lane_ran,
-                ),
-            )
-
         if not top_sections:
             logger.info("Search tool - no results found, returning empty response")
             empty_response, _ = convert_inference_sections_to_llm_string(
@@ -1171,7 +1084,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                     search_docs=[],
                     citation_mapping={},
                     displayed_docs=None,
-                    retrieval_diagnostics=retrieval_diagnostics,
                 ),
                 llm_facing_response=empty_response,
             )
@@ -1337,7 +1249,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 search_docs=search_docs,
                 citation_mapping=citation_mapping,
                 displayed_docs=final_ui_docs,
-                retrieval_diagnostics=retrieval_diagnostics,
             ),
             # The LLM facing response typically includes less docs to cut down on noise and token usage
             llm_facing_response=llm_facing_response,

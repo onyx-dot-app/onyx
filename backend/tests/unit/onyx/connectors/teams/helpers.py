@@ -92,9 +92,18 @@ def message(
     }
 
 
-def connector(client: MagicMock, include_attachments: bool = False) -> TeamsConnector:
-    teams_connector = TeamsConnector(include_attachments=include_attachments)
+def connector(
+    client: MagicMock,
+    include_attachments: bool = False,
+    include_inline_images: bool = False,
+) -> TeamsConnector:
+    teams_connector = TeamsConnector(
+        include_attachments=include_attachments,
+        include_inline_images=include_inline_images,
+    )
     teams_connector.graph_client = client
+    # The factory grants this from the image analysis setting.
+    teams_connector.set_allow_images(True)
     teams_connector.msal_app = MagicMock()
     teams_connector._acquire_token = lambda: {"access_token": "token"}
     teams_connector._auth_method = (

@@ -1,6 +1,8 @@
+import re
 import time
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from datetime import datetime, timezone
+from html.parser import HTMLParser
 from typing import Any
 
 import requests
@@ -23,20 +25,22 @@ logger = setup_logger()
 
 
 def execute_query_with_retry(
-    query: ClientQuery,
+    build_query: Callable[[], ClientQuery],
     method_name: str,
     max_retries: int = GRAPH_API_MAX_RETRIES,
 ) -> Any:
     """Teams' retry policy for ``office365`` SDK queries: the wide Graph status
     set and more attempts than ``sleep_and_retry`` defaults to. Non-retryable statuses
     (401/403/404, a malformed OData filter 400) and exhausted retries re-raise
-    for the caller to handle.
+    for the caller to handle. The query is built per attempt, or a throttled
+    listing would come back empty and its teams or channels would be skipped.
     """
     return sleep_and_retry(
-        query,
+        build_query(),
         method_name,
         max_retries=max_retries,
         retryable_statuses=GRAPH_API_RETRYABLE_STATUSES,
+        rebuild=build_query,
     )
 
 
@@ -58,8 +62,8 @@ def _sanitize_message_user_display_name(value: dict) -> dict:
 
 
 class ChannelFilesUnavailable(RuntimeError):
-    """A channel whose files Graph describes without the site they live in, so
-    there is no library to open and nothing to grant."""
+    """A channel whose files Graph describes without a document library, or a
+    library without its name or site, so there is nothing to open or grant."""
 
 
 class GraphRetriesExhausted(RuntimeError):
@@ -282,24 +286,63 @@ def fetch_channel_files_folder(
         request_url=f"teams/{team_id}/channels/{channel_id}/filesFolder",
     )
     parent = json_data.get("parentReference") or {}
-    # Measured on every channel kind, but Graph's reference example omits it.
-    if not parent.get("siteId"):
+    if not parent.get("driveId"):
         raise ChannelFilesUnavailable(
-            f"The files folder of channel {channel_id} names no site"
+            f"The files folder of channel {channel_id} names no document library"
         )
-    return ChannelFilesFolder(
-        site_id=parent["siteId"], drive_id=parent["driveId"], id=json_data["id"]
+    return ChannelFilesFolder(drive_id=parent["driveId"], id=json_data["id"])
+
+
+def fetch_drive_library(graph_client: GraphClient, drive_id: str) -> tuple[str, str]:
+    """The document library's name, which SharePoint REST looks the list up by,
+    and the url of its site. The site comes from the drive because the files
+    folder can leave its own site id empty."""
+    drive = _retry(
+        graph_client=graph_client,
+        request_url=f"drives/{drive_id}?$select=name,sharePointIds",
     )
+    site_url = (drive.get("sharePointIds") or {}).get("siteUrl")
+    if not drive.get("name") or not site_url:
+        raise ChannelFilesUnavailable(
+            f"Document library {drive_id} came back without its name or its site"
+        )
+    return drive["name"], site_url
 
 
-def fetch_site_url(graph_client: GraphClient, site_id: str) -> str:
-    """The SharePoint site behind a channel's files, for its REST surface."""
-    return _retry(graph_client=graph_client, request_url=f"sites/{site_id}")["webUrl"]
+# An image pasted into a message is hosted content, and its img tag points at
+# the Graph route that serves the bytes. Images linked from elsewhere carry no
+# such route and are left out.
+_HOSTED_CONTENT_PATH = re.compile(r"/hostedContents/[^/?#]+/\$value$")
 
 
-def fetch_drive_name(graph_client: GraphClient, drive_id: str) -> str:
-    """The document library name SharePoint REST looks the list up by."""
-    return _retry(graph_client=graph_client, request_url=f"drives/{drive_id}")["name"]
+class _ImageSources(HTMLParser):
+    """The src of every img tag, in body order, with entities decoded."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.sources: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag != "img":
+            return
+        src = dict(attrs).get("src")
+        if src:
+            self.sources.append(src)
+
+
+def hosted_content_urls(body_html: str, graph_root: str) -> list[str]:
+    """The urls of the images pasted into a message, in body order. Only urls
+    under this cloud's Graph host count: the body is user content, so a src
+    shaped like a hosted content route on another host is not followed. Another
+    tenant's route on the same host is asked for and refused by Graph."""
+    parser = _ImageSources()
+    parser.feed(body_html)
+    prefix = graph_root.rstrip("/") + "/"
+    return [
+        src
+        for src in parser.sources
+        if src.startswith(prefix) and _HOSTED_CONTENT_PATH.search(src)
+    ]
 
 
 def fetch_replies(

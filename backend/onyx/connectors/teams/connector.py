@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import partial
+from hashlib import sha256
 from itertools import chain
 from typing import Any
 from urllib.parse import urlsplit
@@ -15,14 +16,16 @@ import requests
 from office365.graph_client import GraphClient
 from office365.runtime.client_request_exception import ClientRequestException
 from office365.runtime.http.request_options import RequestOptions
+from office365.runtime.queries.client_query import ClientQuery
 from office365.sharepoint.client_context import ClientContext
 from office365.teams.channels.channel import Channel
 from office365.teams.team import Team
+from pydantic import BaseModel
 
 from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.app_configs import TEAMS_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
-from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
@@ -40,6 +43,8 @@ from onyx.connectors.interfaces import (
 from onyx.connectors.microsoft_utils.drive_items import (
     DriveItemContentError,
     DriveItemData,
+    SizeCapExceeded,
+    download_graph_url_with_cap,
     extract_drive_item_content,
     iter_drive_items_paged,
 )
@@ -64,6 +69,7 @@ from onyx.connectors.models import (
     DocumentFailure,
     EntityFailure,
     HierarchyNode,
+    ImageSection,
     SlimDocument,
     TextSection,
 )
@@ -78,16 +84,18 @@ from onyx.connectors.teams.utils import (
     execute_query_with_retry,
     fetch_channel_files_folder,
     fetch_channel_readers,
-    fetch_drive_name,
+    fetch_drive_library,
     fetch_message_page,
     fetch_messages,
     fetch_replies,
-    fetch_site_url,
+    hosted_content_urls,
     message_delta_url,
 )
 from onyx.file_processing.file_types import OnyxMimeTypes
 from onyx.file_processing.html_utils import parse_html_page_basic
+from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
 
@@ -102,6 +110,14 @@ _REST_CTX_MAX_AGE_S = 30 * 60
 # Channel files are documents of their own. The prefix keeps them apart from a
 # SharePoint connector indexing the same library, which uses the bare item id.
 FILE_DOCUMENT_ID_PREFIX = "teams-file:"
+
+# Each pasted image costs a download now and a vision-model call at indexing,
+# so a thread stops well past what a working conversation holds.
+_MAX_IMAGES_PER_THREAD = 100
+
+# What a thread pasted and the document does not carry, so a reader who sees
+# fewer images than the conversation had can tell why.
+IMAGES_NOT_INDEXED = "images_not_indexed"
 
 CREDENTIAL_AUTH_METHOD = "authentication_method"
 CREDENTIAL_PRIVATE_KEY = "teams_private_key"
@@ -140,6 +156,8 @@ class TeamsConnector(
         # Off by default: a channel file's readers come from SharePoint REST,
         # which needs a certificate credential and a sites grant.
         include_attachments: bool = False,
+        # Off by default: every pasted image is a download and a vision call.
+        include_inline_images: bool = False,
     ) -> None:
         if teams is None:
             teams = []
@@ -150,6 +168,9 @@ class TeamsConnector(
         self.max_workers = max_workers
         self.requested_team_list: list[str] = teams
         self.include_attachments = include_attachments
+        self.include_inline_images = include_inline_images
+        # Granted by the factory from the image analysis setting.
+        self.allow_images = False
         # Channels walked again from their first page in this attempt: a saved
         # page url Graph rejects recovers once per attempt and can never loop.
         self._restarted_channel_ids: set[str] = set()
@@ -168,6 +189,9 @@ class TeamsConnector(
         self.sharepoint_domain_suffix = resolved_env.sharepoint_domain_suffix
 
     # impls for BaseConnector
+
+    def set_allow_images(self, value: bool) -> None:
+        self.allow_images = value
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self._auth_method = MicrosoftAuthMethod.parse(
@@ -324,9 +348,8 @@ class TeamsConnector(
         except requests.HTTPError as e:
             if _status(e) in (401, 403):
                 raise InsufficientPermissionsError(
-                    "Include Attachments needs read access to the channel sites on "
-                    "Graph and on SharePoint, through Sites.Read.All or a "
-                    "Sites.Selected grant on each channel site "
+                    "Include Attachments needs read access to the channel files on "
+                    f"Graph, through {_GRANT_BY_CALL['files folder']} "
                     f"({_status(e)} on a channel's files)."
                 )
             raise UnexpectedValidationError(
@@ -337,8 +360,8 @@ class TeamsConnector(
         except (
             ChannelFilesUnavailable,
             GraphRetriesExhausted,
+            # Covers the SharePoint SDK's ClientRequestException, its subclass.
             requests.RequestException,
-            ClientRequestException,
             ValueError,
         ) as e:
             raise UnexpectedValidationError(
@@ -346,8 +369,9 @@ class TeamsConnector(
             )
 
     def _probe_sharepoint_rest(self, site_url: str) -> None:
-        """One REST read on the channel's site. SharePoint answers a token it
-        will not honor with 401 or 403, which Graph alone would never show."""
+        """A role assignments read on the channel's site, the kind indexing makes
+        for each file's readers. A read grant opens the site over REST and is
+        still refused here, which Graph alone would never show."""
         assert self.msal_app is not None
         token = acquire_token_for_rest(
             self.msal_app, _tenant_domain(site_url), self.sharepoint_domain_suffix
@@ -360,6 +384,13 @@ class TeamsConnector(
             },
             timeout=10,
         )
+        if response.status_code in (401, 403):
+            raise InsufficientPermissionsError(
+                "Include Attachments reads each file's readers from SharePoint, "
+                "which needs Sites.FullControl.All on the SharePoint API. With "
+                "Sites.Selected, grant the app full control on each channel site "
+                f"({response.status_code} on a channel site's role assignments)."
+            )
         response.raise_for_status()
 
     # impls for CheckpointedConnector
@@ -414,6 +445,7 @@ class TeamsConnector(
                 self._channel_state,
                 self._channel_library if self.include_attachments else None,
                 self._index_channel_files if self.include_attachments else None,
+                self._message_images if self.include_inline_images else None,
             )
 
         checkpoint.has_more = bool(
@@ -423,6 +455,50 @@ class TeamsConnector(
         )
         return checkpoint
 
+    def _message_images(self, message: Message, limit: int) -> "_ImageHarvest":
+        """Up to ``limit`` images pasted into one message, stored for the vision
+        model. Nothing is downloaded while image analysis is off. A refused or
+        oversized image is left out, anything else fails the attempt so the page
+        is retried."""
+        if not self.allow_images or not message.body.content:
+            return _ImageHarvest(sections=[], downloads=0, missed=0)
+        if self._acquire_token is None:
+            raise ConnectorMissingCredentialError("Teams")
+        graph_root = f"{self.graph_api_host}/v1.0"
+        pasted = hosted_content_urls(message.body.content, graph_root)
+        urls = pasted[:limit]
+        missed = len(pasted) - len(urls)
+        sections: list[ImageSection] = []
+        for url in urls:
+            try:
+                data = download_graph_url_with_cap(
+                    self._acquire_token()["access_token"],
+                    url,
+                    TEAMS_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD,
+                    description=f"image of message {message.id}",
+                )
+            except SizeCapExceeded:
+                logger.warning("Skipping an oversized image of message %s", message.id)
+                missed += 1
+                continue
+            except requests.HTTPError as e:
+                if not _is_permanent(e):
+                    raise
+                logger.warning("Skipping an image of message %s: %s", message.id, e)
+                missed += 1
+                continue
+            section, _ = store_image_and_create_section(
+                image_data=data,
+                # Deterministic, so a re-index overwrites instead of piling up.
+                file_id=f"teams-image-{sha256(url.encode()).hexdigest()[:32]}",
+                display_name=f"Image in a message of {message.created_date_time:%Y-%m-%d}",
+                link=message.web_url,
+                media_type=_image_media_type(data),
+                file_origin=FileOrigin.CONNECTOR,
+            )
+            sections.append(section)
+        return _ImageHarvest(sections=sections, downloads=len(urls), missed=missed)
+
     def _channel_library(self, channel: ChannelRef) -> "_ChannelLibrary":
         """Where the channel's files live, resolved through Graph."""
         if self.graph_client is None:
@@ -430,10 +506,11 @@ class TeamsConnector(
         folder = fetch_channel_files_folder(
             self.graph_client, channel.team_id, channel.id
         )
+        drive_name, site_url = fetch_drive_library(self.graph_client, folder.drive_id)
         return _ChannelLibrary(
-            site_url=fetch_site_url(self.graph_client, folder.site_id),
+            site_url=site_url,
             drive_id=folder.drive_id,
-            drive_name=fetch_drive_name(self.graph_client, folder.drive_id),
+            drive_name=drive_name,
             folder_id=folder.id,
         )
 
@@ -837,22 +914,56 @@ def _modified_at(message: Message) -> datetime:
     return message.last_modified_date_time or message.created_date_time
 
 
+# The images of one message within a budget, and the downloads charged to it.
+_MessageImages = Callable[[Message, int], "_ImageHarvest"]
+
+
+class _ImageHarvest(BaseModel):
+    """What one message gave the thread: its image sections, the downloads they
+    cost the thread budget, and the images left out of the document."""
+
+    sections: list[ImageSection]
+    downloads: int
+    missed: int
+
+
+def _image_media_type(data: bytes) -> str:
+    """Graph names no trustworthy type on the hosted content route, so the type
+    is read off the bytes."""
+    try:
+        return get_image_type_from_bytes(data)
+    except ValueError:
+        return "application/octet-stream"
+
+
 def _convert_thread_to_document(
     channel: ChannelRef,
     root: Message,
     replies: list[Message],
     expert_infos: list[BasicExpertInfo],
     external_access: ExternalAccess,
+    message_images: _MessageImages | None,
 ) -> Document:
-    """A thread (the root message and its replies) is one document, oldest first."""
+    """A thread (the root message and its replies) is one document, oldest
+    first, each message's text followed by the images pasted into it."""
     messages = sorted([root, *replies], key=lambda m: m.created_date_time)
-    sections = [
-        section
-        for message in messages
-        if message.is_indexable and (section := _message_section(message))
-    ]
-    # The slim walk lists every indexable root, so a thread edited down to no
-    # text must still replace its document or the old text would outlive it.
+    sections: list[TextSection | ImageSection] = []
+    images_left = _MAX_IMAGES_PER_THREAD
+    missed_images = 0
+    for message in messages:
+        if not message.is_indexable:
+            continue
+        if section := _message_section(message):
+            sections.append(section)
+        if message_images is None:
+            continue
+        harvest = message_images(message, images_left)
+        images_left -= harvest.downloads
+        missed_images += harvest.missed
+        sections.extend(harvest.sections)
+    # The slim walk lists every indexable root, so a thread left with no text
+    # and no image must still replace its document or the old text would
+    # outlive it.
     if not sections:
         sections = [TextSection(link=root.web_url, text=_message_header(root))]
 
@@ -867,7 +978,7 @@ def _convert_thread_to_document(
         # edit or a deleted reply moves a message's modified time, not its creation.
         doc_updated_at=max(_modified_at(message) for message in messages),
         primary_owners=expert_infos,
-        metadata={},
+        metadata=({IMAGES_NOT_INDEXED: str(missed_images)} if missed_images else {}),
         external_access=external_access,
     )
 
@@ -884,6 +995,22 @@ def _add_prefer_header(request: RequestOptions) -> None:
         request.headers = {}
     # Add header to handle properly encoded ampersands in filters
     request.headers["Prefer"] = "legacySearch=false"
+
+
+def _team_page_query(
+    graph_client: GraphClient, odata_filter: str | None, next_url: str | None
+) -> ClientQuery:
+    """One page of the teams listing: filtered by name, or 50 plain rows."""
+    if odata_filter is None:
+        query = graph_client.teams.get().top(50)
+    else:
+        # Graph accepts only 'eq' operators in this filter.
+        query = graph_client.teams.get().filter(odata_filter)
+    # Works around a Graph issue with ampersands in filters.
+    query.before_execute(lambda req: _add_prefer_header(request=req))
+    if next_url:
+        query.before_execute(partial(_update_request_url, next_url=next_url))
+    return query
 
 
 def _collect_all_teams(
@@ -906,15 +1033,17 @@ def _collect_all_teams(
     teams: list[Team] = []
     next_url: str | None = None
 
-    # Determine filtering strategy based on Microsoft Graph limitations
-    if not requested:
-        # No specific teams requested - return empty list (avoid fetching all teams)
-        logger.info("No specific teams requested - returning empty list")
-        return []
-
+    # No names means every team, which is what the connector form promises, so
+    # the plain listing is paged to its end with no name to stop on.
+    every_team = not requested
     _, safe_names, problematic_names = _can_use_odata_filter(requested)
 
-    if problematic_names and not safe_names:
+    # Determine filtering strategy based on Microsoft Graph limitations
+    if every_team:
+        logger.info("No teams configured, listing every team")
+        use_client_side_filtering = True
+        odata_filter = None
+    elif problematic_names and not safe_names:
         # ALL requested teams have special characters - cannot use OData filtering
         logger.info(
             "All requested team names contain special characters (&, (, )) which require client-side filtering. Using basic /teams endpoint with pagination. Teams: %s",
@@ -932,14 +1061,11 @@ def _collect_all_teams(
         )
         use_client_side_filtering = True
         odata_filter = None
-    elif safe_names:
+    else:
         # All names are safe - use OData filtering
         logger.info("Using OData filtering for all requested teams: %s", safe_names)
         use_client_side_filtering = False
         odata_filter = _build_simple_odata_filter(safe_names)
-    else:
-        # No valid names
-        return []
 
     # Track pagination to avoid fetching too many teams for client-side filtering
     max_pages = 200
@@ -947,22 +1073,14 @@ def _collect_all_teams(
 
     while True:
         try:
-            if use_client_side_filtering:
-                # Use basic /teams endpoint with top parameter to limit results per page
-                query = graph_client.teams.get().top(50)  # Limit to 50 teams per page
-            else:
-                # Use OData filter with only 'eq' operators
-                query = graph_client.teams.get().filter(odata_filter)
-
-            # Add header to work around Microsoft Graph API issues
-            query.before_execute(lambda req: _add_prefer_header(request=req))
-
-            if next_url:
-                url = next_url
-                query.before_execute(partial(_update_request_url, next_url=url))
-
             team_collection = execute_query_with_retry(
-                query, method_name="_collect_all_teams"
+                partial(
+                    _team_page_query,
+                    graph_client,
+                    None if use_client_side_filtering else odata_filter,
+                    next_url,
+                ),
+                method_name="_collect_all_teams",
             )
         except (ClientRequestException, ValueError) as e:
             # If OData filter fails, fall back to client-side filtering
@@ -988,12 +1106,12 @@ def _collect_all_teams(
         teams.extend(filtered_teams)
 
         # For client-side filtering, check if we found all requested teams or hit page limit
-        if use_client_side_filtering:
+        if use_client_side_filtering and not every_team:
             page_count += 1
             found_team_names = {
                 team.display_name for team in teams if team.display_name
             }
-            requested_set = set(requested)
+            requested_set = set(requested or [])
 
             # Log progress every 10 pages to avoid excessive logging
             if page_count % 10 == 0:
@@ -1023,6 +1141,10 @@ def _collect_all_teams(
             raise ValueError(
                 f"The next request url field should be a string, instead got {type(team_collection._next_request_url)}"
             )
+        # Listing every team has no name to stop on, so a page that points back
+        # at itself would be read for ever.
+        if team_collection._next_request_url == next_url:
+            raise RuntimeError(f"Graph repeated a page of teams: {next_url}")
 
         next_url = team_collection._next_request_url
 
@@ -1120,8 +1242,10 @@ def _get_team_by_id(
     graph_client: GraphClient,
     team_id: str,
 ) -> Team:
-    query = graph_client.teams.get().filter(f"id eq '{team_id}'").top(1)
-    team_collection = execute_query_with_retry(query, method_name="_get_team_by_id")
+    team_collection = execute_query_with_retry(
+        lambda: graph_client.teams.get().filter(f"id eq '{team_id}'").top(1),
+        method_name="_get_team_by_id",
+    )
 
     if not team_collection:
         raise ValueError(f"No team with {team_id=} was found")
@@ -1138,13 +1262,11 @@ def _collect_all_channels_from_team(
     if not team.id:
         raise RuntimeError(f"The {team=} has an empty `id` field")
 
-    # `get_all` follows the collection's pages itself.
-    query = team.channels.get_all(
-        # explicitly needed because of incorrect type definitions provided by the `office365` library
-        page_loaded=lambda _: None
-    )
+    # `get_all` follows the collection's pages itself. The argument is needed
+    # because of incorrect type definitions in the `office365` library.
     channel_collection = execute_query_with_retry(
-        query, method_name="_collect_all_channels_from_team"
+        lambda: team.channels.get_all(page_loaded=lambda _: None),
+        method_name="_collect_all_channels_from_team",
     )
     return [channel for channel in channel_collection if channel.id]
 
@@ -1299,6 +1421,7 @@ def _walk_channel_page(
     state_cache: dict[str, _ChannelState],
     open_library: Callable[[ChannelRef], _ChannelLibrary] | None,
     index_files: _IndexFiles | None,
+    message_images: _MessageImages | None,
 ) -> Iterator[Document | ConnectorFailure]:
     """One page of the current channel's threads, and after the last page the
     channel's files. Moves the checkpoint to the next page, or off the channel
@@ -1324,7 +1447,7 @@ def _walk_channel_page(
                 try:
                     library = open_library(channel)
                 except ChannelFilesUnavailable as e:
-                    # A files folder Graph describes without its site. Its
+                    # Graph describes no usable library for this channel. Its
                     # messages are still readable, so only the files are lost.
                     no_files = e
             state = _ChannelState(
@@ -1399,6 +1522,7 @@ def _walk_channel_page(
             replies=replies,
             expert_infos=expert_infos,
             external_access=external_access,
+            message_images=message_images,
         )
 
     checkpoint.next_messages_url = next_url
@@ -1410,8 +1534,6 @@ def _walk_channel_page(
     if library is not None and index_files is not None:
         try:
             yield from index_files(channel, library, start)
-        except ChannelFilesUnavailable as e:
-            yield _channel_failure(channel, "files", e)
         except (requests.HTTPError, ClientRequestException) as e:
             if not _is_permanent(e):
                 raise
