@@ -194,6 +194,16 @@ func installEnforcedSkills(
 func installManualSkills(
 	cmd *cobra.Command, skills []llmContextSkill, copyMode bool,
 ) error {
+	var manual []llmContextSkill
+	for _, skill := range skills {
+		if !skill.Enforced {
+			manual = append(manual, skill)
+		}
+	}
+	if len(manual) == 0 {
+		return nil
+	}
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("could not determine home directory: %w", err)
@@ -204,11 +214,7 @@ func installManualSkills(
 		return fmt.Errorf("could not create %s: %w", claudeSkills, err)
 	}
 
-	for _, skill := range skills {
-		if skill.Enforced {
-			continue
-		}
-
+	for _, skill := range manual {
 		srcDir := skill.Dir
 		dstDir := filepath.Join(claudeSkills, skill.Name)
 
