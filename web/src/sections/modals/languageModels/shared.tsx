@@ -483,8 +483,8 @@ function countryCodeToFlag(code: string | null | undefined): string {
   return String.fromCodePoint(first, second);
 }
 
-/** Models that ship extra picker metadata (e.g. Nebius TokenFactory); most
- *  providers don't, in which case the row renders without a metadata line. */
+/** Models that ship extra picker metadata (e.g. Nebius TokenFactory). Most
+ *  providers do not, and the row description then has no metadata. */
 function hasModelMetadata(model: ModelConfiguration): boolean {
   return (
     model.quantization != null ||
@@ -493,10 +493,16 @@ function hasModelMetadata(model: ModelConfiguration): boolean {
   );
 }
 
-/** Compact "128K · 🇫🇮 · fp8 · tools, reasoning" metadata line. */
-function buildModelDescription(model: ModelConfiguration): string | undefined {
-  if (!hasModelMetadata(model)) return undefined;
-  const parts: string[] = [];
+/** Row description. Several ids can share one title, so the model id comes
+ *  first when the title is not the id. Metadata such as
+ *  "128K · 🇫🇮 · fp8 · tools, reasoning" follows when the model has any. */
+function buildModelDescription(
+  model: ModelConfiguration,
+  title: string
+): string | undefined {
+  const id = title === model.name ? undefined : model.name;
+  if (!hasModelMetadata(model)) return id;
+  const parts: string[] = id ? [id] : [];
   const context = formatContextSize(model.max_input_tokens);
   if (context) parts.push(context);
   const flag = countryCodeToFlag(model.country_code);
@@ -580,7 +586,7 @@ function ModelRow({
               sizePreset="main-ui"
               icon={() => <Checkbox checked={isSelected} />}
               title={displayName}
-              description={buildModelDescription(model)}
+              description={buildModelDescription(model, displayName)}
               rightChildren={modelRightChildren(model)}
               editable
               onTitleChange={(newTitle) => onRename(newTitle || undefined)}
