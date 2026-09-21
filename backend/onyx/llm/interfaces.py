@@ -99,6 +99,13 @@ class LLM(abc.ABC):
         user_identity: LLMUserIdentity | None = None,
         total_timeout_override: float | None = None,
     ) -> "ModelResponse":
+        """Return one complete response.
+
+        timeout_override bounds each socket read. total_timeout_override caps
+        the whole call in wall-clock time; keepalive pings defeat the read
+        timeout, so the cap is enforced between streamed chunks and setting it
+        makes the implementation stream from the provider internally.
+        """
         raise NotImplementedError
 
     def stream(

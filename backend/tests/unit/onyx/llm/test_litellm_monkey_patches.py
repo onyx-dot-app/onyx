@@ -10,6 +10,7 @@ from litellm.litellm_core_utils.litellm_logging import Logging
 from litellm.llms.ollama.chat.transformation import OllamaChatCompletionResponseIterator
 from litellm.types.llms.openai import ResponseAPIUsage, ResponsesAPIResponse
 from litellm.types.utils import ModelResponse
+from openai.types.responses.response import IncompleteDetails
 from openai.types.responses.response_output_message import ResponseOutputMessage
 from openai.types.responses.response_output_text import ResponseOutputText
 from openai.types.responses.response_reasoning_item import (
@@ -201,6 +202,63 @@ def test_responses_transform_response_preserves_reasoning_summary_sections() -> 
     assert (
         result.choices[0].message.reasoning_content == "first section\n\nsecond section"
     )
+
+
+def test_responses_transform_response_maps_incomplete_reply_to_empty_message() -> None:
+    """A reasoning model that spends max_output_tokens on reasoning returns an
+    incomplete reply with no message item. Upstream raises; the patch returns
+    an empty message with the truncation as finish_reason, as streaming does."""
+    apply_monkey_patches()
+    raw_response = ResponsesAPIResponse(
+        id="resp_1",
+        created_at=0,
+        error=None,
+        incomplete_details=IncompleteDetails(reason="max_output_tokens"),
+        instructions=None,
+        metadata={},
+        model="m",
+        object="response",
+        output=[ResponseReasoningItem(id="rs_1", type="reasoning", summary=[])],
+        parallel_tool_calls=False,
+        temperature=None,
+        tool_choice="auto",
+        tools=[],
+        top_p=None,
+        max_output_tokens=20,
+        previous_response_id=None,
+        reasoning=None,
+        status="incomplete",
+        text=None,
+        truncation=None,
+        usage=ResponseAPIUsage(input_tokens=2, output_tokens=20, total_tokens=22),
+        user=None,
+        store=False,
+    )
+
+    result = LiteLLMResponsesTransformationHandler().transform_response(
+        model="m",
+        raw_response=raw_response,
+        model_response=ModelResponse(),
+        logging_obj=Logging(
+            model="m",
+            messages=[],
+            stream=False,
+            call_type="responses",
+            start_time=datetime.now(),
+            litellm_call_id="test-call-id",
+            function_id="test-function-id",
+        ),
+        request_data={},
+        messages=[],
+        optional_params={},
+        litellm_params={},
+        encoding=None,
+    )
+
+    choice = cast(Any, result.choices[0])
+    assert choice.finish_reason == "length"
+    assert not choice.message.content
+    assert cast(Any, result).usage.completion_tokens == 20
 
 
 def _minimal_completed_response_dict() -> dict[str, Any]:
