@@ -96,6 +96,9 @@ Some paths map to more than one component. Read all of them.
 | `backend/onyx/tracing/`, `server/manage/tracing/`, `db/tracing.py`, `server/metrics/`, `docs/METRICS.md`, `docs/AUDIT_LOGGING.md` | observability |
 | `backend/onyx/db/llm_usage.py`, `db/usage.py`, `db/user_usage.py`, `db/system_usage.py`, `server/features/usage/`, `docs/usage/` | observability |
 | `backend/onyx/db/token_limit.py`, `server/token_rate_limits/`, `server/usage_limits.py`, `server/tenant_usage_limits.py` | rate-and-usage-limits |
+| `backend/ee/onyx/server/billing/`, `backend/ee/onyx/server/license/`, `backend/ee/onyx/utils/tier.py` | billing, editions-and-gating |
+| `backend/ee/onyx/server/enterprise_settings/` | whitelabelling-and-theme |
+| `backend/ee/onyx/db/standard_answer.py`, `backend/ee/onyx/server/manage/standard_answer.py`, `*/onyxbot/slack/handlers/handle_standard_answers.py` | standard-answers |
 | `backend/onyx/db/notification.py`, `db/release_notes.py`, `db/admin_banner.py`, `server/features/notifications/`, `features/release_notes/`, `features/admin_banner/` | notifications |
 | `backend/onyx/db/models.py` | **any**. Check which tables the diff touches, then map those. |
 | `backend/alembic/`, `backend/alembic_tenants/` | the component that owns the table being migrated |
@@ -103,7 +106,7 @@ Some paths map to more than one component. Read all of them.
 | `backend/onyx/hooks/`, `backend/ee/onyx/hooks/`, `db/hook.py`, `server/features/hooks/` | observability |
 | `backend/onyx/server/features/password/` | auth-and-identity |
 | `backend/onyx/evals/` | the component being evaluated. A prompt or retrieval change needs an eval, not only a unit test. |
-| `backend/onyx/seeding/`, `backend/onyx/db/seeding/` | the component owning the seeded rows. Built-in tools, default agents, and default prompts are seeded here. |
+| `backend/onyx/db/seeding/` | the component owning the seeded rows. Note `backend/onyx/seeding/` is an empty package; the default agent and built-in tool rows come from alembic migrations, not a seeding module. |
 | `backend/onyx/secondary_llm_flows/` | internal-search (query expansion, filters, selection) and chat-persistence (chat naming) |
 
 ### Shared infrastructure (not product components)
@@ -137,7 +140,8 @@ so verify the callers rather than a single component.
 |---|---|
 | `backend/onyx/server/features/build/` | craft-sessions |
 | `backend/onyx/sandbox_proxy/` | craft-webapp-proxy |
-| `backend/onyx/external_apps/`, `backend/onyx/db/external_app.py` | craft-external-apps |
+| `backend/onyx/external_apps/`, `backend/onyx/db/external_app.py` | craft-external-apps, craft-admin |
+| `backend/onyx/onyxbot/discord/` | discord-bot |
 | `docs/craft/` | the matching `craft-*` component |
 
 ## Frontend
@@ -154,7 +158,10 @@ so verify the callers rather than a single component.
 | `web/src/app/admin/mcp-actions/`, `admin/openapi-actions/` | mcp-and-custom-tools |
 | `web/src/app/admin/bots/`, `admin/discord-bot/` | slack-bot, discord-bot |
 | `web/src/app/admin/sso-providers/`, `admin/security/`, `admin/oauth-test/` | auth-and-identity |
-| `web/src/app/admin/token-rate-limits/`, `admin/billing/` | rate-and-usage-limits |
+| `web/src/app/admin/token-rate-limits/` | rate-and-usage-limits |
+| `web/src/app/ee/admin/` | **a second admin route tree**, reached by a rewrite. `web/src/proxy.ts:EE_ROUTES` lists the `/admin/*` paths that get rewritten to `/ee/admin/*`: groups, performance/usage, performance/analytics, performance/query-history, performance/custom-analytics, theme, standard-answer, export-logs, and agents/stats. A directory under `ee/admin/` that is **not** in `EE_ROUTES` is unreachable: `ee/admin/billing/` is dead code, and the live page is `web/src/app/admin/billing/`. Check `EE_ROUTES` before assuming which copy runs. |
+| `web/src/lib/admin-routes.ts` | the authoritative list of admin routes. Changing it changes the admin panel's surface, so re-check coverage against this map. |
+| `web/src/app/admin/craft/` | craft-admin |
 | `web/src/app/admin/tracing/`, `admin/systeminfo/` | observability |
 | `web/src/app/admin/web-search/` | web-search |
 | `web/src/app/admin/voice/`, `admin/image-generation/`, `admin/code-interpreter/` | voice, image-generation, code-execution |

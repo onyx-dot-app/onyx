@@ -55,7 +55,7 @@ Turning a query into ranked, access-filtered context.
 | ✅ | [internal-search](components/internal-search.md) | The search tool and the retrieval pipeline: preprocessing, hybrid retrieval, reranking, section merging, pruning. |
 | ✅ | [document-index](components/document-index.md) | The OpenSearch-backed index: schema, chunks, embeddings, search settings, index swap. |
 | ✅ | [access-control](components/access-control.md) | Document ACLs, user groups, document sets, external permission sync, curator scoping. |
-| 🚧 | [web-search](components/web-search.md) | External web search and page fetch as a tool. |
+| ✅ | [web-search](components/web-search.md) | External web search and page fetch as a tool. |
 | 🚧 | [federated-search](components/federated-search.md) | Query-time search against a source you have not indexed. |
 | 🚧 | [knowledge-graph](components/knowledge-graph.md) | Entity and relationship extraction, and the KG tool. |
 | ✅ | [search-receipts](components/search-receipts.md) | The retrieval-quality evidence trail. |
@@ -78,11 +78,12 @@ What an admin or user configures to change how chat behaves.
 
 | | Component | What it covers |
 |---|---|---|
-| 🚧 | [agents-personas](components/agents-personas.md) | Agents (DB name: `Persona`): prompt, tools, document sets, sharing, pinning. |
+| ✅ | [agents-personas](components/agents-personas.md) | Agents (DB name: `Persona`): prompt, tools, document sets, sharing, pinning. |
 | 🚧 | [projects](components/projects.md) | A durable file + instruction scope across sessions. |
 | 🚧 | [skills](components/skills.md) | Reusable instruction bundles, user and admin scoped. |
-| 🚧 | [mcp-and-custom-tools](components/mcp-and-custom-tools.md) | MCP servers and OpenAPI-defined custom actions. |
-| 🚧 | [chat-preferences](components/chat-preferences.md) | Input prompts, reminders, default assistant, per-user settings. |
+| ✅ | [mcp-and-custom-tools](components/mcp-and-custom-tools.md) | MCP servers and OpenAPI-defined custom actions. |
+| ✅ | [chat-preferences](components/chat-preferences.md) | Input prompts, reminders, default assistant, per-user settings. |
+| ✅ | [standard-answers](components/standard-answers.md) | Canned answers matched before the LLM runs, used by the bots. |
 
 ## Domain: Platform
 
@@ -97,6 +98,8 @@ Cross-cutting services every feature depends on.
 | ✅ | [observability](components/observability.md) | Metrics, tracing, audit logging, LLM usage and cost. |
 | ✅ | [rate-and-usage-limits](components/rate-and-usage-limits.md) | Token rate limits, usage limits, invite limits. |
 | ✅ | [notifications](components/notifications.md) | In-app notifications, release notes, admin banners. |
+| ✅ | [billing](components/billing.md) | Plans, checkout, license activation, seat and usage billing. |
+| ✅ | [whitelabelling-and-theme](components/whitelabelling-and-theme.md) | Enterprise settings: branding, custom theme, application name. |
 
 ## Domain: Integrations and clients
 
@@ -104,16 +107,16 @@ Ways to reach Onyx that are not the web chat UI.
 
 | | Component | What it covers |
 |---|---|---|
-| 🚧 | [slack-bot](components/slack-bot.md) | Slack app, channel config, the bot turn runner. |
-| 🚧 | [discord-bot](components/discord-bot.md) | Discord equivalent. |
+| ✅ | [slack-bot](components/slack-bot.md) | Slack app, channel config, the bot turn runner. |
+| ✅ | [discord-bot](components/discord-bot.md) | Discord equivalent. |
 | 🚧 | [onyx-api](components/onyx-api.md) | The public HTTP API. |
 | 🚧 | [mcp-server](components/mcp-server.md) | Onyx exposed as an MCP server. |
 | 🚧 | [llm-gateway](components/llm-gateway.md) | OpenAI-compatible gateway with cost tracking. |
 | 🚧 | [mobile-app](components/mobile-app.md) | React Native + Expo client. |
 | 🚧 | [desktop-widget-extensions](components/desktop-widget-extensions.md) | Tauri desktop shell, embeddable widget, browser extensions. |
-| 🚧 | [voice](components/voice.md) | Voice input and output. |
-| 🚧 | [image-generation](components/image-generation.md) | The image generation tool and its admin config. |
-| 🚧 | [code-execution](components/code-execution.md) | Code interpreter, bash, and python tools. |
+| ✅ | [voice](components/voice.md) | Voice input and output. |
+| ✅ | [image-generation](components/image-generation.md) | The image generation tool and its admin config. |
+| ✅ | [code-execution](components/code-execution.md) | Code interpreter, bash, and python tools. |
 
 ## Domain: Craft
 
@@ -122,6 +125,7 @@ these components are the map into it.
 
 | | Component | What it covers |
 |---|---|---|
+| ✅ | [craft-admin](components/craft-admin.md) | The three Craft admin pages: access, apps, preferences. Map into `docs/craft/`. |
 | 🚧 | [craft-sessions](components/craft-sessions.md) | Craft session lifecycle, turns, history. |
 | 🚧 | [craft-sandboxes](components/craft-sandboxes.md) | Kubernetes sandbox provisioning, snapshot and restore. |
 | 🚧 | [craft-streaming](components/craft-streaming.md) | The opencode-serve client and event stream. |
@@ -130,6 +134,26 @@ these components are the map into it.
 | 🚧 | [craft-scheduled-tasks](components/craft-scheduled-tasks.md) | Recurring agent runs. |
 
 ---
+
+## Admin panel coverage
+
+`web/src/lib/admin-routes.ts` is the authoritative list of admin routes. Every one
+of its 40 entries maps to a written component, across 22 components.
+
+To re-check after changing the admin panel, list the routes and confirm each still
+has an owner here:
+
+```bash
+grep -oE 'path: "/admin[^"]*"' web/src/lib/admin-routes.ts | sort -u
+```
+
+Two traps when auditing this yourself:
+
+- Some `/admin/*` paths are served from a second tree, `web/src/app/ee/admin/`, via a
+  rewrite in `web/src/proxy.ts:EE_ROUTES`. Listing `web/src/app/admin/` alone misses
+  theme, standard-answer, export-logs, performance, and groups.
+- A directory under `ee/admin/` that is **not** in `EE_ROUTES` is unreachable.
+  `ee/admin/billing/` is dead code; the live page is `web/src/app/admin/billing/`.
 
 ## Coverage gaps
 
