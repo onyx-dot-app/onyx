@@ -77,11 +77,11 @@ The raw key never appears in a response body.
 
 | Method | Path | Handler | Notes |
 |---|---|---|---|
-| GET | `/admin/tracing/provider` | `list_tracing_providers` | Braintrust / Langfuse config, env or DB. |
-| PUT | `/admin/tracing/provider` | `upsert_tracing_provider_endpoint` | |
-| DELETE | `/admin/tracing/provider/{type}` | `disconnect_tracing_provider` | |
-| POST | `/admin/tracing/provider/{type}/test` | `test_tracing_provider` | |
-| POST | `/admin/tracing/provider/{type}/adopt-env` | `adopt_env_tracing_provider` | Copies an env-configured provider into the DB. |
+| GET | `/admin/tracing/providers` | `list_tracing_providers` | Braintrust / Langfuse config, env or DB. |
+| POST | `/admin/tracing/providers` | `upsert_tracing_provider_endpoint` | Upsert, not PUT. |
+| DELETE | `/admin/tracing/providers/{provider_type}` | `disconnect_tracing_provider` | |
+| POST | `/admin/tracing/providers/test` | `test_tracing_provider` | Not per provider type; the type is in the body. |
+| POST | `/admin/tracing/providers/{provider_type}/adopt-env` | `adopt_env_tracing_provider` | Copies an env-configured provider into the DB. |
 
 `_reject_if_multi_tenant` (`tracing/api.py`) blocks all of these under cloud;
 see §9.
@@ -387,9 +387,9 @@ separate `UserUsageTracingProcessor`, independent of Braintrust/Langfuse.
 
 ### Confirming a new call site is tagged
 
-1. Connect a tracing provider (`PUT /admin/tracing/provider`, or set the
+1. Connect a tracing provider (`POST /admin/tracing/providers`, or set the
    `BRAINTRUST_*`/`LANGFUSE_*` env vars) and confirm it shows in
-   `GET /admin/tracing/provider`.
+   `GET /admin/tracing/providers`.
 2. Exercise the new call site.
 3. In the tracing dashboard, confirm the span's `model_config.flow` is the new
    `LLMFlow` value, not `untagged_invoke` / `untagged_stream`.
