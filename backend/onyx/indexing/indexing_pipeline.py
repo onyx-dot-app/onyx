@@ -840,8 +840,9 @@ def _get_image_summarization_llm(
     llm = get_default_llm_with_vision()
     if llm is None:
         logger.warning(
-            "Image analysis is enabled but no captioning model is selected — "
-            "images will not be summarized. Pick one under Index Settings."
+            "Image analysis is enabled but no usable captioning model is "
+            "available — images will not be summarized. Check the captioning "
+            "model under Index Settings."
         )
     return llm
 
