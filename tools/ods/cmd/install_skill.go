@@ -21,6 +21,7 @@ const (
 
 	agentClaudeCode = "claude-code"
 	agentCursor     = "cursor"
+	agentCodex      = "codex"
 )
 
 // knownAgents maps each supported --agent value to its installer. Every
@@ -33,6 +34,11 @@ var knownAgents = map[string]func(
 		cmd *cobra.Command, ui *installUI, skills []llmContextSkill, repoRoot string, _ bool,
 	) error {
 		return installCursorSkills(cmd, ui, skills, repoRoot)
+	},
+	agentCodex: func(
+		cmd *cobra.Command, skills []llmContextSkill, repoRoot string, _ bool,
+	) error {
+		return installCodexSkills(cmd, skills, repoRoot)
 	},
 }
 
@@ -59,10 +65,15 @@ cursor:
   Enforced skills apply always; on-demand skills attach when Cursor matches
   their description, or on an explicit @skill-name mention.
 
+codex:
+  Enforced skills are compiled into .agents-local.md at the repo root
+  (git-excluded; the committed AGENTS.md points agents at it). Manual skills
+  are installed as custom prompts in ~/.codex/prompts/, invoked via /skill-name.
+
 By default, looks for onyx-llm-context at ~/.claude/skills/onyx-llm-context.`,
 		Example: `  ods install-skill --clone
   ods install-skill --agent cursor
-  ods install-skill --agent claude-code --agent cursor
+  ods install-skill --agent claude-code --agent cursor --agent codex
   ods install-skill --source /path/to/onyx-llm-context
   ods install-skill --copy`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -113,7 +124,7 @@ By default, looks for onyx-llm-context at ~/.claude/skills/onyx-llm-context.`,
 	cmd.Flags().StringVar(&source, "source", "", "Path to onyx-llm-context (default: ~/.claude/skills/onyx-llm-context)")
 	cmd.Flags().BoolVar(&copyMode, "copy", false, "Copy files instead of symlinking (claude-code manual skills only)")
 	cmd.Flags().BoolVar(&cloneRepo, "clone", false, fmt.Sprintf("Clone onyx-llm-context from %s if not already present", llmContextCloneURL))
-	cmd.Flags().StringSliceVar(&agents, "agent", []string{agentClaudeCode}, "Agents to install for (repeatable): claude-code, cursor")
+	cmd.Flags().StringSliceVar(&agents, "agent", []string{agentClaudeCode}, "Agents to install for (repeatable): claude-code, cursor, codex")
 
 	return cmd
 }
