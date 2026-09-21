@@ -66,11 +66,11 @@ Getting company data into the index and keeping it fresh and correctly permissio
 
 | | Component | What it covers |
 |---|---|---|
-| 🚧 | [connectors](components/connectors.md) | The connector interface and the ~69 source integrations. |
-| 🚧 | [cc-pairs-and-credentials](components/cc-pairs-and-credentials.md) | Connector/credential pairing, encrypted credential storage, connector admin. |
-| 🚧 | [indexing-pipeline](components/indexing-pipeline.md) | Document → chunk → embed → write. Index attempts, heartbeats, coordination. |
-| 🚧 | [permission-sync](components/permission-sync.md) | Pulling source-side permissions into Onyx ACLs. |
-| 🚧 | [file-store-and-user-files](components/file-store-and-user-files.md) | Blob storage, user uploads, projects as file collections. |
+| ✅ | [connectors](components/connectors.md) | The connector interface and the ~69 source integrations. |
+| ✅ | [cc-pairs-and-credentials](components/cc-pairs-and-credentials.md) | Connector/credential pairing, encrypted credential storage, connector admin. |
+| ✅ | [indexing-pipeline](components/indexing-pipeline.md) | Document → chunk → embed → write. Index attempts, heartbeats, coordination. |
+| ✅ | [permission-sync](components/permission-sync.md) | Pulling source-side permissions into Onyx ACLs. |
+| ✅ | [file-store-and-user-files](components/file-store-and-user-files.md) | Blob storage, user uploads, projects as file collections. |
 
 ## Domain: Configuration surfaces
 
