@@ -407,7 +407,7 @@ def _incomplete_response_as_empty_message(
     if not all(isinstance(item, ResponseReasoningItem) for item in raw_response.output):
         return None
 
-    summary_texts = [
+    summary_texts: list[str] = [
         summary.text
         for item in raw_response.output
         if isinstance(item, ResponseReasoningItem)
