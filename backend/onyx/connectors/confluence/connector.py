@@ -537,11 +537,11 @@ class ConfluenceConnector(
         try:
             # Extract basic page information
             page_id = _get_page_id(page)
-            page_title = page["title"]
-            logger.info("Converting page %s to document", page_title)
             page_url = build_confluence_document_id(
                 self.wiki_base, page["_links"]["webui"], self.is_cloud
             )
+            page_title = page["title"]
+            logger.info("Converting page %s to document", page_title)
 
             # Get the page content
             page_content = extract_text_from_confluence_html(
@@ -610,8 +610,9 @@ class ConfluenceConnector(
                 failed_document=DocumentFailure(
                     # Must equal the Document.id the success path builds
                     # (page_url), because consumers match failures to documents
-                    # by this value.
-                    document_id=page_url,
+                    # by this value. page_id is a last resort so the id is never
+                    # empty; batched_doc_ids drops failures with a falsy id.
+                    document_id=page_url or page_id,
                     document_link=page_url,
                 ),
                 failure_message=f"Error converting page {page.get('id', 'unknown')}: {e}",

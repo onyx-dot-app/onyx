@@ -101,3 +101,35 @@ def test_failure_document_id_can_be_repaired_by_reindex() -> None:
     extracted_page_id = _extract_page_id_from_url(failed_document.document_id)
     assert extracted_page_id is not None
     assert extracted_page_id == _PAGE_ID
+
+
+def test_failure_before_url_is_built_still_carries_the_url() -> None:
+    """A page that breaks after _links is readable must still record the URL.
+
+    The URL is built first, so a later failure (here, a missing title) keeps the
+    document_id equal to the Document.id the success path would have produced.
+    """
+    connector = _make_connector()
+    page_without_title = {k: v for k, v in _PAGE.items() if k != "title"}
+
+    result = connector._convert_page_to_document(page_without_title)
+    assert isinstance(result, ConnectorFailure)
+    failed_document = result.failed_document
+    assert failed_document is not None
+    assert _extract_page_id_from_url(failed_document.document_id) == _PAGE_ID
+
+
+def test_failure_before_url_can_be_built_falls_back_to_page_id() -> None:
+    """When even the URL cannot be built, the id falls back to the page id.
+
+    batched_doc_ids in connector_runner.py drops failures with a falsy
+    document_id, so an empty id would make the failure disappear.
+    """
+    connector = _make_connector()
+    page_without_links = {k: v for k, v in _PAGE.items() if k != "_links"}
+
+    result = connector._convert_page_to_document(page_without_links)
+    assert isinstance(result, ConnectorFailure)
+    failed_document = result.failed_document
+    assert failed_document is not None
+    assert failed_document.document_id == _PAGE_ID
