@@ -547,10 +547,13 @@ class TestGetRecording:
         client._session = MagicMock()
         client._session.request.return_value = _response(200, _DOCUMENTED_RECORDING)
 
-        client.get_recording("111")
+        recording = client.get_recording("111")
 
         url = client._session.request.call_args.args[1]
         assert url.endswith("/meetings/111/recordings")
+        # Pruning reads the host and the occurrence off the entry itself.
+        assert recording.uuid == _DOCUMENTED_RECORDING["uuid"]
+        assert recording.host_id == _DOCUMENTED_RECORDING["host_id"]
 
     def test_a_transcript_still_processing_is_not_downloadable(self) -> None:
         client = _client()
@@ -780,6 +783,7 @@ class TestListGroupMembers:
                     },
                 ],
                 "next_page_token": "tok",
+                "total_records": 2,
             },
         )
 
@@ -790,6 +794,7 @@ class TestListGroupMembers:
             ("u2", "jack@example.com"),
         ]
         assert page.next_page_token == "tok"
+        assert page.total_records == 2
         params = client._session.request.call_args.kwargs["params"]
         assert params == {"page_size": _MAX_PAGE_SIZE}
 
@@ -879,6 +884,7 @@ class TestListUserRecordings:
                 }
             ],
             "next_page_token": "tok",
+            "total_records": 7,
         }
 
     def test_reads_the_meetings_key(self) -> None:
@@ -893,6 +899,8 @@ class TestListUserRecordings:
         assert recording.topic == "My Personal Meeting"
         assert recording.start_time == "2021-03-18T05:41:36Z"
         assert page.next_page_token == "tok"
+        # The only way a caller can tell a listing stopped early.
+        assert page.total_records == 7
 
     def test_the_integer_meeting_number_becomes_the_session_id(self) -> None:
         client = _client()
@@ -1488,18 +1496,31 @@ class TestListRegistrants:
 
 
 class TestGetMeetingDetails:
+    _SCHEDULED = {"id": 111, "topic": "Weekly Sync", "host_id": "u1"}
+
+    def test_it_reads_the_scheduled_meeting(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, self._SCHEDULED)
+
+        details = client.get_meeting_details("111")
+
+        assert details.host_id == "u1"
+        assert client._session.request.call_args.args[1].endswith("/meetings/111")
+
     def test_invitees_are_read_out_of_the_settings_block(self) -> None:
         client = _client()
         client._session = MagicMock()
         client._session.request.return_value = _response(
             200,
             {
+                **self._SCHEDULED,
                 "settings": {
                     "meeting_invitees": [
                         {"email": "a@example.com", "internal_user": True},
                         {"email": "b@example.com", "internal_user": False},
                     ]
-                }
+                },
             },
         )
 
@@ -1512,7 +1533,9 @@ class TestGetMeetingDetails:
         """An instant meeting was never scheduled, so there is no invite list."""
         client = _client()
         client._session = MagicMock()
-        client._session.request.return_value = _response(200, {"settings": {}})
+        client._session.request.return_value = _response(
+            200, {**self._SCHEDULED, "settings": {}}
+        )
 
         assert client.get_meeting_details("111").settings.meeting_invitees == []
 
