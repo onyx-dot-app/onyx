@@ -78,8 +78,7 @@ What an admin or user configures to change how chat behaves.
 | | Component | What it covers |
 |---|---|---|
 | ✅ | [agents-personas](components/agents-personas.md) | Agents (DB name: `Persona`): prompt, tools, document sets, sharing, pinning. |
-| 🚧 | [projects](components/projects.md) | A durable file + instruction scope across sessions. |
-| 🚧 | [skills](components/skills.md) | Reusable instruction bundles, user and admin scoped. |
+| ✅ | [projects](components/projects.md) | A durable file + instruction scope across sessions. |
 | ✅ | [mcp-and-custom-tools](components/mcp-and-custom-tools.md) | MCP servers and OpenAPI-defined custom actions. |
 | ✅ | [chat-preferences](components/chat-preferences.md) | Input prompts, reminders, default assistant, per-user settings. |
 | ✅ | [standard-answers](components/standard-answers.md) | Canned answers matched before the LLM runs, used by the bots. |
@@ -125,6 +124,7 @@ these components are the map into it.
 | | Component | What it covers |
 |---|---|---|
 | ✅ | [craft-admin](components/craft-admin.md) | The three Craft admin pages: access, apps, preferences. Map into `docs/craft/`. |
+| ✅ | [skills](components/skills.md) | Capability bundles pushed into a Craft sandbox. Surfaced at `/craft/v1/skills`, tied to external apps. |
 | ✅ | [craft-sessions](components/craft-sessions.md) | Craft session lifecycle, turns, history. |
 | ✅ | [craft-sandboxes](components/craft-sandboxes.md) | Kubernetes sandbox provisioning, snapshot and restore. |
 | ✅ | [craft-streaming](components/craft-streaming.md) | The opencode-serve client and event stream. |
