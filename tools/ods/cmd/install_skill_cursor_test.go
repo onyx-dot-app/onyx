@@ -289,3 +289,23 @@ func readRule(t *testing.T, repoRoot, name string) string {
 	t.Helper()
 	return skillReadFile(t, filepath.Join(repoRoot, ".cursor", "rules", name+".mdc"))
 }
+
+func TestInstallCursorSkillsNumbersASecondBackup(t *testing.T) {
+	source := t.TempDir()
+	repoRoot := t.TempDir()
+	writeSkill(t, source, "enforced", "always-on", "core rules", "Generated body.")
+	rulesDir := filepath.Join(repoRoot, ".cursor", "rules")
+	deployWriteFile(t, filepath.Join(rulesDir, "always-on.mdc"), "first hand-written")
+	deployWriteFile(t, filepath.Join(rulesDir, "always-on_old.mdc"), "earlier backup")
+
+	if err := installCursorSkills(discardCmd(), testUI(), discover(t, source), repoRoot); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := skillReadFile(t, filepath.Join(rulesDir, "always-on_old.mdc")); got != "earlier backup" {
+		t.Fatalf("the earlier backup was overwritten: %q", got)
+	}
+	if got := skillReadFile(t, filepath.Join(rulesDir, "always-on_old2.mdc")); got != "first hand-written" {
+		t.Fatalf("the kept file did not move to a numbered backup: %q", got)
+	}
+}

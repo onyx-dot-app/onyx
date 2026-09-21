@@ -55,10 +55,9 @@ func installCursorSkills(
 		// never replaced without their say-so.
 		if err == nil && !strings.Contains(string(existing), generatedRuleMarker) {
 			if ui.resolveConflict(dest) == conflictKeepBoth {
-				if err := os.Rename(dest, backupPath(dest)); err != nil {
-					return fmt.Errorf("could not back up %s: %w", dest, err)
+				if err := backUpFile(cmd, dest); err != nil {
+					return err
 				}
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Renamed %s -> %s\n", dest, backupPath(dest))
 			}
 		}
 		if err := os.WriteFile(dest, []byte(content), 0o644); err != nil {
@@ -82,6 +81,19 @@ func renderCursorRule(skill llmContextSkill) (string, error) {
 	return fmt.Sprintf(
 		"---\n%s---\n\n%s\n\n%s", frontmatter, generatedRuleMarker, skill.Body,
 	), nil
+}
+
+// backUpFile moves a kept hand-written file to an unused _old name.
+func backUpFile(cmd *cobra.Command, dest string) error {
+	backup, err := backupPath(dest)
+	if err != nil {
+		return err
+	}
+	if err := os.Rename(dest, backup); err != nil {
+		return fmt.Errorf("could not back up %s: %w", dest, err)
+	}
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Renamed %s -> %s\n", dest, backup)
+	return nil
 }
 
 // removeStaleGeneratedRules deletes previously generated rule files whose

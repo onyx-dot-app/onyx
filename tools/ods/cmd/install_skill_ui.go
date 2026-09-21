@@ -78,7 +78,7 @@ func (ui *installUI) resolveConflict(dest string) conflictChoice {
 	}
 	if !ui.interactive {
 		_, _ = fmt.Fprintf(
-			ui.out, "Keeping hand-written %s as %s (non-interactive)\n", dest, backupPath(dest),
+			ui.out, "Keeping hand-written %s as an _old backup (non-interactive)\n", dest,
 		)
 		return conflictKeepBoth
 	}
@@ -99,8 +99,22 @@ func (ui *installUI) resolveConflict(dest string) conflictChoice {
 }
 
 // backupPath is where a kept hand-written file moves: its name with `_old`
-// before the extension.
-func backupPath(dest string) string {
+// before the extension, numbered past an existing backup so a second conflict
+// never overwrites the first one's backup.
+func backupPath(dest string) (string, error) {
 	ext := filepath.Ext(dest)
-	return strings.TrimSuffix(dest, ext) + "_old" + ext
+	base := strings.TrimSuffix(dest, ext) + "_old"
+	for i := 1; i <= maxBackups; i++ {
+		candidate := base + ext
+		if i > 1 {
+			candidate = fmt.Sprintf("%s%d%s", base, i, ext)
+		}
+		if _, err := os.Stat(candidate); os.IsNotExist(err) {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("no free backup name for %s after %d tries", dest, maxBackups)
 }
+
+// More backups of one file than this means something is very wrong.
+const maxBackups = 100
