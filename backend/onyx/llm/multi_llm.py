@@ -21,6 +21,7 @@ from onyx.configs.model_configs import (
     GEN_AI_NUM_RESERVED_OUTPUT_TOKENS,
     GEN_AI_TEMPERATURE,
     LITELLM_EXTRA_BODY,
+    LLM_INVOKE_FORCE_STREAMING,
 )
 from onyx.llm.api_surfaces import (
     OPENAI_COMPATIBLE_SURFACES,
@@ -1273,39 +1274,66 @@ class LitellmLLM(LLM):
         if self._uses_isolated_client():
             client = HTTPHandler(timeout=read_timeout)
 
-        try:
-            # When env-only custom_config keys are injected (self-hosted
-            # deployments only), they are set under a global lock. Using
-            # stream=True here means the lock is only held during connection
-            # setup (not the full inference). The chunks are then collected
-            # outside the lock and reassembled into a single ModelResponse
-            # via stream_chunk_builder.
-            from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
-            from litellm import stream_chunk_builder
+        # A plain request is 2-4x cheaper in CPU than streaming and reassembling
+        # a one-shot answer. Streaming stays for two cases:
+        # - total_timeout_override: the wall-clock deadline is checked between
+        #   chunks, and keepalive pings defeat the socket read timeout.
+        # - env injection (self-hosted only): env-only custom_config keys are
+        #   set under a global lock, and streaming keeps the lock to connection
+        #   setup instead of the full inference.
+        use_stream = (
+            total_timeout_override is not None
+            or LLM_INVOKE_FORCE_STREAMING
+            or _env_injection_enabled()
+        )
 
-            stream_response = cast(
-                LiteLLMCustomStreamWrapper,
-                self._completion(
-                    prompt=prompt,
-                    tools=tools,
-                    tool_choice=tool_choice,
-                    stream=True,
-                    structured_response_format=structured_response_format,
-                    timeout_override=read_timeout,
-                    max_tokens=max_tokens,
-                    parallel_tool_calls=True,
-                    reasoning_effort=reasoning_effort,
-                    user_identity=user_identity,
-                    client=client,
-                ),
-            )
-            chunks = _consume_stream_with_timeout(
-                stream_response, total_timeout_override
-            )
-            response = cast(
-                LiteLLMModelResponse,
-                stream_chunk_builder(chunks),
-            )
+        try:
+            if use_stream:
+                from litellm import (
+                    CustomStreamWrapper as LiteLLMCustomStreamWrapper,
+                )
+                from litellm import stream_chunk_builder
+
+                stream_response = cast(
+                    LiteLLMCustomStreamWrapper,
+                    self._completion(
+                        prompt=prompt,
+                        tools=tools,
+                        tool_choice=tool_choice,
+                        stream=True,
+                        structured_response_format=structured_response_format,
+                        timeout_override=read_timeout,
+                        max_tokens=max_tokens,
+                        parallel_tool_calls=True,
+                        reasoning_effort=reasoning_effort,
+                        user_identity=user_identity,
+                        client=client,
+                    ),
+                )
+                chunks = _consume_stream_with_timeout(
+                    stream_response, total_timeout_override
+                )
+                response = cast(
+                    LiteLLMModelResponse,
+                    stream_chunk_builder(chunks),
+                )
+            else:
+                response = cast(
+                    LiteLLMModelResponse,
+                    self._completion(
+                        prompt=prompt,
+                        tools=tools,
+                        tool_choice=tool_choice,
+                        stream=False,
+                        structured_response_format=structured_response_format,
+                        timeout_override=read_timeout,
+                        max_tokens=max_tokens,
+                        parallel_tool_calls=True,
+                        reasoning_effort=reasoning_effort,
+                        user_identity=user_identity,
+                        client=client,
+                    ),
+                )
 
             model_response = from_litellm_model_response(response)
 

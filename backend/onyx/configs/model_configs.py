@@ -89,6 +89,13 @@ DISABLE_LITELLM_STREAMING = (
     os.environ.get("DISABLE_LITELLM_STREAMING") or "false"
 ).lower() == "true"
 
+# LLM.invoke() sends a non-streaming request when it safely can (no total
+# timeout, env injection off). Set to true to force the internal streaming
+# path for every invoke() call as an escape hatch.
+LLM_INVOKE_FORCE_STREAMING = (
+    os.environ.get("LLM_INVOKE_FORCE_STREAMING") or "false"
+).lower() == "true"
+
 # extra headers to pass to LiteLLM
 LITELLM_EXTRA_HEADERS: dict[str, str] | None = None
 _LITELLM_EXTRA_HEADERS_RAW = os.environ.get("LITELLM_EXTRA_HEADERS")
