@@ -270,7 +270,6 @@ def _make_setup(n_models: int = 1) -> MagicMock:
     setup.new_msg_req.include_citations = True
     setup.search_params.project_id_filter = None
     setup.search_params.persona_id_filter = None
-    setup.bypass_acl = False
     setup.slack_context = None
     setup.available_files.user_file_ids = []
     setup.available_files.chat_file_ids = []
