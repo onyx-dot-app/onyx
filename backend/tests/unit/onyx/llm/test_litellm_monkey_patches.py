@@ -207,7 +207,8 @@ def test_responses_transform_response_preserves_reasoning_summary_sections() -> 
 def test_responses_transform_response_maps_incomplete_reply_to_empty_message() -> None:
     """A reasoning model that spends max_output_tokens on reasoning returns an
     incomplete reply with no message item. Upstream raises; the patch returns
-    an empty message with the truncation as finish_reason, as streaming does."""
+    an empty message with the truncation as finish_reason, as streaming does,
+    and keeps the reasoning summary."""
     apply_monkey_patches()
     raw_response = ResponsesAPIResponse(
         id="resp_1",
@@ -218,7 +219,16 @@ def test_responses_transform_response_maps_incomplete_reply_to_empty_message() -
         metadata={},
         model="m",
         object="response",
-        output=[ResponseReasoningItem(id="rs_1", type="reasoning", summary=[])],
+        output=[
+            ResponseReasoningItem(
+                id="rs_1",
+                type="reasoning",
+                summary=[
+                    Summary(text="thinking about lighthouses", type="summary_text"),
+                    Summary(text="ran out of budget", type="summary_text"),
+                ],
+            )
+        ],
         parallel_tool_calls=False,
         temperature=None,
         tool_choice="auto",
@@ -258,7 +268,76 @@ def test_responses_transform_response_maps_incomplete_reply_to_empty_message() -
     choice = cast(Any, result.choices[0])
     assert choice.finish_reason == "length"
     assert not choice.message.content
+    assert (
+        choice.message.reasoning_content
+        == "thinking about lighthouses\n\nran out of budget"
+    )
     assert cast(Any, result).usage.completion_tokens == 20
+
+
+def test_responses_transform_response_incomplete_with_message_uses_upstream() -> None:
+    """An incomplete reply that still carries a message item is upstream's
+    business: the partial text must come back, not an empty fallback."""
+    apply_monkey_patches()
+    raw_response = ResponsesAPIResponse(
+        id="resp_1",
+        created_at=0,
+        error=None,
+        incomplete_details=IncompleteDetails(reason="max_output_tokens"),
+        instructions=None,
+        metadata={},
+        model="m",
+        object="response",
+        output=[
+            ResponseOutputMessage(
+                id="msg_1",
+                type="message",
+                role="assistant",
+                status="incomplete",
+                content=[
+                    ResponseOutputText(
+                        type="output_text", text="Once upon a", annotations=[]
+                    )
+                ],
+            ),
+        ],
+        parallel_tool_calls=False,
+        temperature=None,
+        tool_choice="auto",
+        tools=[],
+        top_p=None,
+        max_output_tokens=20,
+        previous_response_id=None,
+        reasoning=None,
+        status="incomplete",
+        text=None,
+        truncation=None,
+        usage=ResponseAPIUsage(input_tokens=2, output_tokens=20, total_tokens=22),
+        user=None,
+        store=False,
+    )
+
+    result = LiteLLMResponsesTransformationHandler().transform_response(
+        model="m",
+        raw_response=raw_response,
+        model_response=ModelResponse(),
+        logging_obj=Logging(
+            model="m",
+            messages=[],
+            stream=False,
+            call_type="responses",
+            start_time=datetime.now(),
+            litellm_call_id="test-call-id",
+            function_id="test-function-id",
+        ),
+        request_data={},
+        messages=[],
+        optional_params={},
+        litellm_params={},
+        encoding=None,
+    )
+
+    assert cast(Any, result.choices[0]).message.content == "Once upon a"
 
 
 def _minimal_completed_response_dict() -> dict[str, Any]:

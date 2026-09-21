@@ -103,8 +103,12 @@ class LLM(abc.ABC):
 
         timeout_override bounds each socket read. total_timeout_override caps
         the whole call in wall-clock time; keepalive pings defeat the read
-        timeout, so the cap is enforced between streamed chunks and setting it
-        makes the implementation stream from the provider internally.
+        timeout, so the cap is enforced between streamed chunks.
+
+        Callers always get one assembled response, but the implementation
+        streams from the provider internally when total_timeout_override is
+        set or when env injection of provider custom_config is enabled (the
+        self-hosted default). Otherwise it sends a plain request.
         """
         raise NotImplementedError
 

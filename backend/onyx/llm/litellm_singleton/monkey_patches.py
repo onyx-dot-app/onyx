@@ -382,17 +382,20 @@ _INCOMPLETE_REASON_TO_FINISH_REASON = {
 def _incomplete_response_as_empty_message(
     model: str, raw_response: Any, model_response: Any
 ) -> Any | None:
-    """Build the chat response for an incomplete Responses API reply that has
-    no message item, or None when the reply is not that case.
+    """Build the chat response for an incomplete Responses API reply whose
+    output holds nothing but reasoning items, or None for any other reply.
 
     A reasoning model can spend all of max_output_tokens on reasoning. The
-    reply is then "incomplete" with no message, upstream finds no choices and
-    raises. Streaming returns an empty message for the same reply; mirror
-    that and report the truncation as the finish reason.
+    reply is then "incomplete" with no message item, upstream finds no
+    choices and raises. Streaming returns an empty message for the same
+    reply; mirror that, keep the reasoning summary, and report the truncation
+    as the finish reason. Every other shape, including an incomplete reply
+    that does carry a message, goes through upstream untouched.
     """
     from litellm.responses.utils import ResponseAPILoggingUtils
     from litellm.types.llms.openai import ResponsesAPIResponse
     from litellm.types.utils import Choices, Message
+    from openai.types.responses.response_reasoning_item import ResponseReasoningItem
 
     if not isinstance(raw_response, ResponsesAPIResponse):
         return None
@@ -401,14 +404,27 @@ def _incomplete_response_as_empty_message(
     details = raw_response.incomplete_details
     if details is None or not details.reason:
         return None
+    if not all(isinstance(item, ResponseReasoningItem) for item in raw_response.output):
+        return None
 
+    summary_texts = [
+        summary.text
+        for item in raw_response.output
+        if isinstance(item, ResponseReasoningItem)
+        for summary in item.summary
+        if summary.text
+    ]
     model_response.choices = [
         Choices(
             finish_reason=_INCOMPLETE_REASON_TO_FINISH_REASON.get(
                 details.reason, "stop"
             ),
             index=0,
-            message=Message(content=None, role="assistant"),
+            message=Message(
+                content=None,
+                role="assistant",
+                reasoning_content="\n\n".join(summary_texts) or None,
+            ),
         )
     ]
     model_response.model = model
@@ -456,28 +472,26 @@ def _patch_openai_responses_transform_response() -> None:
         from litellm.types.llms.openai import ResponsesAPIResponse
         from openai.types.responses.response_reasoning_item import ResponseReasoningItem
 
-        try:
-            result = original_transform_response(
-                self,
-                model,
-                raw_response,
-                model_response,
-                logging_obj,
-                request_data,
-                messages,
-                optional_params,
-                litellm_params,
-                encoding,
-                api_key,
-                json_mode,
-            )
-        except ValueError:
-            incomplete = _incomplete_response_as_empty_message(
-                model, raw_response, model_response
-            )
-            if incomplete is None:
-                raise
+        incomplete = _incomplete_response_as_empty_message(
+            model, raw_response, model_response
+        )
+        if incomplete is not None:
             return incomplete
+
+        result = original_transform_response(
+            self,
+            model,
+            raw_response,
+            model_response,
+            logging_obj,
+            request_data,
+            messages,
+            optional_params,
+            litellm_params,
+            encoding,
+            api_key,
+            json_mode,
+        )
 
         combined_text: str | None = None
         if isinstance(raw_response, ResponsesAPIResponse) and raw_response.output:
