@@ -18,28 +18,59 @@ const (
 	claudeSkillsDir    = ".claude/skills"
 	claudeMDFile       = ".claude/CLAUDE.md"
 	llmContextCloneURL = "https://github.com/onyx-dot-app/onyx-llm-context.git"
+
+	agentClaudeCode = "claude-code"
+	agentCursor     = "cursor"
 )
+
+// knownAgents maps each supported --agent value to its installer. Every
+// installer regenerates its output, so reruns update in place.
+var knownAgents = map[string]func(
+	cmd *cobra.Command, ui *installUI, skills []llmContextSkill, repoRoot string, copyMode bool,
+) error{
+	agentClaudeCode: installClaudeSkills,
+	agentCursor: func(
+		cmd *cobra.Command, ui *installUI, skills []llmContextSkill, repoRoot string, _ bool,
+	) error {
+		return installCursorSkills(cmd, ui, skills, repoRoot)
+	},
+}
 
 func NewInstallSkillCommand() *cobra.Command {
 	var (
 		source    string
 		copyMode  bool
 		cloneRepo bool
+		agents    []string
 	)
 
 	cmd := &cobra.Command{
 		Use:   "install-skill",
-		Short: "Install onyx-llm-context skills for Claude Code",
-		Long: `Install skills from onyx-llm-context into Claude Code.
+		Short: "Install onyx-llm-context skills for your coding agent",
+		Long: `Install skills from onyx-llm-context for one or more coding agents.
 
-Enforced skills (enforced/) are added as @imports in .claude/CLAUDE.md (project-scoped, git-ignored).
-Manual skills (skills/) are symlinked into ~/.claude/skills/ and invoked via /skill-name.
+claude-code (default):
+  Enforced skills (enforced/) are added as @imports in .claude/CLAUDE.md
+  (project-scoped, git-ignored). Manual skills (skills/) are symlinked into
+  ~/.claude/skills/ and invoked via /skill-name.
+
+cursor:
+  Every skill is rendered as a rule in .cursor/rules/ (git-ignored).
+  Enforced skills apply always; on-demand skills attach when Cursor matches
+  their description, or on an explicit @skill-name mention.
 
 By default, looks for onyx-llm-context at ~/.claude/skills/onyx-llm-context.`,
 		Example: `  ods install-skill --clone
+  ods install-skill --agent cursor
+  ods install-skill --agent claude-code --agent cursor
   ods install-skill --source /path/to/onyx-llm-context
   ods install-skill --copy`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			installers, err := resolveAgents(agents)
+			if err != nil {
+				return err
+			}
+
 			if source == "" {
 				home, err := os.UserHomeDir()
 				if err != nil {
@@ -65,44 +96,74 @@ By default, looks for onyx-llm-context at ~/.claude/skills/onyx-llm-context.`,
 			if err != nil {
 				return err
 			}
-			if err := installEnforcedSkills(cmd, source, repoRoot); err != nil {
+			skills, err := discoverLLMContextSkills(source)
+			if err != nil {
 				return err
 			}
-			if err := installManualSkills(cmd, source, copyMode); err != nil {
-				return err
+			ui := newInstallUI(cmd.OutOrStdout())
+			for _, install := range installers {
+				if err := install(cmd, ui, skills, repoRoot, copyMode); err != nil {
+					return err
+				}
 			}
 			return nil
 		},
 	}
 
 	cmd.Flags().StringVar(&source, "source", "", "Path to onyx-llm-context (default: ~/.claude/skills/onyx-llm-context)")
-	cmd.Flags().BoolVar(&copyMode, "copy", false, "Copy files instead of symlinking")
+	cmd.Flags().BoolVar(&copyMode, "copy", false, "Copy files instead of symlinking (claude-code manual skills only)")
 	cmd.Flags().BoolVar(&cloneRepo, "clone", false, fmt.Sprintf("Clone onyx-llm-context from %s if not already present", llmContextCloneURL))
+	cmd.Flags().StringSliceVar(&agents, "agent", []string{agentClaudeCode}, "Agents to install for (repeatable): claude-code, cursor")
 
 	return cmd
 }
 
-// installEnforcedSkills writes @imports for all enforced/ skills into .claude/CLAUDE.md at the repo root.
-func installEnforcedSkills(cmd *cobra.Command, source, repoRoot string) error {
-	enforcedDir := filepath.Join(source, "enforced")
-	entries, err := os.ReadDir(enforcedDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
+// resolveAgents maps the --agent values to installers, in the given order and
+// deduplicated. An unknown agent is an error rather than a skip, so a typo
+// never reads as a successful install.
+func resolveAgents(agents []string) (
+	[]func(*cobra.Command, *installUI, []llmContextSkill, string, bool) error, error,
+) {
+	var installers []func(*cobra.Command, *installUI, []llmContextSkill, string, bool) error
+	seen := make(map[string]bool, len(agents))
+	for _, agent := range agents {
+		if seen[agent] {
+			continue
 		}
-		return fmt.Errorf("could not read %s: %w", enforcedDir, err)
+		seen[agent] = true
+		install, ok := knownAgents[agent]
+		if !ok {
+			known := make([]string, 0, len(knownAgents))
+			for name := range knownAgents {
+				known = append(known, name)
+			}
+			return nil, fmt.Errorf(
+				"unknown agent %q; known agents: %s", agent, strings.Join(known, ", "),
+			)
+		}
+		installers = append(installers, install)
 	}
+	return installers, nil
+}
 
+func installClaudeSkills(
+	cmd *cobra.Command, ui *installUI, skills []llmContextSkill, repoRoot string, copyMode bool,
+) error {
+	if err := installEnforcedSkills(cmd, skills, repoRoot); err != nil {
+		return err
+	}
+	return installManualSkills(cmd, ui, skills, copyMode)
+}
+
+// installEnforcedSkills writes @imports for all enforced skills into .claude/CLAUDE.md at the repo root.
+func installEnforcedSkills(
+	cmd *cobra.Command, skills []llmContextSkill, repoRoot string,
+) error {
 	var imports []string
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
+	for _, skill := range skills {
+		if skill.Enforced {
+			imports = append(imports, fmt.Sprintf("@%s", skill.File))
 		}
-		skillFile := filepath.Join(enforcedDir, entry.Name(), "SKILL.md")
-		if _, err := os.Stat(skillFile); os.IsNotExist(err) {
-			continue
-		}
-		imports = append(imports, fmt.Sprintf("@%s", skillFile))
 	}
 
 	if len(imports) == 0 {
@@ -130,15 +191,18 @@ func installEnforcedSkills(cmd *cobra.Command, source, repoRoot string) error {
 	return nil
 }
 
-// installManualSkills symlinks each skills/ subdirectory into ~/.claude/skills/.
-func installManualSkills(cmd *cobra.Command, source string, copyMode bool) error {
-	skillsDir := filepath.Join(source, "skills")
-	entries, err := os.ReadDir(skillsDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
+// installManualSkills symlinks each on-demand skill directory into ~/.claude/skills/.
+func installManualSkills(
+	cmd *cobra.Command, ui *installUI, skills []llmContextSkill, copyMode bool,
+) error {
+	var manual []llmContextSkill
+	for _, skill := range skills {
+		if !skill.Enforced {
+			manual = append(manual, skill)
 		}
-		return fmt.Errorf("could not read %s: %w", skillsDir, err)
+	}
+	if len(manual) == 0 {
+		return nil
 	}
 
 	home, err := os.UserHomeDir()
@@ -146,22 +210,20 @@ func installManualSkills(cmd *cobra.Command, source string, copyMode bool) error
 		return fmt.Errorf("could not determine home directory: %w", err)
 	}
 
-	claudeSkills := filepath.Join(home, claudeSkillsDir)
-	if err := os.MkdirAll(claudeSkills, 0o755); err != nil {
-		return fmt.Errorf("could not create %s: %w", claudeSkills, err)
+	claudeSkills, err := ui.resolveTargetDir(
+		"Claude skills", filepath.Join(home, claudeSkillsDir),
+	)
+	if err != nil {
+		return err
 	}
 
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-
-		srcDir := filepath.Join(skillsDir, entry.Name())
-		dstDir := filepath.Join(claudeSkills, entry.Name())
+	for _, skill := range manual {
+		srcDir := skill.Dir
+		dstDir := filepath.Join(claudeSkills, skill.Name)
 
 		if copyMode {
 			if err := copySkill(srcDir, dstDir); err != nil {
-				return fmt.Errorf("could not copy %s: %w", entry.Name(), err)
+				return fmt.Errorf("could not copy %s: %w", skill.Name, err)
 			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Copied  %s\n", dstDir)
 			continue
@@ -176,12 +238,12 @@ func installManualSkills(cmd *cobra.Command, source string, copyMode bool) error
 		}
 		rel, err := filepath.Rel(claudeSkills, srcDir)
 		if err != nil {
-			return fmt.Errorf("could not compute relative path for %s: %w", entry.Name(), err)
+			return fmt.Errorf("could not compute relative path for %s: %w", skill.Name, err)
 		}
 
 		if err := os.Symlink(rel, dstDir); err != nil {
 			if copyErr := copySkill(srcDir, dstDir); copyErr != nil {
-				return fmt.Errorf("could not install %s: %w", entry.Name(), copyErr)
+				return fmt.Errorf("could not install %s: %w", skill.Name, copyErr)
 			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Copied  %s (symlink failed)\n", dstDir)
 			continue
