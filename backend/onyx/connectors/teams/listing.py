@@ -11,22 +11,10 @@ from office365.teams.channels.channel import Channel
 from office365.teams.team import Team
 
 from onyx.connectors.teams.models import ChannelRef
-from onyx.connectors.teams.utils import execute_query_with_retry
+from onyx.connectors.teams.utils import escape_odata_string, execute_query_with_retry
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-
-def _escape_odata_string(name: str) -> str:
-    """Escape special characters for OData string literals.
-
-    Uses proper OData v4 string literal escaping:
-    - Single quotes: ' becomes ''
-    - Other characters are handled by using contains() instead of eq for problematic cases
-    """
-    # Escape single quotes for OData syntax (replace ' with '')
-    escaped = name.replace("'", "''")
-    return escaped
 
 
 def has_odata_incompatible_chars(team_names: list[str] | None) -> bool:
@@ -75,7 +63,7 @@ def _build_simple_odata_filter(safe_names: list[str]) -> str | None:
 
     filter_parts = []
     for name in safe_names:
-        escaped_name = _escape_odata_string(name)
+        escaped_name = escape_odata_string(name)
         filter_parts.append(f"displayName eq '{escaped_name}'")
 
     return " or ".join(filter_parts)

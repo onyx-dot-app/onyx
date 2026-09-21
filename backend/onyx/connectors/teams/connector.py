@@ -38,10 +38,16 @@ from onyx.connectors.models import (
 from onyx.connectors.teams import listing
 from onyx.connectors.teams.files import FileSource
 from onyx.connectors.teams.models import ChannelRef
+from onyx.connectors.teams.organizers import (
+    Organizer,
+    OrganizerSource,
+    OrganizerStage,
+)
 from onyx.connectors.teams.refusals import channel_failure, is_permanent, status
 from onyx.connectors.teams.session import TeamsSession
 from onyx.connectors.teams.sources import SlimWalk
 from onyx.connectors.teams.threads import ThreadSource
+from onyx.connectors.teams.transcripts import TranscriptSource
 from onyx.connectors.teams.utils import ChannelFilesUnavailable
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.batching import batch_generator
@@ -52,9 +58,6 @@ logger = setup_logger()
 
 _SLIM_DOC_BATCH_SIZE = 5000
 
-# Pruning and permission sync both run the slim walk under this label.
-_SLIM_WALK = "retrieve_all_slim_docs_perm_sync"
-
 
 class TeamsCheckpoint(ConnectorCheckpoint):
     # None until the teams are listed.
@@ -64,6 +67,12 @@ class TeamsCheckpoint(ConnectorCheckpoint):
     # a page instead of a whole team. No page url means the channel's first page.
     current_channel: ChannelRef | None = None
     next_messages_url: str | None = None
+    # The meeting organizers follow the channels. None until their first page is
+    # listed, then a batch of organizers per step and a page at a time. Whole
+    # organizers ride along, not ids: the documents name the organizer, and a
+    # resumed attempt would otherwise read every user again. A page is 100.
+    todo_organizers: list[Organizer] | None = None
+    next_organizers_url: str | None = None
 
 
 class TeamsConnector(
@@ -74,7 +83,8 @@ class TeamsConnector(
 ):
     """Walks the teams, then each team's channels a page at a time. What a
     channel holds is read by one source per content type: its threads, and its
-    files when attachments are on."""
+    files when attachments are on. What a scheduled meeting leaves behind is
+    listed per organizer, so those sources follow the channels."""
 
     MAX_WORKERS = 10
 
@@ -91,12 +101,19 @@ class TeamsConnector(
         include_attachments: bool = False,
         # Off by default: every pasted image is a download and a vision call.
         include_inline_images: bool = False,
+        # Off by default: transcripts need three more grants, a tenant setting
+        # and an application access policy. Empty organizers means every
+        # enabled user with a Teams license.
+        include_meeting_transcripts: bool = False,
+        transcript_organizers: list[str] | None = None,
     ) -> None:
         TeamsSession.__init__(self, graph_api_host, authority_host)
         self.max_workers = max_workers
         self.requested_team_list: list[str] = teams or []
         self.include_attachments = include_attachments
         self.include_inline_images = include_inline_images
+        self.include_meeting_transcripts = include_meeting_transcripts
+        self.transcript_organizers: list[str] = transcript_organizers or []
         # Channels walked again from their first page in this attempt: a saved
         # page url Graph rejects recovers once per attempt and can never loop.
         self._restarted_channel_ids: set[str] = set()
@@ -104,6 +121,16 @@ class TeamsConnector(
         self._files: FileSource | None = (
             FileSource(self, self.requested_team_list, lambda: self.raw_file_callback)
             if include_attachments
+            else None
+        )
+        organizer_sources: list[OrganizerSource] = []
+        if include_meeting_transcripts:
+            organizer_sources.append(
+                TranscriptSource(self, covers_every_user=not self.transcript_organizers)
+            )
+        self._organizers: OrganizerStage | None = (
+            OrganizerStage(self, self.transcript_organizers, organizer_sources)
+            if organizer_sources
             else None
         )
 
@@ -195,6 +222,8 @@ class TeamsConnector(
 
         if self._files is not None:
             self._files.validate(list(validation_query))
+        if self._organizers is not None:
+            self._organizers.validate()
 
     # impls for CheckpointedConnector
 
@@ -209,7 +238,7 @@ class TeamsConnector(
     def load_from_checkpoint(
         self,
         start: SecondsSinceUnixEpoch,
-        end: SecondsSinceUnixEpoch,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch,
         checkpoint: TeamsCheckpoint,
     ) -> CheckpointOutput[TeamsCheckpoint]:
         graph_client = self.graph()
@@ -222,8 +251,11 @@ class TeamsConnector(
                 requested=self.requested_team_list,
             )
             checkpoint.todo_team_ids = [team.id for team in teams if team.id]
-        elif checkpoint.current_channel is None and not checkpoint.todo_channels:
-            # A team is left, or has_more would have ended the walk.
+        elif checkpoint.current_channel is not None or checkpoint.todo_channels:
+            if checkpoint.current_channel is None:
+                checkpoint.current_channel = checkpoint.todo_channels.pop()
+            yield from self._walk_channel_page(checkpoint, start)
+        elif checkpoint.todo_team_ids:
             team_id = checkpoint.todo_team_ids.pop()
             team = listing.get_team_by_id(graph_client=graph_client, team_id=team_id)
             checkpoint.todo_channels = [
@@ -236,15 +268,29 @@ class TeamsConnector(
                 team_id,
                 len(checkpoint.todo_team_ids),
             )
-        else:
-            if checkpoint.current_channel is None:
-                checkpoint.current_channel = checkpoint.todo_channels.pop()
-            yield from self._walk_channel_page(checkpoint, start)
+        elif self._organizers is not None and checkpoint.todo_organizers:
+            yield from self._organizers.index_batch(
+                checkpoint.todo_organizers, start, end
+            )
+        elif self._organizers is not None and (
+            checkpoint.todo_organizers is None or checkpoint.next_organizers_url
+        ):
+            checkpoint.todo_organizers, checkpoint.next_organizers_url = (
+                self._organizers.next_page(checkpoint.next_organizers_url)
+            )
 
         checkpoint.has_more = bool(
             checkpoint.current_channel
             or checkpoint.todo_channels
             or checkpoint.todo_team_ids
+            or (
+                self._organizers is not None
+                and (
+                    checkpoint.todo_organizers is None
+                    or checkpoint.todo_organizers
+                    or checkpoint.next_organizers_url
+                )
+            )
         )
         return checkpoint
 
@@ -400,17 +446,14 @@ class TeamsConnector(
             yield from batch_generator(
                 slim_docs,
                 _SLIM_DOC_BATCH_SIZE,
-                pre_batch_yield=lambda _: _slim_batch_signals(callback),
+                pre_batch_yield=lambda _: walk.batch_signals(),
             )
-
-
-def _slim_batch_signals(callback: IndexingHeartbeatInterface | None) -> None:
-    """The stop and progress signals the runner gets before every batch."""
-    if callback is None:
-        return
-    if callback.should_stop():
-        raise RuntimeError(f"{_SLIM_WALK}: Stop signal detected")
-    callback.progress(_SLIM_WALK, 1)
+        if self._organizers is not None:
+            yield from batch_generator(
+                self._organizers.slim(walk),
+                _SLIM_DOC_BATCH_SIZE,
+                pre_batch_yield=lambda _: walk.batch_signals(),
+            )
 
 
 def _rejects_saved_cursor(
