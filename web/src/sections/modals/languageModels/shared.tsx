@@ -496,8 +496,11 @@ function hasModelMetadata(model: ModelConfiguration): boolean {
 /** Row description. Several ids can share one title, so the model id comes
  *  first when the title is not the id. Metadata such as
  *  "128K · 🇫🇮 · fp8 · tools, reasoning" follows when the model has any. */
-function buildModelDescription(model: ModelConfiguration): string | undefined {
-  const id = modelDisplayName(model) === model.name ? undefined : model.name;
+function buildModelDescription(
+  model: ModelConfiguration,
+  title: string
+): string | undefined {
+  const id = title === model.name ? undefined : model.name;
   if (!hasModelMetadata(model)) return id;
   const parts: string[] = id ? [id] : [];
   const context = formatContextSize(model.max_input_tokens);
@@ -583,7 +586,7 @@ function ModelRow({
               sizePreset="main-ui"
               icon={() => <Checkbox checked={isSelected} />}
               title={displayName}
-              description={buildModelDescription(model)}
+              description={buildModelDescription(model, displayName)}
               rightChildren={modelRightChildren(model)}
               editable
               onTitleChange={(newTitle) => onRename(newTitle || undefined)}
