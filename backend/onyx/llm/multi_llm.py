@@ -1280,13 +1280,8 @@ class LitellmLLM(LLM):
         if self._uses_isolated_client():
             client = HTTPHandler(timeout=read_timeout)
 
-        # A plain request is 2-4x cheaper in CPU than streaming and reassembling
-        # a one-shot answer. Streaming stays for two cases:
-        # - total_timeout_override: the wall-clock deadline is checked between
-        #   chunks, and keepalive pings defeat the socket read timeout.
-        # - env injection (self-hosted only): env-only custom_config keys are
-        #   set under a global lock, and streaming keeps the lock to connection
-        #   setup instead of the full inference.
+        # Stream only when needed: a total timeout is enforced between chunks,
+        # and env injection must not hold its lock for the full inference.
         env_injection_enabled = _env_injection_enabled()
         use_stream = total_timeout_override is not None or env_injection_enabled
 
