@@ -356,16 +356,13 @@ def test_parse_gemini_version(
 @pytest.mark.parametrize(
     "model_name, expected",
     [
-        # Google's thinking table: 3.7 and 3.8 Flash take low/medium/high only.
         ("gemini-3.8-flash", True),
         ("vertex_ai/gemini-3.8-flash", True),
         ("gemini-3.7-flash", True),
-        # Earlier Flash releases and the lite variants still take "minimal".
         ("gemini-3.6-flash", False),
         ("gemini-3.5-flash", False),
         ("gemini-3.5-flash-lite", False),
         ("gemini-3-flash-preview", False),
-        # Pro is not affected: LiteLLM already maps "none" to "low" there.
         ("gemini-3.1-pro-preview", False),
         ("gemini-2.5-flash", False),
         ("claude-sonnet-5", False),

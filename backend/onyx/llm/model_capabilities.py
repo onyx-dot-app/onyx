@@ -688,18 +688,12 @@ def anthropic_omits_sampling_params(model_name: str) -> bool:
     )
 
 
-# Gemini 3.7 Flash and later take thinking levels low/medium/high only, and
-# thinking cannot be turned off. Omitting the level runs Google's medium
-# default, and LiteLLM maps reasoning_effort "none" to "minimal" for every
-# "gemini-3*flash", which these reject.
 _GEMINI_FLASH_NO_MINIMAL_MIN_VERSION = (3, 7)
 
 _GEMINI_VERSION_PATTERN = re.compile(r"gemini-(\d+)(?:\.(\d+))?")
 
 
 def parse_gemini_version(model_name: str) -> tuple[int, int] | None:
-    """(major, minor) from a Gemini model name, minor 0 when absent. None for
-    any other name. Tolerates provider prefixes ("vertex_ai/gemini-3.8-flash")."""
     match = _GEMINI_VERSION_PATTERN.search(model_name.lower())
     if match is None:
         return None
@@ -707,9 +701,6 @@ def parse_gemini_version(model_name: str) -> tuple[int, int] | None:
 
 
 def gemini_lowest_thinking_level_is_low(model_name: str) -> bool:
-    """True for Gemini Flash models whose lowest thinking level is "low", so
-    reasoning OFF must reach them as "low" rather than silence or "minimal".
-    Name-only: the registry lags behind new Gemini releases."""
     name = model_name.lower().split("/")[-1]
     if "flash" not in name or "lite" in name:
         return False

@@ -701,12 +701,9 @@ def _anthropic_completion_kwargs(
 @pytest.mark.parametrize(
     "model_provider, model_name, expected_effort",
     [
-        # Gemini 3.7+ Flash take thinking levels low/medium/high only. Sending
-        # nothing runs Google's medium default, so off is floored at low.
         (LlmProviderNames.VERTEX_AI, "gemini-3.8-flash", "low"),
         (LlmProviderNames.VERTEX_AI, "gemini-3.7-flash", "low"),
         (LlmProviderNames.OPENROUTER, "google/gemini-3.8-flash", "low"),
-        # Earlier Gemini keep the existing behavior: no reasoning param at all.
         (LlmProviderNames.VERTEX_AI, "gemini-3.5-flash", None),
         (LlmProviderNames.VERTEX_AI, "gemini-3-flash-preview", None),
         (LlmProviderNames.VERTEX_AI, "gemini-3.1-pro-preview", None),

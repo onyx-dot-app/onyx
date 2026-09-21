@@ -822,8 +822,6 @@ class LitellmLLM(LLM):
         ):
             reasoning_effort = ReasoningEffort.LOW
 
-        # Gemini 3.7+ Flash cannot stop thinking and omitting the level runs
-        # Google's medium default, so off is the least level they accept.
         if (
             reasoning_effort is ReasoningEffort.OFF
             and reasoning_style is ReasoningParamStyle.LITELLM_EFFORT
