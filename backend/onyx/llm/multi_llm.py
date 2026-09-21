@@ -21,7 +21,6 @@ from onyx.configs.model_configs import (
     GEN_AI_NUM_RESERVED_OUTPUT_TOKENS,
     GEN_AI_TEMPERATURE,
     LITELLM_EXTRA_BODY,
-    LLM_INVOKE_FORCE_STREAMING,
 )
 from onyx.llm.api_surfaces import (
     OPENAI_COMPATIBLE_SURFACES,
@@ -1289,11 +1288,7 @@ class LitellmLLM(LLM):
         #   set under a global lock, and streaming keeps the lock to connection
         #   setup instead of the full inference.
         env_injection_enabled = _env_injection_enabled()
-        use_stream = (
-            total_timeout_override is not None
-            or LLM_INVOKE_FORCE_STREAMING
-            or env_injection_enabled
-        )
+        use_stream = total_timeout_override is not None or env_injection_enabled
 
         try:
             if use_stream:

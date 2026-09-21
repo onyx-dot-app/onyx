@@ -3313,7 +3313,6 @@ def test_ui_only_keys_never_injected_or_warned(
 def _invoke_stream_flag(
     llm: LitellmLLM,
     injection_enabled: bool,
-    force_streaming: bool = False,
     total_timeout_override: float | None = None,
 ) -> tuple[bool, ModelResponse]:
     """Run invoke() with litellm mocked and report the stream kwarg it sent."""
@@ -3330,7 +3329,6 @@ def _invoke_stream_flag(
             "onyx.llm.multi_llm._env_injection_enabled",
             return_value=injection_enabled,
         ) as mock_injection_setting,
-        patch("onyx.llm.multi_llm.LLM_INVOKE_FORCE_STREAMING", force_streaming),
     ):
         response = llm.invoke(
             [UserMessage(content="Hi")],
@@ -3378,16 +3376,6 @@ def test_invoke_streams_when_total_timeout_requested(
     forces the streaming path even with injection disabled."""
     streamed, _ = _invoke_stream_flag(
         default_multi_llm, injection_enabled=False, total_timeout_override=30
-    )
-
-    assert streamed is True
-
-
-def test_invoke_streams_when_forced_by_config(
-    default_multi_llm: LitellmLLM,
-) -> None:
-    streamed, _ = _invoke_stream_flag(
-        default_multi_llm, injection_enabled=False, force_streaming=True
     )
 
     assert streamed is True
