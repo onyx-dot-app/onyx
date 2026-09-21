@@ -466,7 +466,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           <div
             {...getRootProps()}
             className={cn(
-              "flex-1 min-h-0 w-full flex flex-col items-center outline-hidden",
+              "relative flex-1 min-h-0 w-full flex flex-col items-center outline-hidden",
               isSidePanel && "px-3"
             )}
           >
@@ -524,6 +524,9 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
               </div>
             )}
 
+            {/* Keeps the input bar below the absolute settings button when pinned to the top */}
+            {!hasMessages && isSearch && !isSidePanel && <Spacer rem={4} />}
+
             {/* AppInputBar container - in normal flex flow like AppPage */}
             <div
               ref={inputRef}
@@ -573,7 +576,13 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
             {/* Search results - shown when query is classified as search */}
             {isSearch && (
-              <div className="flex-1 w-full max-w-(--app-page-main-content-width) px-4 min-h-0 overflow-auto">
+              <div
+                className={cn(
+                  "flex-1 w-full max-w-(--app-page-main-content-width) px-4 min-h-0 overflow-hidden flex flex-col",
+                  !isSidePanel &&
+                    "pb-[calc(var(--nrf-footer-height,0px)_+_0.5rem)]"
+                )}
+              >
                 <Spacer rem={0.75} />
                 <SearchUI onDocumentClick={handleSearchDocumentClick} />
               </div>
