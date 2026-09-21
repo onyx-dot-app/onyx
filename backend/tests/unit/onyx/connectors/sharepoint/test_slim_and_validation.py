@@ -390,24 +390,53 @@ def test_probe_role_assignments_aggregates_unauthorized_sites(
 
 @patch("onyx.connectors.sharepoint.connector.requests.get")
 @patch("onyx.connectors.sharepoint.connector.acquire_token_for_rest")
-def test_probe_role_assignments_caps_probed_sites(
+def test_probe_role_assignments_checks_all_configured_sites(
     mock_acquire: MagicMock,
     mock_get: MagicMock,
 ) -> None:
-    """Only the first ROLE_ASSIGNMENTS_PROBE_MAX_SITES sites are probed."""
-    from onyx.connectors.sharepoint.connector import ROLE_ASSIGNMENTS_PROBE_MAX_SITES
+    """Every configured site must pass the permission check."""
 
     mock_acquire.return_value = MagicMock(accessToken="tok")
     mock_get.return_value = MagicMock(status_code=200)
 
     connector = _make_connector()
     connector.sites = [
-        f"https://tenant.sharepoint.com/sites/Site{i}"
-        for i in range(ROLE_ASSIGNMENTS_PROBE_MAX_SITES + 2)
+        f"https://tenant.sharepoint.com/sites/Site{i}" for i in range(20)
     ]
 
     connector.probe_role_assignments_permission()
-    assert mock_get.call_count == ROLE_ASSIGNMENTS_PROBE_MAX_SITES
+    assert mock_get.call_count == len(connector.sites)
+
+
+@pytest.mark.parametrize("status_code", [401, 403])
+@pytest.mark.parametrize("denied_site_index", [11, 19])
+@patch("onyx.connectors.sharepoint.connector.requests.get")
+@patch("onyx.connectors.sharepoint.connector.acquire_token_for_rest")
+def test_probe_role_assignments_rejects_unauthorized_site_after_first_five(
+    mock_acquire: MagicMock,
+    mock_get: MagicMock,
+    status_code: int,
+    denied_site_index: int,
+) -> None:
+    mock_acquire.return_value = MagicMock(accessToken="tok")
+    connector = _make_connector()
+    connector.sites = [
+        f"https://tenant.sharepoint.com/sites/Site{i}" for i in range(20)
+    ]
+    denied_site = connector.sites[denied_site_index]
+
+    def _fake_get(url: str, **_kwargs: object) -> MagicMock:
+        return MagicMock(
+            status_code=status_code if url.startswith(f"{denied_site}/") else 200
+        )
+
+    mock_get.side_effect = _fake_get
+
+    with pytest.raises(ConnectorValidationError) as exc_info:
+        connector.probe_role_assignments_permission()
+
+    assert denied_site in str(exc_info.value)
+    assert mock_get.call_count == len(connector.sites)
 
 
 # ---------------------------------------------------------------------------

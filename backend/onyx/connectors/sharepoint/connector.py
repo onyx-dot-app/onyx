@@ -131,11 +131,8 @@ def _is_site_excluded(site_url: str, excluded_site_patterns: list[str]) -> bool:
 # OneDrive sites live on '<tenant>-my.<suffix>' instead of '<tenant>.<suffix>'.
 _ONEDRIVE_HOST_SUFFIX = "-my"
 
-# Cap how many configured sites the perm-sync RoleAssignments probe checks at
-# validation time. Each probe is one HTTP round-trip, so we trade exhaustive
-# coverage for keeping connector creation responsive on tenants with many
-# configured sites.
-ROLE_ASSIGNMENTS_PROBE_MAX_SITES = 5
+# Limit concurrent REST requests while checking every configured site.
+ROLE_ASSIGNMENTS_PROBE_MAX_WORKERS = 5
 
 
 # The office365 library's ClientContext caches the access token from its
@@ -720,11 +717,11 @@ class SharepointConnector(
         Required for permission sync (RoleAssignments enumeration uses the
         SharePoint REST surface, which is granted separately from Graph and
         can be granted unevenly across sites under the Sites.Selected model).
-        Probes up to the first ROLE_ASSIGNMENTS_PROBE_MAX_SITES configured
-        sites in parallel and fails if any of them rejects the request, so
-        per-site permission gaps surface at validation time rather than
-        mid-index. The credential check needs only the auth method. The site
-        probe also needs the MSAL app, the tenant domain and configured sites.
+        Probes every configured site with bounded concurrency and fails if
+        any site rejects the request. Per-site permission gaps surface at
+        validation time rather than mid-index. The credential check needs only
+        the auth method. The site probe also needs the MSAL app, the tenant
+        domain and configured sites.
         """
         # No permission grant can make a credential work that SharePoint REST
         # will not accept a token from.
@@ -755,18 +752,18 @@ class SharepointConnector(
             )
             return
 
-        sites_to_probe = self.sites[:ROLE_ASSIGNMENTS_PROBE_MAX_SITES]
         headers = {"Authorization": f"Bearer {token_response.accessToken}"}
         results = run_functions_tuples_in_parallel(
             [
                 (_probe_site_role_assignments_authorized, (site_url, headers))
-                for site_url in sites_to_probe
+                for site_url in self.sites
             ],
             allow_failures=True,
+            max_workers=ROLE_ASSIGNMENTS_PROBE_MAX_WORKERS,
         )
         unauthorized_sites: list[str] = [
             site_url
-            for site_url, authorized in zip(sites_to_probe, results, strict=True)
+            for site_url, authorized in zip(self.sites, results, strict=True)
             if authorized is False
         ]
 
