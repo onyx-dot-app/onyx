@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -307,5 +308,135 @@ func TestInstallCursorSkillsNumbersASecondBackup(t *testing.T) {
 	}
 	if got := skillReadFile(t, filepath.Join(rulesDir, "always-on_old2.mdc")); got != "first hand-written" {
 		t.Fatalf("the kept file did not move to a numbered backup: %q", got)
+	}
+}
+
+func TestDiscoverSkillsRejectsANameUsedInBothTiers(t *testing.T) {
+	source := t.TempDir()
+	writeSkill(t, source, "enforced", "twin", "one", "A.")
+	writeSkill(t, source, "skills", "twin", "two", "B.")
+
+	if _, err := discoverLLMContextSkills(source); err == nil ||
+		!strings.Contains(err.Error(), `"twin"`) {
+		t.Fatalf("expected a duplicate-name error naming the skill, got %v", err)
+	}
+}
+
+func TestBackupPathSkipsDanglingSymlinksAndEventuallyGivesUp(t *testing.T) {
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "rule.mdc")
+	// A dangling symlink still owns its name and must be numbered past.
+	if err := os.Symlink(filepath.Join(dir, "gone"), filepath.Join(dir, "rule_old.mdc")); err != nil {
+		t.Fatal(err)
+	}
+
+	backup, err := backupPath(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if backup != filepath.Join(dir, "rule_old2.mdc") {
+		t.Fatalf("expected the dangling symlink to be numbered past, got %q", backup)
+	}
+
+	deployWriteFile(t, filepath.Join(dir, "rule_old2.mdc"), "x")
+	for i := 3; i <= maxBackups; i++ {
+		deployWriteFile(t, filepath.Join(dir, fmt.Sprintf("rule_old%d.mdc", i)), "x")
+	}
+	if _, err := backupPath(dest); err == nil {
+		t.Fatal("expected exhausted backup names to fail loudly")
+	}
+}
+
+func TestInstallSkill_unknownAgentFails(t *testing.T) {
+	skillEnv(t)
+	source := filepath.Join(t.TempDir(), "onyx-llm-context")
+	skillWriteSource(t, source)
+
+	_, err := skillRun(t, "--source", source, "--agent", "emacs")
+
+	if err == nil || !strings.Contains(err.Error(), `unknown agent "emacs"`) ||
+		!strings.Contains(err.Error(), agentCursor) {
+		t.Fatalf("expected an error naming the known agents, got %v", err)
+	}
+}
+
+func TestInstallSkill_agentCursorInstallsRulesEndToEnd(t *testing.T) {
+	_, repoRoot := skillEnv(t)
+	source := filepath.Join(t.TempDir(), "onyx-llm-context")
+	skillWriteSource(t, source)
+
+	out, err := skillRun(t, "--source", source, "--agent", "claude-code", "--agent", "cursor", "--agent", "cursor")
+	if err != nil {
+		t.Fatalf("install-skill: %v", err)
+	}
+
+	// Both agents installed from one invocation; the repeated agent ran once.
+	if got := readRule(t, repoRoot, "style"); !strings.Contains(got, "alwaysApply: true") {
+		t.Fatalf("expected an enforced cursor rule, got %q", got)
+	}
+	if !strings.Contains(out, "Installed "+filepath.Join(repoRoot, claudeMDFile)) {
+		t.Fatalf("expected the claude install to run too, got %q", out)
+	}
+	if strings.Count(out, "Installed "+filepath.Join(repoRoot, ".cursor", "rules", "style.mdc")) != 1 {
+		t.Fatalf("expected the duplicate --agent to be deduplicated, got %q", out)
+	}
+
+	// A rerun reports the rules as up to date.
+	out, err = skillRun(t, "--source", source, "--agent", "cursor")
+	if err != nil {
+		t.Fatalf("second install-skill: %v", err)
+	}
+	if !strings.Contains(out, "Up to date "+filepath.Join(repoRoot, ".cursor", "rules", "style.mdc")) {
+		t.Fatalf("expected up-to-date rules, got %q", out)
+	}
+}
+
+func TestResolveTargetDirCreatesTheDefaultOnConfirm(t *testing.T) {
+	def := filepath.Join(t.TempDir(), "rules")
+	ui := testUI()
+	ui.interactive = true
+	ui.confirm = func(string) bool { return true }
+
+	got, err := ui.resolveTargetDir("Cursor rules", def)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != def {
+		t.Fatalf("expected the default directory, got %q", got)
+	}
+	if _, err := os.Stat(def); err != nil {
+		t.Fatalf("confirmed default should be created: %v", err)
+	}
+}
+
+func TestResolveConflictInteractiveChoices(t *testing.T) {
+	ui := testUI()
+	ui.interactive = true
+
+	ui.choose = func(string, []string, int) int { return int(conflictKeepBoth) }
+	if got := ui.resolveConflict("x.mdc"); got != conflictKeepBoth {
+		t.Fatalf("expected keep-both, got %v", got)
+	}
+	if ui.overwriteAll {
+		t.Fatal("keep-both must not turn on overwrite-all")
+	}
+
+	ui.choose = func(string, []string, int) int { return int(conflictOverwriteOne) }
+	if got := ui.resolveConflict("x.mdc"); got != conflictOverwriteOne {
+		t.Fatalf("expected overwrite-one, got %v", got)
+	}
+	if ui.overwriteAll {
+		t.Fatal("overwrite-one must not turn on overwrite-all")
+	}
+}
+
+func TestParseSkillMarkdownWithoutAClosedFrontmatterBlockIsAllBody(t *testing.T) {
+	content := "---\ndescription: never closed\nbody text"
+	description, body, err := parseSkillMarkdown(content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if description != "" || body != content {
+		t.Fatalf("unclosed frontmatter must read as body: %q / %q", description, body)
 	}
 }

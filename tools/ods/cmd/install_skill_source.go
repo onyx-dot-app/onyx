@@ -37,6 +37,9 @@ func discoverLLMContextSkills(source string) ([]llmContextSkill, error) {
 	}
 
 	var skills []llmContextSkill
+	// Every agent maps a skill name to one file or link, so a name used in
+	// both tiers would have the second silently shadow the first.
+	seen := make(map[string]bool)
 	for _, tier := range []struct {
 		dir      string
 		enforced bool
@@ -68,6 +71,12 @@ func discoverLLMContextSkills(source string) ([]llmContextSkill, error) {
 			if err != nil {
 				return nil, fmt.Errorf("could not parse %s: %w", skillFile, err)
 			}
+			if seen[entry.Name()] {
+				return nil, fmt.Errorf(
+					"skill %q exists in both enforced/ and skills/; rename one", entry.Name(),
+				)
+			}
+			seen[entry.Name()] = true
 			skills = append(skills, llmContextSkill{
 				Name:        entry.Name(),
 				Dir:         filepath.Join(tierDir, entry.Name()),

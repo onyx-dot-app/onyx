@@ -109,7 +109,9 @@ func backupPath(dest string) (string, error) {
 		if i > 1 {
 			candidate = fmt.Sprintf("%s%d%s", base, i, ext)
 		}
-		if _, err := os.Stat(candidate); os.IsNotExist(err) {
+		// Lstat, so a dangling symlink still counts as taken and is
+		// numbered past rather than replaced.
+		if _, err := os.Lstat(candidate); os.IsNotExist(err) {
 			return candidate, nil
 		}
 	}
