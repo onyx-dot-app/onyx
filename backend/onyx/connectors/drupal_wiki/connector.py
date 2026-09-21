@@ -618,7 +618,7 @@ class DrupalWikiConnector(
             logger.error("Error processing page %s: %s", page.id, e)
             return ConnectorFailure(
                 failed_document=DocumentFailure(
-                    document_id=str(page.id),
+                    document_id=build_drupal_wiki_document_id(self.base_url, page.id),
                     document_link=build_drupal_wiki_document_id(self.base_url, page.id),
                 ),
                 failure_message=f"Error processing page {page.id}: {e}",
@@ -678,7 +678,9 @@ class DrupalWikiConnector(
                 logger.error("Error processing page ID %s: %s", page_id, e)
                 yield ConnectorFailure(
                     failed_document=DocumentFailure(
-                        document_id=str(page_id),
+                        document_id=build_drupal_wiki_document_id(
+                            self.base_url, page_id
+                        ),
                         document_link=build_drupal_wiki_document_id(
                             self.base_url, page_id
                         ),
