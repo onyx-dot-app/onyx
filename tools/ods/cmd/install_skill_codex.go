@@ -25,10 +25,13 @@ const (
 func installCodexSkills(
 	cmd *cobra.Command, ui *installUI, skills []llmContextSkill, repoRoot string,
 ) error {
-	if err := writeAgentsLocal(cmd, ui, skills, repoRoot); err != nil {
+	// The exclusion comes first: a file written before a failed exclusion
+	// would sit unignored, one `git add .` away from publishing the private
+	// guidance the exclusion exists to protect.
+	if err := excludeAgentsLocal(repoRoot); err != nil {
 		return err
 	}
-	if err := excludeAgentsLocal(repoRoot); err != nil {
+	if err := writeAgentsLocal(cmd, ui, skills, repoRoot); err != nil {
 		return err
 	}
 	return installCodexPrompts(cmd, ui, skills)
@@ -45,8 +48,10 @@ func writeAgentsLocal(
 			)
 		}
 	}
+	// With no enforced skills left, a previously compiled file would stay
+	// active through the AGENTS.md pointer, so it is removed rather than kept.
 	if len(sections) == 0 {
-		return nil
+		return removeStaleAgentsLocal(cmd, repoRoot)
 	}
 
 	content := fmt.Sprintf(
@@ -75,6 +80,27 @@ func writeAgentsLocal(
 		return fmt.Errorf("could not write %s: %w", dest, err)
 	}
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Installed %s\n", dest)
+	return nil
+}
+
+// removeStaleAgentsLocal deletes a previously generated .agents-local.md,
+// identified by its marker so a hand-written file of the same name survives.
+func removeStaleAgentsLocal(cmd *cobra.Command, repoRoot string) error {
+	dest := filepath.Join(repoRoot, agentsLocalFile)
+	content, err := os.ReadFile(dest)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("could not read %s: %w", dest, err)
+	}
+	if !strings.Contains(string(content), generatedRuleMarker) {
+		return nil
+	}
+	if err := os.Remove(dest); err != nil {
+		return fmt.Errorf("could not remove stale %s: %w", dest, err)
+	}
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Removed %s\n", dest)
 	return nil
 }
 

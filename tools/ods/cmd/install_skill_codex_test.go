@@ -57,7 +57,10 @@ func TestInstallCodexSkillsCompilesEnforcedAndExcludesTheFile(t *testing.T) {
 	if err := installCodexSkills(discardCmd(), testUI(), skills, repoRoot); err != nil {
 		t.Fatal(err)
 	}
-	exclude, _ = os.ReadFile(filepath.Join(repoRoot, ".git", "info", "exclude"))
+	exclude, err = os.ReadFile(filepath.Join(repoRoot, ".git", "info", "exclude"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if strings.Count(string(exclude), agentsLocalFile) != 1 {
 		t.Fatalf("exclude entry duplicated:\n%s", exclude)
 	}
@@ -111,5 +114,47 @@ func TestInstallCodexSkillsWritesPromptsAndRemovesStaleOnes(t *testing.T) {
 	// No enforced skills, so no compiled file is written.
 	if _, err := os.Stat(filepath.Join(repoRoot, agentsLocalFile)); !os.IsNotExist(err) {
 		t.Fatalf("compiled file should not exist without enforced skills: %v", err)
+	}
+}
+
+func TestInstallCodexSkillsRemovesTheCompiledFileWhenEnforcedSkillsVanish(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	repoRoot := gitRepo(t)
+	generated := filepath.Join(repoRoot, agentsLocalFile)
+	deployWriteFile(t, generated, generatedRuleMarker+"\nold rules")
+
+	if err := installCodexSkills(discardCmd(), testUI(), nil, repoRoot); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(generated); !os.IsNotExist(err) {
+		t.Fatalf("stale compiled file should be removed: %v", err)
+	}
+
+	// A hand-written file of the same name survives the same rerun.
+	deployWriteFile(t, generated, "my own local notes")
+	if err := installCodexSkills(discardCmd(), testUI(), nil, repoRoot); err != nil {
+		t.Fatal(err)
+	}
+	if got := skillReadFile(t, generated); got != "my own local notes" {
+		t.Fatalf("hand-written file must survive: %q", got)
+	}
+}
+
+func TestInstallCodexSkillsExcludesBeforeWriting(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	source := t.TempDir()
+	writeSkill(t, source, "enforced", "rule-a", "first", "Do A.")
+	// Not a git repo, so establishing the exclusion fails.
+	repoRoot := t.TempDir()
+
+	err := installCodexSkills(discardCmd(), testUI(), discover(t, source), repoRoot)
+
+	if err == nil {
+		t.Fatal("expected the failed exclusion to fail the install")
+	}
+	// The compiled file must not exist unignored: one git add away from a
+	// public diff is exactly what the exclusion prevents.
+	if _, statErr := os.Stat(filepath.Join(repoRoot, agentsLocalFile)); !os.IsNotExist(statErr) {
+		t.Fatalf("compiled file must not be written before the exclusion: %v", statErr)
 	}
 }
