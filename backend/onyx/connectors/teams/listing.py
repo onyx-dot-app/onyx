@@ -362,4 +362,5 @@ def channel_ref(team_id: str, channel: Channel) -> ChannelRef:
         team_id=team_id,
         id=channel.id,
         display_name=channel.properties.get("displayName") or "Unknown",
+        membership_type=channel.properties.get("membershipType"),
     )

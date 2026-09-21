@@ -22,7 +22,10 @@ CHANNEL_ID = "19:channel@thread.tacv2"
 SERVICE_ROOT = "https://graph.microsoft.com/v1.0"
 MEMBERS_URL = f"teams/{TEAM_ID}/channels/{CHANNEL_ID}/allMembers"
 DELTA_URL = message_delta_url(TEAM_ID, CHANNEL_ID, 0)
-CHANNEL = ChannelRef(team_id=TEAM_ID, id=CHANNEL_ID, display_name="General")
+# Typed, as every checkpoint saved today is: an untyped channel costs a read.
+CHANNEL = ChannelRef(
+    team_id=TEAM_ID, id=CHANNEL_ID, display_name="General", membership_type="standard"
+)
 
 
 def replies_url(root_id: str, channel_id: str = CHANNEL_ID) -> str:
@@ -138,12 +141,14 @@ def message(
     deleted: str | None = None,
     message_type: str = "message",
     sender: str | None = "Ada",
+    sender_id: str | None = None,
 ) -> dict[str, Any]:
+    user_id = sender_id or f"id-{sender}"
     return {
         "id": message_id,
         "replyToId": reply_to,
         "subject": None if reply_to else f"Subject {message_id}",
-        "from": {"user": {"id": "u1", "displayName": sender}} if sender else None,
+        "from": {"user": {"id": user_id, "displayName": sender}} if sender else None,
         "messageType": message_type,
         "body": {
             "contentType": "html",

@@ -30,7 +30,12 @@ from onyx.connectors.teams import listing as listing_module
 from onyx.connectors.teams import session as session_module
 from onyx.connectors.teams.connector import TeamsConnector
 from onyx.connectors.teams.files import FileSource, file_document_id
-from onyx.connectors.teams.utils import GraphRetriesExhausted, message_delta_url
+from onyx.connectors.teams.models import ChannelRef
+from onyx.connectors.teams.utils import (
+    GraphRetriesExhausted,
+    channel_access,
+    message_delta_url,
+)
 from tests.unit.onyx.connectors.teams.helpers import (
     CHANNEL_ID,
     DELTA_URL,
@@ -43,6 +48,7 @@ from tests.unit.onyx.connectors.teams.helpers import (
     member,
     message,
     replies_url,
+    response,
     step,
     walk_channel,
 )
@@ -62,10 +68,12 @@ LIBRARY_ROUTES: dict[str, dict[str, Any]] = {
     DRIVE_URL: {"name": "Documents", "sharePointIds": {"siteUrl": SITE_URL}},
 }
 MEMBERS = {MEMBERS_URL: {"value": [member("Ada", "ada@example.com", "u1")]}}
-CHANNEL_READERS = ExternalAccess(
-    external_user_emails={"ada@example.com"},
-    external_user_group_ids=set(),
-    is_public=False,
+# A thread names the group of its channel's members, without the source prefix
+# on the permission sync walk, which adds it. The SDK channel double carries
+# no membership type, so the channel has a group of its own.
+CHANNEL_READERS = channel_access(
+    ChannelRef(team_id=TEAM_ID, id=CHANNEL_ID, display_name="General"),
+    for_indexing=False,
 )
 # What the SharePoint permission code answers for a file, and what the file's
 # document carries: the same groups under this connector's source prefix.
@@ -345,7 +353,9 @@ def test_the_slim_walk_lists_files_with_their_own_readers(
 
     assert slim == [
         ("m1", CHANNEL_READERS),
-        (file_document_id("item-1"), FILE_READERS),
+        # The permission sync prefixes the groups it is handed, so a file's
+        # groups arrive as SharePoint names them. A second prefix matches none.
+        (file_document_id("item-1"), SHAREPOINT_READERS),
     ]
     assert library["listed"] == [(DRIVE, FOLDER_ID, None)]
 
@@ -393,7 +403,7 @@ def test_the_rest_context_is_reused_per_site_until_its_token_ages(
     assert _rest_context_calls() == [(SITE_URL,), (SITE_URL,)]
 
 
-def test_channel_site_urls_are_distinct_and_a_refused_channel_fails_the_sync(
+def test_channel_site_urls_are_distinct_and_a_refused_channel_is_left_out(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     team, general = _sdk_team_and_channel()
@@ -423,9 +433,36 @@ def test_channel_site_urls_are_distinct_and_a_refused_channel_fails_the_sync(
         SITE_URL
     ]
 
-    channels.append(refused)
-    with pytest.raises(ConnectorValidationError, match='"Refused"'):
-        list(connector(client, include_attachments=True).channel_site_urls())
+    # The group sync deletes the groups a failed run did not reach, so a raise
+    # would take access from every site after the refused channel.
+    channels.insert(0, refused)
+    assert list(connector(client, include_attachments=True).channel_site_urls()) == [
+        SITE_URL
+    ]
+
+
+def test_a_team_that_refuses_its_channel_listing_is_left_out_of_the_sites(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gone = MagicMock(spec=Team)
+    gone.id = "team-gone"
+    team, general = _sdk_team_and_channel()
+    monkeypatch.setattr(listing_module, "collect_all_teams", lambda **_: [gone, team])
+
+    def channels_of(team: MagicMock) -> list[MagicMock]:
+        if team.id == "team-gone":
+            resp = response(404, {})
+            resp.content = b""
+            # The SDK lists channels and raises its own error type.
+            raise ClientRequestException(response=resp)
+        return [general]
+
+    monkeypatch.setattr(listing_module, "collect_all_channels_from_team", channels_of)
+    client = graph_client(LIBRARY_ROUTES)
+
+    assert list(connector(client, include_attachments=True).channel_site_urls()) == [
+        SITE_URL
+    ]
 
 
 @pytest.mark.parametrize("status", [403, 404])

@@ -13,6 +13,8 @@ from office365.runtime.http.request_options import RequestOptions
 from office365.runtime.queries.client_query import ClientQuery
 
 from onyx.access.models import ExternalAccess
+from onyx.access.utils import build_ext_group_name_for_onyx
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.microsoft_utils.graph_client import (
     GRAPH_API_MAX_RETRIES,
@@ -20,8 +22,12 @@ from onyx.connectors.microsoft_utils.graph_client import (
     backoff_seconds,
     sleep_and_retry,
 )
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.teams.models import ChannelFilesFolder, ChannelMember, Message
+from onyx.connectors.teams.models import (
+    ChannelFilesFolder,
+    ChannelMember,
+    ChannelRef,
+    Message,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -278,51 +284,77 @@ def fetch_channel_members(
     ]
 
 
-def channel_access(expert_infos: list[BasicExpertInfo]) -> ExternalAccess:
-    """A channel is readable by its members and no one else. A standard channel
-    is visible to its team, not the tenant, so no channel is ever public."""
+def fetch_channel_membership_type(
+    graph_client: GraphClient, team_id: str, channel_id: str
+) -> str | None:
+    row = get_json_with_retry(
+        graph_client, f"teams/{team_id}/channels/{channel_id}?$select=membershipType"
+    )
+    return row.get("membershipType")
+
+
+def channel_group_id(channel: ChannelRef) -> str:
+    """The group whose members read the channel. A standard channel is read by
+    every member of its team, so a team's standard channels share one group,
+    where a private or shared channel has a member list of its own."""
+    if channel.membership_type == "standard":
+        return f"team-members:{channel.team_id}"
+    return f"channel-members:{channel.id}"
+
+
+def source_group_ids(group_ids: set[str], for_indexing: bool) -> set[str]:
+    """Group ids as a document carries them. Indexing stores what it is handed,
+    so it needs the source prefix the group sync saves groups under. The
+    permission sync adds that prefix itself, and a second one matches no group."""
+    if not for_indexing:
+        return group_ids
+    return {
+        build_ext_group_name_for_onyx(group_id, DocumentSource.TEAMS)
+        for group_id in group_ids
+    }
+
+
+def channel_access(channel: ChannelRef, for_indexing: bool) -> ExternalAccess:
+    """A channel is readable by its members and no one else, so no channel is
+    ever public. The document names the group and the group sync names the
+    people: a team of thousands would otherwise put every email on every
+    thread, and a join or a leave would rewrite them all."""
     return ExternalAccess(
-        external_user_emails={
-            expert_info.email.lower()
-            for expert_info in expert_infos
-            if expert_info.email
-        },
-        external_user_group_ids=set(),
+        external_user_emails=set(),
+        external_user_group_ids=source_group_ids(
+            {channel_group_id(channel)}, for_indexing
+        ),
         is_public=False,
     )
 
 
-def fetch_channel_readers(
+def fetch_channel_member_emails(
     graph_client: GraphClient,
     team_id: str,
     channel_id: str,
     directory: UserDirectory,
-) -> tuple[list[BasicExpertInfo], ExternalAccess]:
-    """The channel's members as document owners and as its access list. A row
+) -> list[str]:
+    """The emails of everyone who reads the channel, for the group sync. A row
     carries its email for users of any tenant, and one without is named through
     ``directory``, which only knows users of this tenant."""
     members = fetch_channel_members(graph_client, team_id, channel_id)
     names = directory.principal_names(
         [m.user_id for m in members if not m.email and m.user_id]
     )
-    expert_infos: list[BasicExpertInfo] = []
-    unnamed = 0
-    for member in members:
-        email = member.email or names.get(member.user_id or "")
-        if email is None:
-            unnamed += 1
-            continue
-        # The email is what grants access, so a member without a name still reads.
-        expert_infos.append(
-            BasicExpertInfo(display_name=member.display_name, email=email)
-        )
-    if unnamed:
+    emails = [
+        email.lower()
+        for member in members
+        if (email := member.email or names.get(member.user_id or ""))
+    ]
+    if len(emails) < len(members):
         logger.warning(
             "%s member(s) of channel %s are not in this directory; skipping",
-            unnamed,
+            len(members) - len(emails),
             channel_id,
         )
-    return expert_infos, channel_access(expert_infos)
+    # The sync makes a user per distinct spelling and then lowercases them, so
+    # one person spelled two ways would fail the whole run on a duplicate.
+    return list(dict.fromkeys(emails))
 
 
 # The largest page Graph serves for channel messages.

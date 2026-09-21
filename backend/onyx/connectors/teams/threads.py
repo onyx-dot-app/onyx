@@ -1,12 +1,11 @@
 """Channel threads: a root message and its replies are one document, readable
-by the members of its channel."""
+through the group of its channel's members."""
 
 from collections.abc import Iterator
 from datetime import datetime
 
 import requests
 
-from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import (
@@ -25,11 +24,12 @@ from onyx.connectors.teams.images import (
     harvest_message_images,
 )
 from onyx.connectors.teams.models import ChannelRef, Message
-from onyx.connectors.teams.refusals import channel_context, is_permanent
+from onyx.connectors.teams.refusals import channel_failure, is_permanent
 from onyx.connectors.teams.session import TeamsSession
 from onyx.connectors.teams.sources import SlimWalk
 from onyx.connectors.teams.utils import (
-    fetch_channel_readers,
+    channel_access,
+    fetch_channel_membership_type,
     fetch_message_page,
     fetch_messages,
     fetch_replies,
@@ -43,8 +43,6 @@ logger = setup_logger()
 # Each pasted image costs a download now and a vision-model call at indexing,
 # so a thread stops well past what a working conversation holds.
 _MAX_IMAGES_PER_THREAD = 100
-
-_Readers = tuple[list[BasicExpertInfo], ExternalAccess]
 
 
 def _sender_name(message: Message) -> str:
@@ -102,12 +100,25 @@ def _modified_at(message: Message) -> datetime:
     return message.last_modified_date_time or message.created_date_time
 
 
+def _thread_authors(messages: list[Message]) -> list[BasicExpertInfo]:
+    """The people who wrote in the thread, each once by user id: two people can
+    share a name, and one can change theirs. Graph names a sender and gives no
+    email, and a bot or an app posts with no sender at all."""
+    names = {
+        message.from_.user.id: message.from_.user.display_name
+        for message in messages
+        if message.is_indexable
+        and message.from_
+        and message.from_.user
+        and message.from_.user.display_name
+    }
+    return [BasicExpertInfo(display_name=name) for name in names.values()]
+
+
 def _convert_thread_to_document(
     channel: ChannelRef,
     root: Message,
     replies: list[Message],
-    expert_infos: list[BasicExpertInfo],
-    external_access: ExternalAccess,
     message_images: MessageImages | None,
 ) -> Document:
     """A thread (the root message and its replies) is one document, oldest
@@ -143,9 +154,9 @@ def _convert_thread_to_document(
         # Indexing skips a document whose update time has not moved, and an
         # edit or a deleted reply moves a message's modified time, not its creation.
         doc_updated_at=max(_modified_at(message) for message in messages),
-        primary_owners=expert_infos,
+        primary_owners=_thread_authors(messages),
         metadata=({IMAGES_NOT_INDEXED: str(missed_images)} if missed_images else {}),
-        external_access=external_access,
+        external_access=channel_access(channel, for_indexing=True),
     )
 
 
@@ -153,24 +164,22 @@ class ThreadSource:
     def __init__(self, session: TeamsSession, include_inline_images: bool) -> None:
         self._session = session
         self._include_inline_images = include_inline_images
-        # A channel's readers, read once per channel per attempt. The cache dies
-        # with the process, so a resumed attempt reads them again.
-        self._readers: dict[str, _Readers] = {}
 
-    def readers(self, channel: ChannelRef) -> _Readers:
-        """The channel's members as document owners and as its access list. They
-        are never checkpointed, a saved copy would be stale on resume."""
-        if channel.id not in self._readers:
-            self._readers[channel.id] = fetch_channel_readers(
-                graph_client=self._session.graph(),
-                team_id=channel.team_id,
-                channel_id=channel.id,
-                directory=self._session.directory(),
+    def type_failure(self, channel: ChannelRef) -> ConnectorFailure | None:
+        """A checkpoint an older version saved holds its channels without a type,
+        so it is read before a thread names a group. A refused read skips the
+        channel: a guessed group could be one the group sync never lists."""
+        if channel.membership_type is not None:
+            return None
+        try:
+            channel.membership_type = fetch_channel_membership_type(
+                self._session.graph(), channel.team_id, channel.id
             )
-        return self._readers[channel.id]
-
-    def leave(self, channel: ChannelRef) -> None:
-        self._readers.pop(channel.id, None)
+        except requests.HTTPError as e:
+            if not is_permanent(e):
+                raise
+            return channel_failure(channel, "type", e)
+        return None
 
     def page(
         self,
@@ -189,7 +198,6 @@ class ThreadSource:
     def documents(
         self, channel: ChannelRef, roots: list[Message]
     ) -> Iterator[Document | ConnectorFailure]:
-        expert_infos, external_access = self.readers(channel)
         for root in roots:
             # A thread is its root message. A deleted or system root drops the
             # whole thread, which is what the slim walk lists for pruning too.
@@ -217,25 +225,16 @@ class ThreadSource:
                 channel=channel,
                 root=root,
                 replies=replies,
-                expert_infos=expert_infos,
-                external_access=external_access,
                 message_images=(
                     self._message_images if self._include_inline_images else None
                 ),
             )
 
     def slim(self, channel: ChannelRef, walk: SlimWalk) -> Iterator[SlimDocument]:
-        external_access: ExternalAccess | None = None
-        if walk.with_readers:
-            # A refused members call raises: a listing without its readers
-            # would let permission sync act on a partial picture.
-            with channel_context(channel, "members"):
-                _, external_access = fetch_channel_readers(
-                    graph_client=self._session.graph(),
-                    team_id=channel.team_id,
-                    channel_id=channel.id,
-                    directory=self._session.directory(),
-                )
+        # A thread names its channel's group, so readers cost no call.
+        external_access = (
+            channel_access(channel, for_indexing=False) if walk.with_readers else None
+        )
         messages = fetch_messages(
             graph_client=self._session.graph(),
             team_id=channel.team_id,

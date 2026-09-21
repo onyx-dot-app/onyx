@@ -14,7 +14,6 @@ from office365.sharepoint.client_context import ClientContext
 from office365.teams.team import Team
 
 from onyx.access.models import ExternalAccess
-from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.app_configs import TEAMS_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import (
@@ -48,7 +47,9 @@ from onyx.connectors.teams.models import ChannelRef
 from onyx.connectors.teams.refusals import (
     GRANT_BY_CALL,
     channel_context,
+    is_permanent,
     status,
+    warn_group_left_out,
 )
 from onyx.connectors.teams.session import TeamsSession
 from onyx.connectors.teams.sources import SlimWalk
@@ -57,6 +58,7 @@ from onyx.connectors.teams.utils import (
     GraphRetriesExhausted,
     fetch_channel_files_folder,
     fetch_drive_library,
+    source_group_ids,
 )
 from onyx.file_processing.file_types import OnyxMimeTypes
 from onyx.file_store.staging import RawFileCallback
@@ -132,12 +134,16 @@ class FileSource:
 
     def site_urls(self, channels: Iterable[ChannelRef]) -> Iterator[str]:
         """The distinct SharePoint sites behind these channels, for the group
-        sync. A refused channel raises, as in the slim walk: the sync deletes
-        the memberships of every group a partial listing misses."""
+        sync. A refused channel is left out and the listing goes on."""
         seen: set[str] = set()
         for channel in channels:
-            with channel_context(channel, "files folder"):
+            try:
                 site_url = self.resolve_library(channel).site_url
+            except (requests.HTTPError, ChannelFilesUnavailable) as e:
+                if isinstance(e, requests.HTTPError) and not is_permanent(e):
+                    raise
+                warn_group_left_out(channel, "files folder", e)
+                continue
             if site_url not in seen:
                 seen.add(site_url)
                 yield site_url
@@ -259,7 +265,7 @@ class FileSource:
         return context
 
     def _file_access(
-        self, library: ChannelLibrary, item: DriveItemData
+        self, library: ChannelLibrary, item: DriveItemData, for_indexing: bool
     ) -> ExternalAccess:
         """The file's own readers from SharePoint, expanded through site and
         Entra groups. Empty without the enterprise permission code, as for
@@ -271,14 +277,11 @@ class FileSource:
             drive_item=item.to_sdk_driveitem(self._session.graph()),
             drive_name=library.drive_name,
         )
-        # The Teams group sync persists these groups under this source's prefix,
-        # so the file's groups carry the same prefix or they would never match.
         return ExternalAccess(
             external_user_emails=access.external_user_emails,
-            external_user_group_ids={
-                build_ext_group_name_for_onyx(group_id, DocumentSource.TEAMS)
-                for group_id in access.external_user_group_ids
-            },
+            external_user_group_ids=source_group_ids(
+                access.external_user_group_ids, for_indexing
+            ),
             is_public=access.is_public,
         )
 
@@ -353,22 +356,24 @@ class FileSource:
             doc_updated_at=item.last_modified_datetime,
             primary_owners=owners,
             metadata={"channel": channel.display_name},
-            external_access=self._file_access(library, item),
+            external_access=self._file_access(library, item, for_indexing=True),
             file_id=content.staged_file_id if content is not None else None,
         )
 
     def slim(self, channel: ChannelRef, walk: SlimWalk) -> Iterator[SlimDocument]:
         """Channel files with the ids the indexing walk writes, and with the
         readers SharePoint grants them when the caller needs those. A refused
-        folder or site raises, as a refused members call does: a channel missing
-        from this listing would have its documents pruned."""
+        folder or site raises: a channel missing from this listing would have
+        its documents pruned."""
         with channel_context(channel, "files"):
             library = self.resolve_library(channel)
             for item in self._channel_files(library, start=None):
                 yield SlimDocument(
                     id=file_document_id(item.id),
                     external_access=(
-                        self._file_access(library, item) if walk.with_readers else None
+                        self._file_access(library, item, for_indexing=False)
+                        if walk.with_readers
+                        else None
                     ),
                     doc_created_at=item.created_datetime,
                 )
