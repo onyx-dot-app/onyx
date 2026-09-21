@@ -73,6 +73,31 @@ describe("InputMultiSelect", () => {
       expect(handleAdd).not.toHaveBeenCalled();
     });
 
+    test("no option set still opens and lists free-form tags", async () => {
+      const handleAdd = jest.fn();
+      const user = setupUser();
+      render(
+        <InputMultiSelect
+          tags={[{ id: "kiwi-1", label: "Kiwi" }]}
+          value="pear"
+          onChange={jest.fn()}
+          placeholder="Tag"
+          onAdd={handleAdd}
+          onRemoveTag={jest.fn()}
+        />
+      );
+
+      await user.click(screen.getByPlaceholderText("Tag"));
+
+      expect(screen.getByRole("listbox")).toBeInTheDocument();
+      expect(screen.getByRole("option", { name: /Kiwi/ })).toHaveAttribute(
+        "aria-selected",
+        "true"
+      );
+      await user.click(screen.getByLabelText('Create "pear"'));
+      expect(handleAdd).toHaveBeenCalledWith("pear");
+    });
+
     test("closed mode does not list a tag outside the set as a row", async () => {
       const user = setupUser();
       render(

@@ -53,10 +53,11 @@ type InputMultiSelectOptionsProps =
       /**
        * Without a set the input is free tagging — an open set by
        * definition — so only `"open"` may be stated. A closed set with no
-       * options to close over is a contradiction the types reject.
+       * options to close over is a contradiction the types reject. The
+       * dropdown still opens, listing the free-form tags and the create row.
        */
       mode?: "open";
-      dropdownMaxHeight?: never;
+      dropdownMaxHeight?: string;
     }
   | {
       /**
@@ -176,10 +177,9 @@ function InputMultiSelect({
     [optionsProp]
   );
   const flatOptions = useMemo(() => flattenSections(sections), [sections]);
-  // The prop's PRESENCE is the contract: an empty or still-loading closed
-  // set must not fall open. Only an absent prop means legacy free tagging.
-  const hasOptionSet = optionsProp !== undefined;
-  const freeEntry = mode === "open" || !hasOptionSet;
+  // No set is an open set with nothing in it: the dropdown still lists the
+  // free-form tags and the create row. The types only permit "open" there.
+  const freeEntry = optionsProp === undefined || mode === "open";
 
   const selectedValues = useMemo(
     () => new Set(tags.map((tag) => tag.id)),
@@ -190,37 +190,36 @@ function InputMultiSelect({
   // real, selected rows — the single's `customSelected` — so re-picking one
   // routes through the toggle-off instead of the create row.
   const customSelected = useMemo<SelectOption[]>(() => {
-    if (!hasOptionSet || mode !== "open") return [];
+    if (!freeEntry) return [];
     const optionValues = new Set(flatOptions.map((option) => option.value));
     return tags
       .filter((tag) => !optionValues.has(tag.id))
       .map((tag) => ({ value: tag.id, label: tag.label }));
-  }, [hasOptionSet, mode, flatOptions, tags]);
+  }, [freeEntry, flatOptions, tags]);
 
   // Closed-set doctrine, committed values only: a tag outside the supplied
   // set (stale seed, options shrank) flags the input chrome's error variant.
   // Open mode legitimately holds free-form tags, and typing never flags.
   const hasInvalidTag = useMemo(() => {
-    if (mode === "open" || !hasOptionSet) return false;
+    if (freeEntry) return false;
     const optionValues = new Set(flatOptions.map((option) => option.value));
     return tags.some((tag) => !optionValues.has(tag.id));
-  }, [mode, hasOptionSet, flatOptions, tags]);
+  }, [freeEntry, flatOptions, tags]);
 
   // The filter is transient UI state, like the single's: closing the
   // dropdown drops whatever was typed (the caller owns the text, so the
-  // component clears it through onChange). Optionless free-tagging keeps
-  // its draft — that text is a half-typed tag, not a filter.
+  // component clears it through onChange).
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const valueRef = useRef(value);
   valueRef.current = value;
   const wasOpenRef = useRef(false);
   useEffect(() => {
-    if (wasOpenRef.current && !isOpen && hasOptionSet) {
+    if (wasOpenRef.current && !isOpen) {
       if (valueRef.current !== "") onChangeRef.current("");
     }
     wasOpenRef.current = isOpen;
-  }, [isOpen, hasOptionSet]);
+  }, [isOpen]);
 
   const hasSearchTerm = value.trim() !== "";
   const visibleSections = useMemo(
@@ -239,8 +238,7 @@ function InputMultiSelect({
         option.value.toLowerCase() === trimmedValue ||
         option.label.toLowerCase() === trimmedValue
     ) || tags.some((tag) => tag.label.toLowerCase() === trimmedValue);
-  const showCreateOption =
-    mode === "open" && hasOptionSet && hasSearchTerm && !exactOptionMatch;
+  const showCreateOption = freeEntry && hasSearchTerm && !exactOptionMatch;
 
   const allVisibleOptions = useMemo(() => {
     const baseOptions = flattenSections(visibleSections);
@@ -283,7 +281,6 @@ function InputMultiSelect({
     setIsKeyboardNav,
     allVisibleOptions,
     onSelect: handleOptionSelect,
-    hasOptions: hasOptionSet,
   });
 
   useEffect(() => {
@@ -297,21 +294,14 @@ function InputMultiSelect({
     // edits the composition. Neither may add or arm tags.
     if (event.nativeEvent.isComposing) return;
 
-    if (hasOptionSet) {
-      handleDropdownKeyDown(event);
-      if (event.defaultPrevented) return;
-    }
+    handleDropdownKeyDown(event);
+    if (event.defaultPrevented) return;
 
     if (event.key === "Enter") {
+      // Enter belongs to the dropdown; the create row covers free-form
+      // commits. Never submit an enclosing form.
       event.preventDefault();
       event.stopPropagation();
-      // With an option set, Enter belongs to the dropdown (the create row
-      // covers free-form commits); the plain add only serves the optionless
-      // input.
-      if (hasOptionSet) return;
-      if (!freeEntry) return;
-      const trimmed = value.trim();
-      if (trimmed) onAdd(trimmed);
       return;
     }
     if (event.key === "Backspace" && value === "" && tags.length > 0) {
@@ -336,7 +326,6 @@ function InputMultiSelect({
   const autoId = useId();
   const fieldId = `multi-select-${autoId}`;
   const ariaProps = buildAriaAttributes({
-    hasOptions: hasOptionSet,
     isOpen,
     isValid: true,
     highlightedIndex,
@@ -392,13 +381,11 @@ function InputMultiSelect({
           value={value}
           onChange={(event) => {
             onChange(event.target.value);
-            if (hasOptionSet && !isOpen) setIsOpen(true);
+            if (!isOpen) setIsOpen(true);
             setHighlightedIndex(0);
             setIsKeyboardNav(false);
           }}
-          onFocus={() => {
-            if (hasOptionSet) setIsOpen(true);
-          }}
+          onFocus={() => setIsOpen(true)}
           onKeyDown={handleInputKeyDown}
           placeholder={placeholder}
           {...ariaProps}
@@ -416,27 +403,25 @@ function InputMultiSelect({
           }}
         />
       )}
-      {hasOptionSet && (
-        <SelectChevron
-          isOpen={isOpen}
-          disabled={disabled}
-          onToggle={() => {
-            setIsOpen((prev) => !prev);
-            inputRef.current?.focus();
-          }}
-        />
-      )}
+      <SelectChevron
+        isOpen={isOpen}
+        disabled={disabled}
+        onToggle={() => {
+          setIsOpen((prev) => !prev);
+          inputRef.current?.focus();
+        }}
+      />
 
       <SelectDropdown
         ref={dropdownRef}
-        isOpen={isOpen && hasOptionSet}
+        isOpen={isOpen}
         disabled={disabled}
         floatingStyles={floatingStyles}
         setFloatingRef={setFloatingRef}
         fieldId={fieldId}
         placeholder={placeholder ?? ""}
         sections={visibleSections}
-        emptySet={hasOptionSet && flatOptions.length === 0}
+        emptySet={flatOptions.length === 0}
         value=""
         selectedValues={selectedValues}
         highlightedIndex={highlightedIndex}

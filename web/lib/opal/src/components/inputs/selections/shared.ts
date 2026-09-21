@@ -64,7 +64,6 @@ interface UseSelectKeyboardProps {
   setIsKeyboardNav: (isKeyboard: boolean) => void;
   allVisibleOptions: SelectOption[];
   onSelect: (option: SelectOption) => void;
-  hasOptions: boolean;
 }
 
 /**
@@ -79,12 +78,9 @@ export function useSelectKeyboard({
   setIsKeyboardNav,
   allVisibleOptions,
   onSelect,
-  hasOptions,
 }: UseSelectKeyboardProps) {
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (!hasOptions) return;
-
       switch (e.key) {
         case "ArrowDown":
           e.preventDefault();
@@ -138,7 +134,6 @@ export function useSelectKeyboard({
       }
     },
     [
-      hasOptions,
       isOpen,
       allVisibleOptions,
       highlightedIndex,

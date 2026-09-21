@@ -70,9 +70,10 @@ or on the chip — removes it through `onRemoveTag`. Sections render with a
   of the dropdown as selected rows, like the single's, and picking one again
   removes it through `onRemoveTag`.
 
-Without `options` the input is the plain free-tagging field — an open set
-by definition, so the types accept only `mode="open"` there (`"closed"`
-without a set is a contradiction and does not compile).
+Without `options` the field is an open set with nothing in it: the dropdown
+still opens, listing the free-form tags as rows and the create row for typed
+text. The types accept only `mode="open"` there (`"closed"` without a set is
+a contradiction and does not compile).
 
 ```tsx
 <InputMultiSelect

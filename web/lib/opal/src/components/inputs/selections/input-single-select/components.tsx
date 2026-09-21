@@ -323,7 +323,6 @@ const InputSingleSelect = ({
     setIsKeyboardNav,
     allVisibleOptions,
     onSelect: handleOptionSelect,
-    hasOptions: true,
   });
 
   const handleFocus = useCallback(() => {
@@ -362,7 +361,6 @@ const InputSingleSelect = ({
 
   // ARIA Attributes Builder
   const ariaProps = buildAriaAttributes({
-    hasOptions: true,
     isOpen,
     isValid,
     highlightedIndex,

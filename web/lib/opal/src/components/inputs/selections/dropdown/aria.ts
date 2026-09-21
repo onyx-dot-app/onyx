@@ -9,7 +9,6 @@ export function sanitizeOptionId(value: string): string {
 }
 
 interface BuildAriaAttributesProps {
-  hasOptions: boolean;
   isOpen: boolean;
   isValid: boolean;
   highlightedIndex: number;
@@ -23,7 +22,6 @@ interface BuildAriaAttributesProps {
  * Ensures proper screen reader support
  */
 export function buildAriaAttributes({
-  hasOptions,
   isOpen,
   isValid,
   highlightedIndex,
@@ -32,7 +30,7 @@ export function buildAriaAttributes({
   placeholder,
 }: BuildAriaAttributesProps) {
   const activeOption =
-    hasOptions && isOpen && highlightedIndex >= 0
+    isOpen && highlightedIndex >= 0
       ? allVisibleOptions[highlightedIndex]
       : undefined;
 
@@ -40,13 +38,13 @@ export function buildAriaAttributes({
     "aria-label": placeholder,
     "aria-invalid": !isValid,
     "aria-describedby": !isValid ? `${fieldId}-error` : undefined,
-    "aria-expanded": hasOptions ? isOpen : undefined,
-    "aria-haspopup": hasOptions ? ("listbox" as const) : undefined,
-    "aria-controls": hasOptions ? `${fieldId}-listbox` : undefined,
+    "aria-expanded": isOpen,
+    "aria-haspopup": "listbox" as const,
+    "aria-controls": `${fieldId}-listbox`,
     "aria-activedescendant": activeOption
       ? `${fieldId}-option-${sanitizeOptionId(activeOption.value)}`
       : undefined,
-    "aria-autocomplete": hasOptions ? ("list" as const) : undefined,
-    role: hasOptions ? ("combobox" as const) : undefined,
+    "aria-autocomplete": "list" as const,
+    role: "combobox" as const,
   };
 }
