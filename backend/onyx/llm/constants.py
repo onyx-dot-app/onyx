@@ -30,6 +30,7 @@ class LlmProviderNames(str, Enum):
     OPENAI_COMPATIBLE = "openai_compatible"
     NEBIUS_TOKENFACTORY = "nebius_tokenfactory"
     PORTKEY = "portkey"
+    VERCEL_AI_GATEWAY = "vercel_ai_gateway"
 
     def __str__(self) -> str:
         """Needed so things like:
@@ -53,6 +54,7 @@ WELL_KNOWN_PROVIDER_NAMES = [
     LlmProviderNames.OPENAI_COMPATIBLE,
     LlmProviderNames.NEBIUS_TOKENFACTORY,
     LlmProviderNames.PORTKEY,
+    LlmProviderNames.VERCEL_AI_GATEWAY,
 ]
 
 
@@ -74,6 +76,7 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     LlmProviderNames.OPENAI_COMPATIBLE: "OpenAI-Compatible",
     LlmProviderNames.NEBIUS_TOKENFACTORY: "Nebius TokenFactory",
     LlmProviderNames.PORTKEY: "Portkey",
+    LlmProviderNames.VERCEL_AI_GATEWAY: "Vercel AI Gateway",
     "groq": "Groq",
     "anyscale": "Anyscale",
     "deepseek": "DeepSeek",
