@@ -21,7 +21,7 @@ _LOCALLY_HOSTED_PROVIDERS = frozenset(
     {
         LlmProviderNames.OLLAMA_CHAT.value,
         LlmProviderNames.LM_STUDIO.value,
-        "ollama",
+        LlmProviderNames.OLLAMA.value,
     }
 )
 

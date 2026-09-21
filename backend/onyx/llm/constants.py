@@ -21,6 +21,7 @@ class LlmProviderNames(str, Enum):
     VERTEX_AI = "vertex_ai"
     OPENROUTER = "openrouter"
     AZURE = "azure"
+    OLLAMA = "ollama"
     OLLAMA_CHAT = "ollama_chat"
     LM_STUDIO = "lm_studio"
     MISTRAL = "mistral"
@@ -65,7 +66,7 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     LlmProviderNames.VERTEX_AI: "Vertex AI",
     LlmProviderNames.OPENROUTER: "OpenRouter",
     LlmProviderNames.AZURE: "Azure",
-    "ollama": "Ollama",
+    LlmProviderNames.OLLAMA: "Ollama",
     LlmProviderNames.OLLAMA_CHAT: "Ollama",
     LlmProviderNames.LM_STUDIO: "LM Studio",
     LlmProviderNames.LITELLM_PROXY: "LiteLLM Proxy",
