@@ -186,6 +186,17 @@ function InputMultiSelect({
     [tags]
   );
 
+  // Free-form tags (open mode, outside the set) appear in the dropdown as
+  // real, selected rows — the single's `customSelected` — so re-picking one
+  // routes through the toggle-off instead of the create row.
+  const customSelected = useMemo<SelectOption[]>(() => {
+    if (!hasOptionSet || mode !== "open") return [];
+    const optionValues = new Set(flatOptions.map((option) => option.value));
+    return tags
+      .filter((tag) => !optionValues.has(tag.id))
+      .map((tag) => ({ value: tag.id, label: tag.label }));
+  }, [hasOptionSet, mode, flatOptions, tags]);
+
   // Closed-set doctrine, committed values only: a tag outside the supplied
   // set (stale seed, options shrank) flags the input chrome's error variant.
   // Open mode legitimately holds free-form tags, and typing never flags.
@@ -213,8 +224,11 @@ function InputMultiSelect({
 
   const hasSearchTerm = value.trim() !== "";
   const visibleSections = useMemo(
-    () => filterSections(sections, value),
-    [sections, value]
+    () => [
+      ...filterSections([{ options: customSelected }], value),
+      ...filterSections(sections, value),
+    ],
+    [customSelected, sections, value]
   );
   const trimmedValue = value.trim().toLowerCase();
   // An exact match means Enter should pick the option — or nothing, when
@@ -246,6 +260,9 @@ function InputMultiSelect({
         } else {
           onSelectOption?.(real);
         }
+      } else if (selectedValues.has(option.value)) {
+        // A free-form tag's own row: toggle it off.
+        onRemoveTag(option.value);
       } else {
         // The create row: commit the raw text as a free-form tag.
         const trimmed = option.value.trim();
