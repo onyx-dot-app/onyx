@@ -19,7 +19,20 @@ from onyx.connectors.zoom.recordings.access import (
     approved_registrant_emails,
     union_source_emails,
 )
-from onyx.connectors.zoom.recordings.models import OccurrenceWork, ZoomSessionType
+from onyx.connectors.zoom.recordings.models import (
+    OccurrenceWork,
+    SessionHost,
+    ZoomSessionType,
+    definitely_absent,
+    zoom_cannot_reach_back,
+)
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
+# Each occurrence costs its own call, and this runs only after every cheaper
+# lookup has already said Zoom has no such session.
+_MAX_HOST_LOOKUP_OCCURRENCES = 3
 
 # Zoom's `type` code on an entry of the recording listing. The codes and their
 # meeting/webinar split come from `meetings[].type` on Cloud Recording > List all
@@ -85,7 +98,12 @@ def _meeting_invitees(client: ZoomClient, work: OccurrenceWork) -> AccessSource:
         # Zoom returns an external invitee's real address here, unlike the
         # participants endpoint which blanks it. Being invited is what grants
         # access, so don't filter these on internal_user.
-        lambda: [i.email for i in client.list_meeting_invitees(work.session_id)],
+        lambda: [
+            invitee.email
+            for invitee in client.get_meeting_details(
+                work.session_id
+            ).settings.meeting_invitees
+        ],
     )
 
 
@@ -117,6 +135,68 @@ def _webinar_panelists(client: ZoomClient, work: OccurrenceWork) -> AccessSource
     )
 
 
+HostLookup = tuple[str, Callable[[], str | None]]
+HostLookupBuilder = Callable[[ZoomClient, str], HostLookup]
+
+
+def _host_of_newest_recording(
+    client: ZoomClient, occurrences: list[ZoomSessionOccurrence]
+) -> str | None:
+    """The owner of the newest occurrence that still has a recording. An
+    occurrence Zoom has forgotten is skipped, because an older one may still
+    answer."""
+    newest = sorted(occurrences, key=lambda o: o.start_time or "", reverse=True)[
+        :_MAX_HOST_LOOKUP_OCCURRENCES
+    ]
+    for occurrence in newest:
+        try:
+            return client.get_recording(occurrence.uuid).host_id
+        except Exception as e:
+            if definitely_absent(e) or zoom_cannot_reach_back(e):
+                continue
+            raise
+    return None
+
+
+def _meeting_scheduled_host(client: ZoomClient, session_id: str) -> HostLookup:
+    return (
+        f"the scheduled meeting {session_id}",
+        lambda: client.get_meeting_details(session_id).host_id,
+    )
+
+
+def _meeting_past_host(client: ZoomClient, session_id: str) -> HostLookup:
+    return (
+        f"the past meeting {session_id}",
+        lambda: client.get_past_meeting_details(session_id).host_id,
+    )
+
+
+def _meeting_instance_host(client: ZoomClient, session_id: str) -> HostLookup:
+    return (
+        f"the recent instances of meeting {session_id}",
+        lambda: _host_of_newest_recording(
+            client, client.list_past_meeting_occurrences(session_id)
+        ),
+    )
+
+
+def _webinar_scheduled_host(client: ZoomClient, session_id: str) -> HostLookup:
+    return (
+        f"the scheduled webinar {session_id}",
+        lambda: client.get_webinar_details(session_id).host_id,
+    )
+
+
+def _webinar_instance_host(client: ZoomClient, session_id: str) -> HostLookup:
+    return (
+        f"the recent instances of webinar {session_id}",
+        lambda: _host_of_newest_recording(
+            client, client.list_past_webinar_occurrences(session_id)
+        ),
+    )
+
+
 class SessionTypeHandler(abc.ABC):
     session_type: ZoomSessionType
 
@@ -145,12 +225,60 @@ class SessionTypeHandler(abc.ABC):
     ) -> ZoomSessionDetails:
         raise NotImplementedError
 
+    @property
+    @abc.abstractmethod
+    def host_lookups(self) -> tuple[HostLookupBuilder, ...]:
+        """Type-specific ways to find a session's host, in the order to try them.
+        The recordings lookup is left out because it is the same call for both
+        types, so `find_host` makes it first."""
+        raise NotImplementedError
+
     def fetch_access_list(self, client: ZoomClient, work: OccurrenceWork) -> set[str]:
         """Raises ZoomAccessListUnavailable rather than answering with an empty
         set, which would read as nobody having access."""
         return union_source_emails(
             [source(client, work) for source in self.access_sources]
         )
+
+    def find_host(self, client: ZoomClient, session_id: str) -> SessionHost:
+        """Whose recordings listing can still show this session, plus the
+        recording Zoom answered with for the number itself.
+
+        A missing host id only ever means Zoom has no such session, and anything
+        short of a clean not-found raises. There is deliberately no third "we
+        could not tell" answer, because a caller would write `if unknown:
+        continue` and pruning turns that into a deletion."""
+        anchor = None
+        try:
+            anchor = client.get_recording(session_id)
+        except Exception as e:
+            if not definitely_absent(e):
+                raise
+        if anchor is not None and anchor.host_id:
+            return SessionHost(host_id=anchor.host_id, anchor=anchor)
+
+        for description, fetch in (
+            builder(client, session_id) for builder in self.host_lookups
+        ):
+            try:
+                host_id = fetch()
+            except Exception as e:
+                if zoom_cannot_reach_back(e):
+                    logger.info("Zoom will not describe %s any more", description)
+                    continue
+                if definitely_absent(e):
+                    continue
+                raise
+            if host_id:
+                return SessionHost(host_id=host_id, anchor=anchor)
+
+        logger.warning(
+            "Zoom has no record of %s %s under any lookup, so its documents will "
+            "be pruned",
+            self.session_type.value,
+            session_id,
+        )
+        return SessionHost(anchor=anchor)
 
 
 class MeetingSessionType(SessionTypeHandler):
@@ -160,6 +288,9 @@ class MeetingSessionType(SessionTypeHandler):
     # run, which is accepted: being invited to a series counts as access to the
     # series.
     access_sources = (_meeting_participants, _meeting_registrants, _meeting_invitees)
+    # The scheduled meeting outlives its recordings, so it is the only lookup
+    # that answers for a series whose recent runs were never recorded.
+    host_lookups = (_meeting_scheduled_host, _meeting_past_host, _meeting_instance_host)
 
     def list_occurrences(
         self,
@@ -183,6 +314,8 @@ class WebinarSessionType(SessionTypeHandler):
     # A webinar has no invitee list to read. Zoom records only who registered,
     # who presented and who attended.
     access_sources = (_webinar_participants, _webinar_registrants, _webinar_panelists)
+    # No past-webinar details endpoint to match the meeting one.
+    host_lookups = (_webinar_scheduled_host, _webinar_instance_host)
 
     def list_occurrences(
         self,

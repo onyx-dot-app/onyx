@@ -18,8 +18,10 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import (
     CheckpointedConnectorWithPermSync,
     CheckpointOutput,
+    GenerateSlimDocumentOutput,
     Resolver,
     SecondsSinceUnixEpoch,
+    SlimConnector,
 )
 from onyx.connectors.models import (
     ConnectorCheckpoint,
@@ -48,6 +50,7 @@ from onyx.connectors.zoom.recordings.discovery import (
     HostAllowlistSource,
     build_discovery_sources,
 )
+from onyx.connectors.zoom.recordings.inventory import zoom_slim_documents
 from onyx.connectors.zoom.recordings.models import (
     OccurrenceWork,
     RecordingsState,
@@ -60,6 +63,7 @@ from onyx.connectors.zoom.recordings.processing import (
 )
 from onyx.connectors.zoom.recordings.session_types import get_session_type_handler
 from onyx.connectors.zoom.validation import probe_zoom
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -189,7 +193,7 @@ class ZoomConnectorCheckpoint(ConnectorCheckpoint):
 
 
 class ZoomConnector(
-    CheckpointedConnectorWithPermSync[ZoomConnectorCheckpoint], Resolver
+    CheckpointedConnectorWithPermSync[ZoomConnectorCheckpoint], SlimConnector, Resolver
 ):
     def __init__(
         self,
@@ -233,7 +237,7 @@ class ZoomConnector(
         )
         return None
 
-    def validate_connector_settings(self) -> None:
+    def _raise_if_nothing_is_in_scope(self) -> None:
         # Without this, a connector configured with nothing would quietly
         # index every meeting in the Zoom account.
         if not self._sources:
@@ -251,6 +255,9 @@ class ZoomConnector(
             raise ConnectorValidationError(
                 "Host Emails and Zoom Group need meetings, webinars, or both included"
             )
+
+    def validate_connector_settings(self) -> None:
+        self._raise_if_nothing_is_in_scope()
 
         try:
             parse_plan_tier(self.plan_tier)
@@ -292,6 +299,27 @@ class ZoomConnector(
         checkpoint: ZoomConnectorCheckpoint,
     ) -> CheckpointOutput[ZoomConnectorCheckpoint]:
         return self._advance(start, end, checkpoint, include_access=True)
+
+    def retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        callback: IndexingHeartbeatInterface | None = None,  # noqa: ARG002
+    ) -> GenerateSlimDocumentOutput:
+        """Pruning deletes every indexed document this does not list, so the poll
+        window is ignored and the callback is not needed: the caller drives its
+        own heartbeat off the batches.
+
+        Not SlimConnectorWithPermSync. Zoom builds its access lists while
+        indexing, so pruning wants ids and nothing else.
+        """
+        if self.client is None:
+            raise ConnectorMissingCredentialError("Zoom")
+        # Checked again here because instantiate_connector skips
+        # validate_connector_settings, so a connector saved with a blank form
+        # would reach this, list nothing, and delete everything it indexed.
+        self._raise_if_nothing_is_in_scope()
+        return zoom_slim_documents(self.client, self._sources)
 
     def reindex(
         self,
