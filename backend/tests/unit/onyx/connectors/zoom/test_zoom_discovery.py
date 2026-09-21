@@ -1,3 +1,4 @@
+import itertools
 import time
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
@@ -15,6 +16,7 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
 )
 from onyx.connectors.models import SlimDocument
+from onyx.connectors.zoom.client import MAX_LISTING_PAGES
 from onyx.connectors.zoom.models import (
     ZoomRecordingEntry,
     ZoomRecordingPage,
@@ -998,6 +1000,48 @@ class TestAListingWithNoCountFailsTheRun:
             client.list_group_members.return_value = ZoomUserPage(users=[user(id="u1")])
 
         with pytest.raises(ZoomListingIncomplete, match="no total_records"):
+            source.discover_step(client, _HOST_START, _END, None)
+
+
+class TestAListingZoomCutsShortFailsTheRun:
+    """Pruning deletes whatever a listing leaves out, and indexing never returns
+    to a window it reported a failure for, so neither may carry on with a short
+    answer. The recordings loop and the members loop are separate code, so both
+    are driven through every way Zoom can cut a listing short."""
+
+    @pytest.mark.parametrize("listing", ["recordings", "members"])
+    @pytest.mark.parametrize(
+        ("cut_short_by", "message"),
+        [
+            ("sending fewer than it counted", "listed 1 of the 3"),
+            ("repeating its cursor", "stopped advancing the cursor"),
+            ("never ending", f"past {MAX_LISTING_PAGES} pages"),
+        ],
+    )
+    def test_discovery_raises_rather_than_reporting_it(
+        self, listing: str, cut_short_by: str, message: str
+    ) -> None:
+        def page(**fields: Any) -> ZoomRecordingPage | ZoomUserPage:
+            if listing == "recordings":
+                return ZoomRecordingPage(recordings=[_recording("uuid-1")], **fields)
+            return ZoomUserPage(users=[user(id="u1")], **fields)
+
+        pages = {
+            "sending fewer than it counted": iter([page(total_records=3)]),
+            "repeating its cursor": itertools.repeat(page(next_page_token="same")),
+            "never ending": (
+                page(next_page_token=f"tok-{n}") for n in itertools.count()
+            ),
+        }[cut_short_by]
+
+        source = GroupSource("group-1")
+        client = _client_for_hosts(members=[user(id="u1")])
+        if listing == "recordings":
+            client.list_user_recordings.side_effect = pages
+        else:
+            client.list_group_members.side_effect = pages
+
+        with pytest.raises(ZoomListingIncomplete, match=message):
             source.discover_step(client, _HOST_START, _END, None)
 
 
