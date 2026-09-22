@@ -58,7 +58,9 @@ Onyx 开源，并运行在你自己的环境中。你接入 Slack、Google Drive
 - **Action 与 MCP。** Agent 可以调用外部 API 和 MCP 服务器。
 - **Web 搜索。** 搜索支持 Serper、Google PSE、Brave、SearXNG、Exa 和 Tavily，网页抓取支持内置爬虫、Firecrawl 或 Tavily Extract。
 - **代码执行。** 用于数据分析、绘图和文件编辑的沙箱。
-- **Artifact、语音模式和图像生成。**
+- **Artifact。** 在对话中生成文档、图表及其他可下载文件。
+- **语音模式。** 通过语音转文字与 Onyx 对话，并通过文字转语音听取回答。
+- **图像生成。** 在聊天中根据提示词生成图像。
 
 ---
 

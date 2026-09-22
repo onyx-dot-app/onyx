@@ -58,7 +58,9 @@ What ships in the box:
 - **Actions and MCP.** Agents can call external APIs and MCP servers.
 - **Web search.** Serper, Google PSE, Brave, SearXNG, Exa, and Tavily for search, with the built-in crawler, Firecrawl, or Tavily Extract for fetching pages.
 - **Code execution.** A sandbox for data analysis, charts, and file edits.
-- **Artifacts, voice mode, and image generation.**
+- **Artifacts.** Generate documents, charts, and other downloadable files from a conversation.
+- **Voice mode.** Talk to Onyx with speech-to-text and hear answers back with text-to-speech.
+- **Image generation.** Generate images from a prompt inside chat.
 
 ---
 
