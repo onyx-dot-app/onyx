@@ -1,7 +1,6 @@
 import json
 import time
 from collections.abc import Callable
-from functools import partial
 from typing import Any, Literal
 
 from onyx.chat.chat_state import ChatStateContainer
@@ -20,6 +19,7 @@ from onyx.chat.llm_step import (
     _looks_like_xml_tool_call_payload,
     extract_tool_calls_from_response_text,
     run_llm_step,
+    translate_history_to_llm_format,
 )
 from onyx.chat.models import (
     ChatMessageSimple,
@@ -36,8 +36,9 @@ from onyx.chat.prompt_utils import (
     process_prompt_template,
 )
 from onyx.chat.token_budget import resolve_chat_token_budget
+from onyx.chat.tool_result_budget import fit_tool_results, shorten_tool_result
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
-from onyx.configs.chat_configs import MAX_LLM_CYCLES
+from onyx.configs.chat_configs import MAX_LLM_CYCLES, MAX_TOOL_RESULT_TOKENS
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -45,10 +46,11 @@ from onyx.db.memory import UserMemoryContext, add_memory, update_memory_at_index
 from onyx.db.models import Persona
 from onyx.file_store.models import ChatFileType
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.exceptions import ClassifiedLLMError
+from onyx.llm.exceptions import ClassifiedLLMError, InputBudgetExceededError
+from onyx.llm.input_budget import count_prompt_image_tokens, estimate_request_tokens
 from onyx.llm.interfaces import LLM, LLMUserIdentity, ToolChoiceOptions
 from onyx.llm.model_capabilities import is_true_openai_model
-from onyx.llm.models import ReasoningEffort
+from onyx.llm.models import LLMInputBudget, ReasoningEffort
 from onyx.llm.utils import model_supports_image_input
 from onyx.prompts.chat_prompts import (
     IMAGE_GEN_REMINDER,
@@ -84,7 +86,6 @@ from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.tool_runner import run_tool_calls
-from onyx.tools.utils import compute_all_tool_tokens
 from onyx.tracing.framework.create import ChatTraceMetadata, trace
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_incognito_record_mode
@@ -416,10 +417,60 @@ def construct_message_history(
     token_counter: Callable[[str], int] | None = None,
     all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
     image_files_replayed_as_markers: bool = False,
-    # Tool names this step offers the model. Only the retrieval tools
-    # (read_file, internal_search) are consulted, so the out-of-context file
-    # notice never names one the model cannot call. Steps exposing neither pass
-    # an empty set; leaving it unset also names no tool.
+    request_token_counter: Callable[[list[ChatMessageSimple]], int] | None = None,
+    available_tool_names: set[str] | None = None,
+) -> list[ChatMessageSimple]:
+    minimum_budget = 0
+    maximum_budget = available_tokens
+    history_budget = maximum_budget
+    while minimum_budget <= maximum_budget:
+        try:
+            result = _construct_message_history(
+                system_prompt=system_prompt,
+                custom_agent_prompt=custom_agent_prompt,
+                simple_chat_history=simple_chat_history,
+                reminder_message=reminder_message,
+                context_files=context_files,
+                available_tokens=history_budget,
+                last_n_user_messages=last_n_user_messages,
+                token_counter=token_counter,
+                all_injected_file_metadata=all_injected_file_metadata,
+                image_files_replayed_as_markers=image_files_replayed_as_markers,
+                defer_image_tokens=request_token_counter is not None,
+                available_tool_names=available_tool_names,
+            )
+        except InputBudgetExceededError:
+            if history_budget == available_tokens:
+                raise
+            minimum_budget = history_budget + 1
+        else:
+            if request_token_counter is None:
+                return result
+            deficit = request_token_counter(result) - available_tokens
+            if deficit <= 0:
+                return result
+            maximum_budget = history_budget - 1
+            next_budget = history_budget - deficit
+            if minimum_budget <= next_budget <= maximum_budget:
+                history_budget = next_budget
+                continue
+        # Serialization can expand result text. Keep both allowance bounds.
+        history_budget = (minimum_budget + maximum_budget) // 2
+    raise InputBudgetExceededError()
+
+
+def _construct_message_history(
+    system_prompt: ChatMessageSimple | None,
+    custom_agent_prompt: ChatMessageSimple | None,
+    simple_chat_history: list[ChatMessageSimple],
+    reminder_message: ChatMessageSimple | None,
+    context_files: ExtractedContextFiles | None,
+    available_tokens: int,
+    last_n_user_messages: int | None = None,
+    token_counter: Callable[[str], int] | None = None,
+    all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
+    image_files_replayed_as_markers: bool = False,
+    defer_image_tokens: bool = False,
     available_tool_names: set[str] | None = None,
 ) -> list[ChatMessageSimple]:
     if last_n_user_messages is not None:
@@ -428,11 +479,35 @@ def construct_message_history(
                 "filtering chat history by last N user messages must be a value greater than 0"
             )
 
-    _replay_token_count = partial(
-        count_message_replay_tokens,
-        image_files_replayed_as_markers=image_files_replayed_as_markers,
-        token_counter=token_counter,
-    )
+    # Budget each message at its replay cost: when the model takes no image
+    # input, translate_history_to_llm_format sends short text markers instead
+    # of the images, so charging the stored image token cost would evict
+    # history that actually fits.
+    marker_tokens = 0
+    if image_files_replayed_as_markers and not defer_image_tokens:
+        sample_marker = NON_VISION_IMAGE_MARKER.format(file_id="0" * 36)
+        marker_tokens = (
+            token_counter(sample_marker)
+            if token_counter
+            else _NON_VISION_MARKER_TOKEN_FALLBACK
+        )
+
+    def _replay_token_count(msg: ChatMessageSimple) -> int:
+        if defer_image_tokens:
+            return max(0, msg.token_count - msg.image_token_count)
+        if not image_files_replayed_as_markers:
+            return msg.token_count
+        # Charge markers for every IMAGE entry, including ones whose stored
+        # token contribution is zero (project/context images are never
+        # counted) — the marker text is still sent for them.
+        num_images = sum(
+            1 for f in msg.image_files or [] if f.file_type == ChatFileType.IMAGE
+        )
+        if not num_images:
+            return msg.token_count
+        return (
+            max(0, msg.token_count - msg.image_token_count) + num_images * marker_tokens
+        )
 
     # Build the project / file-metadata messages up front so we can use their
     # actual token counts for the budget.
@@ -440,6 +515,10 @@ def construct_message_history(
         context_files, token_counter, available_tool_names
     )
     project_messages_tokens = sum(m.token_count for m in project_messages)
+    if defer_image_tokens and context_files and context_files.file_texts:
+        project_messages_tokens -= sum(
+            image.token_count for image in context_files.image_files
+        )
 
     history_token_budget = available_tokens
     history_token_budget -= system_prompt.token_count if system_prompt else 0
@@ -450,7 +529,9 @@ def construct_message_history(
     history_token_budget -= reminder_message.token_count if reminder_message else 0
 
     if history_token_budget < 0:
-        raise ValueError("Not enough tokens available to construct message history")
+        raise InputBudgetExceededError(
+            "Not enough tokens available to construct message history"
+        )
 
     if system_prompt:
         system_prompt.should_cache = True
@@ -506,6 +587,12 @@ def construct_message_history(
 
     # Calculate tokens needed for the last user message and everything after it
     last_user_tokens = _replay_token_count(last_user_message)
+    if token_counter:
+        messages_after_last_user = fit_tool_results(
+            messages_after_last_user,
+            history_token_budget - last_user_tokens,
+            token_counter,
+        )
     after_user_tokens = sum(
         _replay_token_count(msg) for msg in messages_after_last_user
     )
@@ -513,7 +600,7 @@ def construct_message_history(
     # Check if we can fit at least the last user message and messages after it
     required_tokens = last_user_tokens + after_user_tokens
     if required_tokens > history_token_budget:
-        raise ValueError(
+        raise InputBudgetExceededError(
             f"Not enough tokens to include the last user message and subsequent messages. "
             f"Required: {required_tokens}, Available: {history_token_budget}"
         )
@@ -1086,36 +1173,51 @@ def run_llm_loop(
                 else None
             )
 
-            tool_token_budget = compute_all_tool_tokens(final_tools, token_counter)
+            tool_defs = [tool.tool_definition() for tool in final_tools]
+            request_overhead_tokens = estimate_request_tokens(
+                [], tool_defs, token_counter
+            )
+
+            def request_token_counter(
+                history: list[ChatMessageSimple],
+                tool_definitions: list[dict[str, Any]] = tool_defs,
+                reserved_request_tokens: int = request_overhead_tokens,
+            ) -> int:
+                prompt = translate_history_to_llm_format(history, llm.config)
+                messages = llm.prepare_messages(prompt, bool(tool_definitions))
+                image_tokens = count_prompt_image_tokens(prompt)
+                # Tool definitions and the envelope were reserved before history selection.
+                return (
+                    estimate_request_tokens(
+                        messages, tool_definitions, token_counter, image_tokens
+                    )
+                    - reserved_request_tokens
+                )
+
             truncated_message_history = construct_message_history(
                 system_prompt=system_prompt,
                 custom_agent_prompt=custom_agent_prompt_msg,
                 simple_chat_history=simple_chat_history,
                 reminder_message=reminder_msg,
                 context_files=context_files,
-                available_tokens=max(0, available_tokens - tool_token_budget),
+                available_tokens=max(0, available_tokens - request_overhead_tokens),
                 token_counter=token_counter,
                 all_injected_file_metadata=all_injected_file_metadata,
                 image_files_replayed_as_markers=image_files_replayed_as_markers,
+                request_token_counter=request_token_counter,
                 available_tool_names={tool.name for tool in final_tools},
             )
 
+            estimated_input_tokens = (
+                request_token_counter(truncated_message_history)
+                + request_overhead_tokens
+            )
             max_output_tokens = token_budget.output_allowance(
-                estimated_input_tokens=tool_token_budget
-                + sum(
-                    count_message_replay_tokens(
-                        msg,
-                        image_files_replayed_as_markers=image_files_replayed_as_markers,
-                        token_counter=token_counter,
-                    )
-                    for msg in truncated_message_history
-                ),
+                estimated_input_tokens=estimated_input_tokens,
             )
 
             # This calls the LLM, yields packets (reasoning, answers, etc.) and returns the result
             # It also pre-processes the tool calls in preparation for running them
-            tool_defs = [tool.tool_definition() for tool in final_tools]
-
             # Calculate total processing time from loop start until now
             # This measures how long the user waits before the answer starts streaming
             pre_answer_processing_time = time.monotonic() - loop_start_time
@@ -1136,6 +1238,10 @@ def run_llm_loop(
                 user_identity=user_identity,
                 pre_answer_processing_time=pre_answer_processing_time,
                 reasoning_effort=reasoning_effort,
+                input_budget=LLMInputBudget(
+                    max_tokens=available_tokens,
+                    token_counter=token_counter,
+                ),
                 max_tokens=max_output_tokens,
             )
             if has_reasoned:
@@ -1399,6 +1505,18 @@ def run_llm_loop(
                     tr for tr in tool_responses if tr.tool_call is not None
                 ]
 
+                tool_call_order = {
+                    call.tool_call_id: index for index, call in enumerate(tool_calls)
+                }
+
+                def response_order(
+                    response: ToolResponse, call_order: dict[str, int] = tool_call_order
+                ) -> int:
+                    assert response.tool_call is not None
+                    return call_order[response.tool_call.tool_call_id]
+
+                valid_tool_responses.sort(key=response_order)
+
                 # Build ToolCallSimple list for all tool calls in this turn
                 tool_calls_simple: list[ToolCallSimple] = []
                 for tool_response in valid_tool_responses:
@@ -1435,8 +1553,13 @@ def run_llm_loop(
                     tc = tool_response.tool_call
                     assert tc is not None  # Already filtered above
 
-                    tool_response_message = tool_response.llm_facing_response
-                    tool_response_token_count = token_counter(tool_response_message)
+                    tool_response_message, tool_response_token_count = (
+                        shorten_tool_result(
+                            tool_response.llm_facing_response,
+                            MAX_TOOL_RESULT_TOKENS,
+                            token_counter,
+                        )
+                    )
 
                     tool_response_msg = ChatMessageSimple(
                         message=tool_response_message,

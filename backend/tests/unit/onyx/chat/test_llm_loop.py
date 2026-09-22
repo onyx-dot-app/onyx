@@ -27,6 +27,7 @@ from onyx.chat.models import (
 )
 from onyx.configs.constants import MessageType
 from onyx.file_store.models import ChatFileType
+from onyx.llm.exceptions import InputBudgetExceededError
 from onyx.llm.interfaces import LLMConfig, ToolChoiceOptions
 from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER, OPEN_URL_REMINDER
 from onyx.server.query_and_chat.placement import Placement
@@ -526,7 +527,7 @@ class TestConstructMessageHistory:
 
         # Total required: 50 (system) + 50 (custom) + 100 (project) + 50 (user) = 250
         # But only 200 available
-        with pytest.raises(ValueError, match="Not enough tokens"):
+        with pytest.raises(InputBudgetExceededError, match="Not enough tokens"):
             construct_message_history(
                 system_prompt=system_prompt,
                 custom_agent_prompt=custom_agent,
@@ -550,7 +551,8 @@ class TestConstructMessageHistory:
         # Required: 10 (system) + 30 (user2) + 30 (assistant_with_tool) = 70 tokens
         # After subtracting system: 40 tokens available, but need 60 for user2 + assistant_with_tool
         with pytest.raises(
-            ValueError, match="Not enough tokens to include the last user message"
+            InputBudgetExceededError,
+            match="Not enough tokens to include the last user message",
         ):
             construct_message_history(
                 system_prompt=system_prompt,
@@ -804,7 +806,7 @@ class TestNonVisionImageBudgeting:
 
     @pytest.mark.parametrize("stored_image_tokens", [0, 20000])
     @pytest.mark.parametrize("configured_input_limit", [8000, 24000])
-    def test_output_allowance_uses_image_replay_cost(
+    def test_output_allowance_uses_prepared_request_estimate(
         self,
         stored_image_tokens: int,
         configured_input_limit: int,
@@ -823,6 +825,7 @@ class TestNonVisionImageBudgeting:
             temperature=0,
             max_input_tokens=configured_input_limit,
         )
+        llm.prepare_messages.return_value = []
         older_user = create_message("Old input", MessageType.USER, 20000)
         older_answer = create_message("Old answer", MessageType.ASSISTANT, 5)
         with (
@@ -867,14 +870,13 @@ class TestNonVisionImageBudgeting:
 
         if configured_input_limit == 8000:
             assert step.call_args.kwargs["history"] == [older_answer, image_msg]
-            assert step.call_args.kwargs["max_tokens"] == 16000
         else:
             assert step.call_args.kwargs["history"] == [
                 older_user,
                 older_answer,
                 image_msg,
             ]
-            assert step.call_args.kwargs["max_tokens"] == 2780
+        assert step.call_args.kwargs["max_tokens"] == 16000
         assert (
             count_message_replay_tokens(
                 image_msg,
