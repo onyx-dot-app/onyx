@@ -212,3 +212,16 @@ export interface ReindexErrorRow {
   error_msg: string | null;
   paused: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Image processing
+// ---------------------------------------------------------------------------
+
+/**
+ * The tenant's image processing (captioning) configuration. `null` from the
+ * API means the feature is off; a value means it is on with that model.
+ */
+export interface ImageProcessingSettings {
+  model_configuration_id: number;
+  max_size_mb: number;
+}

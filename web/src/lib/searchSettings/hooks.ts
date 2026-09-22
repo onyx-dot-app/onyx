@@ -18,8 +18,10 @@ import {
   LLMContextualCost,
   ReindexErrorRow,
   ReindexProgress,
+  ImageProcessingSettings,
   SavedSearchSettings,
-} from "@/lib/indexing/types";
+} from "@/lib/searchSettings/types";
+import { IMAGE_PROCESSING_SETTINGS_URL } from "@/lib/searchSettings/constants";
 
 /**
  * Determines the SWR `refreshInterval` for the secondary (in-progress)
@@ -126,6 +128,17 @@ export function useReindexErrors(enabled: boolean) {
 export function useConfiguredEmbeddingProviders() {
   return useSWR<ConfiguredEmbeddingProvider[]>(
     SWR_KEYS.embeddingProviders,
+    errorHandlingFetcher
+  );
+}
+
+/**
+ * The tenant's image processing settings. `data` is `null` when the feature
+ * is off and `undefined` while loading.
+ */
+export function useImageProcessingSettings() {
+  return useSWR<ImageProcessingSettings | null>(
+    IMAGE_PROCESSING_SETTINGS_URL,
     errorHandlingFetcher
   );
 }

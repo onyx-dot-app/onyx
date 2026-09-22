@@ -1,10 +1,10 @@
-import { findRegistryModel, resolveProviderName } from "@/lib/indexing";
+import { findRegistryModel, resolveProviderName } from "@/lib/searchSettings";
 import type {
   EmbeddingModelSelection,
   EmbeddingModelSpec,
   EmbeddingProviderName,
   ResolvedEmbeddingModelForApply,
-} from "@/lib/indexing/types";
+} from "@/lib/searchSettings/types";
 
 export function savedModelSelection(
   currentModel: EmbeddingModelSpec | null,

@@ -76,7 +76,6 @@ packages:
   src/lib/headers: 100
   src/lib/hierarchy: 100
   src/lib/hooks: 95.7
-  src/lib/indexing: 99.4
   src/lib/languageModels: 98.8
   src/lib/multiModel: 100
   src/lib/notifications: 99.3
@@ -86,6 +85,7 @@ packages:
   src/lib/projects: 99.7
   src/lib/search: 99.1
   src/lib/searchFilters: 95.3
+  src/lib/searchSettings: 99.4
   src/lib/settings: 96.6
   src/lib/sidebar: 100
   src/lib/skills: 97.4
