@@ -8574,7 +8574,15 @@
         "fold": "Einklappen",
         "expand": "Ausklappen"
       },
-      "titleWithCount": "Connector-Prüfungen ({passed}/{total})"
+      "titleWithCount": "Connector-Prüfungen ({passed}/{total})",
+      "summary": {
+        "failed": "{count} fehlgeschlagen",
+        "unverified": "{count} nicht verifiziert",
+        "inProgress": "{count} in Bearbeitung",
+        "expected": "{count} weitere erwartet",
+        "skipped": "{count} übersprungen",
+        "successful": "{count} erfolgreich"
+      }
     }
   },
   "agents": {

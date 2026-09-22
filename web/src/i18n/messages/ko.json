@@ -8574,7 +8574,15 @@
         "fold": "접기",
         "expand": "펼치기"
       },
-      "titleWithCount": "커넥터 검사 ({passed}/{total})"
+      "titleWithCount": "커넥터 검사 ({passed}/{total})",
+      "summary": {
+        "failed": "실패 {count}개",
+        "unverified": "미확인 {count}개",
+        "inProgress": "진행 중 {count}개",
+        "expected": "예정 {count}개",
+        "skipped": "건너뜀 {count}개",
+        "successful": "성공 {count}개"
+      }
     }
   },
   "agents": {

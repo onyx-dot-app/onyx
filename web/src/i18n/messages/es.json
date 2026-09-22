@@ -8574,7 +8574,15 @@
         "fold": "Contraer",
         "expand": "Expandir"
       },
-      "titleWithCount": "Comprobaciones del conector ({passed}/{total})"
+      "titleWithCount": "Comprobaciones del conector ({passed}/{total})",
+      "summary": {
+        "failed": "{count} fallidas",
+        "unverified": "{count} sin verificar",
+        "inProgress": "{count} en curso",
+        "expected": "{count} más pendientes",
+        "skipped": "{count} omitidas",
+        "successful": "{count} correctas"
+      }
     }
   },
   "agents": {

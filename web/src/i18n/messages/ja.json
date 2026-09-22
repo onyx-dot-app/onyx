@@ -8574,7 +8574,15 @@
         "fold": "折りたたむ",
         "expand": "展開"
       },
-      "titleWithCount": "コネクターチェック ({passed}/{total})"
+      "titleWithCount": "コネクターチェック ({passed}/{total})",
+      "summary": {
+        "failed": "失敗 {count} 件",
+        "unverified": "未検証 {count} 件",
+        "inProgress": "実行中 {count} 件",
+        "expected": "予定 {count} 件",
+        "skipped": "スキップ {count} 件",
+        "successful": "成功 {count} 件"
+      }
     }
   },
   "agents": {

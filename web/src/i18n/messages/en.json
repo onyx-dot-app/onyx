@@ -8574,7 +8574,15 @@
         "fold": "Fold",
         "expand": "Expand"
       },
-      "titleWithCount": "Connector Checks ({passed}/{total})"
+      "titleWithCount": "Connector Checks ({passed}/{total})",
+      "summary": {
+        "failed": "{count} failed",
+        "unverified": "{count} unverified",
+        "inProgress": "{count} in progress",
+        "expected": "{count} more expected",
+        "skipped": "{count} skipped",
+        "successful": "{count} successful"
+      }
     }
   },
   "agents": {

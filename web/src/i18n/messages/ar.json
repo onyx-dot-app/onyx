@@ -8574,7 +8574,15 @@
         "fold": "طي",
         "expand": "توسيع"
       },
-      "titleWithCount": "فحوصات الموصّل ({passed}/{total})"
+      "titleWithCount": "فحوصات الموصّل ({passed}/{total})",
+      "summary": {
+        "failed": "{count} فشلت",
+        "unverified": "{count} لم يتم التحقق منها",
+        "inProgress": "{count} قيد التنفيذ",
+        "expected": "{count} أخرى متوقعة",
+        "skipped": "{count} تم تخطيها",
+        "successful": "{count} نجحت"
+      }
     }
   },
   "agents": {

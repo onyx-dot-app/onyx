@@ -8574,7 +8574,15 @@
         "fold": "Réduire",
         "expand": "Développer"
       },
-      "titleWithCount": "Vérifications du connecteur ({passed}/{total})"
+      "titleWithCount": "Vérifications du connecteur ({passed}/{total})",
+      "summary": {
+        "failed": "{count} échouées",
+        "unverified": "{count} non vérifiées",
+        "inProgress": "{count} en cours",
+        "expected": "{count} autres attendues",
+        "skipped": "{count} ignorées",
+        "successful": "{count} réussies"
+      }
     }
   },
   "agents": {
