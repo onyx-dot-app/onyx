@@ -1623,6 +1623,18 @@ class TestListRecordingRegistrants:
         assert client._session.request.call_count == 1
         assert client._session.request.call_args.kwargs["params"]["page_size"] == 1
 
+    @pytest.mark.parametrize("limit", [0, -1])
+    def test_a_limit_below_one_is_refused_before_zoom_is_asked(
+        self, limit: int
+    ) -> None:
+        client = _client()
+        client._session = MagicMock()
+
+        with pytest.raises(ValueError, match="at least 1"):
+            client.list_recording_registrants("uuid-1", limit=limit)
+
+        client._session.request.assert_not_called()
+
 
 class TestGetRecordingAuthenticationRules:
     # Read live on 2026-09-22: the built-in rule and one the admin added.

@@ -382,6 +382,8 @@ class ZoomClient:
         whole list is drained here rather than resumed from the checkpoint. A
         limit stops after that many records, for a caller that only needs to
         see Zoom answer."""
+        if limit is not None and limit < 1:
+            raise ValueError(f"A listing limit must be at least 1, got {limit}")
         records: list[_AccessRecordT] = []
         page_token: str | None = None
         seen_tokens: set[str] = set()
