@@ -77,6 +77,8 @@ interface TagFieldProps extends TagFieldBaseProps {
 
   onInputFocus?: () => void;
 
+  onInputClick?: () => void;
+
   /** Extra attributes on the text input (a select's combobox aria). */
   inputAriaProps?: React.AriaAttributes & { role?: React.AriaRole };
 
@@ -111,6 +113,7 @@ function TagField({
   onInputKeyDown,
   onEnter,
   onInputFocus,
+  onInputClick,
   inputAriaProps,
   children,
 }: TagFieldProps) {
@@ -217,6 +220,7 @@ function TagField({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           onFocus={onInputFocus}
+          onClick={onInputClick}
           onKeyDown={handleInputKeyDown}
           placeholder={placeholder}
           aria-label={placeholder}

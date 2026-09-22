@@ -145,7 +145,12 @@ function InputMultiSelect({
       (option) =>
         option.value.toLowerCase() === trimmedValue ||
         option.label.toLowerCase() === trimmedValue
-    ) || tags.some((tag) => tag.label.toLowerCase() === trimmedValue);
+    ) ||
+    tags.some(
+      (tag) =>
+        tag.id.toLowerCase() === trimmedValue ||
+        tag.label.toLowerCase() === trimmedValue
+    );
   const showCreateOption = freeEntry && hasSearchTerm && !exactOptionMatch;
 
   const allVisibleOptions = useMemo(() => {
@@ -235,6 +240,9 @@ function InputMultiSelect({
       inputRef={inputRef}
       onInputKeyDown={handleDropdownKeyDown}
       onInputFocus={() => setIsOpen(true)}
+      // A click on the already-focused input reopens after Escape, like
+      // the single's.
+      onInputClick={() => setIsOpen(true)}
       inputAriaProps={ariaProps}
     >
       <SelectChevron
