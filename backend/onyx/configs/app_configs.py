@@ -1225,6 +1225,23 @@ OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED = (
     os.environ.get("OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED", "true").lower() == "true"
 )
 
+# Limits for the built-in open_url crawler. The body read stops at the larger
+# of the HTML and PDF caps (decoded bytes); each type is then checked on its own.
+OPEN_URL_MAX_HTML_SIZE_BYTES = int(
+    os.environ.get("OPEN_URL_MAX_HTML_SIZE_BYTES") or 20 * 1024 * 1024
+)
+OPEN_URL_MAX_PDF_SIZE_BYTES = int(
+    os.environ.get("OPEN_URL_MAX_PDF_SIZE_BYTES") or 50 * 1024 * 1024
+)
+# Wall-clock limit for reading one response body.
+OPEN_URL_BODY_DEADLINE_SECONDS = float(
+    os.environ.get("OPEN_URL_BODY_DEADLINE_SECONDS") or 120
+)
+# Max URLs in one /web-search/open-urls request (also the MCP open_urls tool).
+OPEN_URLS_MAX_URLS_PER_REQUEST = int(
+    os.environ.get("OPEN_URLS_MAX_URLS_PER_REQUEST") or 20
+)
+
 # NOTE: the three SSRF env vars below (OPEN_URL_VALIDATE_SSRF,
 # MCP_SERVER_ALLOW_PRIVATE_NETWORK, MCP_SERVER_ALLOW_LOOPBACK) are no longer read
 # at their call sites. They only seed the default "SSRF Protection" level when no
