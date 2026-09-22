@@ -811,6 +811,11 @@
           "federatedConfigured": "<strong>Föderierter Konnektor bereits konfiguriert.</strong> Klicken Sie, um den vorhandenen Konnektor zu bearbeiten.",
           "slackCredentialsFound": "<strong>Vorhandene Slack-Anmeldedaten gefunden.</strong> Klicken Sie, um Ihren Slack-Konnektor zu verwalten."
         }
+      },
+      "sourceCard": {
+        "connectButton": {
+          "ariaLabel": "{source} verbinden"
+        }
       }
     },
     "agentStats": {

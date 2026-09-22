@@ -811,6 +811,11 @@
           "federatedConfigured": "<strong>フェデレーテッドコネクターは設定済みです。</strong> クリックすると、既存のコネクターを編集できます。",
           "slackCredentialsFound": "<strong>既存の Slack 資格情報が見つかりました。</strong> クリックすると、Slack コネクターを管理できます。"
         }
+      },
+      "sourceCard": {
+        "connectButton": {
+          "ariaLabel": "{source} を接続"
+        }
       }
     },
     "agentStats": {

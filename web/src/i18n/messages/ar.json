@@ -811,6 +811,11 @@
           "federatedConfigured": "<strong>موصل موحّد مهيأ بالفعل.</strong> انقر لتعديل الموصل الحالي.",
           "slackCredentialsFound": "<strong>تم العثور على بيانات اعتماد Slack موجودة.</strong> انقر لإدارة موصل Slack الخاص بك."
         }
+      },
+      "sourceCard": {
+        "connectButton": {
+          "ariaLabel": "ربط {source}"
+        }
       }
     },
     "agentStats": {

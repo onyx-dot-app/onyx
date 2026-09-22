@@ -231,21 +231,21 @@ export const ADMIN_ROUTES = {
   },
 
   // ── Documents & Knowledge ─────────────────────────────────────────
-  INDEXING_STATUS: {
-    path: "/admin/indexing/status",
-    icon: SvgBookOpen,
-    title: "Existing Connectors",
-    sidebarLabel: "Existing Connectors",
-    requiredPermission: Permission.MANAGE_CONNECTORS,
-    section: "Documents & Knowledge",
-    requiredTier: null,
-    visibleWhen: (f: FeatureFlags) => f.vectorDbEnabled,
-  },
   CONNECTORS: {
     path: "/admin/connectors",
     icon: SvgLinkedDots,
     title: "Connectors",
     sidebarLabel: "Connectors",
+    requiredPermission: Permission.MANAGE_CONNECTORS,
+    section: "Documents & Knowledge",
+    requiredTier: null,
+    visibleWhen: (f: FeatureFlags) => f.vectorDbEnabled,
+  },
+  INDEXING_STATUS: {
+    path: "/admin/indexing/status",
+    icon: SvgBookOpen,
+    title: "Existing Connectors",
+    sidebarLabel: "Existing Connectors",
     requiredPermission: Permission.MANAGE_CONNECTORS,
     section: "Documents & Knowledge",
     requiredTier: null,

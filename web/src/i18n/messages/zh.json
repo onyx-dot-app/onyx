@@ -811,6 +811,11 @@
           "federatedConfigured": "<strong>联合连接器已配置。</strong>点击可编辑现有连接器。",
           "slackCredentialsFound": "<strong>已找到现有的 Slack 凭据。</strong>点击可管理您的 Slack 连接器。"
         }
+      },
+      "sourceCard": {
+        "connectButton": {
+          "ariaLabel": "连接 {source}"
+        }
       }
     },
     "agentStats": {

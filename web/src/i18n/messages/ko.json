@@ -811,6 +811,11 @@
           "federatedConfigured": "<strong>페더레이션 커넥터가 이미 구성되어 있습니다.</strong> 클릭하여 기존 커넥터를 편집하세요.",
           "slackCredentialsFound": "<strong>기존 Slack 자격 증명을 찾았습니다.</strong> 클릭하여 Slack 커넥터를 관리하세요."
         }
+      },
+      "sourceCard": {
+        "connectButton": {
+          "ariaLabel": "{source} 연결"
+        }
       }
     },
     "agentStats": {

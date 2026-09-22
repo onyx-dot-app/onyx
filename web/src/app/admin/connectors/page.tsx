@@ -1,4 +1,5 @@
 "use client";
+import type { Route } from "next";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
 import { Content, SettingsLayouts } from "@opal/layouts";
@@ -25,7 +26,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
 import { Credential } from "@/lib/connectors/credentials";
 import { useSettings } from "@/lib/settings/hooks";
-import SourceTile from "@/components/SourceTile";
+import ConnectorSourceCard from "@/sections/cards/ConnectorSourceCard";
 import { InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -58,6 +59,7 @@ function SourceTileTooltipWrapper({
   slackCredentials?: Credential<any>[];
 }) {
   const t = useTranslations("admin.addConnector");
+  const description = t(CATEGORY_LABEL_KEYS[sourceMetadata.category]);
 
   // Check if there's already a federated connector for this source
   const existingFederatedConnector = useMemo(() => {
@@ -82,11 +84,11 @@ function SourceTileTooltipWrapper({
   const navigationUrl = useMemo(() => {
     // If there's an existing federated connector, route to edit it
     if (existingFederatedConnector) {
-      return `/admin/federated/${existingFederatedConnector.id}`;
+      return `/admin/federated/${existingFederatedConnector.id}` as Route;
     }
 
     // For all other sources (including Slack), use the regular admin URL
-    return sourceMetadata.adminUrl;
+    return sourceMetadata.adminUrl as Route;
   }, [existingFederatedConnector, sourceMetadata]);
 
   // Compute whether to hide the tooltip
@@ -98,11 +100,11 @@ function SourceTileTooltipWrapper({
   // If tooltip should be hidden, just render the tile as a component
   if (shouldHideTooltip) {
     return (
-      <SourceTile
+      <ConnectorSourceCard
         sourceMetadata={sourceMetadata}
+        description={description}
         preSelect={preSelect}
         navigationUrl={navigationUrl}
-        hasExistingSlackCredentials={!!hasExistingSlackCredentials}
       />
     );
   }
@@ -127,11 +129,11 @@ function SourceTileTooltipWrapper({
       }
     >
       <div>
-        <SourceTile
+        <ConnectorSourceCard
           sourceMetadata={sourceMetadata}
+          description={description}
           preSelect={preSelect}
           navigationUrl={navigationUrl}
-          hasExistingSlackCredentials={!!hasExistingSlackCredentials}
         />
       </div>
     </Tooltip>
@@ -267,65 +269,33 @@ export default function Page() {
         divider
       />
       <SettingsLayouts.Body>
-        <InputTypeIn
-          type="text"
-          searchIcon
-          placeholder={t("search.placeholder")}
-          ref={searchInputRef}
-          value={rawSearchTerm} // keep the input bound to immediate state
-          onChange={(event) => setSearchTerm(event.target.value)}
-          onKeyDown={handleKeyPress}
-        />
+        <div className="@container/sourcecards flex flex-col gap-8">
+          <InputTypeIn
+            type="text"
+            searchIcon
+            placeholder={t("search.placeholder")}
+            ref={searchInputRef}
+            value={rawSearchTerm} // keep the input bound to immediate state
+            onChange={(event) => setSearchTerm(event.target.value)}
+            onKeyDown={handleKeyPress}
+          />
 
-        {dedupedPopular.length > 0 && (
-          <GeneralLayouts.Section
-            gap={3}
-            height="fit"
-            alignItems="stretch"
-            justifyContent="start"
-          >
-            <Content
-              title={t("popular.title")}
-              sizePreset="main-content"
-              variant="section"
-            />
-            <div className="flex flex-wrap gap-4">
-              {dedupedPopular.map((source) => (
-                <SourceTileTooltipWrapper
-                  preSelect={false}
-                  key={source.internalName}
-                  sourceMetadata={source}
-                  federatedConnectors={federatedConnectors}
-                  slackCredentials={slackCredentials}
-                />
-              ))}
-            </div>
-          </GeneralLayouts.Section>
-        )}
-
-        {Object.entries(categorizedSources)
-          .filter(([_, sources]) => sources.length > 0)
-          .map(([category, sources], categoryInd) => (
+          {dedupedPopular.length > 0 && (
             <GeneralLayouts.Section
-              key={category}
               gap={3}
               height="fit"
               alignItems="stretch"
               justifyContent="start"
             >
               <Content
-                title={t(CATEGORY_LABEL_KEYS[category as SourceCategory])}
+                title={t("popular.title")}
                 sizePreset="main-content"
                 variant="section"
               />
-              <div className="flex flex-wrap gap-4">
-                {sources.map((source, sourceInd) => (
+              <div className="grid grid-cols-1 @xl/sourcecards:grid-cols-2 gap-2">
+                {dedupedPopular.map((source) => (
                   <SourceTileTooltipWrapper
-                    preSelect={
-                      (searchTerm?.length ?? 0) > 0 &&
-                      categoryInd == 0 &&
-                      sourceInd == 0
-                    }
+                    preSelect={false}
                     key={source.internalName}
                     sourceMetadata={source}
                     federatedConnectors={federatedConnectors}
@@ -334,7 +304,41 @@ export default function Page() {
                 ))}
               </div>
             </GeneralLayouts.Section>
-          ))}
+          )}
+
+          {Object.entries(categorizedSources)
+            .filter(([_, sources]) => sources.length > 0)
+            .map(([category, sources], categoryInd) => (
+              <GeneralLayouts.Section
+                key={category}
+                gap={3}
+                height="fit"
+                alignItems="stretch"
+                justifyContent="start"
+              >
+                <Content
+                  title={t(CATEGORY_LABEL_KEYS[category as SourceCategory])}
+                  sizePreset="main-content"
+                  variant="section"
+                />
+                <div className="grid grid-cols-1 @xl/sourcecards:grid-cols-2 gap-2">
+                  {sources.map((source, sourceInd) => (
+                    <SourceTileTooltipWrapper
+                      preSelect={
+                        (searchTerm?.length ?? 0) > 0 &&
+                        categoryInd == 0 &&
+                        sourceInd == 0
+                      }
+                      key={source.internalName}
+                      sourceMetadata={source}
+                      federatedConnectors={federatedConnectors}
+                      slackCredentials={slackCredentials}
+                    />
+                  ))}
+                </div>
+              </GeneralLayouts.Section>
+            ))}
+        </div>
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
