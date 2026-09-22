@@ -1,28 +1,83 @@
-import type { IconFunctionComponent } from "@opal/types";
+import type { ValidSources } from "@/lib/types";
 
 /**
- * Where a check stands. The first three are finished; the last two are
- * still to come.
+ * Mirrors the backend's capability-check models
+ * (`onyx.connectors.capability_checks.models`) and the report row the
+ * `/manage/admin/credential/{id}/capability-report` endpoint returns.
  */
-export type CheckStatus =
-  | "failed"
-  | "completed"
-  | "skipped"
-  | "running"
-  | "expected";
 
-export interface ConnectorCheck {
-  id: string;
-  /** What the check verifies, e.g. "Check connector scopes". */
-  name: string;
-  status: CheckStatus;
-  /** One line on the outcome or the current state. */
-  detail?: string;
-  /** A required check that fails blocks the connector. */
-  required?: boolean;
-  /** Shown as a marker after the detail, with this text as its tooltip. */
-  warning?: string;
-  /** Replaces the status icon, e.g. an hourglass for a check that waits on
-   * the user rather than on the system. */
-  icon?: IconFunctionComponent;
+/** What a credential may be able to do for its source. */
+export type CredentialCapability =
+  | "indexing"
+  | "doc_permission_sync"
+  | "external_group_sync";
+
+/**
+ * Outcome of one check. `indeterminate` is a transient or unknown failure
+ * and must not be read as proof the credential is broken.
+ */
+export type CapabilityCheckStatus =
+  | "passed"
+  | "failed"
+  | "indeterminate"
+  | "skipped";
+
+/** Per-capability roll-up of its checks. */
+export type CapabilityVerdict =
+  | "passed"
+  | "passed_with_warnings"
+  | "failed"
+  | "indeterminate"
+  | "skipped"
+  | "not_applicable";
+
+export type CapabilityCheckTrigger =
+  | "manual"
+  | "credential_created"
+  | "cc_pair_validation"
+  | "indexing_attempt";
+
+/** Lifecycle of the stored row; the last completed report stays readable
+ * while a re-run is `running`. */
+export type CapabilityReportRunStatus = "running" | "completed";
+
+export interface CapabilityCheckResult {
+  capability: CredentialCapability;
+  check_id: string;
+  display_name: string;
+  /** A required check that fails blocks the capability. */
+  required: boolean;
+  status: CapabilityCheckStatus;
+  /** Failure text, skip reason, or empty on success. */
+  message: string;
+  error_type: string | null;
+  /** A wrapper around the legacy validation rather than a named probe. */
+  is_fallback: boolean;
+  remediation: string | null;
+  docs_link: string | null;
+  duration_ms: number | null;
+}
+
+export interface CredentialCapabilityReport {
+  credential_id: number;
+  source: ValidSources;
+  /** `null` for a config-less, credential-only run. */
+  connector_id: number | null;
+  checked_at: string;
+  trigger: CapabilityCheckTrigger;
+  verdicts: Record<CredentialCapability, CapabilityVerdict>;
+  check_results: CapabilityCheckResult[];
+}
+
+/** One stored row: the latest run for a credential and connector scope. */
+export interface CapabilityReportSnapshot {
+  credential_id: number;
+  connector_id: number | null;
+  source: ValidSources;
+  trigger: CapabilityCheckTrigger;
+  run_status: CapabilityReportRunStatus;
+  run_started_at: string | null;
+  connector_config_hash: string | null;
+  /** `null` until a run completes. */
+  report: CredentialCapabilityReport | null;
 }
