@@ -52,6 +52,13 @@ test("meetings and webinars are both included until the admin unticks one", () =
   expect(values.include_webinars).toBe(true);
 });
 
+test("link access counts as public until the admin unticks it", () => {
+  // Off leaves nearly every transcript readable by its owner alone.
+  const values = createConnectorInitialValues(ValidSources.Zoom);
+
+  expect(values.treat_link_access_as_public).toBe(true);
+});
+
 test("the form posts the names the connector takes", () => {
   const names = connectorConfigs.zoom.values.map((field) => field.name);
 
@@ -62,6 +69,7 @@ test("the form posts the names the connector takes", () => {
     "group_id",
     "include_meetings",
     "include_webinars",
+    "treat_link_access_as_public",
     "plan_tier",
   ]);
 });

@@ -10,24 +10,18 @@ from onyx.connectors.models import (
     DocumentFailure,
     EntityFailure,
 )
-from onyx.connectors.zoom.client import ZoomNotEntitledError
 from onyx.connectors.zoom.connector import ZoomConnector
-from onyx.connectors.zoom.models import ZoomMeetingSettings
 from onyx.connectors.zoom.recordings.models import OccurrenceWork, ZoomSessionType
 from onyx.connectors.zoom.recordings.processing import process_occurrence
+from onyx.connectors.zoom.recordings.recording_access import ZoomAccessContext
 from tests.unit.onyx.connectors.zoom.helpers import (
     http_error,
-    with_access,
+    with_recording_access,
     with_transcript,
 )
 from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
-    invitee,
-    meeting_details,
-    panelist,
-    participant,
     past_meeting_details,
     recording_with_transcript,
-    registrant,
     webinar_details,
 )
 
@@ -36,7 +30,7 @@ _WEBINAR_DOC_ID = "ZOOM_WEBINAR_uuid-xyz"
 
 
 def _client() -> MagicMock:
-    client = with_access(with_transcript())
+    client = with_transcript()
     client.get_past_meeting_details.return_value = past_meeting_details(
         id=111, topic="Weekly Sync", start_time="2026-01-15T10:00:00Z"
     )
@@ -89,10 +83,7 @@ class TestResolveTargets:
         client.get_recording.assert_called_once_with("uuid-abc")
 
     def test_webinar_target_uses_the_webinar_handler(self) -> None:
-        client = _client()
-        client.list_past_webinar_participants.return_value = [
-            participant(user_email="viewer@example.com")
-        ]
+        client = _with_access(_client())
 
         items = _reindex(client, [_target(_WEBINAR_DOC_ID)], include_permissions=True)
 
@@ -103,8 +94,8 @@ class TestResolveTargets:
         assert doc.semantic_identifier == "Launch Webinar"
         client.get_webinar_details.assert_called_with("uuid-xyz")
         client.get_past_meeting_details.assert_not_called()
-        client.list_past_webinar_participants.assert_called_once_with("uuid-xyz")
-        client.list_past_meeting_participants.assert_not_called()
+        # Access comes from the recording, which is the same call for both.
+        client.get_recording_settings.assert_called_once_with("uuid-xyz")
 
     def test_nothing_but_the_named_occurrence_is_touched(self) -> None:
         client = _client()
@@ -183,172 +174,113 @@ class TestUnresolvableTargets:
             _reindex(client, [_target(_MEETING_DOC_ID)])
 
 
+def _with_access(client: MagicMock) -> MagicMock:
+    return with_recording_access(with_transcript(client, host_id="owner-1"))
+
+
 class TestPermissionParity:
     """If these two paths drift, a recovered document quietly ends up with
     different permissions to its neighbours.
     """
 
-    def _populate_access(self, client: MagicMock) -> None:
-        """These answer for the session number only, the way Zoom does. A mock
-        that answers for anything passes even when the reindex never resolved
-        the session.
-        """
-
-        def _for_session[T](session_id: str, found: list[T]) -> list[T]:
-            if session_id in ("111", "222"):
-                return found
-            raise http_error(404)
-
-        client.list_past_meeting_participants.return_value = [
-            participant(user_email="attendee@example.com")
-        ]
-        client.list_meeting_registrants.side_effect = lambda session_id, **_: (
-            _for_session(
-                session_id,
-                [registrant(email="registrant@example.com", status="approved")],
-            )
-        )
-        client.get_meeting_details.side_effect = lambda session_id: meeting_details(
-            settings=ZoomMeetingSettings(
-                meeting_invitees=_for_session(
-                    session_id, [invitee(email="invitee@example.com")]
-                )
-            )
-        )
-        client.list_past_webinar_participants.return_value = [
-            participant(user_email="viewer@example.com")
-        ]
-        client.list_webinar_registrants.side_effect = lambda session_id, **_: (
-            _for_session(
-                session_id, [registrant(email="signup@example.com", status="approved")]
-            )
-        )
-        client.list_webinar_panelists.side_effect = lambda session_id: _for_session(
-            session_id, [panelist(email="panelist@example.com")]
-        )
-
     def _crawled(self, client: MagicMock, work: OccurrenceWork) -> Document:
-        doc = process_occurrence(client, work, include_access=True)
+        doc = process_occurrence(
+            client,
+            work,
+            access=ZoomAccessContext(client, treat_link_access_as_public=True),
+        )
         assert isinstance(doc, Document)
         return doc
 
-    def test_meeting_access_matches_the_crawl(self) -> None:
-        client = _client()
-        self._populate_access(client)
-
-        reindexed = _reindex(
-            client, [_target(_MEETING_DOC_ID)], include_permissions=True
-        )[0]
-        crawled = self._crawled(
-            client,
-            OccurrenceWork(
-                session_type=ZoomSessionType.MEETING,
-                session_id="111",
-                occurrence_uuid="uuid-abc",
+    @pytest.mark.parametrize(
+        ("document_id", "work"),
+        [
+            (
+                _MEETING_DOC_ID,
+                OccurrenceWork(
+                    session_type=ZoomSessionType.MEETING,
+                    session_id="111",
+                    occurrence_uuid="uuid-abc",
+                ),
             ),
-        )
+            (
+                _WEBINAR_DOC_ID,
+                OccurrenceWork(
+                    session_type=ZoomSessionType.WEBINAR,
+                    session_id="222",
+                    occurrence_uuid="uuid-xyz",
+                ),
+            ),
+        ],
+        ids=["meeting", "webinar"],
+    )
+    def test_access_matches_the_crawl(
+        self, document_id: str, work: OccurrenceWork
+    ) -> None:
+        client = _with_access(_client())
+
+        reindexed = _reindex(client, [_target(document_id)], include_permissions=True)[
+            0
+        ]
+        crawled = self._crawled(client, work)
 
         assert isinstance(reindexed, Document)
         assert reindexed.external_access is not None
         assert reindexed.external_access == crawled.external_access
-        assert reindexed.external_access.external_user_emails == {
-            "attendee@example.com",
-            "registrant@example.com",
-            "invitee@example.com",
-        }
-
-    def test_webinar_access_matches_the_crawl(self) -> None:
-        client = _client()
-        self._populate_access(client)
-
-        reindexed = _reindex(
-            client, [_target(_WEBINAR_DOC_ID)], include_permissions=True
-        )[0]
-        crawled = self._crawled(
-            client,
-            OccurrenceWork(
-                session_type=ZoomSessionType.WEBINAR,
-                session_id="222",
-                occurrence_uuid="uuid-xyz",
-            ),
-        )
-
-        assert isinstance(reindexed, Document)
-        assert reindexed.external_access is not None
-        assert reindexed.external_access == crawled.external_access
+        assert reindexed.external_access.external_user_emails == {"owner@example.com"}
+        assert reindexed.external_access.is_public is True
 
     @pytest.mark.parametrize(
         "details_error",
         # Zoom reports a session over a year old with code 12702, and answers
         # 404 for one it has dropped.
         [http_error(400, 12702), http_error(404)],
+        ids=["too-old", "dropped"],
     )
-    def test_a_session_it_cannot_resolve_fails_that_target(
-        self, details_error: Exception
+    @pytest.mark.parametrize("include_permissions", [False, True])
+    def test_a_session_zoom_no_longer_resolves_is_still_reindexed(
+        self, details_error: Exception, include_permissions: bool
     ) -> None:
-        client = _client()
-        self._populate_access(client)
+        # The transcript is already downloaded by then, so the document is
+        # indexed without the title and timestamp that call would have
+        # supplied. The recording and its share settings still answer for the
+        # occurrence, so the access list does not depend on the session.
+        client = _with_access(_client())
         client.get_past_meeting_details.side_effect = details_error
 
-        items = _reindex(client, [_target(_MEETING_DOC_ID)], include_permissions=True)
-
-        assert len(items) == 1
-        failure = items[0]
-        assert isinstance(failure, ConnectorFailure)
-        assert failure.failed_document is not None
-        assert failure.failed_document.document_id == _MEETING_DOC_ID
-        assert "uuid-abc" in failure.failure_message
-        client.list_meeting_registrants.assert_not_called()
-
-    def test_a_webinar_without_the_add_on_fails_and_names_the_plan(self) -> None:
-        # Every webinar endpoint needs the add-on, the access list included, so
-        # this account can name nobody.
-        client = _client()
-        client.get_webinar_details.side_effect = ZoomNotEntitledError("no add-on")
-
-        items = _reindex(client, [_target(_WEBINAR_DOC_ID)], include_permissions=True)
-
-        failure = items[0]
-        assert isinstance(failure, ConnectorFailure)
-        assert failure.failed_document is not None
-        assert failure.failed_document.document_id == _WEBINAR_DOC_ID
-        assert "plan does not cover" in failure.failure_message
-
-    def test_an_unresolvable_session_still_indexes_without_permissions(self) -> None:
-        # Zoom answers 404 for a session it no longer has, and the transcript is
-        # already downloaded by then, so the document is still indexed without
-        # the title and timestamp that call would have supplied.
-        client = _client()
-        client.get_past_meeting_details.side_effect = http_error(404)
-
-        items = _reindex(client, [_target(_MEETING_DOC_ID)])
+        items = _reindex(
+            client, [_target(_MEETING_DOC_ID)], include_permissions=include_permissions
+        )
 
         doc = items[0]
         assert isinstance(doc, Document)
-        assert doc.external_access is None
         assert doc.doc_created_at is None
+        if include_permissions:
+            assert doc.external_access is not None
+            assert doc.external_access.external_user_emails == {"owner@example.com"}
+        else:
+            assert doc.external_access is None
 
     @pytest.mark.parametrize(
         "error",
         [http_error(429), http_error(503), requests.ConnectionError("dropped")],
     )
-    def test_a_session_that_could_not_be_reached_is_not_guessed_at(
+    def test_share_settings_that_could_not_be_reached_are_not_guessed_at(
         self, error: Exception
     ) -> None:
-        client = _client()
-        self._populate_access(client)
-        client.get_past_meeting_details.side_effect = error
+        client = _with_access(_client())
+        client.get_recording_settings.side_effect = error
 
         with pytest.raises(type(error)):
             _reindex(client, [_target(_MEETING_DOC_ID)], include_permissions=True)
 
     def test_permissions_are_not_fetched_when_not_requested(self) -> None:
-        client = _client()
-        self._populate_access(client)
+        client = _with_access(_client())
 
         items = _reindex(client, [_target(_MEETING_DOC_ID)])
 
         doc = items[0]
         assert isinstance(doc, Document)
         assert doc.external_access is None
-        client.list_past_meeting_participants.assert_not_called()
+        client.get_recording_settings.assert_not_called()
+        client.get_user.assert_not_called()
