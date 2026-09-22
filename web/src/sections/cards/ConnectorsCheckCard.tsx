@@ -316,7 +316,7 @@ export function ConnectorsCheckCard({
             {onRerun && (
               <Button
                 icon={SvgRefreshCw}
-                prominence="tertiary"
+                prominence="internal"
                 aria-label={t("rerunButton.ariaLabel")}
                 disabled={isRunning || loading}
                 onClick={onRerun}
@@ -324,7 +324,7 @@ export function ConnectorsCheckCard({
             )}
             <Button
               icon={SvgFold}
-              prominence="tertiary"
+              prominence="internal"
               aria-label={
                 collapsed
                   ? t("collapseButton.expand")
