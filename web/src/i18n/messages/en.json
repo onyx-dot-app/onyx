@@ -4945,7 +4945,7 @@
         "description": "Configure how documents are indexed, embedded, and prepared for search and retrieval."
       },
       "imageExtraction": {
-        "description": "Extract embedded images from uploaded files (PDFs, DOCX, etc.) and summarize them with a vision-capable LLM so image-only documents become searchable and answerable. Requires a vision-capable default LLM.",
+        "description": "Extract embedded images from uploaded files (PDFs, DOCX, etc.) and summarize them with a vision-capable LLM so image-only documents become searchable and answerable. Requires a vision-capable Captioning LLM, chosen below.",
         "title": "Extract & Caption Images"
       },
       "imageProcessing": {

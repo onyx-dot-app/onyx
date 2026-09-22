@@ -45,10 +45,6 @@ export interface Settings {
   search_ui_enabled?: boolean;
   auto_detect_search_filters?: boolean;
 
-  // Image processing settings
-  image_extraction_and_analysis_enabled?: boolean;
-  image_analysis_max_size_mb?: number | null;
-
   // User Knowledge settings
   user_knowledge_enabled?: boolean;
   user_file_max_upload_size_mb?: number | null;

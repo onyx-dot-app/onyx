@@ -4945,7 +4945,7 @@
         "description": "Configure como os documentos são indexados, transformados em embeddings e preparados para pesquisa e recuperação."
       },
       "imageExtraction": {
-        "description": "Extraia imagens incorporadas de arquivos enviados (PDFs, DOCX etc.) e resuma-as com um LLM com capacidade de visão para que documentos só de imagem possam ser pesquisados e respondidos. Requer um LLM padrão com capacidade de visão.",
+        "description": "Extraia imagens incorporadas de arquivos enviados (PDFs, DOCX etc.) e resuma-as com um LLM com capacidade de visão para que documentos só de imagem possam ser pesquisados e respondidos. Requer um LLM de legendas com capacidade de visão, escolhido abaixo.",
         "title": "Extrair e legendar imagens"
       },
       "imageProcessing": {

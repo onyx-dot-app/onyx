@@ -98,7 +98,6 @@ function enrichViews(providers: RawLLMProviderView[]): LLMProviderView[] {
  * - `llmProviders` — The array of provider descriptors, or `undefined`
  *    while loading.
  * - `defaultText` — The global (or agent-overridden) default text model.
- * - `defaultVision` — The global (or agent-overridden) default vision model.
  * - `defaultCraft`: the admin-configured default Craft model, or `null` if
  *    unset. Craft then falls back to `defaultText`.
  * - `isLoading` — `true` until the first successful response or error.
@@ -140,7 +139,6 @@ export function useLLMProviders(agentId?: number) {
   return {
     llmProviders: data?.providers,
     defaultText: data?.default_text ?? null,
-    defaultVision: data?.default_vision ?? null,
     defaultChatNaming: data?.default_chat_naming ?? null,
     defaultCraft: data?.default_craft ?? null,
     isLoading: !error && !data,
@@ -183,7 +181,6 @@ export function useCurrentAgentLLMProviders() {
  * - `llmProviders` — The array of full provider views, or `undefined`
  *    while loading.
  * - `defaultText` — The global default text model.
- * - `defaultVision` — The global default vision model.
  * - `defaultCraft`: the admin-configured default Craft model, or `null` if
  *    unset. Craft then falls back to `defaultText`.
  * - `isLoading` — `true` until the first successful response or error.
@@ -213,7 +210,6 @@ export function useAdminLLMProviders() {
   return {
     llmProviders: data?.providers,
     defaultText: data?.default_text ?? null,
-    defaultVision: data?.default_vision ?? null,
     defaultChatNaming: data?.default_chat_naming ?? null,
     defaultCraft: data?.default_craft ?? null,
     isLoading: !error && !data,
@@ -322,12 +318,6 @@ export interface LlmDefaults {
    * hook only confirms the provider is still in the list.
    */
   defaultLlm: DefaultLlmReference | null;
-  /**
-   * The admin-configured default *vision* model, in the same shape as
-   * `defaultLlm`. Used by indexing-time captioning and any other vision-only
-   * feature.
-   */
-  defaultVision: DefaultLlmReference | null;
   isLoading: boolean;
 }
 
@@ -338,8 +328,7 @@ export interface LlmDefaults {
  *     made an explicit choice.
  */
 export function useLlmDefaults(): LlmDefaults {
-  const { llmProviders, defaultText, defaultVision, isLoading } =
-    useLLMProviders();
+  const { llmProviders, defaultText, isLoading } = useLLMProviders();
 
   const hasAnyLlm = useMemo(
     () =>
@@ -379,17 +368,11 @@ export function useLlmDefaults(): LlmDefaults {
     () => resolveDefault(defaultText),
     [resolveDefault, defaultText]
   );
-  const defaultVisionResolved = useMemo<DefaultLlmReference | null>(
-    () => resolveDefault(defaultVision),
-    [resolveDefault, defaultVision]
-  );
-
   return {
     llmProviders,
     hasAnyLlm,
     hasAnyVisionLlm,
     defaultLlm,
-    defaultVision: defaultVisionResolved,
     isLoading,
   };
 }

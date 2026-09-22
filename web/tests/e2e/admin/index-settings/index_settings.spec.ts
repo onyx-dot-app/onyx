@@ -97,6 +97,25 @@ function modelDisplayName(model: TestModelConfiguration): string {
   return model.custom_display_name || model.display_name || model.name;
 }
 
+interface TestImageProcessingSettings {
+  model_configuration_id: number;
+  max_size_mb: number;
+}
+
+/** `null` means image processing is off. */
+async function getImageProcessingSettings(
+  page: Page
+): Promise<TestImageProcessingSettings | null> {
+  const response = await page.request.get("/api/admin/image-processing");
+  expect(response.ok()).toBeTruthy();
+  return (await response.json()) as TestImageProcessingSettings | null;
+}
+
+async function disableImageProcessing(page: Page): Promise<void> {
+  const response = await page.request.delete("/api/admin/image-processing");
+  expect(response.ok()).toBeTruthy();
+}
+
 // ---------------------------------------------------------------------------
 // Helpers shared across both describe blocks
 // ---------------------------------------------------------------------------
@@ -626,4 +645,66 @@ test.describe("Index Settings — empty-registry providers @exclusive", () => {
       expect(body.provider_type).toBe(providerType);
     });
   }
+});
+
+test.describe("Index Settings — image processing @exclusive", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.context().clearCookies();
+    await loginAs(page, "admin");
+    await disableImageProcessing(page);
+  });
+
+  test.afterEach(async ({ page }) => {
+    await disableImageProcessing(page);
+  });
+
+  test("stays off until a captioning model is picked, then persists", async ({
+    page,
+  }) => {
+    const llmProviderResponse = await getLlmProviderResponse(page);
+    const visionModels = getVisibleLlmModels(llmProviderResponse).filter(
+      (model) => model.supports_image_input === true
+    );
+    test.skip(
+      visionModels.length === 0,
+      "A visible vision-capable LLM model is required"
+    );
+    const model = visionModels[0]!;
+
+    const indexSettings = new IndexSettingsPage(page);
+    await indexSettings.goto();
+
+    // Off: no row, and the picker is gated behind the switch.
+    await expect(indexSettings.imageProcessingSwitch).toHaveAttribute(
+      "aria-checked",
+      "false"
+    );
+    await expect(indexSettings.captioningModelTrigger).toBeDisabled();
+
+    // Flipping the switch arms the picker but persists nothing on its own.
+    await indexSettings.imageProcessingSwitch.click();
+    await expect(indexSettings.captioningModelTrigger).toBeEnabled();
+    expect(await getImageProcessingSettings(page)).toBeNull();
+
+    // Picking a model creates the row, which is the on state.
+    await indexSettings.pickCaptioningModel(modelDisplayName(model));
+    await expect
+      .poll(
+        async () =>
+          (await getImageProcessingSettings(page))?.model_configuration_id
+      )
+      .toBe(model.id);
+
+    // The row survives a reload; the switch is derived from it.
+    await indexSettings.goto();
+    await expect(indexSettings.imageProcessingSwitch).toHaveAttribute(
+      "aria-checked",
+      "true"
+    );
+
+    // Switching off deletes the row.
+    await indexSettings.imageProcessingSwitch.click();
+    await expect.poll(() => getImageProcessingSettings(page)).toBeNull();
+    await expect(indexSettings.captioningModelTrigger).toBeDisabled();
+  });
 });
