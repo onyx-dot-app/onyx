@@ -41,6 +41,8 @@ from onyx.connectors.zoom.endpoints import (
 from onyx.connectors.zoom.models import (
     ZoomRecordingEntry,
     ZoomRecordingFile,
+    ZoomRecordingRegistrant,
+    ZoomRegistrant,
     ZoomShareRecording,
 )
 from onyx.connectors.zoom.rate_limit import (
@@ -1481,7 +1483,11 @@ class TestListRegistrants:
         ids=["meeting", "webinar", "recording"],
     )
     def test_registration_never_enabled_reads_as_no_registrants(
-        self, method: Callable[[ZoomClient, str], list[Any]], message: str
+        self,
+        method: Callable[
+            [ZoomClient, str], list[ZoomRegistrant] | list[ZoomRecordingRegistrant]
+        ],
+        message: str,
     ) -> None:
         # Zoom's real answer is a 400, and it used to fail the whole document.
         client = _client()
