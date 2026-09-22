@@ -1,6 +1,7 @@
 """What every Teams content source reads the tenant through: the app's
 credential, the Graph client built from it, and the endpoints of its cloud."""
 
+import threading
 from collections.abc import Callable
 from typing import Any
 
@@ -15,6 +16,7 @@ from onyx.connectors.microsoft_utils.graph_auth import (
 from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
 from onyx.connectors.microsoft_utils.graph_env import resolve_microsoft_environment
 from onyx.connectors.models import ConnectorMissingCredentialError
+from onyx.connectors.teams.utils import UserDirectory
 
 CREDENTIAL_AUTH_METHOD = "authentication_method"
 CREDENTIAL_PRIVATE_KEY = "teams_private_key"
@@ -29,6 +31,8 @@ class TeamsSession:
         self._auth_method = MicrosoftAuthMethod.CLIENT_SECRET
         # Granted by the factory from the image analysis setting.
         self.allow_images = False
+        self._user_directory: UserDirectory | None = None
+        self._directory_lock = threading.Lock()
 
         resolved_env = resolve_microsoft_environment(graph_api_host, authority_host)
         self._azure_environment = resolved_env.environment
@@ -83,6 +87,14 @@ class TeamsSession:
     @property
     def graph_root(self) -> str:
         return f"{self.graph_api_host}/v1.0"
+
+    def directory(self) -> UserDirectory:
+        """The run's one user directory, also when workers ask for it at once. It
+        lists nothing until a member without an email asks for a name."""
+        with self._directory_lock:
+            if self._user_directory is None:
+                self._user_directory = UserDirectory(self.graph())
+            return self._user_directory
 
     def graph(self) -> GraphClient:
         if self.graph_client is None:

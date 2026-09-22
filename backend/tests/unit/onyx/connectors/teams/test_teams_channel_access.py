@@ -7,8 +7,11 @@ import pytest
 import requests
 
 from onyx.connectors.models import ConnectorFailure, Document
+from onyx.connectors.teams import utils as utils_module
 from onyx.connectors.teams.utils import (
+    USER_LOOKUP_URL,
     GraphRetriesExhausted,
+    UserDirectory,
     channel_access,
     fetch_channel_members,
     fetch_channel_readers,
@@ -52,7 +55,9 @@ def test_a_standard_channel_is_shared_with_its_members_not_everyone() -> None:
         {MEMBERS_URL: {"value": [member("Ada", "Ada@Example.com", "u1")]}}
     )
 
-    experts, access = fetch_channel_readers(client, TEAM_ID, CHANNEL_ID)
+    experts, access = fetch_channel_readers(
+        client, TEAM_ID, CHANNEL_ID, UserDirectory(client)
+    )
 
     assert [(e.display_name, e.email) for e in experts] == [("Ada", "Ada@Example.com")]
     assert access.is_public is False
@@ -64,11 +69,13 @@ def test_a_member_without_an_email_is_resolved_by_user_id() -> None:
     client = graph_client(
         {
             MEMBERS_URL: {"value": [member("Raunak", None, "u-raunak")]},
-            "users/u-raunak": {"userPrincipalName": "raunak@example.com"},
+            USER_LOOKUP_URL: {"u-raunak": "raunak@example.com"},
         }
     )
 
-    experts, _ = fetch_channel_readers(client, TEAM_ID, CHANNEL_ID)
+    experts, _ = fetch_channel_readers(
+        client, TEAM_ID, CHANNEL_ID, UserDirectory(client)
+    )
 
     assert [(e.display_name, e.email) for e in experts] == [
         ("Raunak", "raunak@example.com")
@@ -90,20 +97,23 @@ def test_a_member_from_another_tenant_keeps_the_email_on_the_row() -> None:
         }
     )
 
-    _, access = fetch_channel_readers(client, TEAM_ID, CHANNEL_ID)
+    _, access = fetch_channel_readers(
+        client, TEAM_ID, CHANNEL_ID, UserDirectory(client)
+    )
 
     assert access.external_user_emails == {"guest@other.example"}
-    assert client.execute_request_direct.call_args_list[-1].args == ("users/u-gone",)
+    # Only the row without an email is asked about, and Graph does not name it.
+    assert client.posted == [(USER_LOOKUP_URL, {"ids": ["u-gone"], "types": ["user"]})]
 
 
 def test_a_refused_user_lookup_is_not_a_missing_member() -> None:
     client = graph_client(
         {MEMBERS_URL: {"value": [member("Ada", None, "u1")]}},
-        refused={"users/u1": 403},
+        refused={USER_LOOKUP_URL: 403},
     )
 
     with pytest.raises(requests.HTTPError):
-        fetch_channel_readers(client, TEAM_ID, CHANNEL_ID)
+        fetch_channel_readers(client, TEAM_ID, CHANNEL_ID, UserDirectory(client))
 
 
 def test_a_member_without_a_display_name_still_reads() -> None:
@@ -111,7 +121,9 @@ def test_a_member_without_a_display_name_still_reads() -> None:
         {MEMBERS_URL: {"value": [member(None, "x@example.com", "u1")]}}
     )
 
-    experts, access = fetch_channel_readers(client, TEAM_ID, CHANNEL_ID)
+    experts, access = fetch_channel_readers(
+        client, TEAM_ID, CHANNEL_ID, UserDirectory(client)
+    )
 
     assert [(e.display_name, e.email) for e in experts] == [(None, "x@example.com")]
     assert access.external_user_emails == {"x@example.com"}
@@ -120,7 +132,9 @@ def test_a_member_without_a_display_name_still_reads() -> None:
 def test_a_channel_with_no_resolvable_members_is_shared_with_no_one() -> None:
     client = graph_client({MEMBERS_URL: {"value": [member(None, None, "")]}})
 
-    _, access = fetch_channel_readers(client, TEAM_ID, CHANNEL_ID)
+    _, access = fetch_channel_readers(
+        client, TEAM_ID, CHANNEL_ID, UserDirectory(client)
+    )
 
     assert access.is_public is False
     assert access.external_user_emails == set()
@@ -205,3 +219,76 @@ def test_a_channel_whose_members_stay_throttled_fails_the_attempt_not_the_channe
 
     with pytest.raises(GraphRetriesExhausted):
         walk_channel(connector(client))
+
+
+def _requested(client: MagicMock) -> list[str]:
+    return [call.args[0] for call in client.execute_request_direct.call_args_list]
+
+
+def test_members_without_an_email_are_named_a_batch_at_a_time_once_a_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A channel can hold thousands of mail-less members, so names come in
+    # batches and once a run, not a request per member per channel.
+    monkeypatch.setattr(utils_module, "USER_LOOKUP_BATCH_SIZE", 2)
+    known = {"u1": "ada@example.com", "u2": "bob@example.com", "u3": "cy@example.com"}
+    client = graph_client(
+        {
+            MEMBERS_URL: {"value": [member(uid, None, uid) for uid in known]},
+            USER_LOOKUP_URL: known,
+        }
+    )
+    directory = UserDirectory(client)
+
+    for _ in range(2):
+        _, access = fetch_channel_readers(client, TEAM_ID, CHANNEL_ID, directory)
+        assert access.external_user_emails == set(known.values())
+
+    # Two channels of the same three members: two batches, asked for once.
+    assert [body["ids"] for _, body in client.posted] == [["u1", "u2"], ["u3"]]
+    assert not [url for url in _requested(client) if url.startswith("users/")]
+
+
+def test_an_id_graph_does_not_name_is_not_asked_for_again() -> None:
+    client = graph_client(
+        {
+            MEMBERS_URL: {"value": [member("Ghost", None, "u-gone")]},
+            USER_LOOKUP_URL: {},
+        }
+    )
+    directory = UserDirectory(client)
+
+    for _ in range(2):
+        _, access = fetch_channel_readers(client, TEAM_ID, CHANNEL_ID, directory)
+        assert access.external_user_emails == set()
+
+    assert len(client.posted) == 1
+
+
+def test_a_channel_whose_members_all_carry_an_email_asks_for_no_names() -> None:
+    client = graph_client(
+        {MEMBERS_URL: {"value": [member("Ada", "ada@example.com", "u1")]}}
+    )
+
+    fetch_channel_readers(client, TEAM_ID, CHANNEL_ID, UserDirectory(client))
+
+    assert client.posted == []
+
+
+def test_the_channel_walk_names_members_through_one_directory() -> None:
+    client = graph_client(
+        {
+            MEMBERS_URL: {"value": [member("Ada", None, "u1")]},
+            USER_LOOKUP_URL: {"u1": "ada@example.com"},
+            DELTA_URL: {"value": [message("m1", "Plan")]},
+            replies_url("m1"): {"value": []},
+        }
+    )
+    teams_connector = connector(client)
+
+    items = walk_channel(teams_connector)
+
+    documents = [item for item in items if isinstance(item, Document)]
+    assert documents[0].external_access is not None
+    assert documents[0].external_access.external_user_emails == {"ada@example.com"}
+    assert teams_connector.directory() is teams_connector.directory()

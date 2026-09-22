@@ -4,6 +4,7 @@ attempt so it is retried."""
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import Any
 
 import requests
 from office365.runtime.client_request_exception import ClientRequestException
@@ -79,4 +80,40 @@ def channel_failure(
             else f"Could not read {named}: {error}"
         ),
         exception=error,
+    )
+
+
+def _error_body(error: requests.HTTPError) -> dict[str, Any]:
+    """Graph's error object, empty when the body is not one."""
+    if error.response is None:
+        return {}
+    try:
+        payload = error.response.json()
+    except ValueError:
+        return {}
+    body = payload.get("error") if isinstance(payload, dict) else None
+    return body if isinstance(body, dict) else {}
+
+
+def graph_inner_error_code(error: requests.HTTPError) -> str:
+    """Graph's inner error code, or its outer code, or the empty string. The
+    inner one comes first: it names the cause, where the outer one repeats the
+    status."""
+    body = _error_body(error)
+    inner = body.get("innerError")
+    if isinstance(inner, dict) and inner.get("code"):
+        return str(inner["code"])
+    return str(body.get("code") or "")
+
+
+def graph_error_message(error: requests.HTTPError) -> str:
+    return str(_error_body(error).get("message") or "")
+
+
+def graph_said(error: requests.HTTPError) -> str:
+    """Graph's own code and message. A refusal the connector cannot name is
+    otherwise unreadable, and a missing grant is only its most common cause."""
+    return (
+        f"Graph said: {graph_inner_error_code(error) or 'no code'}, "
+        f"{graph_error_message(error) or 'no message'}"
     )

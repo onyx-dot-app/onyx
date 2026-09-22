@@ -165,6 +165,7 @@ class ThreadSource:
                 graph_client=self._session.graph(),
                 team_id=channel.team_id,
                 channel_id=channel.id,
+                directory=self._session.directory(),
             )
         return self._readers[channel.id]
 
@@ -233,6 +234,7 @@ class ThreadSource:
                     graph_client=self._session.graph(),
                     team_id=channel.team_id,
                     channel_id=channel.id,
+                    directory=self._session.directory(),
                 )
         messages = fetch_messages(
             graph_client=self._session.graph(),
