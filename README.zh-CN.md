@@ -31,13 +31,13 @@
 
 # Onyx - 汇集所有应用知识的上下文层
 
-> 大语言模型了解公开的信息，但如果它也能了解团队内部的情况呢？我想要的是一位 AI 同事，而不是一位刚入职的 AI 新人。
+> “大语言模型了解公开的信息，但如果它也能了解团队内部的情况呢？我想要的是一位 AI 同事，而不是一位刚入职的 AI 新人。”
 
-**[Onyx](https://www.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)** 是面向团队和 AI 智能体的知识与上下文层。
+**[Onyx](https://www.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)** 是面向团队和 AI 智能体的知识/上下文层。
 
 Onyx 可连接 50 多种应用，为其中的知识建立索引并提供检索。同时，灵活的自托管部署让你掌控自己的数据。
 
-除了知识检索，Onyx 还支持网页搜索、代码执行、文件生成、深度研究等功能。
+除了知识检索，Onyx 还通过网页搜索、沙箱、技能等高级功能扩展大语言模型的能力。
 
 > [!TIP]
 > 使用一条命令部署：

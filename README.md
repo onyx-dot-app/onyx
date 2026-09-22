@@ -25,15 +25,15 @@
   </a>
 </p>
 
-# Onyx - The context layer fed by all of your apps
+# Onyx - The context layer fed by all your apps
 
-> LLMs know about everything public, but what if it could also know about what's going on in our team? I want an AI coworker, not an AI new hire.
+> "LLMs know about everything public, but what if it could also know what's going on in our team? I want an AI coworker, not an AI new hire."
 
-**[Onyx](https://www.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)** is the knowledge and context layer for your team and your AI agents.
+**[Onyx](https://www.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)** is the knowledge/context layer for your team and AI agents.
 
 Onyx connects to your application to index and surface knowledge from 50+ applications while protecting your data sovereignty through flexible self-hosted deployments.
 
-Beyond search, Onyx includes web search, code execution, file creation, deep research, and more.
+Beyond search, Onyx enables LLMs with advanced features like web search, sandboxes, skills, and more.
 
 
 > [!TIP]
