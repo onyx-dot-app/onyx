@@ -816,6 +816,188 @@
         "connectButton": {
           "ariaLabel": "{source} 연결"
         }
+      },
+      "sources": {
+        "web": {
+          "description": "공개 또는 내부 웹사이트 크롤링"
+        },
+        "github": {
+          "description": "풀 리퀘스트와 이슈"
+        },
+        "gitlab": {
+          "description": "머지 리퀘스트와 이슈"
+        },
+        "slack": {
+          "description": "채널 메시지와 스레드"
+        },
+        "googleDrive": {
+          "description": "문서, 스프레드시트, 슬라이드, 파일"
+        },
+        "gmail": {
+          "description": "이메일과 첨부 파일"
+        },
+        "bookstack": {
+          "description": "책, 챕터, 페이지"
+        },
+        "outline": {
+          "description": "팀 위키 문서"
+        },
+        "confluence": {
+          "description": "스페이스와 페이지"
+        },
+        "jira": {
+          "description": "이슈와 프로젝트 보드"
+        },
+        "productboard": {
+          "description": "기능, 노트, 피드백"
+        },
+        "slab": {
+          "description": "팀 지식 게시물"
+        },
+        "coda": {
+          "description": "문서와 테이블"
+        },
+        "notion": {
+          "description": "페이지와 데이터베이스"
+        },
+        "guru": {
+          "description": "카드와 컬렉션"
+        },
+        "gong": {
+          "description": "통화 녹음과 녹취록"
+        },
+        "zulip": {
+          "description": "스트림과 토픽"
+        },
+        "linear": {
+          "description": "이슈와 프로젝트"
+        },
+        "hubspot": {
+          "description": "티켓, 연락처, 거래"
+        },
+        "document360": {
+          "description": "지식 베이스 문서"
+        },
+        "file": {
+          "description": "컴퓨터에서 파일 업로드"
+        },
+        "userFile": {
+          "description": "채팅에서 업로드한 파일"
+        },
+        "googleSites": {
+          "description": "사이트 페이지"
+        },
+        "loopio": {
+          "description": "RFP 답변 라이브러리"
+        },
+        "box": {
+          "description": "파일, 폴더, 노트"
+        },
+        "dropbox": {
+          "description": "파일과 공유 폴더"
+        },
+        "discord": {
+          "description": "서버 채널과 메시지"
+        },
+        "salesforce": {
+          "description": "계정, 케이스, 오브젝트"
+        },
+        "sharepoint": {
+          "description": "사이트, 페이지, 문서"
+        },
+        "teams": {
+          "description": "팀 채널과 채팅"
+        },
+        "outlook": {
+          "description": "이메일과 메일 폴더"
+        },
+        "zendesk": {
+          "description": "티켓과 도움말 센터 문서"
+        },
+        "discourse": {
+          "description": "포럼 토픽과 게시물"
+        },
+        "axero": {
+          "description": "인트라넷 스페이스와 문서"
+        },
+        "clickup": {
+          "description": "작업, 문서, 댓글"
+        },
+        "wikipedia": {
+          "description": "백과사전 문서"
+        },
+        "mediawiki": {
+          "description": "위키 페이지와 수정 내역"
+        },
+        "asana": {
+          "description": "작업과 프로젝트"
+        },
+        "s3": {
+          "description": "Amazon S3 버킷의 파일"
+        },
+        "r2": {
+          "description": "Cloudflare R2 버킷의 파일"
+        },
+        "googleCloudStorage": {
+          "description": "Cloud Storage 버킷의 파일"
+        },
+        "xenforo": {
+          "description": "포럼 스레드와 게시물"
+        },
+        "ociStorage": {
+          "description": "OCI Object Storage의 파일"
+        },
+        "notApplicable": {
+          "description": "소스 없음"
+        },
+        "ingestionApi": {
+          "description": "API로 전송된 문서"
+        },
+        "freshdesk": {
+          "description": "지원 티켓"
+        },
+        "fireflies": {
+          "description": "회의 녹취록"
+        },
+        "egnyte": {
+          "description": "기업 파일과 폴더"
+        },
+        "airtable": {
+          "description": "베이스와 레코드"
+        },
+        "gitbook": {
+          "description": "문서와 스페이스"
+        },
+        "highspot": {
+          "description": "영업 콘텐츠와 피치"
+        },
+        "drupalWiki": {
+          "description": "위키 페이지와 책"
+        },
+        "imap": {
+          "description": "모든 IMAP 메일함의 이메일"
+        },
+        "bitbucket": {
+          "description": "풀 리퀘스트와 저장소"
+        },
+        "testrail": {
+          "description": "테스트 케이스와 실행"
+        },
+        "braintrust": {
+          "description": "로그와 평가"
+        },
+        "lumapps": {
+          "description": "인트라넷 페이지와 커뮤니티"
+        },
+        "canvas": {
+          "description": "강좌, 페이지, 공지"
+        },
+        "craftFile": {
+          "description": "업로드한 파일"
+        },
+        "federatedSlack": {
+          "description": "질의 시 Slack 검색"
+        }
       }
     },
     "agentStats": {

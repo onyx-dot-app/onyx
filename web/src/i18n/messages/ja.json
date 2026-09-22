@@ -816,6 +816,188 @@
         "connectButton": {
           "ariaLabel": "{source} を接続"
         }
+      },
+      "sources": {
+        "web": {
+          "description": "公開または社内のウェブサイトをクロール"
+        },
+        "github": {
+          "description": "プルリクエストと Issue"
+        },
+        "gitlab": {
+          "description": "マージリクエストと Issue"
+        },
+        "slack": {
+          "description": "チャンネルのメッセージとスレッド"
+        },
+        "googleDrive": {
+          "description": "ドキュメント、スプレッドシート、スライド、ファイル"
+        },
+        "gmail": {
+          "description": "メールと添付ファイル"
+        },
+        "bookstack": {
+          "description": "ブック、チャプター、ページ"
+        },
+        "outline": {
+          "description": "チームの Wiki ドキュメント"
+        },
+        "confluence": {
+          "description": "スペースとページ"
+        },
+        "jira": {
+          "description": "Issue とプロジェクトボード"
+        },
+        "productboard": {
+          "description": "機能、ノート、フィードバック"
+        },
+        "slab": {
+          "description": "チームのナレッジ投稿"
+        },
+        "coda": {
+          "description": "ドキュメントとテーブル"
+        },
+        "notion": {
+          "description": "ページとデータベース"
+        },
+        "guru": {
+          "description": "カードとコレクション"
+        },
+        "gong": {
+          "description": "通話の録音と文字起こし"
+        },
+        "zulip": {
+          "description": "ストリームとトピック"
+        },
+        "linear": {
+          "description": "Issue とプロジェクト"
+        },
+        "hubspot": {
+          "description": "チケット、連絡先、取引"
+        },
+        "document360": {
+          "description": "ナレッジベースの記事"
+        },
+        "file": {
+          "description": "パソコンからファイルをアップロード"
+        },
+        "userFile": {
+          "description": "チャットでアップロードしたファイル"
+        },
+        "googleSites": {
+          "description": "サイトのページ"
+        },
+        "loopio": {
+          "description": "RFP 回答ライブラリ"
+        },
+        "box": {
+          "description": "ファイル、フォルダー、ノート"
+        },
+        "dropbox": {
+          "description": "ファイルと共有フォルダー"
+        },
+        "discord": {
+          "description": "サーバーのチャンネルとメッセージ"
+        },
+        "salesforce": {
+          "description": "取引先、ケース、オブジェクト"
+        },
+        "sharepoint": {
+          "description": "サイト、ページ、ドキュメント"
+        },
+        "teams": {
+          "description": "チームのチャネルとチャット"
+        },
+        "outlook": {
+          "description": "メールとメールフォルダー"
+        },
+        "zendesk": {
+          "description": "チケットとヘルプセンターの記事"
+        },
+        "discourse": {
+          "description": "フォーラムのトピックと投稿"
+        },
+        "axero": {
+          "description": "イントラネットのスペースと記事"
+        },
+        "clickup": {
+          "description": "タスク、ドキュメント、コメント"
+        },
+        "wikipedia": {
+          "description": "百科事典の記事"
+        },
+        "mediawiki": {
+          "description": "Wiki ページと版"
+        },
+        "asana": {
+          "description": "タスクとプロジェクト"
+        },
+        "s3": {
+          "description": "Amazon S3 バケット内のファイル"
+        },
+        "r2": {
+          "description": "Cloudflare R2 バケット内のファイル"
+        },
+        "googleCloudStorage": {
+          "description": "Cloud Storage バケット内のファイル"
+        },
+        "xenforo": {
+          "description": "フォーラムのスレッドと投稿"
+        },
+        "ociStorage": {
+          "description": "OCI Object Storage 内のファイル"
+        },
+        "notApplicable": {
+          "description": "ソースなし"
+        },
+        "ingestionApi": {
+          "description": "API 経由で送信されたドキュメント"
+        },
+        "freshdesk": {
+          "description": "サポートチケット"
+        },
+        "fireflies": {
+          "description": "会議の文字起こし"
+        },
+        "egnyte": {
+          "description": "企業のファイルとフォルダー"
+        },
+        "airtable": {
+          "description": "ベースとレコード"
+        },
+        "gitbook": {
+          "description": "ドキュメントとスペース"
+        },
+        "highspot": {
+          "description": "営業コンテンツとピッチ"
+        },
+        "drupalWiki": {
+          "description": "Wiki ページとブック"
+        },
+        "imap": {
+          "description": "任意の IMAP メールボックスのメール"
+        },
+        "bitbucket": {
+          "description": "プルリクエストとリポジトリ"
+        },
+        "testrail": {
+          "description": "テストケースとテストラン"
+        },
+        "braintrust": {
+          "description": "ログと評価"
+        },
+        "lumapps": {
+          "description": "イントラネットのページとコミュニティ"
+        },
+        "canvas": {
+          "description": "コース、ページ、お知らせ"
+        },
+        "craftFile": {
+          "description": "アップロードしたファイル"
+        },
+        "federatedSlack": {
+          "description": "クエリ時に Slack を検索"
+        }
       }
     },
     "agentStats": {

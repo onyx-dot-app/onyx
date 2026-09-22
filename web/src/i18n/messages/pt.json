@@ -816,6 +816,188 @@
         "connectButton": {
           "ariaLabel": "Conectar {source}"
         }
+      },
+      "sources": {
+        "web": {
+          "description": "Rastrear sites públicos ou internos"
+        },
+        "github": {
+          "description": "Pull requests e issues"
+        },
+        "gitlab": {
+          "description": "Merge requests e issues"
+        },
+        "slack": {
+          "description": "Mensagens de canais e threads"
+        },
+        "googleDrive": {
+          "description": "Docs, Sheets, Slides e arquivos"
+        },
+        "gmail": {
+          "description": "E-mails e anexos"
+        },
+        "bookstack": {
+          "description": "Livros, capítulos e páginas"
+        },
+        "outline": {
+          "description": "Documentos da wiki da equipe"
+        },
+        "confluence": {
+          "description": "Espaços e páginas"
+        },
+        "jira": {
+          "description": "Issues e quadros de projeto"
+        },
+        "productboard": {
+          "description": "Funcionalidades, notas e feedback"
+        },
+        "slab": {
+          "description": "Publicações de conhecimento da equipe"
+        },
+        "coda": {
+          "description": "Documentos e tabelas"
+        },
+        "notion": {
+          "description": "Páginas e bancos de dados"
+        },
+        "guru": {
+          "description": "Cartões e coleções"
+        },
+        "gong": {
+          "description": "Gravações e transcrições de chamadas"
+        },
+        "zulip": {
+          "description": "Streams e tópicos"
+        },
+        "linear": {
+          "description": "Issues e projetos"
+        },
+        "hubspot": {
+          "description": "Tickets, contatos e negócios"
+        },
+        "document360": {
+          "description": "Artigos da base de conhecimento"
+        },
+        "file": {
+          "description": "Enviar arquivos do seu computador"
+        },
+        "userFile": {
+          "description": "Arquivos enviados no chat"
+        },
+        "googleSites": {
+          "description": "Páginas do site"
+        },
+        "loopio": {
+          "description": "Biblioteca de respostas a RFP"
+        },
+        "box": {
+          "description": "Arquivos, pastas e notas"
+        },
+        "dropbox": {
+          "description": "Arquivos e pastas compartilhadas"
+        },
+        "discord": {
+          "description": "Canais e mensagens do servidor"
+        },
+        "salesforce": {
+          "description": "Contas, casos e objetos"
+        },
+        "sharepoint": {
+          "description": "Sites, páginas e documentos"
+        },
+        "teams": {
+          "description": "Canais e chats da equipe"
+        },
+        "outlook": {
+          "description": "E-mails e pastas de e-mail"
+        },
+        "zendesk": {
+          "description": "Tickets e artigos da central de ajuda"
+        },
+        "discourse": {
+          "description": "Tópicos e postagens do fórum"
+        },
+        "axero": {
+          "description": "Espaços e artigos da intranet"
+        },
+        "clickup": {
+          "description": "Tarefas, documentos e comentários"
+        },
+        "wikipedia": {
+          "description": "Artigos de enciclopédia"
+        },
+        "mediawiki": {
+          "description": "Páginas wiki e revisões"
+        },
+        "asana": {
+          "description": "Tarefas e projetos"
+        },
+        "s3": {
+          "description": "Arquivos em buckets do Amazon S3"
+        },
+        "r2": {
+          "description": "Arquivos em buckets do Cloudflare R2"
+        },
+        "googleCloudStorage": {
+          "description": "Arquivos em buckets do Cloud Storage"
+        },
+        "xenforo": {
+          "description": "Threads e postagens do fórum"
+        },
+        "ociStorage": {
+          "description": "Arquivos no OCI Object Storage"
+        },
+        "notApplicable": {
+          "description": "Sem fonte"
+        },
+        "ingestionApi": {
+          "description": "Documentos enviados pela API"
+        },
+        "freshdesk": {
+          "description": "Tickets de suporte"
+        },
+        "fireflies": {
+          "description": "Transcrições de reuniões"
+        },
+        "egnyte": {
+          "description": "Arquivos e pastas corporativos"
+        },
+        "airtable": {
+          "description": "Bases e registros"
+        },
+        "gitbook": {
+          "description": "Documentos e espaços"
+        },
+        "highspot": {
+          "description": "Conteúdo de vendas e pitches"
+        },
+        "drupalWiki": {
+          "description": "Páginas wiki e livros"
+        },
+        "imap": {
+          "description": "E-mails de qualquer caixa IMAP"
+        },
+        "bitbucket": {
+          "description": "Pull requests e repositórios"
+        },
+        "testrail": {
+          "description": "Casos e execuções de teste"
+        },
+        "braintrust": {
+          "description": "Logs e avaliações"
+        },
+        "lumapps": {
+          "description": "Páginas e comunidades da intranet"
+        },
+        "canvas": {
+          "description": "Cursos, páginas e avisos"
+        },
+        "craftFile": {
+          "description": "Arquivos que você enviou"
+        },
+        "federatedSlack": {
+          "description": "Pesquisar no Slack na consulta"
+        }
       }
     },
     "agentStats": {

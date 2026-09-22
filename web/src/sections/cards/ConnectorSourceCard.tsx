@@ -10,7 +10,7 @@ import type { SourceMetadata } from "@/lib/search/interfaces";
 
 export interface ConnectorSourceCardProps {
   sourceMetadata: SourceMetadata;
-  /** Translated category the source belongs to, shown under its name. */
+  /** Translated one-line summary of what the source indexes, shown under its name. */
   description: string;
   /** Where the card and its add button lead: the setup wizard, or an
    * existing federated connector's edit page. */

@@ -816,6 +816,188 @@
         "connectButton": {
           "ariaLabel": "ربط {source}"
         }
+      },
+      "sources": {
+        "web": {
+          "description": "زحف المواقع العامة أو الداخلية"
+        },
+        "github": {
+          "description": "طلبات السحب والمشكلات"
+        },
+        "gitlab": {
+          "description": "طلبات الدمج والمشكلات"
+        },
+        "slack": {
+          "description": "رسائل القنوات والمحادثات المتسلسلة"
+        },
+        "googleDrive": {
+          "description": "المستندات وجداول البيانات والعروض والملفات"
+        },
+        "gmail": {
+          "description": "رسائل البريد والمرفقات"
+        },
+        "bookstack": {
+          "description": "الكتب والفصول والصفحات"
+        },
+        "outline": {
+          "description": "مستندات ويكي الفريق"
+        },
+        "confluence": {
+          "description": "المساحات والصفحات"
+        },
+        "jira": {
+          "description": "المشكلات ولوحات المشاريع"
+        },
+        "productboard": {
+          "description": "الميزات والملاحظات والتعليقات"
+        },
+        "slab": {
+          "description": "منشورات معرفة الفريق"
+        },
+        "coda": {
+          "description": "المستندات والجداول"
+        },
+        "notion": {
+          "description": "الصفحات وقواعد البيانات"
+        },
+        "guru": {
+          "description": "البطاقات والمجموعات"
+        },
+        "gong": {
+          "description": "تسجيلات المكالمات والنصوص"
+        },
+        "zulip": {
+          "description": "التدفقات والمواضيع"
+        },
+        "linear": {
+          "description": "المشكلات والمشاريع"
+        },
+        "hubspot": {
+          "description": "التذاكر وجهات الاتصال والصفقات"
+        },
+        "document360": {
+          "description": "مقالات قاعدة المعرفة"
+        },
+        "file": {
+          "description": "رفع ملفات من جهازك"
+        },
+        "userFile": {
+          "description": "الملفات المرفوعة في الدردشة"
+        },
+        "googleSites": {
+          "description": "صفحات الموقع"
+        },
+        "loopio": {
+          "description": "مكتبة إجابات طلبات العروض"
+        },
+        "box": {
+          "description": "الملفات والمجلدات والملاحظات"
+        },
+        "dropbox": {
+          "description": "الملفات والمجلدات المشتركة"
+        },
+        "discord": {
+          "description": "قنوات الخادم والرسائل"
+        },
+        "salesforce": {
+          "description": "الحسابات والحالات والكائنات"
+        },
+        "sharepoint": {
+          "description": "المواقع والصفحات والمستندات"
+        },
+        "teams": {
+          "description": "قنوات الفريق والدردشات"
+        },
+        "outlook": {
+          "description": "رسائل البريد ومجلداته"
+        },
+        "zendesk": {
+          "description": "التذاكر ومقالات مركز المساعدة"
+        },
+        "discourse": {
+          "description": "مواضيع المنتدى والمنشورات"
+        },
+        "axero": {
+          "description": "مساحات الشبكة الداخلية والمقالات"
+        },
+        "clickup": {
+          "description": "المهام والمستندات والتعليقات"
+        },
+        "wikipedia": {
+          "description": "مقالات الموسوعة"
+        },
+        "mediawiki": {
+          "description": "صفحات الويكي والمراجعات"
+        },
+        "asana": {
+          "description": "المهام والمشاريع"
+        },
+        "s3": {
+          "description": "الملفات في حاويات Amazon S3"
+        },
+        "r2": {
+          "description": "الملفات في حاويات Cloudflare R2"
+        },
+        "googleCloudStorage": {
+          "description": "الملفات في حاويات Cloud Storage"
+        },
+        "xenforo": {
+          "description": "سلاسل المنتدى والمنشورات"
+        },
+        "ociStorage": {
+          "description": "الملفات في OCI Object Storage"
+        },
+        "notApplicable": {
+          "description": "لا يوجد مصدر"
+        },
+        "ingestionApi": {
+          "description": "المستندات المرسلة عبر واجهة البرمجة"
+        },
+        "freshdesk": {
+          "description": "تذاكر الدعم"
+        },
+        "fireflies": {
+          "description": "نصوص الاجتماعات"
+        },
+        "egnyte": {
+          "description": "ملفات المؤسسة ومجلداتها"
+        },
+        "airtable": {
+          "description": "القواعد والسجلات"
+        },
+        "gitbook": {
+          "description": "المستندات والمساحات"
+        },
+        "highspot": {
+          "description": "محتوى المبيعات والعروض"
+        },
+        "drupalWiki": {
+          "description": "صفحات الويكي والكتب"
+        },
+        "imap": {
+          "description": "رسائل البريد من أي صندوق IMAP"
+        },
+        "bitbucket": {
+          "description": "طلبات السحب والمستودعات"
+        },
+        "testrail": {
+          "description": "حالات الاختبار وعمليات التشغيل"
+        },
+        "braintrust": {
+          "description": "السجلات والتقييمات"
+        },
+        "lumapps": {
+          "description": "صفحات الشبكة الداخلية والمجتمعات"
+        },
+        "canvas": {
+          "description": "الدورات والصفحات والإعلانات"
+        },
+        "craftFile": {
+          "description": "الملفات التي رفعتها"
+        },
+        "federatedSlack": {
+          "description": "البحث في Slack عند الاستعلام"
+        }
       }
     },
     "agentStats": {

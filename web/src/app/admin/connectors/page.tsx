@@ -14,7 +14,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { Tooltip } from "@opal/components";
+import { Tooltip, InputTypeIn, Text } from "@opal/components";
+import { richNodes } from "@opal/utils";
 import { useFederatedConnectors } from "@/lib/hooks";
 import {
   FederatedConnectorDetail,
@@ -27,12 +28,18 @@ import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/
 import { Credential } from "@/lib/connectors/credentials";
 import { useSettings } from "@/lib/settings/hooks";
 import ConnectorSourceCard from "@/sections/cards/ConnectorSourceCard";
-import { InputTypeIn } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { SOURCE_CATEGORY_LABEL_KEYS } from "@/lib/connectors/constants";
+import {
+  SOURCE_CATEGORY_LABEL_KEYS,
+  SOURCE_DESCRIPTION_KEYS,
+} from "@/lib/connectors/constants";
 
 const route = ADMIN_ROUTES.CONNECTORS;
+
+// Four columns at the full settings width, three and then two as the
+// `sourcecards` container narrows.
+const SOURCE_CARD_GRID =
+  "grid grid-cols-2 @xl/sourcecards:grid-cols-3 @3xl/sourcecards:grid-cols-4 gap-2";
 
 function SourceTileTooltipWrapper({
   sourceMetadata,
@@ -46,7 +53,7 @@ function SourceTileTooltipWrapper({
   slackCredentials?: Credential<any>[];
 }) {
   const t = useTranslations("admin.addConnector");
-  const description = t(SOURCE_CATEGORY_LABEL_KEYS[sourceMetadata.category]);
+  const description = t(SOURCE_DESCRIPTION_KEYS[sourceMetadata.internalName]);
 
   // Check if there's already a federated connector for this source
   const existingFederatedConnector = useMemo(() => {
@@ -101,16 +108,20 @@ function SourceTileTooltipWrapper({
       side="top"
       tooltip={
         existingFederatedConnector ? (
-          <Text as="p" textLight05 secondaryBody>
-            {t.rich("sourceTile.tooltip.federatedConfigured", {
-              strong: (chunks) => <strong>{chunks}</strong>,
-            })}
+          <Text as="p" font="secondary-body" color="inherit">
+            {richNodes(
+              t.rich("sourceTile.tooltip.federatedConfigured", {
+                strong: (chunks) => <strong>{chunks}</strong>,
+              })
+            )}
           </Text>
         ) : hasExistingSlackCredentials ? (
-          <Text as="p" textLight05 secondaryBody>
-            {t.rich("sourceTile.tooltip.slackCredentialsFound", {
-              strong: (chunks) => <strong>{chunks}</strong>,
-            })}
+          <Text as="p" font="secondary-body" color="inherit">
+            {richNodes(
+              t.rich("sourceTile.tooltip.slackCredentialsFound", {
+                strong: (chunks) => <strong>{chunks}</strong>,
+              })
+            )}
           </Text>
         ) : undefined
       }
@@ -279,7 +290,7 @@ export default function Page() {
                 sizePreset="main-content"
                 variant="section"
               />
-              <div className="grid grid-cols-1 @xl/sourcecards:grid-cols-2 gap-2">
+              <div className={SOURCE_CARD_GRID}>
                 {dedupedPopular.map((source) => (
                   <SourceTileTooltipWrapper
                     preSelect={false}
@@ -303,14 +314,10 @@ export default function Page() {
                 alignItems="stretch"
                 justifyContent="start"
               >
-                <Content
-                  title={t(
-                    SOURCE_CATEGORY_LABEL_KEYS[category as SourceCategory]
-                  )}
-                  sizePreset="main-content"
-                  variant="section"
-                />
-                <div className="grid grid-cols-1 @xl/sourcecards:grid-cols-2 gap-2">
+                <Text font="main-ui-action" color="text-03">
+                  {t(SOURCE_CATEGORY_LABEL_KEYS[category as SourceCategory])}
+                </Text>
+                <div className={SOURCE_CARD_GRID}>
                   {sources.map((source, sourceInd) => (
                     <SourceTileTooltipWrapper
                       preSelect={

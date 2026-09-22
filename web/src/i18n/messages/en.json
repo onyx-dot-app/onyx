@@ -816,6 +816,188 @@
         "connectButton": {
           "ariaLabel": "Connect {source}"
         }
+      },
+      "sources": {
+        "web": {
+          "description": "Link any public URL"
+        },
+        "github": {
+          "description": "Code & pull requests"
+        },
+        "gitlab": {
+          "description": "Code & CI/CD"
+        },
+        "slack": {
+          "description": "Team messaging"
+        },
+        "googleDrive": {
+          "description": "Shared files & folders"
+        },
+        "gmail": {
+          "description": "Google email"
+        },
+        "bookstack": {
+          "description": "Books, chapters, and pages"
+        },
+        "outline": {
+          "description": "Team wiki documents"
+        },
+        "confluence": {
+          "description": "Spaces and pages"
+        },
+        "jira": {
+          "description": "Issues and project boards"
+        },
+        "productboard": {
+          "description": "Features, notes, and feedback"
+        },
+        "slab": {
+          "description": "Team knowledge posts"
+        },
+        "coda": {
+          "description": "Docs and tables"
+        },
+        "notion": {
+          "description": "Pages and databases"
+        },
+        "guru": {
+          "description": "Cards and collections"
+        },
+        "gong": {
+          "description": "Call recordings and transcripts"
+        },
+        "zulip": {
+          "description": "Streams and topics"
+        },
+        "linear": {
+          "description": "Issues and projects"
+        },
+        "hubspot": {
+          "description": "Tickets, contacts, and deals"
+        },
+        "document360": {
+          "description": "Knowledge base articles"
+        },
+        "file": {
+          "description": "Upload files from your computer"
+        },
+        "userFile": {
+          "description": "Files uploaded in chat"
+        },
+        "googleSites": {
+          "description": "Site pages"
+        },
+        "loopio": {
+          "description": "RFP answer library"
+        },
+        "box": {
+          "description": "Files, folders, and notes"
+        },
+        "dropbox": {
+          "description": "Files and shared folders"
+        },
+        "discord": {
+          "description": "Server channels and messages"
+        },
+        "salesforce": {
+          "description": "Accounts, cases, and objects"
+        },
+        "sharepoint": {
+          "description": "Sites, pages, and documents"
+        },
+        "teams": {
+          "description": "Team channels and chats"
+        },
+        "outlook": {
+          "description": "Emails and mail folders"
+        },
+        "zendesk": {
+          "description": "Tickets and help center articles"
+        },
+        "discourse": {
+          "description": "Forum topics and posts"
+        },
+        "axero": {
+          "description": "Intranet spaces and articles"
+        },
+        "clickup": {
+          "description": "Tasks, docs, and comments"
+        },
+        "wikipedia": {
+          "description": "Encyclopedia articles"
+        },
+        "mediawiki": {
+          "description": "Wiki pages and revisions"
+        },
+        "asana": {
+          "description": "Tasks and projects"
+        },
+        "s3": {
+          "description": "Files in Amazon S3 buckets"
+        },
+        "r2": {
+          "description": "Files in Cloudflare R2 buckets"
+        },
+        "googleCloudStorage": {
+          "description": "Files in Cloud Storage buckets"
+        },
+        "xenforo": {
+          "description": "Forum threads and posts"
+        },
+        "ociStorage": {
+          "description": "Files in OCI Object Storage"
+        },
+        "notApplicable": {
+          "description": "No source"
+        },
+        "ingestionApi": {
+          "description": "Documents sent through the API"
+        },
+        "freshdesk": {
+          "description": "Support tickets"
+        },
+        "fireflies": {
+          "description": "Meeting transcripts"
+        },
+        "egnyte": {
+          "description": "Enterprise files and folders"
+        },
+        "airtable": {
+          "description": "Bases and records"
+        },
+        "gitbook": {
+          "description": "Docs and spaces"
+        },
+        "highspot": {
+          "description": "Sales content and pitches"
+        },
+        "drupalWiki": {
+          "description": "Wiki pages and books"
+        },
+        "imap": {
+          "description": "Emails from any IMAP mailbox"
+        },
+        "bitbucket": {
+          "description": "Pull requests and repositories"
+        },
+        "testrail": {
+          "description": "Test cases and runs"
+        },
+        "braintrust": {
+          "description": "Logs and evaluations"
+        },
+        "lumapps": {
+          "description": "Intranet pages and communities"
+        },
+        "canvas": {
+          "description": "Courses, pages, and announcements"
+        },
+        "craftFile": {
+          "description": "Files you uploaded"
+        },
+        "federatedSlack": {
+          "description": "Search Slack at query time"
+        }
       }
     },
     "agentStats": {

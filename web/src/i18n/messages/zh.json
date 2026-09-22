@@ -816,6 +816,188 @@
         "connectButton": {
           "ariaLabel": "连接 {source}"
         }
+      },
+      "sources": {
+        "web": {
+          "description": "抓取公开或内部网站"
+        },
+        "github": {
+          "description": "拉取请求和议题"
+        },
+        "gitlab": {
+          "description": "合并请求和议题"
+        },
+        "slack": {
+          "description": "频道消息和话题"
+        },
+        "googleDrive": {
+          "description": "文档、表格、幻灯片和文件"
+        },
+        "gmail": {
+          "description": "邮件和附件"
+        },
+        "bookstack": {
+          "description": "书籍、章节和页面"
+        },
+        "outline": {
+          "description": "团队 Wiki 文档"
+        },
+        "confluence": {
+          "description": "空间和页面"
+        },
+        "jira": {
+          "description": "议题和项目看板"
+        },
+        "productboard": {
+          "description": "功能、笔记和反馈"
+        },
+        "slab": {
+          "description": "团队知识帖子"
+        },
+        "coda": {
+          "description": "文档和表格"
+        },
+        "notion": {
+          "description": "页面和数据库"
+        },
+        "guru": {
+          "description": "卡片和合集"
+        },
+        "gong": {
+          "description": "通话录音和转录"
+        },
+        "zulip": {
+          "description": "信息流和主题"
+        },
+        "linear": {
+          "description": "议题和项目"
+        },
+        "hubspot": {
+          "description": "工单、联系人和交易"
+        },
+        "document360": {
+          "description": "知识库文章"
+        },
+        "file": {
+          "description": "从电脑上传文件"
+        },
+        "userFile": {
+          "description": "聊天中上传的文件"
+        },
+        "googleSites": {
+          "description": "站点页面"
+        },
+        "loopio": {
+          "description": "RFP 答案库"
+        },
+        "box": {
+          "description": "文件、文件夹和笔记"
+        },
+        "dropbox": {
+          "description": "文件和共享文件夹"
+        },
+        "discord": {
+          "description": "服务器频道和消息"
+        },
+        "salesforce": {
+          "description": "客户、个案和对象"
+        },
+        "sharepoint": {
+          "description": "站点、页面和文档"
+        },
+        "teams": {
+          "description": "团队频道和聊天"
+        },
+        "outlook": {
+          "description": "邮件和邮件文件夹"
+        },
+        "zendesk": {
+          "description": "工单和帮助中心文章"
+        },
+        "discourse": {
+          "description": "论坛主题和帖子"
+        },
+        "axero": {
+          "description": "内网空间和文章"
+        },
+        "clickup": {
+          "description": "任务、文档和评论"
+        },
+        "wikipedia": {
+          "description": "百科全书文章"
+        },
+        "mediawiki": {
+          "description": "Wiki 页面和修订"
+        },
+        "asana": {
+          "description": "任务和项目"
+        },
+        "s3": {
+          "description": "Amazon S3 存储桶中的文件"
+        },
+        "r2": {
+          "description": "Cloudflare R2 存储桶中的文件"
+        },
+        "googleCloudStorage": {
+          "description": "Cloud Storage 存储桶中的文件"
+        },
+        "xenforo": {
+          "description": "论坛帖子和回复"
+        },
+        "ociStorage": {
+          "description": "OCI 对象存储中的文件"
+        },
+        "notApplicable": {
+          "description": "无来源"
+        },
+        "ingestionApi": {
+          "description": "通过 API 发送的文档"
+        },
+        "freshdesk": {
+          "description": "支持工单"
+        },
+        "fireflies": {
+          "description": "会议转录"
+        },
+        "egnyte": {
+          "description": "企业文件和文件夹"
+        },
+        "airtable": {
+          "description": "数据库和记录"
+        },
+        "gitbook": {
+          "description": "文档和空间"
+        },
+        "highspot": {
+          "description": "销售内容和推介"
+        },
+        "drupalWiki": {
+          "description": "Wiki 页面和书籍"
+        },
+        "imap": {
+          "description": "任意 IMAP 邮箱的邮件"
+        },
+        "bitbucket": {
+          "description": "拉取请求和仓库"
+        },
+        "testrail": {
+          "description": "测试用例和测试运行"
+        },
+        "braintrust": {
+          "description": "日志和评估"
+        },
+        "lumapps": {
+          "description": "内网页面和社区"
+        },
+        "canvas": {
+          "description": "课程、页面和公告"
+        },
+        "craftFile": {
+          "description": "你上传的文件"
+        },
+        "federatedSlack": {
+          "description": "查询时搜索 Slack"
+        }
       }
     },
     "agentStats": {
