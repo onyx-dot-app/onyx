@@ -8837,13 +8837,6 @@
       "required": {
         "label": "必須"
       },
-      "rerunButton": {
-        "ariaLabel": "チェックを再実行"
-      },
-      "collapseButton": {
-        "collapse": "チェックを折りたたむ",
-        "expand": "チェックを展開"
-      },
       "running": {
         "label": "チェックを実行中…"
       },
@@ -8852,6 +8845,13 @@
       },
       "docsLink": {
         "label": "ドキュメント"
+      },
+      "rerunButton": {
+        "label": "チェックを再実行"
+      },
+      "foldButton": {
+        "fold": "折りたたむ",
+        "expand": "展開"
       }
     },
     "llmGateway": {
