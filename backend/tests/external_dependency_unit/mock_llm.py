@@ -309,6 +309,7 @@ class MockLLM(LLM, MockLLMController):
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
         total_timeout_override: float | None = None,
+        stream: bool = False,
     ) -> ModelResponse:
         raise NotImplementedError("We only care about streaming atm")
 

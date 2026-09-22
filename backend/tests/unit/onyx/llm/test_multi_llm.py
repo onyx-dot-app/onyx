@@ -3106,6 +3106,29 @@ def _simple_stream_chunks(model_name: str) -> list[litellm.ModelResponse]:
     ]
 
 
+def _simple_response(model_name: str) -> litellm.ModelResponse:
+    return litellm.ModelResponse(
+        id="chatcmpl-123",
+        choices=[
+            litellm.Choices(
+                message=litellm.Message(role="assistant", content="Hi"),
+                finish_reason="stop",
+                index=0,
+            )
+        ],
+        model=model_name,
+    )
+
+
+def _simple_completion_result(
+    kwargs: Mapping[str, Any], model_name: str
+) -> litellm.ModelResponse | list[litellm.ModelResponse]:
+    """Return what litellm.completion returns for the requested stream mode."""
+    if kwargs.get("stream"):
+        return _simple_stream_chunks(model_name)
+    return _simple_response(model_name)
+
+
 def test_injection_disabled_maps_kwargs_and_never_touches_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -3130,12 +3153,16 @@ def test_injection_disabled_maps_kwargs_and_never_touches_env(
 
     env_during_call: dict[str, str | None] = {}
 
-    def fake_completion(**kwargs: Any) -> list[litellm.ModelResponse]:  # noqa: ARG001
+    def fake_completion(
+        **kwargs: Any,
+    ) -> litellm.ModelResponse | list[litellm.ModelResponse]:
         env_during_call["AWS_SECRET_ACCESS_KEY"] = os.environ.get(
             "AWS_SECRET_ACCESS_KEY"
         )
         env_during_call["ENV_ONLY_KEY"] = os.environ.get("ENV_ONLY_KEY")
-        return _simple_stream_chunks("anthropic.claude-3-sonnet-20240229-v1:0")
+        return _simple_completion_result(
+            kwargs, "anthropic.claude-3-sonnet-20240229-v1:0"
+        )
 
     from onyx.llm import multi_llm as multi_llm_module
 
@@ -3252,9 +3279,11 @@ def test_generic_custom_provider_api_key_reaches_litellm(
 
     env_during_call: dict[str, str | None] = {}
 
-    def fake_completion(**kwargs: Any) -> list[litellm.ModelResponse]:  # noqa: ARG001
+    def fake_completion(
+        **kwargs: Any,
+    ) -> litellm.ModelResponse | list[litellm.ModelResponse]:
         env_during_call["GROQ_API_KEY"] = os.environ.get("GROQ_API_KEY")
-        return _simple_stream_chunks("llama-3.3-70b-versatile")
+        return _simple_completion_result(kwargs, "llama-3.3-70b-versatile")
 
     with (
         patch("litellm.completion", side_effect=fake_completion) as mock_completion,
@@ -3292,9 +3321,13 @@ def test_ui_only_keys_never_injected_or_warned(
 
     env_during_call: dict[str, str | None] = {}
 
-    def fake_completion(**kwargs: Any) -> list[litellm.ModelResponse]:  # noqa: ARG001
+    def fake_completion(
+        **kwargs: Any,
+    ) -> litellm.ModelResponse | list[litellm.ModelResponse]:
         env_during_call["BEDROCK_AUTH_METHOD"] = os.environ.get("BEDROCK_AUTH_METHOD")
-        return _simple_stream_chunks("anthropic.claude-3-sonnet-20240229-v1:0")
+        return _simple_completion_result(
+            kwargs, "anthropic.claude-3-sonnet-20240229-v1:0"
+        )
 
     for injection_enabled in (True, False):
         with (
@@ -3308,6 +3341,90 @@ def test_ui_only_keys_never_injected_or_warned(
             llm.invoke([UserMessage(content="Hi")])
         assert env_during_call["BEDROCK_AUTH_METHOD"] is None
         mock_warn.assert_not_called()
+
+
+# ---- Tests for the invoke() stream / non-stream decision ----
+
+
+def _invoke_stream_flag(
+    llm: LitellmLLM,
+    injection_enabled: bool,
+    stream: bool = False,
+    total_timeout_override: float | None = None,
+) -> tuple[bool, ModelResponse]:
+    """Run invoke() with litellm mocked and report the stream kwarg it sent."""
+    model_name = llm.config.model_name
+
+    def fake_completion(
+        **kwargs: Any,
+    ) -> litellm.ModelResponse | list[litellm.ModelResponse]:
+        return _simple_completion_result(kwargs, model_name)
+
+    with (
+        patch("litellm.completion", side_effect=fake_completion) as mock_completion,
+        patch(
+            "onyx.llm.multi_llm._env_injection_enabled",
+            return_value=injection_enabled,
+        ) as mock_injection_setting,
+    ):
+        response = llm.invoke(
+            [UserMessage(content="Hi")],
+            total_timeout_override=total_timeout_override,
+            stream=stream,
+        )
+
+    # One snapshot drives both the stream choice and the env lock, so the two
+    # cannot diverge if an admin flips the setting mid-call.
+    assert mock_injection_setting.call_count == 1
+
+    kwargs = mock_completion.call_args.kwargs
+    if kwargs["stream"]:
+        assert kwargs["stream_options"] == {"include_usage": True}
+    else:
+        assert "stream_options" not in kwargs
+    return kwargs["stream"], response
+
+
+def test_invoke_plain_request_by_default(default_multi_llm: LitellmLLM) -> None:
+    """Cloud posture: invoke() sends one non-streamed request and takes the
+    response as one body."""
+    streamed, response = _invoke_stream_flag(default_multi_llm, injection_enabled=False)
+
+    assert streamed is False
+    assert response.choice.message.content == "Hi"
+    assert response.choice.finish_reason == "stop"
+
+
+def test_invoke_stream_true_streams(default_multi_llm: LitellmLLM) -> None:
+    """Long-answer callers ask for streaming and get the reassembled response."""
+    streamed, response = _invoke_stream_flag(
+        default_multi_llm, injection_enabled=False, stream=True
+    )
+
+    assert streamed is True
+    assert response.choice.message.content == "Hi"
+
+
+def test_invoke_streams_when_injection_enabled(
+    default_multi_llm: LitellmLLM,
+) -> None:
+    """Self-hosted posture: streaming keeps the env rwlock to connection setup."""
+    streamed, response = _invoke_stream_flag(default_multi_llm, injection_enabled=True)
+
+    assert streamed is True
+    assert response.choice.message.content == "Hi"
+
+
+def test_invoke_streams_when_total_timeout_requested(
+    default_multi_llm: LitellmLLM,
+) -> None:
+    """The wall-clock deadline is enforced between chunks, so a total timeout
+    forces streaming."""
+    streamed, _ = _invoke_stream_flag(
+        default_multi_llm, injection_enabled=False, total_timeout_override=30
+    )
+
+    assert streamed is True
 
 
 def _openai_compatible_llm(

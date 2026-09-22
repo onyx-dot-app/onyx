@@ -367,7 +367,7 @@ def generate_summary(
         flow=LLMFlow.CHAT_HISTORY_SUMMARIZATION,
         input_messages=input_messages,
     ) as span_generation:
-        response = llm.invoke(input_messages)
+        response = llm.invoke(input_messages, stream=True)
         record_llm_response(span_generation, response)
 
     content = response.choice.message.content

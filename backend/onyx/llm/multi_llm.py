@@ -650,11 +650,18 @@ class LitellmLLM(LLM):
         max_tokens: int | None = None,
         user_identity: LLMUserIdentity | None = None,
         client: "HTTPHandler | None" = None,
+        env_injection_enabled: bool | None = None,
     ) -> Union["ModelResponse", "CustomStreamWrapper"]:
         # Lazy loading to avoid memory bloat for non-inference flows
         from litellm.exceptions import BadRequestError, RateLimitError, Timeout
 
         from onyx.llm.litellm_singleton import litellm
+
+        # One snapshot of the setting for the whole call. A caller that made a
+        # decision on it (invoke's stream choice) passes its own value so the
+        # two cannot diverge if an admin flips the setting mid-call.
+        if env_injection_enabled is None:
+            env_injection_enabled = _env_injection_enabled()
 
         #########################
         # Flags that modify the final arguments
@@ -1089,7 +1096,7 @@ class LitellmLLM(LLM):
                 else:
                     optional_kwargs["tool_choice"] = tool_choice
 
-            if not _env_injection_enabled() and self._env_only_custom_config:
+            if not env_injection_enabled and self._env_only_custom_config:
                 _warn_dropped_env_only_keys(
                     self._model_provider,
                     tuple(sorted(self._env_only_custom_config)),
@@ -1101,7 +1108,7 @@ class LitellmLLM(LLM):
                 # because the context manager is single-use.
                 env_ctx: AbstractContextManager[None] = (
                     temporary_env_and_lock(self._env_only_custom_config)
-                    if _env_injection_enabled()
+                    if env_injection_enabled
                     else nullcontext()
                 )
                 with env_ctx:
@@ -1136,6 +1143,7 @@ class LitellmLLM(LLM):
                     "model_provider": self.config.model_provider,
                     "reasoning_effort": reasoning_effort.value,
                     "max_tokens": max_tokens,
+                    "stream": stream,
                     "sent_kwargs": {
                         k: _json_safe(opts[k])
                         for k in sorted(_BEST_EFFORT_KWARG_KEYS & opts.keys())
@@ -1230,7 +1238,18 @@ class LitellmLLM(LLM):
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
         total_timeout_override: float | None = None,
+        stream: bool = False,
     ) -> ModelResponse:
+        """One complete response. By default it is one non-streamed request,
+        2-4x cheaper in CPU than streaming and reassembling.
+
+        Pass stream=True for long or unbounded answers: without chunks the
+        socket read timeout bounds the whole response, so a long generation
+        could time out. Streaming is also forced when total_timeout_override is
+        set (the deadline is checked between chunks) or when env injection of
+        custom_config is enabled (the env rwlock must not be held for a full
+        inference; self-hosted default).
+        """
         from litellm import HTTPHandler
         from litellm import ModelResponse as LiteLLMModelResponse
 
@@ -1284,39 +1303,39 @@ class LitellmLLM(LLM):
         if self._uses_isolated_client():
             client = HTTPHandler(timeout=read_timeout)
 
-        try:
-            # When env-only custom_config keys are injected (self-hosted
-            # deployments only), they are set under a global lock. Using
-            # stream=True here means the lock is only held during connection
-            # setup (not the full inference). The chunks are then collected
-            # outside the lock and reassembled into a single ModelResponse
-            # via stream_chunk_builder.
-            from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
-            from litellm import stream_chunk_builder
+        env_injection_enabled = _env_injection_enabled()
+        use_stream = (
+            stream or total_timeout_override is not None or env_injection_enabled
+        )
 
-            stream_response = cast(
-                LiteLLMCustomStreamWrapper,
-                self._completion(
-                    prompt=prompt,
-                    tools=tools,
-                    tool_choice=tool_choice,
-                    stream=True,
-                    structured_response_format=structured_response_format,
-                    timeout_override=read_timeout,
-                    max_tokens=max_tokens,
-                    parallel_tool_calls=True,
-                    reasoning_effort=reasoning_effort,
-                    user_identity=user_identity,
-                    client=client,
-                ),
+        try:
+            raw_response = self._completion(
+                prompt=prompt,
+                tools=tools,
+                tool_choice=tool_choice,
+                stream=use_stream,
+                structured_response_format=structured_response_format,
+                timeout_override=read_timeout,
+                max_tokens=max_tokens,
+                parallel_tool_calls=True,
+                reasoning_effort=reasoning_effort,
+                user_identity=user_identity,
+                client=client,
+                env_injection_enabled=env_injection_enabled,
             )
-            chunks = _consume_stream_with_timeout(
-                stream_response, total_timeout_override
-            )
-            response = cast(
-                LiteLLMModelResponse,
-                stream_chunk_builder(chunks),
-            )
+            if use_stream:
+                from litellm import (
+                    CustomStreamWrapper as LiteLLMCustomStreamWrapper,
+                )
+                from litellm import stream_chunk_builder
+
+                chunks = _consume_stream_with_timeout(
+                    cast(LiteLLMCustomStreamWrapper, raw_response),
+                    total_timeout_override,
+                )
+                response = cast(LiteLLMModelResponse, stream_chunk_builder(chunks))
+            else:
+                response = cast(LiteLLMModelResponse, raw_response)
 
             model_response = from_litellm_model_response(response)
 
