@@ -13,7 +13,6 @@ from onyx.connectors.models import (
 from onyx.connectors.zoom.connector import ZoomConnector
 from onyx.connectors.zoom.recordings.models import OccurrenceWork, ZoomSessionType
 from onyx.connectors.zoom.recordings.processing import process_occurrence
-from onyx.connectors.zoom.recordings.recording_access import ZoomAccessContext
 from tests.unit.onyx.connectors.zoom.helpers import (
     http_error,
     with_recording_access,
@@ -185,9 +184,7 @@ class TestPermissionParity:
 
     def _crawled(self, client: MagicMock, work: OccurrenceWork) -> Document:
         doc = process_occurrence(
-            client,
-            work,
-            access=ZoomAccessContext(client, treat_link_access_as_public=True),
+            client, work, resolve_access=_connector(client)._resolve_access
         )
         assert isinstance(doc, Document)
         return doc
