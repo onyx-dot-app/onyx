@@ -62,50 +62,19 @@ What ships in the box:
 - **Voice mode.** Talk to Onyx with speech-to-text and hear answers back with text-to-speech.
 - **Image generation.** Generate images from a prompt inside chat.
 
+The full connector list is [here](https://www.onyx.app/connectors?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme) and the docs are [here](https://docs.onyx.app/welcome?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme).
+
 ---
 
 ## Why self-host it
 
 Every hosted enterprise AI product wants your documents and prompts in its cloud, which means you inherit its retention policy, its access controls, and its training terms. Onyx runs in your environment instead, so none of that applies.
 
-```mermaid
-flowchart LR
-    subgraph boundary["Your environment (VPC, datacenter, or air-gapped)"]
-        direction LR
-        subgraph sources["Your knowledge sources"]
-            S1[Slack]
-            S2[Google Drive]
-            S3[Confluence]
-            S4[50+ more]
-        end
-        subgraph onyx["Onyx"]
-            W[Web + API server]
-            C[Sync workers]
-            IDX[(Hybrid index<br/>OpenSearch)]
-            DB[(Postgres)]
-            EMB[Embedding + reranking<br/>inference servers]
-        end
-        LLMself[Self-hosted LLM<br/>Ollama, vLLM, open weights]
-        U[People: web, desktop, Slack, Chrome]
-        A[Agents: MCP clients]
-    end
-    LLMapi[Hosted LLM API<br/>optional]
-
-    sources -->|"documents + permissions"| C
-    C --> EMB --> IDX
-    C --> DB
-    U --> W
-    A --> W
-    W --> IDX
-    W --> DB
-    W --> LLMself
-    W -.->|"only if you choose to"| LLMapi
-```
+![Onyx architecture: everything runs inside your environment](docs/assets/architecture.png)
 
 - **Everything stays inside your boundary.** The index, the database, the embedding models, and the model traffic all run on machines you control, whether that is your cloud account, your datacenter, or an air-gapped network.
 - **No content leaves.** The only outbound call Onyx makes on its own is usage telemetry: an installation UUID, version, event types, timings, and on Enterprise deployments the instance's email domain. It never includes documents or prompts, and `DISABLE_TELEMETRY=true` turns it off. Sentry and PostHog stay off unless you set their keys.
 - **Any model.** Run open weights on your own GPUs through Ollama, vLLM, or LiteLLM, or connect Anthropic, OpenAI, Gemini, and others under your own keys. Onyx never proxies prompts through a third party, and you can swap providers in one click or restrict which providers each user group can use.
-- **Open source.** The Community Edition is MIT licensed and lives in this repo, so your security team can read the code that touches your data, build the images themselves, and confirm there is no hidden egress.
 - **Permission syncing (Enterprise Edition).** Onyx syncs document-level ACLs from Google Drive, Confluence, Jira, GitHub, Slack, SharePoint, Gmail, Outlook, Teams, Zoom, Box, and Canvas, and filters Salesforce results live at query time. Every query, whether it comes from a person or an agent, only returns documents that user can already open at the source. Syncs run every 5 to 30 minutes by default.
 - **Audit (Enterprise Edition).** Query history records who asked what and which documents were cited, and [audit logging](docs/AUDIT_LOGGING.md) records logins, admin changes, and access-control changes in a format your SIEM can ingest.
 
@@ -119,8 +88,6 @@ The same index and the same permissions apply no matter where the question comes
 - **Slackbot.** Answers land in the channels where people already ask.
 - **MCP server.** Point Claude Code, Cursor, Codex, or any MCP client at Onyx, and your agents get company context with the same access controls as the person running them.
 - **Chrome extension.** Query Onyx from any tab.
-
-The full connector list is [here](https://www.onyx.app/connectors?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme) and the docs are [here](https://docs.onyx.app/welcome?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme).
 
 ---
 
