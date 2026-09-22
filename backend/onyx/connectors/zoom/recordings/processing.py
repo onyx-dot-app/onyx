@@ -3,6 +3,9 @@ Anything that differs between meetings and webinars belongs on the
 SessionTypeHandler, not in a branch here.
 """
 
+from collections.abc import Callable
+
+from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.models import (
@@ -12,17 +15,14 @@ from onyx.connectors.models import (
     TextSection,
 )
 from onyx.connectors.zoom.client import ZoomClient
+from onyx.connectors.zoom.models import ZoomRecordingEntry
 from onyx.connectors.zoom.recordings.models import (
     OccurrenceWork,
     ZoomSessionType,
     fails_the_whole_run,
     has_no_transcript,
 )
-from onyx.connectors.zoom.recordings.recording_access import (
-    ZoomAccessContext,
-    ZoomAccessListUnavailable,
-    resolve_recording_access,
-)
+from onyx.connectors.zoom.recordings.recording_access import ZoomAccessListUnavailable
 from onyx.connectors.zoom.recordings.session_types import get_session_type_handler
 from onyx.connectors.zoom.recordings.vtt import parse_vtt_transcript
 from onyx.utils.logger import setup_logger
@@ -60,7 +60,10 @@ def parse_zoom_document_id(document_id: str) -> tuple[ZoomSessionType, str] | No
 
 
 def process_occurrence(
-    client: ZoomClient, work: OccurrenceWork, *, access: ZoomAccessContext | None
+    client: ZoomClient,
+    work: OccurrenceWork,
+    *,
+    resolve_access: Callable[[ZoomRecordingEntry], ExternalAccess] | None,
 ) -> Document | ConnectorFailure | None:
     """One occurrence is at most one transcript, so this answers with the
     document, the failure that replaces it, or nothing when the occurrence has
@@ -181,9 +184,7 @@ def process_occurrence(
     # calls. Failing the document beats indexing it with an access list we know
     # is wrong, and a targeted reindex can come back for it later.
     try:
-        external_access = (
-            resolve_recording_access(access, recording) if access else None
-        )
+        external_access = resolve_access(recording) if resolve_access else None
     except ZoomAccessListUnavailable as e:
         # This one already reads as a whole sentence, so don't bury it behind
         # a prefix the way the generic case below has to.

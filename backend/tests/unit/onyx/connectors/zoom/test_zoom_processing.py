@@ -42,7 +42,7 @@ def _run(
     access lists have their own file. process_occurrence answers with at most
     one item; the tests read it as a list so an unexpected extra one would show
     up as a length mismatch."""
-    processed = process_occurrence(client, work, access=None)
+    processed = process_occurrence(client, work, resolve_access=None)
     return [] if processed is None else [processed]
 
 

@@ -1586,6 +1586,26 @@ class TestPermissionSyncEntryPoint:
         assert access is not None
         assert access.is_public is False
 
+    def test_the_catalogue_and_each_owner_are_asked_for_once_per_run(self) -> None:
+        connector, mock_client = _make_connector(meeting_ids=["111"])
+        self._access_configured(mock_client)
+        mock_client.list_past_meeting_occurrences.side_effect = None
+        mock_client.list_past_meeting_occurrences.return_value = [
+            ZoomSessionOccurrence(uuid="uuid-1", start_time=_days_ago(21)),
+            ZoomSessionOccurrence(uuid="uuid-2", start_time=_days_ago(14)),
+            ZoomSessionOccurrence(uuid="uuid-3", start_time=_days_ago(7)),
+        ]
+
+        documents = [
+            d for d in _run_with_perm_sync(connector) if isinstance(d, Document)
+        ]
+
+        assert len(documents) == 3
+        assert mock_client.get_recording_settings.call_count == 3
+        mock_client.get_user.assert_called_once_with("owner-1")
+        mock_client.list_users.assert_called_once()
+        mock_client.get_recording_authentication_rules.assert_called_once()
+
     def test_a_normal_run_leaves_the_access_list_alone(self) -> None:
         connector, mock_client = _make_connector()
         self._access_configured(mock_client)

@@ -14,6 +14,7 @@ from typing import Any
 
 from pydantic import Field
 
+from onyx.access.models import ExternalAccess
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import (
     CheckpointedConnectorWithPermSync,
@@ -32,6 +33,7 @@ from onyx.connectors.models import (
     HierarchyNode,
 )
 from onyx.connectors.zoom.client import ZoomClient
+from onyx.connectors.zoom.models import ZoomRecordingEntry
 from onyx.connectors.zoom.rate_limit import (
     DEFAULT_RATE_LIMIT_SHARE,
     MAX_RATE_LIMIT_PERCENT,
@@ -55,7 +57,12 @@ from onyx.connectors.zoom.recordings.processing import (
     parse_zoom_document_id,
     process_occurrence,
 )
-from onyx.connectors.zoom.recordings.recording_access import ZoomAccessContext
+from onyx.connectors.zoom.recordings.recording_access import (
+    RuleGrant,
+    load_rule_grants,
+    look_up_owner_email,
+    resolve_recording_access,
+)
 from onyx.connectors.zoom.validation import (
     ProbeSample,
     probe_recording_access_scopes,
@@ -185,7 +192,8 @@ class ZoomConnector(
         self.plan_tier = plan_tier
         self.rate_limit_percent = rate_limit_percent
         self.client: ZoomClient | None = None
-        self._access: ZoomAccessContext | None = None
+        self._rule_grants: dict[str, RuleGrant] | None = None
+        self._owner_emails: dict[str, str | None] = {}
         # validate_connector_settings keeps what it sampled here so the
         # permission-sync probe asks about the same things instead of sampling
         # again. None means it has not run.
@@ -208,10 +216,10 @@ class ZoomConnector(
                 share=parse_rate_limit_percent(self.rate_limit_percent),
             ),
         )
-        # A sample or an access context from the old credential must not
-        # outlive it.
+        # Nothing sampled or looked up under the old credential may outlive it.
         self._probe_sample = None
-        self._access = None
+        self._rule_grants = None
+        self._owner_emails = {}
         return None
 
     def _raise_if_nothing_is_in_scope(self) -> None:
@@ -270,17 +278,21 @@ class ZoomConnector(
     def build_dummy_checkpoint(self) -> ZoomConnectorCheckpoint:
         return ZoomConnectorCheckpoint(has_more=True)
 
-    def _access_for(self, include_access: bool) -> ZoomAccessContext | None:
-        """One per run, so each owner and the rule catalogue are asked for once."""
-        if not include_access:
-            return None
+    def _resolve_access(self, recording: ZoomRecordingEntry) -> ExternalAccess:
         if self.client is None:
             raise ConnectorMissingCredentialError("Zoom")
-        if self._access is None:
-            self._access = ZoomAccessContext(
-                self.client, self._treat_link_access_as_public
-            )
-        return self._access
+        if self._rule_grants is None:
+            self._rule_grants = load_rule_grants(self.client)
+        host_id = recording.host_id
+        if host_id not in self._owner_emails:
+            self._owner_emails[host_id] = look_up_owner_email(self.client, host_id)
+        return resolve_recording_access(
+            self.client,
+            recording,
+            treat_link_access_as_public=self._treat_link_access_as_public,
+            rule_grants=self._rule_grants,
+            owner_email=self._owner_emails[host_id],
+        )
 
     def validate_checkpoint_json(self, checkpoint_json: str) -> ZoomConnectorCheckpoint:
         return ZoomConnectorCheckpoint.model_validate_json(checkpoint_json)
@@ -366,7 +378,11 @@ class ZoomConnector(
             )
             try:
                 processed = process_occurrence(
-                    self.client, work, access=self._access_for(include_permissions)
+                    self.client,
+                    work,
+                    resolve_access=self._resolve_access
+                    if include_permissions
+                    else None,
                 )
                 if processed is not None:
                     yield processed
@@ -400,7 +416,7 @@ class ZoomConnector(
             processed = process_occurrence(
                 self.client,
                 state.pending_work[state.work_index],
-                access=self._access_for(include_access),
+                resolve_access=self._resolve_access if include_access else None,
             )
             if processed is not None:
                 yield processed
