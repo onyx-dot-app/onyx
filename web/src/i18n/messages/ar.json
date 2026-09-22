@@ -8621,13 +8621,6 @@
       "required": {
         "label": "مطلوب"
       },
-      "rerunButton": {
-        "ariaLabel": "إعادة تشغيل الفحوصات"
-      },
-      "collapseButton": {
-        "collapse": "طي الفحوصات",
-        "expand": "توسيع الفحوصات"
-      },
       "running": {
         "label": "جارٍ تشغيل الفحوصات…"
       },
@@ -8636,6 +8629,13 @@
       },
       "docsLink": {
         "label": "التوثيق"
+      },
+      "rerunButton": {
+        "label": "إعادة تشغيل الفحوصات"
+      },
+      "foldButton": {
+        "fold": "طي",
+        "expand": "توسيع"
       }
     }
   },
