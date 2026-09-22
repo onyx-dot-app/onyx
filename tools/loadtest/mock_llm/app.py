@@ -166,7 +166,10 @@ def _last_user_text(messages: list[ChatMessage]) -> str:
 
 
 def _last_user_snippet(messages: list[ChatMessage]) -> str:
-    return _last_user_text(messages)[:200]
+    """Text used to fill synthesized tool-call arguments (e.g. a search tool's
+    query). Prefer the question over the head of the prompt, so a search tool
+    call searches for what the user asked."""
+    return _extract_question(_last_user_text(messages))[:200]
 
 
 # Stable phrases from Onyx's secondary-flow prompts whose LLM output feeds
@@ -175,6 +178,25 @@ def _last_user_snippet(messages: list[ChatMessage]) -> str:
 # these calls the mock must echo the real question's terms, not filler, or
 # retrieval searches for nonsense and returns nothing.
 _ECHO_PROMPT_MARKERS = ("reformulates the last user message",)
+
+# Onyx's rephrase templates end with a labelled question
+# (backend/onyx/prompts/search_prompts.py). Slicing a fixed-width tail instead
+# drags prompt boilerplate and the user's memories into the search query: every
+# turn then embeds ~260 characters of identical scaffolding plus ~40 characters
+# of question, so distinct questions yield near-identical vectors and the index
+# is never really exercised. Cut at the label to search the question alone.
+_QUESTION_LABELS = ("Final user query:", "Final user message:")
+
+
+def _extract_question(text: str) -> str:
+    """The user's actual question, stripped of prompt scaffolding."""
+    for label in _QUESTION_LABELS:
+        _, sep, tail = text.rpartition(label)
+        if sep:
+            question = tail.strip()
+            if question:
+                return question
+    return text[-300:].strip()
 
 
 def _is_echo_flow(messages: list[ChatMessage]) -> bool:
@@ -187,9 +209,7 @@ def _is_echo_flow(messages: list[ChatMessage]) -> bool:
 
 
 def _echo_answer(messages: list[ChatMessage]) -> str:
-    """Prompt templates put the actual question at the end of the user
-    message, so echo the tail."""
-    return _last_user_text(messages)[-300:]
+    return _extract_question(_last_user_text(messages))
 
 
 def _synthesize_arguments(tool: ToolDefinition, snippet: str) -> str:

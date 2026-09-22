@@ -19,6 +19,7 @@ see README.md.
 from __future__ import annotations
 
 import os
+import random
 import time
 import uuid
 from typing import Any
@@ -28,6 +29,10 @@ from locust import HttpUser, constant, task
 from onyx_client.env import env_float, env_int
 from onyx_client.stream_parser import ChatStreamAnalyzer
 
+# Retrieval is only exercised when queries vary. A short list makes every
+# search after warmup an index cache hit (~0.05 s instead of ~1 s per kNN
+# query), which silently removes retrieval from any measurement. Keep this
+# corpus broad, and phrase entries as distinct topics rather than rewordings.
 DEFAULT_MESSAGES = [
     "What are the key features of the product?",
     "How does the search functionality work?",
@@ -35,6 +40,50 @@ DEFAULT_MESSAGES = [
     "Explain the security and access control model.",
     "What integrations and connectors are supported?",
     "Summarize how background indexing works.",
+    "How do I rotate database credentials?",
+    "What is the backup and restore procedure?",
+    "Which metrics are exported to Prometheus?",
+    "How is multi-tenancy isolated between customers?",
+    "What are the rate limits on the public API?",
+    "How do I configure single sign-on with Okta?",
+    "What happens when a connector fails mid-sync?",
+    "Describe the document permission inheritance rules.",
+    "How are embeddings generated and stored?",
+    "What is the upgrade path between minor versions?",
+    "How do I troubleshoot slow query performance?",
+    "Which regions are supported for data residency?",
+    "What telemetry is collected by default?",
+    "How do I set up a staging environment?",
+    "Explain the retry behaviour for failed jobs.",
+    "What are the hardware requirements for self-hosting?",
+    "How do I export audit logs to an external system?",
+    "What is the retention policy for deleted documents?",
+    "How does the Slack integration handle threads?",
+    "What causes indexing to fall behind?",
+    "How do I restrict access to a specific document set?",
+    "Describe the disaster recovery runbook.",
+    "What is the difference between beta and stable releases?",
+    "How do I migrate from a self-hosted to a cloud deployment?",
+    "Which file formats can be indexed?",
+    "How are API keys scoped and revoked?",
+    "What is the maximum supported document size?",
+    "How do I debug a failing OAuth connection?",
+    "Explain how query expansion improves recall.",
+    "What monitoring alerts are recommended for production?",
+    "How do I bulk delete documents from an index?",
+    "What are the licensing terms for enterprise features?",
+    "How does the system handle duplicate documents?",
+    "What network ports need to be open?",
+    "How do I customise the ranking of search results?",
+    "What is the onboarding process for a new workspace?",
+    "How are long conversations summarised?",
+    "What guardrails exist for sensitive data?",
+    "How do I schedule recurring connector syncs?",
+    "Explain the difference between semantic and keyword search.",
+    "How do I configure a custom embedding model?",
+    "What is the process for reporting a security vulnerability?",
+    "How do I measure answer quality over time?",
+    "What are common causes of high memory usage?",
 ]
 
 _PAD = "Please consider the full context of the conversation so far in detail. "
@@ -105,7 +154,10 @@ class OnyxChatUser(HttpUser):
             if msg_chars > 0
             else DEFAULT_MESSAGES
         )
-        self.turn_index: int = 0
+        # Stagger users through the corpus. Starting everyone at 0 would have
+        # the whole fleet asking the same question at the same moment, which
+        # restores the cache-hit problem a large corpus is meant to avoid.
+        self.turn_index: int = random.randrange(len(self.messages))
 
         # Multi-turn session state (only used when max_session_turns > 1).
         self._session_id: str | None = None

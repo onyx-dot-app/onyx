@@ -95,6 +95,20 @@ approximating production traffic shape:
 ... uv run --group loadtest locust --headless -u 10 -r 2 -t 10m -H https://<your-onyx-url> BasicChatUser ChatWithSearchUser
 ```
 
+### Query diversity and retrieval realism
+
+Search scenarios draw from a ~50-question corpus (`DEFAULT_MESSAGES` in
+`onyx_client/chat_user.py`), and each user starts at a random offset in it, so
+the fleet does not ask the same question at the same moment. The mock also
+echoes the user's question — not the surrounding prompt scaffolding — as the
+rephrased search query.
+
+Both matter for measurement: with a short corpus, or with scaffolding dominating
+the query text, every search after warmup is an index cache hit (~0.05 s rather
+than ~0.5–1.5 s per novel kNN query on a large index), which quietly removes
+retrieval from the results. If you add questions, keep them topically distinct
+rather than rewordings of each other.
+
 ### Targeted reproducers
 
 Run on their own (not part of the default mix) to stress a specific failure
