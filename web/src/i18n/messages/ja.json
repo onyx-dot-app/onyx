@@ -8543,7 +8543,6 @@
     },
     "connectorChecks": {
       "title": "コネクターチェック",
-      "count": "({passed}/{total})",
       "groups": {
         "failed": "失敗 {count} 件",
         "indeterminate": "未検証 {count} 件",
@@ -8574,7 +8573,8 @@
       "foldButton": {
         "fold": "折りたたむ",
         "expand": "展開"
-      }
+      },
+      "titleWithCount": "コネクターチェック ({passed}/{total})"
     }
   },
   "agents": {

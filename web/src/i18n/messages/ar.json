@@ -8543,7 +8543,6 @@
     },
     "connectorChecks": {
       "title": "فحوصات الموصّل",
-      "count": "({passed}/{total})",
       "groups": {
         "failed": "{count} فشلت",
         "indeterminate": "{count} لم يتم التحقق منها",
@@ -8574,7 +8573,8 @@
       "foldButton": {
         "fold": "طي",
         "expand": "توسيع"
-      }
+      },
+      "titleWithCount": "فحوصات الموصّل ({passed}/{total})"
     }
   },
   "agents": {

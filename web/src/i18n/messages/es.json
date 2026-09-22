@@ -8543,7 +8543,6 @@
     },
     "connectorChecks": {
       "title": "Comprobaciones del conector",
-      "count": "({passed}/{total})",
       "groups": {
         "failed": "{count} fallidas",
         "indeterminate": "{count} sin verificar",
@@ -8574,7 +8573,8 @@
       "foldButton": {
         "fold": "Contraer",
         "expand": "Expandir"
-      }
+      },
+      "titleWithCount": "Comprobaciones del conector ({passed}/{total})"
     }
   },
   "agents": {

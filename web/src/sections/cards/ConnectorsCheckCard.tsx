@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useTranslations } from "next-intl";
+import { Content } from "@opal/layouts";
+import { useFormatter, useTranslations } from "next-intl";
 import {
   Button,
   Card,
@@ -21,7 +22,7 @@ import {
   SvgRefreshCw,
   SvgXCircle,
 } from "@opal/icons";
-import type { IconFunctionComponent } from "@opal/types";
+import type { IconFunctionComponent, IconProps } from "@opal/types";
 import type { TextColor } from "@onyx-ai/shared/contracts";
 import { cn } from "@opal/utils";
 import type {
@@ -91,14 +92,19 @@ const DETAIL_COLORS: Record<CapabilityCheckStatus, TextColor> = {
 // ProgressRing — passed and failed shares of the total, as arcs
 // ---------------------------------------------------------------------------
 
-interface ProgressRingProps {
+interface ProgressRingProps extends IconProps {
   passed: number;
   failed: number;
   total: number;
 }
 
-function ProgressRing({ passed, failed, total }: ProgressRingProps) {
-  const size = 24;
+function ProgressRing({
+  passed,
+  failed,
+  total,
+  size = 24,
+  className,
+}: ProgressRingProps) {
   const strokeWidth = 2.5;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -119,7 +125,7 @@ function ProgressRing({ passed, failed, total }: ProgressRingProps) {
       width={size}
       height={size}
       viewBox={`0 0 ${size} ${size}`}
-      className="shrink-0 -rotate-90"
+      className={cn("shrink-0 -rotate-90", className)}
       aria-hidden
     >
       <circle {...shared} className="stroke-border-02" />
@@ -271,6 +277,7 @@ export function ConnectorsCheckCard({
   onRerun,
 }: ConnectorsCheckCardProps) {
   const t = useTranslations("admin.connectorChecks");
+  const format = useFormatter();
   const [collapsed, setCollapsed] = useState(false);
 
   const results = useMemo(
@@ -289,29 +296,54 @@ export function ConnectorsCheckCard({
   const failed = results.filter((result) => result.status === "failed").length;
   const isRunning = running || snapshot?.run_status === "running";
   const hasReport = results.length > 0;
+  const total = results.length;
+
+  // What the fold hides: one count per non-empty group, e.g. "2 Failed,
+  // 4 Completed, 1 Skipped".
+  const summary = useMemo(() => {
+    if (!hasReport) return isRunning ? t("running.label") : t("empty.label");
+    return format.list(
+      groups.map((group) =>
+        t(GROUP_LABEL_KEYS[group.status], { count: group.results.length })
+      ),
+      { type: "unit" }
+    );
+  }, [hasReport, isRunning, groups, t, format]);
+
+  // Content wants an icon component; this one is the ring, or a spinner
+  // while a run is in flight.
+  const HeaderIcon = useMemo<IconFunctionComponent>(
+    () =>
+      function HeaderIcon({ size, className }: IconProps) {
+        return isRunning ? (
+          <IconLoader size={size} color="text-03" />
+        ) : (
+          <ProgressRing
+            passed={passed}
+            failed={failed}
+            total={total}
+            size={size}
+            className={className}
+          />
+        );
+      },
+    [isRunning, passed, failed, total]
+  );
 
   return (
     <Card border="solid" rounding={4} padding={2}>
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-3">
-          {isRunning ? (
-            <IconLoader size={24} color="text-03" />
-          ) : (
-            <ProgressRing
-              passed={passed}
-              failed={failed}
-              total={results.length}
+          <div className="min-w-0 flex-1">
+            <Content
+              icon={HeaderIcon}
+              title={
+                hasReport ? t("titleWithCount", { passed, total }) : t("title")
+              }
+              description={collapsed ? summary : undefined}
+              sizePreset="section"
+              variant="section"
             />
-          )}
-          <div className="flex min-w-0 flex-1 items-baseline gap-2">
-            <Text font="heading-h3" color="text-05">
-              {t("title")}
-            </Text>
-            {hasReport && (
-              <Text font="heading-h3-muted" color="text-03">
-                {t("count", { passed, total: results.length })}
-              </Text>
-            )}
           </div>
           <div className="flex items-center">
             {onRerun && !collapsed && (

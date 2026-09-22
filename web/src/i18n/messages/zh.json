@@ -8543,7 +8543,6 @@
     },
     "connectorChecks": {
       "title": "连接器检查",
-      "count": "({passed}/{total})",
       "groups": {
         "failed": "{count} 项失败",
         "indeterminate": "{count} 项未验证",
@@ -8574,7 +8573,8 @@
       "foldButton": {
         "fold": "收起",
         "expand": "展开"
-      }
+      },
+      "titleWithCount": "连接器检查 ({passed}/{total})"
     }
   },
   "agents": {

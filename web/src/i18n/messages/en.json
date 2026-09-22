@@ -8543,7 +8543,6 @@
     },
     "connectorChecks": {
       "title": "Connector Checks",
-      "count": "({passed}/{total})",
       "groups": {
         "failed": "{count} Failed",
         "indeterminate": "{count} Unverified",
@@ -8574,7 +8573,8 @@
       "foldButton": {
         "fold": "Fold",
         "expand": "Expand"
-      }
+      },
+      "titleWithCount": "Connector Checks ({passed}/{total})"
     }
   },
   "agents": {
