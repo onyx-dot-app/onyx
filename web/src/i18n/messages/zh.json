@@ -8540,6 +8540,41 @@
           "description": "您的 Firecrawl API 基础 URL。"
         }
       }
+    },
+    "connectorChecks": {
+      "title": "连接器检查",
+      "count": "({passed}/{total})",
+      "groups": {
+        "failed": "{count} 项失败",
+        "indeterminate": "{count} 项未验证",
+        "passed": "{count} 项完成",
+        "skipped": "{count} 项跳过"
+      },
+      "status": {
+        "passed": "通过",
+        "failed": "失败",
+        "indeterminate": "无法验证",
+        "skipped": "已跳过"
+      },
+      "required": {
+        "label": "必需"
+      },
+      "rerunButton": {
+        "ariaLabel": "重新运行检查"
+      },
+      "collapseButton": {
+        "collapse": "收起检查",
+        "expand": "展开检查"
+      },
+      "running": {
+        "label": "正在运行检查…"
+      },
+      "empty": {
+        "label": "尚未运行任何检查。"
+      },
+      "docsLink": {
+        "label": "文档"
+      }
     }
   },
   "agents": {

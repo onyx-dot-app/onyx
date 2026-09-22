@@ -8540,6 +8540,41 @@
           "description": "Firecrawl API のベース URL。"
         }
       }
+    },
+    "connectorChecks": {
+      "title": "コネクターチェック",
+      "count": "({passed}/{total})",
+      "groups": {
+        "failed": "失敗 {count} 件",
+        "indeterminate": "未検証 {count} 件",
+        "passed": "完了 {count} 件",
+        "skipped": "スキップ {count} 件"
+      },
+      "status": {
+        "passed": "合格",
+        "failed": "失敗",
+        "indeterminate": "検証できませんでした",
+        "skipped": "スキップ"
+      },
+      "required": {
+        "label": "必須"
+      },
+      "rerunButton": {
+        "ariaLabel": "チェックを再実行"
+      },
+      "collapseButton": {
+        "collapse": "チェックを折りたたむ",
+        "expand": "チェックを展開"
+      },
+      "running": {
+        "label": "チェックを実行中…"
+      },
+      "empty": {
+        "label": "まだチェックは実行されていません。"
+      },
+      "docsLink": {
+        "label": "ドキュメント"
+      }
     }
   },
   "agents": {

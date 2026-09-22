@@ -8540,6 +8540,41 @@
           "description": "Firecrawl API 기본 URL입니다."
         }
       }
+    },
+    "connectorChecks": {
+      "title": "커넥터 검사",
+      "count": "({passed}/{total})",
+      "groups": {
+        "failed": "실패 {count}개",
+        "indeterminate": "미확인 {count}개",
+        "passed": "완료 {count}개",
+        "skipped": "건너뜀 {count}개"
+      },
+      "status": {
+        "passed": "통과",
+        "failed": "실패",
+        "indeterminate": "확인할 수 없음",
+        "skipped": "건너뜀"
+      },
+      "required": {
+        "label": "필수"
+      },
+      "rerunButton": {
+        "ariaLabel": "검사 다시 실행"
+      },
+      "collapseButton": {
+        "collapse": "검사 접기",
+        "expand": "검사 펼치기"
+      },
+      "running": {
+        "label": "검사 실행 중…"
+      },
+      "empty": {
+        "label": "아직 실행된 검사가 없습니다."
+      },
+      "docsLink": {
+        "label": "문서"
+      }
     }
   },
   "agents": {

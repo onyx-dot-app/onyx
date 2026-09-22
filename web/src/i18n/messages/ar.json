@@ -8540,6 +8540,41 @@
           "description": "عنوان URL الأساسي لواجهة Firecrawl API الخاصة بك."
         }
       }
+    },
+    "connectorChecks": {
+      "title": "فحوصات الموصّل",
+      "count": "({passed}/{total})",
+      "groups": {
+        "failed": "{count} فشلت",
+        "indeterminate": "{count} لم يتم التحقق منها",
+        "passed": "{count} اكتملت",
+        "skipped": "{count} تم تخطيها"
+      },
+      "status": {
+        "passed": "ناجح",
+        "failed": "فاشل",
+        "indeterminate": "تعذّر التحقق",
+        "skipped": "تم التخطي"
+      },
+      "required": {
+        "label": "مطلوب"
+      },
+      "rerunButton": {
+        "ariaLabel": "إعادة تشغيل الفحوصات"
+      },
+      "collapseButton": {
+        "collapse": "طي الفحوصات",
+        "expand": "توسيع الفحوصات"
+      },
+      "running": {
+        "label": "جارٍ تشغيل الفحوصات…"
+      },
+      "empty": {
+        "label": "لم يتم تشغيل أي فحوصات بعد."
+      },
+      "docsLink": {
+        "label": "التوثيق"
+      }
     }
   },
   "agents": {

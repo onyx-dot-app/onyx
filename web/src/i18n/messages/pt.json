@@ -8540,6 +8540,41 @@
           "description": "A URL base da sua API do Firecrawl."
         }
       }
+    },
+    "connectorChecks": {
+      "title": "Verificações do conector",
+      "count": "({passed}/{total})",
+      "groups": {
+        "failed": "{count} com falha",
+        "indeterminate": "{count} não verificadas",
+        "passed": "{count} concluídas",
+        "skipped": "{count} ignoradas"
+      },
+      "status": {
+        "passed": "Aprovada",
+        "failed": "Com falha",
+        "indeterminate": "Não foi possível verificar",
+        "skipped": "Ignorada"
+      },
+      "required": {
+        "label": "Obrigatória"
+      },
+      "rerunButton": {
+        "ariaLabel": "Executar as verificações novamente"
+      },
+      "collapseButton": {
+        "collapse": "Recolher verificações",
+        "expand": "Expandir verificações"
+      },
+      "running": {
+        "label": "Executando verificações…"
+      },
+      "empty": {
+        "label": "Nenhuma verificação foi executada ainda."
+      },
+      "docsLink": {
+        "label": "Documentação"
+      }
     }
   },
   "agents": {
