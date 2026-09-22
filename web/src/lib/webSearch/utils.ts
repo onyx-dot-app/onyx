@@ -63,6 +63,12 @@ export const SEARCH_PROVIDER_DETAILS: Record<
     apiKeyUrl: "https://app.tavily.com/home",
     logo: SvgTavily,
   },
+  firecrawl: {
+    label: "Firecrawl",
+    subtitle: "Firecrawl Search",
+    apiKeyUrl: "https://www.firecrawl.dev/app/api-keys",
+    logo: SvgFirecrawl,
+  },
 };
 
 export const SEARCH_PROVIDER_ORDER = Object.keys(
@@ -118,6 +124,10 @@ const SEARCH_PROVIDER_CAPABILITIES: Record<
     storedConfigAliases: { searxng_base_url: ["searxng_base_url"] },
   },
   tavily: {
+    requiresApiKey: true,
+    requiredConfigKeys: [],
+  },
+  firecrawl: {
     requiresApiKey: true,
     requiredConfigKeys: [],
   },

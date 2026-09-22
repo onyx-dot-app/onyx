@@ -1,6 +1,9 @@
 import pytest
 
 from onyx.tools.tool_implementations.web_search.clients.brave_client import BraveClient
+from onyx.tools.tool_implementations.web_search.clients.firecrawl_client import (
+    FirecrawlSearchClient,
+)
 from onyx.tools.tool_implementations.web_search.providers import (
     build_search_provider_from_config,
     provider_requires_api_key,
@@ -14,6 +17,7 @@ def test_provider_requires_api_key() -> None:
     assert provider_requires_api_key(WebSearchProviderType.BRAVE) is True
     assert provider_requires_api_key(WebSearchProviderType.SERPER) is True
     assert provider_requires_api_key(WebSearchProviderType.GOOGLE_PSE) is True
+    assert provider_requires_api_key(WebSearchProviderType.FIRECRAWL) is True
     assert provider_requires_api_key(WebSearchProviderType.SEARXNG) is False
 
 
@@ -83,6 +87,45 @@ def test_build_brave_provider_rejects_invalid_timeout() -> None:
     with pytest.raises(ValueError, match="timeout_seconds"):
         build_search_provider_from_config(
             provider_type=WebSearchProviderType.BRAVE,
+            api_key="test-api-key",
+            config={"timeout_seconds": "not-an-int"},
+        )
+
+
+def test_build_firecrawl_provider_requires_api_key() -> None:
+    """Test that Firecrawl provider requires an API key."""
+    with pytest.raises(ValueError, match="API key is required"):
+        build_search_provider_from_config(
+            provider_type=WebSearchProviderType.FIRECRAWL,
+            api_key=None,
+            config={},
+        )
+
+
+def test_build_firecrawl_provider_with_optional_config() -> None:
+    provider = build_search_provider_from_config(
+        provider_type=WebSearchProviderType.FIRECRAWL,
+        api_key="test-api-key",
+        config={
+            "base_url": "https://firecrawl.internal/v2/search",
+            "timeout_seconds": "45",
+            "tbs": "qdr:w",
+            "location": "Germany",
+            "country": "de",
+        },
+    )
+    assert isinstance(provider, FirecrawlSearchClient)
+    assert provider._base_url == "https://firecrawl.internal/v2/search"  # noqa: SLF001
+    assert provider._timeout_seconds == 45  # noqa: SLF001
+    assert provider._tbs == "qdr:w"  # noqa: SLF001
+    assert provider._location == "Germany"  # noqa: SLF001
+    assert provider._country == "DE"  # noqa: SLF001
+
+
+def test_build_firecrawl_provider_rejects_invalid_timeout() -> None:
+    with pytest.raises(ValueError, match="timeout_seconds"):
+        build_search_provider_from_config(
+            provider_type=WebSearchProviderType.FIRECRAWL,
             api_key="test-api-key",
             config={"timeout_seconds": "not-an-int"},
         )

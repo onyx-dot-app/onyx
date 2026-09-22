@@ -79,21 +79,29 @@ export default function WebSearchPage() {
   const tavilyContentProvider = contentProviders.find(
     (p) => p.provider_type === "tavily"
   );
+  const firecrawlSearchProvider = searchProviders.find(
+    (p) => p.provider_type === "firecrawl"
+  );
+  const firecrawlContentProvider = contentProviders.find(
+    (p) => p.provider_type === "firecrawl"
+  );
   const openSearchModal = (
     providerType: WebSearchProviderType,
     provider?: WebSearchProviderView
   ) => {
     const hasStoredKey = !!provider?.masked_api_key;
-    // Exa and Tavily share one API key across the search and content sides, so
-    // pre-fill the search modal from the stored content-provider key when the
-    // search side has none yet (the backend syncs the two on save).
+    // Exa, Tavily and Firecrawl share one API key across the search and content
+    // sides, so pre-fill the search modal from the stored content-provider key
+    // when the search side has none yet (the backend syncs the two on save).
     const sharedContentMaskedKey = hasStoredKey
       ? null
       : providerType === "exa"
         ? (exaContentProvider?.masked_api_key ?? null)
         : providerType === "tavily"
           ? (tavilyContentProvider?.masked_api_key ?? null)
-          : null;
+          : providerType === "firecrawl"
+            ? (firecrawlContentProvider?.masked_api_key ?? null)
+            : null;
 
     const effectiveProvider: WebSearchProviderView | null =
       provider ??
@@ -198,7 +206,10 @@ export default function WebSearchPage() {
           provider_type: "firecrawl",
           is_active: false,
           config: null,
-          masked_api_key: null,
+          masked_api_key:
+            firecrawlSearchProvider?.masked_api_key ??
+            firecrawlContentProvider?.masked_api_key ??
+            null,
         } satisfies WebContentProviderView;
       }
 
@@ -244,6 +255,8 @@ export default function WebSearchPage() {
     exaContentProvider,
     tavilySearchProvider,
     tavilyContentProvider,
+    firecrawlSearchProvider,
+    firecrawlContentProvider,
   ]);
 
   const currentContentProviderType =
