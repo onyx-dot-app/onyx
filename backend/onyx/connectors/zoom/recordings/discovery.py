@@ -11,6 +11,7 @@ documents are keyed by occurrence UUID and get upserted.
 
 import abc
 from bisect import bisect_left, bisect_right
+from collections.abc import Iterator
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
@@ -23,13 +24,17 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
 )
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorFailure, EntityFailure
-from onyx.connectors.zoom.client import ZoomClient
+from onyx.connectors.zoom.client import MAX_LISTING_PAGES, ZoomClient
 from onyx.connectors.zoom.endpoints import normalize_session_id
 from onyx.connectors.zoom.models import ZoomRecordingEntry, ZoomSessionOccurrence
 from onyx.connectors.zoom.recordings.models import (
+    Host,
+    HostScope,
     OccurrenceWork,
+    ZoomListingIncomplete,
     ZoomSessionType,
     fails_the_whole_run,
+    user_does_not_exist,
 )
 from onyx.connectors.zoom.recordings.session_types import (
     get_session_type_handler,
@@ -60,7 +65,7 @@ _WIDE_BACKFILL_WINDOWS = 24
 # Zoom 1.0 shipped in January 2013, so no cloud recording can predate it. Without
 # this floor a connector with no indexing start date asks Zoom for every 30-day
 # window back to 1970, which is four times the calls and finds nothing.
-_EARLIEST_RECORDING_DATE = date(2013, 1, 1)
+EARLIEST_RECORDING_DATE = date(2013, 1, 1)
 
 
 def _poll_window_range(
@@ -120,12 +125,12 @@ def _poll_window_dates(
         max(start - _OCCURRENCE_POLL_OVERLAP_SECONDS, 0), tz=timezone.utc
     )
     return (
-        max(from_moment.date(), _EARLIEST_RECORDING_DATE),
+        max(from_moment.date(), EARLIEST_RECORDING_DATE),
         datetime.fromtimestamp(end, tz=timezone.utc).date(),
     )
 
 
-def _listing_windows(from_date: date, to_date: date) -> list[tuple[date, date]]:
+def listing_windows(from_date: date, to_date: date) -> list[tuple[date, date]]:
     """Zoom never documents whether `to` includes its own date, so windows share
     their boundary day and the last one runs a day past the poll window. Without
     both, a boundary day or the poll window's last day would be asked for by no
@@ -172,6 +177,18 @@ class DiscoveryStepResult(BaseModel):
     done: bool = False
 
 
+class InventoryScope(BaseModel):
+    hosts: list[HostScope] = Field(default_factory=list)
+    # Occurrences Zoom answered for directly, kept whatever a host listing goes
+    # on to say later. A listing reaches neither a recording made on-premise nor
+    # one whose owner nobody can resolve.
+    proven: list[OccurrenceWork] = Field(default_factory=list)
+    # Hosts and sessions Zoom has no record of. Tracked so the walk can tell
+    # one that was deleted from a credential pointed at the wrong Zoom account,
+    # which makes every one of them look deleted.
+    unrecognised: list[str] = Field(default_factory=list)
+
+
 class DiscoverySource(abc.ABC):
     @abc.abstractmethod
     def discover_step(
@@ -184,6 +201,16 @@ class DiscoverySource(abc.ABC):
         """Advance discovery by one bounded unit of work (roughly one API
         call). cursor=None means start from the beginning. Sources convert
         their own errors into failures on the result rather than raising."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def inventory_scopes(self, client: ZoomClient) -> Iterator[InventoryScope]:
+        """Every host whose recordings listing can still show a document this
+        source indexed, and what to keep from each.
+
+        Pruning deletes whatever this does not reach, so it raises where
+        discover_step would record a failure and carry on. Yield as you resolve:
+        the prune renews its lock only between the pieces you hand back."""
         raise NotImplementedError
 
 
@@ -300,14 +327,56 @@ class IdAllowlistSource(DiscoverySource):
             done=done,
         )
 
+    def inventory_scopes(self, client: ZoomClient) -> Iterator[InventoryScope]:
+        """The session type comes from the field the admin typed the number into,
+        never from the recording. Zoom's meeting and webinar numbers look
+        identical, so indexing reads the field, and pruning that disagreed would
+        delete a document on every run that indexing wrote back on the next.
+        """
+        listable: dict[str, bool] = {}
 
-class _Host(BaseModel):
-    user_id: str
-    email: str | None = None
+        for session_type, session_id in self._refs:
+            handler = get_session_type_handler(session_type)
+            found = handler.find_host(client, session_id)
 
-    @property
-    def entity_id(self) -> str:
-        return f"host:{self.email or self.user_id}"
+            proven: list[OccurrenceWork] = []
+            if found.anchor is not None:
+                proven.append(
+                    OccurrenceWork(
+                        session_type=session_type,
+                        session_id=session_id,
+                        occurrence_uuid=found.anchor.uuid,
+                        start_time=found.anchor.start_time,
+                        topic=found.anchor.topic,
+                    )
+                )
+
+            if found.host_id is not None and found.host_id not in listable:
+                listable[found.host_id] = has_a_recordings_listing(
+                    client, found.host_id
+                )
+
+            host_id = found.host_id
+            if host_id is None:
+                # Zoom answers the same not-found for a session that was deleted
+                # and for one in another account, so a number nothing answered
+                # for counts towards the stop exactly as a host email nobody has.
+                yield InventoryScope(
+                    proven=proven, unrecognised=[] if proven else [session_id]
+                )
+                continue
+            if not listable[host_id]:
+                yield InventoryScope(proven=proven, unrecognised=[host_id])
+                continue
+            yield InventoryScope(
+                hosts=[
+                    HostScope(
+                        host=Host(user_id=host_id),
+                        sessions=frozenset({(session_type, session_id)}),
+                    )
+                ],
+                proven=proven,
+            )
 
 
 class _UserRecordingsCursor(BaseModel):
@@ -334,7 +403,7 @@ def _recording_key(recording: ZoomRecordingEntry) -> tuple[str, str]:
     return (recording.start_time or "", recording.uuid)
 
 
-def _resume_at(hosts: list[_Host], host_id: str | None) -> int:
+def _resume_at(hosts: list[Host], host_id: str | None) -> int:
     """The cursor names the host it stopped on rather than its position, because
     the host list is resolved again on every attempt. A member leaving shifts every
     later position back by one, and the host that slides under the cursor is skipped
@@ -356,7 +425,7 @@ def _resume_window_at(
 
 
 def _advance_host(
-    hosts: list["_Host"],
+    hosts: list["Host"],
     index: int,
     work: list[OccurrenceWork],
     failures: list[ConnectorFailure],
@@ -402,20 +471,27 @@ def _work_from_recording(recording: ZoomRecordingEntry) -> OccurrenceWork | None
     )
 
 
-def _list_every_recording(
+def list_every_recording(
     client: ZoomClient,
-    host: _Host,
+    host: Host,
     from_date: date,
     to_date: date,
 ) -> list[ZoomRecordingEntry]:
-    """Zoom expires a next_page_token 15 minutes after issuing it, so no token may
+    """Fetched whole rather than a page per step, because Zoom's page tokens do not
     outlive one step. A crawl that resumed holding one would send a dead token, and
     reporting that loses the host's remaining recordings for good: the attempt still
     ends as a success, so the next run moves its poll window on and never returns.
+
+    Raises rather than answering short, because pruning deletes every recording
+    a listing leaves out.
     """
+    listing = f"the recordings of {host.entity_id} over {from_date}..{to_date}"
     recordings: list[ZoomRecordingEntry] = []
     page_token: str | None = None
-    while True:
+    seen_tokens: set[str] = set()
+    expected: int | None = None
+
+    for _ in range(MAX_LISTING_PAGES):
         page = client.list_user_recordings(
             user_id=host.user_id,
             from_date=from_date,
@@ -423,9 +499,55 @@ def _list_every_recording(
             page_token=page_token,
         )
         recordings.extend(page.recordings)
+        if expected is None:
+            expected = page.total_records
+
         page_token = page.next_page_token
         if not page_token:
+            # Comparing against Zoom's own count is the only way to catch a
+            # listing that stopped early, because every page is a 200 and the
+            # last one simply has no token. A listing with no count cannot be
+            # checked, and pruning would delete whatever it left out.
+            if expected is None:
+                raise ZoomListingIncomplete(
+                    f"Zoom sent no total_records for {listing}, so the listing "
+                    "cannot be checked for recordings it left out"
+                )
+            if len(recordings) < expected:
+                raise ZoomListingIncomplete(
+                    f"Zoom listed {len(recordings)} of the {expected} recordings "
+                    f"it reported for {listing}"
+                )
             return recordings
+        if page_token in seen_tokens:
+            raise ZoomListingIncomplete(
+                f"Zoom stopped advancing the cursor for {listing}"
+            )
+        seen_tokens.add(page_token)
+
+    raise ZoomListingIncomplete(
+        f"Zoom kept paging {listing} past {MAX_LISTING_PAGES} pages"
+    )
+
+
+def has_a_recordings_listing(client: ZoomClient, user_id: str) -> bool:
+    """A false answer here costs the host every document it ever indexed, so
+    only Zoom saying it has no such user may produce one.
+
+    Asked once, before the walk, rather than caught during it. A not-found on
+    the 87th of a host's 173 windows would leave that host half enumerated, and
+    pruning would delete the windows it never reached."""
+    try:
+        client.list_user_recordings(
+            user_id=user_id,
+            from_date=EARLIEST_RECORDING_DATE,
+            to_date=EARLIEST_RECORDING_DATE,
+        )
+    except Exception as e:
+        if user_does_not_exist(e):
+            return False
+        raise
+    return True
 
 
 ALL_SESSION_TYPES: frozenset[ZoomSessionType] = frozenset(ZoomSessionType)
@@ -449,7 +571,7 @@ class _UserRecordingsSource(DiscoverySource):
         # A user's recordings listing mixes meetings and webinars; the admin's
         # session-type choice decides which of them become work.
         self._session_types = session_types
-        self._resolved: list[_Host] | None = None
+        self._resolved: list[Host] | None = None
         self._listed_key: tuple[str, date] | None = None
         self._listed: list[ZoomRecordingEntry] = []
 
@@ -459,7 +581,7 @@ class _UserRecordingsSource(DiscoverySource):
         client: ZoomClient,
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
-    ) -> tuple[list[_Host], list[ConnectorFailure]]:
+    ) -> tuple[list[Host], list[ConnectorFailure]]:
         """The hosts to crawl, plus a failure for anything the admin configured
         that resolved to nobody."""
         raise NotImplementedError
@@ -469,8 +591,14 @@ class _UserRecordingsSource(DiscoverySource):
         client: ZoomClient,
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
-    ) -> tuple[list[_Host], list[ConnectorFailure]]:
-        """Resolution costs several API calls, so it runs once per run. Its failures
+    ) -> tuple[list[Host], list[ConnectorFailure]]:
+        """Indexing only. Pruning resolves its own hosts instead, because this
+        carries on with no hosts at all when it cannot read the user list. A
+        revoked scope is safe, since fails_the_whole_run re-raises it, but a 400
+        Zoom sends for any other reason is swallowed. Pruning would read the
+        empty result as every host having left and delete all their documents.
+
+        Resolution costs several API calls, so it runs once per run. Its failures
         come back only on the step that did the work, or every later step would
         report the same failure again.
         """
@@ -504,7 +632,7 @@ class _UserRecordingsSource(DiscoverySource):
     def _recordings(
         self,
         client: ZoomClient,
-        host: _Host,
+        host: Host,
         from_date: date,
         to_date: date,
         end: SecondsSinceUnixEpoch,
@@ -528,7 +656,7 @@ class _UserRecordingsSource(DiscoverySource):
                 if self._listed_key is not None and self._listed_key[0] == host.user_id
                 else set()
             )
-            recordings = _list_every_recording(client, host, from_date, to_date)
+            recordings = list_every_recording(client, host, from_date, to_date)
             self._listed = sorted(
                 (
                     entry
@@ -582,7 +710,7 @@ class _UserRecordingsSource(DiscoverySource):
         # The window and offset belong to the host the cursor named. If that host is
         # gone, `_resume_at` lands on a different one, which starts from the top.
         on_named_host = host.user_id == position.host_id
-        windows = _listing_windows(*_poll_window_dates(start, end))
+        windows = listing_windows(*_poll_window_dates(start, end))
         window_index = (
             _resume_window_at(windows, position.window_start) if on_named_host else 0
         )
@@ -663,6 +791,11 @@ class _UserRecordingsSource(DiscoverySource):
             )
         return _advance_host(hosts, index, work, failures)
 
+    def _scope_for(self, host: Host) -> InventoryScope:
+        return InventoryScope(
+            hosts=[HostScope(host=host, session_types=self._session_types)]
+        )
+
 
 class HostAllowlistSource(_UserRecordingsSource):
     def __init__(
@@ -678,9 +811,9 @@ class HostAllowlistSource(_UserRecordingsSource):
         client: ZoomClient,
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
-    ) -> tuple[list[_Host], list[ConnectorFailure]]:
+    ) -> tuple[list[Host], list[ConnectorFailure]]:
         unmatched = set(self._emails)
-        hosts: list[_Host] = []
+        hosts: list[Host] = []
         page_token: str | None = None
         while unmatched:
             page = client.list_users(page_token=page_token)
@@ -692,7 +825,7 @@ class HostAllowlistSource(_UserRecordingsSource):
                 if email not in unmatched or not user.id:
                     continue
                 unmatched.discard(email)
-                hosts.append(_Host(user_id=user.id, email=user.email))
+                hosts.append(Host(user_id=user.id, email=user.email))
 
             page_token = page.next_page_token
             if not page_token:
@@ -706,6 +839,23 @@ class HostAllowlistSource(_UserRecordingsSource):
             )
             for email in sorted(unmatched)
         ]
+
+    def inventory_scopes(self, client: ZoomClient) -> Iterator[InventoryScope]:
+        """Asks Zoom about each email rather than hunting for it in the paged
+        user list, which cannot tell an address nobody has from a page that came
+        back short. Pruning would read that silence as a deletion."""
+        for email in sorted(self._emails):
+            if has_a_recordings_listing(client, email):
+                yield self._scope_for(Host(user_id=email, email=email))
+                continue
+            logger.warning(
+                "Zoom has no user with the email %s, so every document indexed "
+                "for them is being pruned. If their recordings were transferred "
+                "when they left, add the new owner to this connector to index "
+                "them again",
+                email,
+            )
+            yield InventoryScope(unrecognised=[email])
 
 
 class GroupSource(_UserRecordingsSource):
@@ -722,14 +872,26 @@ class GroupSource(_UserRecordingsSource):
         client: ZoomClient,
         start: SecondsSinceUnixEpoch,  # noqa: ARG002
         end: SecondsSinceUnixEpoch,  # noqa: ARG002
-    ) -> tuple[list[_Host], list[ConnectorFailure]]:
+    ) -> tuple[list[Host], list[ConnectorFailure]]:
         """A group id that doesn't exist comes back as a 404, so there is no such
-        thing here as a group that resolved to nobody."""
-        hosts: list[_Host] = []
+        thing here as a group that resolved to nobody.
+
+        Raises rather than answering short, because a member Zoom leaves out is a
+        host whose documents pruning then deletes.
+        """
+        listing = f"the members of group {self._group_id}"
+        hosts: list[Host] = []
+        members = 0
         page_token: str | None = None
-        while True:
+        seen_tokens: set[str] = set()
+        expected: int | None = None
+
+        for _ in range(MAX_LISTING_PAGES):
             page = client.list_group_members(self._group_id, page_token=page_token)
+            if expected is None:
+                expected = page.total_records
             for member in page.users:
+                members += 1
                 if not member.id:
                     logger.warning(
                         "Skipping Zoom group member %s: no user id until the "
@@ -737,15 +899,46 @@ class GroupSource(_UserRecordingsSource):
                         member.email,
                     )
                     continue
-                hosts.append(_Host(user_id=member.id, email=member.email))
+                hosts.append(Host(user_id=member.id, email=member.email))
 
             page_token = page.next_page_token
             if not page_token:
+                if expected is None:
+                    raise ZoomListingIncomplete(
+                        f"Zoom sent no total_records for {listing}, so the "
+                        "listing cannot be checked for members it left out"
+                    )
+                if members < expected:
+                    raise ZoomListingIncomplete(
+                        f"Zoom listed {members} of the {expected} members it "
+                        f"reported for {listing}"
+                    )
                 break
+            if page_token in seen_tokens:
+                raise ZoomListingIncomplete(
+                    f"Zoom stopped advancing the cursor for {listing}"
+                )
+            seen_tokens.add(page_token)
+        else:
+            raise ZoomListingIncomplete(
+                f"Zoom kept paging {listing} past {MAX_LISTING_PAGES} pages"
+            )
 
         if not hosts:
             logger.info("Zoom group %s has no members to crawl", self._group_id)
         return hosts, []
+
+    def inventory_scopes(self, client: ZoomClient) -> Iterator[InventoryScope]:
+        """A member who left is simply absent from the listing, so their
+        documents go, exactly as they would if an admin removed a host email.
+
+        Members are deliberately not probed the way host emails are. A member id
+        arrives from Zoom in this same call, so a not-found on it is a race
+        rather than a deletion, and the next prune settles it by not listing
+        that person at all."""
+        hosts, _ = self._resolve_hosts(client, 0, 0)
+        for host in hosts:
+            yield self._scope_for(host)
 
 
 def build_discovery_sources(

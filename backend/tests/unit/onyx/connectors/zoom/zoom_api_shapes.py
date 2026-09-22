@@ -9,6 +9,7 @@ from typing import Any
 
 from onyx.connectors.zoom.models import (
     ZoomInvitee,
+    ZoomMeetingDetails,
     ZoomPanelist,
     ZoomParticipant,
     ZoomPastMeetingDetails,
@@ -16,18 +17,9 @@ from onyx.connectors.zoom.models import (
     ZoomRecordingFile,
     ZoomRegistrant,
     ZoomSessionOccurrence,
-    ZoomTranscript,
     ZoomUser,
     ZoomWebinarDetails,
 )
-
-
-def transcript(**overrides: Any) -> ZoomTranscript:
-    """Zoom never sends this shape. `recording_file` below is the payload it
-    really answers with.
-    """
-    fields: dict[str, Any] = {"download_url": "https://zoom.example/transcript.vtt"}
-    return ZoomTranscript(**(fields | overrides))
 
 
 def recording_file(**overrides: Any) -> ZoomRecordingFile:
@@ -44,6 +36,32 @@ def recording_file(**overrides: Any) -> ZoomRecordingFile:
         "download_url": "https://zoom.example/transcript.vtt",
     }
     return ZoomRecordingFile(**(fields | overrides))
+
+
+def recording_with_transcript(
+    download_url: str | None = "https://zoom.example/transcript.vtt",
+    is_ready: bool = True,
+    meeting_topic: str = "",
+    **overrides: Any,
+) -> ZoomRecordingEntry:
+    """What Zoom answers for a session that has a transcript. The topic defaults
+    to empty so callers that care about the details fallback do not have to opt
+    out of one."""
+    return recording_entry(
+        topic=meeting_topic,
+        recording_files=[
+            recording_file(
+                download_url=download_url,
+                status="completed" if is_ready else "processing",
+            )
+        ],
+        **overrides,
+    )
+
+
+def meeting_details(**overrides: Any) -> ZoomMeetingDetails:
+    fields: dict[str, Any] = {"host_id": "_0ctZtY0REqWalTmwvrdIw"}
+    return ZoomMeetingDetails(**(fields | overrides))
 
 
 def past_meeting_details(**overrides: Any) -> ZoomPastMeetingDetails:

@@ -52,6 +52,26 @@ class ZoomSessionDetails(BaseModel):
         return str(self.id)
 
 
+class ZoomInvitee(BaseModel):
+    """Both documented fields of one entry of `settings.meeting_invitees[]` from
+    `GET /meetings/{meetingId}`. Webinars have no equivalent field."""
+
+    email: str
+    internal_user: bool = False
+
+
+class ZoomMeetingSettings(BaseModel):
+    meeting_invitees: list[ZoomInvitee] = Field(default_factory=list)
+
+
+class ZoomMeetingDetails(BaseModel):
+    """Response of `GET /meetings/{meetingId}`. Read for a meeting's host when
+    pruning, and for its invitees when building an access list."""
+
+    host_id: str | None = None
+    settings: ZoomMeetingSettings = Field(default_factory=ZoomMeetingSettings)
+
+
 class ZoomPastMeetingDetails(ZoomSessionDetails):
     """Response shape of `GET /past_meetings/{meetingId}` — every documented field.
 
@@ -157,11 +177,14 @@ class ZoomUser(BaseModel):
 class ZoomUserPage(BaseModel):
     """One page of either user listing. The client builds this rather than
     validating a response, because `/users` and `/groups/{groupId}/members`
-    return the same users under different keys.
+    return the same users under different keys. `total_records` is carried
+    because comparing against it is the only way to catch a listing that
+    stopped early.
     """
 
     users: list[ZoomUser] = Field(default_factory=list)
     next_page_token: str | None = None
+    total_records: int | None = None
 
 
 TRANSCRIPT_FILE_TYPE = "TRANSCRIPT"
@@ -231,12 +254,15 @@ class ZoomRecordingEntry(BaseModel):
 
 class ZoomRecordingPage(BaseModel):
     """One page of `GET /users/{userId}/recordings`. The client builds this
-    rather than validating a response, so Zoom's `from`, `to` and page counters
-    are not carried across.
+    rather than validating a response, so Zoom's `from` and `to` are not
+    carried across. `total_records` is, because comparing against it is the only
+    way to catch a listing that stopped early, and pruning deletes every
+    recording a listing leaves out.
     """
 
     recordings: list[ZoomRecordingEntry] = Field(default_factory=list)
     next_page_token: str | None = None
+    total_records: int | None = None
 
 
 class ZoomParticipant(BaseModel):
@@ -276,6 +302,7 @@ APPROVED_REGISTRANT_STATUS = "approved"
 # a string on others.
 ZOOM_MEETING_TOO_OLD_CODE = "12702"
 ZOOM_NOT_FOUND_CODE = "3001"
+ZOOM_USER_NOT_FOUND_CODE = "1001"
 ZOOM_NOT_ENTITLED_CODE = "200"
 # Undocumented in the spec; the shape is a 400 with a message that lists the
 # missing scopes.
@@ -315,14 +342,6 @@ class ZoomRegistrant(BaseModel):
 
     # The webinar listing does not document this one.
     participant_pin_code: int | None = None
-
-
-class ZoomInvitee(BaseModel):
-    """Both documented fields of one entry of `settings.meeting_invitees[]` from
-    `GET /meetings/{meetingId}`. Webinars have no equivalent field."""
-
-    email: str
-    internal_user: bool = False
 
 
 class ZoomPanelist(BaseModel):
