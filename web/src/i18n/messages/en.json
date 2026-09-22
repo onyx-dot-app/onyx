@@ -832,7 +832,7 @@
           "description": "Team messaging"
         },
         "googleDrive": {
-          "description": "Shared files and folders"
+          "description": "Shared files & folders"
         },
         "gmail": {
           "description": "Google email"
@@ -892,7 +892,7 @@
           "description": "RFP response"
         },
         "box": {
-          "description": "Files, folders, and notes"
+          "description": "Files, folders, & notes"
         },
         "dropbox": {
           "description": "Shared files and folders"
@@ -910,7 +910,7 @@
           "description": "Microsoft team chats"
         },
         "outlook": {
-          "description": "Emails and mail folders"
+          "description": "Emails & mail folders"
         },
         "zendesk": {
           "description": "Customer support tickets"
@@ -985,13 +985,13 @@
           "description": "Test case tracking"
         },
         "braintrust": {
-          "description": "Logs and evaluations"
+          "description": "Logs & evaluations"
         },
         "lumapps": {
-          "description": "Intranet pages and communities"
+          "description": "Intranet pages & communities"
         },
         "canvas": {
-          "description": "Courses, pages, and announcements"
+          "description": "Courses, pages, & announcements"
         },
         "craftFile": {
           "description": "Files you uploaded"
