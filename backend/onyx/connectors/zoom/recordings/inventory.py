@@ -26,7 +26,7 @@ from onyx.connectors.zoom.recordings.discovery import (
     list_every_recording,
     listing_windows,
 )
-from onyx.connectors.zoom.recordings.models import HostScope, OccurrenceWork
+from onyx.connectors.zoom.recordings.models import Host, HostScope, OccurrenceWork
 from onyx.connectors.zoom.recordings.processing import zoom_document_id
 from onyx.connectors.zoom.recordings.session_types import (
     is_portal_upload,
@@ -114,12 +114,32 @@ def _slim_batches(
 
 def _merged(scopes: list[HostScope]) -> list[HostScope]:
     """Without this, a host that both the Group and the host list name is walked
-    twice, which is another 173 calls every prune."""
+    twice, which is another 173 calls every prune.
+
+    The host list knows a person only by the email an admin typed and the Group
+    only by Zoom's user id, so a scope carrying both, such as a Group member's,
+    is what ties the two together."""
+    ids_by_email = {
+        _normalised(scope.host.email): scope.host.user_id
+        for scope in scopes
+        if scope.host.email and _normalised(scope.host.email) != scope.host.user_id
+    }
     merged: dict[str, HostScope] = {}
     for scope in scopes:
-        seen = merged.get(scope.host.user_id)
-        merged[scope.host.user_id] = seen.merged_with(scope) if seen else scope
+        user_id = scope.host.user_id
+        if scope.host.email:
+            user_id = ids_by_email.get(_normalised(scope.host.email), user_id)
+        if user_id != scope.host.user_id:
+            scope = scope.model_copy(
+                update={"host": Host(user_id=user_id, email=scope.host.email)}
+            )
+        seen = merged.get(user_id)
+        merged[user_id] = seen.merged_with(scope) if seen else scope
     return list(merged.values())
+
+
+def _normalised(email: str) -> str:
+    return email.strip().lower()
 
 
 def _host_documents(

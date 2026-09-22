@@ -28,6 +28,7 @@ from onyx.connectors.zoom.recordings.discovery import (
     _OCCURRENCE_POLL_OVERLAP_SECONDS,
     _WIDE_BACKFILL_WINDOWS,
     EARLIEST_RECORDING_DATE,
+    DiscoverySource,
     GroupSource,
     HostAllowlistSource,
     IdAllowlistSource,
@@ -35,8 +36,10 @@ from onyx.connectors.zoom.recordings.discovery import (
     build_discovery_sources,
     listing_windows,
 )
-from onyx.connectors.zoom.recordings.inventory import zoom_slim_documents
+from onyx.connectors.zoom.recordings.inventory import _merged, zoom_slim_documents
 from onyx.connectors.zoom.recordings.models import (
+    Host,
+    HostScope,
     ZoomListingIncomplete,
     ZoomSessionType,
 )
@@ -674,6 +677,69 @@ class TestTheIdAllowlistInventory:
         }
 
         assert ids == {"ZOOM_MEETING_uuid-2"}
+
+
+class TestOneHostIsWalkedOnce:
+    """The host list names a person by email and the Group by Zoom's user id,
+    and a host walked under both costs another 173 calls every prune."""
+
+    _EMAIL = HostScope(
+        host=Host(user_id="jill@example.com", email="jill@example.com"),
+        session_types=frozenset({ZoomSessionType.MEETING}),
+    )
+    _MEMBER = HostScope(
+        host=Host(user_id="u1", email="Jill@Example.com "),
+        session_types=frozenset({ZoomSessionType.WEBINAR}),
+    )
+    _NUMBER = HostScope(
+        host=Host(user_id="u1"),
+        sessions=frozenset({(ZoomSessionType.MEETING, "111")}),
+    )
+
+    def test_an_email_and_the_member_it_belongs_to_merge_under_zooms_id(
+        self,
+    ) -> None:
+        merged = _merged([self._EMAIL, self._NUMBER, self._MEMBER])
+
+        assert [scope.host.user_id for scope in merged] == ["u1"]
+        assert merged[0].session_types == {
+            ZoomSessionType.MEETING,
+            ZoomSessionType.WEBINAR,
+        }
+        assert merged[0].sessions == {(ZoomSessionType.MEETING, "111")}
+
+    def test_an_email_no_member_carries_stays_its_own_host(self) -> None:
+        merged = _merged([self._EMAIL, self._NUMBER])
+
+        assert sorted(scope.host.user_id for scope in merged) == [
+            "jill@example.com",
+            "u1",
+        ]
+
+    def test_the_walk_asks_zoom_once_for_a_host_named_both_ways(self) -> None:
+        def walked(sources: list[DiscoverySource]) -> list[str]:
+            client = mock_zoom_client()
+            client.list_group_members.return_value = ZoomUserPage(
+                users=[user(id="u1", email="Jill@Example.com")], total_records=1
+            )
+            client.list_user_recordings.return_value = ZoomRecordingPage(
+                total_records=0
+            )
+            list(zoom_slim_documents(client, sources))
+            return [
+                call.kwargs["user_id"]
+                for call in client.list_user_recordings.call_args_list
+            ]
+
+        group_only = walked([GroupSource("group-1")])
+        both = walked(
+            [HostAllowlistSource(["jill@example.com"]), GroupSource("group-1")]
+        )
+
+        # Asked about once to prove the email exists, then never walked as
+        # itself.
+        assert both.count("jill@example.com") == 1
+        assert both.count("u1") == group_only.count("u1")
 
 
 class TestHostAllowlistSource:
