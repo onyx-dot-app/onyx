@@ -744,6 +744,7 @@ class TestZoomConnectorProbeRecordingAccessPermissions:
         client.list_recording_registrants.assert_called_once_with(
             "rec-1", status="approved", limit=1
         )
+        client.get_user.assert_called_once_with("u1")
         client.get_recording_authentication_rules.assert_called_once_with("u1")
 
     @pytest.mark.parametrize(
@@ -751,9 +752,10 @@ class TestZoomConnectorProbeRecordingAccessPermissions:
         [
             lambda client: client.get_recording_settings,
             lambda client: client.list_recording_registrants,
+            lambda client: client.get_user,
             lambda client: client.get_recording_authentication_rules,
         ],
-        ids=["settings", "registrants", "rules"],
+        ids=["settings", "registrants", "user", "rules"],
     )
     def test_a_missing_scope_is_rejected_at_setup(
         self, refused: Callable[[MagicMock], MagicMock]

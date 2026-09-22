@@ -15,12 +15,19 @@ from onyx.connectors.zoom.models import (
     ZoomMeetingSettings,
     ZoomPanelist,
     ZoomParticipant,
+    ZoomRecordingAuthenticationRule,
+    ZoomRecordingRegistrant,
+    ZoomRecordingSettings,
     ZoomRegistrant,
+    ZoomUser,
 )
 from onyx.connectors.zoom.recordings.models import OccurrenceWork, ZoomSessionType
 from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
     meeting_details,
+    recording_authentication_settings,
+    recording_settings,
     recording_with_transcript,
+    user,
 )
 
 SAMPLE_VTT = """WEBVTT
@@ -107,4 +114,28 @@ def with_access(
         settings=ZoomMeetingSettings(meeting_invitees=invitees or [])
     )
     client.list_webinar_panelists.return_value = panelists or []
+    return client
+
+
+def with_recording_access(
+    client: MagicMock | None = None,
+    *,
+    settings: ZoomRecordingSettings | None = None,
+    owner: ZoomUser | None = None,
+    rules: list[ZoomRecordingAuthenticationRule] | None = None,
+    registrants: list[ZoomRecordingRegistrant] | None = None,
+) -> MagicMock:
+    """An account with one owner, the built-in sign-in rule, and a recording
+    shared with the account, unless told otherwise. The owner answers for any
+    id asked for, since a test names the owner it wants on the recording."""
+    if client is None:
+        client = mock_zoom_client()
+    client.get_recording_settings.return_value = settings or recording_settings()
+    client.get_user.return_value = owner or user(
+        id="owner-1", email="Owner@Example.com"
+    )
+    client.get_recording_authentication_rules.return_value = (
+        recording_authentication_settings(*(rules or []))
+    )
+    client.list_recording_registrants.return_value = registrants or []
     return client

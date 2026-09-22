@@ -13,8 +13,12 @@ from onyx.connectors.zoom.models import (
     ZoomPanelist,
     ZoomParticipant,
     ZoomPastMeetingDetails,
+    ZoomRecordingAuthenticationRule,
+    ZoomRecordingAuthenticationSettings,
     ZoomRecordingEntry,
     ZoomRecordingFile,
+    ZoomRecordingRegistrant,
+    ZoomRecordingSettings,
     ZoomRegistrant,
     ZoomSessionOccurrence,
     ZoomUser,
@@ -168,3 +172,43 @@ def panelist(**overrides: Any) -> ZoomPanelist:
         "join_url": "https://example.com/j/11111",
     }
     return ZoomPanelist(**(fields | overrides))
+
+
+# The built-in "Signed-in users in my account" rule of the test account.
+ACCOUNT_RULE_ID = "internally_GB7nutLVSz-Aoi3nrsxZrw"
+
+
+def recording_settings(**overrides: Any) -> ZoomRecordingSettings:
+    """What Zoom answered for a recording on "Anyone in Signed-in users in my
+    account", read live on 2026-09-22."""
+    fields: dict[str, Any] = {
+        "share_recording": "publicly",
+        "recording_authentication": True,
+        "authentication_option": ACCOUNT_RULE_ID,
+        "authentication_name": "Signed-in users in my account",
+        "on_demand": False,
+    }
+    return ZoomRecordingSettings(**(fields | overrides))
+
+
+def recording_registrant(**overrides: Any) -> ZoomRecordingRegistrant:
+    fields: dict[str, Any] = {"email": "jchill@example.com", "status": "approved"}
+    return ZoomRecordingRegistrant(**(fields | overrides))
+
+
+def recording_authentication_rule(**overrides: Any) -> ZoomRecordingAuthenticationRule:
+    fields: dict[str, Any] = {
+        "id": ACCOUNT_RULE_ID,
+        "type": "internally",
+        "name": "Signed-in users in my account",
+    }
+    return ZoomRecordingAuthenticationRule(**(fields | overrides))
+
+
+def recording_authentication_settings(
+    *rules: ZoomRecordingAuthenticationRule,
+) -> ZoomRecordingAuthenticationSettings:
+    return ZoomRecordingAuthenticationSettings(
+        recording_authentication=True,
+        authentication_options=list(rules or [recording_authentication_rule()]),
+    )
