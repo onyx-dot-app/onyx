@@ -23,8 +23,7 @@ _LOCALLY_HOSTED_PROVIDERS = frozenset(
     }
 )
 # Ollama Cloud serves hosted, billable inference under the same provider names
-# as local Ollama, distinguished only by this suffix on the model. See the
-# `-cloud` entries in onyx/llm/litellm_singleton/config.py.
+# as local Ollama, distinguished by this suffix on the model name.
 _OLLAMA_CLOUD_MODEL_SUFFIX = "-cloud"
 
 
@@ -40,28 +39,17 @@ def _is_locally_hosted(model: str, provider: str | None) -> bool:
     return not model.endswith(_OLLAMA_CLOUD_MODEL_SUFFIX)
 
 
-def _has_litellm_token_price(model: str, provider: str | None) -> bool:
-    """Whether litellm's cost map states a token price for this model.
+def _catalog_entry(model: str, provider: str | None) -> dict:
+    from onyx.llm.model_capabilities import get_model_map
 
-    A zero from litellm is not evidence of a free model. When every exact
-    lookup misses, litellm resolves the model from capability generalization
-    rules, which carry no pricing, then coerces the missing rates to 0 rather
-    than raising. Gateway providers hit this on their usual `vendor/model`
-    names. Entries can also be metadata-only, including the ones Onyx
-    registers itself through its model metadata enrichments, so requiring a
-    cost-map hit is not enough. An explicit 0.0 is a real price and stays valid.
-    """
-    try:
-        import litellm
+    catalog = get_model_map()
+    if provider:
+        return catalog.get(f"{provider}/{model}", {})
+    return catalog.get(model, {})
 
-        key = litellm.get_model_info(model=model, custom_llm_provider=provider).get(
-            "key"
-        )
-        entry = litellm.model_cost.get(key) if isinstance(key, str) else None
-    except Exception:
-        return False
-    if entry is None:
-        return False
+
+def _has_catalog_token_price(model: str, provider: str | None) -> bool:
+    entry = _catalog_entry(model, provider)
     return (
         entry.get("input_cost_per_token") is not None
         or entry.get("output_cost_per_token") is not None
@@ -74,7 +62,7 @@ def _default_rate_cents(
     prompt_tokens: int,
     completion_tokens: int,
 ) -> tuple[float, float]:
-    """Configured fallback rates for a model litellm cannot price."""
+    """Configured fallback rates for a model without a published price."""
     input_cents = prompt_tokens / 1_000_000 * DEFAULT_LLM_INPUT_COST_PER_MTOK * 100
     output_cents = (
         completion_tokens / 1_000_000 * DEFAULT_LLM_OUTPUT_COST_PER_MTOK * 100
@@ -127,11 +115,9 @@ def get_model_price_per_million(
         )
 
     try:
-        import litellm
-
-        if not _has_litellm_token_price(model, provider):
+        if not _has_catalog_token_price(model, provider):
             raise ValueError("no stated token price for this model")
-        entry = litellm.get_model_info(model=model, custom_llm_provider=provider)
+        entry = _catalog_entry(model, provider)
         input_per_tok = entry.get("input_cost_per_token")
         output_per_tok = entry.get("output_cost_per_token")
         cache_per_tok = entry.get("cache_read_input_token_cost")
@@ -162,17 +148,9 @@ def get_model_price_per_million(
 
 
 def _image_cost_cents(model: str, provider: str | None) -> float:
-    """Per-image cents from litellm, else DEFAULT_IMAGE_COST_CENTS."""
+    """Per-image cents from the model catalog, else DEFAULT_IMAGE_COST_CENTS."""
     try:
-        import litellm
-
-        try:
-            entry = litellm.get_model_info(model=model, custom_llm_provider=provider)
-        except Exception:
-            entry = litellm.model_cost.get(model) or {}
-        # litellm prices images per-image under either of these keys. Use an
-        # explicit None check so a genuinely free (0.0) model is billed 0, not
-        # silently bumped to the flat fallback.
+        entry = _catalog_entry(model, provider)
         per_image_usd = entry.get("output_cost_per_image")
         if per_image_usd is None:
             per_image_usd = entry.get("input_cost_per_image")
@@ -224,8 +202,8 @@ def compute_cost_cents(
     prompt_tokens is the cache-inclusive provider total; the cache counts are
     subsets of it, not additions to it.
 
-    Resolution order: image pricing → admin override → litellm → default
-    fallback rates (0 unless set). Never raises (usage hot path)."""
+    Resolution order: image pricing → admin override → local inference →
+    genai-prices → model catalog → configured fallback rates (0 unless set)."""
     if flow in IMAGE_FLOWS:
         return 0.0, _image_cost_cents(model, provider) * max(image_count, 1)
 
@@ -258,42 +236,45 @@ def compute_cost_cents(
     if _is_locally_hosted(model, provider):
         return 0.0, 0.0
 
-    try:
-        import litellm
+    from genai_prices import Usage, calc_price
 
-        # custom_llm_provider is required for non-self-identifying model names
-        # (bedrock/vertex/anthropic-plain) — without it litellm raises and we'd
-        # record $0 for entire provider classes.
-        # litellm re-prices the cache subsets of prompt_tokens at the model's own
-        # cache rates (reads discounted, writes at a premium), never as output.
-        prompt_cost_usd, completion_cost_usd = litellm.cost_per_token(
-            model=model,
-            custom_llm_provider=provider,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            cache_read_input_tokens=cache_read_tokens,
-            cache_creation_input_tokens=cache_creation_tokens,
-        )
-        if prompt_cost_usd or completion_cost_usd:
-            return prompt_cost_usd * 100, completion_cost_usd * 100
-        # Zero is only trustworthy from a mapped model; otherwise litellm
-        # invented it for a model it cannot price.
-        if _has_litellm_token_price(model, provider):
-            return 0.0, 0.0
-        logger.debug(
-            "litellm priced model %s (provider %s) at 0 without a stated token "
-            "price; using default rates",
+    provider_id = {
+        "bedrock": "aws",
+        "vertex_ai": "google",
+        "gemini": "google",
+        "together_ai": "together",
+        "fireworks_ai": "fireworks",
+        "xai": "x-ai",
+    }.get(provider or "", provider)
+    try:
+        price = calc_price(
+            Usage(
+                input_tokens=prompt_tokens,
+                output_tokens=completion_tokens,
+                cache_read_tokens=min(cache_read_tokens, prompt_tokens),
+                cache_write_tokens=min(
+                    cache_creation_tokens, max(prompt_tokens - cache_read_tokens, 0)
+                ),
+            ),
             model,
-            provider,
+            provider_id=provider_id,
         )
-    except Exception:
-        # Unpriced model: configurable default rates; debug log distinguishes
-        # transient litellm failure from a genuinely unpriced model.
-        logger.debug(
-            "litellm pricing failed for model %s (provider %s); using default rates",
-            model,
-            provider,
-            exc_info=True,
-        )
+        return float(price.input_price) * 100, float(price.output_price) * 100
+    except LookupError:
+        entry = _catalog_entry(model, provider)
+        if _has_catalog_token_price(model, provider):
+            input_rate = float(entry.get("input_cost_per_token") or 0)
+            output_rate = float(entry.get("output_cost_per_token") or 0)
+            read_rate = float(entry.get("cache_read_input_token_cost", input_rate))
+            write_rate = float(entry.get("cache_creation_input_token_cost", input_rate))
+            read_tokens = min(cache_read_tokens, prompt_tokens)
+            write_tokens = min(
+                cache_creation_tokens, max(prompt_tokens - read_tokens, 0)
+            )
+            input_cost = (prompt_tokens - read_tokens - write_tokens) * input_rate
+            return (
+                input_cost + read_tokens * read_rate + write_tokens * write_rate
+            ) * 100, completion_tokens * output_rate * 100
+        logger.debug("No catalog price for model %s (provider %s)", model, provider)
 
     return _default_rate_cents(model, provider, prompt_tokens, completion_tokens)

@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-from litellm.exceptions import BadRequestError
+from pydantic_ai.exceptions import ModelHTTPError
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -17,12 +17,12 @@ _CUSTOM_SECRET = "custom-config-secret"
 
 
 def test_image_generation_error_is_actionable_and_redacts_credentials() -> None:
-    upstream_error = BadRequestError(
-        message=(
+    upstream_error = ModelHTTPError(
+        status_code=400,
+        body=(
             f"Unsupported image size. api_key={_API_KEY} custom_token={_CUSTOM_SECRET}"
         ),
-        model="gpt-image-1",
-        llm_provider="openai",
+        model_name="gpt-image-1",
     )
     image_provider = MagicMock()
     image_provider.generate_image.side_effect = upstream_error

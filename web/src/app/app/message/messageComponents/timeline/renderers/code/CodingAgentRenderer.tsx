@@ -1,3 +1,9 @@
+import {
+  buildAgentSteps,
+  BashStepView,
+  ThinkingStepView,
+  AgentStep,
+} from "@/app/app/message/messageComponents/timeline/renderers/code/codingAgentSteps";
 import { JSX, Key, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import {
@@ -10,12 +16,9 @@ import {
 import hljs from "highlight.js/lib/core";
 import bash from "highlight.js/lib/languages/bash";
 import {
-  BashToolDelta,
-  BashToolStart,
   CodingAgentFinal,
   CodingAgentPacket,
   CodingAgentStart,
-  CodingAgentThinkingDelta,
   PacketType,
 } from "@/app/app/services/streamingModels";
 import {
@@ -59,77 +62,6 @@ function HighlightedBashCode({ code }: { code: string }) {
       className="hljs"
     />
   );
-}
-
-// Agent alternates between thinking and bash; build a flat ordered list.
-interface ThinkingStepView {
-  kind: "thinking";
-  content: string;
-}
-
-interface BashStepView {
-  kind: "bash";
-  cmd: string;
-  stdout: string;
-  stderr: string;
-  exit_code: number | null;
-  timed_out: boolean;
-  isComplete: boolean;
-}
-
-type AgentStep = ThinkingStepView | BashStepView;
-
-function buildAgentSteps(packets: CodingAgentPacket[]): AgentStep[] {
-  const steps: AgentStep[] = [];
-  const findOpenBash = (): BashStepView | undefined => {
-    for (let i = steps.length - 1; i >= 0; i--) {
-      const c = steps[i];
-      if (c?.kind === "bash" && !c.isComplete) return c;
-    }
-    return undefined;
-  };
-
-  for (const packet of packets) {
-    if (packet.obj.type === PacketType.BASH_TOOL_DELTA) {
-      // Fold output; finalization waits for the next non-delta packet.
-      const delta = packet.obj as BashToolDelta;
-      const open = findOpenBash();
-      if (open) {
-        open.stdout += delta.stdout || "";
-        open.stderr += delta.stderr || "";
-        open.exit_code = delta.exit_code;
-        open.timed_out = delta.timed_out;
-      }
-      continue;
-    }
-
-    // Any non-delta packet (thinking, next bash, FINAL, ERROR, …) closes the open bash.
-    const open = findOpenBash();
-    if (open) open.isComplete = true;
-
-    if (packet.obj.type === PacketType.CODING_AGENT_THINKING_DELTA) {
-      const delta = packet.obj as CodingAgentThinkingDelta;
-      const last = steps[steps.length - 1];
-      if (last && last.kind === "thinking") {
-        last.content += delta.content;
-      } else {
-        steps.push({ kind: "thinking", content: delta.content });
-      }
-    } else if (packet.obj.type === PacketType.BASH_TOOL_START) {
-      const start = packet.obj as BashToolStart;
-      steps.push({
-        kind: "bash",
-        cmd: start.cmd,
-        stdout: "",
-        stderr: "",
-        exit_code: null,
-        timed_out: false,
-        isComplete: false,
-      });
-    }
-  }
-
-  return steps;
 }
 
 interface ThinkingStepProps {

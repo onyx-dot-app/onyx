@@ -21,6 +21,7 @@ spinning up the full chat backend.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import queue
 from uuid import uuid4
 
@@ -34,8 +35,8 @@ from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.models import User
 from onyx.llm.factory import get_default_llm, get_llm_token_counter
 from onyx.server.query_and_chat.placement import Placement
-from onyx.tools.fake_tools.coding_agent import run_coding_agent_call
 from onyx.tools.models import ToolCallKickoff
+from onyx.tools.subagents.coding_agent import run_coding_agent_call
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -109,13 +110,16 @@ def main() -> int:
         logger.info("Query: %s", args.query)
         logger.info("LLM: %s/%s", llm.config.model_provider, llm.config.model_name)
 
-        result = run_coding_agent_call(
-            coding_agent_call=coding_agent_call,
-            emitter=emitter,
-            llm=llm,
-            token_counter=token_counter,
-            user_identity=None,
-            github_token=args.github_token,
+        result = asyncio.run(
+            run_coding_agent_call(
+                parent_context=None,
+                coding_agent_call=coding_agent_call,
+                emitter=emitter,
+                llm=llm,
+                token_counter=token_counter,
+                user_identity=None,
+                github_token=args.github_token,
+            )
         )
 
         if result is None:

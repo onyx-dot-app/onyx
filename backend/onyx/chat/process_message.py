@@ -22,6 +22,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
+from onyx.chat.chat_agent import EmptyLLMResponseError, run_chat_agent
 from onyx.chat.chat_processing_checker import set_processing_status
 from onyx.chat.chat_state import AvailableFiles, ChatStateContainer, ChatTurnSetup
 from onyx.chat.chat_utils import (
@@ -34,10 +35,8 @@ from onyx.chat.chat_utils import (
     load_all_chat_files,
 )
 from onyx.chat.compression import (
-    calculate_total_history_tokens,
     compress_chat_history,
     find_summary_for_branch,
-    get_compression_params,
 )
 from onyx.chat.emitter import Emitter
 from onyx.chat.incognito import (
@@ -49,7 +48,6 @@ from onyx.chat.incognito_context import (
     incognito_session_ended,
     load_incognito_context,
 )
-from onyx.chat.llm_loop import EmptyLLMResponseError, run_llm_loop
 from onyx.chat.models import (
     AnswerStream,
     AnswerStreamPart,
@@ -93,7 +91,7 @@ from onyx.db.memory import get_memories
 from onyx.db.models import ChatMessage, ChatSession, Persona, User, UserFile
 from onyx.db.projects import get_user_files_from_project
 from onyx.db.tools import get_tools
-from onyx.deep_research.dr_loop import run_deep_research_llm_loop
+from onyx.deep_research.deep_research_agent import run_deep_research_agent
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError, log_onyx_error
 from onyx.file_processing.extract_file_text import extract_file_text
@@ -115,7 +113,7 @@ from onyx.llm.override_models import LLMOverride
 from onyx.llm.request_context import reset_llm_mock_response, set_llm_mock_response
 from onyx.llm.utils import (
     collect_credential_values,
-    litellm_exception_to_safe_error,
+    llm_exception_to_safe_error,
     scrub_sensitive_values,
 )
 from onyx.natural_language_processing.utils import get_tokenizer
@@ -133,9 +131,11 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     AgentResponseDelta,
     AgentResponseStart,
+    AnswerMetadata,
     CitationInfo,
     OverallStop,
     Packet,
+    PydanticAIEvent,
     heartbeat_packet,
 )
 from onyx.server.settings.store import load_settings
@@ -605,7 +605,7 @@ def build_chat_turn(
     # None → single-model (persona default LLM); non-empty list → multi-model (one LLM per override)
     llm_overrides: list[LLMOverride] | None,
     *,
-    litellm_additional_headers: dict[str, str] | None = None,
+    llm_additional_headers: dict[str, str] | None = None,
     custom_tool_additional_headers: dict[str, str] | None = None,
     mcp_headers: dict[str, str] | None = None,
     # Slack context for federated Slack search
@@ -710,7 +710,7 @@ def build_chat_turn(
             persona=persona,
             user=user,
             llm_override=override,
-            additional_headers=litellm_additional_headers,
+            additional_headers=llm_additional_headers,
             policy_fn=incognito_policy_fn,
         )
         check_llm_cost_limit_for_provider(
@@ -862,7 +862,7 @@ def build_chat_turn(
 
     user_memory_context = get_memories(user, db_session)
 
-    # This prompt may come from the Agent or Project. Fetched here (before run_llm_loop)
+    # This prompt may come from the Agent or Project. Fetched here (before run_chat_agent)
     # because the inner loop shouldn't need to access the DB-form chat history, but we
     # need it early for token reservation.
     custom_agent_prompt = get_custom_agent_prompt(persona, chat_session)
@@ -878,7 +878,7 @@ def build_chat_turn(
 
     # ── Token reservation ────────────────────────────────────────────────────
     # Reserve against the placeholder-substituted text — the same final form
-    # run_llm_loop sends to the model — so long directory values can't
+    # run_chat_agent sends to the model — so long directory values can't
     # invalidate the reservation.
     max_reserved_system_prompt_tokens_str = substitute_user_placeholders(
         (persona.system_prompt or "") + (custom_agent_prompt or ""),
@@ -1276,7 +1276,7 @@ def _run_models(
             compression_claimed = True
 
         try:
-            llm_loop_completion_handle(
+            finalize_model_response(
                 state_container=state_containers[model_idx],
                 is_connected=_is_connected,
                 assistant_message=setup.reserved_messages[model_idx],
@@ -1383,11 +1383,11 @@ def _run_models(
                     f"Forced tool {setup.forced_tool_id} not found in tools"
                 )
 
-            # Per-thread copy: run_llm_loop mutates simple_chat_history in-place.
+            # Per-thread copy: run_chat_agent mutates simple_chat_history in-place.
             if n_models == 1 and setup.new_msg_req.deep_research:
                 if setup.chat_session_project_id:
                     raise RuntimeError("Deep research is not supported for projects")
-                run_deep_research_llm_loop(
+                run_deep_research_agent(
                     emitter=model_emitter,
                     state_container=sc,
                     simple_chat_history=list(setup.simple_chat_history),
@@ -1403,7 +1403,7 @@ def _run_models(
                     user_language=setup.user_memory_context.user_info.language,
                 )
             else:
-                run_llm_loop(
+                run_chat_agent(
                     emitter=model_emitter,
                     state_container=sc,
                     simple_chat_history=list(setup.simple_chat_history),
@@ -1428,7 +1428,7 @@ def _run_models(
 
         except Exception as e:
             model_errored[model_idx] = True
-            model_error_info[model_idx] = litellm_exception_to_safe_error(
+            model_error_info[model_idx] = llm_exception_to_safe_error(
                 e, model_llm, fallback_to_error_msg=True
             )
             merged_queue.put((model_idx, e))
@@ -1653,7 +1653,7 @@ def _stream_chat_turn(
     new_msg_req: SendMessageRequest,
     user: User,
     llm_overrides: list[LLMOverride] | None = None,
-    litellm_additional_headers: dict[str, str] | None = None,
+    llm_additional_headers: dict[str, str] | None = None,
     custom_tool_additional_headers: dict[str, str] | None = None,
     mcp_headers: dict[str, str] | None = None,
     additional_context: str | None = None,
@@ -1677,7 +1677,7 @@ def _stream_chat_turn(
         user: Authenticated user; may be anonymous for public personas.
         llm_overrides: ``None`` → single-model (persona default LLM).
             Non-empty list → multi-model (one LLM per override, 2–3 items).
-        litellm_additional_headers: Extra headers forwarded to the LLM provider.
+        llm_additional_headers: Extra headers forwarded to the LLM provider.
         custom_tool_additional_headers: Extra headers for custom tool HTTP calls.
         mcp_headers: Extra headers for MCP tool calls.
         additional_context: Extra context prepended to the LLM's chat history, not
@@ -1738,7 +1738,7 @@ def _stream_chat_turn(
                     user=user,
                     db_session=setup_db_session,
                     llm_overrides=llm_overrides,
-                    litellm_additional_headers=litellm_additional_headers,
+                    llm_additional_headers=llm_additional_headers,
                     custom_tool_additional_headers=custom_tool_additional_headers,
                     mcp_headers=mcp_headers,
                     slack_context=slack_context,
@@ -1848,7 +1848,7 @@ def _stream_chat_turn(
 
         llm = setup.llms[0] if setup else None
         if llm:
-            error_info = litellm_exception_to_safe_error(e, llm)
+            error_info = llm_exception_to_safe_error(e, llm)
             stack_trace = scrub_sensitive_values(
                 stack_trace,
                 collect_credential_values(llm.config.api_key, llm.config.custom_config),
@@ -1894,7 +1894,7 @@ def _stream_chat_turn(
 def handle_stream_message_objects(
     new_msg_req: SendMessageRequest,
     user: User,
-    litellm_additional_headers: dict[str, str] | None = None,
+    llm_additional_headers: dict[str, str] | None = None,
     custom_tool_additional_headers: dict[str, str] | None = None,
     mcp_headers: dict[str, str] | None = None,
     additional_context: str | None = None,
@@ -1911,7 +1911,7 @@ def handle_stream_message_objects(
         new_msg_req=new_msg_req,
         user=user,
         llm_overrides=None,
-        litellm_additional_headers=litellm_additional_headers,
+        llm_additional_headers=llm_additional_headers,
         custom_tool_additional_headers=custom_tool_additional_headers,
         mcp_headers=mcp_headers,
         additional_context=additional_context,
@@ -1939,7 +1939,7 @@ def handle_multi_model_stream(
     new_msg_req: SendMessageRequest,
     user: User,
     llm_overrides: list[LLMOverride],
-    litellm_additional_headers: dict[str, str] | None = None,
+    llm_additional_headers: dict[str, str] | None = None,
     custom_tool_additional_headers: dict[str, str] | None = None,
     mcp_headers: dict[str, str] | None = None,
 ) -> AnswerStream:
@@ -1952,7 +1952,7 @@ def handle_multi_model_stream(
         new_msg_req: The incoming chat request. ``deep_research`` must be ``False``.
         user: Authenticated user making the request.
         llm_overrides: Exactly 2 or 3 ``LLMOverride`` objects — one per model to run.
-        litellm_additional_headers: Extra headers forwarded to each LLM provider.
+        llm_additional_headers: Extra headers forwarded to each LLM provider.
         custom_tool_additional_headers: Extra headers for custom tool HTTP calls.
         mcp_headers: Extra headers for MCP tool calls.
 
@@ -1979,13 +1979,13 @@ def handle_multi_model_stream(
         new_msg_req=new_msg_req,
         user=user,
         llm_overrides=llm_overrides,
-        litellm_additional_headers=litellm_additional_headers,
+        llm_additional_headers=llm_additional_headers,
         custom_tool_additional_headers=custom_tool_additional_headers,
         mcp_headers=mcp_headers,
     )
 
 
-def llm_loop_completion_handle(
+def finalize_model_response(
     state_container: ChatStateContainer,
     is_connected: Callable[[], bool],
     assistant_message: ChatMessage,
@@ -2076,34 +2076,13 @@ def llm_loop_completion_handle(
             db_session=db_session,
         )
 
-        # Measure what the next turn will actually replay: the branch summary
-        # (if any) plus messages after its cutoff. The full chain only grows,
-        # so counting it would keep the trigger on permanently once crossed
-        # and inflate tokens_for_recent until compression stalls.
-        summary_message = find_summary_for_branch(db_session, updated_chat_history)
-        effective_history = updated_chat_history
-        summary_tokens = 0
-        if summary_message and summary_message.last_summarized_message_id:
-            cutoff_id = summary_message.last_summarized_message_id
-            effective_history = [m for m in updated_chat_history if m.id > cutoff_id]
-            summary_tokens = summary_message.token_count or 0
-        total_tokens = summary_tokens + calculate_total_history_tokens(
-            effective_history
-        )
-
-    if not run_compression:
-        return
-
-    compression_params = get_compression_params(
-        max_input_tokens=compression_max_input_tokens or llm.config.max_input_tokens,
-        current_history_tokens=total_tokens,
-        reserved_tokens=reserved_tokens,
-    )
-    if compression_params.should_compress:
+    if run_compression:
         compress_chat_history(
             chat_history=updated_chat_history,
             llm=llm,
-            compression_params=compression_params,
+            max_input_tokens=compression_max_input_tokens
+            or llm.config.max_input_tokens,
+            reserved_tokens=reserved_tokens,
         )
 
 
@@ -2162,7 +2141,7 @@ def gather_stream(
     for packet in packets:
         if isinstance(packet, Packet):
             # Handle the different packet object types
-            if isinstance(packet.obj, AgentResponseStart):
+            if isinstance(packet.obj, (AgentResponseStart, AnswerMetadata)):
                 # AgentResponseStart contains the final documents
                 if packet.obj.final_documents:
                     top_documents = packet.obj.final_documents
@@ -2172,6 +2151,9 @@ def gather_stream(
                     answer = ""
                 if packet.obj.content:
                     answer += packet.obj.content
+            elif isinstance(packet.obj, PydanticAIEvent):
+                if packet.obj.text_delta:
+                    answer = (answer or "") + packet.obj.text_delta
             elif isinstance(packet.obj, CitationInfo):
                 # CitationInfo contains citation information
                 citations.append(packet.obj)
@@ -2229,7 +2211,7 @@ def gather_stream_full(
 
     for packet in packets:
         if isinstance(packet, Packet):
-            if isinstance(packet.obj, AgentResponseStart):
+            if isinstance(packet.obj, (AgentResponseStart, AnswerMetadata)):
                 if packet.obj.final_documents:
                     top_documents = packet.obj.final_documents
             elif isinstance(packet.obj, AgentResponseDelta):
@@ -2237,6 +2219,9 @@ def gather_stream_full(
                     answer = ""
                 if packet.obj.content:
                     answer += packet.obj.content
+            elif isinstance(packet.obj, PydanticAIEvent):
+                if packet.obj.text_delta:
+                    answer = (answer or "") + packet.obj.text_delta
             elif isinstance(packet.obj, CitationInfo):
                 citations.append(packet.obj)
         elif isinstance(packet, StreamingError):

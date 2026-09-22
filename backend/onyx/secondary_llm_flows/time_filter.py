@@ -4,15 +4,15 @@ from enum import StrEnum
 
 from dateutil.relativedelta import relativedelta
 from pydantic import BaseModel
+from pydantic_ai.messages import ModelRequest, UserPromptPart
 
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import BaseFilters, TimeRange
+from onyx.llm.inference import run_inference
 from onyx.llm.interfaces import LLM
-from onyx.llm.models import ChatCompletionMessage, ReasoningEffort, UserMessage
 from onyx.prompts.filter_extration import TIME_SCOPE_DECISION_PROMPT
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -176,17 +176,14 @@ def decide_time_filter(
         conversation_history=conversation_history,
         last_user_query=last_user_query,
     )
-    messages: list[ChatCompletionMessage] = [UserMessage(content=prompt)]
 
     try:
-        with llm_generation_span(
+        content = run_inference(
             llm=llm,
+            messages=[ModelRequest(parts=[UserPromptPart(prompt)])],
+            output_type=str,
             flow=LLMFlow.TIME_FILTER_EXTRACTION,
-            input_messages=messages,
-        ) as span_generation:
-            response = llm.invoke(prompt=messages, reasoning_effort=ReasoningEffort.OFF)
-            record_llm_response(span_generation, response)
-            content = response.choice.message.content
+        )
         return _parse_time_decision(content, now)
     except Exception:
         logger.exception("Time filter decision failed; searching across all time")

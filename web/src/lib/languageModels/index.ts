@@ -137,7 +137,7 @@ const PROVIDERS: Record<string, ProviderEntry> = {
   [LLMProviderName.CUSTOM]: {
     icon: SvgServer,
     productName: "Custom Models",
-    companyName: "models from other LiteLLM-compatible providers",
+    companyName: "models from other supported providers",
     Modal: CustomModal,
   },
 };

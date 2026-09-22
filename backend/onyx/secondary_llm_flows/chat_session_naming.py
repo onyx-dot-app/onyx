@@ -1,15 +1,13 @@
 from collections.abc import Sequence
 
-from onyx.chat.llm_step import translate_history_to_llm_format
+from onyx.chat.history_translation import translate_history_to_native_messages
 from onyx.chat.models import ChatMessageSimple
 from onyx.configs.constants import MessageType
 from onyx.db.models import ChatMessage
+from onyx.llm.inference import run_inference
 from onyx.llm.interfaces import LLM
-from onyx.llm.models import ReasoningEffort
-from onyx.llm.utils import llm_response_to_string
 from onyx.prompts.chat_prompts import CHAT_NAMING_REMINDER, CHAT_NAMING_SYSTEM_PROMPT
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -52,17 +50,15 @@ def generate_chat_session_name(
 
     complete_message_history = [system_prompt] + chat_history + [reminder_prompt]
 
-    llm_facing_history = translate_history_to_llm_format(
+    llm_facing_history = translate_history_to_native_messages(
         complete_message_history, llm.config
     )
 
-    with llm_generation_span(
+    new_name_raw = run_inference(
         llm=llm,
+        messages=llm_facing_history,
+        output_type=str,
         flow=LLMFlow.CHAT_SESSION_NAMING,
-        input_messages=llm_facing_history,
-    ) as span_generation:
-        response = llm.invoke(llm_facing_history, reasoning_effort=ReasoningEffort.OFF)
-        record_llm_response(span_generation, response)
-        new_name_raw = llm_response_to_string(response)
+    )
 
     return new_name_raw.strip().strip('"')

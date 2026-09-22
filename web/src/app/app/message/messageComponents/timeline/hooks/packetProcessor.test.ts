@@ -1227,3 +1227,45 @@ describe("packetProcessor", () => {
     });
   });
 });
+
+test("native answer metadata restores citation documents and timing on replay", () => {
+  const document = {
+    document_id: "final-doc",
+    semantic_identifier: "Final source",
+  };
+  const packets = [
+    createPacket(
+      PacketType.ANSWER_METADATA,
+      { turn_index: 2 },
+      {
+        final_documents: [document],
+        pre_answer_processing_seconds: 12,
+      }
+    ),
+    createCitationPacket(1, "final-doc", { turn_index: 2 }),
+    createPacket(
+      PacketType.PYDANTIC_AI,
+      { turn_index: 2 },
+      {
+        phase: "report",
+        event: {
+          event_kind: "part_start",
+          index: 0,
+          part: { part_kind: "text", content: "Answer [[1]](url)" },
+        },
+      }
+    ),
+    createStopPacket(StopReason.FINISHED, { turn_index: 2 }),
+  ];
+  const streamed = createInitialState(1);
+  for (let i = 1; i <= packets.length; i++)
+    processPackets(streamed, packets.slice(0, i));
+  const replayed = processPackets(createInitialState(1), packets);
+  for (const state of [streamed, replayed]) {
+    expect(state.documentMap.get("final-doc")).toEqual(document);
+    expect(state.citationMap).toEqual({ 1: "final-doc" });
+    expect(state.toolProcessingDuration).toBe(12);
+    expect(state.potentialDisplayGroups).toHaveLength(1);
+    expect(state.stopPacketSeen).toBe(true);
+  }
+});

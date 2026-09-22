@@ -45,14 +45,12 @@ class LoggerContextVars:
         doc_permission_sync_ctx.set({})
 
 
-# Third-party loggers that are extremely chatty at DEBUG (LiteLLM logs several
-# records per streamed token; httpcore logs every network event; pdfminer logs
-# per PDF object). Capped at INFO unless LOG_THIRD_PARTY_DEBUG opts back in.
+# Provider and transport logs can include a record for each streamed token.
+# Cap them at INFO unless LOG_THIRD_PARTY_DEBUG opts back in.
 THIRD_PARTY_CAPPED_LOGGER_NAMES: tuple[str, ...] = (
-    "LiteLLM",
-    "LiteLLM Proxy",
-    "LiteLLM Router",
-    "litellm",
+    "pydantic_ai",
+    "httpx2",
+    "httpcore2",
     "httpx",
     "httpcore",
     "openai",
@@ -72,13 +70,6 @@ THIRD_PARTY_CAPPED_LOGGER_NAMES: tuple[str, ...] = (
     "filelock",
     "pdfminer",
     "unstructured",
-)
-
-# Loggers LiteLLM attaches its own stream handler to at import time.
-LITELLM_NATIVE_LOGGER_NAMES: tuple[str, ...] = (
-    "LiteLLM",
-    "LiteLLM Proxy",
-    "LiteLLM Router",
 )
 
 _third_party_log_levels_capped = False
@@ -136,21 +127,6 @@ def cap_third_party_log_levels(
         cap_target = level if allow_debug else max(logging.INFO, level)
         third_party_logger.setLevel(max(cap_target, existing_level))
         _cap_applied_levels[logger_name] = cap_target
-
-
-def remove_litellm_native_log_handlers() -> None:
-    """LiteLLM attaches its own colored StreamHandler to its loggers at import
-    time while leaving propagation on, so every record is emitted twice: once
-    by LiteLLM's handler and once by the app/root handlers. Drop LiteLLM's
-    handlers so the app logging pipeline is the single emission path.
-
-    Must be called after ``litellm`` has been imported (its handlers are
-    attached as an import side effect).
-    """
-    for logger_name in LITELLM_NATIVE_LOGGER_NAMES:
-        litellm_logger = logging.getLogger(logger_name)
-        litellm_logger.handlers.clear()
-        litellm_logger.propagate = True
 
 
 class OnyxRequestIDFilter(logging.Filter):

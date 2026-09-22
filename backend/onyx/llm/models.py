@@ -28,11 +28,8 @@ ToolChoice = ToolChoiceOptions | NamedToolChoice
 class ReasoningEffort(str, Enum):
     """Reasoning effort levels for models that support extended thinking.
 
-    Different providers map these values differently:
-    - OpenAI: Uses "low", "medium", "high" directly for reasoning_effort. Recently added "none" for 5 series
-              which is like "minimal"
-    - Claude: Uses budget_tokens with different values for each level
-    - Gemini: Uses "none", "low", "medium", "high" for thinking_budget (via litellm mapping)
+    Pydantic AI maps thinking levels to each provider. Onyx supplies explicit
+    token budgets for Claude models that require budget-based thinking.
     """
 
     AUTO = "auto"
@@ -134,7 +131,7 @@ OPENAI_REASONING_EFFORT: dict[ReasoningEffort, str] = {
 }
 
 # Anthropic reasoning effort to budget tokens mapping
-# Loosely based on budgets from LiteLLM but this ensures it's not updated without our knowing from a version bump.
+# Keep application thinking budgets stable across provider SDK updates.
 ANTHROPIC_REASONING_EFFORT_BUDGET: dict[ReasoningEffort, int] = {
     ReasoningEffort.AUTO: 2048,
     ReasoningEffort.LOW: 1024,
@@ -155,7 +152,7 @@ ANTHROPIC_ADAPTIVE_REASONING_EFFORT: dict[ReasoningEffort, str] = {
 
 
 # Content part structures for multimodal messages
-# The classes in this mirror the OpenAI Chat Completions message types and work well with routers like LiteLLM
+# Persisted message types use the OpenAI Chat Completions shape.
 class TextContentPart(BaseModel):
     type: Literal["text"] = "text"
     text: str
@@ -209,7 +206,7 @@ class ToolCall(BaseModel):
 
 # Base class for all cacheable messages
 class CacheableMessage(BaseModel):
-    # Some providers support prompt caching controls at the message level (passed through via LiteLLM).
+    # The native message adapter translates these controls into cache points.
     cache_control: dict | None = None
 
 

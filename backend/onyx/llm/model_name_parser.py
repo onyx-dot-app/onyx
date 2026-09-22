@@ -1,19 +1,4 @@
-"""
-LiteLLM Model Name Parser
-
-Parses LiteLLM model strings and returns structured metadata for UI display.
-All metadata comes from litellm's model_cost dictionary. Until this upstream patch to LiteLLM
-is merged (https://github.com/BerriAI/litellm/pull/17330), we use the model_metadata_enrichments.json
-to add these fields at server startup.
-
-Enrichment fields:
-- display_name: Human-friendly name (e.g., "Claude 3.5 Sonnet")
-- model_vendor: The company that made the model (anthropic, openai, meta, etc.)
-- model_version: Version string (e.g., "20241022-v2:0", "v1:0")
-
-The parser only extracts provider and region from the model key - everything
-else comes from enrichment.
-"""
+"""Model display metadata from the bundled catalog and curated enrichments."""
 
 import re
 from functools import lru_cache
@@ -31,7 +16,7 @@ from onyx.llm.constants import (
 
 
 class ParsedModelName(BaseModel):
-    """Structured representation of a parsed LiteLLM model name."""
+    """Structured representation of a parsed provider model name."""
 
     raw_name: str  # Original: "bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0"
     provider: str  # "bedrock", "azure", "openai", etc. (the API route)
@@ -43,37 +28,37 @@ class ParsedModelName(BaseModel):
 
 
 def _get_model_info(model_key: str) -> dict:
-    """Get model info from litellm.model_cost."""
-    from onyx.llm.litellm_singleton import litellm
+    """Get model info from get_model_map()."""
+    from onyx.llm.model_capabilities import get_model_map
 
     # Try exact key first
-    info = litellm.model_cost.get(model_key)
+    info = get_model_map().get(model_key)
     if info:
         return info
 
     # Try without provider prefix (e.g., "bedrock/anthropic.claude-..." -> "anthropic.claude-...")
     if "/" in model_key:
-        return litellm.model_cost.get(model_key.split("/", 1)[-1], {})
+        return get_model_map().get(model_key.split("/", 1)[-1], {})
 
     return {}
 
 
 def _extract_provider(model_key: str) -> str:
     """Extract provider from model key prefix."""
-    from onyx.llm.litellm_singleton import litellm
+    from onyx.llm.model_capabilities import get_model_map
 
     if "/" in model_key:
         return model_key.split("/")[0]
 
-    # No prefix - try to get from litellm.model_cost
-    info = litellm.model_cost.get(model_key, {})
-    litellm_provider = info.get("litellm_provider", "")
+    # No prefix - try to get from get_model_map()
+    info = get_model_map().get(model_key, {})
+    catalog_provider = info.get("model_provider", "")
 
-    if litellm_provider:
+    if catalog_provider:
         # Normalize vertex_ai variants
-        if litellm_provider.startswith(LlmProviderNames.VERTEX_AI):
+        if catalog_provider.startswith(LlmProviderNames.VERTEX_AI):
             return LlmProviderNames.VERTEX_AI
-        return litellm_provider
+        return catalog_provider
 
     return "unknown"
 
@@ -230,15 +215,15 @@ def _generate_provider_display_name(provider: str, vendor: str | None) -> str:
 
 
 @lru_cache(maxsize=1024)
-def parse_litellm_model_name(raw_name: str) -> ParsedModelName:
+def parse_model_name(raw_name: str) -> ParsedModelName:
     """
-    Parse a LiteLLM model string into structured data.
+    Parse a provider model string into structured data.
 
     Metadata comes from enrichment when available, with fallback logic
     for models not in the enrichment data.
 
     Args:
-        raw_name: The LiteLLM model string
+        raw_name: The provider model string
 
     Returns:
         ParsedModelName with all components from enrichment or fallback

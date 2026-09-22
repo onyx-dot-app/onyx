@@ -66,7 +66,7 @@ The current date is {current_date}.
 
 KEYWORD_REPHRASE_USER_PROMPT = """
 Given the chat history above (if any) and the final user query (provided below), provide a set of keyword only queries that can
-help find relevant documents. Provide a single query per line (where each query consists of one or more keywords). \
+help find relevant documents. Return the queries in the structured output (each query consists of one or more keywords). \
 The queries must be purely keywords and not contain any natural language. \
 Each query should have as few keywords as necessary to represent the user's search intent.
 
@@ -77,7 +77,7 @@ Guidelines:
 - Focus on the last user message, in most cases the history and any extra context should be ignored.
 {additional_context}
 =========================
-CRITICAL: ONLY provide the keyword queries, one set of keywords per line and nothing else.
+CRITICAL: Return only keyword queries in the requested output structure.
 
 Final user query:
 {user_query}

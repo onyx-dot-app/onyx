@@ -2,7 +2,7 @@ import threading
 from queue import Queue
 
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import Packet, PacketObj
 
 
 class Emitter:
@@ -29,6 +29,17 @@ class Emitter:
         self._merged_queue = merged_queue
         self._drain_done = drain_done
 
+    @property
+    def cancelled(self) -> bool:
+        return self._drain_done is not None and self._drain_done.is_set()
+
+    def report(self, *, placement: Placement, obj: PacketObj) -> None:
+        """Publish domain progress through the agent that owns this tool call."""
+        from onyx.tools.progress import publish_tool_progress
+
+        if not publish_tool_progress(placement, obj):
+            self.emit(Packet(placement=placement, obj=obj))
+
     def emit(self, packet: Packet) -> None:
         if self._drain_done is not None and self._drain_done.is_set():
             return
@@ -51,6 +62,9 @@ class NullEmitter(Emitter):
         self._model_idx = 0
         self._merged_queue = None
         self._drain_done = None
+
+    def report(self, *, placement: Placement, obj: PacketObj) -> None:
+        pass
 
     def emit(self, packet: Packet) -> None:
         pass

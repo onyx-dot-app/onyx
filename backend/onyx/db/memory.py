@@ -129,6 +129,11 @@ def add_memory(
     Returns the id of the newly created Memory row.
     """
     with get_session_with_current_tenant_if_none(db_session) as db_session:
+        db_session.scalar(
+            select(User.enable_memory_tool)
+            .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
+            .with_for_update()
+        )
         existing = db_session.scalars(
             select(Memory).where(Memory.user_id == user_id).order_by(Memory.id.asc())
         ).all()
@@ -156,6 +161,11 @@ def update_memory_at_index(
     Returns the id of the updated Memory row, or None if the index is out of range.
     """
     with get_session_with_current_tenant_if_none(db_session) as db_session:
+        db_session.scalar(
+            select(User.enable_memory_tool)
+            .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
+            .with_for_update()
+        )
         memory_rows = db_session.scalars(
             select(Memory).where(Memory.user_id == user_id).order_by(Memory.id.asc())
         ).all()

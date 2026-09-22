@@ -3,6 +3,9 @@ from collections.abc import Callable, Iterator
 from typing import Any
 
 from pydantic import BaseModel
+from pydantic_ai.models import Model
+from pydantic_ai.settings import ModelSettings
+from pydantic_ai.usage import RequestUsage
 
 from onyx.llm.model_response import ModelResponse, ModelResponseStream
 from onyx.llm.models import (
@@ -86,6 +89,25 @@ class LLM(abc.ABC):
     @abc.abstractmethod
     def config(self) -> LLMConfig:
         raise NotImplementedError
+
+    @property
+    def model(self) -> Model:
+        """The native model used by Pydantic AI agents."""
+        raise NotImplementedError
+
+    def model_settings(
+        self,
+        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
+        max_tokens: int | None = None,
+        user_identity: LLMUserIdentity | None = None,
+        timeout_override: int | None = None,
+        tool_choice: ToolChoice | None = None,
+    ) -> ModelSettings:
+        raise NotImplementedError
+
+    def record_usage(self, usage: RequestUsage) -> None:
+        """Record a native model request's usage for application billing."""
+        del usage
 
     def invoke(
         self,

@@ -6,6 +6,8 @@ interface BaseObj {
 }
 
 export enum PacketType {
+  PYDANTIC_AI = "pydantic_ai",
+  ANSWER_METADATA = "answer_metadata",
   MESSAGE_START = "message_start",
   MESSAGE_DELTA = "message_delta",
   MESSAGE_END = "message_end",
@@ -91,6 +93,12 @@ export interface MessageStart extends BaseObj {
 
   final_documents: OnyxDocument[] | null;
   pre_answer_processing_seconds?: number;
+}
+
+export interface AnswerMetadata extends BaseObj {
+  type: "answer_metadata";
+  final_documents: OnyxDocument[] | null;
+  pre_answer_processing_seconds?: number | null;
 }
 
 export interface MessageDelta extends BaseObj {
@@ -355,7 +363,59 @@ export interface BashToolDelta extends BaseObj {
   timed_out: boolean;
 }
 
-export type ChatObj = MessageStart | MessageDelta | MessageEnd;
+// Model events retain the Pydantic AI wire format. Domain events remain separate.
+export type PydanticPart =
+  | { part_kind: "text" | "thinking"; content: string }
+  | {
+      part_kind: "tool-call";
+      tool_name: string;
+      tool_call_id: string;
+      args: unknown;
+    }
+  | {
+      part_kind: "tool-return" | "retry-prompt";
+      content: unknown;
+      tool_call_id?: string;
+    }
+  | {
+      part_kind: "builtin-tool-call" | "builtin-tool-return" | "file";
+      content?: unknown;
+    };
+
+export type PydanticStreamEvent =
+  | { event_kind: "part_start" | "part_end"; index: number; part: PydanticPart }
+  | {
+      event_kind: "part_delta";
+      index: number;
+      delta:
+        | { part_delta_kind: "text" | "thinking"; content_delta?: string }
+        | {
+            part_delta_kind: "tool_call";
+            tool_name_delta?: string;
+            args_delta?: unknown;
+            tool_call_id?: string;
+          };
+    }
+  | {
+      event_kind: "final_result";
+      tool_name?: string | null;
+      tool_call_id?: string | null;
+    }
+  | { event_kind: "function_tool_call"; part: PydanticPart }
+  | { event_kind: "function_tool_result"; result: PydanticPart };
+
+export interface PydanticAIEvent extends BaseObj {
+  type: "pydantic_ai";
+  phase?: "chat" | "clarification" | "plan" | "research" | "report" | "coding";
+  event: PydanticStreamEvent;
+}
+
+export type ChatObj =
+  | MessageStart
+  | MessageDelta
+  | MessageEnd
+  | PydanticAIEvent
+  | AnswerMetadata;
 
 export type StopObj = Stop;
 
@@ -424,6 +484,7 @@ export type NewToolObj =
   | MemoryToolObj;
 
 export type ReasoningObj =
+  | PydanticAIEvent
   | ReasoningStart
   | ReasoningDelta
   | ReasoningDone
@@ -437,11 +498,13 @@ export type CitationObj =
   | PacketError;
 
 export type DeepResearchPlanObj =
+  | PydanticAIEvent
   | DeepResearchPlanStart
   | DeepResearchPlanDelta
   | SectionEnd;
 
 export type ResearchAgentObj =
+  | PydanticAIEvent
   | ResearchAgentStart
   | IntermediateReportStart
   | IntermediateReportDelta
@@ -449,6 +512,7 @@ export type ResearchAgentObj =
   | SectionEnd;
 
 export type CodingAgentObj =
+  | PydanticAIEvent
   | CodingAgentStart
   | CodingAgentThinkingDelta
   | CodingAgentFinal

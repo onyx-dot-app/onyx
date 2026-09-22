@@ -1,7 +1,5 @@
 from unittest.mock import patch
 
-import litellm
-
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_capabilities import (
@@ -20,29 +18,8 @@ def test_partial_match_in_model_map() -> None:
     model_map = get_model_map()
 
     _EXPECTED_FIELDS = {
-        "input_cost_per_audio_per_second": 0,
-        "input_cost_per_audio_per_second_above_128k_tokens": 0,
-        "input_cost_per_character": 0,
-        "input_cost_per_character_above_128k_tokens": 0,
-        "input_cost_per_image": 0,
-        "input_cost_per_image_above_128k_tokens": 0,
-        "input_cost_per_token": 0,
-        "input_cost_per_token_above_128k_tokens": 0,
-        "input_cost_per_video_per_second": 0,
-        "input_cost_per_video_per_second_above_128k_tokens": 0,
         "max_input_tokens": 131072,
         "max_output_tokens": 8192,
-        "max_tokens": 8192,
-        "output_cost_per_character": 0,
-        "output_cost_per_character_above_128k_tokens": 0,
-        "output_cost_per_token": 0,
-        "output_cost_per_token_above_128k_tokens": 0,
-        "source": "https://aistudio.google.com",
-        "supports_audio_output": False,
-        "supports_function_calling": True,
-        "supports_response_schema": True,
-        "supports_system_messages": False,
-        "supports_tool_choice": True,
         "supports_vision": True,
     }
 
@@ -75,7 +52,7 @@ def test_no_overwrite_in_model_map() -> None:
         },
     }
 
-    with patch.object(litellm, "model_cost", mock_original_model_cost):
+    with patch("json.load", side_effect=[mock_original_model_cost.copy(), {}]):
         get_model_map.cache_clear()  # Clear the LRU cache to use the patched data
 
         model_map = get_model_map()
@@ -101,7 +78,7 @@ def test_model_is_reasoning_model_handles_none_in_model_map() -> None:
         },
     }
 
-    with patch.object(litellm, "model_cost", mock_model_cost):
+    with patch("json.load", side_effect=[mock_model_cost.copy(), {}]):
         get_model_map.cache_clear()
         try:
             # None in map — should fall through to litellm.supports_reasoning

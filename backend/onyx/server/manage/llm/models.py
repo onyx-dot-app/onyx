@@ -12,8 +12,8 @@ from onyx.llm.api_surfaces import resolve_api_surface
 from onyx.llm.constants import DYNAMIC_LLM_PROVIDERS
 from onyx.llm.model_capabilities import (
     anthropic_supports_thinking,
+    catalog_supports_image_input,
     get_max_input_tokens,
-    litellm_thinks_model_supports_image_input,
     model_is_reasoning_model,
     supported_reasoning_efforts,
 )
@@ -381,13 +381,13 @@ class ModelConfigurationView(BaseModel):
                     LLMModelFlowType.VISION
                     in model_configuration_model.llm_model_flow_types
                     or any(
-                        litellm_thinks_model_supports_image_input(name, provider_name)
+                        catalog_supports_image_input(name, provider_name)
                         for name in model_identity_names
                     )
                 ),
                 # Prefer the stored flow, then the Claude version parse, then
                 # the LiteLLM cost map, then a name/display-name substring
-                # heuristic. Mirrors multi_llm.py's is_reasoning.
+                # heuristic. Mirrors pydantic_ai_llm.py's is_reasoning.
                 supports_reasoning=(
                     LLMModelFlowType.REASONING
                     in model_configuration_model.llm_model_flow_types
@@ -419,14 +419,14 @@ class ModelConfigurationView(BaseModel):
             )
 
         # For static providers (OpenAI, Anthropic, etc.), use LiteLLM enrichments
-        from onyx.llm.model_name_parser import parse_litellm_model_name
+        from onyx.llm.model_name_parser import parse_model_name
 
         # Parse the model name to get display information
         # Include provider prefix if not already present (enrichments use full keys like "vertex_ai/...")
         model_name = model_configuration_model.name
         if provider_name and not model_name.startswith(f"{provider_name}/"):
             model_name = f"{provider_name}/{model_name}"
-        parsed = parse_litellm_model_name(model_name)
+        parsed = parse_model_name(model_name)
 
         # Include region in display name for Bedrock cross-region models
         display_name = (
@@ -452,13 +452,13 @@ class ModelConfigurationView(BaseModel):
                 if LLMModelFlowType.VISION
                 in model_configuration_model.llm_model_flow_types
                 else any(
-                    litellm_thinks_model_supports_image_input(name, provider_name)
+                    catalog_supports_image_input(name, provider_name)
                     for name in model_identity_names
                 )
             ),
             # Prefer the stored flow, then the Claude version parse, then
             # LiteLLM-based detection for legacy rows saved before the flow
-            # existed. Mirrors multi_llm.py's is_reasoning.
+            # existed. Mirrors pydantic_ai_llm.py's is_reasoning.
             supports_reasoning=(
                 LLMModelFlowType.REASONING
                 in model_configuration_model.llm_model_flow_types
@@ -690,7 +690,7 @@ class LitellmModelDetails(BaseModel):
 
         Preference order:
         1. litellm_params.custom_llm_provider (explicit override)
-        2. model_info.litellm_provider (reported by LiteLLM, e.g. "auto_router")
+        2. model_info.catalog_provider (reported by LiteLLM, e.g. "auto_router")
         3. "" (empty string fallback)
         """
         if self.litellm_params:
@@ -699,7 +699,7 @@ class LitellmModelDetails(BaseModel):
                 return provider
 
         if self.model_info:
-            provider = self.model_info.get("litellm_provider", "")
+            provider = self.model_info.get("catalog_provider", "")
             if provider:
                 return provider
 

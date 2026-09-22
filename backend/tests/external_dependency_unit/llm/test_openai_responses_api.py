@@ -1,6 +1,6 @@
 """Live behavior tests for the OpenAI Responses API path through LiteLLM.
 
-`LitellmLLM` routes true OpenAI models through LiteLLM's Responses API
+`PydanticAILLM` routes true OpenAI models through LiteLLM's Responses API
 bridge (model name prefixed with `openai/responses/`). These tests exercise
 behavior of that bridge that cannot be reached with mocks:
 
@@ -21,18 +21,18 @@ import json
 import warnings
 
 import pytest
+from pydantic_ai.exceptions import ModelHTTPError
 
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.litellm_singleton import litellm
 from onyx.llm.models import ChatCompletionMessage, UserMessage
-from onyx.llm.multi_llm import LitellmLLM
+from onyx.llm.pydantic_ai_llm import PydanticAILLM
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.nightly
 
 
-def _build_openai_llm(model: str, api_key: str) -> LitellmLLM:
-    return LitellmLLM(
+def _build_openai_llm(model: str, api_key: str) -> PydanticAILLM:
+    return PydanticAILLM(
         api_key=api_key,
         model_provider=LlmProviderNames.OPENAI,
         model_name=model,
@@ -48,15 +48,9 @@ def test_streaming_parallel_tool_calls_land_in_distinct_slots(
     """Concurrent tool calls in a single streaming response must arrive on
     distinct `index` values with intact, parseable arguments.
 
-    Pre-litellm-1.83.0 the responses bridge hardcoded `index=0` for every
-    tool call, causing argument deltas from the second call to overwrite the
-    first; it also set `finish_reason="tool_calls"` on the first
-    `output_item.done`, terminating the stream before the second call
-    arrived. Onyx's responses-streaming patch was removed once upstream
-    fixed both. This test is the regression guard against either failure
-    re-emerging.
+    Each tool call must retain its own arguments until the native stream ends.
     """
-    llm = _build_openai_llm("gpt-4o-mini", test_secrets[TestSecret.OPENAI_API_KEY])
+    llm = _build_openai_llm("gpt-5-mini", test_secrets[TestSecret.OPENAI_API_KEY])
 
     tools = [
         {
@@ -110,8 +104,8 @@ def test_streaming_parallel_tool_calls_land_in_distinct_slots(
                     slot["arguments"] += tc.function.arguments
 
     indices = sorted(accumulated.keys())
-    assert indices == list(range(len(indices))), (
-        f"Tool call indices should be 0..N-1, got {indices}"
+    assert len(indices) == 2 and all(index >= 0 for index in indices), (
+        f"Expected two distinct native tool part indices, got {indices}"
     )
 
     names = {slot["name"] for slot in accumulated.values()}
@@ -144,13 +138,12 @@ def test_responses_call_with_invalid_key_raises_authentication_error() -> None:
     landed; this test guards against regression.
     """
     with pytest.raises(Exception) as exc_info:
-        litellm.responses(
-            model="openai/gpt-5.4-nano",
-            input="hi",
+        PydanticAILLM(
+            model_name="gpt-5-mini",
+            model_provider="openai",
             api_key="sk-onyx-contract-test-deliberately-invalid",
-            metadata=None,
-            max_output_tokens=8,
-        )
+            max_input_tokens=128000,
+        ).invoke([UserMessage(content="hi")], max_tokens=32)
 
     err = exc_info.value
     err_str = str(err)
@@ -158,7 +151,8 @@ def test_responses_call_with_invalid_key_raises_authentication_error() -> None:
         f"metadata=None TypeError leaked into the surfaced exception: {err_str!r}"
     )
     assert (
-        isinstance(err, litellm.exceptions.AuthenticationError)
+        isinstance(err, ModelHTTPError)
+        and err.status_code == 401
         or "auth" in err_str.lower()
         or "401" in err_str
     ), (
@@ -177,13 +171,13 @@ def test_responses_call_tolerates_explicit_metadata_none(
     confirms `metadata=None` is tolerated for *successful* calls, not just
     error paths.
     """
-    response = litellm.responses(
-        model="openai/gpt-5.4-nano",
-        input="Reply with exactly the word: ok",
+    response = PydanticAILLM(
+        model_name="gpt-5-mini",
+        model_provider="openai",
         api_key=test_secrets[TestSecret.OPENAI_API_KEY],
-        metadata=None,
-        max_output_tokens=16,
-    )
+        max_input_tokens=128000,
+    ).invoke([UserMessage(content="Reply with exactly the word: ok")], max_tokens=256)
+
     assert response is not None
 
 
@@ -201,7 +195,7 @@ def test_streaming_reasoning_summary_sections_are_separated_by_blank_line(
     `monkey_patches.py`) inserts the blank line. This test guards that the
     patch is still firing for current LiteLLM and OpenAI behavior.
     """
-    llm = _build_openai_llm("gpt-5.4-nano", test_secrets[TestSecret.OPENAI_API_KEY])
+    llm = _build_openai_llm("gpt-5-mini", test_secrets[TestSecret.OPENAI_API_KEY])
 
     prompt: list[ChatCompletionMessage] = [
         UserMessage(
@@ -242,7 +236,7 @@ def test_non_streaming_reasoning_summary_sections_are_separated_by_blank_line(
     `monkey_patches.py`) post-processes the result to join with `\\n\\n`. This
     test guards that the patch fires on the non-stream path.
     """
-    llm = _build_openai_llm("gpt-5.4-nano", test_secrets[TestSecret.OPENAI_API_KEY])
+    llm = _build_openai_llm("gpt-5-mini", test_secrets[TestSecret.OPENAI_API_KEY])
 
     prompt: list[ChatCompletionMessage] = [
         UserMessage(
@@ -281,7 +275,7 @@ def test_streaming_emits_no_pydantic_serializer_warnings(
     captures the symptom rather than either patch's internals — if the
     warning escapes, at least one patch is broken or upstream regressed.
     """
-    llm = _build_openai_llm("gpt-5.4-nano", test_secrets[TestSecret.OPENAI_API_KEY])
+    llm = _build_openai_llm("gpt-5-mini", test_secrets[TestSecret.OPENAI_API_KEY])
 
     prompt: list[ChatCompletionMessage] = [
         UserMessage(role="user", content="Reply with exactly the word: ok")

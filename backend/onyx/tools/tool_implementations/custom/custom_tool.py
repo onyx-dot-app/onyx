@@ -17,7 +17,6 @@ from onyx.server.query_and_chat.streaming_models import (
     CustomToolDelta,
     CustomToolErrorInfo,
     CustomToolStart,
-    Packet,
 )
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
@@ -139,11 +138,9 @@ class CustomTool(Tool[None]):
     """Actual execution of the tool"""
 
     def emit_start(self, placement: Placement) -> None:
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=CustomToolStart(tool_name=self._name, tool_id=self._id),
-            )
+        self.emitter.report(
+            placement=placement,
+            obj=CustomToolStart(tool_name=self._name, tool_id=self._id),
         )
 
     def run(
@@ -177,14 +174,12 @@ class CustomTool(Tool[None]):
         # Emit args packet (path + query params only, no request body)
         tool_args = {**path_params, **query_params}
         if tool_args:
-            self.emitter.emit(
-                Packet(
-                    placement=placement,
-                    obj=CustomToolArgs(
-                        tool_name=self._name,
-                        tool_args=tool_args,
-                    ),
-                )
+            self.emitter.report(
+                placement=placement,
+                obj=CustomToolArgs(
+                    tool_name=self._name,
+                    tool_args=tool_args,
+                ),
             )
 
         request_body = llm_kwargs.get(REQUEST_BODY)
@@ -247,18 +242,16 @@ class CustomTool(Tool[None]):
         )
 
         # Emit CustomToolDelta packet
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=CustomToolDelta(
-                    tool_name=self._name,
-                    tool_id=self._id,
-                    response_type=response_type,
-                    data=data,
-                    file_ids=file_ids,
-                    error=error_info,
-                ),
-            )
+        self.emitter.report(
+            placement=placement,
+            obj=CustomToolDelta(
+                tool_name=self._name,
+                tool_id=self._id,
+                response_type=response_type,
+                data=data,
+                file_ids=file_ids,
+                error=error_info,
+            ),
         )
 
         llm_facing_response = json.dumps(tool_result)

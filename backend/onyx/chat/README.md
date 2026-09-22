@@ -75,18 +75,15 @@ final message. If a search related tool just ran and the user has reminders, bot
 
 If a search related tool is called at any point during the turn, the reminder will remain at the end until the turn is over and the agent has responded.
 
-## Tool Calls
+## Tool calls
 
-As tool call responses can get very long (like an internal search can be many thousands of tokens), tool responses are current replaced with a hardcoded
-string saying it is no longer available. Tool Call details like the search query and other arguments are kept in the history as this is information
-rich and generally very few tokens.
+Native history retains the model's tool arguments and each tool result.
+When the input budget becomes tight, `ClearToolResults` replaces older result content with a short marker.
+`SlidingWindowCompaction` can then remove older conversation history while preserving valid tool pairs.
+Search query expansion remains tool behavior; it does not rewrite native model messages.
 
-> Note: in the Internal Search flow with query expansion, the Tool Call which was actually run differs from what the LLM provided as arguments.
-> What the LLM sees in the history (to be most informative for future calls) is the full set of expanded queries.
-
-**Possible Future Extension**:
-Instead of dropping the Tool Call response, we might summarize it using an LLM so that it is just 1-2 sentences and captures the main points. That said,
-this is questionable value add because anything relevant and useful should be already captured in the Agent response.
+Persisted branch summaries use native `SummarizingCompaction`.
+See [Chat history compaction](COMPRESSION.md) for the persistence boundary.
 
 ## Examples
 
@@ -196,12 +193,11 @@ workers themselves via self-completion if the drain loop exits early).
 
 ### Emitter
 
-The emitter is an object that lower levels use to send packets without needing to yield them all the way back
-up the call stack. Each `Emitter` tags every packet with a `model_index` and places it on the shared
+The emitter delivers stream events to the outer response flow. Each `Emitter` tags every packet with a `model_index` and places it on the shared
 `merged_queue` as a `(model_idx, packet)` tuple. The drain loop in `_run_models` consumes these tuples and
 yields the packets to the caller. Both the emitter and the state container are mutating state objects used
 only to accumulate state. There should be no logic dependent on the states of these objects, especially in
-the lower levels. The emitter should only take packets and should not be used for other things.
+the lower levels. The emitter also exposes the disconnect signal to the native cancellation watcher.
 
 ### State Container
 
@@ -220,32 +216,62 @@ A `drain_done` event signals emitters to stop blocking so worker threads can exi
 already completed successfully will self-complete (persist their response) if the drain loop exited before
 reaching the normal completion path.
 
-## 2. LLM Loop (run_llm_loop function)
+## Native agent execution
 
-This function handles the logic of the Turn. It's essentially a while loop where context is added and modified (according what
-is outlined in the first half of this doc). Its main functionality is:
+`chat_agent.run_chat_agent` prepares application context and starts a Pydantic AI `Agent`.
+`agent_runtime.build_native_agent` configures the shared execution path.
+The synchronous entry point is used only at the application boundary.
+Pydantic AI owns model requests, tool dispatch, validation retries, and termination.
 
-- Translate and truncate the context for the LLM inference
-- Add context modifiers like reminders, updates to the system prompts, etc.
-- Run tool calls and gather results
-- Build some of the objects stored in the state container.
+Each run creates its own agent, provider clients, callbacks, and cancellation token.
+The run closes its provider clients before its event loop exits.
+Research and coding tools await native harness `SubAgent` delegation on the parent event loop.
+Typed domain tools retain repository arguments, citations, and result persistence.
+Each child has its own request budget and deadline. These budgets are independent of the coordinator request budget.
+Per-request billing records both coordinator and child usage.
+Credentials and conversation state never live on a shared agent.
 
-## 3. LLM Step (run_llm_step function)
+A native request hook adds application prompts, settings, and active tools before each model request.
+The harness `TieredCompaction` first clears older tool results, then trims older history.
+Compaction keeps native message types, including tool pairs and provider thinking signatures.
+Required prompts and the latest question must fit the selected model's input budget.
+The runtime checks this limit after compaction and includes tool definitions in the estimate.
 
-This function is a single inference of the LLM. It's a wrapper around the LLM stream function which handles packet translations
-so that the Emitter can emit individual tokens as soon as they arrive. It also keeps track of the different sections since they
-do not all come at once (reasoning, answers, tool calls are all built up token by token). This layer also tracks the different
-tool calls and returns that to the LLM Loop to execute.
+Saved chat records become native `ModelMessage` objects directly.
+Images use `BinaryContent`; supported explicit caching uses native `CachePoint` markers.
 
-## Things to know
+Tools expose JSON schemas to Pydantic AI and return tool results.
+Pydantic AI schedules parallel tools. Synchronous domain tools run in worker threads.
+Tool progress uses native custom events through `RunContext.emit`.
+The central stream handler delivers these domain events to the application emitter.
+Tools do not construct transport packets.
 
-- Packets are labeled with a "turn_index" field as part of the Placement of the packet. This is not the same as the backend
-  concept of a turn. The turn_index for the frontend is which block does this packet belong to. So while a reasoning + tool call
-  comes from the same LLM inference (same backend LLM step), they are 2 turns to the frontend because that's how it's rendered.
+Native memory uses the harness `Memory` capability.
+`UserMemoryStore` persists notebook files in existing user memory rows.
+Metadata adds stable file paths, version checks, and durable operation receipts.
+Each store fixes its tenant and user when the run starts.
+Incognito runs do not create a memory capability.
 
-- There are 3 representations of a message, each scoped to a different layer:
-  1. **ChatMessage** — The database model. Should be converted into ChatMessageSimple early and never passed deep into the flow.
-  2. **ChatMessageSimple** — The canonical data model used throughout the codebase. This is the rich, full-featured representation
-     of a message. Any modifications or additions to message structure should be made here.
-  3. **LanguageModelInput** — The LLM-facing representation. Intentionally minimal so the LLM interface layer stays clean and
-     easy to maintain/extend.
+## Stream events and placement
+
+The transport wraps Pydantic AI events with placement and phase fields.
+The frontend reads native text and thinking events directly.
+`part_end` contains accumulated content; renderers must not append that content again.
+Domain events still carry search documents, generated files, citations, and memory changes.
+
+Phases distinguish chat, clarification, planning, research, reports, and coding.
+Placement assigns display groups and parallel branches.
+A placement `turn_index` identifies a display group, not a conversation turn.
+Nested tools use `sub_turn_index` within their parent's group.
+
+Citation processing changes displayed text while preserving raw model history.
+The state container stores the displayed answer and tool snapshots for replay.
+A cancellation token stops the graph when the emitter observes a disconnect.
+The outer message flow still saves partial responses and handles multi-model delivery.
+
+## Message boundaries
+
+Database `ChatMessage` rows become `ChatMessageSimple` records before execution.
+`history_translation.py` converts persisted application records at the run boundary.
+Pydantic AI `ModelMessage` objects remain the source of truth throughout the active run.
+Generated history does not pass through legacy message objects between model requests.

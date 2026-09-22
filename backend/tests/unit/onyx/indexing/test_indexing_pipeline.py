@@ -8,6 +8,8 @@ from typing import Any, List, cast
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+from pydantic_ai import messages as pm
+from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from onyx.connectors.models import (
     Document,
@@ -39,8 +41,8 @@ from onyx.indexing.indexing_pipeline import (
     run_indexing_pipeline,
 )
 from onyx.llm.constants import LlmProviderNames
+from onyx.llm.interfaces import LLMConfig
 from onyx.llm.model_capabilities import get_max_input_tokens
-from onyx.llm.model_response import Choice, Message, ModelResponse
 from onyx.tracing.framework.traces import TraceContentMode
 
 
@@ -207,18 +209,14 @@ def test_contextual_rag(
     mock_llm_invoke_count = 0
     counter_lock = threading.Lock()
 
-    def mock_llm_invoke(
-        *args: Any,  # noqa: ARG001
-        **kwargs: Any,  # noqa: ARG001
-    ) -> ModelResponse:
+    def model_response(
+        _messages: list[pm.ModelMessage], _info: AgentInfo
+    ) -> pm.ModelResponse:
         nonlocal mock_llm_invoke_count
         with counter_lock:
             mock_llm_invoke_count += 1
-        return ModelResponse(
-            id=f"test-{mock_llm_invoke_count}",
-            created="2024-01-01T00:00:00Z",
-            choice=Choice(message=Message(content=f"Test{mock_llm_invoke_count}")),
-        )
+            text = f"Test{mock_llm_invoke_count}"
+        return pm.ModelResponse(parts=[pm.TextPart(text)])
 
     llm_tokenizer = embedder.embedding_model.tokenizer
 
@@ -226,7 +224,14 @@ def test_contextual_rag(
     mock_llm.config.max_input_tokens = get_max_input_tokens(
         model_provider=LlmProviderNames.OPENAI, model_name="gpt-4o"
     )
-    mock_llm.invoke = mock_llm_invoke
+    mock_llm.config = LLMConfig(
+        model_provider="openai",
+        model_name="gpt-4o",
+        temperature=0,
+        max_input_tokens=128000,
+    )
+    mock_llm.model = FunctionModel(model_response)
+    mock_llm.model_settings.return_value = {}
 
     chunker = Chunker(
         tokenizer=embedder.embedding_model.tokenizer,

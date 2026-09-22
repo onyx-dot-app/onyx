@@ -1,4 +1,4 @@
-"""Admin per-model cost overrides — negotiated enterprise rates that win over litellm."""
+"""Admin per-model cost overrides take precedence over published prices."""
 
 import threading
 import time

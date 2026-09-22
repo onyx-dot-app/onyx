@@ -5507,16 +5507,16 @@
           "apiVersionField": {
             "title": "API バージョン"
           },
-          "description": "LiteLLM 互換の他のプロバイダーのモデルを接続します。",
+          "description": "対応する他のプロバイダーのモデルを接続します。",
           "envVars": {
             "addButton": {
               "label": "行を追加"
             },
-            "description": "モデルプロバイダーが必要とする追加のプロパティを指定します。これらは [環境変数](https://docs.litellm.ai/docs/set_keys#environment-variables) として LiteLLM の `completion()` 呼び出しに渡されます。詳しい手順は [ドキュメント](https://docs.onyx.app/admins/ai_models/custom_inference_provider) を参照してください。",
+            "description": "この接続のプロバイダー設定を追加します。このプロバイダーを使うリクエストにのみ適用されます。",
             "keyInput": {
               "placeholder": "例: OPENAI_ORGANIZATION"
             },
-            "title": "環境変数"
+            "title": "プロバイダー設定"
           },
           "modelRow": {
             "displayNamePlaceholder": "表示名",
@@ -5545,15 +5545,15 @@
             }
           },
           "models": {
-            "description": "このプロバイダーで使用する LLM モデルとその設定を一覧に追加してください。モデルの全一覧は LiteLLM で確認できます。",
+            "description": "このプロバイダーで使用するモデルと設定を指定します。",
             "empty": {
               "title": "モデルがまだ追加されていません。"
             },
             "title": "モデル"
           },
           "providerField": {
-            "description": "対応する LLM プロバイダーの全一覧は [LiteLLM](https://docs.litellm.ai/docs/providers) を参照してください。",
-            "placeholder": "LiteLLM に表示されるプロバイダー ID 文字列",
+            "description": "プロバイダーを選択するか、IDと互換性のあるAPIエンドポイントを入力してください。",
+            "placeholder": "プロバイダーID（例：groq）",
             "title": "プロバイダー"
           },
           "toasts": {
@@ -6444,11 +6444,6 @@
         }
       },
       "networkSafety": {
-        "envInjection": {
-          "description": "カスタム LLM プロバイダーの設定が、呼び出し中にプロセスの環境変数を一時的に設定できるようにします。無効にすると、すべてのプロバイダー設定に LiteLLM の同等のパラメータが必要になります。",
-          "multiTenantDescription": "マルチテナント環境では、カスタム LLM プロバイダーの設定でプロセスの環境変数を設定することはできません。",
-          "title": "LLM の環境変数インジェクション"
-        },
         "section": {
           "title": "ネットワークの安全性"
         },
@@ -12917,7 +12912,7 @@
         "label": "{count, plural, one {# 個のモデルを接続済み} other {# 個のモデルを接続済み}}"
       },
       "customProvider": {
-        "subtitle": "LiteLLM 互換 API",
+        "subtitle": "互換モデルAPI",
         "title": "カスタム LLM プロバイダー"
       },
       "description": "Onyx はセルフホストのモデルと主要なプロバイダーの両方に対応しています。",

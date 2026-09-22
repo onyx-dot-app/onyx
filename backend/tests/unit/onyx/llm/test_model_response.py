@@ -1,365 +1,139 @@
-from __future__ import annotations
+"""Round-trip native messages, thinking signatures, cache and tool deltas."""
 
-from typing import TYPE_CHECKING, cast
+from pydantic_ai import messages as pm
+from pydantic_ai.usage import RequestUsage
 
-import pytest
-
-from onyx.llm.model_response import (
-    ChatCompletionDeltaToolCall,
+from onyx.llm.models import (
+    AssistantMessage,
+    ChatCompletionMessage,
     FunctionCall,
-    ModelResponse,
-    ModelResponseStream,
-    from_litellm_model_response,
-    from_litellm_model_response_stream,
+    ImageContentPart,
+    ImageUrlDetail,
+    RedactedThinkingBlock,
+    TextContentPart,
+    ThinkingBlock,
+    ToolCall,
+    ToolMessage,
+    UserMessage,
+)
+from onyx.llm.pydantic_messages import (
+    from_pydantic_event,
+    from_pydantic_response,
+    to_pydantic_messages,
 )
 
-if TYPE_CHECKING:
-    from litellm.types.utils import ModelResponse as LiteLLMModelResponse
-    from litellm.types.utils import ModelResponseStream as LiteLLMModelResponseStream
+
+def test_signed_and_redacted_thinking_round_trip() -> None:
+    prompt: list[ChatCompletionMessage] = [
+        AssistantMessage(
+            thinking_blocks=[
+                ThinkingBlock(thinking="reason", signature="signed"),
+                RedactedThinkingBlock(data="encrypted"),
+            ],
+            content="hello",
+        )
+    ]
+    native = to_pydantic_messages(prompt, "anthropic")[0]
+    assert isinstance(native, pm.ModelResponse)
+    converted = from_pydantic_response(native)
+    assert isinstance(prompt[0], AssistantMessage)
+    assert converted.choice.message.thinking_blocks == prompt[0].thinking_blocks
+    assert converted.choice.message.content == "hello"
 
 
-class _LiteLLMStreamDouble:
-    """
-    Lightweight double that mimics the LiteLLM ``ModelResponseStream`` interface
-    used by ``from_litellm_model_response_stream``.
-    """
-
-    def __init__(self, payload: dict) -> None:
-        self._payload = payload
-
-    def model_dump(self) -> dict:
-        return self._payload
-
-
-class _LiteLLMResponseDouble:
-    """
-    Lightweight double that mimics the LiteLLM ``ModelResponse`` interface
-    used by ``from_litellm_model_response``.
-    """
-
-    def __init__(self, payload: dict) -> None:
-        self._payload = payload
-
-    def model_dump(self) -> dict:
-        return self._payload
-
-
-def _make_stream_double(payload: dict) -> "LiteLLMModelResponseStream":
-    """Create a test double for LiteLLM ModelResponseStream."""
-    return cast("LiteLLMModelResponseStream", _LiteLLMStreamDouble(payload))
-
-
-def _make_response_double(payload: dict) -> "LiteLLMModelResponse":
-    """Create a test double for LiteLLM ModelResponse."""
-    return cast("LiteLLMModelResponse", _LiteLLMResponseDouble(payload))
-
-
-def _build_tool_call_payload() -> dict:
-    return {
-        "id": "chatcmpl-f739f09c-7c9b-4dd6-aea7-cf41d4fd2196",
-        "created": 1762544538,
-        "model": "gpt-5",
-        "object": "chat.completion.chunk",
-        "choices": [
-            {
-                "finish_reason": None,
-                "index": 0,
-                "delta": {
-                    "content": "",
-                    "tool_calls": [
-                        {
-                            "id": None,
-                            "index": 0,
-                            "type": "function",
-                            "function": {
-                                "arguments": '{"',
-                                "name": None,
-                            },
-                        }
-                    ],
-                },
-            }
-        ],
-    }
-
-
-def _build_reasoning_payload() -> dict:
-    return {
-        "id": "chatcmpl-c2a25682-5715-4ca2-84a9-061498f79626",
-        "created": 1762544538,
-        "model": "gpt-5",
-        "object": "chat.completion.chunk",
-        "choices": [
-            {
-                "finish_reason": None,
-                "index": 0,
-                "delta": {
-                    "reasoning_content": " variations",
-                },
-            }
-        ],
-    }
-
-
-def _build_finish_reason_payload() -> tuple[dict, dict]:
-    base_chunk = {
-        "id": "chatcmpl-2b136068-c6fb-4af1-97d5-d2c9d84cd52b",
-        "created": 1762544448,
-        "object": "chat.completion.chunk",
-    }
-
-    content_chunk = base_chunk | {
-        "choices": [
-            {
-                "finish_reason": None,
-                "index": 0,
-                "delta": {
-                    "content": "?",
-                },
-            }
-        ],
-    }
-
-    final_chunk = base_chunk | {
-        "choices": [
-            {
-                "finish_reason": "stop",
-                "index": 0,
-                "delta": {},
-            }
-        ],
-    }
-
-    return content_chunk, final_chunk
-
-
-def _build_multiple_tool_calls_payload() -> dict:
-    return {
-        "id": "Yn4SaajROLXEnvgP5JTN-AQ",
-        "created": 1762819684,
-        "model": "gemini-2.5-flash",
-        "object": "chat.completion.chunk",
-        "choices": [
-            {
-                "finish_reason": None,
-                "index": 0,
-                "delta": {
-                    "content": None,
-                    "tool_calls": [
-                        {
-                            "id": "call_130bec4755e544ea95f4b1bafd81",
-                            "function": {
-                                "arguments": '{"queries": ["new agent framework"]}',
-                                "name": "internal_search",
-                            },
-                            "type": "function",
-                            "index": 0,
-                        },
-                        {
-                            "id": "call_42273e8ee5ac4c0a97237d6d25a6",
-                            "function": {
-                                "arguments": '{"queries": ["cheese"]}',
-                                "name": "web_search",
-                            },
-                            "type": "function",
-                            "index": 1,
-                        },
-                    ],
-                },
-            }
-        ],
-    }
-
-
-def _build_usage_only_chunk_payload() -> dict:
-    # Final chunk OpenAI emits when stream_options.include_usage is set: empty
-    # `choices` array plus usage. litellm forwards it through verbatim.
-    return {
-        "id": "chatcmpl-usage-only",
-        "created": 1762544600,
-        "model": "gpt-5.1",
-        "object": "chat.completion.chunk",
-        "choices": [],
-        "usage": {
-            "prompt_tokens": 11,
-            "completion_tokens": 22,
-            "total_tokens": 33,
-        },
-    }
-
-
-def _build_non_streaming_response_payload() -> dict:
-    return {
-        "id": "chatcmpl-abc123",
-        "created": 1234567890,
-        "model": "gpt-4",
-        "object": "chat.completion",
-        "choices": [
-            {
-                "finish_reason": "stop",
-                "index": 0,
-                "message": {
-                    "content": "Hello, world!",
-                    "role": "assistant",
-                },
-            }
-        ],
-    }
-
-
-def _build_non_streaming_tool_call_payload() -> dict:
-    return {
-        "id": "chatcmpl-xyz789",
-        "created": 9876543210,
-        "model": "gpt-4",
-        "object": "chat.completion",
-        "choices": [
-            {
-                "finish_reason": "tool_calls",
-                "index": 0,
-                "message": {
-                    "content": None,
-                    "role": "assistant",
-                    "tool_calls": [
-                        {
-                            "id": "call_abc123",
-                            "type": "function",
-                            "function": {
-                                "name": "search_documents",
-                                "arguments": '{"query": "test"}',
-                            },
-                        }
-                    ],
-                },
-            }
-        ],
-    }
-
-
-def test_from_litellm_model_response_stream_parses_tool_calls() -> None:
-    response = from_litellm_model_response_stream(
-        _make_stream_double(_build_tool_call_payload())
+def test_tool_history_preserves_ids_names_and_arguments() -> None:
+    native = to_pydantic_messages(
+        [
+            AssistantMessage(
+                tool_calls=[
+                    ToolCall(
+                        id="call-1",
+                        function=FunctionCall(name="search", arguments='{"q":"term"}'),
+                    )
+                ]
+            ),
+            ToolMessage(tool_call_id="call-1", content="result"),
+        ]
     )
+    assert isinstance(native[0], pm.ModelResponse)
+    call = native[0].parts[0]
+    assert isinstance(call, pm.ToolCallPart)
+    assert call.args_as_dict() == {"q": "term"}
+    assert isinstance(native[1], pm.ModelRequest)
+    tool_return = native[1].parts[0]
+    assert isinstance(tool_return, pm.ToolReturnPart)
+    assert tool_return.tool_name == "search" and tool_return.tool_call_id == "call-1"
 
-    assert isinstance(response, ModelResponseStream)
-    assert response.id == "chatcmpl-f739f09c-7c9b-4dd6-aea7-cf41d4fd2196"
-    assert response.created == "1762544538"
 
-    tool_calls = response.choice.delta.tool_calls
-    assert len(tool_calls) == 1
-    assert tool_calls[0] == ChatCompletionDeltaToolCall(
-        id=None,
-        index=0,
-        type="function",
-        function=FunctionCall(arguments='{"', name=None),
+def test_multimodal_content_and_cache_boundary() -> None:
+    native = to_pydantic_messages(
+        UserMessage(
+            content=[
+                TextContentPart(text="look", cache_control={"ttl": "1h"}),
+                ImageContentPart(
+                    image_url=ImageUrlDetail(
+                        url="https://example.com/image.png", detail="high"
+                    )
+                ),
+            ]
+        )
     )
+    assert isinstance(native[0], pm.ModelRequest)
+    prompt = native[0].parts[0]
+    assert isinstance(prompt, pm.UserPromptPart)
+    assert isinstance(prompt.content[1], pm.CachePoint)
+    assert prompt.content[1].ttl == "1h"
+    assert isinstance(prompt.content[2], pm.ImageUrl)
+    assert prompt.content[2].vendor_metadata == {"detail": "high"}
 
 
-def test_from_litellm_model_response_stream_preserves_reasoning_content() -> None:
-    response = from_litellm_model_response_stream(
-        _make_stream_double(_build_reasoning_payload())
+def test_usage_preserves_cache_write_and_read_tokens() -> None:
+    response = from_pydantic_response(
+        pm.ModelResponse(
+            parts=[pm.TextPart("answer")],
+            usage=RequestUsage(
+                input_tokens=100,
+                output_tokens=20,
+                cache_read_tokens=30,
+                cache_write_tokens=40,
+            ),
+        )
     )
-
-    assert response.choice.delta.content is None
-    assert response.choice.delta.reasoning_content == " variations"
-    assert response.choice.finish_reason is None
-
-
-@pytest.mark.parametrize("payload", _build_finish_reason_payload())
-def test_from_litellm_model_response_stream_handles_content_and_finish_reason(
-    payload: dict,
-) -> None:
-    response = from_litellm_model_response_stream(_make_stream_double(payload))
-
-    assert response.id == "chatcmpl-2b136068-c6fb-4af1-97d5-d2c9d84cd52b"
-    assert response.created == "1762544448"
-    assert response.choice.index == 0
-    if payload["choices"][0]["finish_reason"] == "stop":
-        assert response.choice.finish_reason == "stop"
-        assert response.choice.delta.content is None
-    else:
-        assert response.choice.finish_reason is None
-        assert response.choice.delta.content == "?"
+    assert response.usage
+    assert response.usage.cache_creation_input_tokens == 40
+    assert response.usage.cache_read_input_tokens == 30
+    assert response.usage.total_tokens == 120
 
 
-def test_from_litellm_model_response_stream_parses_multiple_tool_calls() -> None:
-    response = from_litellm_model_response_stream(
-        _make_stream_double(_build_multiple_tool_calls_payload())
+def test_partial_tool_arguments_do_not_gain_empty_json_prefix() -> None:
+    response = pm.ModelResponse(parts=[])
+    first = from_pydantic_event(
+        pm.PartStartEvent(index=2, part=pm.ToolCallPart("search", None, "call-1")),
+        response,
     )
-
-    tool_calls = response.choice.delta.tool_calls
-    assert response.id == "Yn4SaajROLXEnvgP5JTN-AQ"
-    assert response.created == "1762819684"
-    assert response.choice.finish_reason is None
-    assert response.choice.delta.content is None
-    assert len(tool_calls) == 2
-    assert tool_calls[0] == ChatCompletionDeltaToolCall(
-        id="call_130bec4755e544ea95f4b1bafd81",
-        index=0,
-        type="function",
-        function=FunctionCall(
-            arguments='{"queries": ["new agent framework"]}',
-            name="internal_search",
+    second = from_pydantic_event(
+        pm.PartDeltaEvent(
+            index=2, delta=pm.ToolCallPartDelta(args_delta='{"q":"term"}')
         ),
+        response,
     )
-    assert tool_calls[1] == ChatCompletionDeltaToolCall(
-        id="call_42273e8ee5ac4c0a97237d6d25a6",
-        index=1,
-        type="function",
-        function=FunctionCall(
-            arguments='{"queries": ["cheese"]}',
-            name="web_search",
+    assert first and second
+    call = first.choice.delta.tool_calls[0]
+    assert call.function and call.function.arguments == ""
+    delta = second.choice.delta.tool_calls[0]
+    assert delta.function and delta.function.arguments == '{"q":"term"}'
+    assert delta.index == call.index == 2
+
+
+def test_redacted_stream_start_preserves_ciphertext() -> None:
+    chunk = from_pydantic_event(
+        pm.PartStartEvent(
+            index=0,
+            part=pm.ThinkingPart("", id="redacted_thinking", signature="ciphertext"),
         ),
+        pm.ModelResponse(parts=[]),
     )
-
-
-def test_from_litellm_model_response_stream_handles_empty_choices_usage_chunk() -> None:
-    response = from_litellm_model_response_stream(
-        _make_stream_double(_build_usage_only_chunk_payload())
-    )
-
-    assert isinstance(response, ModelResponseStream)
-    assert response.id == "chatcmpl-usage-only"
-    assert response.created == "1762544600"
-    assert response.choice.finish_reason is None
-    assert response.choice.delta.content is None
-    assert response.choice.delta.tool_calls == []
-    assert response.usage is not None
-    assert response.usage.prompt_tokens == 11
-    assert response.usage.completion_tokens == 22
-    assert response.usage.total_tokens == 33
-
-
-def test_from_litellm_model_response_parses_basic_message() -> None:
-    response = from_litellm_model_response(
-        _make_response_double(_build_non_streaming_response_payload())
-    )
-
-    assert isinstance(response, ModelResponse)
-    assert response.id == "chatcmpl-abc123"
-    assert response.created == "1234567890"
-    assert response.choice.finish_reason == "stop"
-    assert response.choice.message.content == "Hello, world!"
-    assert response.choice.message.role == "assistant"
-    assert response.choice.message.tool_calls is None
-
-
-def test_from_litellm_model_response_parses_tool_calls() -> None:
-    response = from_litellm_model_response(
-        _make_response_double(_build_non_streaming_tool_call_payload())
-    )
-
-    assert isinstance(response, ModelResponse)
-    assert response.id == "chatcmpl-xyz789"
-    assert response.created == "9876543210"
-    assert response.choice.finish_reason == "tool_calls"
-    assert response.choice.message.content is None
-    assert response.choice.message.role == "assistant"
-    assert response.choice.message.tool_calls is not None
-    assert len(response.choice.message.tool_calls) == 1
-
-    tool_call = response.choice.message.tool_calls[0]
-    assert tool_call.id == "call_abc123"
-    assert tool_call.type == "function"
-    assert tool_call.function.name == "search_documents"
-    assert tool_call.function.arguments == '{"query": "test"}'
+    assert chunk
+    assert chunk.choice.delta.thinking_blocks == [
+        RedactedThinkingBlock(data="ciphertext")
+    ]

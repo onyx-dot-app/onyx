@@ -7,13 +7,13 @@ import pytest
 from onyx.llm.api_surfaces import resolve_api_surface
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_capabilities import (
+    catalog_supports_image_input,
     get_max_input_tokens,
-    litellm_thinks_model_supports_image_input,
     model_identity_names,
     model_is_reasoning_model,
     supported_reasoning_efforts,
 )
-from onyx.llm.model_name_parser import parse_litellm_model_name
+from onyx.llm.model_name_parser import parse_model_name
 from onyx.llm.well_known_providers.llm_provider_options import (
     fetch_default_model_for_provider,
 )
@@ -58,7 +58,7 @@ def assert_response_is_equivalent(
         model_key = req.name
         if provider_name and not model_key.startswith(f"{provider_name}/"):
             model_key = f"{provider_name}/{model_key}"
-        parsed = parse_litellm_model_name(model_key)
+        parsed = parse_model_name(model_key)
 
         # Include region in display name for Bedrock cross-region models (matches from_model)
         display_name = (
@@ -75,7 +75,7 @@ def assert_response_is_equivalent(
         )
         return {
             **filled_with_max_input_tokens.model_dump(),
-            "supports_image_input": litellm_thinks_model_supports_image_input(
+            "supports_image_input": catalog_supports_image_input(
                 req.name, provider_name
             ),
             "supports_reasoning": model_is_reasoning_model(req.name, provider_name),

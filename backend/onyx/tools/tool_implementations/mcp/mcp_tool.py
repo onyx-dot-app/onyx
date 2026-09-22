@@ -24,7 +24,6 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     CustomToolDelta,
     CustomToolStart,
-    Packet,
 )
 from onyx.tools.interface import Tool
 from onyx.tools.models import CustomToolCallSummary, ToolResponse
@@ -134,11 +133,8 @@ class MCPTool(Tool[None]):
         }
 
     def emit_start(self, placement: Placement) -> None:
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=CustomToolStart(tool_name=self._name),
-            )
+        self.emitter.report(
+            placement=placement, obj=CustomToolStart(tool_name=self._name)
         )
 
     def run(
@@ -196,15 +192,13 @@ class MCPTool(Tool[None]):
                 llm_facing_response = json.dumps(error_result)
 
                 # Emit CustomToolDelta packet
-                self.emitter.emit(
-                    Packet(
-                        placement=placement,
-                        obj=CustomToolDelta(
-                            tool_name=self._name,
-                            response_type="json",
-                            data=error_result,
-                        ),
-                    )
+                self.emitter.report(
+                    placement=placement,
+                    obj=CustomToolDelta(
+                        tool_name=self._name,
+                        response_type="json",
+                        data=error_result,
+                    ),
                 )
 
                 outcome = MCPToolCallStatus.AUTH_ERROR
@@ -263,15 +257,13 @@ class MCPTool(Tool[None]):
             llm_facing_response = json.dumps(tool_result_dict)
 
             # Emit CustomToolDelta packet
-            self.emitter.emit(
-                Packet(
-                    placement=placement,
-                    obj=CustomToolDelta(
-                        tool_name=self._name,
-                        response_type="json",
-                        data=tool_result_dict,
-                    ),
-                )
+            self.emitter.report(
+                placement=placement,
+                obj=CustomToolDelta(
+                    tool_name=self._name,
+                    response_type="json",
+                    data=tool_result_dict,
+                ),
             )
 
             response = ToolResponse(
@@ -307,15 +299,13 @@ class MCPTool(Tool[None]):
             llm_facing_response = json.dumps(error_result)
 
             # Emit CustomToolDelta packet
-            self.emitter.emit(
-                Packet(
-                    placement=placement,
-                    obj=CustomToolDelta(
-                        tool_name=self._name,
-                        response_type="json",
-                        data=error_result,
-                    ),
-                )
+            self.emitter.report(
+                placement=placement,
+                obj=CustomToolDelta(
+                    tool_name=self._name,
+                    response_type="json",
+                    data=error_result,
+                ),
             )
 
             return ToolResponse(

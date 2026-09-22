@@ -11,7 +11,6 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.web_search import fetch_active_web_search_provider
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
-    Packet,
     SearchToolDocumentsDelta,
     SearchToolQueriesDelta,
     SearchToolStart,
@@ -167,11 +166,8 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         }
 
     def emit_start(self, placement: Placement) -> None:
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=SearchToolStart(is_internet_search=True),
-            )
+        self.emitter.report(
+            placement=placement, obj=SearchToolStart(is_internet_search=True)
         )
 
     def _safe_execute_single_search(
@@ -226,11 +222,8 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
             )
 
         # Emit queries
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=SearchToolQueriesDelta(queries=queries),
-            )
+        self.emitter.report(
+            placement=placement, obj=SearchToolQueriesDelta(queries=queries)
         )
 
         # Perform searches in parallel with error capture
@@ -325,11 +318,8 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         )
 
         # Emit documents
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=SearchToolDocumentsDelta(documents=search_docs),
-            )
+        self.emitter.report(
+            placement=placement, obj=SearchToolDocumentsDelta(documents=search_docs)
         )
 
         # Format for LLM

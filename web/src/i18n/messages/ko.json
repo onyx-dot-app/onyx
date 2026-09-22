@@ -5507,16 +5507,16 @@
           "apiVersionField": {
             "title": "API 버전"
           },
-          "description": "LiteLLM과 호환되는 다른 제공자의 모델을 연결합니다.",
+          "description": "지원되는 다른 공급자의 모델을 연결합니다.",
           "envVars": {
             "addButton": {
               "label": "줄 추가"
             },
-            "description": "모델 제공자가 요구하는 추가 속성을 입력하세요. 이 값은 [환경 변수](https://docs.litellm.ai/docs/set_keys#environment-variables)로서 LiteLLM의 `completion()` 호출에 전달됩니다. 자세한 안내는 [문서](https://docs.onyx.app/admins/ai_models/custom_inference_provider)를 참고하세요.",
+            "description": "이 연결의 공급자 설정을 추가합니다. 이 공급자를 사용하는 요청에만 적용됩니다.",
             "keyInput": {
               "placeholder": "예: OPENAI_ORGANIZATION"
             },
-            "title": "환경 변수"
+            "title": "공급자 설정"
           },
           "modelRow": {
             "displayNamePlaceholder": "표시 이름",
@@ -5545,15 +5545,15 @@
             }
           },
           "models": {
-            "description": "이 제공자에서 사용할 LLM 모델과 해당 설정을 입력하세요. 전체 모델 목록은 LiteLLM에서 확인하세요.",
+            "description": "이 공급자에서 사용할 모델과 설정을 지정합니다.",
             "empty": {
               "title": "아직 추가된 모델이 없습니다."
             },
             "title": "모델"
           },
           "providerField": {
-            "description": "지원되는 LLM 제공자 전체 목록은 [LiteLLM](https://docs.litellm.ai/docs/providers)에서 확인하세요.",
-            "placeholder": "LiteLLM에 표시된 제공자 ID 문자열",
+            "description": "공급자를 선택하거나 ID와 호환 API 엔드포인트를 입력하세요.",
+            "placeholder": "공급자 ID, 예: groq",
             "title": "제공자"
           },
           "toasts": {
@@ -6444,11 +6444,6 @@
         }
       },
       "networkSafety": {
-        "envInjection": {
-          "description": "사용자 지정 LLM 제공자 구성이 호출 중에 프로세스 환경 변수를 임시로 설정하도록 허용합니다. 비활성화하면 모든 제공자 설정에 대응하는 LiteLLM 파라미터가 있어야 합니다.",
-          "multiTenantDescription": "멀티테넌트 배포에서는 사용자 지정 LLM 제공자 구성이 프로세스 환경 변수를 설정할 수 없습니다.",
-          "title": "LLM 환경 변수 주입"
-        },
         "section": {
           "title": "네트워크 보안"
         },
@@ -12917,7 +12912,7 @@
         "label": "{count, plural, one {모델 #개 연결됨} other {모델 #개 연결됨}}"
       },
       "customProvider": {
-        "subtitle": "LiteLLM 호환 API",
+        "subtitle": "호환 모델 API",
         "title": "사용자 지정 LLM 제공자"
       },
       "description": "Onyx는 자체 호스팅 모델과 널리 쓰이는 제공자를 모두 지원합니다.",

@@ -5507,16 +5507,16 @@
           "apiVersionField": {
             "title": "API-Version"
           },
-          "description": "Verbinden Sie Modelle von anderen LiteLLM-kompatiblen Anbietern.",
+          "description": "Verbinden Sie Modelle anderer unterstützter Anbieter.",
           "envVars": {
             "addButton": {
               "label": "Zeile hinzufügen"
             },
-            "description": "Fügen Sie weitere Eigenschaften hinzu, die der Modellanbieter benötigt. Diese werden dem `completion()`-Aufruf von LiteLLM als [Umgebungsvariablen](https://docs.litellm.ai/docs/set_keys#environment-variables) übergeben. Weitere Anweisungen finden Sie in der [Dokumentation](https://docs.onyx.app/admins/ai_models/custom_inference_provider).",
+            "description": "Fügen Sie Anbietereinstellungen für diese Verbindung hinzu. Sie gelten nur für Anfragen an diesen Anbieter.",
             "keyInput": {
               "placeholder": "z. B. OPENAI_ORGANIZATION"
             },
-            "title": "Umgebungsvariablen"
+            "title": "Anbietereinstellungen"
           },
           "modelRow": {
             "displayNamePlaceholder": "Anzeigename",
@@ -5545,15 +5545,15 @@
             }
           },
           "models": {
-            "description": "Listen Sie die LLM-Modelle auf, die Sie verwenden möchten, und deren Konfiguration für diesen Anbieter. Die vollständige Modellliste finden Sie bei LiteLLM.",
+            "description": "Listen Sie die Modelle und Einstellungen für diesen Anbieter auf.",
             "empty": {
               "title": "Noch keine Modelle hinzugefügt."
             },
             "title": "Modelle"
           },
           "providerField": {
-            "description": "Die vollständige Liste der unterstützten LLM-Anbieter finden Sie bei [LiteLLM](https://docs.litellm.ai/docs/providers).",
-            "placeholder": "Anbieter-ID wie bei LiteLLM angegeben",
+            "description": "Wählen Sie einen Anbieter oder geben Sie seine ID und einen kompatiblen API-Endpunkt ein.",
+            "placeholder": "Anbieter-ID, zum Beispiel groq",
             "title": "Anbieter"
           },
           "toasts": {
@@ -6444,11 +6444,6 @@
         }
       },
       "networkSafety": {
-        "envInjection": {
-          "description": "Erlauben Sie benutzerdefinierten LLM-Anbieterkonfigurationen, während der Aufrufe vorübergehend Prozess-Umgebungsvariablen zu setzen. Deaktivieren Sie dies, um für alle Anbietereinstellungen ein LiteLLM-Parameteräquivalent zu verlangen.",
-          "multiTenantDescription": "Benutzerdefinierte LLM-Anbieterkonfigurationen können in mandantenfähigen Bereitstellungen niemals Prozess-Umgebungsvariablen setzen.",
-          "title": "Einschleusen von LLM-Umgebungsvariablen"
-        },
         "section": {
           "title": "Netzwerksicherheit"
         },
@@ -12917,7 +12912,7 @@
         "label": "{count, plural, one {# Modell verbunden} other {# Modelle verbunden}}"
       },
       "customProvider": {
-        "subtitle": "LiteLLM-kompatible APIs",
+        "subtitle": "Kompatible Modell-APIs",
         "title": "Benutzerdefinierter LLM-Anbieter"
       },
       "description": "Onyx unterstützt sowohl selbst gehostete Modelle als auch gängige Anbieter.",

@@ -6,6 +6,7 @@ from typing import NamedTuple, Protocol
 
 import sentry_sdk
 from pydantic import BaseModel, ConfigDict
+from pydantic_ai import messages as pm
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import (
@@ -87,14 +88,15 @@ from onyx.indexing.models import (
     UpdatableChunkData,
 )
 from onyx.indexing.vector_db_insertion import write_chunks_to_vector_db_with_backoff
+from onyx.llm.exceptions import LLMRateLimitError
 from onyx.llm.factory import (
     get_contextual_rag_llm_for_search_settings,
     get_default_llm_with_vision,
 )
+from onyx.llm.inference import run_inference
 from onyx.llm.interfaces import LLM
-from onyx.llm.models import ReasoningEffort, UserMessage
-from onyx.llm.multi_llm import LLMRateLimitError
-from onyx.llm.utils import MAX_CONTEXT_TOKENS, llm_response_to_string
+from onyx.llm.models import ReasoningEffort
+from onyx.llm.utils import MAX_CONTEXT_TOKENS, supports_explicit_cache
 from onyx.natural_language_processing.utils import (
     BaseTokenizer,
     get_tokenizer,
@@ -109,7 +111,6 @@ from onyx.server.query_and_chat.token_limit import check_global_token_rate_limit
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import ensure_trace
 from onyx.tracing.framework.traces import TraceContentMode
-from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_documents_for_postgres
@@ -958,26 +959,17 @@ def add_document_summaries(
     doc_tokens = tokenizer.encode(chunks_by_doc[0].source_document.get_text_content())
     doc_content = tokenizer_trim_middle(doc_tokens, trunc_doc_tokens, tokenizer)
 
-    # Apply prompt caching: cache the static prompt, document content is the suffix
-    # Note: For document summarization, there's no cacheable prefix since the document changes
-    # So we just pass the full prompt without caching
     summary_prompt = DOCUMENT_SUMMARY_PROMPT.format(document=doc_content)
-    prompt_msg = UserMessage(content=summary_prompt)
-
-    with llm_generation_span(
+    doc_summary = run_inference(
         llm=llm,
+        messages=[pm.ModelRequest(parts=[pm.UserPromptPart(summary_prompt)])],
+        output_type=str,
         flow=LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
-        input_messages=[prompt_msg],
         content_mode=TraceContentMode.METADATA_ONLY,
-    ) as span_generation:
-        response = llm.invoke(
-            prompt_msg,
-            max_tokens=MAX_CONTEXT_TOKENS,
-            reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
-            total_timeout_override=CONTEXTUAL_RAG_LLM_TIMEOUT,
-        )
-        record_llm_response(span_generation, response)
-    doc_summary = llm_response_to_string(response)
+        max_tokens=MAX_CONTEXT_TOKENS,
+        reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
+        total_timeout_override=CONTEXTUAL_RAG_LLM_TIMEOUT,
+    )
 
     for chunk in chunks_by_doc:
         chunk.doc_summary = doc_summary
@@ -1016,54 +1008,44 @@ def add_chunk_summaries(
     if not doc_info:
         # This happens if the document is too long AND document summaries are turned off
         # In this case we compute a doc summary using the LLM
-        fallback_prompt = UserMessage(
-            content=DOCUMENT_SUMMARY_PROMPT.format(document=doc_content)
-        )
-        with llm_generation_span(
+        doc_info = run_inference(
             llm=llm,
+            messages=[
+                pm.ModelRequest(
+                    parts=[
+                        pm.UserPromptPart(
+                            DOCUMENT_SUMMARY_PROMPT.format(document=doc_content)
+                        )
+                    ]
+                )
+            ],
+            output_type=str,
             flow=LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
-            input_messages=[fallback_prompt],
             content_mode=TraceContentMode.METADATA_ONLY,
-        ) as span_generation:
-            response = llm.invoke(
-                fallback_prompt,
-                max_tokens=MAX_CONTEXT_TOKENS,
-                reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
-                total_timeout_override=CONTEXTUAL_RAG_LLM_TIMEOUT,
-            )
-            record_llm_response(span_generation, response)
-        doc_info = llm_response_to_string(response)
-
-    from onyx.llm.prompt_cache.processor import process_with_prompt_cache
+            max_tokens=MAX_CONTEXT_TOKENS,
+            reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
+            total_timeout_override=CONTEXTUAL_RAG_LLM_TIMEOUT,
+        )
 
     context_prompt1 = CONTEXTUAL_RAG_PROMPT1.format(document=doc_info)
 
     def assign_context(chunk: DocAwareChunk) -> None:
         context_prompt2 = CONTEXTUAL_RAG_PROMPT2.format(chunk=chunk.content)
         try:
-            # Apply prompt caching: cache the document context (prompt1), chunk content is the suffix
-            # For string inputs with continuation=True, the result will be a concatenated string
-            processed_prompt, _ = process_with_prompt_cache(
-                llm_config=llm.config,
-                cacheable_prefix=UserMessage(content=context_prompt1),
-                suffix=UserMessage(content=context_prompt2),
-                continuation=True,  # Append chunk to the document context
-            )
-
-            with llm_generation_span(
+            content: list[pm.UserContent] = [context_prompt1]
+            if supports_explicit_cache(llm.config):
+                content.append(pm.CachePoint())
+            content.append(context_prompt2)
+            chunk.chunk_context = run_inference(
                 llm=llm,
+                messages=[pm.ModelRequest(parts=[pm.UserPromptPart(content)])],
+                output_type=str,
                 flow=LLMFlow.CONTEXTUAL_RAG_CHUNK_CONTEXT,
-                input_messages=[processed_prompt],
                 content_mode=TraceContentMode.METADATA_ONLY,
-            ) as span_generation:
-                response = llm.invoke(
-                    processed_prompt,
-                    max_tokens=MAX_CONTEXT_TOKENS,
-                    reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
-                    total_timeout_override=CONTEXTUAL_RAG_LLM_TIMEOUT,
-                )
-                record_llm_response(span_generation, response)
-            chunk.chunk_context = llm_response_to_string(response)
+                max_tokens=MAX_CONTEXT_TOKENS,
+                reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
+                total_timeout_override=CONTEXTUAL_RAG_LLM_TIMEOUT,
+            )
 
         except LLMRateLimitError as e:
             # Erroring during chunker is undesirable, so we log the error and continue

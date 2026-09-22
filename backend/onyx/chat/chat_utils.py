@@ -856,7 +856,7 @@ def convert_chat_history(
                     # Build ToolCallSimple list for this turn
                     tool_calls_simple: list[ToolCallSimple] = []
                     for tool_call in turn_tool_calls:
-                        tool_name = tool_id_to_name_map.get(
+                        tool_name = tool_call.tool_name or tool_id_to_name_map.get(
                             tool_call.tool_id, "unknown"
                         )
                         tool_calls_simple.append(
@@ -884,7 +884,7 @@ def convert_chat_history(
 
                     # Add TOOL_CALL_RESPONSE messages for each tool call in this turn
                     for tool_call in turn_tool_calls:
-                        tool_name = tool_id_to_name_map.get(
+                        tool_name = tool_call.tool_name or tool_id_to_name_map.get(
                             tool_call.tool_id, "unknown"
                         )
                         tool_response_message = (

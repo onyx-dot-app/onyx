@@ -208,19 +208,19 @@ def test_openai_chat_tools_require_reasoning_none(
             LlmProviderNames.VERTEX_AI,
             "gemini-3-pro",
             None,
-            ReasoningParamStyle.LITELLM_EFFORT,
+            ReasoningParamStyle.PROVIDER_EFFORT,
         ),
         (
             LlmProviderNames.BIFROST,
             "google/gemini-3-pro",
             CHAT_COMPLETIONS,
-            ReasoningParamStyle.LITELLM_EFFORT,
+            ReasoningParamStyle.PROVIDER_EFFORT,
         ),
         (
             LlmProviderNames.OPENROUTER,
             "openai/gpt-5.1",
             None,
-            ReasoningParamStyle.LITELLM_EFFORT,
+            ReasoningParamStyle.PROVIDER_EFFORT,
         ),
     ],
 )

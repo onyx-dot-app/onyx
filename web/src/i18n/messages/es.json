@@ -5507,16 +5507,16 @@
           "apiVersionField": {
             "title": "Versión de la API"
           },
-          "description": "Conecta modelos de otros proveedores compatibles con LiteLLM.",
+          "description": "Conecta modelos de otros proveedores compatibles.",
           "envVars": {
             "addButton": {
               "label": "Añadir una línea"
             },
-            "description": "Añade las propiedades adicionales que necesite el proveedor de modelos. Se pasan a la llamada `completion()` de LiteLLM como [variables de entorno](https://docs.litellm.ai/docs/set_keys#environment-variables). Consulta la [documentación](https://docs.onyx.app/admins/ai_models/custom_inference_provider) para ver más instrucciones.",
+            "description": "Añade ajustes para esta conexión. Solo se aplican a las solicitudes que usan este proveedor.",
             "keyInput": {
               "placeholder": "p. ej., OPENAI_ORGANIZATION"
             },
-            "title": "Variables de entorno"
+            "title": "Ajustes del proveedor"
           },
           "modelRow": {
             "displayNamePlaceholder": "Nombre visible",
@@ -5545,15 +5545,15 @@
             }
           },
           "models": {
-            "description": "Enumera los modelos LLM que quieres usar y su configuración para este proveedor. Consulta la lista completa de modelos en LiteLLM.",
+            "description": "Indica los modelos y ajustes que se usarán con este proveedor.",
             "empty": {
               "title": "Todavía no se ha añadido ningún modelo."
             },
             "title": "Modelos"
           },
           "providerField": {
-            "description": "Consulta la lista completa de proveedores de LLM admitidos en [LiteLLM](https://docs.litellm.ai/docs/providers).",
-            "placeholder": "Cadena del ID del proveedor tal como aparece en LiteLLM",
+            "description": "Selecciona un proveedor o introduce su ID y un punto de conexión de API compatible.",
+            "placeholder": "ID del proveedor, por ejemplo groq",
             "title": "Proveedor"
           },
           "toasts": {
@@ -6444,11 +6444,6 @@
         }
       },
       "networkSafety": {
-        "envInjection": {
-          "description": "Permite que las configuraciones de proveedores de LLM personalizados definan temporalmente variables de entorno del proceso durante las llamadas. Desactívalo para exigir que todas las opciones del proveedor tengan un parámetro equivalente en LiteLLM.",
-          "multiTenantDescription": "Las configuraciones de proveedores de LLM personalizados nunca pueden definir variables de entorno del proceso en instalaciones multiinquilino.",
-          "title": "Inyección de variables de entorno para LLM"
-        },
         "section": {
           "title": "Seguridad de red"
         },
@@ -12917,7 +12912,7 @@
         "label": "{count, plural, one {# modelo conectado} other {# modelos conectados}}"
       },
       "customProvider": {
-        "subtitle": "APIs compatibles con LiteLLM",
+        "subtitle": "API de modelos compatibles",
         "title": "Proveedor de LLM personalizado"
       },
       "description": "Onyx admite tanto modelos autoalojados como los proveedores más conocidos.",

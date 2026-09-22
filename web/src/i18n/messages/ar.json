@@ -5507,16 +5507,16 @@
           "apiVersionField": {
             "title": "إصدار API"
           },
-          "description": "اربط نماذج من موفرين آخرين متوافقين مع LiteLLM.",
+          "description": "اربط نماذج من موفرين آخرين مدعومين.",
           "envVars": {
             "addButton": {
               "label": "إضافة سطر"
             },
-            "description": "أضف خصائص إضافية بحسب حاجة موفر النموذج. تُمرَّر هذه إلى استدعاء `completion()` في LiteLLM كـ[متغيرات بيئة](https://docs.litellm.ai/docs/set_keys#environment-variables). راجع [الوثائق](https://docs.onyx.app/admins/ai_models/custom_inference_provider) لمزيد من التعليمات.",
+            "description": "أضف إعدادات الموفر لهذا الاتصال. تنطبق فقط على الطلبات التي تستخدم هذا الموفر.",
             "keyInput": {
               "placeholder": "مثل OPENAI_ORGANIZATION"
             },
-            "title": "متغيرات البيئة"
+            "title": "إعدادات الموفر"
           },
           "modelRow": {
             "displayNamePlaceholder": "اسم العرض",
@@ -5545,15 +5545,15 @@
             }
           },
           "models": {
-            "description": "أدرج نماذج LLM التي تريد استخدامها وتهيئاتها لهذا الموفر. راجع القائمة الكاملة للنماذج في LiteLLM.",
+            "description": "حدد النماذج والإعدادات المطلوب استخدامها مع هذا الموفر.",
             "empty": {
               "title": "لم تُضف نماذج بعد."
             },
             "title": "النماذج"
           },
           "providerField": {
-            "description": "راجع القائمة الكاملة لموفري LLM المدعومين في [LiteLLM](https://docs.litellm.ai/docs/providers).",
-            "placeholder": "معرّف الموفر كما يظهر في LiteLLM",
+            "description": "اختر موفرًا أو أدخل معرّفه ونقطة اتصال API متوافقة.",
+            "placeholder": "معرّف الموفر، مثل groq",
             "title": "الموفر"
           },
           "toasts": {
@@ -6444,11 +6444,6 @@
         }
       },
       "networkSafety": {
-        "envInjection": {
-          "description": "السماح لتهيئات موفري LLM المخصصين بتعيين متغيرات بيئة العملية مؤقتًا أثناء الاستدعاءات. عطّله لإلزام كل إعدادات الموفر بمكافئ من معاملات LiteLLM.",
-          "multiTenantDescription": "لا يمكن لتهيئات موفري LLM المخصصين أبدًا تعيين متغيرات بيئة العملية في عمليات النشر متعددة المستأجرين.",
-          "title": "حقن متغيرات بيئة LLM"
-        },
         "section": {
           "title": "أمان الشبكة"
         },
@@ -12917,7 +12912,7 @@
         "label": "{count, plural, one {# نموذج متصل} other {# نماذج متصلة}}"
       },
       "customProvider": {
-        "subtitle": "واجهات برمجة متوافقة مع LiteLLM",
+        "subtitle": "واجهات API للنماذج المتوافقة",
         "title": "موفر LLM مخصص"
       },
       "description": "يدعم Onyx النماذج المستضافة ذاتيًا والموفرين الشائعين.",

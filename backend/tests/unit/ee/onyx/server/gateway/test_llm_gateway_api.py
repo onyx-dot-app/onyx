@@ -21,6 +21,7 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.exceptions import LLMRateLimitError, LLMTimeoutError
 from onyx.llm.interfaces import LLM, LLMConfig
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
@@ -49,7 +50,6 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.llm.models import FunctionCall as ToolFunctionCall
-from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
 from onyx.server.auth_check import check_router_auth
 from onyx.server.features.build import craft_gateway
 from onyx.server.features.build.craft_gateway import gateway_request_flow
@@ -360,62 +360,53 @@ def test_reasoning_effort_defaults_to_auto(
     assert gateway_api._parse_reasoning_effort(raw) is expected
 
 
-def test_prepare_messages_marks_stable_prefix_for_prompt_cache() -> None:
-    config = LLMConfig(
-        model_provider="anthropic",
-        model_name="claude-sonnet",
-        temperature=0,
-        max_input_tokens=200_000,
+@pytest.mark.parametrize(
+    ("provider", "model", "enabled", "marked"),
+    [
+        ("anthropic", "claude-sonnet", True, True),
+        ("bedrock", "us.anthropic.claude-sonnet", True, True),
+        ("openrouter", "anthropic/claude-sonnet", True, True),
+        ("openai", "gpt-5-mini", True, False),
+        ("bedrock", "amazon.nova-pro", True, False),
+        ("anthropic", "claude-sonnet", False, False),
+    ],
+)
+def test_prepare_messages_marks_stable_prefix_for_prompt_cache(
+    provider: str, model: str, enabled: bool, marked: bool
+) -> None:
+    llm = _ConfigOnlyLLM(
+        LLMConfig(
+            model_provider=provider,
+            model_name=model,
+            temperature=0,
+            max_input_tokens=200_000,
+        )
     )
-    llm = _ConfigOnlyLLM(config)
-    messages: list[ChatCompletionMessage] = [
-        SystemMessage(content="stable instructions"),
-        UserMessage(content="new request"),
-    ]
     raw_messages = [
-        {"role": "system", "content": "stable instructions"},
+        {"role": "user", "content": "stable document"},
         {"role": "user", "content": "new request"},
     ]
-    processed = [*messages]
-
-    with patch.object(
-        gateway_api,
-        "process_with_prompt_cache",
-        return_value=(processed, None),
-    ) as process_prompt:
+    with patch("onyx.llm.utils.ENABLE_PROMPT_CACHING", enabled):
         result = gateway_api._prepare_messages(llm, raw_messages)
-
-    assert result is processed
-    process_prompt.assert_called_once_with(
-        llm_config=config,
-        cacheable_prefix=messages[:-1],
-        suffix=messages[-1:],
-        continuation=False,
-        with_metadata=False,
-    )
+    assert result[0].cache_control == ({"type": "ephemeral"} if marked else None)
+    assert result[1].cache_control is None
+    assert "cache_control" not in raw_messages[0]
 
 
 def test_prepare_messages_uses_no_cacheable_prefix_for_single_message() -> None:
-    config = LLMConfig(
-        model_provider="openai",
-        model_name="gpt-5-mini",
-        temperature=0,
-        max_input_tokens=128_000,
+    llm = _ConfigOnlyLLM(
+        LLMConfig(
+            model_provider="anthropic",
+            model_name="claude-sonnet",
+            temperature=0,
+            max_input_tokens=200_000,
+        )
     )
-    llm = _ConfigOnlyLLM(config)
-    messages: list[ChatCompletionMessage] = [UserMessage(content="only message")]
-
-    with patch.object(
-        gateway_api,
-        "process_with_prompt_cache",
-        return_value=(messages, None),
-    ) as process_prompt:
-        gateway_api._prepare_messages(
+    with patch("onyx.llm.utils.ENABLE_PROMPT_CACHING", True):
+        result = gateway_api._prepare_messages(
             llm, [{"role": "user", "content": "only message"}]
         )
-
-    assert process_prompt.call_args.kwargs["cacheable_prefix"] is None
-    assert process_prompt.call_args.kwargs["suffix"] == messages
+    assert result == [UserMessage(content="only message")]
 
 
 def test_drop_empty_text() -> None:

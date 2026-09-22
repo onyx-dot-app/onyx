@@ -6,7 +6,7 @@ import uuid
 from contextlib import closing
 from functools import partial
 from itertools import count
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any
 
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -40,6 +40,7 @@ from onyx.db.llm import (
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.exceptions import LLMRateLimitError, LLMTimeoutError
 from onyx.llm.factory import llm_from_provider
 from onyx.llm.interfaces import LLM
 from onyx.llm.model_response import ChatCompletionMessageToolCall
@@ -57,9 +58,8 @@ from onyx.llm.models import (
     ToolChoiceOptions,
     UserMessage,
 )
-from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
-from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.llm.tracing_wrap import _finalize_tool_calls
+from onyx.llm.utils import supports_explicit_cache
 from onyx.server.features.build.craft_gateway import gateway_request_flow
 from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
 from onyx.server.gateway.model_catalog import build_gateway_model_catalog
@@ -116,17 +116,6 @@ from onyx.tracing.framework.create import trace
 from onyx.tracing.framework.traces import Trace
 from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.logger import setup_logger
-
-if TYPE_CHECKING:
-    from litellm.types.llms.anthropic import (
-        AnthopicMessagesAssistantMessageParam,
-        AnthropicMessagesUserMessageParam,
-    )
-    from litellm.types.llms.openai import ChatCompletionToolParam
-
-    _AnthropicAdapterMessage = (
-        AnthropicMessagesUserMessageParam | AnthopicMessagesAssistantMessageParam
-    )
 
 logger = setup_logger()
 
@@ -251,17 +240,11 @@ def _prepare_messages(
     ]
     if not messages:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "messages must not be empty")
-    cacheable_prefix = messages[:-1] or None
-    processed_messages, _ = process_with_prompt_cache(
-        llm_config=llm.config,
-        cacheable_prefix=cacheable_prefix,
-        suffix=messages[-1:],
-        continuation=False,
-        with_metadata=False,
-    )
-    if not isinstance(processed_messages, list):
-        raise RuntimeError("LLM gateway message processing returned non-list input")
-    return processed_messages
+    if len(messages) > 1 and supports_explicit_cache(llm.config):
+        messages[-2] = messages[-2].model_copy(
+            update={"cache_control": {"type": "ephemeral"}}
+        )
+    return messages
 
 
 def _parse_tool_choice(raw: Any) -> ToolChoice | None:
@@ -452,54 +435,93 @@ def _flatten_text_content(content: Any) -> str:
 
 
 def _responses_input_to_raw_messages(request: ResponsesRequest) -> list[dict[str, Any]]:
-    """LiteLLM's Responses->Chat bridge emits an OpenAI 'developer' role and
-    list-of-parts system/developer content; our ChatCompletionMessage union has
-    no developer role and SystemMessage.content is str-only, so collapse both."""
-    from litellm.responses.litellm_completion_transformation.transformation import (
-        LiteLLMCompletionResponsesConfig,
-    )
-
-    litellm_messages = (
-        LiteLLMCompletionResponsesConfig.transform_responses_api_input_to_messages(
-            input=cast(Any, request.input),
-            responses_api_request=cast(Any, {"instructions": request.instructions}),
-        )
-    )
+    """Convert the gateway Responses wire format to application messages."""
     raw: list[dict[str, Any]] = []
-    for message in litellm_messages:
-        message_dict: dict[str, Any] = dict(message)
-        role = message_dict.get("role")
-        if role in ("system", "developer"):
+    if request.instructions:
+        raw.append({"role": "system", "content": request.instructions})
+    if isinstance(request.input, str):
+        raw.append({"role": "user", "content": request.input})
+        return raw
+    for item in request.input:
+        item_type = item.get("type", "message")
+        if item_type == "function_call":
             raw.append(
                 {
-                    "role": "system",
-                    "content": _flatten_text_content(message_dict.get("content")),
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": item["call_id"],
+                            "type": "function",
+                            "function": {
+                                "name": item["name"],
+                                "arguments": item["arguments"],
+                            },
+                        }
+                    ],
                 }
             )
-        elif role == "assistant" and isinstance(message_dict.get("content"), list):
-            # AssistantMessage.content is str, but LiteLLM emits parts here.
+        elif item_type == "function_call_output":
             raw.append(
                 {
-                    **message_dict,
-                    "content": _flatten_text_content(message_dict["content"]) or None,
+                    "role": "tool",
+                    "tool_call_id": item["call_id"],
+                    "content": item["output"],
                 }
             )
-        else:
-            raw.append(message_dict)
+        elif item_type == "message":
+            role = item.get("role", "user")
+            if role == "developer":
+                role = "system"
+            content = item.get("content", "")
+            if isinstance(content, list):
+                parts: list[dict[str, Any]] = []
+                for part in content:
+                    kind = part.get("type")
+                    if kind in ("input_text", "output_text", "text"):
+                        parts.append({"type": "text", "text": part["text"]})
+                    elif kind == "input_image":
+                        parts.append(
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": part["image_url"],
+                                    "detail": part.get("detail", "auto"),
+                                },
+                            }
+                        )
+                    else:
+                        raise OnyxError(
+                            OnyxErrorCode.INVALID_INPUT,
+                            f"Unsupported Responses content: {kind}",
+                        )
+                content = (
+                    _flatten_text_content(parts)
+                    if role in ("system", "assistant")
+                    else parts
+                )
+            raw.append({"role": role, "content": content})
+        elif item_type != "reasoning":
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT, f"Unsupported Responses input: {item_type}"
+            )
     return raw
 
 
 def _responses_tools(request: ResponsesRequest) -> list[dict[str, Any]] | None:
-    from litellm.responses.litellm_completion_transformation.transformation import (
-        LiteLLMCompletionResponsesConfig,
-    )
-
-    tools, _ = (
-        LiteLLMCompletionResponsesConfig.transform_responses_api_tools_to_chat_completion_tools(
-            cast(Any, request.tools)
+    tools: list[dict[str, Any]] = []
+    for tool in request.tools or []:
+        if tool.get("type") != "function":
+            continue
+        tools.append(
+            {
+                "type": "function",
+                "function": {
+                    key: value for key, value in tool.items() if key != "type"
+                },
+            }
         )
-    )
-    return cast(list[dict[str, Any]], tools) or None
+    return tools or None
 
 
 def _function_call_item(
@@ -866,56 +888,79 @@ def _replayable_thinking_blocks(
 def _anthropic_messages_to_raw_messages(
     messages: list[dict[str, Any]], system: str | list[dict[str, Any]] | None
 ) -> list[dict[str, Any]]:
-    """LiteLLM's Anthropic adapter handles text/image/tool_use/tool_result block
-    translation; system is prepended separately, and any residual list-of-parts
-    content on system/tool messages is collapsed because our SystemMessage/
-    ToolMessage content is str-only."""
-    from litellm.llms.anthropic.experimental_pass_through.adapters.transformation import (
-        LiteLLMAnthropicMessagesAdapter,
-    )
-
-    for message in messages:
-        content = message.get("content")
-        if not isinstance(content, list):
-            continue
-        for block in content:
-            if not isinstance(block, dict) or block.get("type") != "tool_result":
-                continue
-            tool_result_content = block.get("content")
-            if not isinstance(tool_result_content, list):
-                continue
-            if any(
-                not isinstance(part, dict) or part.get("type") != "text"
-                for part in tool_result_content
-            ):
-                raise OnyxError(
-                    OnyxErrorCode.INVALID_INPUT,
-                    "Multimodal tool_result content is not supported by the "
-                    "Onyx gateway.",
-                )
-
-    adapter = LiteLLMAnthropicMessagesAdapter()
-    translated = adapter.translate_anthropic_messages_to_openai(
-        messages=cast("list[_AnthropicAdapterMessage]", messages)
-    )
+    """Convert Anthropic blocks while retaining signed reasoning and tool order."""
     raw: list[dict[str, Any]] = []
     system_message = _anthropic_system_to_raw_message(system)
     if system_message is not None:
         raw.append(system_message)
-    for message in translated:
-        message_dict: dict[str, Any] = dict(message)
-        role = message_dict.get("role")
+    for message in messages:
+        role = message["role"]
+        content = message.get("content", "")
+        if isinstance(content, str):
+            raw.append({"role": role, "content": content})
+            continue
+        parts: list[dict[str, Any]] = []
+        calls: list[dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
+        for block in content:
+            kind = block.get("type")
+            if kind == "text":
+                parts.append({"type": "text", "text": block["text"]})
+            elif kind == "image":
+                source = block["source"]
+                url = (
+                    source["url"]
+                    if source["type"] == "url"
+                    else f"data:{source['media_type']};base64,{source['data']}"
+                )
+                parts.append({"type": "image_url", "image_url": {"url": url}})
+            elif kind == "tool_use":
+                calls.append(
+                    {
+                        "id": block["id"],
+                        "type": "function",
+                        "function": {
+                            "name": block["name"],
+                            "arguments": json.dumps(block["input"]),
+                        },
+                    }
+                )
+            elif kind == "tool_result":
+                result = block.get("content", "")
+                if isinstance(result, list):
+                    if any(
+                        not isinstance(part, dict) or part.get("type") != "text"
+                        for part in result
+                    ):
+                        raise OnyxError(
+                            OnyxErrorCode.INVALID_INPUT,
+                            "Multimodal tool_result content is not supported by the Onyx gateway.",
+                        )
+                    result = _flatten_text_content(result)
+                results.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": block["tool_use_id"],
+                        "content": result,
+                    }
+                )
+            elif kind not in ("thinking", "redacted_thinking"):
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    f"Unsupported Anthropic content: {kind}",
+                )
+        raw.extend(results)
         if role == "assistant":
-            message_dict["thinking_blocks"] = _replayable_thinking_blocks(
-                message_dict.get("thinking_blocks")
-            )
-        if role in ("system", "tool") and isinstance(message_dict.get("content"), list):
-            message_dict["content"] = _flatten_text_content(message_dict["content"])
-        elif role == "assistant" and isinstance(message_dict.get("content"), list):
-            message_dict["content"] = (
-                _flatten_text_content(message_dict["content"]) or None
-            )
-        raw.append(message_dict)
+            converted: dict[str, Any] = {
+                "role": role,
+                "content": _flatten_text_content(parts) or None,
+                "thinking_blocks": _replayable_thinking_blocks(content),
+            }
+            if calls:
+                converted["tool_calls"] = calls
+            raw.append(converted)
+        elif parts:
+            raw.append({"role": role, "content": parts})
     return raw
 
 
@@ -1000,14 +1045,10 @@ def _anthropic_reasoning_effort(
         # Adaptive without an explicit effort: leave it to the downstream
         # adaptive default rather than pinning an effort tier.
         return ReasoningEffort.AUTO
-    from litellm.llms.anthropic.experimental_pass_through.adapters.transformation import (
-        LiteLLMAnthropicMessagesAdapter,
+    budget = thinking.get("budget_tokens", 0)
+    return _parse_reasoning_effort(
+        "low" if budget < 4000 else "medium" if budget < 8000 else "high"
     )
-
-    effort = LiteLLMAnthropicMessagesAdapter.translate_anthropic_thinking_to_reasoning_effort(
-        thinking
-    )
-    return _parse_reasoning_effort(effort)
 
 
 _ANTHROPIC_STOP_REASONS = {
@@ -1519,13 +1560,13 @@ def gateway_anthropic_count_tokens(
             )
     raw_messages = _anthropic_messages_to_raw_messages(request.messages, request.system)
     tools = _anthropic_tools(request.tools)
-    from onyx.llm.litellm_singleton import litellm
+    from onyx.server.gateway.token_counting import count_gateway_tokens
 
     try:
-        input_tokens = litellm.token_counter(
+        input_tokens = count_gateway_tokens(
             model=model_config.name,
             messages=raw_messages,
-            tools=cast("list[ChatCompletionToolParam] | None", tools),
+            tools=tools,
         )
     except Exception:
         logger.exception("LLM gateway token count failed for model %s", request.model)

@@ -16,6 +16,7 @@ from ee.onyx.server.gateway import stream_bridge
 from ee.onyx.server.gateway.api import _MESSAGES_ADAPTER
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.exceptions import LLMRateLimitError, LLMTimeoutError
 from onyx.llm.interfaces import LLM
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
@@ -41,7 +42,6 @@ from onyx.llm.models import (
     ToolMessage,
     UserMessage,
 )
-from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
 from onyx.server.gateway.models import (
     AnthropicCountTokensRequest,
     AnthropicMessageResponse,
@@ -848,7 +848,7 @@ def test_gateway_anthropic_count_tokens_includes_tools() -> None:
             return_value=(provider, model_config),
         ),
         patch(
-            "onyx.llm.litellm_singleton.litellm.token_counter", return_value=123
+            "onyx.server.gateway.token_counting.count_gateway_tokens", return_value=123
         ) as token_counter,
     ):
         response = gateway_api.gateway_anthropic_count_tokens(

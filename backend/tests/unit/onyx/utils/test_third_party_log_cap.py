@@ -5,10 +5,8 @@ import pytest
 
 import onyx.utils.logger as logger_module
 from onyx.utils.logger import (
-    LITELLM_NATIVE_LOGGER_NAMES,
     THIRD_PARTY_CAPPED_LOGGER_NAMES,
     cap_third_party_log_levels,
-    remove_litellm_native_log_handlers,
 )
 
 
@@ -112,24 +110,3 @@ def test_recap_at_more_permissive_level_relaxes_own_earlier_cap() -> None:
         app_log_level=logging.DEBUG, allow_third_party_debug=False
     )
     assert logging.getLogger("httpx").getEffectiveLevel() == logging.WARNING
-
-
-@pytest.mark.parametrize("logger_name", LITELLM_NATIVE_LOGGER_NAMES)
-def test_remove_litellm_native_log_handlers_leaves_single_emission_path(
-    logger_name: str,
-) -> None:
-    litellm_logger = logging.getLogger(logger_name)
-    saved_handlers = litellm_logger.handlers[:]
-    saved_propagate = litellm_logger.propagate
-    try:
-        # Simulate litellm's import-time handler attachment.
-        litellm_logger.addHandler(logging.StreamHandler())
-        litellm_logger.propagate = True
-
-        remove_litellm_native_log_handlers()
-
-        assert litellm_logger.handlers == []
-        assert litellm_logger.propagate is True
-    finally:
-        litellm_logger.handlers = saved_handlers
-        litellm_logger.propagate = saved_propagate

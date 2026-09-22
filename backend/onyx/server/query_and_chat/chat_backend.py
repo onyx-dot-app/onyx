@@ -61,7 +61,7 @@ from onyx.configs.constants import (
     MessageType,
     MilestoneRecordType,
 )
-from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
+from onyx.configs.model_configs import LLM_PASS_THROUGH_HEADERS
 from onyx.db.chat import (
     add_chats_to_session_from_slack_thread,
     delete_all_chat_sessions_for_user,
@@ -512,7 +512,7 @@ def _generate_or_fallback_chat_session_name(
             user=user,
             llm_override=llm_override,
             additional_headers=extract_headers(
-                request.headers, LITELLM_PASS_THROUGH_HEADERS
+                request.headers, LLM_PASS_THROUGH_HEADERS
             ),
         )
         with get_session_with_current_tenant() as db_session:
@@ -853,8 +853,8 @@ def handle_send_chat_message(
                     new_msg_req=chat_message_req,
                     user=user,
                     llm_overrides=llm_overrides,
-                    litellm_additional_headers=extract_headers(
-                        request.headers, LITELLM_PASS_THROUGH_HEADERS
+                    llm_additional_headers=extract_headers(
+                        request.headers, LLM_PASS_THROUGH_HEADERS
                     ),
                     custom_tool_additional_headers=get_custom_tool_additional_request_headers(
                         request.headers
@@ -897,8 +897,8 @@ def handle_send_chat_message(
         packets = handle_stream_message_objects(
             new_msg_req=chat_message_req,
             user=user,
-            litellm_additional_headers=extract_headers(
-                request.headers, LITELLM_PASS_THROUGH_HEADERS
+            llm_additional_headers=extract_headers(
+                request.headers, LLM_PASS_THROUGH_HEADERS
             ),
             custom_tool_additional_headers=get_custom_tool_additional_request_headers(
                 request.headers
@@ -926,8 +926,8 @@ def handle_send_chat_message(
             for obj in handle_stream_message_objects(
                 new_msg_req=chat_message_req,
                 user=user,
-                litellm_additional_headers=extract_headers(
-                    request.headers, LITELLM_PASS_THROUGH_HEADERS
+                llm_additional_headers=extract_headers(
+                    request.headers, LLM_PASS_THROUGH_HEADERS
                 ),
                 custom_tool_additional_headers=get_custom_tool_additional_request_headers(
                     request.headers

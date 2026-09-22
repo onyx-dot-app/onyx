@@ -1,3 +1,4 @@
+import { getTextContent } from "@/app/app/services/packetUtils";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import ReactMarkdown, { Components } from "react-markdown";
@@ -130,17 +131,7 @@ export const MessageTextRenderer: MessageRenderer<
     isAwaitingAutoPlaybackStart,
   } = useVoiceMode();
 
-  const fullContent = packets
-    .map((packet) => {
-      if (
-        packet.obj.type === PacketType.MESSAGE_DELTA ||
-        packet.obj.type === PacketType.MESSAGE_START
-      ) {
-        return packet.obj.content;
-      }
-      return "";
-    })
-    .join("");
+  const fullContent = getTextContent(packets);
 
   const shouldUseAutoPlaybackSync =
     autoPlayback &&

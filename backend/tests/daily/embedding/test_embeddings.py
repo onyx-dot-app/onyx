@@ -1,3 +1,5 @@
+import os
+
 import pytest
 from tenacity import (
     retry,
@@ -126,6 +128,7 @@ def azure_embedding_model(test_secrets: dict[TestSecret, str]) -> EmbeddingModel
         api_key=test_secrets[TestSecret.AZURE_API_KEY],
         provider_type=EmbeddingProvider.AZURE,
         api_url=test_secrets[TestSecret.AZURE_API_URL],
+        deployment_name=os.environ.get("AZURE_EMBEDDING_DEPLOYMENT") or None,
     )
 
 

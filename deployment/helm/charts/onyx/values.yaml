@@ -1588,6 +1588,17 @@ configMap:
   # clouds (e.g. *.blob.core.usgovcloudapi.net).
   AZURE_STORAGE_ACCOUNT_URL: ""
   # Gen AI Settings
+  # JSON object of headers added to provider requests.
+  LLM_EXTRA_HEADERS: ""
+  # JSON list of incoming headers forwarded to provider requests.
+  LLM_PASS_THROUGH_HEADERS: ""
+  # JSON object merged into provider request bodies.
+  LLM_EXTRA_BODY: ""
+  # JSON object mapping provider error text to user-facing messages.
+  LLM_CUSTOM_ERROR_MESSAGE_MAPPINGS: ""
+  # Legacy aliases; prefer the LLM_* names above.
+  LITELLM_EXTRA_HEADERS: ""
+  LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS: ""
   GEN_AI_MAX_TOKENS: ""
   LLM_SOCKET_READ_TIMEOUT: "60"
   IMAGE_SUMMARIZATION_TIMEOUT: "300"
@@ -1597,9 +1608,9 @@ configMap:
   # Records priced generation spans into the per-user usage ledger (default on).
   # Set to "false" to disable the recording processor entirely.
   USER_USAGE_TRACKING_ENABLED: ""
-  # Flat per-image cost in cents when litellm has no price for an image model (default 4).
+  # Flat per-image cost in cents when the model catalog has no price for an image model (default 4).
   DEFAULT_IMAGE_COST_CENTS: ""
-  # Fallback USD per million tokens when litellm can't price a model (default 0 = free).
+  # Fallback USD per million tokens when the model catalog cannot price a model (default 0 = free).
   DEFAULT_LLM_INPUT_COST_PER_MTOK: ""
   DEFAULT_LLM_OUTPUT_COST_PER_MTOK: ""
   # Query Options

@@ -31,7 +31,7 @@ from ee.onyx.server.gateway.openai_passthrough import (
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.interfaces import LLMConfig
-from onyx.llm.multi_llm import LitellmLLM
+from onyx.llm.pydantic_ai_llm import PydanticAILLM
 from onyx.server.gateway.models import ResponsesRequest
 from onyx.tracing.flows import LLMFlow
 from tests.unit.ee.onyx.server.gateway.test_llm_gateway_api import (
@@ -52,11 +52,11 @@ def _openai_llm() -> _ConfigOnlyLLM:
     )
 
 
-def _real_openai_litellm_llm() -> LitellmLLM:
-    """A real LitellmLLM instance so isinstance(llm, LitellmLLM) holds; only
+def _real_openai_litellm_llm() -> PydanticAILLM:
+    """A real PydanticAILLM instance so isinstance(llm, PydanticAILLM) holds; only
     used with _track_llm_cost patched onto the instance so no DB/network
     call actually happens."""
-    return LitellmLLM(
+    return PydanticAILLM(
         api_key="test-key",
         model_provider="openai",
         model_name="gpt-5-mini",

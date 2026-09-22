@@ -29,14 +29,14 @@ MOCK_LLM_RESPONSE = f"The {MOCK_LLM_TOKEN} jumps over the lazy dog. " * 20
 def _mock_llm_responses() -> Generator[None, None, None]:
     # The CLI suite exercises the binary, not the model. Pin every chat
     # completion to a fixed response so no test calls a real provider.
-    import onyx.llm.multi_llm as multi_llm
+    import onyx.llm.pydantic_ai_llm as provider_llm
 
-    original = multi_llm.MOCK_LLM_RESPONSE
-    multi_llm.MOCK_LLM_RESPONSE = MOCK_LLM_RESPONSE
+    original = provider_llm.MOCK_LLM_RESPONSE
+    provider_llm.MOCK_LLM_RESPONSE = MOCK_LLM_RESPONSE
     try:
         yield
     finally:
-        multi_llm.MOCK_LLM_RESPONSE = original
+        provider_llm.MOCK_LLM_RESPONSE = original
 
 
 @pytest.fixture(scope="session", autouse=True)

@@ -9,7 +9,7 @@ from functools import wraps
 from types import TracebackType
 from typing import Any, cast
 
-import aioboto3
+import boto3
 import httpx
 import requests
 import voyageai
@@ -412,20 +412,53 @@ class CloudEmbedding:
         return response.embeddings
 
     async def _embed_azure(
-        self, texts: list[str], model: str | None
+        self,
+        texts: list[str],
+        deployment_name: str | None,
+        *,
+        model_name: str | None = None,
     ) -> list[Embedding]:
-        from litellm import aembedding
+        from urllib.parse import parse_qsl, unquote, urlsplit, urlunsplit
 
-        response = await aembedding(
-            model=model,
-            input=texts,
-            timeout=API_BASED_EMBEDDING_TIMEOUT,
-            api_key=self.api_key,
-            api_base=self.api_url,
-            api_version=self.api_version,
+        from openai import AsyncAzureOpenAI
+        from pydantic_ai import Embedder
+        from pydantic_ai.embeddings.openai import OpenAIEmbeddingModel
+        from pydantic_ai.providers.openai import OpenAIProvider
+
+        if not self.api_url:
+            raise ValueError("Azure embeddings require an API base URL")
+        url = urlsplit(self.api_url)
+        path = url.path.rstrip("/")
+        endpoint_path, separator, deployment_path = path.rpartition(
+            "/openai/deployments/"
         )
-        embeddings = [embedding["embedding"] for embedding in response.data]
-        return embeddings
+        url_deployment = (
+            unquote(deployment_path.split("/", 1)[0]) if separator else None
+        )
+        if not separator:
+            endpoint_path = path.removesuffix("/openai")
+        deployment = deployment_name or url_deployment or model_name
+        if not deployment:
+            raise ValueError("Azure embedding deployment is required")
+        query = dict(parse_qsl(url.query, keep_blank_values=True))
+        url_api_version = query.pop("api-version", None)
+        api_version = self.api_version or url_api_version or "2024-10-21"
+        endpoint = urlunsplit((url.scheme, url.netloc, endpoint_path, "", ""))
+        async with AsyncAzureOpenAI(
+            api_key=self.api_key,
+            azure_endpoint=endpoint,
+            api_version=api_version,
+            default_query=query,
+            timeout=self.timeout,
+        ) as client:
+            embedder = Embedder(
+                OpenAIEmbeddingModel(
+                    deployment,
+                    provider=OpenAIProvider(openai_client=client),
+                )
+            )
+            result = await embedder.embed_documents(texts)
+            return [list(embedding) for embedding in result.embeddings]
 
     async def _embed_vertex(
         self,
@@ -596,7 +629,9 @@ class CloudEmbedding:
             if self.provider == EmbeddingProvider.OPENAI:
                 return await self._embed_openai(texts, model_name, reduced_dimension)
             elif self.provider == EmbeddingProvider.AZURE:
-                return await self._embed_azure(texts, f"azure/{deployment_name}")
+                return await self._embed_azure(
+                    texts, deployment_name, model_name=model_name
+                )
             elif self.provider == EmbeddingProvider.LITELLM:
                 return await self._embed_litellm_proxy(texts, model_name)
 
@@ -716,35 +751,26 @@ async def cohere_rerank_aws(
     aws_access_key_id: str,
     aws_secret_access_key: str,
 ) -> list[float]:
-    session = aioboto3.Session(
-        aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key
-    )
-    async with session.client(
-        "bedrock-runtime", region_name=region_name
-    ) as bedrock_client:
-        body = json.dumps(
-            {
-                "query": query,
-                "documents": docs,
-                "api_version": 2,
-            }
+    def invoke() -> list[float]:
+        session = boto3.Session(
+            aws_access_key_id=aws_access_key_id,
+            aws_secret_access_key=aws_secret_access_key,
         )
-        # Invoke the Bedrock model asynchronously
-        response = await bedrock_client.invoke_model(
-            modelId=model_name,
-            accept="application/json",
-            contentType="application/json",
-            body=body,
-        )
+        with session.client("bedrock-runtime", region_name=region_name) as client:
+            response = client.invoke_model(
+                modelId=model_name,
+                accept="application/json",
+                contentType="application/json",
+                body=json.dumps({"query": query, "documents": docs, "api_version": 2}),
+            )
+            with response["body"] as body:
+                response_body = json.loads(body.read())
+            results = sorted(
+                response_body.get("results", []), key=lambda item: item["index"]
+            )
+            return [result["relevance_score"] for result in results]
 
-        # Read the response asynchronously
-        response_body = json.loads(await response["body"].read())
-
-        # Extract and sort the results
-        results = response_body.get("results", [])
-        sorted_results = sorted(results, key=lambda item: item["index"])
-
-        return [result["relevance_score"] for result in sorted_results]
+    return await asyncio.to_thread(invoke)
 
 
 async def litellm_rerank(

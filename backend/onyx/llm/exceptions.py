@@ -10,3 +10,11 @@ class ClassifiedLLMError(RuntimeError):
         self.client_error_msg = client_error_msg
         self.error_code = error_code
         self.is_retryable = is_retryable
+
+
+class LLMTimeoutError(TimeoutError):
+    """The provider did not complete within the request deadline."""
+
+
+class LLMRateLimitError(Exception):
+    """The provider rejected the request due to its rate limit."""

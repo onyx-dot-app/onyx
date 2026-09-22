@@ -220,14 +220,14 @@ raise OnyxError(
 
 ## AI/LLM Integration
 
-LLM calls go through LiteLLM; models are configurable per feature (chat, search, embeddings).
+LLM calls go through Pydantic AI; models are configurable per feature (chat, search, embeddings).
 
 ### Tracing — every LLM invocation must be tagged
 
 Every LLM, embedding, rerank, image-generation, voice (STT/TTS), and intent-classification call must open a generation span tagged with a value from the `LLMFlow` registry in `backend/onyx/tracing/flows.py`. Use one of:
 
 - `llm_generation_span(llm=..., flow=LLMFlow.X, input_messages=...)` for calls going through an `LLM` subclass.
-- `traced_llm_call(flow=LLMFlow.X, model=..., provider=..., input_messages=...)` for direct provider SDK / `litellm` / model_server HTTP calls that bypass the `LLM` abstraction.
+- `traced_llm_call(flow=LLMFlow.X, model=..., provider=..., input_messages=...)` for direct provider SDK / Pydantic AI / model_server HTTP calls that bypass the `LLM` abstraction.
 
 Rules:
 

@@ -9,7 +9,7 @@ from fastapi.exceptions import RequestValidationError
 from starlette.requests import Request
 
 from onyx.chat import process_message
-from onyx.chat.llm_loop import EmptyLLMResponseError
+from onyx.chat.chat_agent import EmptyLLMResponseError
 from onyx.chat.models import StreamingError
 from onyx.connectors import connector_runner
 from onyx.connectors.interfaces import LoadConnector

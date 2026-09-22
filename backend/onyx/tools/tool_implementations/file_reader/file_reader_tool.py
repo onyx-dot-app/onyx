@@ -16,7 +16,6 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     FileReaderResult,
     FileReaderStart,
-    Packet,
 )
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolCallException, ToolResponse
@@ -112,12 +111,7 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
         }
 
     def emit_start(self, placement: Placement) -> None:
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=FileReaderStart(),
-            )
-        )
+        self.emitter.report(placement=placement, obj=FileReaderStart())
 
     def _validate_file_id(self, raw_file_id: str) -> UUID:
         try:
@@ -213,19 +207,17 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
         preview_end = section[-PREVIEW_CHARS:] if len(section) > PREVIEW_CHARS else ""
 
         # Emit result packet so the frontend can display what was read
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=FileReaderResult(
-                    file_name=file_name,
-                    file_id=str(file_id),
-                    start_char=start_char,
-                    end_char=end_char,
-                    total_chars=total_chars,
-                    preview_start=preview_start,
-                    preview_end=preview_end,
-                ),
-            )
+        self.emitter.report(
+            placement=placement,
+            obj=FileReaderResult(
+                file_name=file_name,
+                file_id=str(file_id),
+                start_char=start_char,
+                end_char=end_char,
+                total_chars=total_chars,
+                preview_start=preview_start,
+                preview_end=preview_end,
+            ),
         )
 
         has_more = end_char < total_chars

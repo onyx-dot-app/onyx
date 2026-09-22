@@ -1,5 +1,5 @@
 """
-Tests for the USER_REMINDER message type handling in translate_history_to_llm_format.
+Tests for the USER_REMINDER message type handling in translate_history_to_native_messages.
 
 These tests verify that:
 1. USER_REMINDER messages are wrapped with <system-reminder> tags
@@ -9,23 +9,28 @@ These tests verify that:
 """
 
 import pytest
+from pydantic_ai import messages as pm
 
-from onyx.chat.llm_step import translate_history_to_llm_format
+from onyx.chat.history_translation import translate_history_to_native_messages
 from onyx.chat.models import ChatMessageSimple
 from onyx.configs.constants import MessageType
 from onyx.llm.interfaces import LLMConfig
-from onyx.llm.models import ChatCompletionMessage, SystemMessage, UserMessage
 from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN
 from onyx.prompts.constants import SYSTEM_REMINDER_TAG_CLOSE, SYSTEM_REMINDER_TAG_OPEN
 
 
-def _ensure_list(
-    result: list[ChatCompletionMessage] | ChatCompletionMessage,
-) -> list[ChatCompletionMessage]:
-    """Convert LanguageModelInput to a list for easier testing."""
-    if isinstance(result, list):
-        return result
-    return [result]
+def _user_part(message: pm.ModelMessage) -> pm.UserPromptPart:
+    assert isinstance(message, pm.ModelRequest)
+    part = message.parts[0]
+    assert isinstance(part, pm.UserPromptPart)
+    return part
+
+
+def _system_part(message: pm.ModelMessage) -> pm.SystemPromptPart:
+    assert isinstance(message, pm.ModelRequest)
+    part = message.parts[0]
+    assert isinstance(part, pm.SystemPromptPart)
+    return part
 
 
 @pytest.fixture
@@ -43,7 +48,7 @@ def mock_llm_config() -> LLMConfig:
 
 
 class TestUserReminderMessageType:
-    """Tests for USER_REMINDER message handling in translate_history_to_llm_format."""
+    """Tests for USER_REMINDER message handling in translate_history_to_native_messages."""
 
     def test_user_reminder_wrapped_with_tags(self, mock_llm_config: LLMConfig) -> None:
         """Test that USER_REMINDER messages are wrapped with system-reminder tags."""
@@ -56,13 +61,12 @@ class TestUserReminderMessageType:
             )
         ]
 
-        raw_result = translate_history_to_llm_format(history, mock_llm_config)
-        result = _ensure_list(raw_result)
+        result = translate_history_to_native_messages(history, mock_llm_config)
 
         assert len(result) == 1
-        msg = result[0]
-        assert isinstance(msg, UserMessage)
-        assert msg.role == "user"
+        msg = _user_part(result[0])
+        assert isinstance(msg, pm.UserPromptPart)
+        assert msg.part_kind == "user-prompt"
         # Verify the content starts and ends with the proper tags
         assert isinstance(msg.content, str)
         assert msg.content.startswith(SYSTEM_REMINDER_TAG_OPEN)
@@ -81,12 +85,11 @@ class TestUserReminderMessageType:
             )
         ]
 
-        raw_result = translate_history_to_llm_format(history, mock_llm_config)
-        result = _ensure_list(raw_result)
+        result = translate_history_to_native_messages(history, mock_llm_config)
 
         assert len(result) == 1
-        msg = result[0]
-        assert isinstance(msg, UserMessage)
+        msg = _user_part(result[0])
+        assert isinstance(msg, pm.UserPromptPart)
         expected_content = (
             f"{SYSTEM_REMINDER_TAG_OPEN}\n{reminder_text}\n{SYSTEM_REMINDER_TAG_CLOSE}"
         )
@@ -104,13 +107,11 @@ class TestUserReminderMessageType:
             )
         ]
 
-        raw_result = translate_history_to_llm_format(history, mock_llm_config)
-        result = _ensure_list(raw_result)
+        result = translate_history_to_native_messages(history, mock_llm_config)
 
         assert len(result) == 1
         # Should be a UserMessage since LLM APIs don't have a native reminder type
-        assert isinstance(result[0], UserMessage)
-        assert result[0].role == "user"
+        assert _user_part(result[0]).part_kind == "user-prompt"
 
     def test_user_reminder_in_mixed_history(self, mock_llm_config: LLMConfig) -> None:
         """Test USER_REMINDER handling when mixed with other message types."""
@@ -137,21 +138,20 @@ class TestUserReminderMessageType:
             ),
         ]
 
-        raw_result = translate_history_to_llm_format(history, mock_llm_config)
-        result = _ensure_list(raw_result)
+        result = translate_history_to_native_messages(history, mock_llm_config)
 
         assert len(result) == 4
         # Check the reminder message (last one)
-        reminder_msg = result[3]
-        assert isinstance(reminder_msg, UserMessage)
+        reminder_msg = _user_part(result[3])
+        assert isinstance(reminder_msg, pm.UserPromptPart)
         assert isinstance(reminder_msg.content, str)
         assert reminder_msg.content.startswith(SYSTEM_REMINDER_TAG_OPEN)
         assert reminder_msg.content.endswith(SYSTEM_REMINDER_TAG_CLOSE)
         assert "Remember to be concise." in reminder_msg.content
 
         # Check that regular USER message is NOT wrapped
-        user_msg = result[1]
-        assert isinstance(user_msg, UserMessage)
+        user_msg = _user_part(result[1])
+        assert isinstance(user_msg, pm.UserPromptPart)
         assert user_msg.content == "Hello!"  # No tags
 
     def test_regular_user_message_not_wrapped(self, mock_llm_config: LLMConfig) -> None:
@@ -164,12 +164,11 @@ class TestUserReminderMessageType:
             )
         ]
 
-        raw_result = translate_history_to_llm_format(history, mock_llm_config)
-        result = _ensure_list(raw_result)
+        result = translate_history_to_native_messages(history, mock_llm_config)
 
         assert len(result) == 1
-        msg = result[0]
-        assert isinstance(msg, UserMessage)
+        msg = _user_part(result[0])
+        assert isinstance(msg, pm.UserPromptPart)
         # Regular user message should NOT have the tags
         assert isinstance(msg.content, str)
         assert SYSTEM_REMINDER_TAG_OPEN not in msg.content
@@ -191,7 +190,7 @@ def _create_llm_config(model_name: str) -> LLMConfig:
 
 
 class TestCodeBlockMarkdownFormatting:
-    """Tests for CODE_BLOCK_MARKDOWN prefix handling in translate_history_to_llm_format.
+    """Tests for CODE_BLOCK_MARKDOWN prefix handling in translate_history_to_native_messages.
 
     OpenAI reasoning models (o1, o3, gpt-5) need a "Formatting re-enabled. " prefix
     in their system messages for correct markdown generation.
@@ -208,12 +207,11 @@ class TestCodeBlockMarkdownFormatting:
             )
         ]
 
-        raw_result = translate_history_to_llm_format(history, llm_config)
-        result = _ensure_list(raw_result)
+        result = translate_history_to_native_messages(history, llm_config)
 
         assert len(result) == 1
-        msg = result[0]
-        assert isinstance(msg, SystemMessage)
+        msg = _system_part(result[0])
+        assert isinstance(msg, pm.SystemPromptPart)
         assert isinstance(msg.content, str)
         assert msg.content == CODE_BLOCK_MARKDOWN + "You are a helpful assistant."
 
@@ -228,12 +226,11 @@ class TestCodeBlockMarkdownFormatting:
             )
         ]
 
-        raw_result = translate_history_to_llm_format(history, llm_config)
-        result = _ensure_list(raw_result)
+        result = translate_history_to_native_messages(history, llm_config)
 
         assert len(result) == 1
-        msg = result[0]
-        assert isinstance(msg, SystemMessage)
+        msg = _system_part(result[0])
+        assert isinstance(msg, pm.SystemPromptPart)
         assert isinstance(msg.content, str)
         assert msg.content.startswith(CODE_BLOCK_MARKDOWN)
 
@@ -248,12 +245,11 @@ class TestCodeBlockMarkdownFormatting:
             )
         ]
 
-        raw_result = translate_history_to_llm_format(history, llm_config)
-        result = _ensure_list(raw_result)
+        result = translate_history_to_native_messages(history, llm_config)
 
         assert len(result) == 1
-        msg = result[0]
-        assert isinstance(msg, SystemMessage)
+        msg = _system_part(result[0])
+        assert isinstance(msg, pm.SystemPromptPart)
         assert isinstance(msg.content, str)
         assert msg.content.startswith(CODE_BLOCK_MARKDOWN)
 
@@ -268,12 +264,11 @@ class TestCodeBlockMarkdownFormatting:
             )
         ]
 
-        raw_result = translate_history_to_llm_format(history, llm_config)
-        result = _ensure_list(raw_result)
+        result = translate_history_to_native_messages(history, llm_config)
 
         assert len(result) == 1
-        msg = result[0]
-        assert isinstance(msg, SystemMessage)
+        msg = _system_part(result[0])
+        assert isinstance(msg, pm.SystemPromptPart)
         assert isinstance(msg.content, str)
         # Should NOT have the prefix
         assert msg.content == "You are a helpful assistant."
@@ -290,12 +285,11 @@ class TestCodeBlockMarkdownFormatting:
             )
         ]
 
-        raw_result = translate_history_to_llm_format(history, llm_config)
-        result = _ensure_list(raw_result)
+        result = translate_history_to_native_messages(history, llm_config)
 
         assert len(result) == 1
-        msg = result[0]
-        assert isinstance(msg, UserMessage)
+        msg = _user_part(result[0])
+        assert isinstance(msg, pm.UserPromptPart)
         assert msg.content == "Hello!"
 
     def test_only_first_system_message_modified(self) -> None:
@@ -319,17 +313,16 @@ class TestCodeBlockMarkdownFormatting:
             ),
         ]
 
-        raw_result = translate_history_to_llm_format(history, llm_config)
-        result = _ensure_list(raw_result)
+        result = translate_history_to_native_messages(history, llm_config)
 
         assert len(result) == 3
         # First system message should have prefix
-        first_sys = result[0]
-        assert isinstance(first_sys, SystemMessage)
+        first_sys = _system_part(result[0])
+        assert isinstance(first_sys, pm.SystemPromptPart)
         assert isinstance(first_sys.content, str)
         assert first_sys.content.startswith(CODE_BLOCK_MARKDOWN)
         # Second system message should NOT have prefix (only first one is modified)
-        second_sys = result[2]
-        assert isinstance(second_sys, SystemMessage)
+        second_sys = _system_part(result[2])
+        assert isinstance(second_sys, pm.SystemPromptPart)
         assert isinstance(second_sys.content, str)
         assert not second_sys.content.startswith(CODE_BLOCK_MARKDOWN)

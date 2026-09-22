@@ -36,7 +36,7 @@ This file provides guidance to AI agents when working with code in this reposito
 - **Database**: PostgreSQL with Redis caching
 - **Search**: OpenSearch-backed keyword and vector document index
 - **Auth**: OAuth2, SAML, multi-provider support
-- **AI/ML**: LangChain, LiteLLM, multiple embedding models
+- **AI/ML**: Pydantic AI, multiple embedding models
 
 ### Repository Layout & Sub-project Guides
 

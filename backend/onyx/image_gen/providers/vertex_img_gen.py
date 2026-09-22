@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import json
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel
 
@@ -89,51 +89,15 @@ class VertexImageGenerationProvider(ImageGenerationProvider):
         reference_images: list[ReferenceImage] | None = None,
         **kwargs: Any,
     ) -> ImageGenerationResponse:
-        if reference_images:
-            return self._generate_image_with_reference_images(
-                prompt=prompt,
-                model=model,
-                size=size,
-                n=n,
-                reference_images=reference_images,
-            )
-
-        from litellm import image_generation
-
-        # In Workload Identity mode, omit vertex_credentials so LiteLLM falls back
-        # to google.auth.default() (the GKE metadata server / ambient credentials).
-        if not self._use_workload_identity and self._vertex_credentials is not None:
-            kwargs["vertex_credentials"] = self._vertex_credentials
-
-        with traced_llm_call(
-            flow=LLMFlow.IMAGE_GENERATION,
-            model=model,
-            provider="vertex_ai",
-            image_count=n,
-            input_messages=[{"role": "user", "content": prompt}],
-        ):
-            return image_generation(
-                prompt=prompt,
-                model=model,
-                size=size,
-                n=n,
-                quality=quality,
-                vertex_location=self._vertex_location,
-                vertex_project=self._vertex_project,
-                **kwargs,
-            )
-
-    def _generate_image_with_reference_images(
-        self,
-        prompt: str,
-        model: str,
-        size: str,
-        n: int,
-        reference_images: list[ReferenceImage],
-    ) -> ImageGenerationResponse:
+        del quality, kwargs  # Google has no equivalent image quality parameter.
         from google import genai
         from google.genai import types as genai_types
-        from litellm.types.utils import ImageObject, ImageResponse
+        from pydantic_ai import BinaryImage, ImageGenerator
+        from pydantic_ai.images.google import GoogleImageGenerationModel
+        from pydantic_ai.providers.google import GoogleProvider
+
+        from onyx.image_gen.interfaces import ImageGenerationResponse, ImageObject
+        from onyx.image_gen.providers.pydantic_images import image_response
 
         credentials: Any
         if self._use_workload_identity:
@@ -159,78 +123,78 @@ class VertexImageGenerationProvider(ImageGenerationProvider):
             credentials=credentials,
         )
 
-        parts: list[genai_types.Part] = [
-            genai_types.Part.from_bytes(data=image.data, mime_type=image.mime_type)
-            for image in reference_images
-        ]
-        parts.append(genai_types.Part.from_text(text=prompt))
-
-        config = genai_types.GenerateContentConfig(
-            response_modalities=["TEXT", "IMAGE"],
-            candidate_count=max(1, n),
-            image_config=genai_types.ImageConfig(
-                aspect_ratio=_map_size_to_aspect_ratio(size)
-            ),
-        )
-        model_name = model.replace("vertex_ai/", "")
-        with traced_llm_call(
-            flow=LLMFlow.IMAGE_EDIT,
-            model=model_name,
-            provider="vertex_ai",
-            image_count=n,
-            input_messages=[{"role": "user", "content": prompt}],
-        ):
-            response = client.models.generate_content(
+        model_name = model.removeprefix("vertex_ai/")
+        try:
+            with traced_llm_call(
+                flow=LLMFlow.IMAGE_EDIT
+                if reference_images
+                else LLMFlow.IMAGE_GENERATION,
                 model=model_name,
-                contents=genai_types.Content(
-                    role="user",
-                    parts=parts,
-                ),
-                config=config,
-            )
-
-        generated_data: list[ImageObject] = []
-        for candidate in response.candidates or []:
-            candidate_content = candidate.content
-            if not candidate_content:
-                continue
-
-            for part in candidate_content.parts or []:
-                inline_data = part.inline_data
-                if not inline_data or inline_data.data is None:
-                    continue
-
-                if isinstance(inline_data.data, bytes):
-                    b64_json = base64.b64encode(inline_data.data).decode("utf-8")
-                elif isinstance(inline_data.data, str):
-                    b64_json = inline_data.data
-                else:
-                    continue
-
-                generated_data.append(
-                    ImageObject(
-                        b64_json=b64_json,
-                        revised_prompt=prompt,
+                provider="vertex_ai",
+                image_count=n,
+                input_messages=[{"role": "user", "content": prompt}],
+            ):
+                if "imagen" in model_name:
+                    if reference_images:
+                        raise ValueError("Imagen reference editing is not supported")
+                    response = client.models.generate_images(
+                        model=model_name,
+                        prompt=prompt,
+                        config=genai_types.GenerateImagesConfig(
+                            number_of_images=n,
+                            aspect_ratio=_map_size_to_aspect_ratio(size),
+                        ),
+                    )
+                    return ImageGenerationResponse(
+                        created=int(datetime.now().timestamp()),
+                        data=[
+                            ImageObject(
+                                b64_json=base64.b64encode(
+                                    item.image.image_bytes
+                                ).decode()
+                            )
+                            for item in response.generated_images or []
+                            if item.image and item.image.image_bytes
+                        ],
+                    )
+                generator = ImageGenerator(
+                    GoogleImageGenerationModel(
+                        model_name, provider=GoogleProvider(client=client)
                     )
                 )
+                generated_data: list[ImageObject] = []
+                for _ in range(n):
+                    result = generator.generate_sync(
+                        prompt,
+                        images=[
+                            BinaryImage(data=image.data, media_type=image.mime_type)
+                            for image in reference_images
+                        ]
+                        if reference_images
+                        else None,
+                        settings={"aspect_ratio": _map_size_to_aspect_ratio(size)},
+                    )
+                    generated_data.extend(image_response(result).data)
+                if not generated_data:
+                    raise RuntimeError("No image data returned from Vertex AI.")
+                return ImageGenerationResponse(
+                    created=int(datetime.now().timestamp()), data=generated_data
+                )
+        finally:
+            client.close()
 
-        if not generated_data:
-            raise RuntimeError("No image data returned from Vertex AI.")
 
-        return ImageResponse(
-            created=int(datetime.now().timestamp()),
-            data=generated_data,
-        )
-
-
-def _map_size_to_aspect_ratio(size: str) -> str:
-    return {
+def _map_size_to_aspect_ratio(
+    size: str,
+) -> Literal["1:1", "16:9", "9:16", "3:2", "2:3"]:
+    ratios: dict[str, Literal["1:1", "16:9", "9:16", "3:2", "2:3"]] = {
         "1024x1024": "1:1",
         "1792x1024": "16:9",
         "1024x1792": "9:16",
         "1536x1024": "3:2",
         "1024x1536": "2:3",
-    }.get(size, "1:1")
+    }
+    return ratios.get(size, "1:1")
 
 
 def _parse_to_vertex_credentials(

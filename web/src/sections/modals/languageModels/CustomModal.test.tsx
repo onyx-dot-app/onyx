@@ -90,7 +90,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
 
     // Select provider from the combo box dropdown
     const providerInput = screen.getByPlaceholderText(
-      "Provider ID string as shown on LiteLLM"
+      "Provider ID, for example groq"
     );
     await user.click(providerInput);
     const providerOption = await screen.findByRole("option", {
@@ -538,7 +538,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
 
     // Select provider from the combo box dropdown
     const providerInput = screen.getByPlaceholderText(
-      "Provider ID string as shown on LiteLLM"
+      "Provider ID, for example groq"
     );
     await user.click(providerInput);
     const providerOption = await screen.findByRole("option", {

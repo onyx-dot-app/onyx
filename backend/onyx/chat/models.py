@@ -16,7 +16,7 @@ from onyx.server.query_and_chat.streaming_models import (
     GeneratedImage,
     Packet,
 )
-from onyx.tools.models import SearchToolUsage, ToolCallKickoff
+from onyx.tools.models import SearchToolUsage
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
 
 
@@ -242,16 +242,3 @@ class SearchParams(BaseModel):
     project_id_filter: int | None
     persona_id_filter: int | None
     search_usage: SearchToolUsage
-
-
-class LlmStepResult(BaseModel):
-    reasoning: str | None
-    answer: str | None
-    tool_calls: list[ToolCallKickoff] | None
-    # Raw LLM text before any display-oriented filtering/sanitization.
-    # Used for fallback tool-call extraction when providers emit calls as text.
-    raw_answer: str | None = None
-    # Terminal finish_reason from the stream, LiteLLM-normalized (e.g. "stop",
-    # "length", "tool_calls", "content_filter"). Lets downstream classification
-    # distinguish a model refusal from a genuinely empty provider response.
-    finish_reason: str | None = None

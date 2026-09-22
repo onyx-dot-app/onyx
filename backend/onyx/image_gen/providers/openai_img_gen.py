@@ -74,62 +74,36 @@ class OpenAIImageGenerationProvider(ImageGenerationProvider):
         reference_images: list[ReferenceImage] | None = None,
         **kwargs: Any,
     ) -> ImageGenerationResponse:
+        from onyx.image_gen.providers.pydantic_images import generate_openai_image
+
         normalized_model = self._normalize_model_name(model)
-        # Explicitly prefix with `openai/` so LiteLLM routes correctly even
-        # for models not yet in its built-in registry (e.g. new gpt-image-* releases).
-        litellm_model = f"openai/{normalized_model}"
-
-        if reference_images:
-            if not self._model_supports_image_edits(model):
-                raise ValueError(
-                    f"Model '{model}' does not support image edits with reference images."
-                )
-
-            if (
-                normalized_model == self._DALL_E_2_MODEL_NAME
-                and len(reference_images) > 1
-            ):
-                raise ValueError(
-                    "Model 'dall-e-2' only supports a single reference image for edits."
-                )
-
-            from litellm import image_edit
-
-            with traced_llm_call(
-                flow=LLMFlow.IMAGE_EDIT,
-                model=normalized_model,
-                provider="openai",
-                image_count=n,
-                input_messages=[{"role": "user", "content": prompt}],
-            ):
-                return image_edit(
-                    image=[image.data for image in reference_images],
-                    prompt=prompt,
-                    model=litellm_model,
-                    api_key=self._api_key,
-                    api_base=self._api_base,
-                    size=size,
-                    n=n,
-                    quality=quality,
-                    **kwargs,
-                )
-
-        from litellm import image_generation
-
+        if reference_images and not self._model_supports_image_edits(model):
+            raise ValueError(
+                f"Model '{model}' does not support image edits with reference images."
+            )
+        if (
+            normalized_model == self._DALL_E_2_MODEL_NAME
+            and reference_images
+            and len(reference_images) > 1
+        ):
+            raise ValueError(
+                "Model 'dall-e-2' only supports a single reference image for edits."
+            )
         with traced_llm_call(
-            flow=LLMFlow.IMAGE_GENERATION,
+            flow=LLMFlow.IMAGE_EDIT if reference_images else LLMFlow.IMAGE_GENERATION,
             model=normalized_model,
             provider="openai",
             image_count=n,
             input_messages=[{"role": "user", "content": prompt}],
         ):
-            return image_generation(
+            return generate_openai_image(
                 prompt=prompt,
-                model=litellm_model,
-                api_key=self._api_key,
-                api_base=self._api_base,
+                model=normalized_model,
                 size=size,
                 n=n,
                 quality=quality,
+                reference_images=reference_images,
+                api_key=self._api_key,
+                api_base=self._api_base,
                 **kwargs,
             )

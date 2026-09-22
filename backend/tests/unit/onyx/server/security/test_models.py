@@ -27,7 +27,6 @@ _VALID_EFFECTIVE_KWARGS: dict[str, Any] = {
     "incognito_record_mode": IncognitoRecordMode.USAGE_ONLY,
     "ssrf_protection_level": SSRFProtectionLevel.VALIDATE_LLM,
     "mask_credential_prefix": True,
-    "llm_custom_config_env_injection": True,
     "valid_email_domains": (),
     "password_min_length": 8,
     "password_max_length": 64,

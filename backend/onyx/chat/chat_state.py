@@ -58,7 +58,7 @@ class ChatStateContainer:
         self.pre_answer_processing_time: float | None = None
         # Per-model: the outcome is persisted from whichever thread claims it.
         self.request_params: dict[str, Any] | None = None
-        # Note: LLM cost tracking is now handled in multi_llm.py
+        # Note: LLM cost tracking is now handled in pydantic_ai_llm.py
         # Search doc collection - maps dedup key to SearchDoc for all docs from tool calls
         self._all_search_docs: dict[SearchDocKey, SearchDoc] = {}
         # Track which citation numbers were actually emitted during streaming

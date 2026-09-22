@@ -1,7 +1,7 @@
 """Wire protocols ("API surfaces") that provider endpoints speak.
 
-Routing depends on the surface rather than the provider: which LiteLLM provider
-to impersonate, whether to coerce the base URL to `/v1`, and how to address the
+Routing depends on the surface rather than the provider: which native provider
+to use, whether to coerce the base URL to `/v1`, and how to address the
 model. A gateway can expose several surfaces, with the admin picking one.
 """
 
@@ -23,9 +23,8 @@ from onyx.llm.well_known_providers.constants import (
 
 class LlmApiSurface(str, Enum):
     OPENAI_CHAT_COMPLETIONS = "openai_chat_completions"
-    # Reached via LiteLLM's completions->responses bridge (a `responses/` prefix).
     OPENAI_RESPONSES = "openai_responses"
-    # LiteLLM appends /v1/messages to the base, so the base must stay bare.
+    # The Anthropic SDK appends /v1/messages to the base.
     ANTHROPIC_MESSAGES = "anthropic_messages"
 
 
@@ -62,7 +61,7 @@ _SELECTABLE_SURFACES: dict[str, tuple[str, dict[str, LlmApiSurface], str]] = {
     ),
 }
 
-# UI form state, not credentials — exempt from environment injection.
+# UI form state is separate from provider credentials.
 SURFACE_SELECTION_CONFIG_KEYS: frozenset[str] = frozenset(
     config_key for config_key, _, _ in _SELECTABLE_SURFACES.values()
 )
@@ -71,8 +70,7 @@ SURFACE_SELECTION_CONFIG_KEYS: frozenset[str] = frozenset(
 def resolve_api_surface(
     model_provider: str, custom_config: dict[str, str] | None
 ) -> LlmApiSurface | None:
-    """None when the provider is reached through LiteLLM's own integration
-    (Bedrock, Vertex, native Anthropic, ...)."""
+    """Return None for native provider protocols such as Bedrock and Vertex."""
     selectable = _SELECTABLE_SURFACES.get(model_provider)
     if selectable is not None:
         config_key, by_value, default = selectable

@@ -273,22 +273,22 @@ func TestFindEagerImportsFileReadError(t *testing.T) {
 }
 
 func TestLitellmSingletonEagerImportDetection(t *testing.T) {
-	// Test detection of eager import of litellm_singleton module.
+	// Test detection of eager import of provider_model module.
 	testContent := `
 import os
-from onyx.llm.litellm_singleton import litellm  # Should be flagged as eager import
+from onyx.llm.provider_model import provider_model  # Should be flagged as eager import
 from typing import Dict
 
 def some_function():
     # This would be OK - lazy import
-    from onyx.llm.litellm_singleton import litellm
-    return litellm.some_method()
+    from onyx.llm.provider_model import provider_model
+    return provider_model.some_method()
 `
 
 	testPath := createTempPythonFile(t, testContent)
 	defer func() { _ = os.Remove(testPath) }()
 
-	patterns := createPatterns([]string{"onyx.llm.litellm_singleton"})
+	patterns := createPatterns([]string{"onyx.llm.provider_model"})
 	result, err := findEagerImports(testPath, patterns)
 	if err != nil {
 		t.Fatalf("findEagerImports failed: %v", err)
@@ -299,8 +299,8 @@ def some_function():
 		t.Errorf("Expected 1 violation, got %d", len(result.ViolationLines))
 	}
 
-	if _, ok := result.ViolatedModules["onyx.llm.litellm_singleton"]; !ok {
-		t.Error("Expected onyx.llm.litellm_singleton in violated modules")
+	if _, ok := result.ViolatedModules["onyx.llm.provider_model"]; !ok {
+		t.Error("Expected onyx.llm.provider_model in violated modules")
 	}
 
 	if len(result.ViolationLines) > 0 {
@@ -312,27 +312,27 @@ def some_function():
 }
 
 func TestLitellmSingletonLazyImportOK(t *testing.T) {
-	// Test that lazy import of litellm_singleton is allowed.
+	// Test that lazy import of provider_model is allowed.
 	testContent := `
 import os
 from typing import Dict
 
-def get_litellm():
+def get_provider_model():
     # This is OK - lazy import inside function
-    from onyx.llm.litellm_singleton import litellm
-    return litellm
+    from onyx.llm.provider_model import provider_model
+    return provider_model
 
 class SomeClass:
     def method(self):
         # Also OK - lazy import inside method
-        from onyx.llm.litellm_singleton import litellm
-        return litellm.completion()
+        from onyx.llm.provider_model import provider_model
+        return provider_model.completion()
 `
 
 	testPath := createTempPythonFile(t, testContent)
 	defer func() { _ = os.Remove(testPath) }()
 
-	patterns := createPatterns([]string{"onyx.llm.litellm_singleton"})
+	patterns := createPatterns([]string{"onyx.llm.provider_model"})
 	result, err := findEagerImports(testPath, patterns)
 	if err != nil {
 		t.Fatalf("findEagerImports failed: %v", err)
@@ -700,8 +700,6 @@ func TestDefaultLazyImportModules(t *testing.T) {
 		"transformers",
 		"setfit",
 		"unstructured",
-		"onyx.llm.litellm_singleton",
-		"litellm",
 		"nltk",
 		"trafilatura",
 		"pypdf",
@@ -720,18 +718,6 @@ func TestDefaultLazyImportModules(t *testing.T) {
 	// Check specific ignore files for some modules
 	if _, ok := modules["transformers"].IgnoreFiles["model_server/main.py"]; !ok {
 		t.Error("Expected model_server/main.py in transformers ignore files")
-	}
-
-	litellmIgnores := modules["litellm"].IgnoreFiles
-	expectedLitellmIgnores := []string{
-		"onyx/llm/litellm_singleton/__init__.py",
-		"onyx/llm/litellm_singleton/config.py",
-		"onyx/llm/litellm_singleton/monkey_patches.py",
-	}
-	for _, ignore := range expectedLitellmIgnores {
-		if _, ok := litellmIgnores[ignore]; !ok {
-			t.Errorf("Expected %s in litellm ignore files", ignore)
-		}
 	}
 
 	// Gateway modules are the only files allowed to import these at module level.
@@ -759,7 +745,7 @@ func TestDefaultLazyImportModules(t *testing.T) {
 }
 
 func TestBraintrustAndExaViolations(t *testing.T) {
-	// Both packages pull in openai (and braintrust also litellm) at import time.
+	// Both packages pull in openai (and braintrust also provider_model) at import time.
 	testContent := `
 import braintrust
 from braintrust import Eval

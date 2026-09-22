@@ -1,7 +1,8 @@
+import asyncio
 from typing import Any, cast
-from uuid import uuid4
 
 from pydantic import BaseModel
+from pydantic_ai import RunContext
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
@@ -14,7 +15,7 @@ from onyx.coding_agent.mock_tools import (
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import CodingAgentStart, Packet
+from onyx.server.query_and_chat.streaming_models import CodingAgentStart
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolCallException, ToolCallKickoff, ToolResponse
 from onyx.tools.tool_implementations.bash.bash_tool import BashTool
@@ -28,11 +29,11 @@ class CodingAgentToolOverrideKwargs(BaseModel):
 
 
 class CodingAgentTool(Tool[CodingAgentToolOverrideKwargs]):
-    """Top-level Tool wrapper around the coding-agent loop.
+    """Domain tool for native coding-agent delegation.
 
     Exposes a single LLM-facing tool that takes a query + GitHub repo,
-    runs the inner agent loop (downloads repo, opens a code-interpreter
-    session, drives bash commands), and returns the final text answer
+    delegates repository work to a child agent with a code-interpreter
+    session and returns its final text answer
     as the tool response.
     """
 
@@ -123,6 +124,16 @@ class CodingAgentTool(Tool[CodingAgentToolOverrideKwargs]):
         override_kwargs: CodingAgentToolOverrideKwargs,
         **llm_kwargs: Any,
     ) -> ToolResponse:
+        raise RuntimeError("Coding agents require native async delegation.")
+
+    async def run_async(
+        self,
+        parent_context: RunContext[None],
+        placement: Placement,
+        override_kwargs: CodingAgentToolOverrideKwargs,
+        **llm_kwargs: Any,
+    ) -> ToolResponse:
+        del override_kwargs
         if CODING_AGENT_QUERY_KEY not in llm_kwargs:
             raise ToolCallException(
                 message=f"Missing '{CODING_AGENT_QUERY_KEY}' in coding_agent call",
@@ -142,19 +153,22 @@ class CodingAgentTool(Tool[CodingAgentToolOverrideKwargs]):
         query = cast(str, llm_kwargs[CODING_AGENT_QUERY_KEY])
         repo = cast(str, llm_kwargs[CODING_AGENT_REPO_KEY])
 
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=CodingAgentStart(query=query, repo=repo),
-            )
+        await asyncio.to_thread(
+            self.emitter.report,
+            placement=placement,
+            obj=CodingAgentStart(query=query, repo=repo),
         )
 
         # Imported lazily to avoid a circular import: coding_agent.py imports
         # the BashTool which lives in tool_implementations alongside us.
-        from onyx.tools.fake_tools.coding_agent import run_coding_agent_call
+        from onyx.tools.subagents.coding_agent import run_coding_agent_call
 
-        synthetic_call = ToolCallKickoff(
-            tool_call_id=str(uuid4()),
+        if parent_context.tool_call_id is None:
+            raise ValueError(
+                "Coding delegation requires a native tool call identifier."
+            )
+        coding_call = ToolCallKickoff(
+            tool_call_id=parent_context.tool_call_id,
             tool_name=self.name,
             tool_args={
                 CODING_AGENT_QUERY_KEY: query,
@@ -165,8 +179,9 @@ class CodingAgentTool(Tool[CodingAgentToolOverrideKwargs]):
 
         token_counter = get_llm_token_counter(self._llm)
 
-        result = run_coding_agent_call(
-            coding_agent_call=synthetic_call,
+        result = await run_coding_agent_call(
+            parent_context=parent_context,
+            coding_agent_call=coding_call,
             emitter=self.emitter,
             llm=self._llm,
             token_counter=token_counter,

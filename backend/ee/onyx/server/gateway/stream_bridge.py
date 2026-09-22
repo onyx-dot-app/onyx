@@ -13,12 +13,12 @@ from typing import Any, Protocol, cast, runtime_checkable
 
 from fastapi.responses import StreamingResponse
 
+from onyx.llm.exceptions import LLMRateLimitError, LLMTimeoutError
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     ModelResponseStream,
     Usage,
 )
-from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
 from onyx.llm.tracing_wrap import _finalize_tool_calls, _merge_tool_call_delta
 from onyx.tracing.framework.span_data import GenerationSpanData
 from onyx.tracing.framework.spans import Span

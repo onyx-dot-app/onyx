@@ -396,14 +396,7 @@ def extract_vendor_from_model_name(model_name: str, provider: str) -> str | None
 
 def is_embedding_model(model_name: str) -> bool:
     """Checks for if a model is an embedding model"""
-    from litellm import get_model_info
+    from onyx.llm.model_capabilities import get_model_map
 
-    try:
-        # get_model_info raises on unknown models
-        # default to False
-        model_info = get_model_info(model_name)
-    except Exception:
-        return False
-    is_embedding_mode = model_info.get("mode") == "embedding"
-
-    return is_embedding_mode
+    model_info = get_model_map().get(model_name)
+    return model_info is not None and model_info.get("mode") == "embedding"

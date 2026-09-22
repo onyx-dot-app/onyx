@@ -11,7 +11,7 @@ from onyx.llm.interfaces import LLM, LLMConfig
 from onyx.llm.utils import (
     collect_credential_values,
     is_sensitive_custom_config_key,
-    litellm_exception_to_safe_error,
+    llm_exception_to_safe_error,
 )
 from onyx.llm.utils import (
     test_llm as run_test_llm,
@@ -183,7 +183,7 @@ def test_safe_error_preserves_classification_and_redacts_fallback() -> None:
     llm = _StubLLM(_make_config(custom_config={"auth_token": custom_secret}))
     error = RuntimeError(f"provider rejected {_SECRET_KEY} and {custom_secret}")
 
-    error_info = litellm_exception_to_safe_error(
+    error_info = llm_exception_to_safe_error(
         error,
         llm,
         fallback_to_error_msg=True,
@@ -204,7 +204,7 @@ def test_safe_error_redacts_classified_error_without_losing_metadata() -> None:
         is_retryable=False,
     )
 
-    error_info = litellm_exception_to_safe_error(error, llm)
+    error_info = llm_exception_to_safe_error(error, llm)
 
     assert _SECRET_KEY not in error_info.message
     assert "[REDACTED]" in error_info.message
@@ -226,7 +226,7 @@ def test_run_test_llm_returns_none_on_success() -> None:
 
 def test_run_test_llm_redacts_api_key_from_unknown_exception() -> None:
     # An unknown exception subclass falls into the `fallback_to_error_msg=False`
-    # branch of `litellm_exception_to_error_msg`, which already returns a
+    # branch of `llm_exception_to_error_msg`, which already returns a
     # generic message. The key thing we verify here is that even if the raw
     # exception text contained the API key, it does NOT make it into the
     # returned message.
@@ -245,16 +245,16 @@ def test_run_test_llm_redacts_api_key_from_unknown_exception() -> None:
 
 def test_run_test_llm_redacts_litellm_authentication_error_payload() -> None:
     # Use the real LiteLLM AuthenticationError so we exercise the
-    # litellm_exception_to_error_msg mapping path.
-    from litellm.exceptions import AuthenticationError
+    # llm_exception_to_error_msg mapping path.
+    from pydantic_ai.exceptions import ModelHTTPError
 
-    err = AuthenticationError(
-        message=(
+    err = ModelHTTPError(
+        status_code=401,
+        model_name="claude-haiku-4-5",
+        body=(
             f"AnthropicException - 401: invalid api key. "
             f"Authorization: Bearer {_SECRET_KEY}"
         ),
-        llm_provider="anthropic",
-        model="claude-3-5-sonnet",
     )
     llm = _StubLLM(_make_config(), raise_on_invoke=err)
 

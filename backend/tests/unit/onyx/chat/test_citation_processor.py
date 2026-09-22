@@ -1366,7 +1366,7 @@ def test_adding_project_files_across_messages(
     assert message1_processor.citation_to_doc[4].document_id == "doc_1"
 
     # ===== MESSAGE 2: 5 project files + search =====
-    # Fresh processor for new message (simulates new run_llm_loop() call)
+    # Fresh processor for new message (simulates new run_chat_agent() call)
     message2_processor = DynamicCitationProcessor()
 
     # Add 5 project files (citations 1, 2, 3, 4, 5) - includes 2 NEW files

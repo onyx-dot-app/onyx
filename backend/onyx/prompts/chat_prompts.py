@@ -80,7 +80,7 @@ If you reference or share these files, use the exact markdown format [filename](
 """.strip()
 
 
-# Wrapped in <system-reminder> tags by translate_history_to_llm_format when
+# Wrapped in <system-reminder> tags by translate_history_to_native_messages when
 # the per-request image cap drops images from the outgoing request.
 IMAGE_DROP_REMINDER = """
 {dropped_count} earlier image(s) attached to this conversation were omitted to fit the model's per-request image limit.

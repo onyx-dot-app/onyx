@@ -569,6 +569,36 @@ class Memory(Base):
     user: Mapped["User"] = relationship("User", back_populates="memories")
 
 
+class MemoryFileMetadata(Base):
+    __tablename__ = "memory_file_metadata"
+    __table_args__ = (UniqueConstraint("user_id", "path"),)
+
+    memory_id: Mapped[int] = mapped_column(
+        ForeignKey("memory.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+    path: Mapped[str] = mapped_column(String(1024), nullable=False)
+
+
+class MemoryOperationReceipt(Base):
+    __tablename__ = "memory_operation_receipt"
+
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    operation_id: Mapped[str] = mapped_column(String(256), primary_key=True)
+    fingerprint: Mapped[str] = mapped_column(String(256), nullable=False)
+    version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    existed: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class ApiKey(Base):
     __tablename__ = "api_key"
 
@@ -3456,6 +3486,7 @@ class ToolCall(Base):
     # Not a FK because we want to be able to delete the tool without deleting
     # this entry
     tool_id: Mapped[int] = mapped_column(Integer())
+    tool_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     # This is needed because LLMs expect the tool call and the response to have matching IDs
     # This is better than just regenerating one randomly
     tool_call_id: Mapped[str] = mapped_column(String())
@@ -3705,11 +3736,11 @@ class ModelConfiguration(Base):
 
     # Human-readable display name for the model.
     # For dynamic providers (OpenRouter, Bedrock, Ollama), this comes from the source API.
-    # For static providers (OpenAI, Anthropic), this may be null and will fall back to LiteLLM.
+    # Static providers can leave this null and use the model catalog name.
     display_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Admin-specified override for the display name. When set, this takes precedence
-    # over both display_name and the LiteLLM-derived name everywhere in the UI.
+    # over both display_name and the model catalog name in the UI.
     custom_display_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Never store AUTO in either column, an unset value already means AUTO.
@@ -4806,9 +4837,6 @@ class SecuritySettings(Base):
         default=None,
     )
     mask_credential_prefix: Mapped[bool | None] = mapped_column(
-        Boolean, nullable=True, default=None
-    )
-    llm_custom_config_env_injection: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True, default=None
     )
     valid_email_domains: Mapped[list[str] | None] = mapped_column(
@@ -6299,17 +6327,16 @@ class UserUsage(Base):
 
 
 class ModelCostOverride(Base):
-    """Admin-set per-model rates that supersede litellm pricing.
+    """Admin-set per-model rates that supersede published prices.
 
-    Negotiated enterprise rates win over litellm's published numbers, so cost
-    computation consults this table before falling back to litellm.
+    Cost calculation checks these rates before genai-prices and the model catalog.
     """
 
     __tablename__ = "model_cost_override"
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
-    # litellm-style model name (e.g. "gpt-4o").
+    # Provider model name (e.g. "gpt-4o").
     model: Mapped[str] = mapped_column(String, nullable=False)
     # Empty string (not NULL) for a provider-agnostic override, so the unique key
     # below works on every Postgres version without NULLS NOT DISTINCT (PG15+).
@@ -6324,7 +6351,7 @@ class ModelCostOverride(Base):
     output_cost_per_mtok: Mapped[float] = mapped_column(
         Numeric(18, 6, asdecimal=False), nullable=False
     )
-    # Cache-read rate; null bills cache reads at the input rate (litellm default).
+    # A null cache-read rate uses the input rate.
     cache_read_cost_per_mtok: Mapped[float | None] = mapped_column(
         Numeric(18, 6, asdecimal=False), nullable=True
     )

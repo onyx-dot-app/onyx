@@ -15,7 +15,6 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     BashToolDelta,
     BashToolStart,
-    Packet,
 )
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolCallException, ToolResponse
@@ -155,9 +154,7 @@ class BashTool(Tool[BashToolOverrideKwargs]):
                 ),
             )
 
-        self.emitter.emit(
-            Packet(placement=placement, obj=BashToolStart(cmd=cmd)),
-        )
+        self.emitter.report(placement=placement, obj=BashToolStart(cmd=cmd))
 
         adapter = TypeAdapter(LlmBashExecutionResult)
 
@@ -179,15 +176,13 @@ class BashTool(Tool[BashToolOverrideKwargs]):
                 timed_out=False,
                 error=error_msg,
             )
-            self.emitter.emit(
-                Packet(
-                    placement=placement,
-                    obj=BashToolDelta(
-                        stdout="",
-                        stderr=error_msg,
-                        exit_code=-1,
-                        timed_out=False,
-                    ),
+            self.emitter.report(
+                placement=placement,
+                obj=BashToolDelta(
+                    stdout="",
+                    stderr=error_msg,
+                    exit_code=-1,
+                    timed_out=False,
                 ),
             )
             return ToolResponse(
@@ -210,15 +205,13 @@ class BashTool(Tool[BashToolOverrideKwargs]):
             error=(None if response.exit_code == 0 else truncated_stderr),
         )
 
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=BashToolDelta(
-                    stdout=truncated_stdout,
-                    stderr=truncated_stderr,
-                    exit_code=response.exit_code,
-                    timed_out=response.timed_out,
-                ),
+        self.emitter.report(
+            placement=placement,
+            obj=BashToolDelta(
+                stdout=truncated_stdout,
+                stderr=truncated_stderr,
+                exit_code=response.exit_code,
+                timed_out=response.timed_out,
             ),
         )
 

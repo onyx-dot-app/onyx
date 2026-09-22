@@ -88,7 +88,7 @@ def test_client_records_post_call_failure_once() -> None:
     with (
         patch.object(
             tool.emitter,
-            "emit",
+            "report",
             side_effect=[RuntimeError("emit failed"), None],
         ),
         patch(

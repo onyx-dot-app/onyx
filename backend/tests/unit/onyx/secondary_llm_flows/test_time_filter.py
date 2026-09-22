@@ -1,12 +1,20 @@
 from __future__ import annotations
 
-from contextlib import nullcontext
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelRequest,
+    ModelResponse,
+    TextPart,
+    UserPromptPart,
+)
+from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import BaseFilters, TimeRange
-from onyx.llm.models import UserMessage
+from onyx.llm.interfaces import LLMConfig
 from onyx.secondary_llm_flows.time_filter import (
     DocumentTimeField,
     TimeFilter,
@@ -24,22 +32,22 @@ def _run_decision(
     Returns (TimeFilter | None, prompt_messages)."""
     captured: dict = {}
 
-    def fake_invoke(prompt: list, **_kwargs: object) -> MagicMock:
-        captured["prompt"] = prompt
-        resp = MagicMock()
-        resp.choice.message.content = llm_returns
-        return resp
+    def respond(messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        captured["prompt"] = [
+            part
+            for message in messages
+            if isinstance(message, ModelRequest)
+            for part in message.parts
+        ]
+        return ModelResponse(parts=[TextPart(llm_returns)])
 
     llm = MagicMock()
-    llm.invoke.side_effect = fake_invoke
-    with (
-        patch(
-            "onyx.secondary_llm_flows.time_filter.llm_generation_span",
-            return_value=nullcontext(MagicMock()),
-        ),
-        patch("onyx.secondary_llm_flows.time_filter.record_llm_response"),
-    ):
-        tf = decide_time_filter(history, llm)
+    llm.config = LLMConfig(
+        model_provider="test", model_name="test", max_input_tokens=8000, temperature=0
+    )
+    llm.model = FunctionModel(respond)
+    llm.model_settings.return_value = {}
+    tf = decide_time_filter(history, llm)
     return tf, captured.get("prompt", [])
 
 
@@ -215,7 +223,7 @@ def test_prompt_is_single_user_message_and_excludes_assistant_turns() -> None:
         ),
     ]
     tf, prompt = _run_decision(history, "updated (2026-01-01, 2026-01-31)")
-    assert all(isinstance(m, UserMessage) for m in prompt)
+    assert all(isinstance(m, UserPromptPart) for m in prompt)
     text = prompt[-1].content
     assert "What changed last January?" in text
     assert "Let me look into that." not in text
@@ -230,7 +238,7 @@ def test_no_user_turns_skips_the_llm() -> None:
         )
     ]
     assert decide_time_filter(history, llm) is None
-    llm.invoke.assert_not_called()
+    llm.record_usage.assert_not_called()
 
 
 def test_only_the_last_five_user_turns_reach_the_prompt() -> None:

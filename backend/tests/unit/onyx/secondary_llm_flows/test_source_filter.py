@@ -1,10 +1,18 @@
 from __future__ import annotations
 
-from contextlib import nullcontext
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelRequest,
+    ModelResponse,
+    TextPart,
+    UserPromptPart,
+)
+from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from onyx.configs.constants import DocumentSource, MessageType
-from onyx.llm.models import UserMessage
+from onyx.llm.interfaces import LLMConfig
 from onyx.secondary_llm_flows.source_filter import SearchCycle, decide_search_scope
 from onyx.tools.models import ChatMinimalTextMessage
 
@@ -22,22 +30,22 @@ def _run_decision(
     Returns (scope, prompt_messages)."""
     captured: dict = {}
 
-    def fake_invoke(prompt: list, **_kwargs: object) -> MagicMock:
-        captured["prompt"] = prompt
-        resp = MagicMock()
-        resp.choice.message.content = llm_returns
-        return resp
+    def respond(messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        captured["prompt"] = [
+            part
+            for message in messages
+            if isinstance(message, ModelRequest)
+            for part in message.parts
+        ]
+        return ModelResponse(parts=[TextPart(llm_returns)])
 
     llm = MagicMock()
-    llm.invoke.side_effect = fake_invoke
-    with (
-        patch(
-            "onyx.secondary_llm_flows.source_filter.llm_generation_span",
-            return_value=nullcontext(MagicMock()),
-        ),
-        patch("onyx.secondary_llm_flows.source_filter.record_llm_response"),
-    ):
-        scope = decide_search_scope(history, llm, connected, previous_cycles, ["q"])
+    llm.config = LLMConfig(
+        model_provider="test", model_name="test", max_input_tokens=8000, temperature=0
+    )
+    llm.model = FunctionModel(respond)
+    llm.model_settings.return_value = {}
+    scope = decide_search_scope(history, llm, connected, previous_cycles, ["q"])
     return scope, captured["prompt"]
 
 
@@ -62,8 +70,8 @@ def test_prompt_excludes_assistant_turns_and_ends_with_user() -> None:
     ]
     scope, prompt = _run_decision(history, [A, B], [], "[confluence]")
 
-    assert all(isinstance(m, UserMessage) for m in prompt)
-    assert isinstance(prompt[-1], UserMessage)
+    assert all(isinstance(m, UserPromptPart) for m in prompt)
+    assert isinstance(prompt[-1], UserPromptPart)
     text = prompt[-1].content
     assert "Let me search Zendesk first." not in text
     assert "<huge zendesk result dump>" not in text
@@ -110,7 +118,7 @@ def test_fewer_than_two_sources_skips_the_llm() -> None:
     llm = MagicMock()
     for connected in ([], [A]):
         assert decide_search_scope(history, llm, connected, [], ["q"]) is None
-    llm.invoke.assert_not_called()
+    llm.record_usage.assert_not_called()
 
 
 def test_empty_bracket_is_unscoped() -> None:

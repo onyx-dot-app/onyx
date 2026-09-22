@@ -68,19 +68,13 @@ func compileModulePatterns(module string) modulePatterns {
 // DefaultLazyImportModules returns the default map of modules that should be lazily imported.
 func DefaultLazyImportModules() map[string]LazyImportSettings {
 	return map[string]LazyImportSettings{
-		"google.genai":               NewLazyImportSettings(),
-		"openai":                     NewLazyImportSettings(),
-		"markitdown":                 NewLazyImportSettings(),
-		"tiktoken":                   NewLazyImportSettings(),
-		"transformers":               NewLazyImportSettings("model_server/main.py"),
-		"setfit":                     NewLazyImportSettings(),
-		"unstructured":               NewLazyImportSettings(),
-		"onyx.llm.litellm_singleton": NewLazyImportSettings(),
-		"litellm": NewLazyImportSettings(
-			"onyx/llm/litellm_singleton/__init__.py",
-			"onyx/llm/litellm_singleton/config.py",
-			"onyx/llm/litellm_singleton/monkey_patches.py",
-		),
+		"google.genai":        NewLazyImportSettings(),
+		"openai":              NewLazyImportSettings(),
+		"markitdown":          NewLazyImportSettings(),
+		"tiktoken":            NewLazyImportSettings(),
+		"transformers":        NewLazyImportSettings("model_server/main.py"),
+		"setfit":              NewLazyImportSettings(),
+		"unstructured":        NewLazyImportSettings(),
 		"nltk":                NewLazyImportSettings(),
 		"trafilatura":         NewLazyImportSettings(),
 		"pypdf":               NewLazyImportSettings(),

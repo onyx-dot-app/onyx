@@ -1,29 +1,21 @@
-"""Unit tests for chat history compression module."""
+"""Native compaction and branch persistence regressions."""
 
+from collections.abc import AsyncIterator
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-from onyx.chat.compression import (
-    SummaryContent,
-    _build_llm_messages_for_summarization,
-    calculate_total_history_tokens,
+import pytest
+from pydantic_ai import messages as pm
+from pydantic_ai.models.function import AgentInfo, FunctionModel
+
+from onyx.chat.compression import compact_branch, native_branch_history
+from onyx.configs.constants import MessageType
+from onyx.db.chat_compaction import (
     find_summary_for_branch,
-    generate_summary,
-    get_compression_params,
-    get_messages_to_summarize,
     get_summary_parent_message_id,
 )
-from onyx.configs.constants import MessageType
-from onyx.llm.models import AssistantMessage, SystemMessage, UserMessage
-from onyx.prompts.compression_prompts import (
-    PROGRESSIVE_SUMMARY_SYSTEM_PROMPT_BLOCK,
-    PROGRESSIVE_USER_REMINDER,
-    SUMMARIZATION_CUTOFF_MARKER,
-    SUMMARIZATION_PROMPT,
-    USER_REMINDER,
-)
+from onyx.llm.pydantic_ai_llm import PydanticAILLM
 
-# Base time for generating sequential timestamps
 BASE_TIME = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
 
 
@@ -52,154 +44,6 @@ def create_mock_message(
     return mock
 
 
-def test_no_compression_when_under_threshold() -> None:
-    """Should not compress when history is under threshold."""
-    result = get_compression_params(
-        max_input_tokens=10000,
-        current_history_tokens=1000,
-        reserved_tokens=2000,
-    )
-    assert result.should_compress is False
-
-
-def test_compression_triggered_when_over_threshold() -> None:
-    """Should compress when history exceeds threshold."""
-    result = get_compression_params(
-        max_input_tokens=10000,
-        current_history_tokens=7000,
-        reserved_tokens=2000,
-    )
-    assert result.should_compress is True
-    assert result.tokens_for_recent > 0
-
-
-def test_get_messages_returns_summary_content() -> None:
-    """Should return SummaryContent with correct structure."""
-    messages = [
-        create_mock_message(1, "msg1", 100),
-        create_mock_message(2, "msg2", 100),
-    ]
-    result = get_messages_to_summarize(
-        chat_history=messages,  # ty: ignore[invalid-argument-type]
-        existing_summary=None,
-        tokens_for_recent=50,
-    )
-
-    assert isinstance(result, SummaryContent)
-    assert hasattr(result, "older_messages")
-    assert hasattr(result, "recent_messages")
-
-
-def test_messages_after_summary_cutoff_only() -> None:
-    """Should only include messages after existing summary cutoff."""
-    messages = [
-        create_mock_message(1, "already summarized", 100),
-        create_mock_message(2, "also summarized", 100),
-        create_mock_message(3, "new message", 100),
-    ]
-    existing_summary = MagicMock()
-    existing_summary.last_summarized_message_id = 2
-
-    result = get_messages_to_summarize(
-        chat_history=messages,  # ty: ignore[invalid-argument-type]
-        existing_summary=existing_summary,
-        tokens_for_recent=50,
-    )
-
-    all_ids = [m.id for m in result.older_messages + result.recent_messages]
-    assert 1 not in all_ids
-    assert 2 not in all_ids
-    assert 3 in all_ids
-
-
-def test_no_summary_considers_all_messages() -> None:
-    """Without existing summary, all messages should be considered."""
-    messages = [
-        create_mock_message(1, "msg1", 100),
-        create_mock_message(2, "msg2", 100),
-        create_mock_message(3, "msg3", 100),
-    ]
-
-    result = get_messages_to_summarize(
-        chat_history=messages,  # ty: ignore[invalid-argument-type]
-        existing_summary=None,
-        tokens_for_recent=50,
-    )
-
-    all_ids = [m.id for m in result.older_messages + result.recent_messages]
-    assert len(all_ids) == 3
-
-
-def test_empty_messages_filtered_out() -> None:
-    """Messages with empty content should be filtered out."""
-    messages = [
-        create_mock_message(1, "has content", 100),
-        create_mock_message(2, "", 0),
-        create_mock_message(3, "also has content", 100),
-    ]
-
-    result = get_messages_to_summarize(
-        chat_history=messages,  # ty: ignore[invalid-argument-type]
-        existing_summary=None,
-        tokens_for_recent=50,
-    )
-
-    all_messages = result.older_messages + result.recent_messages
-    assert len(all_messages) == 2
-
-
-def test_empty_history_returns_empty() -> None:
-    """Should return empty lists for empty history."""
-    result = get_messages_to_summarize(
-        chat_history=[],
-        existing_summary=None,
-        tokens_for_recent=100,
-    )
-    assert result.older_messages == []
-    assert result.recent_messages == []
-
-
-def test_calculate_total_history_tokens_includes_tool_call_tokens() -> None:
-    """Tool-call argument tokens are replayed with the history, so the
-    compression trigger must count them too."""
-    tool_call = MagicMock()
-    tool_call.tool_call_tokens = 30
-    messages = [
-        create_mock_message(1, "question", 100),
-        create_mock_message(
-            2,
-            "answer",
-            50,
-            MessageType.ASSISTANT,
-            tool_calls=[tool_call, tool_call],
-        ),
-    ]
-    assert (
-        calculate_total_history_tokens(messages)  # ty: ignore[invalid-argument-type]
-        == 210
-    )
-
-
-def test_no_user_in_recent_tail_keeps_last_user_exchange() -> None:
-    """A verbatim tail without a USER message must not cause the entire
-    conversation (including the latest exchange) to be summarized away."""
-    messages = [
-        create_mock_message(1, "q1", 100),
-        create_mock_message(2, "a1", 100, MessageType.ASSISTANT),
-        create_mock_message(3, "q2", 100),
-        create_mock_message(4, "a2", 50, MessageType.ASSISTANT),
-    ]
-    result = get_messages_to_summarize(
-        chat_history=messages,  # ty: ignore[invalid-argument-type]
-        existing_summary=None,
-        # Only fits the final ASSISTANT message, which then gets popped as a
-        # leading non-USER message.
-        tokens_for_recent=60,
-    )
-    assert [m.id for m in result.recent_messages] == [3, 4]
-    assert [m.id for m in result.older_messages] == [1, 2]
-
-
 def test_summary_parent_is_last_user_message() -> None:
     """Summaries parent to the last USER message so every sibling branch
     (multi-model answers, regenerations) can find them."""
@@ -224,21 +68,6 @@ def test_summary_parent_falls_back_to_tail_without_user_messages() -> None:
         get_summary_parent_message_id(messages)  # ty: ignore[invalid-argument-type]
         == 2
     )
-
-
-def test_no_user_messages_at_all_skips_compression() -> None:
-    """With no USER message anywhere, nothing is summarized (caller no-ops
-    on empty older_messages)."""
-    messages = [
-        create_mock_message(1, "a1", 100, MessageType.ASSISTANT),
-        create_mock_message(2, "a2", 100, MessageType.ASSISTANT),
-    ]
-    result = get_messages_to_summarize(
-        chat_history=messages,  # ty: ignore[invalid-argument-type]
-        existing_summary=None,
-        tokens_for_recent=50,
-    )
-    assert result.older_messages == []
 
 
 def test_find_summary_for_branch_returns_matching_branch() -> None:
@@ -302,289 +131,97 @@ def test_find_summary_for_branch_ignores_other_branch() -> None:
     assert result is None
 
 
-def test_cutoff_always_before_user_message() -> None:
-    """Cutoff should always be placed right before a user message.
+@pytest.mark.asyncio
+async def test_native_compaction_keeps_latest_exchange_and_updates_previous_summary() -> (
+    None
+):
+    requests: list[list[pm.ModelMessage]] = []
 
-    If token budget would place the cutoff between tool calls or assistant messages,
-    it should be moved to right before the next user message.
-    """
-    messages = [
-        create_mock_message(1, "user question", 100, MessageType.USER),
-        create_mock_message(2, "assistant uses tool", 100, MessageType.ASSISTANT),
-        create_mock_message(3, "tool response", 100, MessageType.TOOL_CALL_RESPONSE),
-        create_mock_message(4, "assistant continues", 100, MessageType.ASSISTANT),
-        create_mock_message(5, "user follow up", 100, MessageType.USER),
-        create_mock_message(6, "final answer", 100, MessageType.ASSISTANT),
-    ]
+    async def stream(
+        messages: list[pm.ModelMessage], info: AgentInfo
+    ) -> AsyncIterator[str]:
+        requests.append(messages)
+        assert not info.function_tools
+        yield "Preserved important facts."
 
-    # Token budget that would normally cut between messages 3 and 4
-    # (keeping ~300 tokens = messages 4, 5, 6)
-    result = get_messages_to_summarize(
-        chat_history=messages,  # ty: ignore[invalid-argument-type]
-        existing_summary=None,
-        tokens_for_recent=300,
-    )
-
-    # recent_messages should start with user message (5), not assistant (4)
-    assert result.recent_messages[0].message_type == MessageType.USER
-    assert result.recent_messages[0].id == 5
-
-    # Messages 1, 2, 4 should be in older_messages (to be summarized)
-    # Note: message 3 (TOOL_CALL_RESPONSE) has content so it's included
-    older_ids = [m.id for m in result.older_messages]
-    assert 1 in older_ids
-    assert 2 in older_ids
-    assert 4 in older_ids
-
-
-def test__build_llm_messages_for_summarization_user_messages() -> None:
-    """User messages should be converted to UserMessage objects."""
-    messages = [
-        create_mock_message(1, "Hello", 10, MessageType.USER),
-        create_mock_message(2, "How are you?", 15, MessageType.USER),
-    ]
-
-    result = _build_llm_messages_for_summarization(
-        messages,  # ty: ignore[invalid-argument-type]
-        {},
-    )
-
-    assert len(result) == 2
-    assert all(isinstance(m, UserMessage) for m in result)
-    assert result[0].content == "Hello"
-    assert result[1].content == "How are you?"
-
-
-def test__build_llm_messages_for_summarization_assistant_messages() -> None:
-    """Assistant messages should be converted to AssistantMessage objects."""
-    messages = [
-        create_mock_message(1, "I'm doing great!", 20, MessageType.ASSISTANT),
-    ]
-
-    result = _build_llm_messages_for_summarization(
-        messages,  # ty: ignore[invalid-argument-type]
-        {},
-    )
-
-    assert len(result) == 1
-    assert isinstance(result[0], AssistantMessage)
-    assert result[0].content == "I'm doing great!"
-
-
-def test__build_llm_messages_for_summarization_tool_calls() -> None:
-    """Assistant messages with tool calls should be formatted compactly."""
-    mock_tool_call = MagicMock()
-    mock_tool_call.tool_id = 1
-    msg = create_mock_message(
-        1, "Using tool", 20, MessageType.ASSISTANT, tool_calls=[mock_tool_call]
-    )
-
-    tool_id_to_name = {1: "search"}
-
-    result = _build_llm_messages_for_summarization([msg], tool_id_to_name)
-
-    assert len(result) == 1
-    assert isinstance(result[0], AssistantMessage)
-    assert result[0].content == "[Used tools: search]"
-
-
-def test__build_llm_messages_for_summarization_skips_tool_responses() -> None:
-    """Tool response messages should be skipped."""
-    messages = [
-        create_mock_message(1, "User question", 10, MessageType.USER),
-        create_mock_message(
-            2, "Tool response data", 50, MessageType.TOOL_CALL_RESPONSE
+    llm = MagicMock(spec=PydanticAILLM)
+    llm.model = FunctionModel(stream_function=stream)
+    llm.model_settings.return_value = {}
+    history: list[pm.ModelMessage] = [
+        pm.ModelRequest(
+            parts=[
+                pm.SystemPromptPart(
+                    "Summary of previous conversation:\n\nEarlier durable fact."
+                )
+            ]
         ),
-        create_mock_message(3, "Assistant answer", 20, MessageType.ASSISTANT),
+        pm.ModelRequest(parts=[pm.UserPromptPart("Old question " * 200)]),
+        pm.ModelResponse(parts=[pm.TextPart("Old answer " * 200)]),
+        pm.ModelRequest(parts=[pm.UserPromptPart("Latest question")]),
+        pm.ModelResponse(parts=[pm.TextPart("Latest answer")]),
     ]
-
-    result = _build_llm_messages_for_summarization(
-        messages,  # ty: ignore[invalid-argument-type]
-        {},
+    compacted = await compact_branch(history, llm=llm, input_budget=1000, tokenizer=len)
+    assert compacted[-2:] == history[-2:]
+    assert len(requests) == 1
+    assert "Earlier durable fact." in str(requests[0])
+    assert "previous-summary" in str(requests[0])
+    assert "Preserved important facts." in str(compacted[0])
+    llm.record_usage.assert_called_once()
+    unchanged = await compact_branch(
+        compacted, llm=llm, input_budget=1000, tokenizer=len
     )
-
-    assert len(result) == 2
-    assert isinstance(result[0], UserMessage)
-    assert isinstance(result[1], AssistantMessage)
+    assert unchanged == compacted
+    assert len(requests) == 1
 
 
-def test__build_llm_messages_for_summarization_skips_empty() -> None:
-    """Empty messages should be skipped."""
-    messages = [
-        create_mock_message(1, "Has content", 10, MessageType.USER),
-        create_mock_message(2, "", 0, MessageType.USER),
-        create_mock_message(3, "Also has content", 10, MessageType.ASSISTANT),
-    ]
-
-    result = _build_llm_messages_for_summarization(
-        messages,  # ty: ignore[invalid-argument-type]
-        {},
+def test_persisted_native_history_keeps_answers_with_tool_calls() -> None:
+    call = MagicMock()
+    call.tool_name = None
+    call.tool_id = 42
+    call.tool_call_id = "search-1"
+    call.tool_call_arguments = {"query": "fact"}
+    call.tool_call_response = "Tool evidence"
+    row = create_mock_message(
+        2, "The final answer", 20, MessageType.ASSISTANT, tool_calls=[call]
     )
+    native = native_branch_history([row], None, {42: "search"})
+    assert all(message.metadata == {"onyx_message_id": 2} for message in native)
+    assert "Tool evidence" in str(native)
+    assert "The final answer" in str(native)
+    assert isinstance(native[0].parts[0], pm.ToolCallPart)
+    assert isinstance(native[1].parts[0], pm.ToolReturnPart)
 
-    assert len(result) == 2
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("over_threshold", [False, True])
+async def test_native_tier_uses_configured_trigger_ratio(over_threshold: bool) -> None:
+    from onyx.configs.chat_configs import COMPRESSION_TRIGGER_RATIO
 
-def test_generate_summary_initial_system_prompt() -> None:
-    """Initial summarization should use SUMMARIZATION_PROMPT as system prompt."""
-    older_messages = [
-        create_mock_message(1, "User msg", 10, MessageType.USER),
-        create_mock_message(2, "Assistant reply", 10, MessageType.ASSISTANT),
+    calls = 0
+
+    async def stream(
+        messages: list[pm.ModelMessage], info: AgentInfo
+    ) -> AsyncIterator[str]:
+        nonlocal calls
+        del messages, info
+        calls += 1
+        yield "Summary."
+
+    llm = MagicMock(spec=PydanticAILLM)
+    llm.model = FunctionModel(stream_function=stream)
+    llm.model_settings.return_value = {}
+    threshold = int(1000 * COMPRESSION_TRIGGER_RATIO)
+    history: list[pm.ModelMessage] = [
+        pm.ModelRequest(
+            parts=[
+                pm.UserPromptPart(
+                    "x" * (threshold - 20 + (50 if over_threshold else -50))
+                )
+            ]
+        ),
+        pm.ModelResponse(parts=[pm.TextPart("answer")]),
+        pm.ModelRequest(parts=[pm.UserPromptPart("latest")]),
+        pm.ModelResponse(parts=[pm.TextPart("answer")]),
     ]
-    recent_messages = [
-        create_mock_message(3, "Recent user msg", 10, MessageType.USER),
-    ]
-
-    mock_llm = MagicMock()
-    mock_response = MagicMock()
-    mock_response.choice.message.content = "Summary of conversation"
-    mock_llm.invoke.return_value = mock_response
-
-    with patch("onyx.chat.compression.llm_generation_span"):
-        result = generate_summary(
-            older_messages=older_messages,  # ty: ignore[invalid-argument-type]
-            recent_messages=recent_messages,  # ty: ignore[invalid-argument-type]
-            llm=mock_llm,
-            tool_id_to_name={},
-            existing_summary=None,
-        )
-
-    assert result == "Summary of conversation"
-
-    # Check the messages passed to the LLM
-    call_args = mock_llm.invoke.call_args[0][0]
-
-    # First message should be SystemMessage with just SUMMARIZATION_PROMPT
-    assert isinstance(call_args[0], SystemMessage)
-    assert call_args[0].content == SUMMARIZATION_PROMPT
-
-    # Should have separate user/assistant messages, not a single concatenated string
-    user_messages = [m for m in call_args if isinstance(m, UserMessage)]
-    assistant_messages = [m for m in call_args if isinstance(m, AssistantMessage)]
-
-    # Should have: older user msg, cutoff marker, recent user msg, final reminder
-    assert len(user_messages) >= 3  # At least: older user, cutoff, reminder
-    assert len(assistant_messages) >= 1  # At least: older assistant
-
-    # Final message should be the reminder
-    assert isinstance(call_args[-1], UserMessage)
-    assert call_args[-1].content == USER_REMINDER
-
-
-def test_generate_summary_progressive_system_prompt() -> None:
-    """Progressive summarization should append PROGRESSIVE_SUMMARY_SYSTEM_PROMPT_BLOCK to system prompt."""
-    older_messages = [
-        create_mock_message(1, "User msg", 10, MessageType.USER),
-    ]
-    recent_messages = [
-        create_mock_message(2, "Recent msg", 10, MessageType.USER),
-    ]
-    existing_summary = "Previous conversation summary"
-
-    mock_llm = MagicMock()
-    mock_response = MagicMock()
-    mock_response.choice.message.content = "Updated summary"
-    mock_llm.invoke.return_value = mock_response
-
-    with patch("onyx.chat.compression.llm_generation_span"):
-        result = generate_summary(
-            older_messages=older_messages,  # ty: ignore[invalid-argument-type]
-            recent_messages=recent_messages,  # ty: ignore[invalid-argument-type]
-            llm=mock_llm,
-            tool_id_to_name={},
-            existing_summary=existing_summary,
-        )
-
-    assert result == "Updated summary"
-
-    # Check the messages passed to the LLM
-    call_args = mock_llm.invoke.call_args[0][0]
-
-    # First message should be SystemMessage with SUMMARIZATION_PROMPT + PROGRESSIVE_SUMMARY_SYSTEM_PROMPT_BLOCK
-    assert isinstance(call_args[0], SystemMessage)
-    expected_system = (
-        SUMMARIZATION_PROMPT
-        + PROGRESSIVE_SUMMARY_SYSTEM_PROMPT_BLOCK.format(
-            previous_summary=existing_summary
-        )
-    )
-    assert call_args[0].content == expected_system
-
-    # Final message should be PROGRESSIVE_USER_REMINDER
-    assert isinstance(call_args[-1], UserMessage)
-    assert call_args[-1].content == PROGRESSIVE_USER_REMINDER
-
-
-def test_generate_summary_cutoff_marker_as_separate_message() -> None:
-    """Cutoff marker should be sent as a separate UserMessage."""
-    older_messages = [
-        create_mock_message(1, "User msg", 10, MessageType.USER),
-    ]
-    recent_messages = [
-        create_mock_message(2, "Recent msg", 10, MessageType.USER),
-    ]
-
-    mock_llm = MagicMock()
-    mock_response = MagicMock()
-    mock_response.choice.message.content = "Summary"
-    mock_llm.invoke.return_value = mock_response
-
-    with patch("onyx.chat.compression.llm_generation_span"):
-        generate_summary(
-            older_messages=older_messages,  # ty: ignore[invalid-argument-type]
-            recent_messages=recent_messages,  # ty: ignore[invalid-argument-type]
-            llm=mock_llm,
-            tool_id_to_name={},
-            existing_summary=None,
-        )
-
-    call_args = mock_llm.invoke.call_args[0][0]
-
-    # Find the cutoff marker message
-    cutoff_messages = [
-        m
-        for m in call_args
-        if isinstance(m, UserMessage) and SUMMARIZATION_CUTOFF_MARKER in str(m.content)
-    ]
-    assert len(cutoff_messages) == 1
-    assert cutoff_messages[0].content == SUMMARIZATION_CUTOFF_MARKER
-
-
-def test_generate_summary_messages_are_separate() -> None:
-    """Messages should be sent as separate objects, not concatenated into one string."""
-    older_messages = [
-        create_mock_message(1, "First user message", 10, MessageType.USER),
-        create_mock_message(2, "First assistant reply", 10, MessageType.ASSISTANT),
-        create_mock_message(3, "Second user message", 10, MessageType.USER),
-    ]
-    recent_messages = [
-        create_mock_message(4, "Recent message", 10, MessageType.USER),
-    ]
-
-    mock_llm = MagicMock()
-    mock_response = MagicMock()
-    mock_response.choice.message.content = "Summary"
-    mock_llm.invoke.return_value = mock_response
-
-    with patch("onyx.chat.compression.llm_generation_span"):
-        generate_summary(
-            older_messages=older_messages,  # ty: ignore[invalid-argument-type]
-            recent_messages=recent_messages,  # ty: ignore[invalid-argument-type]
-            llm=mock_llm,
-            tool_id_to_name={},
-            existing_summary=None,
-        )
-
-    call_args = mock_llm.invoke.call_args[0][0]
-
-    # Should have multiple messages, not just 2 (SystemMessage + single UserMessage)
-    assert len(call_args) > 2
-
-    # Count message types
-    system_count = sum(1 for m in call_args if isinstance(m, SystemMessage))
-    user_count = sum(1 for m in call_args if isinstance(m, UserMessage))
-    assistant_count = sum(1 for m in call_args if isinstance(m, AssistantMessage))
-
-    assert system_count == 1  # One system message
-    # 3 older user messages + 1 cutoff + 1 recent + 1 reminder = at least 3 user messages
-    assert user_count >= 3
-    assert assistant_count >= 1  # At least one assistant message from older_messages
+    await compact_branch(history, llm=llm, input_budget=1000, tokenizer=len)
+    assert calls == int(over_threshold)

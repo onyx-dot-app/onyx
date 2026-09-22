@@ -100,7 +100,6 @@ from onyx.secondary_llm_flows.source_filter import SearchCycle, decide_search_sc
 from onyx.secondary_llm_flows.time_filter import TimeFilter, decide_time_filter
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
-    Packet,
     SearchToolDocumentsDelta,
     SearchToolFilterDelta,
     SearchToolQueriesDelta,
@@ -585,12 +584,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         }
 
     def emit_start(self, placement: Placement) -> None:
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=SearchToolStart(),
-            )
-        )
+        self.emitter.report(placement=placement, obj=SearchToolStart())
 
     @log_function_time(
         func_name="Search tool - query expansion + scope decision",
@@ -882,15 +876,13 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         )
         time_filter = expansion.time_filter
         if emitted_sources or time_filter is not None:
-            self.emitter.emit(
-                Packet(
-                    placement=placement,
-                    obj=SearchToolFilterDelta(
-                        sources=emitted_sources,
-                        time_filter_start=time_filter.start if time_filter else None,
-                        time_filter_end=time_filter.end if time_filter else None,
-                    ),
-                )
+            self.emitter.report(
+                placement=placement,
+                obj=SearchToolFilterDelta(
+                    sources=emitted_sources,
+                    time_filter_start=time_filter.start if time_filter else None,
+                    time_filter_end=time_filter.end if time_filter else None,
+                ),
             )
 
         queries_run = list(
@@ -979,13 +971,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         )
 
         # Emit the queries early so the UI can display them immediately
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=SearchToolQueriesDelta(
-                    queries=all_queries,
-                ),
-            )
+        self.emitter.report(
+            placement=placement,
+            obj=SearchToolQueriesDelta(
+                queries=all_queries,
+            ),
         )
 
         # Run all searches in parallel with appropriate hybrid_alpha values
@@ -1146,13 +1136,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             selected_sections, is_internet=False
         )
 
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=SearchToolDocumentsDelta(
-                    documents=final_ui_docs,
-                ),
-            )
+        self.emitter.report(
+            placement=placement,
+            obj=SearchToolDocumentsDelta(
+                documents=final_ui_docs,
+            ),
         )
 
         # Create wrapper function to handle errors gracefully

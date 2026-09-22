@@ -5507,16 +5507,16 @@
           "apiVersionField": {
             "title": "API 版本"
           },
-          "description": "连接来自其他 LiteLLM 兼容提供商的模型。",
+          "description": "连接其他受支持提供商的模型。",
           "envVars": {
             "addButton": {
               "label": "添加行"
             },
-            "description": "按模型提供商的要求添加额外属性。这些属性会作为[环境变量](https://docs.litellm.ai/docs/set_keys#environment-variables)传递给 LiteLLM 的 `completion()` 调用。更多说明请参见[文档](https://docs.onyx.app/admins/ai_models/custom_inference_provider)。",
+            "description": "添加此连接的提供商设置。这些设置仅适用于使用此提供商的请求。",
             "keyInput": {
               "placeholder": "例如 OPENAI_ORGANIZATION"
             },
-            "title": "环境变量"
+            "title": "提供商设置"
           },
           "modelRow": {
             "displayNamePlaceholder": "显示名称",
@@ -5545,15 +5545,15 @@
             }
           },
           "models": {
-            "description": "列出您要为此提供商使用的 LLM 模型及其配置。完整的模型列表请参见 LiteLLM。",
+            "description": "列出此提供商要使用的模型及其设置。",
             "empty": {
               "title": "尚未添加模型。"
             },
             "title": "模型"
           },
           "providerField": {
-            "description": "支持的 LLM 提供商完整列表请参见 [LiteLLM](https://docs.litellm.ai/docs/providers)。",
-            "placeholder": "LiteLLM 上显示的提供商 ID 字符串",
+            "description": "选择提供商，或输入其 ID 和兼容的 API 端点。",
+            "placeholder": "提供商 ID，例如 groq",
             "title": "提供商"
           },
           "toasts": {
@@ -6444,11 +6444,6 @@
         }
       },
       "networkSafety": {
-        "envInjection": {
-          "description": "允许自定义 LLM 提供商配置在调用期间临时设置进程环境变量。禁用后，所有提供商设置都必须有对应的 LiteLLM 参数。",
-          "multiTenantDescription": "在多租户部署中，自定义 LLM 提供商配置永远无法设置进程环境变量。",
-          "title": "LLM 环境变量注入"
-        },
         "section": {
           "title": "网络安全"
         },
@@ -12917,7 +12912,7 @@
         "label": "{count, plural, one {已连接 # 个模型} other {已连接 # 个模型}}"
       },
       "customProvider": {
-        "subtitle": "兼容 LiteLLM 的 API",
+        "subtitle": "兼容模型 API",
         "title": "自定义 LLM 提供商"
       },
       "description": "Onyx 同时支持自托管模型和主流提供商。",

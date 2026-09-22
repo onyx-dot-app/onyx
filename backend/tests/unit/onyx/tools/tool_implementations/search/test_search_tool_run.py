@@ -106,8 +106,9 @@ def _queries_sent(mock_search_pipeline: MagicMock) -> list[str]:
 
 def _emitted_filter_sources(tool: SearchTool) -> list[list[str]]:
     """Sources of each SearchToolFilterDelta the tool emitted to the UI."""
-    emit_mock = cast(MagicMock, tool.emitter.emit)
-    emitted = [call.args[0].obj for call in emit_mock.call_args_list]
+    report_mock = cast(MagicMock, tool.emitter.report)
+    cast(MagicMock, tool.emitter.emit).assert_not_called()
+    emitted = [call.kwargs["obj"] for call in report_mock.call_args_list]
     return [obj.sources for obj in emitted if isinstance(obj, SearchToolFilterDelta)]
 
 

@@ -4,6 +4,8 @@ from io import BytesIO
 from typing import cast
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from onyx.chat.chat_utils import (
     _build_tool_call_response_history_message,
     _get_or_extract_plaintext,
@@ -316,6 +318,7 @@ class TestConvertChatHistory:
         hardcoded constant."""
         tool_call = MagicMock()
         tool_call.turn_number = 0
+        tool_call.tool_name = None
         tool_call.tool_id = 1
         tool_call.tool_call_id = "call-1"
         tool_call.tool_call_arguments = {"queries": ["alpha"]}
@@ -348,3 +351,59 @@ class TestConvertChatHistory:
         assert len(tool_responses) == 1
         assert tool_responses[0].message == TOOL_CALL_RESPONSE_CROSS_MESSAGE
         assert tool_responses[0].token_count == len(TOOL_CALL_RESPONSE_CROSS_MESSAGE)
+
+
+@pytest.mark.parametrize("native_name", ["write_memory", "read_memory", None])
+def test_saved_memory_call_name_survives_history_replay(
+    native_name: str | None,
+) -> None:
+    from uuid import uuid4
+
+    from pydantic_ai import messages as pm
+
+    from onyx.chat.compression import native_branch_history
+    from onyx.db.tools import create_tool_call_no_commit
+
+    tool_call = create_tool_call_no_commit(
+        chat_session_id=uuid4(),
+        parent_chat_message_id=2,
+        turn_number=0,
+        tool_id=42,
+        tool_name=native_name,
+        tool_call_id="memory-call",
+        tool_call_arguments={"path": "preferences.md"},
+        tool_call_response="Saved preference",
+        tool_call_tokens=10,
+        db_session=MagicMock(),
+    )
+    row = ChatMessage(
+        id=2,
+        message="Remembered",
+        message_type=MessageType.ASSISTANT,
+        token_count=2,
+        files=None,
+    )
+    row.tool_calls = [tool_call]
+    expected_name = native_name or "memory"
+    replay = convert_chat_history(
+        [row],
+        files=[],
+        context_image_files=[],
+        additional_context=None,
+        token_counter=len,
+        tool_id_to_name_map={42: "memory"},
+    )
+    calls = [
+        call for message in replay.simple_messages for call in message.tool_calls or []
+    ]
+    assert [call.tool_name for call in calls] == [expected_name]
+    returns = [message for message in replay.simple_messages if message.tool_call_id]
+    assert [message.tool_call_id for message in returns] == ["memory-call"]
+    native = native_branch_history([row], None, {42: "memory"})
+    parts = [
+        part
+        for message in native
+        for part in message.parts
+        if isinstance(part, (pm.ToolCallPart, pm.ToolReturnPart))
+    ]
+    assert [part.tool_name for part in parts] == [expected_name, expected_name]

@@ -1,7 +1,7 @@
 """Unit tests for BashTool.
 
 Covers:
-- Happy path: response shape, emitted start + delta packets.
+- Happy path: response shape, reported start + delta progress.
 - Missing required ``cmd`` parameter raises ToolCallException.
 - Exception during execute is caught and surfaces as an error result + delta.
 - stdout/stderr are truncated at CODE_INTERPRETER_MAX_OUTPUT_LENGTH.
@@ -104,7 +104,7 @@ def test_tool_definition_shape() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_happy_path_returns_serialized_result_and_emits_packets() -> None:
+def test_happy_path_returns_serialized_result_and_reports_progress() -> None:
     tool, emitter = _make_tool()
     client = MagicMock()
     client.execute_bash_in_session.return_value = _make_response(
@@ -136,16 +136,21 @@ def test_happy_path_returns_serialized_result_and_emits_packets() -> None:
     assert payload["error"] is None  # exit_code == 0
     assert response.rich_response is None
 
-    # Two packets emitted: start (with cmd) then delta (with stdout/stderr)
-    assert emitter.emit.call_count == 2
-    start_packet = emitter.emit.call_args_list[0].args[0]
-    delta_packet = emitter.emit.call_args_list[1].args[0]
-    assert isinstance(start_packet.obj, BashToolStart)
-    assert start_packet.obj.cmd == "echo hello"
-    assert isinstance(delta_packet.obj, BashToolDelta)
-    assert delta_packet.obj.stdout == "hello\n"
-    assert delta_packet.obj.exit_code == 0
-    assert delta_packet.obj.timed_out is False
+    # Report start before the result, preserving the tool placement.
+    emitter.emit.assert_not_called()
+    assert all(
+        call.kwargs["placement"] == _placement()
+        for call in emitter.report.call_args_list
+    )
+    assert emitter.report.call_count == 2
+    start_progress = emitter.report.call_args_list[0].kwargs["obj"]
+    delta_progress = emitter.report.call_args_list[1].kwargs["obj"]
+    assert isinstance(start_progress, BashToolStart)
+    assert start_progress.cmd == "echo hello"
+    assert isinstance(delta_progress, BashToolDelta)
+    assert delta_progress.stdout == "hello\n"
+    assert delta_progress.exit_code == 0
+    assert delta_progress.timed_out is False
 
 
 # ---------------------------------------------------------------------------
@@ -167,7 +172,7 @@ def test_missing_cmd_raises_tool_call_exception() -> None:
     assert CMD_FIELD in excinfo.value.llm_facing_message
 
     # Nothing should have been emitted before the exception
-    emitter.emit.assert_not_called()
+    emitter.report.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -201,7 +206,7 @@ def test_non_string_cmd_raises_tool_call_exception(bad_cmd: object) -> None:
     assert type(bad_cmd).__name__ in excinfo.value.llm_facing_message
 
     # No packets emitted — failure is at validation, before BashToolStart
-    emitter.emit.assert_not_called()
+    emitter.report.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -230,12 +235,17 @@ def test_client_exception_returns_error_result_and_emits_error_delta() -> None:
     assert payload["timed_out"] is False
     assert "connection refused" in payload["error"]
 
-    # Start + error-delta both emitted (still two packets)
-    assert emitter.emit.call_count == 2
-    delta_packet = emitter.emit.call_args_list[1].args[0]
-    assert isinstance(delta_packet.obj, BashToolDelta)
-    assert delta_packet.obj.exit_code == -1
-    assert "connection refused" in delta_packet.obj.stderr
+    # Report start and error delta.
+    emitter.emit.assert_not_called()
+    assert all(
+        call.kwargs["placement"] == _placement()
+        for call in emitter.report.call_args_list
+    )
+    assert emitter.report.call_count == 2
+    delta_progress = emitter.report.call_args_list[1].kwargs["obj"]
+    assert isinstance(delta_progress, BashToolDelta)
+    assert delta_progress.exit_code == -1
+    assert "connection refused" in delta_progress.stderr
 
 
 def test_client_constructor_failure_still_emits_closing_delta() -> None:
@@ -262,12 +272,17 @@ def test_client_constructor_failure_still_emits_closing_delta() -> None:
     assert "CODE_INTERPRETER_BASE_URL" in payload["error"]
 
     # Critically: both Start AND closing Delta were emitted, in that order
-    assert emitter.emit.call_count == 2
-    start_packet = emitter.emit.call_args_list[0].args[0]
-    delta_packet = emitter.emit.call_args_list[1].args[0]
-    assert isinstance(start_packet.obj, BashToolStart)
-    assert isinstance(delta_packet.obj, BashToolDelta)
-    assert delta_packet.obj.exit_code == -1
+    emitter.emit.assert_not_called()
+    assert all(
+        call.kwargs["placement"] == _placement()
+        for call in emitter.report.call_args_list
+    )
+    assert emitter.report.call_count == 2
+    start_progress = emitter.report.call_args_list[0].kwargs["obj"]
+    delta_progress = emitter.report.call_args_list[1].kwargs["obj"]
+    assert isinstance(start_progress, BashToolStart)
+    assert isinstance(delta_progress, BashToolDelta)
+    assert delta_progress.exit_code == -1
 
 
 # ---------------------------------------------------------------------------
@@ -378,7 +393,7 @@ def test_zero_exit_code_with_stderr_does_not_set_error() -> None:
 def test_emit_start_is_a_noop() -> None:
     tool, emitter = _make_tool()
     tool.emit_start(_placement())
-    emitter.emit.assert_not_called()
+    emitter.report.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -513,6 +528,6 @@ def test_timed_out_response_is_propagated() -> None:
     payload = json.loads(response.llm_facing_response)
     assert payload["timed_out"] is True
     assert payload["exit_code"] is None
-    delta_packet = emitter.emit.call_args_list[1].args[0]
-    assert isinstance(delta_packet.obj, BashToolDelta)
-    assert delta_packet.obj.timed_out is True
+    delta_progress = emitter.report.call_args_list[1].kwargs["obj"]
+    assert isinstance(delta_progress, BashToolDelta)
+    assert delta_progress.timed_out is True

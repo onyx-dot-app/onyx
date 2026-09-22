@@ -1,3 +1,4 @@
+import { nativeContent } from "@/app/app/services/pydanticEvents";
 import React, { useMemo, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { SvgCircle, SvgCheckCircle, SvgBookOpen } from "@opal/icons";
@@ -81,7 +82,11 @@ export const ResearchAgentRenderer: MessageRenderer<
 
     packets.forEach((packet) => {
       const subTurnIndex = packet.placement.sub_turn_index;
-      if (subTurnIndex === undefined || subTurnIndex === null) {
+      if (
+        subTurnIndex == null ||
+        (packet.obj.type === PacketType.PYDANTIC_AI &&
+          packet.obj.phase === "report")
+      ) {
         parent.push(packet);
       } else {
         if (!nestedBySubTurn.has(subTurnIndex)) {
@@ -141,7 +146,10 @@ export const ResearchAgentRenderer: MessageRenderer<
       if (packet.obj.type === PacketType.INTERMEDIATE_REPORT_DELTA) {
         return (packet.obj as IntermediateReportDelta).content;
       }
-      return "";
+      return packet.obj.type === PacketType.PYDANTIC_AI &&
+        packet.obj.phase === "report"
+        ? nativeContent(packet, "text")
+        : "";
     })
     .join("");
 

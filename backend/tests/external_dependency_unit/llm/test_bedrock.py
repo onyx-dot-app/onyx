@@ -1,4 +1,4 @@
-"""Live behavior tests for AWS Bedrock through LiteLLM.
+"""Live behavior tests for AWS Bedrock through Pydantic AI.
 
 Covers:
 - Nova models on Bedrock do NOT leak `<thinking>...</thinking>` tags into
@@ -16,7 +16,7 @@ import pytest
 
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.models import ChatCompletionMessage, UserMessage
-from onyx.llm.multi_llm import LitellmLLM
+from onyx.llm.pydantic_ai_llm import PydanticAILLM
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.nightly
@@ -27,6 +27,7 @@ _BEDROCK_REGION = "us-west-2"
 
 @pytest.mark.xfail(
     strict=True,
+    raises=AssertionError,
     reason=(
         "Issue #10090: Nova thinking tags currently leak into visible "
         "content. Remove this xfail once the Bedrock chunk parser routes "
@@ -48,7 +49,7 @@ def test_nova_streaming_does_not_leak_thinking_tags(
     the leak is reliably reproducible — we don't want this to be flaky on
     prompts where Nova happens to skip the tags.
     """
-    llm = LitellmLLM(
+    llm = PydanticAILLM(
         api_key=test_secrets[TestSecret.BEDROCK_API_KEY],
         model_provider=LlmProviderNames.BEDROCK,
         model_name=_NOVA_THINKING_MODEL,
@@ -86,3 +87,86 @@ def test_nova_streaming_does_not_leak_thinking_tags(
     assert "<thinking>" not in full_content and "</thinking>" not in full_content, (
         f"Raw <thinking> tags leaked into visible content: {full_content!r}"
     )
+
+
+@pytest.mark.secrets(TestSecret.BEDROCK_API_KEY)
+def test_nova_native_agent_tool_cycle(test_secrets: dict[TestSecret, str]) -> None:
+    """Exercise real authentication, native streaming, and tool result history."""
+    from queue import Queue
+
+    from pydantic_ai import messages as pm
+    from pydantic_ai.tools import ToolDefinition
+
+    from onyx.chat.agent_runtime import NativeAgentRequest, run_native_agent
+    from onyx.chat.emitter import Emitter
+    from onyx.server.query_and_chat.placement import Placement
+    from onyx.server.query_and_chat.streaming_models import PydanticAIEvent
+
+    llm = PydanticAILLM(
+        api_key=test_secrets[TestSecret.BEDROCK_API_KEY],
+        model_provider=LlmProviderNames.BEDROCK,
+        model_name=_NOVA_THINKING_MODEL,
+        max_input_tokens=128_000,
+        timeout=60,
+        custom_config={"AWS_REGION_NAME": _BEDROCK_REGION},
+    )
+    schema = {"type": "object", "properties": {}, "additionalProperties": False}
+    calls: list[str] = []
+    responses: list[pm.ModelResponse] = []
+    queue = Queue()
+
+    def execute(call: pm.ToolCallPart) -> str:
+        calls.append(call.tool_name)
+        assert call.args_as_dict() == {}
+        return "The verification code is 728491."
+
+    output = run_native_agent(
+        llm=llm,
+        prepare_step=lambda messages: NativeAgentRequest(
+            messages,
+            llm.model_settings(max_tokens=512),
+            [
+                ToolDefinition(
+                    name="get_verification_code", parameters_json_schema=schema
+                )
+            ],
+        ),
+        finalize_step=responses.append,
+        execute_tool=execute,
+        tool_definitions=[
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_verification_code",
+                    "description": "Retrieve the current verification code.",
+                    "parameters": schema,
+                },
+            }
+        ],
+        max_requests=3,
+        emitter=Emitter(queue),
+        state_container=None,
+        placement=lambda: Placement(turn_index=0),
+        message_history=[
+            pm.ModelRequest(
+                parts=[
+                    pm.UserPromptPart(
+                        "Call get_verification_code to retrieve the code. Then return that code."
+                    )
+                ]
+            )
+        ],
+        total_timeout=90,
+    )
+    assert calls == ["get_verification_code"]
+    assert "728491" in output
+    assert len(responses) == 2
+    assert all(response.usage.input_tokens > 0 for response in responses)
+    events = []
+    while not queue.empty():
+        packet = queue.get_nowait()[1]
+        if isinstance(packet.obj, PydanticAIEvent):
+            events.append(packet.obj.event["event_kind"])
+    assert "function_tool_call" in events
+    assert "function_tool_result" in events
+    assert "part_delta" in events

@@ -1,3 +1,8 @@
+import {
+  isNativeAnswer,
+  isNativeNarration,
+  isNativeThinking,
+} from "@/app/app/services/pydanticEvents";
 import React, { JSX, memo } from "react";
 import {
   ChatPacket,
@@ -39,6 +44,8 @@ interface GroupedPackets {
 
 function isChatPacket(packet: Packet): packet is ChatPacket {
   return (
+    isNativeAnswer(packet) ||
+    packet.obj.type === PacketType.ANSWER_METADATA ||
     packet.obj.type === PacketType.MESSAGE_START ||
     packet.obj.type === PacketType.MESSAGE_DELTA ||
     packet.obj.type === PacketType.MESSAGE_END
@@ -90,6 +97,8 @@ function isMemoryToolPacket(packet: Packet) {
 
 function isReasoningPacket(packet: Packet): packet is ReasoningPacket {
   return (
+    isNativeThinking(packet) ||
+    isNativeNarration(packet) ||
     packet.obj.type === PacketType.REASONING_START ||
     packet.obj.type === PacketType.REASONING_DELTA ||
     packet.obj.type === PacketType.SECTION_END ||
@@ -117,11 +126,6 @@ function isResearchAgentPacket(packet: Packet) {
 export function findRenderer(
   groupedPackets: GroupedPackets
 ): MessageRenderer<any, any> | null {
-  // Check for chat messages first
-  if (groupedPackets.packets.some((packet) => isChatPacket(packet))) {
-    return MessageTextRenderer;
-  }
-
   // Check for deep research packets EARLY - these have priority over other tools
   // because deep research groups may contain multiple packet types (plan + reasoning + fetch)
   if (
@@ -134,6 +138,10 @@ export function findRenderer(
   }
   if (isCodingAgentPackets(groupedPackets.packets)) {
     return CodingAgentRenderer;
+  }
+
+  if (groupedPackets.packets.some((packet) => isChatPacket(packet))) {
+    return MessageTextRenderer;
   }
 
   // Standard tool checks

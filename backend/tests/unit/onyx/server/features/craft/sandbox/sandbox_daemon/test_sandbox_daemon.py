@@ -24,7 +24,7 @@ from pathlib import Path
 from types import ModuleType
 from uuid import UUID
 
-import httpx
+import httpx2 as httpx
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat

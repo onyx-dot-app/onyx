@@ -1,4 +1,10 @@
 import {
+  isNativeAnswer,
+  isNativeText,
+  isNativeThinking,
+  nativePartEnded,
+} from "@/app/app/services/pydanticEvents";
+import {
   Packet,
   PacketType,
   StreamingCitation,
@@ -9,7 +15,6 @@ import {
   TopLevelBranching,
   Stop,
   ImageGenerationToolDelta,
-  MessageStart,
   ToolCallArgumentDelta,
   isCodeInterpreterToolType,
 } from "@/app/app/services/streamingModels";
@@ -137,6 +142,7 @@ function injectSectionEnd(state: ProcessorState, groupKey: string): void {
  */
 const CONTENT_PACKET_TYPES_SET = new Set<PacketType>([
   PacketType.MESSAGE_START,
+  PacketType.ANSWER_METADATA,
   PacketType.SEARCH_TOOL_START,
   PacketType.IMAGE_GENERATION_TOOL_START,
   PacketType.PYTHON_TOOL_START,
@@ -154,6 +160,7 @@ const CONTENT_PACKET_TYPES_SET = new Set<PacketType>([
 
 function hasContentPackets(packets: Packet[]): boolean {
   return packets.some((packet) => {
+    if (isNativeText(packet) || isNativeThinking(packet)) return true;
     const type = packet.obj.type as PacketType;
     if (type === PacketType.TOOL_CALL_ARGUMENT_DELTA) {
       return isCodeInterpreterToolType(
@@ -169,6 +176,7 @@ function hasContentPackets(packets: Packet[]): boolean {
  */
 const FINAL_ANSWER_PACKET_TYPES_SET = new Set<PacketType>([
   PacketType.MESSAGE_START,
+  PacketType.ANSWER_METADATA,
   PacketType.MESSAGE_DELTA,
   PacketType.IMAGE_GENERATION_TOOL_START,
   PacketType.IMAGE_GENERATION_TOOL_DELTA,
@@ -227,7 +235,14 @@ function handleCitationPacket(state: ProcessorState, packet: Packet): void {
 }
 
 function handleDocumentPacket(state: ProcessorState, packet: Packet): void {
-  if (packet.obj.type === PacketType.SEARCH_TOOL_DOCUMENTS_DELTA) {
+  if (
+    packet.obj.type === PacketType.ANSWER_METADATA ||
+    packet.obj.type === PacketType.MESSAGE_START
+  ) {
+    for (const doc of packet.obj.final_documents ?? []) {
+      if (doc.document_id) state.documentMap.set(doc.document_id, doc);
+    }
+  } else if (packet.obj.type === PacketType.SEARCH_TOOL_DOCUMENTS_DELTA) {
     const docDelta = packet.obj as SearchToolDocumentsDelta;
     if (docDelta.documents) {
       for (const doc of docDelta.documents) {
@@ -253,14 +268,20 @@ function handleStreamingStatusPacket(
   packet: Packet
 ): void {
   // Check if final answer is coming
-  if (FINAL_ANSWER_PACKET_TYPES_SET.has(packet.obj.type as PacketType)) {
+  if (
+    (isNativeAnswer(packet) && !state.toolGroupKeys.has(getGroupKey(packet))) ||
+    FINAL_ANSWER_PACKET_TYPES_SET.has(packet.obj.type as PacketType)
+  ) {
     state.finalAnswerComing = true;
   }
 
   // Capture pre-answer processing time from MESSAGE_START packet
-  if (packet.obj.type === PacketType.MESSAGE_START) {
-    const messageStart = packet.obj as MessageStart;
-    if (messageStart.pre_answer_processing_seconds !== undefined) {
+  if (
+    packet.obj.type === PacketType.MESSAGE_START ||
+    packet.obj.type === PacketType.ANSWER_METADATA
+  ) {
+    const messageStart = packet.obj;
+    if (messageStart.pre_answer_processing_seconds != null) {
       state.toolProcessingDuration = messageStart.pre_answer_processing_seconds;
     }
   }
@@ -338,21 +359,24 @@ function processPacket(state: ProcessorState, packet: Packet): void {
 
   // Track SECTION_END and ERROR packets (both indicate completion)
   if (
+    (nativePartEnded(packet) &&
+      (isNativeAnswer(packet) || isNativeThinking(packet)) &&
+      packet.placement.sub_turn_index == null &&
+      !state.toolGroupKeys.has(groupKey)) ||
     packet.obj.type === PacketType.SECTION_END ||
     packet.obj.type === PacketType.ERROR
   ) {
     state.groupKeysWithSectionEnd.add(groupKey);
   }
 
-  // Check if this is the first packet in the group (before adding)
-  const existingGroup = state.groupedPacketsMap.get(groupKey);
-  const isFirstPacket = !existingGroup;
-
   // Add packet to group
   addPacketToGroup(state, packet, groupKey);
 
-  // Categorize on first packet of each group
-  if (isFirstPacket) {
+  // Native lifecycle and citation events can precede the first display packet.
+  if (
+    !state.toolGroupKeys.has(groupKey) &&
+    !state.displayGroupKeys.has(groupKey)
+  ) {
     if (isToolPacket(packet, false)) {
       state.toolGroupKeys.add(groupKey);
     }

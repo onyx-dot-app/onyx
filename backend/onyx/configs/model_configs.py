@@ -83,50 +83,48 @@ if not 0.0 <= GEN_AI_INPUT_TOKEN_SAFETY_MARGIN < 1.0:
 
 GEN_AI_TEMPERATURE = float(os.environ.get("GEN_AI_TEMPERATURE") or 0)
 
-# should be used if you are using a custom LLM inference provider that doesn't support
-# streaming format AND you are still using the langchain/litellm LLM class
-DISABLE_LITELLM_STREAMING = (
-    os.environ.get("DISABLE_LITELLM_STREAMING") or "false"
-).lower() == "true"
-
-# extra headers to pass to LiteLLM
-LITELLM_EXTRA_HEADERS: dict[str, str] | None = None
-_LITELLM_EXTRA_HEADERS_RAW = os.environ.get("LITELLM_EXTRA_HEADERS")
-if _LITELLM_EXTRA_HEADERS_RAW:
+# Extra headers for provider requests.
+LLM_EXTRA_HEADERS: dict[str, str] | None = None
+_LLM_EXTRA_HEADERS_RAW = os.environ.get("LLM_EXTRA_HEADERS") or os.environ.get(
+    "LITELLM_EXTRA_HEADERS"
+)
+if _LLM_EXTRA_HEADERS_RAW:
     try:
-        LITELLM_EXTRA_HEADERS = json.loads(_LITELLM_EXTRA_HEADERS_RAW)
+        LLM_EXTRA_HEADERS = json.loads(_LLM_EXTRA_HEADERS_RAW)
     except Exception:
         # need to import here to avoid circular imports
         from onyx.utils.logger import setup_logger
 
         logger = setup_logger()
-        logger.error(
-            "Failed to parse LITELLM_EXTRA_HEADERS, must be a valid JSON object"
-        )
+        logger.error("Failed to parse LLM_EXTRA_HEADERS, must be a valid JSON object")
 
 # if specified, will pass through request headers to the call to the LLM
-LITELLM_PASS_THROUGH_HEADERS: list[str] | None = None
-_LITELLM_PASS_THROUGH_HEADERS_RAW = os.environ.get("LITELLM_PASS_THROUGH_HEADERS")
-if _LITELLM_PASS_THROUGH_HEADERS_RAW:
+LLM_PASS_THROUGH_HEADERS: list[str] | None = None
+_LLM_PASS_THROUGH_HEADERS_RAW = os.environ.get(
+    "LLM_PASS_THROUGH_HEADERS"
+) or os.environ.get("LITELLM_PASS_THROUGH_HEADERS")
+if _LLM_PASS_THROUGH_HEADERS_RAW:
     try:
-        LITELLM_PASS_THROUGH_HEADERS = json.loads(_LITELLM_PASS_THROUGH_HEADERS_RAW)
+        LLM_PASS_THROUGH_HEADERS = json.loads(_LLM_PASS_THROUGH_HEADERS_RAW)
     except Exception:
         # need to import here to avoid circular imports
         from onyx.utils.logger import setup_logger
 
         logger = setup_logger()
         logger.error(
-            "Failed to parse LITELLM_PASS_THROUGH_HEADERS, must be a valid JSON object"
+            "Failed to parse LLM_PASS_THROUGH_HEADERS, must be a valid JSON object"
         )
 
 
 # if specified, will merge the specified JSON with the existing body of the
 # request before sending it to the LLM
-LITELLM_EXTRA_BODY: dict | None = None
-_LITELLM_EXTRA_BODY_RAW = os.environ.get("LITELLM_EXTRA_BODY")
-if _LITELLM_EXTRA_BODY_RAW:
+LLM_EXTRA_BODY: dict | None = None
+_LLM_EXTRA_BODY_RAW = os.environ.get("LLM_EXTRA_BODY") or os.environ.get(
+    "LITELLM_EXTRA_BODY"
+)
+if _LLM_EXTRA_BODY_RAW:
     try:
-        LITELLM_EXTRA_BODY = json.loads(_LITELLM_EXTRA_BODY_RAW)
+        LLM_EXTRA_BODY = json.loads(_LLM_EXTRA_BODY_RAW)
     except Exception:
         pass
 

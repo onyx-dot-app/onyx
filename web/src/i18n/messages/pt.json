@@ -5507,16 +5507,16 @@
           "apiVersionField": {
             "title": "Versão da API"
           },
-          "description": "Conecte modelos de outros provedores compatíveis com o LiteLLM.",
+          "description": "Conecte modelos de outros provedores compatíveis.",
           "envVars": {
             "addButton": {
               "label": "Adicionar linha"
             },
-            "description": "Adicione propriedades extras conforme o provedor de modelos exigir. Elas são passadas para a chamada `completion()` do LiteLLM como [variáveis de ambiente](https://docs.litellm.ai/docs/set_keys#environment-variables). Consulte a [documentação](https://docs.onyx.app/admins/ai_models/custom_inference_provider) para mais instruções.",
+            "description": "Adicione configurações para esta conexão. Elas se aplicam apenas às solicitações que usam este provedor.",
             "keyInput": {
               "placeholder": "ex.: OPENAI_ORGANIZATION"
             },
-            "title": "Variáveis de ambiente"
+            "title": "Configurações do provedor"
           },
           "modelRow": {
             "displayNamePlaceholder": "Nome de exibição",
@@ -5545,15 +5545,15 @@
             }
           },
           "models": {
-            "description": "Liste os modelos de LLM que você quer usar e as configurações deles para este provedor. Veja a lista completa de modelos no LiteLLM.",
+            "description": "Liste os modelos e as configurações para este provedor.",
             "empty": {
               "title": "Nenhum modelo adicionado ainda."
             },
             "title": "Modelos"
           },
           "providerField": {
-            "description": "Veja a lista completa de provedores de LLM compatíveis no [LiteLLM](https://docs.litellm.ai/docs/providers).",
-            "placeholder": "String do ID do provedor conforme mostrado no LiteLLM",
+            "description": "Selecione um provedor ou insira seu ID e um endpoint de API compatível.",
+            "placeholder": "ID do provedor, por exemplo groq",
             "title": "Provedor"
           },
           "toasts": {
@@ -6444,11 +6444,6 @@
         }
       },
       "networkSafety": {
-        "envInjection": {
-          "description": "Permite que configurações personalizadas de provedores de LLM definam temporariamente variáveis de ambiente do processo durante as chamadas. Desative para exigir que todas as configurações do provedor tenham um parâmetro equivalente no LiteLLM.",
-          "multiTenantDescription": "Configurações personalizadas de provedores de LLM nunca podem definir variáveis de ambiente do processo em implantações multi-tenant.",
-          "title": "Injeção de variáveis de ambiente do LLM"
-        },
         "section": {
           "title": "Segurança de rede"
         },
@@ -12917,7 +12912,7 @@
         "label": "{count, plural, one {# modelo conectado} other {# modelos conectados}}"
       },
       "customProvider": {
-        "subtitle": "APIs compatíveis com LiteLLM",
+        "subtitle": "APIs de modelos compatíveis",
         "title": "Provedor de LLM personalizado"
       },
       "description": "O Onyx é compatível com modelos auto-hospedados e com provedores populares.",

@@ -390,7 +390,7 @@ def test_selected_model_price_known_model(
     caller = str(uuid4())
     _seed_current_window(db_session, caller)
     monkeypatch.setattr(cost_overrides, "get_current_tenant_id", lambda: "public")
-    cost_overrides.invalidate_override_cache()  # no override; price from litellm
+    cost_overrides.invalidate_override_cache()  # no override; price from the model catalog
     monkeypatch.setattr(
         "onyx.server.features.usage.api.fetch_default_llm_model",
         lambda _db: _StubModelConfig("gpt-4o", "openai"),
@@ -404,7 +404,7 @@ def test_selected_model_price_known_model(
     price = client.get("/user/usage").json()["selected_model_price"]
     assert price["model"] == "gpt-4o"
     assert price["provider"] == "openai"
-    # litellm prices gpt-4o at $2.50 in / $10.00 out per 1M.
+    # The model catalog prices gpt-4o at $2.50 in / $10.00 out per 1M.
     assert price["input_per_mtok"] == pytest.approx(2.5)
     assert price["output_per_mtok"] == pytest.approx(10.0)
 
@@ -493,9 +493,9 @@ class TestGetModelPricePerMillion:
         def _boom(*_a: object, **_k: object) -> None:
             raise RuntimeError("litellm exploded")
 
-        import litellm
+        from onyx.llm import cost
 
-        monkeypatch.setattr(litellm, "get_model_info", _boom)
+        monkeypatch.setattr(cost, "_catalog_entry", _boom)
         assert get_model_price_per_million("gpt-4o", "openai") == ModelPrice(
             model="gpt-4o",
             provider="openai",

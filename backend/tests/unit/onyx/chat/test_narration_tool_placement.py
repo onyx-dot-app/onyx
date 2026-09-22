@@ -1,118 +1,85 @@
-"""Regression test for the "disappearing search step" bug.
+"""Native narration and domain tool progress occupy separate render groups."""
 
-When the model narrates AND calls a tool in the same LLM cycle (e.g.
-"Let me search Zendesk first." followed by an internal_search call), the
-narration streams as the assistant message and the tool call is extracted as a
-kickoff. Both must NOT share the same (turn_index, tab_index): the frontend
-buckets packets by that pair and routes a bucket whose first packet is a
-message to the chat area, which swallows the tool's timeline step.
+from queue import Queue
+from unittest.mock import Mock
 
-The fix (onyx/chat/llm_step.py) shifts the tool call to the next tab_index when
-pre-tool answer content was emitted, so it forms its own render group.
-"""
+from pydantic_ai import messages as pm
+from pydantic_ai.models.function import DeltaToolCall, FunctionModel
+from pydantic_ai.tools import ToolDefinition
 
-from collections.abc import Iterator
-from typing import Any
-from unittest.mock import MagicMock, patch
-
-from onyx.chat.llm_step import run_llm_step_pkt_generator
-from onyx.llm.interfaces import ToolChoiceOptions
-from onyx.llm.model_response import (
-    ChatCompletionDeltaToolCall,
-    Delta,
-    FunctionCall,
-    ModelResponseStream,
-    StreamingChoice,
-)
+from onyx.chat.agent_runtime import NativeAgentRequest, run_native_agent
+from onyx.chat.emitter import Emitter
+from onyx.llm.interfaces import LLM, LLMConfig
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import (
-    AgentResponseDelta,
-    AgentResponseStart,
-)
+from onyx.server.query_and_chat.streaming_models import PydanticAIEvent, SearchToolStart
 
 
-def _chunk(delta: Delta) -> ModelResponseStream:
-    return ModelResponseStream(id="c", created="0", choice=StreamingChoice(delta=delta))
+def test_narration_and_tool_progress_keep_distinct_native_groups() -> None:
+    requests = 0
+    queue = Queue()
+    emitter = Emitter(queue)
+    responses: list[pm.ModelResponse] = []
 
+    async def stream(_messages, _info):
+        nonlocal requests
+        requests += 1
+        if requests == 1:
+            yield "Let me search first."
+            yield {1: DeltaToolCall(name="search", json_args="{}", tool_call_id="call")}
+        else:
+            yield "Here is the answer."
 
-def _narration_then_tool_stream() -> Iterator[ModelResponseStream]:
-    # 1) The model narrates before acting -> streamed as answer content.
-    yield _chunk(Delta(content="Let me search Zendesk first."))
-    # 2) ...then, in the SAME cycle, it calls the search tool.
-    yield _chunk(
-        Delta(
-            tool_calls=[
-                ChatCompletionDeltaToolCall(
-                    id="call_1",
-                    index=0,
-                    function=FunctionCall(name="internal_search", arguments=""),
-                )
-            ]
-        )
+    llm = Mock(spec=LLM)
+    llm.config = LLMConfig(
+        model_provider="openai",
+        model_name="gpt-5-mini",
+        max_input_tokens=8000,
+        temperature=0,
     )
-    yield _chunk(
-        Delta(
-            tool_calls=[
-                ChatCompletionDeltaToolCall(
-                    index=0,
-                    id=None,
-                    function=FunctionCall(name=None, arguments='{"queries": ["x"]}'),
-                )
-            ]
+    llm.model = FunctionModel(stream_function=stream)
+
+    def execute(call: pm.ToolCallPart) -> str:
+        index = next(
+            index
+            for index, part in enumerate(responses[-1].parts)
+            if isinstance(part, pm.ToolCallPart)
+            and part.tool_call_id == call.tool_call_id
         )
-    )
+        emitter.report(
+            placement=Placement(turn_index=0, tab_index=index), obj=SearchToolStart()
+        )
+        return "found"
 
-
-def _make_llm() -> MagicMock:
-    llm = MagicMock()
-    llm.config.model_name = "test-model"
-    llm.config.model_provider = "openai"
-    llm.config.api_base = None
-    llm.stream.return_value = _narration_then_tool_stream()
-    return llm
-
-
-def _drive() -> tuple[list[Any], Any]:
-    """Run the streaming step and return (emitted_packets, LlmStepResult)."""
-    gen = run_llm_step_pkt_generator(
-        history=[],
-        tool_definitions=[],
-        tool_choice=ToolChoiceOptions.AUTO,
-        llm=_make_llm(),
-        placement=Placement(turn_index=1, tab_index=0),
+    run_native_agent(
+        llm=llm,
+        prepare_step=lambda messages: NativeAgentRequest(
+            messages, {}, [ToolDefinition(name="search")]
+        ),
+        finalize_step=responses.append,
+        execute_tool=execute,
+        tool_definitions=[
+            {
+                "type": "function",
+                "function": {
+                    "name": "search",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            }
+        ],
+        max_requests=2,
+        emitter=emitter,
         state_container=None,
-        citation_processor=None,
+        placement=lambda: Placement(turn_index=max(0, requests - 1)),
+        message_history=[pm.ModelRequest(parts=[pm.UserPromptPart("find")])],
     )
-    packets: list[Any] = []
-    result: Any = None
-    try:
-        while True:
-            packets.append(next(gen))
-    except StopIteration as stop:
-        result, _has_reasoned = stop.value
-    return packets, result
-
-
-@patch("onyx.chat.llm_step.translate_history_to_llm_format", return_value=[])
-def test_narration_and_tool_call_get_distinct_tabs(_translate: MagicMock) -> None:
-    packets, result = _drive()
-
-    # The narration streamed as the assistant message at the cycle's base tab.
-    narration = [
-        p
-        for p in packets
-        if isinstance(p.obj, (AgentResponseStart, AgentResponseDelta))
-    ]
-    assert narration, "expected the model's narration to stream as answer content"
-    narration_turn = narration[0].placement.turn_index
-    assert all(p.placement.tab_index == 0 for p in narration)
-
-    # The tool call must land in its own render group: same turn, distinct tab.
-    assert result.tool_calls is not None and len(result.tool_calls) == 1
-    tool_placement = result.tool_calls[0].placement
-    assert tool_placement.turn_index == narration_turn
-    assert tool_placement.tab_index == 1, (
-        "tool call collided with the narration's placement (same turn_index AND "
-        "tab_index) — the frontend would route the shared group to the chat area "
-        "and the search step would never render in the timeline"
+    packets = [queue.get_nowait()[1] for _ in range(queue.qsize())]
+    narration = next(
+        packet
+        for packet in packets
+        if isinstance(packet.obj, PydanticAIEvent)
+        and packet.obj.text_delta.startswith("Let")
     )
+    tool = next(packet for packet in packets if isinstance(packet.obj, SearchToolStart))
+    assert narration.placement.tab_index != tool.placement.tab_index
+    assert sum(isinstance(packet.obj, SearchToolStart) for packet in packets) == 1
+    assert requests == 2

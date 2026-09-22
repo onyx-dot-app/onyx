@@ -22,7 +22,6 @@ from onyx.server.query_and_chat.streaming_models import (
     GeneratedImage,
 )
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
-from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
 
 TOOL_CALL_MSG_FUNC_NAME = "function_name"
 TOOL_CALL_MSG_ARGUMENTS = "arguments"
@@ -90,7 +89,6 @@ class ToolResponse(BaseModel):
         # This comes from internal search / web search, search docs need to be saved, already emitted by the tool
         | SearchDocsResponse
         # This comes from the memory tool, memory needs to be persisted to the database
-        | MemoryToolResponse
         # This comes from open url, web content needs to be saved, maybe this can be consolidated too
         # | WebContentResponse
         # This comes from custom tools, tool result needs to be saved
@@ -107,11 +105,6 @@ class ToolResponse(BaseModel):
     # The response is first created by the tool runner, which does not need to be aware of things like the tool_call_id
     # So this is set after the response is created by the tool runner
     tool_call: ToolCallKickoff | None = None
-
-
-class ParallelToolCallResponse(BaseModel):
-    tool_responses: list[ToolResponse]
-    updated_citation_mapping: dict[int, str]
 
 
 class ToolRunnerResponse(BaseModel):

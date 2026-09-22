@@ -9,21 +9,7 @@ from onyx.db.connector import check_connectors_exist
 from onyx.db.document import check_docs_exist
 from onyx.db.models import LLMProvider
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.model_capabilities import find_model_obj, get_model_map
 from onyx.tools.interface import Tool
-
-
-def explicit_tool_calling_supported(model_provider: str, model_name: str) -> bool:
-    model_map = get_model_map()
-    model_obj = find_model_obj(
-        model_map=model_map,
-        provider=model_provider,
-        model_name=model_name,
-    )
-
-    if not model_obj:
-        return False
-    return bool(model_obj.get("supports_function_calling"))
 
 
 def compute_tool_tokens(tool: Tool, token_counter: Callable[[str], int]) -> int:

@@ -90,7 +90,7 @@ def _build_provider_view(
 
 
 def test_get_llm_sets_ollama_num_ctx_model_kwarg() -> None:
-    with patch("onyx.llm.factory.LitellmLLM") as mock_litellm_llm:
+    with patch("onyx.llm.factory.PydanticAILLM") as mock_litellm_llm:
         get_llm(
             provider=LlmProviderNames.OLLAMA_CHAT,
             model="test-model",
@@ -104,7 +104,7 @@ def test_get_llm_sets_ollama_num_ctx_model_kwarg() -> None:
 
 
 def test_get_llm_does_not_set_ollama_num_ctx_for_non_ollama_provider() -> None:
-    with patch("onyx.llm.factory.LitellmLLM") as mock_litellm_llm:
+    with patch("onyx.llm.factory.PydanticAILLM") as mock_litellm_llm:
         get_llm(
             provider=LlmProviderNames.OPENAI,
             model="gpt-4o-mini",
@@ -181,8 +181,8 @@ def test_get_llm_policy_headers_win_over_every_other_source() -> None:
     )
     header = BIFROST_DISABLE_CONTENT_LOGGING_HEADER
     with (
-        patch("onyx.llm.factory.LitellmLLM") as mock_litellm_llm,
-        patch("onyx.utils.headers.LITELLM_EXTRA_HEADERS", {header: "false"}),
+        patch("onyx.llm.factory.PydanticAILLM") as mock_litellm_llm,
+        patch("onyx.utils.headers.LLM_EXTRA_HEADERS", {header: "false"}),
     ):
         get_llm(
             provider=BIFROST_PROVIDER_NAME,
@@ -198,7 +198,7 @@ def test_get_llm_policy_headers_win_over_every_other_source() -> None:
 
 
 def test_get_llm_without_policy_headers_keeps_the_existing_merge() -> None:
-    with patch("onyx.llm.factory.LitellmLLM") as mock_litellm_llm:
+    with patch("onyx.llm.factory.PydanticAILLM") as mock_litellm_llm:
         get_llm(
             provider="openai",
             model="gpt-4o",

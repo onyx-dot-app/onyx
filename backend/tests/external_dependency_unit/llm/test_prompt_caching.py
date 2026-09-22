@@ -1,7 +1,6 @@
 """External dependency unit tests for prompt caching functionality.
 
-These tests call LLM providers directly and use litellm's completion_cost() to verify
-that prompt caching reduces costs.
+These tests verify native provider cache usage and Onyx cost accounting.
 """
 
 import json
@@ -12,9 +11,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from litellm import completion_cost
 from sqlalchemy.orm import Session
 
+from onyx.llm.cost import compute_cost_cents
 from onyx.llm.model_response import Usage
 from onyx.llm.models import (
     AssistantMessage,
@@ -22,13 +21,27 @@ from onyx.llm.models import (
     SystemMessage,
     UserMessage,
 )
-from onyx.llm.multi_llm import LitellmLLM
-from onyx.llm.prompt_cache.processor import process_with_prompt_cache
+from onyx.llm.pydantic_ai_llm import PydanticAILLM
+from tests.utils.secret_names import TestSecret
 
 VERTEX_CREDENTIALS_ENV = "VERTEX_CREDENTIALS"
 VERTEX_LOCATION_ENV = "VERTEX_LOCATION"
 VERTEX_MODEL_ENV = "VERTEX_MODEL_NAME"
 DEFAULT_VERTEX_MODEL = "gemini-2.5-flash"
+
+
+def completion_cost(completion_response: dict, model: str) -> float:
+    provider, model_name = model.split("/", 1)
+    usage = completion_response.get("usage") or {}
+    input_cents, output_cents = compute_cost_cents(
+        model_name,
+        provider,
+        usage.get("prompt_tokens", 0),
+        usage.get("completion_tokens", 0),
+        cache_read_tokens=usage.get("cache_read_input_tokens", 0) or 0,
+        cache_creation_tokens=usage.get("cache_creation_input_tokens", 0) or 0,
+    )
+    return (input_cents + output_cents) / 100
 
 
 def _extract_cached_tokens(usage: Usage | None) -> int:
@@ -162,10 +175,10 @@ def test_openai_prompt_caching_reduces_costs(
     successes = 0
     for _ in range(attempts):
         # Create OpenAI LLM
-        llm = LitellmLLM(
+        llm = PydanticAILLM(
             api_key=os.environ["OPENAI_API_KEY"],
             model_provider="openai",
-            model_name="gpt-4o",
+            model_name="gpt-5-mini",
             max_input_tokens=128000,
         )
         import random
@@ -201,21 +214,16 @@ def test_openai_prompt_caching_reduces_costs(
         ]
 
         # Apply prompt caching (for OpenAI, this is mostly a no-op but should still work)
-        processed_messages1, _ = process_with_prompt_cache(
-            llm_config=llm.config,
-            cacheable_prefix=cacheable_prefix,
-            suffix=question1,
-            continuation=False,
-        )
+        processed_messages1 = [*cacheable_prefix, *question1]
         # print(f"Processed messages 1: {processed_messages1}")
         # print(f"Metadata 1: {metadata1}")
         # print(f"Cache key 1: {metadata1.cache_key if metadata1 else None}")
 
-        # Call litellm directly so we can get the raw response
+        # Call the provider adapter and inspect its usage
         response1 = llm.invoke(prompt=processed_messages1)
         cost1 = completion_cost(
             completion_response=response1.model_dump(),
-            model=f"{llm._model_provider}/{llm._model_version}",
+            model=f"{llm.config.model_provider}/{llm.config.model_name}",
         )
 
         usage1 = response1.usage
@@ -234,17 +242,12 @@ def test_openai_prompt_caching_reduces_costs(
         ]
 
         # Apply prompt caching (same cacheable prefix)
-        processed_messages2, _ = process_with_prompt_cache(
-            llm_config=llm.config,
-            cacheable_prefix=cacheable_prefix,
-            suffix=question2,
-            continuation=False,
-        )
+        processed_messages2 = [*cacheable_prefix, *question2]
         # print(f"Processed messages 2: {processed_messages2}")
         response2 = llm.invoke(prompt=processed_messages2)
         cost2 = completion_cost(
             completion_response=response2.model_dump(),
-            model=f"{llm._model_provider}/{llm._model_version}",
+            model=f"{llm.config.model_provider}/{llm.config.model_name}",
         )
 
         usage2 = response2.usage
@@ -271,12 +274,9 @@ def test_openai_prompt_caching_reduces_costs(
     )
 
 
-@pytest.mark.skipif(
-    not os.environ.get("ANTHROPIC_API_KEY"),
-    reason="Anthropic API key not available",
-)
+@pytest.mark.secrets(TestSecret.ANTHROPIC_API_KEY)
 def test_anthropic_prompt_caching_reduces_costs(
-    db_session: Session,  # noqa: ARG001
+    test_secrets: dict[TestSecret, str],
 ) -> None:
     """Test that Anthropic prompt caching reduces costs on subsequent calls.
 
@@ -294,15 +294,13 @@ def test_anthropic_prompt_caching_reduces_costs(
     else:
         candidate_models = [
             "claude-haiku-4-5-20251001",
-            "claude-sonnet-4-5-20250929",
-            "claude-3-5-sonnet-20241022",
-            "claude-3-5-sonnet-latest",
+            "claude-haiku-4-5",
         ]
 
     import random
     import string
 
-    # Create a long context message.
+    # Haiku 4.5 requires at least 4096 tokens before a cache breakpoint.
     # Add a random prefix to avoid reusing an existing ephemeral cache from prior test runs.
     random_prefix = "".join(random.choices(string.ascii_lowercase, k=32))
     long_context = (
@@ -314,21 +312,23 @@ def test_anthropic_prompt_caching_reduces_costs(
                 f"including neural networks, deep learning, natural language processing, "
                 f"computer vision, and reinforcement learning. These technologies are "
                 f"revolutionizing how we interact with computers and process information."
-                for i in range(50)
+                for i in range(100)
             ]
         )
     )
 
     base_messages: list[ChatCompletionMessage] = [
-        UserMessage(role="user", content=long_context)
+        UserMessage(
+            role="user", content=long_context, cache_control={"type": "ephemeral"}
+        )
     ]
 
     unavailable_models: list[str] = []
     non_caching_models: list[str] = []
 
     for model_name in candidate_models:
-        llm = LitellmLLM(
-            api_key=os.environ["ANTHROPIC_API_KEY"],
+        llm = PydanticAILLM(
+            api_key=test_secrets[TestSecret.ANTHROPIC_API_KEY],
             model_provider="anthropic",
             model_name=model_name,
             max_input_tokens=200000,
@@ -343,12 +343,7 @@ def test_anthropic_prompt_caching_reduces_costs(
             )
         ]
 
-        processed_messages1, _ = process_with_prompt_cache(
-            llm_config=llm.config,
-            cacheable_prefix=base_messages,
-            suffix=question1,
-            continuation=False,
-        )
+        processed_messages1 = [*base_messages, *question1]
 
         try:
             response1 = llm.invoke(prompt=processed_messages1, max_tokens=8)
@@ -365,7 +360,7 @@ def test_anthropic_prompt_caching_reduces_costs(
 
         cost1 = completion_cost(
             completion_response=response1.model_dump(),
-            model=f"{llm._model_provider}/{llm._model_version}",
+            model=f"{llm.config.model_provider}/{llm.config.model_name}",
         )
 
         usage1 = response1.usage
@@ -384,17 +379,12 @@ def test_anthropic_prompt_caching_reduces_costs(
             )
         ]
 
-        processed_messages2, _ = process_with_prompt_cache(
-            llm_config=llm.config,
-            cacheable_prefix=base_messages,
-            suffix=question2,
-            continuation=False,
-        )
+        processed_messages2 = [*base_messages, *question2]
 
         response2 = llm.invoke(prompt=processed_messages2, max_tokens=8)
         cost2 = completion_cost(
             completion_response=response2.model_dump(),
-            model=f"{llm._model_provider}/{llm._model_version}",
+            model=f"{llm.config.model_provider}/{llm.config.model_name}",
         )
 
         usage2 = response2.usage
@@ -419,8 +409,8 @@ def test_anthropic_prompt_caching_reduces_costs(
         )
         return
 
-    pytest.skip(
-        "No Anthropic model available with observable prompt-cache metrics. "
+    pytest.fail(
+        "No Anthropic model returned expected prompt-cache metrics. "
         f"Tried models={candidate_models}, unavailable={unavailable_models}, non_caching={non_caching_models}"
     )
 
@@ -445,7 +435,7 @@ def test_google_genai_prompt_caching_reduces_costs(
     import random
     import string
 
-    from litellm import exceptions as litellm_exceptions
+    from onyx.llm.exceptions import LLMTimeoutError
 
     try:
         credentials_path, should_cleanup = _resolve_vertex_credentials()
@@ -467,7 +457,7 @@ def test_google_genai_prompt_caching_reduces_costs(
         if vertex_location:
             custom_config["vertex_location"] = vertex_location
 
-        llm = LitellmLLM(
+        llm = PydanticAILLM(
             api_key=None,
             model_provider="vertex_ai",
             model_name=model_name,
@@ -504,12 +494,7 @@ def test_google_genai_prompt_caching_reduces_costs(
                 UserMessage(role="user", content="What are the main topics discussed?")
             ]
 
-            processed_messages1, _ = process_with_prompt_cache(
-                llm_config=llm.config,
-                cacheable_prefix=cacheable_prefix,
-                suffix=question1,
-                continuation=False,
-            )
+            processed_messages1 = [*cacheable_prefix, *question1]
             # Debug: print processed messages structure
             first_msg = (
                 processed_messages1[0]
@@ -521,7 +506,7 @@ def test_google_genai_prompt_caching_reduces_costs(
             response1 = llm.invoke(prompt=processed_messages1)
             cost1 = completion_cost(
                 completion_response=response1.model_dump(),
-                model=f"{llm._model_provider}/{llm._model_version}",
+                model=f"{llm.config.model_provider}/{llm.config.model_name}",
             )
             usage1 = response1.usage
             cache_creation_tokens = _get_usage_value(
@@ -542,17 +527,12 @@ def test_google_genai_prompt_caching_reduces_costs(
                 )
             ]
 
-            processed_messages2, _ = process_with_prompt_cache(
-                llm_config=llm.config,
-                cacheable_prefix=cacheable_prefix,
-                suffix=question2,
-                continuation=False,
-            )
+            processed_messages2 = [*cacheable_prefix, *question2]
 
             response2 = llm.invoke(prompt=processed_messages2)
             cost2 = completion_cost(
                 completion_response=response2.model_dump(),
-                model=f"{llm._model_provider}/{llm._model_version}",
+                model=f"{llm.config.model_provider}/{llm.config.model_name}",
             )
             usage2 = response2.usage
             cache_read_tokens_2 = _extract_cache_read_tokens(usage2)
@@ -583,7 +563,7 @@ def test_google_genai_prompt_caching_reduces_costs(
                 break
     except ValueError as exc:
         pytest.fail(f"Invalid Vertex credentials: {exc}")
-    except litellm_exceptions.APIConnectionError as exc:
+    except LLMTimeoutError as exc:
         creds_details = json.loads(credentials_path.read_text(encoding="utf-8"))
         pytest.fail(
             "Vertex credentials appeared well-formed but failed to mint an access token. "
@@ -617,10 +597,10 @@ def test_prompt_caching_with_conversation_history(
     System message and history should be cached, only new user message is uncached.
     """
     # Create OpenAI LLM
-    llm = LitellmLLM(
+    llm = PydanticAILLM(
         api_key=os.environ["OPENAI_API_KEY"],
         model_provider="openai",
-        model_name="gpt-4o-mini",
+        model_name="gpt-5-mini",
         max_input_tokens=128000,
     )
 
@@ -652,7 +632,7 @@ def test_prompt_caching_with_conversation_history(
     response1 = llm.invoke(prompt=messages_turn1)
     cost1 = completion_cost(
         completion_response=response1.model_dump(),
-        model=f"{llm._model_provider}/{llm._model_version}",
+        model=f"{llm.config.model_provider}/{llm.config.model_name}",
     )
 
     usage1 = response1.usage
@@ -674,7 +654,7 @@ def test_prompt_caching_with_conversation_history(
     response2 = llm.invoke(prompt=messages_turn2)
     cost2 = completion_cost(
         completion_response=response2.model_dump(),
-        model=f"{llm._model_provider}/{llm._model_version}",
+        model=f"{llm.config.model_provider}/{llm.config.model_name}",
     )
 
     usage2 = response2.usage
@@ -691,7 +671,7 @@ def test_prompt_caching_with_conversation_history(
     response3 = llm.invoke(prompt=messages_turn3)
     cost3 = completion_cost(
         completion_response=response3.model_dump(),
-        model=f"{llm._model_provider}/{llm._model_version}",
+        model=f"{llm.config.model_provider}/{llm.config.model_name}",
     )
 
     usage3 = response3.usage
@@ -724,18 +704,18 @@ def test_prompt_caching_with_conversation_history(
     not os.environ.get("OPENAI_API_KEY"),
     reason="OpenAI API key not available",
 )
-def test_no_caching_without_process_with_prompt_cache(
+def test_provider_without_explicit_cache_marker(
     db_session: Session,  # noqa: ARG001
 ) -> None:
-    """Test baseline: without using process_with_prompt_cache, no special caching occurs.
+    """Test baseline: without an explicit cache marker, provider defaults apply.
 
     This establishes a baseline to compare against the caching tests.
     """
     # Create OpenAI LLM
-    llm = LitellmLLM(
+    llm = PydanticAILLM(
         api_key=os.environ["OPENAI_API_KEY"],
         model_provider="openai",
-        model_name="gpt-4o-mini",
+        model_name="gpt-5-mini",
         max_input_tokens=128000,
     )
 
@@ -753,7 +733,7 @@ def test_no_caching_without_process_with_prompt_cache(
     response1 = llm.invoke(prompt=messages1)
     cost1 = completion_cost(
         completion_response=response1.model_dump(),
-        model=f"{llm._model_provider}/{llm._model_version}",
+        model=f"{llm.config.model_provider}/{llm.config.model_name}",
     )
 
     usage1 = response1.usage

@@ -1652,13 +1652,13 @@ RECENCY_BIAS_MULTIPLIER = float(os.environ.get("RECENCY_BIAS_MULTIPLIER") or 1.0
 # backend/onyx/document_index/vespa/app_config/schemas/danswer_chunk.sd.jinja.
 RERANK_COUNT = int(os.environ.get("RERANK_COUNT") or 1000)
 
-# Flat per-image cost (cents) when litellm has no price for an image model.
+# Flat per-image cost (cents) when the model catalog has no price for an image model.
 # Clamped to >= 0 so a misconfigured negative can't credit usage.
 DEFAULT_IMAGE_COST_CENTS = max(
     0.0, float(os.environ.get("DEFAULT_IMAGE_COST_CENTS") or 4.0)
 )
 
-# Fallback USD/Mtok when litellm can't price (default 0 = free). Clamped >= 0.
+# Fallback USD/Mtok when the model catalog cannot price (default 0 = free). Clamped >= 0.
 DEFAULT_LLM_INPUT_COST_PER_MTOK = max(
     0.0, float(os.environ.get("DEFAULT_LLM_INPUT_COST_PER_MTOK") or 0.0)
 )
@@ -1829,17 +1829,17 @@ API_SERVER_THREADPOOL_SIZE = int(os.environ.get("ONYX_API_THREADPOOL_SIZE") or "
 
 PARSE_WITH_TRAFILATURA = os.environ.get("PARSE_WITH_TRAFILATURA", "").lower() == "true"
 
-# allow for custom error messages for different errors returned by litellm
+# allow for custom error messages for different errors returned by providers
 # for example, can specify: {"Violated content safety policy": "EVIL REQUEST!!!"}
 # to make it so that if an LLM call returns an error containing "Violated content safety policy"
 # the end user will see "EVIL REQUEST!!!" instead of the default error message.
-_LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS = os.environ.get(
-    "LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS", ""
-)
-LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS: dict[str, str] | None = None
+_LLM_CUSTOM_ERROR_MESSAGE_MAPPINGS = os.environ.get(
+    "LLM_CUSTOM_ERROR_MESSAGE_MAPPINGS"
+) or os.environ.get("LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS", "")
+LLM_CUSTOM_ERROR_MESSAGE_MAPPINGS: dict[str, str] | None = None
 try:
-    LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS = cast(
-        dict[str, str], json.loads(_LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS)
+    LLM_CUSTOM_ERROR_MESSAGE_MAPPINGS = cast(
+        dict[str, str], json.loads(_LLM_CUSTOM_ERROR_MESSAGE_MAPPINGS)
     )
 except json.JSONDecodeError:
     pass

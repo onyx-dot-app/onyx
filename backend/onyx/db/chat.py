@@ -726,7 +726,7 @@ def reserve_multi_model_message_ids(
             parent_message_id=parent_message_id,
             latest_child_message_id=None,
             message="Response was terminated prior to completion, try regenerating.",
-            token_count=15,  # placeholder; updated on completion by llm_loop_completion_handle
+            token_count=15,  # placeholder; updated on completion by finalize_model_response
             message_type=MessageType.ASSISTANT,
             model_display_name=display_name,
         )

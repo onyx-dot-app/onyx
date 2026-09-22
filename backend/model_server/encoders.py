@@ -181,8 +181,6 @@ async def route_bi_encoder_embed(
 async def process_embed_request(
     embed_request: EmbedRequest, gpu_type: str = "UNKNOWN"
 ) -> EmbedResponse:
-    from litellm.exceptions import RateLimitError
-
     # Only local models should use this endpoint - API providers should make direct API calls
     if embed_request.provider_type is not None:
         raise ValueError(
@@ -213,11 +211,6 @@ async def process_embed_request(
             gpu_type=gpu_type,
         )
         return EmbedResponse(embeddings=embeddings)
-    except RateLimitError as e:
-        raise HTTPException(
-            status_code=429,
-            detail=str(e),
-        )
     except Exception as e:
         logger.exception(
             "Error during embedding process: provider=%s model=%s",

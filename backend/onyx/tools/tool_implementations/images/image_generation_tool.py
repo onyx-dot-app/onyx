@@ -31,7 +31,6 @@ from onyx.server.query_and_chat.streaming_models import (
     ImageGenerationFinal,
     ImageGenerationToolHeartbeat,
     ImageGenerationToolStart,
-    Packet,
 )
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolCallException, ToolExecutionException, ToolResponse
@@ -140,12 +139,7 @@ class ImageGenerationTool(Tool[None]):
         }
 
     def emit_start(self, placement: Placement) -> None:
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=ImageGenerationToolStart(),
-            )
-        )
+        self.emitter.report(placement=placement, obj=ImageGenerationToolStart())
 
     def _generate_image(
         self,
@@ -361,12 +355,7 @@ class ImageGenerationTool(Tool[None]):
         heartbeat_count = 0
         while not completed.is_set():
             # Emit a heartbeat packet to prevent timeout
-            self.emitter.emit(
-                Packet(
-                    placement=placement,
-                    obj=ImageGenerationToolHeartbeat(),
-                )
-            )
+            self.emitter.report(placement=placement, obj=ImageGenerationToolHeartbeat())
             heartbeat_count += 1
 
             # Wait for a short time before next heartbeat
@@ -404,11 +393,9 @@ class ImageGenerationTool(Tool[None]):
         ]
 
         # Emit final packet with generated images
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=ImageGenerationFinal(images=generated_images_metadata),
-            )
+        self.emitter.report(
+            placement=placement,
+            obj=ImageGenerationFinal(images=generated_images_metadata),
         )
 
         final_image_generation_response = FinalImageGenerationResponse(

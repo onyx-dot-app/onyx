@@ -1,12 +1,16 @@
-from onyx.configs.constants import MessageType
-from onyx.llm.interfaces import LLM
-from onyx.llm.models import (
-    AssistantMessage,
-    ChatCompletionMessage,
-    ReasoningEffort,
-    SystemMessage,
-    UserMessage,
+from pydantic import BaseModel, Field
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelRequest,
+    ModelResponse,
+    SystemPromptPart,
+    TextPart,
+    UserPromptPart,
 )
+
+from onyx.configs.constants import MessageType
+from onyx.llm.inference import run_inference
+from onyx.llm.interfaces import LLM
 from onyx.prompts.prompt_utils import get_current_llm_day_time
 from onyx.prompts.search_prompts import (
     KEYWORD_REPHRASE_SYSTEM_PROMPT,
@@ -17,10 +21,13 @@ from onyx.prompts.search_prompts import (
 )
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+class KeywordQueries(BaseModel):
+    queries: list[str] = Field(max_length=3)
 
 
 def _build_additional_context(
@@ -53,16 +60,16 @@ def _build_additional_context(
 
 def _build_message_history(
     history: list[ChatMinimalTextMessage],
-) -> list[ChatCompletionMessage]:
+) -> list[ModelMessage]:
     """Convert ChatMinimalTextMessage list to ChatCompletionMessage list."""
-    messages: list[ChatCompletionMessage] = []
+    messages: list[ModelMessage] = []
 
     for msg in history:
         if msg.message_type == MessageType.USER:
-            user_msg = UserMessage(content=msg.message)
+            user_msg = ModelRequest(parts=[UserPromptPart(msg.message)])
             messages.append(user_msg)
         elif msg.message_type == MessageType.ASSISTANT:
-            assistant_msg = AssistantMessage(content=msg.message)
+            assistant_msg = ModelResponse(parts=[TextPart(msg.message)])
             messages.append(assistant_msg)
 
     return messages
@@ -116,31 +123,38 @@ def semantic_query_rephrase(
     )
 
     # Build system message with current date
-    system_msg = SystemMessage(
-        content=SEMANTIC_QUERY_REPHRASE_SYSTEM_PROMPT.format(
-            current_date=current_datetime_str
-        )
+    system_msg = ModelRequest(
+        parts=[
+            SystemPromptPart(
+                SEMANTIC_QUERY_REPHRASE_SYSTEM_PROMPT.format(
+                    current_date=current_datetime_str
+                )
+            )
+        ]
     )
 
     # Convert chat history to message format (excluding the last user message and everything after it)
-    messages: list[ChatCompletionMessage] = [system_msg]
+    messages: list[ModelMessage] = [system_msg]
     messages.extend(_build_message_history(history[:last_user_message_idx]))
 
     # Add the last message as the user prompt with instructions
-    final_user_msg = UserMessage(
-        content=SEMANTIC_QUERY_REPHRASE_USER_PROMPT.format(
-            additional_context=additional_context, user_query=user_query
-        )
+    final_user_msg = ModelRequest(
+        parts=[
+            UserPromptPart(
+                SEMANTIC_QUERY_REPHRASE_USER_PROMPT.format(
+                    additional_context=additional_context, user_query=user_query
+                )
+            )
+        ]
     )
     messages.append(final_user_msg)
 
-    # Call LLM and return result with Braintrust tracing
-    with llm_generation_span(
-        llm=llm, flow=LLMFlow.SEMANTIC_QUERY_REPHRASE, input_messages=messages
-    ) as span_generation:
-        response = llm.invoke(prompt=messages, reasoning_effort=ReasoningEffort.OFF)
-        record_llm_response(span_generation, response)
-        final_query = response.choice.message.content
+    final_query = run_inference(
+        llm=llm,
+        messages=messages,
+        output_type=str,
+        flow=LLMFlow.SEMANTIC_QUERY_REPHRASE,
+    )
 
     if not final_query:
         # It's ok if some other queries fail, this one is likely the best one
@@ -198,33 +212,34 @@ def keyword_query_expansion(
     )
 
     # Build system message with current date
-    system_msg = SystemMessage(
-        content=KEYWORD_REPHRASE_SYSTEM_PROMPT.format(current_date=current_datetime_str)
+    system_msg = ModelRequest(
+        parts=[
+            SystemPromptPart(
+                KEYWORD_REPHRASE_SYSTEM_PROMPT.format(current_date=current_datetime_str)
+            )
+        ]
     )
 
     # Convert chat history to message format (excluding the last user message and everything after it)
-    messages: list[ChatCompletionMessage] = [system_msg]
+    messages: list[ModelMessage] = [system_msg]
     messages.extend(_build_message_history(history[:last_user_message_idx]))
 
     # Add the last message as the user prompt with instructions
-    final_user_msg = UserMessage(
-        content=KEYWORD_REPHRASE_USER_PROMPT.format(
-            additional_context=additional_context, user_query=user_query
-        )
+    final_user_msg = ModelRequest(
+        parts=[
+            UserPromptPart(
+                KEYWORD_REPHRASE_USER_PROMPT.format(
+                    additional_context=additional_context, user_query=user_query
+                )
+            )
+        ]
     )
     messages.append(final_user_msg)
 
-    # Call LLM and return result with Braintrust tracing
-    with llm_generation_span(
-        llm=llm, flow=LLMFlow.KEYWORD_QUERY_EXPANSION, input_messages=messages
-    ) as span_generation:
-        response = llm.invoke(prompt=messages, reasoning_effort=ReasoningEffort.OFF)
-        record_llm_response(span_generation, response)
-        content = response.choice.message.content
-
-    # Parse the response - each line is a separate keyword query
-    if not content:
-        return []
-
-    queries = [line.strip() for line in content.strip().split("\n") if line.strip()]
-    return queries
+    result = run_inference(
+        llm=llm,
+        messages=messages,
+        output_type=KeywordQueries,
+        flow=LLMFlow.KEYWORD_QUERY_EXPANSION,
+    )
+    return [query.strip() for query in result.queries if query.strip()]

@@ -2,7 +2,7 @@ import ipaddress
 import socket
 import unicodedata
 from typing import Any
-from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -332,6 +332,7 @@ def _pinned_get(
     port: int,
     headers: dict[str, str] | None,
     timeout: float | tuple[float, float],
+    trust_env: bool = True,
     **kwargs: Any,
 ) -> requests.Response:
     """GET the already-validated IP directly, presenting ``hostname`` for the
@@ -346,7 +347,7 @@ def _pinned_get(
     request_headers = headers.copy() if headers else {}
     request_headers["Host"] = f"{hostname}:{port}" if port != default_port else hostname
 
-    if parsed.scheme != "https":
+    if parsed.scheme != "https" and trust_env:
         return requests.get(
             request_url,
             headers=request_headers,
@@ -356,7 +357,9 @@ def _pinned_get(
         )
 
     with requests.Session() as session:
-        session.mount("https://", _PinnedHostAdapter(hostname))
+        session.trust_env = trust_env
+        if parsed.scheme == "https":
+            session.mount("https://", _PinnedHostAdapter(hostname))
         return session.get(
             request_url,
             headers=request_headers,
@@ -466,6 +469,7 @@ def ssrf_safe_get(
     block_loopback_and_link_local: bool = True,
     block_link_local_only: bool = False,
     https_only: bool = False,
+    trust_env: bool = True,
     **kwargs: Any,
 ) -> requests.Response:
     """
@@ -484,6 +488,7 @@ def ssrf_safe_get(
             IPs. Use only when the operator has explicitly opted in (e.g. trusted
             self-hosted deployment fetching internal docs). Scheme, credential, and
             blocked-hostname checks still apply on each hop.
+        trust_env: Use ambient proxy and netrc settings. Disable for untrusted media.
         **kwargs: Additional arguments passed to requests.get()
 
     Returns:
@@ -502,6 +507,7 @@ def ssrf_safe_get(
         block_loopback_and_link_local=block_loopback_and_link_local,
         block_link_local_only=block_link_local_only,
         https_only=https_only,
+        trust_env=trust_env,
         **kwargs,
     )
 
@@ -520,17 +526,7 @@ def ssrf_safe_get(
         if not redirect_url:
             break
 
-        # Handle relative redirects
-        if not redirect_url.startswith(("http://", "https://")):
-            parsed_current = urlparse(current_url)
-            if redirect_url.startswith("/"):
-                redirect_url = (
-                    f"{parsed_current.scheme}://{parsed_current.netloc}{redirect_url}"
-                )
-            else:
-                # Relative path
-                base_path = parsed_current.path.rsplit("/", 1)[0]
-                redirect_url = f"{parsed_current.scheme}://{parsed_current.netloc}{base_path}/{redirect_url}"
+        redirect_url = urljoin(current_url, redirect_url)
 
         # Validate and follow the redirect (this will raise SSRFException if invalid)
         current_url = redirect_url
@@ -542,6 +538,7 @@ def ssrf_safe_get(
             block_loopback_and_link_local=block_loopback_and_link_local,
             block_link_local_only=block_link_local_only,
             https_only=https_only,
+            trust_env=trust_env,
             **kwargs,
         )
 

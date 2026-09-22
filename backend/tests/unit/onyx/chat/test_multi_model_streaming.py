@@ -13,9 +13,9 @@ from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
-from litellm.exceptions import ContextWindowExceededError
+from pydantic_ai.exceptions import ModelHTTPError
 
-from onyx.chat.llm_loop import EmptyLLMResponseError
+from onyx.chat.chat_agent import EmptyLLMResponseError
 from onyx.chat.models import StreamingError
 from onyx.configs.constants import MessageType
 from onyx.db.chat import set_preferred_response
@@ -294,11 +294,11 @@ class TestRunModels:
     """Tests for the _run_models worker-thread drain loop.
 
     All external dependencies (LLM, DB, tools) are patched out.  Worker threads
-    still run but return immediately since run_llm_loop is mocked.
+    still run but return immediately since run_chat_agent is mocked.
     """
 
     def test_n1_overall_stop_from_llm_loop_passes_through(self) -> None:
-        """OverallStop emitted by run_llm_loop is passed through the drain loop unchanged."""
+        """OverallStop emitted by run_chat_agent is passed through the drain loop unchanged."""
 
         def emit_stop(**kwargs: Any) -> None:
             kwargs["emitter"].emit(
@@ -309,10 +309,10 @@ class TestRunModels:
             )
 
         with (
-            patch("onyx.chat.process_message.run_llm_loop", side_effect=emit_stop),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.run_chat_agent", side_effect=emit_stop),
+            patch("onyx.chat.process_message.run_deep_research_agent"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.llm_loop_completion_handle"),
+            patch("onyx.chat.process_message.finalize_model_response"),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -342,12 +342,12 @@ class TestRunModels:
                 0.05,
             ),
             patch(
-                "onyx.chat.process_message.run_llm_loop",
+                "onyx.chat.process_message.run_chat_agent",
                 side_effect=sleep_then_return,
             ),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.run_deep_research_agent"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.llm_loop_completion_handle"),
+            patch("onyx.chat.process_message.finalize_model_response"),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -371,10 +371,10 @@ class TestRunModels:
             )
 
         with (
-            patch("onyx.chat.process_message.run_llm_loop", side_effect=emit_one),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.run_chat_agent", side_effect=emit_one),
+            patch("onyx.chat.process_message.run_deep_research_agent"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.llm_loop_completion_handle"),
+            patch("onyx.chat.process_message.finalize_model_response"),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -401,10 +401,10 @@ class TestRunModels:
             )
 
         with (
-            patch("onyx.chat.process_message.run_llm_loop", side_effect=emit_one),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.run_chat_agent", side_effect=emit_one),
+            patch("onyx.chat.process_message.run_deep_research_agent"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.llm_loop_completion_handle"),
+            patch("onyx.chat.process_message.finalize_model_response"),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -428,10 +428,10 @@ class TestRunModels:
             raise RuntimeError("intentional test failure")
 
         with (
-            patch("onyx.chat.process_message.run_llm_loop", side_effect=always_fail),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.run_chat_agent", side_effect=always_fail),
+            patch("onyx.chat.process_message.run_deep_research_agent"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.llm_loop_completion_handle"),
+            patch("onyx.chat.process_message.finalize_model_response"),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -451,17 +451,15 @@ class TestRunModels:
         CONTEXT_TOO_LONG and non-retryable through the _run_model -> drain path."""
 
         def overflow(**_kwargs: Any) -> None:
-            raise ContextWindowExceededError(
-                "This model's maximum context length is 8192 tokens",
-                model="gpt-4",
-                llm_provider="openai",
+            raise ModelHTTPError(
+                400, "gpt-4", "This model's maximum context length is 8192 tokens"
             )
 
         with (
-            patch("onyx.chat.process_message.run_llm_loop", side_effect=overflow),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.run_chat_agent", side_effect=overflow),
+            patch("onyx.chat.process_message.run_deep_research_agent"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.llm_loop_completion_handle"),
+            patch("onyx.chat.process_message.finalize_model_response"),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -487,10 +485,10 @@ class TestRunModels:
         )
 
         with (
-            patch("onyx.chat.process_message.run_llm_loop", side_effect=refusal),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.run_chat_agent", side_effect=refusal),
+            patch("onyx.chat.process_message.run_deep_research_agent"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.llm_loop_completion_handle"),
+            patch("onyx.chat.process_message.finalize_model_response"),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -519,12 +517,12 @@ class TestRunModels:
 
         with (
             patch(
-                "onyx.chat.process_message.run_llm_loop",
+                "onyx.chat.process_message.run_chat_agent",
                 side_effect=fail_model_0_succeed_model_1,
             ),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.run_deep_research_agent"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.llm_loop_completion_handle"),
+            patch("onyx.chat.process_message.finalize_model_response"),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -554,11 +552,11 @@ class TestRunModels:
         completion_called = threading.Event()
 
         with (
-            patch("onyx.chat.process_message.run_llm_loop", side_effect=slow_llm),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.run_chat_agent", side_effect=slow_llm),
+            patch("onyx.chat.process_message.run_deep_research_agent"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
             patch(
-                "onyx.chat.process_message.llm_loop_completion_handle",
+                "onyx.chat.process_message.finalize_model_response",
                 side_effect=lambda *_, **__: completion_called.set(),
             ),
             patch(
@@ -599,11 +597,11 @@ class TestRunModels:
                 model_1_persisted.set()
 
         with (
-            patch("onyx.chat.process_message.run_llm_loop", side_effect=slow_llm),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.run_chat_agent", side_effect=slow_llm),
+            patch("onyx.chat.process_message.run_deep_research_agent"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
             patch(
-                "onyx.chat.process_message.llm_loop_completion_handle",
+                "onyx.chat.process_message.finalize_model_response",
                 side_effect=mark_persisted,
             ) as mock_handle,
             patch(
@@ -635,12 +633,10 @@ class TestRunModels:
         setup = _make_setup(n_models=2)
 
         with (
-            patch("onyx.chat.process_message.run_llm_loop"),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.run_chat_agent"),
+            patch("onyx.chat.process_message.run_deep_research_agent"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch(
-                "onyx.chat.process_message.llm_loop_completion_handle"
-            ) as mock_handle,
+            patch("onyx.chat.process_message.finalize_model_response") as mock_handle,
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -659,18 +655,16 @@ class TestRunModels:
         assert compression_flags == [False, True]
 
     def test_completion_handle_not_called_for_failed_model(self) -> None:
-        """llm_loop_completion_handle must be skipped for a model that raised."""
+        """finalize_model_response must be skipped for a model that raised."""
 
         def always_fail(**_kwargs: Any) -> None:
             raise RuntimeError("fail")
 
         with (
-            patch("onyx.chat.process_message.run_llm_loop", side_effect=always_fail),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.run_chat_agent", side_effect=always_fail),
+            patch("onyx.chat.process_message.run_deep_research_agent"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch(
-                "onyx.chat.process_message.llm_loop_completion_handle"
-            ) as mock_handle,
+            patch("onyx.chat.process_message.finalize_model_response") as mock_handle,
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -692,12 +686,10 @@ class TestRunModels:
                 raise RuntimeError("fail")
 
         with (
-            patch("onyx.chat.process_message.run_llm_loop", side_effect=fail_model_0),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.run_chat_agent", side_effect=fail_model_0),
+            patch("onyx.chat.process_message.run_deep_research_agent"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch(
-                "onyx.chat.process_message.llm_loop_completion_handle"
-            ) as mock_handle,
+            patch("onyx.chat.process_message.finalize_model_response") as mock_handle,
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -728,13 +720,13 @@ class TestRunModels:
 
         with (
             patch(
-                "onyx.chat.process_message.run_llm_loop",
+                "onyx.chat.process_message.run_chat_agent",
                 side_effect=emit_then_block_until_drain,
             ),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.run_deep_research_agent"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
             patch(
-                "onyx.chat.process_message.llm_loop_completion_handle",
+                "onyx.chat.process_message.finalize_model_response",
                 side_effect=lambda *_, **__: completion_called.set(),
             ) as mock_handle,
             patch(
@@ -780,14 +772,12 @@ class TestRunModels:
 
         with (
             patch(
-                "onyx.chat.process_message.run_llm_loop",
+                "onyx.chat.process_message.run_chat_agent",
                 side_effect=emit_then_raise_after_drain,
             ),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.run_deep_research_agent"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch(
-                "onyx.chat.process_message.llm_loop_completion_handle"
-            ) as mock_handle,
+            patch("onyx.chat.process_message.finalize_model_response") as mock_handle,
             patch(
                 "onyx.chat.process_message.get_session_with_current_tenant",
                 return_value=session_ctx,
@@ -831,13 +821,13 @@ class TestRunModels:
 
         with (
             patch(
-                "onyx.chat.process_message.run_llm_loop",
+                "onyx.chat.process_message.run_chat_agent",
                 side_effect=emit_and_return_immediately,
             ),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.run_deep_research_agent"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
             patch(
-                "onyx.chat.process_message.llm_loop_completion_handle",
+                "onyx.chat.process_message.finalize_model_response",
                 side_effect=lambda *_, **__: completion_called.set(),
             ) as mock_handle,
             patch(
@@ -885,13 +875,13 @@ class TestRunModels:
 
         with (
             patch(
-                "onyx.chat.process_message.run_llm_loop",
+                "onyx.chat.process_message.run_chat_agent",
                 side_effect=emit_and_maybe_block,
             ),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.run_deep_research_agent"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
             patch(
-                "onyx.chat.process_message.llm_loop_completion_handle",
+                "onyx.chat.process_message.finalize_model_response",
                 side_effect=mark_persisted,
             ) as mock_handle,
             patch(
@@ -936,12 +926,12 @@ class TestRunModels:
 
         with (
             patch(
-                "onyx.chat.process_message.run_llm_loop",
+                "onyx.chat.process_message.run_chat_agent",
                 side_effect=emit_then_block,
             ),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.run_deep_research_agent"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.llm_loop_completion_handle"),
+            patch("onyx.chat.process_message.finalize_model_response"),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -982,11 +972,11 @@ class TestRunModels:
         model_1_persisted = threading.Event()
 
         with (
-            patch("onyx.chat.process_message.run_llm_loop", side_effect=fail_model_0),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.run_chat_agent", side_effect=fail_model_0),
+            patch("onyx.chat.process_message.run_deep_research_agent"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
             patch(
-                "onyx.chat.process_message.llm_loop_completion_handle",
+                "onyx.chat.process_message.finalize_model_response",
                 side_effect=lambda *_, **__: model_1_persisted.set(),
             ) as mock_handle,
             patch(
@@ -1000,7 +990,7 @@ class TestRunModels:
 
         for call in mock_handle.call_args_list:
             assert call.kwargs.get("llm") is not setup.llms[0], (
-                "llm_loop_completion_handle must not be called for the errored model"
+                "finalize_model_response must not be called for the errored model"
             )
 
     def test_external_state_container_used_for_model_zero(self) -> None:
@@ -1012,10 +1002,10 @@ class TestRunModels:
         setup = _make_setup(n_models=1)
 
         with (
-            patch("onyx.chat.process_message.run_llm_loop") as mock_llm,
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.run_chat_agent") as mock_llm,
+            patch("onyx.chat.process_message.run_deep_research_agent"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.llm_loop_completion_handle"),
+            patch("onyx.chat.process_message.finalize_model_response"),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -1023,7 +1013,7 @@ class TestRunModels:
         ):
             list(_run_models(setup, MagicMock(), external_state_container=external))
 
-        # The state_container kwarg passed to run_llm_loop must be the external one
+        # The state_container kwarg passed to run_chat_agent must be the external one
         call_kwargs = mock_llm.call_args.kwargs
         assert call_kwargs["state_container"] is external
 
@@ -1040,12 +1030,12 @@ def test_worker_traceback_only_reaches_development_clients() -> None:
             patch("onyx.chat.process_message.load_settings"),
             patch("onyx.chat.process_message.get_session_with_current_tenant"),
             patch(
-                "onyx.chat.process_message.run_llm_loop",
+                "onyx.chat.process_message.run_chat_agent",
                 side_effect=RuntimeError("worker-frame"),
             ),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.run_deep_research_agent"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.llm_loop_completion_handle"),
+            patch("onyx.chat.process_message.finalize_model_response"),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,

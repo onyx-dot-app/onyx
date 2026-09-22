@@ -1,3 +1,9 @@
+import {
+  isNativeNarration,
+  isNativeThinking,
+  nativeContent,
+  nativePartEnded,
+} from "@/app/app/services/pydanticEvents";
 import React, {
   useCallback,
   useEffect,
@@ -9,7 +15,6 @@ import { useTranslations } from "next-intl";
 
 import {
   PacketType,
-  ReasoningDelta,
   ReasoningPacket,
 } from "@/app/app/services/streamingModels";
 import {
@@ -66,20 +71,27 @@ function extractFirstParagraph(content: string): {
 
 function constructCurrentReasoningState(packets: ReasoningPacket[]) {
   const hasStart = packets.some(
-    (p) => p.obj.type === PacketType.REASONING_START
+    (p) =>
+      isNativeThinking(p) ||
+      isNativeNarration(p) ||
+      p.obj.type === PacketType.REASONING_START
   );
   const hasEnd = packets.some(
     (p) =>
+      nativePartEnded(p) ||
       p.obj.type === PacketType.SECTION_END ||
       p.obj.type === PacketType.ERROR ||
       // Support reasoning_done from backend
-      (p.obj as any).type === PacketType.REASONING_DONE
+      p.obj.type === PacketType.REASONING_DONE
   );
-  const deltas = packets
-    .filter((p) => p.obj.type === PacketType.REASONING_DELTA)
-    .map((p) => p.obj as ReasoningDelta);
-
-  const content = deltas.map((d) => d.reasoning).join("");
+  const content = packets
+    .map((packet) =>
+      packet.obj.type === PacketType.REASONING_DELTA
+        ? packet.obj.reasoning
+        : nativeContent(packet, "thinking") +
+          (isNativeNarration(packet) ? nativeContent(packet, "text") : "")
+    )
+    .join("");
 
   return {
     hasStart,

@@ -1,0 +1,81 @@
+{
+  "anthropic/claude-3-5-sonnet": {
+    "max_input_tokens": 200000,
+    "max_output_tokens": 8192,
+    "mode": "chat",
+    "model_provider": "anthropic",
+    "supports_function_calling": true,
+    "supports_reasoning": false,
+    "supports_vision": true
+  },
+  "anthropic/claude-3-5-sonnet-20240620": {
+    "max_input_tokens": 200000,
+    "max_output_tokens": 8192,
+    "mode": "chat",
+    "model_provider": "anthropic",
+    "supports_function_calling": true,
+    "supports_reasoning": false,
+    "supports_vision": true
+  },
+  "bedrock/amazon.titan-embed-text-v1": {
+    "max_input_tokens": 8192,
+    "mode": "embedding",
+    "model_provider": "bedrock",
+    "supports_reasoning": false,
+    "supports_vision": false
+  },
+  "cohere/embed-english-light-v3.0": {
+    "mode": "embedding",
+    "model_provider": "cohere",
+    "supports_reasoning": false,
+    "supports_vision": false
+  },
+  "cohere/embed-english-v3.0": {
+    "mode": "embedding",
+    "model_provider": "cohere",
+    "supports_reasoning": false,
+    "supports_vision": false
+  },
+  "cohere/embed-multilingual-light-v3.0": {
+    "mode": "embedding",
+    "model_provider": "cohere",
+    "supports_reasoning": false,
+    "supports_vision": false
+  },
+  "cohere/embed-multilingual-v3.0": {
+    "mode": "embedding",
+    "model_provider": "cohere",
+    "supports_reasoning": false,
+    "supports_vision": false
+  },
+  "cohere/embed-v4.0": {
+    "mode": "embedding",
+    "model_provider": "cohere",
+    "supports_reasoning": false,
+    "supports_vision": true
+  },
+  "gemini/gemma-3-27b-it": {
+    "max_input_tokens": 131072,
+    "max_output_tokens": 8192,
+    "mode": "chat",
+    "model_provider": "gemini",
+    "supports_reasoning": false,
+    "supports_vision": true
+  },
+  "ollama/gpt-oss:120b-cloud": {
+    "input_cost_per_token": 0,
+    "mode": "chat",
+    "model_provider": "ollama",
+    "output_cost_per_token": 0,
+    "supports_function_calling": true,
+    "supports_reasoning": true
+  },
+  "ollama/gpt-oss:20b-cloud": {
+    "input_cost_per_token": 0,
+    "mode": "chat",
+    "model_provider": "ollama",
+    "output_cost_per_token": 0,
+    "supports_function_calling": true,
+    "supports_reasoning": true
+  }
+}

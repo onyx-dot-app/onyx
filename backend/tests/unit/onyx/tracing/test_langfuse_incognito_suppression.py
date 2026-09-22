@@ -20,7 +20,7 @@ def incognito_context() -> Generator[None, None, None]:
 def _fake_trace(trace_id: str) -> MagicMock:
     trace = MagicMock()
     trace.trace_id = trace_id
-    trace.name = "run_llm_loop"
+    trace.name = "run_chat_agent"
     trace.export.return_value = {}
     return trace
 

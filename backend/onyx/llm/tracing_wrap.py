@@ -249,7 +249,7 @@ def _merge_tool_call_delta(
 ) -> None:
     """Merge a single streaming tool-call delta into the per-``index`` buffer.
 
-    Streaming tool calls from LiteLLM arrive as partial fragments:
+    The native stream adapter emits tool calls as partial fragments:
     - Early chunks for a given ``index`` usually carry ``id`` and
       ``function.name`` (and possibly the first slice of ``function.arguments``).
     - Subsequent chunks for the same ``index`` carry additional

@@ -1054,7 +1054,9 @@ def test_gateway_anthropic_count_tokens_falls_back_to_local_estimate_on_unavaila
         patch.object(
             anthropic_passthrough, "ANTHROPIC_GATEWAY_PASSTHROUGH_ENABLED", True
         ),
-        patch("onyx.llm.litellm_singleton.litellm.token_counter", return_value=123),
+        patch(
+            "onyx.server.gateway.token_counting.count_gateway_tokens", return_value=123
+        ),
     ):
         result = gateway_api.gateway_anthropic_count_tokens(
             request=request,

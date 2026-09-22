@@ -8,12 +8,14 @@ from datetime import datetime
 from typing import Any
 from unittest.mock import patch
 
-from litellm.types.utils import ImageObject, ImageResponse
-
 from onyx.image_gen.interfaces import (
     ImageGenerationProvider,
     ImageGenerationProviderCredentials,
+    ImageObject,
     ReferenceImage,
+)
+from onyx.image_gen.interfaces import (
+    ImageGenerationResponse as ImageResponse,
 )
 from onyx.llm.interfaces import LLMConfig
 

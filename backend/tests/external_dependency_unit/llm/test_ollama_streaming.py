@@ -14,7 +14,7 @@ import pytest
 
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.models import ChatCompletionMessage, UserMessage
-from onyx.llm.multi_llm import LitellmLLM
+from onyx.llm.pydantic_ai_llm import PydanticAILLM
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.nightly
@@ -42,7 +42,7 @@ def test_streaming_separates_reasoning_content_from_visible_content(
     chunks). This test guards against regression in either the patch or
     upstream Ollama chunk shape.
     """
-    llm = LitellmLLM(
+    llm = PydanticAILLM(
         api_key=test_secrets[TestSecret.OLLAMA_API_KEY],
         model_provider=LlmProviderNames.OLLAMA_CHAT,
         model_name=_THINKING_MODEL,

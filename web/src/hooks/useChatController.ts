@@ -83,7 +83,7 @@ import {
   useCurrentChatState,
   useCurrentMessageHistory,
 } from "@/app/app/stores/useChatSessionStore";
-import { Packet, MessageStart } from "@/app/app/services/streamingModels";
+import { Packet } from "@/app/app/services/streamingModels";
 import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
@@ -1369,8 +1369,11 @@ export default function useChatController({
                       ...citationsPerModel[modelIndex],
                       [citationInfo.citation_number]: citationInfo.document_id,
                     };
-                  } else if (packetObj.type === "message_start") {
-                    const messageStart = packetObj as MessageStart;
+                  } else if (
+                    packetObj.type === "message_start" ||
+                    packetObj.type === "answer_metadata"
+                  ) {
+                    const messageStart = packetObj;
                     if (messageStart.final_documents) {
                       documentsPerModel[modelIndex] =
                         messageStart.final_documents;
@@ -1399,8 +1402,11 @@ export default function useChatController({
                     ...citations,
                     [citationInfo.citation_number]: citationInfo.document_id,
                   };
-                } else if (packetObj.type === "message_start") {
-                  const messageStart = packetObj as MessageStart;
+                } else if (
+                  packetObj.type === "message_start" ||
+                  packetObj.type === "answer_metadata"
+                ) {
+                  const messageStart = packetObj;
                   if (messageStart.final_documents) {
                     documents = messageStart.final_documents;
                     updateSelectedNodeForDocDisplay(

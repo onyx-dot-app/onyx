@@ -21,8 +21,8 @@ from onyx.db.models import Persona, SearchSettings, User
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM, LlmRequestPolicy
 from onyx.llm.models import ReasoningEffort, UserChatDefaults
-from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.override_models import LLMOverride
+from onyx.llm.pydantic_ai_llm import PydanticAILLM
 from onyx.llm.utils import (
     get_max_input_tokens_from_llm_provider,
     model_supports_image_input,
@@ -441,7 +441,7 @@ def get_llm(
     if policy_model_kwargs:
         merged_model_kwargs.update(policy_model_kwargs)
 
-    return LitellmLLM(
+    return PydanticAILLM(
         model_provider=provider,
         model_name=model,
         deployment_name=deployment_name,

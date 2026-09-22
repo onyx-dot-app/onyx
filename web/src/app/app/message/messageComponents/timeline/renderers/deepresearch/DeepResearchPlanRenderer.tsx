@@ -1,3 +1,4 @@
+import { nativeContent } from "@/app/app/services/pydanticEvents";
 import React, { useCallback, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { SvgCircle } from "@opal/icons";
@@ -35,7 +36,10 @@ export const DeepResearchPlanRenderer: MessageRenderer<
           if (packet.obj.type === PacketType.DEEP_RESEARCH_PLAN_DELTA) {
             return packet.obj.content;
           }
-          return "";
+          return packet.obj.type === PacketType.PYDANTIC_AI &&
+            packet.obj.phase === "plan"
+            ? nativeContent(packet, "text")
+            : "";
         })
         .join(""),
     [packets]

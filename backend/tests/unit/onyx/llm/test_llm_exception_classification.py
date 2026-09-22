@@ -1,21 +1,16 @@
-"""Guards classification order in litellm_exception_to_error_msg:
+"""Guards classification order in llm_exception_to_error_msg:
 ContextWindowExceededError and ContentPolicyViolationError subclass
 BadRequestError and must be matched first, or context overflow is mislabeled
 BAD_REQUEST instead of CONTEXT_TOO_LONG.
 """
 
-from litellm.exceptions import (
-    APIError,
-    BadRequestError,
-    ContentPolicyViolationError,
-    ContextWindowExceededError,
-)
+from pydantic_ai.exceptions import ModelHTTPError
 
-from onyx.llm.utils import litellm_exception_to_error_msg
+from onyx.llm.utils import llm_exception_to_error_msg
 
 
-def _err(exc_cls: type[BadRequestError]) -> BadRequestError:
-    return exc_cls("boom", model="m", llm_provider="p")
+def _err(message: str) -> ModelHTTPError:
+    return ModelHTTPError(400, "test", message)
 
 
 _NGINX_413_HTML = (
@@ -26,33 +21,28 @@ _NGINX_413_HTML = (
 
 
 def test_context_window_exceeded_classified_before_bad_request() -> None:
-    _, code, is_retryable = litellm_exception_to_error_msg(
-        _err(ContextWindowExceededError), None
+    _, code, is_retryable = llm_exception_to_error_msg(
+        _err("context_length_exceeded"), None
     )
     assert code == "CONTEXT_TOO_LONG"
     assert is_retryable is False
 
 
 def test_content_policy_classified_before_bad_request() -> None:
-    _, code, _ = litellm_exception_to_error_msg(_err(ContentPolicyViolationError), None)
+    _, code, _ = llm_exception_to_error_msg(_err("content_policy_violation"), None)
     assert code == "CONTENT_POLICY"
 
 
 def test_plain_bad_request_still_bad_request() -> None:
-    _, code, _ = litellm_exception_to_error_msg(_err(BadRequestError), None)
+    _, code, _ = llm_exception_to_error_msg(_err("bad request"), None)
     assert code == "BAD_REQUEST"
 
 
 def test_413_status_code_classified_as_request_too_large() -> None:
     """A gateway 413 (e.g. nginx rejecting a large image payload) maps to an
     actionable message instead of dumping the raw HTML."""
-    exc = APIError(
-        status_code=413,
-        message=_NGINX_413_HTML,
-        llm_provider="bifrost",
-        model="vertex/gemini-3-pro-image-preview",
-    )
-    msg, code, is_retryable = litellm_exception_to_error_msg(exc, None)
+    exc = ModelHTTPError(413, "test", _NGINX_413_HTML)
+    msg, code, is_retryable = llm_exception_to_error_msg(exc, None)
     assert code == "REQUEST_TOO_LARGE"
     assert is_retryable is False
     assert "413" in msg
@@ -63,12 +53,7 @@ def test_413_status_code_classified_as_request_too_large() -> None:
 
 def test_413_in_message_classified_when_status_code_absent() -> None:
     """Some upstreams surface the 413 only in the body; match on text too."""
-    exc = APIError(
-        status_code=500,  # upstream mislabels; body is the source of truth
-        message=_NGINX_413_HTML,
-        llm_provider="bifrost",
-        model="m",
-    )
+    exc = ModelHTTPError(500, "test", _NGINX_413_HTML)
     # status_code 500 won't match the numeric branch, but the body text will.
-    _, code, _ = litellm_exception_to_error_msg(exc, None)
+    _, code, _ = llm_exception_to_error_msg(exc, None)
     assert code == "REQUEST_TOO_LARGE"

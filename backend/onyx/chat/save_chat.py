@@ -105,6 +105,7 @@ def _create_and_link_tool_calls(
             parent_chat_message_id=parent_message_id,
             turn_number=tool_call_info.turn_index,
             tool_id=tool_call_info.tool_id,
+            tool_name=tool_call_info.tool_name,
             tool_call_id=tool_call_info.tool_call_id,
             tool_call_arguments=tool_call_info.tool_call_arguments,
             tool_call_response=tool_call_info.tool_call_response,

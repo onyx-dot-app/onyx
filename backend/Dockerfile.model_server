@@ -50,7 +50,7 @@ RUN awk '/^[[:alnum:]]/ { keep = ($0 ~ /^(torch|nvidia-[a-z0-9-]+|triton)==/) } 
         | uv pip install --python /app/.venv/bin/python --no-cache-dir --no-deps --require-hashes -r /dev/stdin && \
     rm -rf ~/.cache/uv
 
-# TODO: drop --no-deps once we upgrade to a litellm version with looser dependencies.
+# The exported lock contains the complete dependency set and hashes.
 RUN uv pip install --python /app/.venv/bin/python --no-cache-dir --no-deps --require-hashes \
         -r /tmp/requirements.txt && \
     rm -rf ~/.cache/uv /tmp/*.txt

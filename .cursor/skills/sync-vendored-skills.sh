@@ -15,9 +15,11 @@
 
 set -euo pipefail
 
-# One entry per vendored skills repo: "<dir under .cursor/skills> <url> <ref>".
+# One entry per vendored skills repo:
+# "<dir under .cursor/skills> <url> <ref> [path in upstream, default: repo root]".
 UPSTREAMS=(
   "greptile https://github.com/greptileai/skills.git main"
+  "pydantic-ai https://github.com/pydantic/skills.git main plugins/ai/skills"
 )
 
 SKILLS_DIR=".cursor/skills"
@@ -39,12 +41,16 @@ done
 # Bring each vendored directory up to date with its upstream tree.
 synced=""
 for entry in "${UPSTREAMS[@]}"; do
-  read -r dir url ref <<<"${entry}"
+  read -r dir url ref path <<<"${entry}"
   prefix="${SKILLS_DIR}/${dir}"
 
   git fetch --quiet --no-tags "${url}" "${ref}"
   upstream_commit="$(git rev-parse --short FETCH_HEAD)"
-  upstream_tree="$(git rev-parse 'FETCH_HEAD^{tree}')"
+  if [ -n "${path}" ]; then
+    upstream_tree="$(git rev-parse "FETCH_HEAD:${path}")"
+  else
+    upstream_tree="$(git rev-parse 'FETCH_HEAD^{tree}')"
+  fi
   current_tree="$(git rev-parse --quiet --verify "HEAD:${prefix}" || echo none)"
 
   if [ "${current_tree}" = "${upstream_tree}" ]; then
@@ -52,7 +58,7 @@ for entry in "${UPSTREAMS[@]}"; do
     continue
   fi
   git rm --quiet -r --ignore-unmatch -- "${prefix}"
-  git read-tree "--prefix=${prefix}" -u FETCH_HEAD
+  git read-tree "--prefix=${prefix}" -u "${upstream_tree}"
   synced="${synced}${synced:+, }${dir}@${upstream_commit}"
   echo "${dir}: synced to ${url}@${upstream_commit}"
 done

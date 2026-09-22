@@ -55,8 +55,8 @@ from onyx.llm.factory import (
     get_max_input_tokens_from_llm_provider,
 )
 from onyx.llm.model_capabilities import (
+    catalog_supports_image_input,
     get_bedrock_token_limit,
-    litellm_thinks_model_supports_image_input,
     model_is_reasoning_model,
 )
 from onyx.llm.utils import (
@@ -354,7 +354,7 @@ def _validate_and_normalize_vertex_auth(
     """Enforce vertex_ai auth-method invariants and strip incompatible fields.
 
     - Workload Identity (ADC) requires an explicit vertex_project and must not
-      carry a vertex_credentials blob (LiteLLM would otherwise try to use it).
+      carry a vertex_credentials blob, which would select explicit credentials.
     - Service account JSON mode requires vertex_credentials.
     - Missing vertex_auth_method is treated as service_account_json for
       backwards compatibility with providers created before this field existed.
@@ -401,10 +401,8 @@ def _validate_and_normalize_vertex_auth(
 def fetch_custom_provider_names(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> list[CustomProviderOption]:
-    """Returns the sorted list of LiteLLM provider names that can be used
-    with the custom provider modal (i.e. everything that is not already
-    covered by a well-known provider modal)."""
-    import litellm
+    """Return supported native providers without a dedicated configuration modal."""
+    from onyx.llm.provider_registry import SUPPORTED_PROVIDER_NAMES
 
     well_known = {p.value for p in WELL_KNOWN_PROVIDER_NAMES}
     return sorted(
@@ -413,7 +411,7 @@ def fetch_custom_provider_names(
                 value=name,
                 label=PROVIDER_DISPLAY_NAMES.get(name, name.replace("_", " ").title()),
             )
-            for name in litellm.models_by_provider.keys()
+            for name in SUPPORTED_PROVIDER_NAMES
             if name not in well_known
         ),
         key=lambda o: o.label.lower(),
@@ -1157,7 +1155,7 @@ def get_provider_contextual_cost(
     """
     Get the cost of Re-indexing all documents for contextual retrieval.
 
-    See https://docs.litellm.ai/docs/completion/token_usage#5-cost_per_token
+    Uses the application cost calculator with admin overrides and published rates.
     This includes:
     - The cost of invoking the LLM on each chunk-document pair to get
       - the doc_summary
@@ -1335,7 +1333,7 @@ def get_bedrock_available_models(
                                 else generate_bedrock_display_name(profile_id)
                             ),
                             "supports_image_input": (
-                                litellm_thinks_model_supports_image_input(
+                                catalog_supports_image_input(
                                     profile_id, LlmProviderNames.BEDROCK
                                 )
                             ),
@@ -1500,7 +1498,7 @@ def get_ollama_available_models(
             )
 
         # Note: context_limit may be None if Ollama API doesn't provide it.
-        # The runtime will use LiteLLM fallback logic to determine max tokens.
+        # The runtime resolves the context limit from the model catalog.
         all_models_with_context_size_and_vision.append(
             OllamaFinalModelResponse(
                 name=model_name,
@@ -1957,12 +1955,11 @@ def get_bifrost_available_models(
                     name=model_id,
                     display_name=model_name,
                     max_input_tokens=model.get("context_length"),
-                    # Vision support from the LiteLLM cost map, not a hardcoded list
-                    supports_image_input=litellm_thinks_model_supports_image_input(
+                    # Resolve vision support from the model catalog.
+                    supports_image_input=catalog_supports_image_input(
                         model_id, LlmProviderNames.BIFROST
                     ),
-                    # Reasoning support from the LiteLLM cost map, with the
-                    # substring heuristic covering models LiteLLM doesn't know
+                    # Use catalog reasoning metadata, then the model-name fallback.
                     supports_reasoning=model_is_reasoning_model(
                         model_id, LlmProviderNames.BIFROST
                     )
@@ -2102,8 +2099,7 @@ def get_nebius_tokenfactory_available_models(
                 supports_reasoning = "reasoning" in feature_list
             else:
                 feature_list = []
-                # No feature data from the source; fall back to the LiteLLM
-                # cost map, then the substring heuristic
+                # Without source features, use the catalog and model-name fallback.
                 supports_reasoning = model_is_reasoning_model(
                     model_id, LlmProviderNames.NEBIUS_TOKENFACTORY
                 ) or is_reasoning_model(model_id, display_name)
@@ -2207,11 +2203,10 @@ def get_openai_compatible_server_available_models(
                     name=model_id,
                     display_name=model_name,
                     max_input_tokens=model.get("context_length"),
-                    supports_image_input=litellm_thinks_model_supports_image_input(
+                    supports_image_input=catalog_supports_image_input(
                         model_id, LlmProviderNames.OPENAI_COMPATIBLE
                     ),
-                    # Reasoning support from the LiteLLM cost map, with the
-                    # substring heuristic covering models LiteLLM doesn't know
+                    # Use catalog reasoning metadata, then the model-name fallback.
                     supports_reasoning=model_is_reasoning_model(
                         model_id, LlmProviderNames.OPENAI_COMPATIBLE
                     )
@@ -2331,11 +2326,10 @@ def get_portkey_available_models(
                     name=model_id,
                     display_name=model_name,
                     max_input_tokens=model.get("context_length"),
-                    supports_image_input=litellm_thinks_model_supports_image_input(
+                    supports_image_input=catalog_supports_image_input(
                         model_id, LlmProviderNames.PORTKEY
                     ),
-                    # Reasoning support from the LiteLLM cost map, with the
-                    # substring heuristic covering models LiteLLM doesn't know
+                    # Use catalog reasoning metadata, then the model-name fallback.
                     supports_reasoning=model_is_reasoning_model(
                         model_id, LlmProviderNames.PORTKEY
                     )

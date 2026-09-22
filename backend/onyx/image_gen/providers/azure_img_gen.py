@@ -88,63 +88,38 @@ class AzureImageGenerationProvider(ImageGenerationProvider):
         reference_images: list[ReferenceImage] | None = None,
         **kwargs: Any,
     ) -> ImageGenerationResponse:
-        deployment = self._deployment_name or model
-        model_name = f"azure/{deployment}"
+        from onyx.image_gen.providers.pydantic_images import generate_openai_image
 
-        if reference_images:
-            if not self._model_supports_image_edits(model):
-                raise ValueError(
-                    f"Model '{model}' does not support image edits with reference images."
-                )
-
-            normalized_model = self._normalize_model_name(model)
-            if (
-                normalized_model == self._DALL_E_2_MODEL_NAME
-                and len(reference_images) > 1
-            ):
-                raise ValueError(
-                    "Model 'dall-e-2' only supports a single reference image for edits."
-                )
-
-            from litellm import image_edit
-
-            with traced_llm_call(
-                flow=LLMFlow.IMAGE_EDIT,
-                model=deployment,
-                provider="azure",
-                image_count=n,
-                input_messages=[{"role": "user", "content": prompt}],
-            ):
-                return image_edit(
-                    image=[image.data for image in reference_images],
-                    prompt=prompt,
-                    model=model_name,
-                    api_key=self._api_key,
-                    api_base=self._api_base,
-                    api_version=self._api_version,
-                    size=size,
-                    n=n,
-                    quality=quality,
-                    **kwargs,
-                )
-
-        from litellm import image_generation
-
+        normalized_model = self._normalize_model_name(model)
+        if reference_images and not self._model_supports_image_edits(model):
+            raise ValueError(
+                f"Model '{model}' does not support image edits with reference images."
+            )
+        if (
+            normalized_model == self._DALL_E_2_MODEL_NAME
+            and reference_images
+            and len(reference_images) > 1
+        ):
+            raise ValueError(
+                "Model 'dall-e-2' only supports a single reference image for edits."
+            )
         with traced_llm_call(
-            flow=LLMFlow.IMAGE_GENERATION,
-            model=deployment,
+            flow=LLMFlow.IMAGE_EDIT if reference_images else LLMFlow.IMAGE_GENERATION,
+            model=normalized_model,
             provider="azure",
             image_count=n,
             input_messages=[{"role": "user", "content": prompt}],
         ):
-            return image_generation(
+            return generate_openai_image(
                 prompt=prompt,
-                model=model_name,
-                api_key=self._api_key,
-                api_base=self._api_base,
-                api_version=self._api_version,
+                model=normalized_model,
                 size=size,
                 n=n,
                 quality=quality,
+                reference_images=reference_images,
+                api_key=self._api_key,
+                api_base=self._api_base,
+                api_version=self._api_version,
+                deployment=self._deployment_name,
                 **kwargs,
             )

@@ -14,7 +14,7 @@ from onyx.tracing.langfuse_tracing_processor import LangfuseTracingProcessor
 def _make_trace(metadata: Mapping[str, Any]) -> MagicMock:
     trace = MagicMock()
     trace.trace_id = "trace-123"
-    trace.name = "run_llm_loop"
+    trace.name = "run_chat_agent"
     trace.export.return_value = {"metadata": metadata}
     return trace
 
@@ -59,7 +59,7 @@ def test_on_trace_start_promotes_user_id_and_session_id() -> None:
     kwargs = propagate.call_args.kwargs
     assert kwargs["user_id"] == "user-42"
     assert kwargs["session_id"] == "session-xyz"
-    assert kwargs["trace_name"] == "run_llm_loop"
+    assert kwargs["trace_name"] == "run_chat_agent"
     assert kwargs["metadata"] == metadata
 
 

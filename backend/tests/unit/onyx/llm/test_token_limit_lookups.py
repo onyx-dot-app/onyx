@@ -28,7 +28,7 @@ def test_model_context_metadata_is_not_inferred_or_overwritten() -> None:
     }
     get_model_map.cache_clear()
     try:
-        with patch("litellm.model_cost", metadata):
+        with patch("json.load", side_effect=[metadata.copy(), {}]):
             model_map = get_model_map()
         for name, limits in metadata.items():
             assert model_map[name] == limits

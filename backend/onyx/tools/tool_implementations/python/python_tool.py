@@ -23,7 +23,6 @@ from onyx.db.code_interpreter import fetch_code_interpreter_server
 from onyx.file_store.utils import build_full_frontend_file_url, get_default_file_store
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
-    Packet,
     PythonToolDelta,
     PythonToolStart,
 )
@@ -376,12 +375,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
         chat_files = override_kwargs.chat_files if override_kwargs else []
 
         # Emit start event with the code
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=PythonToolStart(code=code),
-            )
-        )
+        self.emitter.report(placement=placement, obj=PythonToolStart(code=code))
 
         # Create Code Interpreter client — context manager ensures
         # session.close() is called on every exit path.
@@ -426,18 +420,12 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                         else:
                             stderr_parts.append(event.data)
                         # Emit incremental delta to frontend
-                        self.emitter.emit(
-                            Packet(
-                                placement=placement,
-                                obj=PythonToolDelta(
-                                    stdout=(
-                                        event.data if event.stream == "stdout" else ""
-                                    ),
-                                    stderr=(
-                                        event.data if event.stream == "stderr" else ""
-                                    ),
-                                ),
-                            )
+                        self.emitter.report(
+                            placement=placement,
+                            obj=PythonToolDelta(
+                                stdout=(event.data if event.stream == "stdout" else ""),
+                                stderr=(event.data if event.stream == "stderr" else ""),
+                            ),
                         )
                     elif isinstance(event, StreamResultEvent):
                         result_event = event
@@ -524,11 +512,9 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
 
                 # Emit file_ids once files are processed
                 if generated_file_ids:
-                    self.emitter.emit(
-                        Packet(
-                            placement=placement,
-                            obj=PythonToolDelta(file_ids=generated_file_ids),
-                        )
+                    self.emitter.report(
+                        placement=placement,
+                        obj=PythonToolDelta(file_ids=generated_file_ids),
                     )
 
                 # Build result
@@ -558,15 +544,13 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                 error_msg = str(e)
 
                 # Emit error delta
-                self.emitter.emit(
-                    Packet(
-                        placement=placement,
-                        obj=PythonToolDelta(
-                            stdout="",
-                            stderr=error_msg,
-                            file_ids=[],
-                        ),
-                    )
+                self.emitter.report(
+                    placement=placement,
+                    obj=PythonToolDelta(
+                        stdout="",
+                        stderr=error_msg,
+                        file_ids=[],
+                    ),
                 )
 
                 # Return error result

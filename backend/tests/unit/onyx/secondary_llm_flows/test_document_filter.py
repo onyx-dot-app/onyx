@@ -9,8 +9,8 @@ from onyx.context.search.models import (
     InferenceChunk,
     InferenceSection,
 )
+from onyx.llm.exceptions import LLMTimeoutError
 from onyx.llm.interfaces import LLM
-from onyx.llm.multi_llm import LLMTimeoutError
 from onyx.secondary_llm_flows.document_filter import (
     classify_section_relevance,
     select_sections_for_expansion,

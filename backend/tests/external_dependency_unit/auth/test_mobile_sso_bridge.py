@@ -21,7 +21,7 @@ from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 from urllib.parse import parse_qs, urlparse
 
-import httpx
+import httpx2 as httpx
 from fastapi import FastAPI, Response
 from fastapi.testclient import TestClient
 from fastapi_users.authentication import AuthenticationBackend, CookieTransport

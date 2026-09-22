@@ -1,4 +1,8 @@
 import {
+  isNativeThinking,
+  nativeContent,
+} from "@/app/app/services/pydanticEvents";
+import {
   isCodeInterpreterToolType,
   MemoryToolPacket,
   Packet,
@@ -53,12 +57,15 @@ export const isPythonToolPackets = (packets: Packet[]): boolean =>
 
 // Check if packets belong to reasoning
 export const isReasoningPackets = (packets: Packet[]): boolean =>
-  packets.some((p) => p.obj.type === PacketType.REASONING_START);
+  packets.some(
+    (p) => isNativeThinking(p) || p.obj.type === PacketType.REASONING_START
+  );
 
 // Check if step supports collapsed streaming rendering mode
 export const stepSupportsCollapsedStreaming = (packets: Packet[]): boolean =>
   packets.some(
     (p) =>
+      isNativeThinking(p) ||
       COLLAPSED_STREAMING_PACKET_TYPES.has(p.obj.type as PacketType) ||
       (p.obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
         isCodeInterpreterToolType((p.obj as ToolCallArgumentDelta).tool_type))
@@ -69,6 +76,7 @@ export const stepSupportsCollapsedStreaming = (packets: Packet[]): boolean =>
 export const stepHasCollapsedStreamingContent = (
   packets: Packet[]
 ): boolean => {
+  if (packets.some((p) => nativeContent(p, "thinking").length > 0)) return true;
   const packetTypes = new Set(
     packets.map((packet) => packet.obj.type as PacketType)
   );

@@ -1,5 +1,5 @@
 import json
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -185,54 +185,43 @@ def test_build_vertex_workload_identity_requires_project() -> None:
         get_image_generation_provider(VERTEX_PROVIDER, credentials)
 
 
-def test_vertex_workload_identity_omits_credentials_in_litellm_call() -> None:
+@pytest.mark.parametrize("workload_identity", [True, False])
+def test_vertex_credentials_are_passed_to_request_scoped_client(
+    workload_identity: bool,
+) -> None:
     credentials = _get_default_image_gen_creds()
     credentials.custom_config = {
-        "vertex_auth_method": "workload_identity",
-        "vertex_location": "us-central1",
-        "vertex_project": "demo_project_wi",
-    }
-    provider = get_image_generation_provider(VERTEX_PROVIDER, credentials)
-    expected_response = object()
-
-    with patch("litellm.image_generation", return_value=expected_response) as mock_gen:
-        response = provider.generate_image(
-            prompt="draw a mountain",
-            model="vertex_ai/imagen-3.0",
-            size="1024x1024",
-            n=1,
-        )
-
-    assert response is expected_response
-    mock_gen.assert_called_once()
-    call_kwargs = mock_gen.call_args.kwargs
-    # Ambient credentials: LiteLLM must fall back to google.auth.default().
-    assert "vertex_credentials" not in call_kwargs
-    assert call_kwargs["vertex_project"] == "demo_project_wi"
-    assert call_kwargs["vertex_location"] == "us-central1"
-
-
-def test_vertex_service_account_passes_credentials_in_litellm_call() -> None:
-    credentials = _get_default_image_gen_creds()
-    vertex_json = json.dumps({"project_id": "demo_project_1", "private_key_id": "x"})
-    credentials.custom_config = {
-        "vertex_credentials": vertex_json,
         "vertex_location": "global",
+        "vertex_project": "demo_project",
+        "vertex_auth_method": "workload_identity"
+        if workload_identity
+        else "service_account_json",
+        "vertex_credentials": json.dumps({"project_id": "demo_project"}),
     }
     provider = get_image_generation_provider(VERTEX_PROVIDER, credentials)
-    expected_response = object()
-
-    with patch("litellm.image_generation", return_value=expected_response) as mock_gen:
+    resolved_credentials = MagicMock()
+    with (
+        patch(
+            "google.auth.default", return_value=(resolved_credentials, "demo_project")
+        ) as ambient,
+        patch(
+            "google.oauth2.service_account.Credentials.from_service_account_info",
+            return_value=resolved_credentials,
+        ) as service_account,
+        patch("google.genai.Client") as client,
+    ):
+        client.return_value.models.generate_images.return_value.generated_images = []
         provider.generate_image(
             prompt="draw a mountain",
             model="vertex_ai/imagen-3.0",
             size="1024x1024",
             n=1,
         )
-
-    call_kwargs = mock_gen.call_args.kwargs
-    assert call_kwargs["vertex_credentials"] == vertex_json
-    assert call_kwargs["vertex_project"] == "demo_project_1"
+    assert ambient.called is workload_identity
+    assert service_account.called is not workload_identity
+    assert client.call_args.kwargs["credentials"] is resolved_credentials
+    assert client.call_args.kwargs["project"] == "demo_project"
+    client.return_value.close.assert_called_once()
 
 
 def test_openai_provider_uses_image_generation_without_reference_images() -> None:
@@ -243,8 +232,10 @@ def test_openai_provider_uses_image_generation_without_reference_images() -> Non
     expected_response = object()
 
     with (
-        patch("litellm.image_generation", return_value=expected_response) as mock_gen,
-        patch("litellm.image_edit") as mock_edit,
+        patch(
+            "onyx.image_gen.providers.pydantic_images.generate_openai_image",
+            return_value=expected_response,
+        ) as mock_gen,
     ):
         response = provider.generate_image(
             prompt="draw a mountain",
@@ -256,7 +247,7 @@ def test_openai_provider_uses_image_generation_without_reference_images() -> Non
 
     assert response is expected_response
     mock_gen.assert_called_once()
-    mock_edit.assert_not_called()
+    assert mock_gen.call_args.kwargs["reference_images"] is None
 
 
 def test_openai_provider_uses_image_edit_with_reference_images() -> None:
@@ -271,8 +262,10 @@ def test_openai_provider_uses_image_edit_with_reference_images() -> None:
     expected_response = object()
 
     with (
-        patch("litellm.image_generation") as mock_gen,
-        patch("litellm.image_edit", return_value=expected_response) as mock_edit,
+        patch(
+            "onyx.image_gen.providers.pydantic_images.generate_openai_image",
+            return_value=expected_response,
+        ) as mock_edit,
     ):
         response = provider.generate_image(
             prompt="make this look watercolor",
@@ -284,12 +277,9 @@ def test_openai_provider_uses_image_edit_with_reference_images() -> None:
         )
 
     assert response is expected_response
-    mock_gen.assert_not_called()
+
     mock_edit.assert_called_once()
-    assert mock_edit.call_args.kwargs["image"] == [
-        b"image-1-bytes",
-        b"image-2-bytes",
-    ]
+    assert mock_edit.call_args.kwargs["reference_images"] == reference_images
 
 
 def test_openai_provider_rejects_reference_images_for_unsupported_model() -> None:
@@ -315,8 +305,10 @@ def test_azure_provider_uses_image_generation_without_reference_images() -> None
     expected_response = object()
 
     with (
-        patch("litellm.image_generation", return_value=expected_response) as mock_gen,
-        patch("litellm.image_edit") as mock_edit,
+        patch(
+            "onyx.image_gen.providers.pydantic_images.generate_openai_image",
+            return_value=expected_response,
+        ) as mock_gen,
     ):
         response = provider.generate_image(
             prompt="draw a skyline",
@@ -328,8 +320,8 @@ def test_azure_provider_uses_image_generation_without_reference_images() -> None
 
     assert response is expected_response
     mock_gen.assert_called_once()
-    mock_edit.assert_not_called()
-    assert mock_gen.call_args.kwargs["model"] == "azure/img-deployment"
+    assert mock_gen.call_args.kwargs["reference_images"] is None
+    assert mock_gen.call_args.kwargs["deployment"] == "img-deployment"
 
 
 def test_azure_provider_uses_image_edit_with_reference_images() -> None:
@@ -346,8 +338,10 @@ def test_azure_provider_uses_image_edit_with_reference_images() -> None:
     expected_response = object()
 
     with (
-        patch("litellm.image_generation") as mock_gen,
-        patch("litellm.image_edit", return_value=expected_response) as mock_edit,
+        patch(
+            "onyx.image_gen.providers.pydantic_images.generate_openai_image",
+            return_value=expected_response,
+        ) as mock_edit,
     ):
         response = provider.generate_image(
             prompt="make this noir style",
@@ -359,13 +353,10 @@ def test_azure_provider_uses_image_edit_with_reference_images() -> None:
         )
 
     assert response is expected_response
-    mock_gen.assert_not_called()
+
     mock_edit.assert_called_once()
-    assert mock_edit.call_args.kwargs["model"] == "azure/img-deployment"
-    assert mock_edit.call_args.kwargs["image"] == [
-        b"image-1-bytes",
-        b"image-2-bytes",
-    ]
+    assert mock_edit.call_args.kwargs["deployment"] == "img-deployment"
+    assert mock_edit.call_args.kwargs["reference_images"] == reference_images
 
 
 def test_azure_provider_rejects_reference_images_for_unsupported_model() -> None:

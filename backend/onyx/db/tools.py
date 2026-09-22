@@ -353,6 +353,7 @@ def create_tool_call_no_commit(
     tool_call_tokens: int,
     db_session: Session,
     *,
+    tool_name: str | None = None,
     parent_tool_call_id: int | None = None,
     reasoning_tokens: str | None = None,
     generated_images: list[dict] | None = None,
@@ -388,6 +389,7 @@ def create_tool_call_no_commit(
         turn_number=turn_number,
         tab_index=tab_index,
         tool_id=tool_id,
+        tool_name=tool_name,
         tool_call_id=tool_call_id,
         reasoning_tokens=(
             sanitize_string(reasoning_tokens) if reasoning_tokens else reasoning_tokens

@@ -523,7 +523,6 @@ def _construct_tools_impl(
             memory_tool = MemoryTool(
                 tool_id=memory_tool_db_model.id,
                 emitter=emitter,
-                llm=llm,
             )
             tool_dict[memory_tool_db_model.id] = [memory_tool]
         except RuntimeError:

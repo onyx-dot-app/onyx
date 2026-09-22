@@ -100,7 +100,7 @@ class TestModelConfigurationViewVisionFallback:
         litellm_vision: bool,
     ) -> ModelConfigurationView:
         with patch(
-            "onyx.server.manage.llm.models.litellm_thinks_model_supports_image_input",
+            "onyx.server.manage.llm.models.catalog_supports_image_input",
             return_value=litellm_vision,
         ):
             return ModelConfigurationView.from_model(
@@ -377,11 +377,11 @@ class TestModelConfigurationViewFromModelStatic:
                 return_value=128000,
             ),
             patch(
-                "onyx.server.manage.llm.models.litellm_thinks_model_supports_image_input",
+                "onyx.server.manage.llm.models.catalog_supports_image_input",
                 return_value=False,
             ),
             patch(
-                "onyx.llm.model_name_parser.parse_litellm_model_name",
+                "onyx.llm.model_name_parser.parse_model_name",
             ) as mock_parse,
         ):
             mock_parsed = MagicMock()
@@ -400,7 +400,7 @@ class TestModelConfigurationViewFromModelStatic:
 
     def test_deployment_alias_reveals_vision_support(self) -> None:
         """The model row's own name is opaque; only the deployment alias
-        (litellm_thinks_model_supports_image_input left unpatched) is what
+        (catalog_supports_image_input left unpatched) is what
         the cost map recognizes."""
         mc = _make_model_config(
             name="foundry-deploy-7",
@@ -418,7 +418,7 @@ class TestModelConfigurationViewFromModelStatic:
                 return_value=False,
             ),
             patch(
-                "onyx.llm.model_name_parser.parse_litellm_model_name",
+                "onyx.llm.model_name_parser.parse_model_name",
             ) as mock_parse,
         ):
             mock_parsed = MagicMock()
@@ -455,7 +455,7 @@ class TestModelConfigurationViewFromModelStatic:
                 return_value=False,
             ),
             patch(
-                "onyx.llm.model_name_parser.parse_litellm_model_name",
+                "onyx.llm.model_name_parser.parse_model_name",
             ) as mock_parse,
         ):
             mock_parsed = MagicMock()
@@ -490,11 +490,11 @@ class TestModelConfigurationViewFromModelStatic:
                 return_value=128000,
             ),
             patch(
-                "onyx.server.manage.llm.models.litellm_thinks_model_supports_image_input",
+                "onyx.server.manage.llm.models.catalog_supports_image_input",
                 return_value=False,
             ),
             patch(
-                "onyx.llm.model_name_parser.parse_litellm_model_name",
+                "onyx.llm.model_name_parser.parse_model_name",
             ) as mock_parse,
         ):
             mock_parsed = MagicMock()

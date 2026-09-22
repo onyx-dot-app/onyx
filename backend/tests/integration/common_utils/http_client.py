@@ -19,6 +19,7 @@ import time
 from typing import Any
 
 import httpx
+from starlette.testclient import TestClient
 
 from tests.integration.common_utils.constants import API_SERVER_URL
 
@@ -74,15 +75,15 @@ class RetryingTransport(httpx.HTTPTransport):
 
 # Typed as ``httpx.Client`` so both FastAPI's ``TestClient`` and a raw
 # ``httpx.Client`` satisfy the signature.
-_test_client: httpx.Client | None = None
+_test_client: httpx.Client | TestClient | None = None
 
 
-def set_test_client(c: httpx.Client | None) -> None:
+def set_test_client(c: httpx.Client | TestClient | None) -> None:
     global _test_client
     _test_client = c
 
 
-def _require_client() -> httpx.Client:
+def _require_client() -> httpx.Client | TestClient:
     if _test_client is None:
         raise RuntimeError(
             "TestClient not initialized; integration conftest must call "

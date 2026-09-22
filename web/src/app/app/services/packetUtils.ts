@@ -1,9 +1,14 @@
 import {
-  MessageDelta,
-  MessageStart,
+  isNativeAnswer,
+  isNativeNarration,
+  isNativeThinking,
+  nativeContent,
+  nativePartEnded,
+} from "@/app/app/services/pydanticEvents";
+import {
   PacketType,
   StreamingCitation,
-} from "./streamingModels";
+} from "@/app/app/services/streamingModels";
 import { Packet } from "@/app/app/services/streamingModels";
 
 export function isToolPacket(
@@ -47,7 +52,11 @@ export function isToolPacket(
     toolPacketTypes.push(PacketType.SECTION_END);
     toolPacketTypes.push(PacketType.ERROR);
   }
-  return toolPacketTypes.includes(packet.obj.type as PacketType);
+  return (
+    isNativeNarration(packet) ||
+    isNativeThinking(packet) ||
+    toolPacketTypes.includes(packet.obj.type as PacketType)
+  );
 }
 
 // Check if a packet is an actual tool call (not reasoning/thinking).
@@ -58,6 +67,8 @@ export function isToolPacket(
 export function isActualToolCallPacket(packet: Packet): boolean {
   return (
     isToolPacket(packet, false) &&
+    !isNativeThinking(packet) &&
+    !isNativeNarration(packet) &&
     packet.obj.type !== PacketType.REASONING_START &&
     packet.obj.type !== PacketType.REASONING_DELTA
   );
@@ -65,6 +76,8 @@ export function isActualToolCallPacket(packet: Packet): boolean {
 
 export function isDisplayPacket(packet: Packet) {
   return (
+    isNativeAnswer(packet) ||
+    packet.obj.type === PacketType.ANSWER_METADATA ||
     packet.obj.type === PacketType.MESSAGE_START ||
     packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START
   );
@@ -86,6 +99,8 @@ export function isStreamingComplete(packets: Packet[]) {
 export function isFinalAnswerComing(packets: Packet[]) {
   return packets.some(
     (packet) =>
+      isNativeAnswer(packet) ||
+      packet.obj.type === PacketType.ANSWER_METADATA ||
       packet.obj.type === PacketType.MESSAGE_START ||
       packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START
   );
@@ -95,6 +110,8 @@ export function isFinalAnswerComplete(packets: Packet[]) {
   // Find the first MESSAGE_START packet and get its index
   const messageStartPacket = packets.find(
     (packet) =>
+      isNativeAnswer(packet) ||
+      packet.obj.type === PacketType.ANSWER_METADATA ||
       packet.obj.type === PacketType.MESSAGE_START ||
       packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START
   );
@@ -107,8 +124,11 @@ export function isFinalAnswerComplete(packets: Packet[]) {
   return packets.some(
     (packet) =>
       (packet.obj.type === PacketType.SECTION_END ||
-        packet.obj.type === PacketType.ERROR) &&
-      packet.placement.turn_index === messageStartPacket.placement.turn_index
+        packet.obj.type === PacketType.ERROR ||
+        (isNativeAnswer(packet) && nativePartEnded(packet))) &&
+      packet.placement.turn_index === messageStartPacket.placement.turn_index &&
+      (packet.placement.tab_index ?? 0) ===
+        (messageStartPacket.placement.tab_index ?? 0)
   );
 }
 
@@ -153,11 +173,12 @@ export function groupPacketsByTurnIndex(
 export function getTextContent(packets: Packet[]) {
   return packets
     .map((packet) => {
+      if (isNativeAnswer(packet)) return nativeContent(packet, "text");
       if (
         packet.obj.type === PacketType.MESSAGE_START ||
         packet.obj.type === PacketType.MESSAGE_DELTA
       ) {
-        return (packet.obj as MessageStart | MessageDelta).content || "";
+        return packet.obj.content || "";
       }
       return "";
     })
@@ -171,10 +192,7 @@ export function getCitations(packets: Packet[]): StreamingCitation[] {
   packets.forEach((packet) => {
     if (packet.obj.type === PacketType.CITATION_INFO) {
       // Individual citation packet from backend
-      const citationInfo = packet.obj as {
-        citation_number: number;
-        document_id: string;
-      };
+      const citationInfo = packet.obj;
       if (!seenDocIds.has(citationInfo.document_id)) {
         seenDocIds.add(citationInfo.document_id);
         citations.push({

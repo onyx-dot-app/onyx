@@ -974,8 +974,8 @@ class TestGetLitellmAvailableModels:
             # can differ.
             assert claude.litellm_params_model == "claude-3-5-sonnet-20241022"
 
-    def test_provider_name_falls_back_to_model_info_litellm_provider(self) -> None:
-        """Test that provider_name falls back to model_info.litellm_provider when
+    def test_provider_name_falls_back_to_model_info_catalog_provider(self) -> None:
+        """Test that provider_name falls back to model_info.catalog_provider when
         litellm_params.custom_llm_provider is absent — e.g. auto_router entries."""
         from onyx.server.manage.llm.api import get_litellm_available_models
 
@@ -989,7 +989,7 @@ class TestGetLitellmAvailableModels:
                         "model": "auto_router/complexity_router",
                     },
                     "model_info": {
-                        "litellm_provider": "auto_router",
+                        "catalog_provider": "auto_router",
                         "max_input_tokens": 262144,
                         "supports_vision": True,
                         "supports_reasoning": True,

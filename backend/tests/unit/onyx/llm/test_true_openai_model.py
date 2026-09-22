@@ -27,7 +27,7 @@ class TestIsTrueOpenAIModel:
 
     def test_openai_with_provider_prefix(self) -> None:
         """Test that OpenAI model with provider prefix is correctly identified."""
-        assert is_true_openai_model(LlmProviderNames.OPENAI, "openai/gpt-4") is False
+        assert is_true_openai_model(LlmProviderNames.OPENAI, "openai/gpt-4") is True
 
     def test_real_openai_with_date_version(self) -> None:
         """Test that OpenAI model with date version is correctly identified."""

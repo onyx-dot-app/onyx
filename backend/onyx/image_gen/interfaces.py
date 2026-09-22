@@ -2,14 +2,22 @@ from __future__ import annotations
 
 import abc
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from pydantic import BaseModel
 
 from onyx.image_gen.exceptions import ImageProviderCredentialsError
 
-if TYPE_CHECKING:
-    from litellm.types.utils import ImageResponse as ImageGenerationResponse
+
+class ImageObject(BaseModel):
+    b64_json: str | None = None
+    url: str | None = None
+    revised_prompt: str | None = None
+
+
+class ImageGenerationResponse(BaseModel):
+    created: int
+    data: list[ImageObject]
 
 
 class ImageShape(str, Enum):

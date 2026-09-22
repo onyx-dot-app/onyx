@@ -5,10 +5,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import AsyncClient
-from litellm.exceptions import RateLimitError
+from pydantic_ai.exceptions import ModelHTTPError
 from tenacity import wait_none
 
-from onyx.llm.constants import LlmProviderNames
 from onyx.natural_language_processing.search_nlp_models import (
     CloudEmbedding,
     EmbeddingModel,
@@ -254,15 +253,13 @@ async def test_rate_limit_handling() -> None:
     with patch(
         "onyx.natural_language_processing.search_nlp_models.CloudEmbedding.embed"
     ) as mock_embed:
-        mock_embed.side_effect = RateLimitError(
-            "Rate limit exceeded",
-            llm_provider=LlmProviderNames.OPENAI,
-            model="fake-model",
+        mock_embed.side_effect = ModelHTTPError(
+            429, "fake-model", "Rate limit exceeded"
         )
 
         embedding = CloudEmbedding("fake-key", EmbeddingProvider.OPENAI)
 
-        with pytest.raises(RateLimitError):
+        with pytest.raises(ModelHTTPError):
             await embedding.embed(
                 texts=["test"],
                 model_name="fake-model",

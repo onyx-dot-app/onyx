@@ -29,7 +29,6 @@ from onyx.server.query_and_chat.streaming_models import (
     OpenUrlDocuments,
     OpenUrlStart,
     OpenUrlUrls,
-    Packet,
 )
 from onyx.tools.interface import Tool
 from onyx.tools.models import OpenURLToolOverrideKwargs, ToolCallException, ToolResponse
@@ -518,12 +517,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
 
     def emit_start(self, placement: Placement) -> None:
         """Emit start packet to signal tool has started."""
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=OpenUrlStart(),
-            )
-        )
+        self.emitter.report(placement=placement, obj=OpenUrlStart())
 
     def run(
         self,
@@ -562,12 +556,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                 ),
             )
 
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=OpenUrlUrls(urls=urls),
-            )
-        )
+        self.emitter.report(placement=placement, obj=OpenUrlUrls(urls=urls))
 
         with get_session_with_current_tenant() as db_session:
             url_to_doc_id: dict[str, str] = {}
@@ -726,11 +715,8 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             inference_sections, is_internet=False
         )
 
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=OpenUrlDocuments(documents=search_docs),
-            )
+        self.emitter.report(
+            placement=placement, obj=OpenUrlDocuments(documents=search_docs)
         )
 
         # Note that with this call, some contents may be truncated or dropped so what the LLM sees may not be the entire set

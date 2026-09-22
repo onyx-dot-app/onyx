@@ -1,25 +1,24 @@
-import copy
 import re
 from collections.abc import Callable, Iterable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 
 from onyx.configs.app_configs import (
-    LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS,
+    LLM_CUSTOM_ERROR_MESSAGE_MAPPINGS,
     MAX_TOKENS_FOR_FULL_INCLUSION,
-    SEND_USER_METADATA_TO_LLM_PROVIDER,
     USE_CHUNK_SUMMARY,
     USE_DOCUMENT_SUMMARY,
 )
+from onyx.configs.model_configs import ENABLE_PROMPT_CACHING
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.models import LLMProvider, ModelConfiguration
 from onyx.llm.exceptions import ClassifiedLLMError
-from onyx.llm.interfaces import LLM, LLMUserIdentity
+from onyx.llm.interfaces import LLM, LLMConfig
 from onyx.llm.model_capabilities import (
+    catalog_supports_image_input,
     get_max_input_tokens,
-    litellm_thinks_model_supports_image_input,
     model_identity_names,
 )
 from onyx.llm.model_response import ModelResponse
@@ -41,59 +40,23 @@ logger = setup_logger()
 MAX_CONTEXT_TOKENS = 100
 ONE_MILLION = 1_000_000
 CHUNKS_PER_DOC_ESTIMATE = 5
-MAX_LITELLM_USER_ID_LENGTH = 64
 
 
-def truncate_litellm_user_id(user_id: str) -> str:
-    """Truncate the LiteLLM `user` field maximum length."""
-    if len(user_id) <= MAX_LITELLM_USER_ID_LENGTH:
-        return user_id
-    logger.warning(
-        "User's ID exceeds %d chars (len=%d); truncating for Litellm logging compatibility.",
-        MAX_LITELLM_USER_ID_LENGTH,
-        len(user_id),
+def supports_explicit_cache(config: LLMConfig) -> bool:
+    """Enable user-content cache points on supported Anthropic routes."""
+    return ENABLE_PROMPT_CACHING and (
+        config.model_provider == "anthropic"
+        or (config.model_provider == "bedrock" and "anthropic." in config.model_name)
+        or (
+            config.model_provider == "openrouter"
+            and config.model_name.startswith("anthropic/")
+        )
     )
-    return user_id[:MAX_LITELLM_USER_ID_LENGTH]
-
-
-def build_litellm_passthrough_kwargs(
-    model_kwargs: dict[str, Any],
-    user_identity: LLMUserIdentity | None,
-) -> dict[str, Any]:
-    """Build kwargs passed through directly to LiteLLM.
-
-    Returns `model_kwargs` unchanged unless we need to add user/session metadata,
-    in which case a copy is returned to avoid cross-request mutation.
-    """
-
-    if not (SEND_USER_METADATA_TO_LLM_PROVIDER and user_identity):
-        return model_kwargs
-
-    passthrough_kwargs = copy.deepcopy(model_kwargs)
-
-    if user_identity.user_id:
-        passthrough_kwargs["user"] = truncate_litellm_user_id(user_identity.user_id)
-
-    if user_identity.session_id:
-        existing_metadata = passthrough_kwargs.get("metadata")
-        metadata: dict[str, Any] | None
-        if existing_metadata is None:
-            metadata = {}
-        elif isinstance(existing_metadata, dict):
-            metadata = copy.deepcopy(existing_metadata)
-        else:
-            metadata = None
-
-        if metadata is not None:
-            metadata["session_id"] = user_identity.session_id
-            passthrough_kwargs["metadata"] = metadata
-
-    return passthrough_kwargs
 
 
 def _unwrap_nested_exception(error: Exception) -> Exception:
     """
-    Traverse common exception wrappers to surface the underlying LiteLLM error.
+    Traverse common exception wrappers to surface the underlying provider error.
     """
     visited: set[int] = set()
     current = error
@@ -115,15 +78,15 @@ def _unwrap_nested_exception(error: Exception) -> Exception:
     return current
 
 
-def litellm_exception_to_error_msg(
+def llm_exception_to_error_msg(
     e: Exception,
     llm: LLM | None,
     fallback_to_error_msg: bool = False,
     custom_error_msg_mappings: (
         dict[str, str] | None
-    ) = LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS,
+    ) = LLM_CUSTOM_ERROR_MESSAGE_MAPPINGS,
 ) -> tuple[str, str, bool]:
-    """Convert a LiteLLM exception to a user-friendly error message with classification.
+    """Convert a provider exception to a user-friendly error message with classification.
 
     Returns:
         tuple: (error_message, error_code, is_retryable)
@@ -131,21 +94,13 @@ def litellm_exception_to_error_msg(
             - error_code: Categorized error code for frontend display
             - is_retryable: Whether the user should try again
     """
-    from litellm.exceptions import (
-        APIConnectionError,
-        APIError,
-        AuthenticationError,
-        BadRequestError,
-        BudgetExceededError,
-        ContentPolicyViolationError,
-        ContextWindowExceededError,
-        NotFoundError,
-        PermissionDeniedError,
-        RateLimitError,
-        ServiceUnavailableError,
-        Timeout,
-        UnprocessableEntityError,
-    )
+    import anthropic
+    import httpx
+    import httpx2
+    import openai
+    from botocore.exceptions import ClientError
+    from google.genai.errors import APIError as GoogleAPIError
+    from pydantic_ai.exceptions import ModelHTTPError, UsageLimitExceeded
 
     core_exception = _unwrap_nested_exception(e)
     error_msg = str(core_exception)
@@ -153,7 +108,7 @@ def litellm_exception_to_error_msg(
     is_retryable = True
 
     # This is raised by us in cases where we already have computed the stuff we
-    # normally pull out of litellm errors. Just send it through.
+    # normally pull out of provider errors. Just send it through.
     if isinstance(core_exception, ClassifiedLLMError):
         return (
             core_exception.client_error_msg,
@@ -166,155 +121,113 @@ def litellm_exception_to_error_msg(
             if error_msg_pattern in error_msg:
                 return custom_error_msg, "CUSTOM_ERROR", True
 
-    # Both subclass BadRequestError, so they must precede the BadRequestError
-    # branch or they'd be misclassified as BAD_REQUEST.
-    if isinstance(core_exception, ContextWindowExceededError):
-        error_msg = (
-            "Context window exceeded: Your input is too long for the model to process."
-        )
-        if llm is not None:
-            try:
-                max_context = get_max_input_tokens(
-                    model_name=llm.config.model_name,
-                    model_provider=llm.config.model_provider,
-                )
-                error_msg += f" Your invoked model ({llm.config.model_name}) has a maximum context size of {max_context}."
-            except Exception:
-                logger.warning(
-                    "Unable to get maximum input token for LiteLLM exception handling"
-                )
-        error_code = "CONTEXT_TOO_LONG"
-        is_retryable = False
-    elif isinstance(core_exception, ContentPolicyViolationError):
-        error_msg = "Content policy violation: Your request violates the content policy. Please revise your input."
-        error_code = "CONTENT_POLICY"
-        is_retryable = False
-    elif isinstance(core_exception, BadRequestError):
-        error_msg = f"Bad request: {str(core_exception)}"
-        error_code = "BAD_REQUEST"
-        is_retryable = True
-    elif isinstance(core_exception, AuthenticationError):
-        error_msg = "Authentication failed: Please check your API key and credentials."
-        error_code = "AUTH_ERROR"
-        is_retryable = False
-    elif isinstance(core_exception, PermissionDeniedError):
-        error_msg = (
-            f"Permission denied: {str(core_exception)}"
-            "Ensure you have access to this model."
-        )
-        error_code = "PERMISSION_DENIED"
-        is_retryable = False
-    elif isinstance(core_exception, NotFoundError):
-        error_msg = f"Resource not found: {str(core_exception)}"
-        error_code = "NOT_FOUND"
-        is_retryable = False
-    elif isinstance(core_exception, UnprocessableEntityError):
-        error_msg = "Unprocessable entity: The server couldn't process your request due to semantic errors."
-        error_code = "UNPROCESSABLE_ENTITY"
-        is_retryable = True
-    elif isinstance(core_exception, RateLimitError):
-        provider_name = (
-            llm.config.model_provider
-            if llm is not None and llm.config.model_provider
-            else "The LLM provider"
-        )
-        upstream_detail: str | None = None
-        message_attr = getattr(core_exception, "message", None)  # ods: ignore[getattr]
-        if message_attr:
-            upstream_detail = str(message_attr)
-        elif hasattr(core_exception, "api_error"):
-            api_error = core_exception.api_error
-            if isinstance(api_error, dict):
-                detail_value = (
-                    api_error.get("message")
-                    or api_error.get("detail")
-                    or api_error.get("error")
-                )
-                if detail_value:
-                    upstream_detail = str(detail_value)
-        if not upstream_detail:
-            upstream_detail = str(core_exception)
-        upstream_detail = str(upstream_detail).strip()
-        if ":" in upstream_detail and upstream_detail.lower().startswith(
-            "ratelimiterror"
-        ):
-            upstream_detail = upstream_detail.split(":", 1)[1].strip()
-        upstream_detail_lower = upstream_detail.lower()
-        if (
-            "insufficient_quota" in upstream_detail_lower
-            or "exceeded your current quota" in upstream_detail_lower
-        ):
-            error_msg = (
-                f"{provider_name} quota exceeded: {upstream_detail}"
-                if upstream_detail
-                else f"{provider_name} quota exceeded: Verify billing and quota for this API key."
-            )
-            error_code = "BUDGET_EXCEEDED"
-            is_retryable = False
-        else:
-            error_msg = (
-                f"{provider_name} rate limit: {upstream_detail}"
-                if upstream_detail
-                else f"{provider_name} rate limit exceeded: Please slow down your requests and try again later."
-            )
-            error_code = "RATE_LIMIT"
-            is_retryable = True
-    elif isinstance(core_exception, ServiceUnavailableError):
-        provider_name = (
-            llm.config.model_provider
-            if llm is not None and llm.config.model_provider
-            else "The LLM provider"
-        )
-        # Check if this is specifically the Bedrock "Too many connections" error
-        if "Too many connections" in error_msg or "BedrockException" in error_msg:
-            error_msg = (
-                f"{provider_name} is experiencing high connection volume and cannot process your request right now. "
-                "This typically happens when there are too many simultaneous requests to the AI model. "
-                "Please wait a moment and try again. If this persists, contact your system administrator "
-                "to review connection limits and retry configurations."
-            )
-        else:
-            # Generic 503 Service Unavailable
-            error_msg = f"{provider_name} service error: {str(core_exception)}"
-        error_code = "SERVICE_UNAVAILABLE"
-        is_retryable = True
-    elif isinstance(core_exception, APIConnectionError):
-        error_msg = "API connection error: Failed to connect to the API. Please check your internet connection."
-        error_code = "CONNECTION_ERROR"
-        is_retryable = True
-    elif isinstance(core_exception, BudgetExceededError):
-        error_msg = (
-            "Budget exceeded: You've exceeded your allocated budget for API usage."
-        )
-        error_code = "BUDGET_EXCEEDED"
-        is_retryable = False
-    elif isinstance(core_exception, Timeout):
-        error_msg = "Request timed out: The operation took too long to complete. Please try again."
-        error_code = "CONNECTION_ERROR"
-        is_retryable = True
-    elif str(
-        getattr(core_exception, "status_code", "")  # ods: ignore[getattr]
-    ) == "413" or (
-        "413" in error_msg and "request entity too large" in error_msg.lower()
+    status: int | None = None
+    if isinstance(
+        core_exception,
+        (ModelHTTPError, openai.APIStatusError, anthropic.APIStatusError),
     ):
-        # Upstream proxy/gateway (e.g. nginx) rejected the request body as too large.
-        error_msg = (
-            "Request too large: The LLM endpoint rejected the request because it "
-            "exceeded the maximum allowed size (HTTP 413). This commonly happens "
-            "when sending images to a model behind a proxy/gateway. Increase the "
-            "maximum request body size on the gateway in front of your LLM "
-            "endpoint (e.g. nginx `client_max_body_size`)."
+        status = core_exception.status_code
+    elif isinstance(core_exception, GoogleAPIError):
+        status = core_exception.code
+    elif isinstance(core_exception, ClientError):
+        status = core_exception.response.get("ResponseMetadata", {}).get(
+            "HTTPStatusCode"
         )
-        error_code = "REQUEST_TOO_LARGE"
-        is_retryable = False
-    elif isinstance(core_exception, APIError):
-        error_msg = f"API error: An error occurred while communicating with the API. Details: {str(core_exception)}"
-        error_code = "API_ERROR"
-        is_retryable = True
-    elif not fallback_to_error_msg:
+        aws_code = core_exception.response.get("Error", {}).get("Code", "")
+        if aws_code in {"ThrottlingException", "TooManyRequestsException"}:
+            status = 429
+        elif aws_code in {"AccessDeniedException", "UnrecognizedClientException"}:
+            status = 403
+    detail = error_msg.lower()
+    if any(
+        term in detail
+        for term in (
+            "context_length_exceeded",
+            "context window",
+            "maximum context length",
+            "prompt is too long",
+        )
+    ):
+        return (
+            "Context window exceeded: Your input is too long for the model to process.",
+            "CONTEXT_TOO_LONG",
+            False,
+        )
+    if any(
+        term in detail
+        for term in ("content_policy_violation", "content_filter", "content policy")
+    ):
+        return (
+            "Content policy violation: Please revise your input.",
+            "CONTENT_POLICY",
+            False,
+        )
+    if isinstance(core_exception, UsageLimitExceeded) or any(
+        term in detail for term in ("insufficient_quota", "exceeded your current quota")
+    ):
+        return (
+            "Budget exceeded: Verify your billing and API quota.",
+            "BUDGET_EXCEEDED",
+            False,
+        )
+    if status == 401:
+        return (
+            "Authentication failed: Please check your API key and credentials.",
+            "AUTH_ERROR",
+            False,
+        )
+    if status == 403:
+        return (
+            "Permission denied: Ensure you have access to this model.",
+            "PERMISSION_DENIED",
+            False,
+        )
+    if status == 404:
+        return (
+            "Resource not found: Check the configured model and endpoint.",
+            "NOT_FOUND",
+            False,
+        )
+    if status == 413 or ("413" in detail and "request entity too large" in detail):
+        return (
+            "Request too large (HTTP 413): The LLM endpoint rejected the request body. Check the gateway request size limit (nginx client_max_body_size).",
+            "REQUEST_TOO_LARGE",
+            False,
+        )
+    if status == 429:
+        provider_name = llm.config.model_provider if llm is not None else "Provider"
+        return f"{provider_name} rate limit: {error_msg}", "RATE_LIMIT", True
+    if status == 422:
+        return (
+            "The provider could not process this request.",
+            "UNPROCESSABLE_ENTITY",
+            True,
+        )
+    if status == 400:
+        return f"Bad request: {error_msg}", "BAD_REQUEST", True
+    if status is not None and status >= 500:
+        return f"Provider service error: {error_msg}", "SERVICE_UNAVAILABLE", True
+    if isinstance(
+        core_exception,
+        (
+            TimeoutError,
+            httpx.TimeoutException,
+            httpx.TransportError,
+            httpx2.TimeoutException,
+            httpx2.TransportError,
+            openai.APIConnectionError,
+            anthropic.APIConnectionError,
+        ),
+    ):
+        return (
+            "Connection failed or timed out. Please try again.",
+            "CONNECTION_ERROR",
+            True,
+        )
+    if status is not None:
+        return f"Provider API error: {error_msg}", "API_ERROR", True
+    if not fallback_to_error_msg:
         error_msg = "An unexpected error occurred while processing your request. Please try again later."
-        error_code = "UNKNOWN_ERROR"
-        is_retryable = True
 
     return error_msg, error_code, is_retryable
 
@@ -380,18 +293,18 @@ def collect_credential_values(
     return credential_values
 
 
-def litellm_exception_to_safe_error(
+def llm_exception_to_safe_error(
     e: Exception,
     llm: LLM | None = None,
     *,
     fallback_to_error_msg: bool = False,
     custom_error_msg_mappings: (
         dict[str, str] | None
-    ) = LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS,
+    ) = LLM_CUSTOM_ERROR_MESSAGE_MAPPINGS,
     secrets: Iterable[str | None] = (),
 ) -> LLMErrorInfo:
-    """Classify a LiteLLM exception and redact secrets from its message."""
-    message, error_code, is_retryable = litellm_exception_to_error_msg(
+    """Classify a provider exception and redact secrets from its message."""
+    message, error_code, is_retryable = llm_exception_to_error_msg(
         e,
         llm,
         fallback_to_error_msg=fallback_to_error_msg,
@@ -414,9 +327,9 @@ def test_llm(llm: LLM) -> str | None:
     """Probe an LLM and return either `None` (success) or a sanitized error.
 
     The returned message is intended to be safe to surface to admin callers:
-    raw upstream exception text is *not* echoed verbatim. Known LiteLLM
+    raw upstream exception text is *not* echoed verbatim. Known provider
     exception types are mapped to friendly messages via
-    `litellm_exception_to_error_msg`, and the result is then scrubbed of any
+    `llm_exception_to_error_msg`, and the result is then scrubbed of any
     credential values pulled from `llm.config` plus common header/JSON
     credential patterns.
 
@@ -430,7 +343,7 @@ def test_llm(llm: LLM) -> str | None:
             return None
         except Exception as e:
             logger.warning("Failed to call LLM with the following error: %s", e)
-            error_msg = litellm_exception_to_safe_error(e, llm).message
+            error_msg = llm_exception_to_safe_error(e, llm).message
 
     return error_msg
 
@@ -521,7 +434,7 @@ def get_max_input_tokens_from_llm_provider(
     Fallback order:
     1. Use max_input_tokens from model_configuration (populated from source APIs
        like OpenRouter, Ollama, or our Bedrock mapping)
-    2. Look up in litellm.model_cost dictionary
+    2. Look up in model catalog
     3. Fall back to GEN_AI_MODEL_FALLBACK_MAX_TOKENS (32000)
 
     Most dynamic providers (OpenRouter, Ollama) provide context_length via their
@@ -572,11 +485,11 @@ def model_supports_image_input(
             e,
         )
 
-    # Fallback to looking up the model in the litellm model_cost dict. A
+    # Fallback to looking up the model in the model catalog. A
     # custom provider (e.g. Azure AI Foundry) may carry the real model
     # identity only in the deployment alias.
     return any(
-        litellm_thinks_model_supports_image_input(name, model_provider)
+        catalog_supports_image_input(name, model_provider)
         for name in model_identity_names(model_name, deployment_name)
     )
 

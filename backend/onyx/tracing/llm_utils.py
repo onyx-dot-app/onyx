@@ -4,6 +4,8 @@ from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from typing import Any, cast
 
+from pydantic_ai import messages as pm
+
 from onyx.llm.interfaces import LLM
 from onyx.llm.model_response import ModelResponse
 from onyx.llm.models import ToolCall
@@ -109,6 +111,39 @@ def record_llm_request_params(params: Mapping[str, Any]) -> None:
     if span.content_mode == TraceContentMode.METADATA_ONLY:
         return
     span.span_data.request_params = dict(params)
+
+
+def record_native_llm_response(
+    span: Span[GenerationSpanData], response: pm.ModelResponse
+) -> None:
+    """Record native response content only when the trace permits it."""
+    if span.content_mode == TraceContentMode.FULL:
+        output: dict[str, Any] = {"role": "assistant"}
+        if response.text:
+            output["content"] = response.text
+        if response.tool_calls:
+            output["tool_calls"] = [
+                {
+                    "id": call.tool_call_id,
+                    "type": "function",
+                    "function": {
+                        "name": call.tool_name,
+                        "arguments": call.args_as_json_str(),
+                    },
+                }
+                for call in response.tool_calls
+            ]
+        span.span_data.output = [output]
+        if response.thinking:
+            span.span_data.reasoning = response.thinking
+    usage = response.usage
+    span.span_data.usage = {
+        "input_tokens": usage.input_tokens,
+        "output_tokens": usage.output_tokens,
+        "total_tokens": usage.total_tokens,
+        "cache_read_input_tokens": usage.cache_read_tokens,
+        "cache_creation_input_tokens": usage.cache_write_tokens,
+    }
 
 
 def record_llm_response(

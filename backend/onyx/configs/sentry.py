@@ -54,7 +54,7 @@ def _add_instance_tags(
     return event
 
 
-# Provider API keys ride in litellm's outbound request `headers` dict, which
+# Provider API keys ride in provider SDK outbound request `headers` dict, which
 # Sentry can capture. Its default denylist only has the underscore `x_api_key`,
 # so the real hyphenated header names slip through — add them here.
 _EXTRA_CREDENTIAL_DENYLIST = [
@@ -101,7 +101,7 @@ def init_sentry(
         traces_sample_rate=traces_sample_rate,
         release=__version__,
         before_send=_add_instance_tags,
-        # Never capture stack-frame locals: litellm holds the provider key in
+        # Never capture stack-frame locals: provider clients hold the provider key in
         # the outbound request `headers` dict Sentry would otherwise store.
         # Also scrub nested credential keys (incl. the hyphenated x-api-key).
         include_local_variables=False,

@@ -131,6 +131,37 @@ class AgentResponseStart(BaseObj):
 
 # The stream of tokens for the final response
 # There is no end packet for this as the stream is over and a final OverallStop packet is emitted
+class AnswerMetadata(BaseObj):
+    type: Literal["answer_metadata"] = "answer_metadata"
+    final_documents: list[SearchDoc] | None = None
+    pre_answer_processing_seconds: float | None = None
+
+
+AgentEventPhase = Literal[
+    "chat", "clarification", "plan", "research", "report", "coding"
+]
+
+
+class PydanticAIEvent(BaseObj):
+    """Native agent stream event with Onyx placement supplied by the run."""
+
+    type: Literal["pydantic_ai"] = "pydantic_ai"
+    event: dict[str, Any]
+    phase: AgentEventPhase = "chat"
+
+    @property
+    def text_delta(self) -> str:
+        if self.event.get("event_kind") == "part_start":
+            part = self.event.get("part", {})
+            if part.get("part_kind") == "text":
+                return str(part.get("content", ""))
+        elif self.event.get("event_kind") == "part_delta":
+            delta = self.event.get("delta", {})
+            if delta.get("part_delta_kind") == "text":
+                return str(delta.get("content_delta", ""))
+        return ""
+
+
 class AgentResponseDelta(BaseObj):
     type: Literal["message_delta"] = StreamingType.MESSAGE_DELTA.value
 
@@ -432,6 +463,7 @@ class BashToolDelta(BaseObj):
 ################################################
 # Discriminated union of all possible packet object types
 PacketObj = Union[
+    PydanticAIEvent,
     # Control Packets
     OverallStop,
     SectionEnd,
@@ -440,6 +472,7 @@ PacketObj = Union[
     ChatHeartbeat,
     # Agent Response Packets
     AgentResponseStart,
+    AnswerMetadata,
     AgentResponseDelta,
     # Tool Packets
     SearchToolStart,
