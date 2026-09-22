@@ -1,0 +1,375 @@
+{
+  "aliases": {},
+  "models": {
+    "gpt-oss-120b": {
+      "attachment": false,
+      "cost": {
+        "input": 0.09,
+        "output": 0.47
+      },
+      "limit": {
+        "context": 131072,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "gpt-oss-120b",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-08-28",
+      "structured_output": true,
+      "tool_call": true
+    },
+    "gpt-oss-20b": {
+      "attachment": false,
+      "cost": {
+        "input": 0.05,
+        "output": 0.18
+      },
+      "limit": {
+        "context": 131072,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "gpt-oss-20b",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-08-28",
+      "structured_output": true,
+      "tool_call": true
+    },
+    "meta-llama-3_3-70b-instruct": {
+      "attachment": false,
+      "cost": {
+        "input": 0.74,
+        "output": 0.74
+      },
+      "limit": {
+        "context": 131072,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Meta-Llama-3_3-70B-Instruct",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-04-01",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "mistral-7b-instruct-v0.3": {
+      "attachment": false,
+      "cost": {
+        "input": 0.11,
+        "output": 0.11
+      },
+      "limit": {
+        "context": 65536,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Mistral-7B-Instruct-v0.3",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-04-01",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "mistral-nemo-instruct-2407": {
+      "attachment": false,
+      "cost": {
+        "input": 0.14,
+        "output": 0.14
+      },
+      "limit": {
+        "context": 65536,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Mistral-Nemo-Instruct-2407",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2024-11-20",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "mistral-small-3.2-24b-instruct-2506": {
+      "attachment": true,
+      "cost": {
+        "input": 0.1,
+        "output": 0.31
+      },
+      "limit": {
+        "context": 131072,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Mistral-Small-3.2-24B-Instruct-2506",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-07-16",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "qwen2.5-vl-72b-instruct": {
+      "attachment": true,
+      "cost": {
+        "input": 1.01,
+        "output": 1.01
+      },
+      "limit": {
+        "context": 32768,
+        "output": 32768
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Qwen2.5-VL-72B-Instruct",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-03-31",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": false
+    },
+    "qwen3-coder-30b-a3b-instruct": {
+      "attachment": false,
+      "cost": {
+        "input": 0.07,
+        "output": 0.26
+      },
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Qwen3-Coder-30B-A3B-Instruct",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-10-28",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "qwen3.5-397b-a17b": {
+      "attachment": true,
+      "cost": {
+        "input": 0.71,
+        "output": 4.25
+      },
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Qwen3.5-397B-A17B",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-05-18",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "qwen3.5-9b": {
+      "attachment": true,
+      "cost": {
+        "input": 0.12,
+        "output": 0.18
+      },
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Qwen3.5-9B",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-04-22",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "qwen3.6-27b": {
+      "attachment": true,
+      "cost": {
+        "input": 0.47,
+        "output": 3.19
+      },
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Qwen3.6-27B",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-06-01",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "qwen3.8-27b": {
+      "attachment": true,
+      "cost": {
+        "input": 0.47,
+        "output": 3.19
+      },
+      "family": "qwen",
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Qwen3.8-27B",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-09-02",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "qwen3guard-gen-0.6b": {
+      "attachment": false,
+      "cost": {
+        "input": 0,
+        "output": 0
+      },
+      "limit": {
+        "context": 32768,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Qwen3Guard-Gen-0.6B",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2026-01-22",
+      "temperature": true,
+      "tool_call": false
+    },
+    "qwen3guard-gen-8b": {
+      "attachment": false,
+      "cost": {
+        "input": 0,
+        "output": 0
+      },
+      "limit": {
+        "context": 32768,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Qwen3Guard-Gen-8B",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2026-01-22",
+      "temperature": true,
+      "tool_call": false
+    }
+  },
+  "models_dev_providers": [
+    "ovhcloud"
+  ]
+}

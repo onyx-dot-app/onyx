@@ -1,0 +1,143 @@
+{
+  "aliases": {},
+  "models": {
+    "ibm/granite-4-h-small": {
+      "attachment": false,
+      "cost": {
+        "input": 0.0636,
+        "output": 0.265
+      },
+      "family": "granite",
+      "limit": {
+        "context": 131072,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Granite-4.0-H-Small",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-10-02",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "meta-llama/llama-3-3-70b-instruct": {
+      "attachment": false,
+      "cost": {
+        "input": 0.7526,
+        "output": 0.7526
+      },
+      "family": "llama",
+      "limit": {
+        "context": 131072,
+        "output": 4096
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Llama-3.3-70B-Instruct",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2024-12-06",
+      "temperature": true,
+      "tool_call": true
+    },
+    "meta-llama/llama-4-maverick-17b-128e-instruct-fp8": {
+      "attachment": true,
+      "cost": {
+        "input": 0.371,
+        "output": 1.484
+      },
+      "family": "llama",
+      "limit": {
+        "context": 131072,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Llama 4 Maverick 17B 128E Instruct FP8",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-04-05",
+      "temperature": true,
+      "tool_call": true
+    },
+    "mistralai/mistral-small-3-1-24b-instruct-2503": {
+      "attachment": true,
+      "cost": {
+        "input": 0.106,
+        "output": 0.318
+      },
+      "family": "mistral-small",
+      "limit": {
+        "context": 131072,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Mistral Small 3.1 24B",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-03-17",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "openai/gpt-oss-120b": {
+      "attachment": false,
+      "cost": {
+        "input": 0.159,
+        "output": 0.636
+      },
+      "family": "gpt-oss",
+      "limit": {
+        "context": 131072,
+        "output": 32768
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT OSS 120B",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-08-05",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    }
+  },
+  "models_dev_providers": [
+    "watsonx"
+  ]
+}

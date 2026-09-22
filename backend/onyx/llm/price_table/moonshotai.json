@@ -1,0 +1,128 @@
+{
+  "aliases": {},
+  "models": {
+    "kimi-k2.6": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.16,
+        "input": 0.95,
+        "output": 4
+      },
+      "family": "kimi-k2",
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Kimi K2.6",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-04-21",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "kimi-k2.7-code": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.19,
+        "input": 0.95,
+        "output": 4
+      },
+      "family": "kimi-k2",
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Kimi K2.7 Code",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-06-12",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "kimi-k2.7-code-highspeed": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.38,
+        "input": 1.9,
+        "output": 8
+      },
+      "family": "kimi-k2",
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Kimi K2.7 Code HighSpeed",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-06-12",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "kimi-k3": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.3,
+        "input": 3,
+        "output": 15
+      },
+      "family": "kimi-k3",
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Kimi K3",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-07-16",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    }
+  },
+  "models_dev_providers": [
+    "moonshotai"
+  ]
+}

@@ -1,0 +1,5285 @@
+{
+  "aliases": {
+    "amazon.nova-premier": "us.amazon.nova-premier-v1:0",
+    "amazon.nova-premier-v1:0": "us.amazon.nova-premier-v1:0",
+    "deepseek.v3": "deepseek.v3-v1:0",
+    "qwen.qwen3-235b-a22b-2507": "qwen.qwen3-235b-a22b-2507-v1:0",
+    "qwen.qwen3-32b": "qwen.qwen3-32b-v1:0",
+    "qwen.qwen3-coder-30b-a3b": "qwen.qwen3-coder-30b-a3b-v1:0",
+    "qwen.qwen3-coder-480b-a35b": "qwen.qwen3-coder-480b-a35b-v1:0"
+  },
+  "models": {
+    "amazon.nova-2-lite-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.0825,
+        "cache_write": 0.33,
+        "input": 0.33,
+        "output": 2.75
+      },
+      "family": "nova",
+      "limit": {
+        "context": 1000000,
+        "output": 65535
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Nova 2 Lite",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-12-02",
+      "temperature": true,
+      "tool_call": true
+    },
+    "amazon.nova-lite-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.015,
+        "cache_write": 0.06,
+        "input": 0.06,
+        "output": 0.24
+      },
+      "family": "nova-lite",
+      "limit": {
+        "context": 300000,
+        "output": 10000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Nova Lite",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2024-12-03",
+      "temperature": true,
+      "tool_call": true
+    },
+    "amazon.nova-micro-v1:0": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.00875,
+        "cache_write": 0.035,
+        "input": 0.035,
+        "output": 0.14
+      },
+      "family": "nova-micro",
+      "limit": {
+        "context": 128000,
+        "output": 10000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Nova Micro",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2024-12-03",
+      "temperature": true,
+      "tool_call": true
+    },
+    "amazon.nova-pro-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "cache_write": 0.8,
+        "input": 0.8,
+        "output": 3.2
+      },
+      "family": "nova-pro",
+      "limit": {
+        "context": 300000,
+        "output": 10000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Nova Pro",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2024-12-03",
+      "temperature": true,
+      "tool_call": true
+    },
+    "anthropic.claude-fable-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 1,
+        "cache_write": 12.5,
+        "input": 10,
+        "output": 50
+      },
+      "family": "claude-fable",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Fable 5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-06-09",
+      "temperature": false,
+      "tool_call": true
+    },
+    "anthropic.claude-fable-5-1": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.25,
+        "cache_write": 12.5,
+        "input": 10,
+        "output": 50
+      },
+      "family": "claude-fable",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Fable 5.1",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-01",
+      "temperature": false,
+      "tool_call": true
+    },
+    "anthropic.claude-haiku-4-5-20251001-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.1,
+        "cache_write": 1.25,
+        "input": 1,
+        "output": 5
+      },
+      "family": "claude-haiku",
+      "limit": {
+        "context": 200000,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Haiku 4.5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-10-15",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "anthropic.claude-opus-4-1-20250805-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 1.5,
+        "cache_write": 18.75,
+        "input": 15,
+        "output": 75
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 200000,
+        "output": 32000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 4.1",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-08-05",
+      "status": "deprecated",
+      "temperature": true,
+      "tool_call": true
+    },
+    "anthropic.claude-opus-4-5-20251101-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.5,
+        "cache_write": 6.25,
+        "input": 5,
+        "output": 25
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 200000,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 4.5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-11-01",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "anthropic.claude-opus-4-6-v1": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.55,
+        "cache_write": 6.875,
+        "input": 5.5,
+        "output": 27.5
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 4.6",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-02-05",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "anthropic.claude-opus-4-7": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.5,
+        "cache_write": 6.25,
+        "input": 5,
+        "output": 25
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 4.7",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-04-16",
+      "temperature": false,
+      "tool_call": true
+    },
+    "anthropic.claude-opus-4-8": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.5,
+        "cache_write": 6.25,
+        "input": 5,
+        "output": 25
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 4.8",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-05-28",
+      "temperature": false,
+      "tool_call": true
+    },
+    "anthropic.claude-opus-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.5,
+        "cache_write": 6.25,
+        "input": 5,
+        "output": 25
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-07-24",
+      "temperature": false,
+      "tool_call": true
+    },
+    "anthropic.claude-opus-5-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "cache_write": 5,
+        "input": 4,
+        "output": 20
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 5.5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "temperature": false,
+      "tool_call": true
+    },
+    "anthropic.claude-sonnet-4-5-20250929-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.3,
+        "cache_write": 3.75,
+        "input": 3,
+        "output": 15
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 200000,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Sonnet 4.5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-09-29",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "anthropic.claude-sonnet-4-6": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.33,
+        "cache_write": 4.125,
+        "input": 3.3,
+        "output": 16.5
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Sonnet 4.6",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-02-17",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "anthropic.claude-sonnet-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "cache_write": 2.5,
+        "input": 2,
+        "output": 10
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Sonnet 5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-06-30",
+      "structured_output": false,
+      "temperature": false,
+      "tool_call": true
+    },
+    "apac.amazon.nova-lite-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.01575,
+        "cache_write": 0.063,
+        "input": 0.063,
+        "output": 0.252
+      },
+      "family": "nova-lite",
+      "limit": {
+        "context": 300000,
+        "output": 10000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Nova Lite (APAC)",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2024-12-03",
+      "temperature": true,
+      "tool_call": true
+    },
+    "apac.amazon.nova-micro-v1:0": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.00925,
+        "cache_write": 0.037,
+        "input": 0.037,
+        "output": 0.148
+      },
+      "family": "nova-micro",
+      "limit": {
+        "context": 128000,
+        "output": 10000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Nova Micro (APAC)",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2024-12-03",
+      "temperature": true,
+      "tool_call": true
+    },
+    "apac.amazon.nova-pro-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.21,
+        "cache_write": 0.84,
+        "input": 0.84,
+        "output": 3.36
+      },
+      "family": "nova-pro",
+      "limit": {
+        "context": 300000,
+        "output": 10000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Nova Pro (APAC)",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2024-12-03",
+      "temperature": true,
+      "tool_call": true
+    },
+    "apac.anthropic.claude-sonnet-4-20250514-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.3,
+        "cache_write": 3.75,
+        "input": 3,
+        "output": 15
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 200000,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Sonnet 4 (APAC)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-05-22",
+      "status": "deprecated",
+      "temperature": true,
+      "tool_call": true
+    },
+    "au.anthropic.claude-haiku-4-5-20251001-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.11,
+        "cache_write": 1.375,
+        "input": 1.1,
+        "output": 5.5
+      },
+      "family": "claude-haiku",
+      "limit": {
+        "context": 200000,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Haiku 4.5 (AU)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-10-15",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "au.anthropic.claude-opus-4-6-v1": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.55,
+        "cache_write": 6.875,
+        "input": 5.5,
+        "output": 27.5
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "AU Anthropic Claude Opus 4.6",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-02-05",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "au.anthropic.claude-opus-4-7": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.55,
+        "cache_write": 6.875,
+        "input": 5.5,
+        "output": 27.5
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 4.7 (AU)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-04-16",
+      "temperature": false,
+      "tool_call": true
+    },
+    "au.anthropic.claude-opus-4-8": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.55,
+        "cache_write": 6.875,
+        "input": 5.5,
+        "output": 27.5
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 4.8 (AU)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-05-28",
+      "temperature": false,
+      "tool_call": true
+    },
+    "au.anthropic.claude-opus-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.55,
+        "cache_write": 6.875,
+        "input": 5.5,
+        "output": 27.5
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 5 (AU)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-07-24",
+      "temperature": false,
+      "tool_call": true
+    },
+    "au.anthropic.claude-opus-5-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.22,
+        "cache_write": 5.5,
+        "input": 4.4,
+        "output": 22
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 5.5 (AU)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "temperature": false,
+      "tool_call": true
+    },
+    "au.anthropic.claude-sonnet-4-5-20250929-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.33,
+        "cache_write": 4.125,
+        "input": 3.3,
+        "output": 16.5
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 200000,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Sonnet 4.5 (AU)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-09-29",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "au.anthropic.claude-sonnet-4-6": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.33,
+        "cache_write": 4.125,
+        "input": 3.3,
+        "output": 16.5
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "AU Anthropic Claude Sonnet 4.6",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-02-17",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "au.anthropic.claude-sonnet-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.22,
+        "cache_write": 2.75,
+        "input": 2.2,
+        "output": 11
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Sonnet 5 (AU)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-06-30",
+      "structured_output": false,
+      "temperature": false,
+      "tool_call": true
+    },
+    "ca.amazon.nova-lite-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.016,
+        "cache_write": 0.064,
+        "input": 0.064,
+        "output": 0.256
+      },
+      "family": "nova-lite",
+      "limit": {
+        "context": 300000,
+        "output": 10000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Nova Lite (CA)",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2024-12-03",
+      "temperature": true,
+      "tool_call": true
+    },
+    "deepseek.r1-v1:0": {
+      "attachment": false,
+      "cost": {
+        "input": 1.35,
+        "output": 5.4
+      },
+      "family": "deepseek-thinking",
+      "limit": {
+        "context": 128000,
+        "output": 32768
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "DeepSeek-R1",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-01-20",
+      "temperature": true,
+      "tool_call": false
+    },
+    "deepseek.v3-v1:0": {
+      "attachment": false,
+      "cost": {
+        "input": 0.58,
+        "output": 1.68
+      },
+      "family": "deepseek",
+      "limit": {
+        "context": 163840,
+        "output": 81920
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "DeepSeek-V3.1",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-08-21",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "deepseek.v3.2": {
+      "attachment": false,
+      "cost": {
+        "input": 0.62,
+        "output": 1.85
+      },
+      "family": "deepseek",
+      "limit": {
+        "context": 163840,
+        "output": 81920
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "DeepSeek V3.2",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-12-01",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "eu.amazon.nova-2-lite-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.0935,
+        "cache_write": 0.374,
+        "input": 0.374,
+        "output": 3.157
+      },
+      "family": "nova",
+      "limit": {
+        "context": 1000000,
+        "output": 65535
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Nova 2 Lite (EU)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-12-02",
+      "temperature": true,
+      "tool_call": true
+    },
+    "eu.amazon.nova-lite-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.01725,
+        "cache_write": 0.069,
+        "input": 0.069,
+        "output": 0.276
+      },
+      "family": "nova-lite",
+      "limit": {
+        "context": 300000,
+        "output": 10000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Nova Lite (EU)",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2024-12-03",
+      "temperature": true,
+      "tool_call": true
+    },
+    "eu.amazon.nova-micro-v1:0": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.01,
+        "cache_write": 0.04,
+        "input": 0.04,
+        "output": 0.16
+      },
+      "family": "nova-micro",
+      "limit": {
+        "context": 128000,
+        "output": 10000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Nova Micro (EU)",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2024-12-03",
+      "temperature": true,
+      "tool_call": true
+    },
+    "eu.amazon.nova-pro-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.23,
+        "cache_write": 0.92,
+        "input": 0.92,
+        "output": 3.68
+      },
+      "family": "nova-pro",
+      "limit": {
+        "context": 300000,
+        "output": 10000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Nova Pro (EU)",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2024-12-03",
+      "temperature": true,
+      "tool_call": true
+    },
+    "eu.anthropic.claude-fable-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 1.1,
+        "cache_write": 13.75,
+        "input": 11,
+        "output": 55
+      },
+      "family": "claude-fable",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Fable 5 (EU)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-06-09",
+      "temperature": false,
+      "tool_call": true
+    },
+    "eu.anthropic.claude-haiku-4-5-20251001-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.11,
+        "cache_write": 1.375,
+        "input": 1.1,
+        "output": 5.5
+      },
+      "family": "claude-haiku",
+      "limit": {
+        "context": 200000,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Haiku 4.5 (EU)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-10-15",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "eu.anthropic.claude-opus-4-5-20251101-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.55,
+        "cache_write": 6.875,
+        "input": 5.5,
+        "output": 27.5
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 200000,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 4.5 (EU)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-11-01",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "eu.anthropic.claude-opus-4-6-v1": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.55,
+        "cache_write": 6.875,
+        "input": 5.5,
+        "output": 27.5
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 4.6 (EU)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-02-05",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "eu.anthropic.claude-opus-4-7": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.55,
+        "cache_write": 6.875,
+        "input": 5.5,
+        "output": 27.5
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 4.7 (EU)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-04-16",
+      "temperature": false,
+      "tool_call": true
+    },
+    "eu.anthropic.claude-opus-4-8": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.55,
+        "cache_write": 6.875,
+        "input": 5.5,
+        "output": 27.5
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 4.8 (EU)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-05-28",
+      "temperature": false,
+      "tool_call": true
+    },
+    "eu.anthropic.claude-opus-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.55,
+        "cache_write": 6.875,
+        "input": 5.5,
+        "output": 27.5
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 5 (EU)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-07-24",
+      "temperature": false,
+      "tool_call": true
+    },
+    "eu.anthropic.claude-opus-5-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.22,
+        "cache_write": 5.5,
+        "input": 4.4,
+        "output": 22
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 5.5 (EU)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "temperature": false,
+      "tool_call": true
+    },
+    "eu.anthropic.claude-sonnet-4-20250514-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.3,
+        "cache_write": 3.75,
+        "input": 3,
+        "output": 15
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 200000,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Sonnet 4 (EU)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-05-22",
+      "status": "deprecated",
+      "temperature": true,
+      "tool_call": true
+    },
+    "eu.anthropic.claude-sonnet-4-5-20250929-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.33,
+        "cache_write": 4.125,
+        "input": 3.3,
+        "output": 16.5
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 200000,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Sonnet 4.5 (EU)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-09-29",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "eu.anthropic.claude-sonnet-4-6": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.33,
+        "cache_write": 4.125,
+        "input": 3.3,
+        "output": 16.5
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Sonnet 4.6 (EU)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-02-17",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "eu.anthropic.claude-sonnet-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.22,
+        "cache_write": 2.75,
+        "input": 2.2,
+        "output": 11
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Sonnet 5 (EU)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-06-30",
+      "structured_output": false,
+      "temperature": false,
+      "tool_call": true
+    },
+    "eu.mistral.pixtral-large-2502-v1:0": {
+      "attachment": true,
+      "cost": {
+        "input": 2,
+        "output": 6
+      },
+      "family": "pixtral",
+      "limit": {
+        "context": 128000,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Pixtral Large (25.02) (EU)",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2025-04-08",
+      "temperature": true,
+      "tool_call": true
+    },
+    "global.amazon.nova-2-lite-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.075,
+        "cache_write": 0.3,
+        "input": 0.3,
+        "output": 2.5
+      },
+      "family": "nova",
+      "limit": {
+        "context": 1000000,
+        "output": 65535
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Nova 2 Lite (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-12-02",
+      "temperature": true,
+      "tool_call": true
+    },
+    "global.anthropic.claude-fable-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 1,
+        "cache_write": 12.5,
+        "input": 10,
+        "output": 50
+      },
+      "family": "claude-fable",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Fable 5 (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-06-09",
+      "temperature": false,
+      "tool_call": true
+    },
+    "global.anthropic.claude-fable-5-1": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.25,
+        "cache_write": 12.5,
+        "input": 10,
+        "output": 50
+      },
+      "family": "claude-fable",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Fable 5.1 (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-01",
+      "temperature": false,
+      "tool_call": true
+    },
+    "global.anthropic.claude-haiku-4-5-20251001-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.1,
+        "cache_write": 1.25,
+        "input": 1,
+        "output": 5
+      },
+      "family": "claude-haiku",
+      "limit": {
+        "context": 200000,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Haiku 4.5 (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-10-15",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "global.anthropic.claude-opus-4-5-20251101-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.5,
+        "cache_write": 6.25,
+        "input": 5,
+        "output": 25
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 200000,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 4.5 (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-11-01",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "global.anthropic.claude-opus-4-6-v1": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.5,
+        "cache_write": 6.25,
+        "input": 5,
+        "output": 25
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 4.6 (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-02-05",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "global.anthropic.claude-opus-4-7": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.5,
+        "cache_write": 6.25,
+        "input": 5,
+        "output": 25
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 4.7 (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-04-16",
+      "temperature": false,
+      "tool_call": true
+    },
+    "global.anthropic.claude-opus-4-8": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.5,
+        "cache_write": 6.25,
+        "input": 5,
+        "output": 25
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 4.8 (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-05-28",
+      "temperature": false,
+      "tool_call": true
+    },
+    "global.anthropic.claude-opus-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.5,
+        "cache_write": 6.25,
+        "input": 5,
+        "output": 25
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 5 (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-07-24",
+      "temperature": false,
+      "tool_call": true
+    },
+    "global.anthropic.claude-opus-5-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "cache_write": 5,
+        "input": 4,
+        "output": 20
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 5.5 (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "temperature": false,
+      "tool_call": true
+    },
+    "global.anthropic.claude-sonnet-4-20250514-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.3,
+        "cache_write": 3.75,
+        "input": 3,
+        "output": 15
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 200000,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Sonnet 4 (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-05-22",
+      "status": "deprecated",
+      "temperature": true,
+      "tool_call": true
+    },
+    "global.anthropic.claude-sonnet-4-5-20250929-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.3,
+        "cache_write": 3.75,
+        "input": 3,
+        "output": 15
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 200000,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Sonnet 4.5 (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-09-29",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "global.anthropic.claude-sonnet-4-6": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.3,
+        "cache_write": 3.75,
+        "input": 3,
+        "output": 15
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Sonnet 4.6 (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-02-17",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "global.anthropic.claude-sonnet-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "cache_write": 2.5,
+        "input": 2,
+        "output": 10
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Sonnet 5 (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-06-30",
+      "structured_output": false,
+      "temperature": false,
+      "tool_call": true
+    },
+    "global.openai.gpt-5.6-luna": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.02,
+        "cache_write": 0.25,
+        "context_over_200k": {
+          "cache_read": 0.04,
+          "cache_write": 0.5,
+          "input": 0.4,
+          "output": 1.8
+        },
+        "input": 0.2,
+        "output": 1.2,
+        "tiers": [
+          {
+            "cache_read": 0.04,
+            "cache_write": 0.5,
+            "input": 0.4,
+            "output": 1.8,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-luna",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-5.6 Luna (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-07-09",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "global.openai.gpt-5.6-sol": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.4,
+        "cache_write": 5,
+        "context_over_200k": {
+          "cache_read": 0.8,
+          "cache_write": 10,
+          "input": 8,
+          "output": 30
+        },
+        "input": 4,
+        "output": 20,
+        "tiers": [
+          {
+            "cache_read": 0.8,
+            "cache_write": 10,
+            "input": 8,
+            "output": 30,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-sol",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-5.6 Sol (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-07-09",
+      "structured_output": false,
+      "temperature": false,
+      "tool_call": true
+    },
+    "global.openai.gpt-5.6-terra": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "cache_write": 2.5,
+        "context_over_200k": {
+          "cache_read": 0.4,
+          "cache_write": 5,
+          "input": 4,
+          "output": 18
+        },
+        "input": 2,
+        "output": 12,
+        "tiers": [
+          {
+            "cache_read": 0.4,
+            "cache_write": 5,
+            "input": 4,
+            "output": 18,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-terra",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-5.6 Terra (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-07-09",
+      "structured_output": false,
+      "temperature": false,
+      "tool_call": true
+    },
+    "global.openai.gpt-6-astra": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 1,
+        "cache_write": 12.5,
+        "context_over_200k": {
+          "cache_read": 2,
+          "cache_write": 25,
+          "input": 20,
+          "output": 75
+        },
+        "input": 10,
+        "output": 50,
+        "tiers": [
+          {
+            "cache_read": 2,
+            "cache_write": 25,
+            "input": 20,
+            "output": 75,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-astra",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6 Astra (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-04",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "global.xai.grok-4.6": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.5,
+        "input": 2,
+        "output": 6
+      },
+      "family": "grok",
+      "limit": {
+        "context": 500000,
+        "output": 500000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Grok 4.6 (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-08-12",
+      "structured_output": false,
+      "temperature": true,
+      "tool_call": true
+    },
+    "google.gemma-3-12b-it": {
+      "attachment": true,
+      "cost": {
+        "input": 0.09,
+        "output": 0.29
+      },
+      "family": "gemma",
+      "limit": {
+        "context": 131072,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Gemma 3 12B IT",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-03-12",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": false
+    },
+    "google.gemma-3-27b-it": {
+      "attachment": true,
+      "cost": {
+        "input": 0.23,
+        "output": 0.38
+      },
+      "family": "gemma",
+      "limit": {
+        "context": 202752,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Gemma 3 27B IT",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-03-12",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": false
+    },
+    "google.gemma-3-4b-it": {
+      "attachment": true,
+      "cost": {
+        "input": 0.04,
+        "output": 0.08
+      },
+      "family": "gemma",
+      "limit": {
+        "context": 131072,
+        "output": 4096
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Gemma 3 4B IT",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-03-12",
+      "temperature": true,
+      "tool_call": false
+    },
+    "google.gemma-4-26b-a4b": {
+      "attachment": true,
+      "cost": {
+        "input": 0.13,
+        "output": 0.4
+      },
+      "family": "gemma",
+      "limit": {
+        "context": 262144,
+        "output": 32768
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Gemma 4 26B A4B IT",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-04-02",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "google.gemma-4-31b": {
+      "attachment": true,
+      "cost": {
+        "input": 0.14,
+        "output": 0.4
+      },
+      "family": "gemma",
+      "limit": {
+        "context": 262144,
+        "output": 32768
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Gemma 4 31B IT",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-04-02",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "google.gemma-4-e2b": {
+      "attachment": true,
+      "cost": {
+        "input": 0.04,
+        "output": 0.08
+      },
+      "family": "gemma",
+      "limit": {
+        "context": 131072,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "audio",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Gemma 4 E2B IT",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-04-02",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "in.openai.gpt-5.6-luna": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.022,
+        "cache_write": 0.275,
+        "context_over_200k": {
+          "cache_read": 0.044,
+          "cache_write": 0.55,
+          "input": 0.44,
+          "output": 1.98
+        },
+        "input": 0.22,
+        "output": 1.32,
+        "tiers": [
+          {
+            "cache_read": 0.044,
+            "cache_write": 0.55,
+            "input": 0.44,
+            "output": 1.98,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-luna",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-5.6 Luna (India)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-07-09",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "in.openai.gpt-5.6-terra": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.22,
+        "cache_write": 2.75,
+        "context_over_200k": {
+          "cache_read": 0.44,
+          "cache_write": 5.5,
+          "input": 4.4,
+          "output": 19.8
+        },
+        "input": 2.2,
+        "output": 13.2,
+        "tiers": [
+          {
+            "cache_read": 0.44,
+            "cache_write": 5.5,
+            "input": 4.4,
+            "output": 19.8,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-terra",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-5.6 Terra (India)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-07-09",
+      "structured_output": false,
+      "temperature": false,
+      "tool_call": true
+    },
+    "jp.amazon.nova-2-lite-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.099,
+        "cache_write": 0.396,
+        "input": 0.396,
+        "output": 3.311
+      },
+      "family": "nova",
+      "limit": {
+        "context": 1000000,
+        "output": 65535
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Nova 2 Lite (JP)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-12-02",
+      "temperature": true,
+      "tool_call": true
+    },
+    "jp.anthropic.claude-haiku-4-5-20251001-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.11,
+        "cache_write": 1.375,
+        "input": 1.1,
+        "output": 5.5
+      },
+      "family": "claude-haiku",
+      "limit": {
+        "context": 200000,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Haiku 4.5 (JP)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-10-15",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "jp.anthropic.claude-opus-4-7": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.55,
+        "cache_write": 6.875,
+        "input": 5.5,
+        "output": 27.5
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 4.7 (JP)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-04-16",
+      "temperature": false,
+      "tool_call": true
+    },
+    "jp.anthropic.claude-opus-4-8": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.55,
+        "cache_write": 6.875,
+        "input": 5.5,
+        "output": 27.5
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 4.8 (JP)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-05-28",
+      "temperature": false,
+      "tool_call": true
+    },
+    "jp.anthropic.claude-opus-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.55,
+        "cache_write": 6.875,
+        "input": 5.5,
+        "output": 27.5
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 5 (JP)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-07-24",
+      "temperature": false,
+      "tool_call": true
+    },
+    "jp.anthropic.claude-opus-5-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.22,
+        "cache_write": 5.5,
+        "input": 4.4,
+        "output": 22
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 5.5 (JP)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "temperature": false,
+      "tool_call": true
+    },
+    "jp.anthropic.claude-sonnet-4-5-20250929-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.33,
+        "cache_write": 4.125,
+        "input": 3.3,
+        "output": 16.5
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 200000,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Sonnet 4.5 (JP)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-09-29",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "jp.anthropic.claude-sonnet-4-6": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.33,
+        "cache_write": 4.125,
+        "input": 3.3,
+        "output": 16.5
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Sonnet 4.6 (JP)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-02-17",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "jp.anthropic.claude-sonnet-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.22,
+        "cache_write": 2.75,
+        "input": 2.2,
+        "output": 11
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Sonnet 5 (JP)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-06-30",
+      "structured_output": false,
+      "temperature": false,
+      "tool_call": true
+    },
+    "meta.llama3-1-70b-instruct-v1:0": {
+      "attachment": false,
+      "cost": {
+        "input": 0.72,
+        "output": 0.72
+      },
+      "family": "llama",
+      "limit": {
+        "context": 128000,
+        "output": 4096
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Llama 3.1 70B Instruct",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2024-07-23",
+      "temperature": true,
+      "tool_call": true
+    },
+    "meta.llama3-1-8b-instruct-v1:0": {
+      "attachment": false,
+      "cost": {
+        "input": 0.22,
+        "output": 0.22
+      },
+      "family": "llama",
+      "limit": {
+        "context": 128000,
+        "output": 4096
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Llama 3.1 8B Instruct",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2024-07-23",
+      "temperature": true,
+      "tool_call": true
+    },
+    "meta.llama3-3-70b-instruct-v1:0": {
+      "attachment": false,
+      "cost": {
+        "input": 0.72,
+        "output": 0.72
+      },
+      "family": "llama",
+      "limit": {
+        "context": 128000,
+        "output": 4096
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Llama 3.3 70B Instruct",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2024-12-06",
+      "temperature": true,
+      "tool_call": true
+    },
+    "meta.llama4-maverick-17b-instruct-v1:0": {
+      "attachment": true,
+      "cost": {
+        "input": 0.24,
+        "output": 0.97
+      },
+      "family": "llama",
+      "limit": {
+        "context": 1000000,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Llama 4 Maverick 17B Instruct",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-04-05",
+      "temperature": true,
+      "tool_call": true
+    },
+    "meta.llama4-scout-17b-instruct-v1:0": {
+      "attachment": true,
+      "cost": {
+        "input": 0.17,
+        "output": 0.66
+      },
+      "family": "llama",
+      "limit": {
+        "context": 10000000,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Llama 4 Scout 17B Instruct",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-04-05",
+      "temperature": true,
+      "tool_call": true
+    },
+    "minimax.minimax-m2": {
+      "attachment": false,
+      "cost": {
+        "input": 0.3,
+        "output": 1.2
+      },
+      "family": "minimax",
+      "limit": {
+        "context": 204608,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "MiniMax-M2",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-10-27",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "minimax.minimax-m2.1": {
+      "attachment": false,
+      "cost": {
+        "input": 0.3,
+        "output": 1.2
+      },
+      "family": "minimax",
+      "limit": {
+        "context": 204800,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "MiniMax-M2.1",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-12-23",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "minimax.minimax-m2.5": {
+      "attachment": false,
+      "cost": {
+        "input": 0.3,
+        "output": 1.2
+      },
+      "family": "minimax",
+      "limit": {
+        "context": 196608,
+        "output": 98304
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "MiniMax-M2.5",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-02-12",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "mistral.devstral-2-123b": {
+      "attachment": false,
+      "cost": {
+        "input": 0.4,
+        "output": 2
+      },
+      "family": "devstral",
+      "limit": {
+        "context": 256000,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Devstral 2 123B",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-12-09",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "mistral.magistral-small-2509": {
+      "attachment": true,
+      "cost": {
+        "input": 0.5,
+        "output": 1.5
+      },
+      "family": "magistral",
+      "limit": {
+        "context": 128000,
+        "output": 40000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Magistral Small 1.2",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-09-18",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "mistral.ministral-3-14b-instruct": {
+      "attachment": true,
+      "cost": {
+        "input": 0.2,
+        "output": 0.2
+      },
+      "family": "ministral",
+      "limit": {
+        "context": 128000,
+        "output": 4096
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Ministral 14B 3.0",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-12-02",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "mistral.ministral-3-3b-instruct": {
+      "attachment": true,
+      "cost": {
+        "input": 0.1,
+        "output": 0.1
+      },
+      "family": "ministral",
+      "limit": {
+        "context": 256000,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Ministral 3 3B",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-12-02",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "mistral.ministral-3-8b-instruct": {
+      "attachment": true,
+      "cost": {
+        "input": 0.15,
+        "output": 0.15
+      },
+      "family": "ministral",
+      "limit": {
+        "context": 128000,
+        "output": 4096
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Ministral 3 8B",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-12-02",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "mistral.mistral-large-3-675b-instruct": {
+      "attachment": true,
+      "cost": {
+        "input": 0.5,
+        "output": 1.5
+      },
+      "family": "mistral-large",
+      "limit": {
+        "context": 256000,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Mistral Large 3",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-12-02",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "mistral.pixtral-large-2502-v1:0": {
+      "attachment": true,
+      "cost": {
+        "input": 2,
+        "output": 6
+      },
+      "family": "pixtral",
+      "limit": {
+        "context": 128000,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Pixtral Large (25.02)",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2025-04-08",
+      "temperature": true,
+      "tool_call": true
+    },
+    "mistral.voxtral-mini-3b-2507": {
+      "attachment": true,
+      "cost": {
+        "input": 0.04,
+        "output": 0.04
+      },
+      "family": "voxtral",
+      "limit": {
+        "context": 32768,
+        "output": 4096
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "audio"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Voxtral Mini 3B 2507",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-07-15",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "mistral.voxtral-small-24b-2507": {
+      "attachment": true,
+      "cost": {
+        "input": 0.1,
+        "output": 0.3
+      },
+      "family": "voxtral",
+      "limit": {
+        "context": 32768,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "audio"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Voxtral Small 24B 2507",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-07-15",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "moonshot.kimi-k2-thinking": {
+      "attachment": false,
+      "cost": {
+        "input": 0.6,
+        "output": 2.5
+      },
+      "family": "kimi-thinking",
+      "limit": {
+        "context": 262143,
+        "output": 16000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Kimi K2 Thinking",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-11-06",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "moonshotai.kimi-k2.5": {
+      "attachment": true,
+      "cost": {
+        "input": 0.6,
+        "output": 3
+      },
+      "family": "kimi-k2",
+      "limit": {
+        "context": 262143,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Kimi K2.5",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-01-27",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "nvidia.nemotron-nano-12b-v2": {
+      "attachment": true,
+      "cost": {
+        "input": 0.2,
+        "output": 0.6
+      },
+      "family": "nemotron",
+      "limit": {
+        "context": 128000,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "NVIDIA Nemotron Nano 12B v2 VL BF16",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-10-28",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "nvidia.nemotron-nano-3-30b": {
+      "attachment": false,
+      "cost": {
+        "input": 0.06,
+        "output": 0.24
+      },
+      "family": "nemotron",
+      "limit": {
+        "context": 262144,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "NVIDIA Nemotron Nano 3 30B",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-12-15",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "nvidia.nemotron-nano-9b-v2": {
+      "attachment": false,
+      "cost": {
+        "input": 0.06,
+        "output": 0.23
+      },
+      "family": "nemotron",
+      "limit": {
+        "context": 131072,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "NVIDIA Nemotron Nano 9B v2",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-08-18",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "nvidia.nemotron-super-3-120b": {
+      "attachment": false,
+      "cost": {
+        "input": 0.15,
+        "output": 0.65
+      },
+      "family": "nemotron",
+      "limit": {
+        "context": 262144,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "NVIDIA Nemotron 3 Super 120B A12B",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-03-11",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "openai.gpt-5.4": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.275,
+        "input": 2.75,
+        "output": 16.5
+      },
+      "family": "gpt",
+      "limit": {
+        "context": 272000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-5.4",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-03-05",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "openai.gpt-5.5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.55,
+        "input": 5.5,
+        "output": 33
+      },
+      "family": "gpt",
+      "limit": {
+        "context": 272000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-5.5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-04-23",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "openai.gpt-5.6-luna": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.022,
+        "cache_write": 0.275,
+        "context_over_200k": {
+          "cache_read": 0.044,
+          "cache_write": 0.55,
+          "input": 0.44,
+          "output": 1.98
+        },
+        "input": 0.22,
+        "output": 1.32,
+        "tiers": [
+          {
+            "cache_read": 0.044,
+            "cache_write": 0.55,
+            "input": 0.44,
+            "output": 1.98,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-luna",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-5.6 Luna",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-07-09",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "openai.gpt-5.6-sol": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.44,
+        "cache_write": 5.5,
+        "context_over_200k": {
+          "cache_read": 0.88,
+          "cache_write": 11,
+          "input": 8.8,
+          "output": 33
+        },
+        "input": 4.4,
+        "output": 22,
+        "tiers": [
+          {
+            "cache_read": 0.88,
+            "cache_write": 11,
+            "input": 8.8,
+            "output": 33,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-sol",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-5.6 Sol",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-07-09",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "openai.gpt-5.6-terra": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.22,
+        "cache_write": 2.75,
+        "context_over_200k": {
+          "cache_read": 0.44,
+          "cache_write": 5.5,
+          "input": 4.4,
+          "output": 19.8
+        },
+        "input": 2.2,
+        "output": 13.2,
+        "tiers": [
+          {
+            "cache_read": 0.44,
+            "cache_write": 5.5,
+            "input": 4.4,
+            "output": 19.8,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-terra",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-5.6 Terra",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-07-09",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "openai.gpt-6-astra": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 1.1,
+        "cache_write": 13.75,
+        "context_over_200k": {
+          "cache_read": 2.2,
+          "cache_write": 27.5,
+          "input": 22,
+          "output": 82.5
+        },
+        "input": 11,
+        "output": 55,
+        "tiers": [
+          {
+            "cache_read": 2.2,
+            "cache_write": 27.5,
+            "input": 22,
+            "output": 82.5,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-astra",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6 Astra",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-04",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "openai.gpt-oss-120b": {
+      "attachment": false,
+      "cost": {
+        "input": 0.15,
+        "output": 0.6
+      },
+      "family": "gpt-oss",
+      "limit": {
+        "context": 128000,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "gpt-oss-120b",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-08-05",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "openai.gpt-oss-120b-1:0": {
+      "attachment": false,
+      "cost": {
+        "input": 0.15,
+        "output": 0.6
+      },
+      "family": "gpt-oss",
+      "limit": {
+        "context": 128000,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "gpt-oss-120b",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-08-05",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "openai.gpt-oss-20b": {
+      "attachment": false,
+      "cost": {
+        "input": 0.07,
+        "output": 0.3
+      },
+      "family": "gpt-oss",
+      "limit": {
+        "context": 128000,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "gpt-oss-20b",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-08-05",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "openai.gpt-oss-20b-1:0": {
+      "attachment": false,
+      "cost": {
+        "input": 0.07,
+        "output": 0.3
+      },
+      "family": "gpt-oss",
+      "limit": {
+        "context": 128000,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "gpt-oss-20b",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-08-05",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "openai.gpt-oss-safeguard-120b": {
+      "attachment": false,
+      "cost": {
+        "input": 0.15,
+        "output": 0.6
+      },
+      "family": "gpt-oss",
+      "limit": {
+        "context": 128000,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT OSS Safeguard 120B",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-10-29",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "openai.gpt-oss-safeguard-20b": {
+      "attachment": false,
+      "cost": {
+        "input": 0.07,
+        "output": 0.2
+      },
+      "family": "gpt-oss",
+      "limit": {
+        "context": 128000,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT OSS Safeguard 20B",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-10-29",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "qwen.qwen3-235b-a22b-2507-v1:0": {
+      "attachment": false,
+      "cost": {
+        "input": 0.22,
+        "output": 0.88
+      },
+      "family": "qwen",
+      "limit": {
+        "context": 262144,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Qwen3 235B-A22B Instruct 2507",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-07-21",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "qwen.qwen3-32b-v1:0": {
+      "attachment": false,
+      "cost": {
+        "input": 0.15,
+        "output": 0.6
+      },
+      "family": "qwen",
+      "limit": {
+        "context": 32768,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Qwen3 32B",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-04",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "qwen.qwen3-coder-30b-a3b-v1:0": {
+      "attachment": false,
+      "cost": {
+        "input": 0.15,
+        "output": 0.6
+      },
+      "family": "qwen",
+      "limit": {
+        "context": 262144,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Qwen3-Coder 30B-A3B Instruct",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-07-31",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "qwen.qwen3-coder-480b-a35b-v1:0": {
+      "attachment": false,
+      "cost": {
+        "input": 0.45,
+        "output": 1.8
+      },
+      "family": "qwen",
+      "limit": {
+        "context": 131072,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Qwen3-Coder 480B-A35B Instruct",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-07-23",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "qwen.qwen3-coder-next": {
+      "attachment": false,
+      "cost": {
+        "input": 0.5,
+        "output": 1.2
+      },
+      "family": "qwen",
+      "limit": {
+        "context": 262144,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Qwen3 Coder Next",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2026-02-03",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "qwen.qwen3-next-80b-a3b": {
+      "attachment": false,
+      "cost": {
+        "input": 0.15,
+        "output": 1.2
+      },
+      "family": "qwen",
+      "limit": {
+        "context": 262144,
+        "output": 262000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Qwen3-Next 80B-A3B Instruct",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-09-11",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "qwen.qwen3-vl-235b-a22b": {
+      "attachment": true,
+      "cost": {
+        "input": 0.53,
+        "output": 2.66
+      },
+      "family": "qwen",
+      "limit": {
+        "context": 262144,
+        "output": 262000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Qwen3 VL 235B A22B Instruct",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-09-23",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "us-gov.openai.gpt-oss-120b-1:0": {
+      "attachment": false,
+      "cost": {
+        "input": 0.18,
+        "output": 0.72
+      },
+      "family": "gpt-oss",
+      "limit": {
+        "context": 128000,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "gpt-oss-120b (GovCloud)",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-08-05",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "us-gov.openai.gpt-oss-20b-1:0": {
+      "attachment": false,
+      "cost": {
+        "input": 0.084,
+        "output": 0.36
+      },
+      "family": "gpt-oss",
+      "limit": {
+        "context": 128000,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "gpt-oss-20b (GovCloud)",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-08-05",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "us.amazon.nova-2-lite-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.0825,
+        "cache_write": 0.33,
+        "input": 0.33,
+        "output": 2.75
+      },
+      "family": "nova",
+      "limit": {
+        "context": 1000000,
+        "output": 65535
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Nova 2 Lite (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-12-02",
+      "temperature": true,
+      "tool_call": true
+    },
+    "us.amazon.nova-lite-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.015,
+        "cache_write": 0.06,
+        "input": 0.06,
+        "output": 0.24
+      },
+      "family": "nova-lite",
+      "limit": {
+        "context": 300000,
+        "output": 10000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Nova Lite (US)",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2024-12-03",
+      "temperature": true,
+      "tool_call": true
+    },
+    "us.amazon.nova-micro-v1:0": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.00875,
+        "cache_write": 0.035,
+        "input": 0.035,
+        "output": 0.14
+      },
+      "family": "nova-micro",
+      "limit": {
+        "context": 128000,
+        "output": 10000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Nova Micro (US)",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2024-12-03",
+      "temperature": true,
+      "tool_call": true
+    },
+    "us.amazon.nova-premier-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.625,
+        "cache_write": 2.5,
+        "input": 2.5,
+        "output": 12.5
+      },
+      "family": "nova",
+      "limit": {
+        "context": 1000000,
+        "output": 10000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Nova Premier (US)",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2025-04-30",
+      "status": "deprecated",
+      "structured_output": false,
+      "temperature": true,
+      "tool_call": true
+    },
+    "us.amazon.nova-pro-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "cache_write": 0.8,
+        "input": 0.8,
+        "output": 3.2
+      },
+      "family": "nova-pro",
+      "limit": {
+        "context": 300000,
+        "output": 10000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Nova Pro (US)",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2024-12-03",
+      "temperature": true,
+      "tool_call": true
+    },
+    "us.anthropic.claude-fable-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 1.1,
+        "cache_write": 13.75,
+        "input": 11,
+        "output": 55
+      },
+      "family": "claude-fable",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Fable 5 (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-06-09",
+      "temperature": false,
+      "tool_call": true
+    },
+    "us.anthropic.claude-fable-5-1": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.275,
+        "cache_write": 13.75,
+        "input": 11,
+        "output": 55
+      },
+      "family": "claude-fable",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Fable 5.1 (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-01",
+      "temperature": false,
+      "tool_call": true
+    },
+    "us.anthropic.claude-haiku-4-5-20251001-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.11,
+        "cache_write": 1.375,
+        "input": 1.1,
+        "output": 5.5
+      },
+      "family": "claude-haiku",
+      "limit": {
+        "context": 200000,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Haiku 4.5 (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-10-15",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "us.anthropic.claude-opus-4-1-20250805-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 1.5,
+        "cache_write": 18.75,
+        "input": 15,
+        "output": 75
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 200000,
+        "output": 32000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 4.1 (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-08-05",
+      "status": "deprecated",
+      "temperature": true,
+      "tool_call": true
+    },
+    "us.anthropic.claude-opus-4-5-20251101-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.55,
+        "cache_write": 6.875,
+        "input": 5.5,
+        "output": 27.5
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 200000,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 4.5 (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-11-01",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "us.anthropic.claude-opus-4-6-v1": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.55,
+        "cache_write": 6.875,
+        "input": 5.5,
+        "output": 27.5
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 4.6 (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-02-05",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "us.anthropic.claude-opus-4-7": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.55,
+        "cache_write": 6.875,
+        "input": 5.5,
+        "output": 27.5
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 4.7 (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-04-16",
+      "temperature": false,
+      "tool_call": true
+    },
+    "us.anthropic.claude-opus-4-8": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.55,
+        "cache_write": 6.875,
+        "input": 5.5,
+        "output": 27.5
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 4.8 (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-05-28",
+      "temperature": false,
+      "tool_call": true
+    },
+    "us.anthropic.claude-opus-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.55,
+        "cache_write": 6.875,
+        "input": 5.5,
+        "output": 27.5
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 5 (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-07-24",
+      "temperature": false,
+      "tool_call": true
+    },
+    "us.anthropic.claude-opus-5-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.22,
+        "cache_write": 5.5,
+        "input": 4.4,
+        "output": 22
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 5.5 (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "temperature": false,
+      "tool_call": true
+    },
+    "us.anthropic.claude-sonnet-4-20250514-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.3,
+        "cache_write": 3.75,
+        "input": 3,
+        "output": 15
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 200000,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Sonnet 4 (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-05-22",
+      "status": "deprecated",
+      "temperature": true,
+      "tool_call": true
+    },
+    "us.anthropic.claude-sonnet-4-5-20250929-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.33,
+        "cache_write": 4.125,
+        "input": 3.3,
+        "output": 16.5
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 200000,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Sonnet 4.5 (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-09-29",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "us.anthropic.claude-sonnet-4-6": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.33,
+        "cache_write": 4.125,
+        "input": 3.3,
+        "output": 16.5
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Sonnet 4.6 (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-02-17",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "us.anthropic.claude-sonnet-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.22,
+        "cache_write": 2.75,
+        "input": 2.2,
+        "output": 11
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Sonnet 5 (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-06-30",
+      "structured_output": false,
+      "temperature": false,
+      "tool_call": true
+    },
+    "us.deepseek.r1-v1:0": {
+      "attachment": false,
+      "cost": {
+        "input": 1.35,
+        "output": 5.4
+      },
+      "family": "deepseek-thinking",
+      "limit": {
+        "context": 128000,
+        "output": 32768
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "DeepSeek-R1 (US)",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-01-20",
+      "temperature": true,
+      "tool_call": false
+    },
+    "us.meta.llama3-1-70b-instruct-v1:0": {
+      "attachment": false,
+      "cost": {
+        "input": 0.72,
+        "output": 0.72
+      },
+      "family": "llama",
+      "limit": {
+        "context": 128000,
+        "output": 4096
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Llama 3.1 70B Instruct (US)",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2024-07-23",
+      "temperature": true,
+      "tool_call": true
+    },
+    "us.meta.llama3-1-8b-instruct-v1:0": {
+      "attachment": false,
+      "cost": {
+        "input": 0.22,
+        "output": 0.22
+      },
+      "family": "llama",
+      "limit": {
+        "context": 128000,
+        "output": 4096
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Llama 3.1 8B Instruct (US)",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2024-07-23",
+      "temperature": true,
+      "tool_call": true
+    },
+    "us.meta.llama3-3-70b-instruct-v1:0": {
+      "attachment": false,
+      "cost": {
+        "input": 0.72,
+        "output": 0.72
+      },
+      "family": "llama",
+      "limit": {
+        "context": 128000,
+        "output": 4096
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Llama 3.3 70B Instruct (US)",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2024-12-06",
+      "temperature": true,
+      "tool_call": true
+    },
+    "us.meta.llama4-maverick-17b-instruct-v1:0": {
+      "attachment": true,
+      "cost": {
+        "input": 0.24,
+        "output": 0.97
+      },
+      "family": "llama",
+      "limit": {
+        "context": 1000000,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Llama 4 Maverick 17B Instruct (US)",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-04-05",
+      "temperature": true,
+      "tool_call": true
+    },
+    "us.meta.llama4-scout-17b-instruct-v1:0": {
+      "attachment": true,
+      "cost": {
+        "input": 0.17,
+        "output": 0.66
+      },
+      "family": "llama",
+      "limit": {
+        "context": 10000000,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Llama 4 Scout 17B Instruct (US)",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-04-05",
+      "temperature": true,
+      "tool_call": true
+    },
+    "us.mistral.pixtral-large-2502-v1:0": {
+      "attachment": true,
+      "cost": {
+        "input": 2,
+        "output": 6
+      },
+      "family": "pixtral",
+      "limit": {
+        "context": 128000,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Pixtral Large (25.02) (US)",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2025-04-08",
+      "temperature": true,
+      "tool_call": true
+    },
+    "us.openai.gpt-5.6-luna": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.022,
+        "cache_write": 0.275,
+        "context_over_200k": {
+          "cache_read": 0.044,
+          "cache_write": 0.55,
+          "input": 0.44,
+          "output": 1.98
+        },
+        "input": 0.22,
+        "output": 1.32,
+        "tiers": [
+          {
+            "cache_read": 0.044,
+            "cache_write": 0.55,
+            "input": 0.44,
+            "output": 1.98,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-luna",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-5.6 Luna (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-07-09",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "us.openai.gpt-5.6-sol": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.44,
+        "cache_write": 5.5,
+        "context_over_200k": {
+          "cache_read": 0.88,
+          "cache_write": 11,
+          "input": 8.8,
+          "output": 33
+        },
+        "input": 4.4,
+        "output": 22,
+        "tiers": [
+          {
+            "cache_read": 0.88,
+            "cache_write": 11,
+            "input": 8.8,
+            "output": 33,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-sol",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-5.6 Sol (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-07-09",
+      "structured_output": false,
+      "temperature": false,
+      "tool_call": true
+    },
+    "us.openai.gpt-5.6-terra": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.22,
+        "cache_write": 2.75,
+        "context_over_200k": {
+          "cache_read": 0.44,
+          "cache_write": 5.5,
+          "input": 4.4,
+          "output": 19.8
+        },
+        "input": 2.2,
+        "output": 13.2,
+        "tiers": [
+          {
+            "cache_read": 0.44,
+            "cache_write": 5.5,
+            "input": 4.4,
+            "output": 19.8,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-terra",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-5.6 Terra (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-07-09",
+      "structured_output": false,
+      "temperature": false,
+      "tool_call": true
+    },
+    "us.openai.gpt-6-astra": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 1.1,
+        "cache_write": 13.75,
+        "context_over_200k": {
+          "cache_read": 2.2,
+          "cache_write": 27.5,
+          "input": 22,
+          "output": 82.5
+        },
+        "input": 11,
+        "output": 55,
+        "tiers": [
+          {
+            "cache_read": 2.2,
+            "cache_write": 27.5,
+            "input": 22,
+            "output": 82.5,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-astra",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6 Astra (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-04",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "us.writer.palmyra-x4-v1:0": {
+      "attachment": false,
+      "cost": {
+        "input": 2.5,
+        "output": 10
+      },
+      "family": "palmyra",
+      "limit": {
+        "context": 122880,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Palmyra X4 (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2024-10-09",
+      "temperature": true,
+      "tool_call": true
+    },
+    "us.writer.palmyra-x5-v1:0": {
+      "attachment": false,
+      "cost": {
+        "input": 0.6,
+        "output": 6
+      },
+      "family": "palmyra",
+      "limit": {
+        "context": 1040000,
+        "input": 1040000,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Palmyra X5 (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-04-28",
+      "temperature": true,
+      "tool_call": true
+    },
+    "us.xai.grok-4.6": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.55,
+        "input": 2.2,
+        "output": 6.6
+      },
+      "family": "grok",
+      "limit": {
+        "context": 500000,
+        "output": 500000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Grok 4.6 (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-08-12",
+      "structured_output": false,
+      "temperature": true,
+      "tool_call": true
+    },
+    "writer.palmyra-x4-v1:0": {
+      "attachment": false,
+      "cost": {
+        "input": 2.5,
+        "output": 10
+      },
+      "family": "palmyra",
+      "limit": {
+        "context": 122880,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Palmyra X4",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2024-10-09",
+      "temperature": true,
+      "tool_call": true
+    },
+    "writer.palmyra-x5-v1:0": {
+      "attachment": false,
+      "cost": {
+        "input": 0.6,
+        "output": 6
+      },
+      "family": "palmyra",
+      "limit": {
+        "context": 1040000,
+        "input": 1040000,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Palmyra X5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-04-28",
+      "temperature": true,
+      "tool_call": true
+    },
+    "xai.grok-4.3": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "family": "grok",
+      "limit": {
+        "context": 1000000,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Grok 4.3",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-04-17",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "xai.grok-4.6": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.55,
+        "input": 2.2,
+        "output": 6.6
+      },
+      "family": "grok",
+      "limit": {
+        "context": 500000,
+        "output": 500000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Grok 4.6",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-08-12",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "zai.glm-4.7": {
+      "attachment": false,
+      "cost": {
+        "input": 0.6,
+        "output": 2.2
+      },
+      "family": "glm",
+      "limit": {
+        "context": 204800,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GLM-4.7",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-12-22",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "zai.glm-4.7-flash": {
+      "attachment": false,
+      "cost": {
+        "input": 0.07,
+        "output": 0.4
+      },
+      "family": "glm-flash",
+      "limit": {
+        "context": 200000,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GLM-4.7-Flash",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-01-19",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "zai.glm-5": {
+      "attachment": false,
+      "cost": {
+        "input": 1,
+        "output": 3.2
+      },
+      "family": "glm",
+      "limit": {
+        "context": 202752,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GLM-5",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-02-12",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    }
+  },
+  "models_dev_providers": [
+    "amazon-bedrock"
+  ]
+}
