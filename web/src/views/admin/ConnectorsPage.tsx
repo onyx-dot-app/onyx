@@ -231,35 +231,34 @@ export default function ConnectorsPage() {
     return popularSources.filter((s) => !resultIds.has(s.internalName));
   }, [popularSources, resultIds, searchTerm]);
 
+  // The source Enter opens while searching: the first card in the first
+  // category with results, else the first popular card (Web and File only
+  // live in the popular grid).
+  const enterTarget = useMemo(() => {
+    if (!searchTerm) return undefined;
+    const firstCategory = Object.values(categorizedSources).find(
+      (sources) => sources.length > 0
+    );
+    return firstCategory?.[0] ?? dedupedPopular[0];
+  }, [searchTerm, categorizedSources, dedupedPopular]);
+
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      const filteredCategories = Object.entries(categorizedSources).filter(
-        ([_, sources]) => sources.length > 0
-      );
-      if (
-        filteredCategories.length > 0 &&
-        filteredCategories[0] !== undefined &&
-        filteredCategories[0][1].length > 0
-      ) {
-        const firstSource = filteredCategories[0][1][0];
-        if (firstSource) {
-          // Check if this source has an existing federated connector
-          const existingFederatedConnector =
-            firstSource.federated && federatedConnectors
-              ? federatedConnectors.find(
-                  (connector) =>
-                    connector.source === `federated_${firstSource.internalName}`
-                )
-              : null;
+    if (e.key !== "Enter" || !enterTarget) return;
 
-          const url = existingFederatedConnector
-            ? `/admin/federated/${existingFederatedConnector.id}`
-            : firstSource.adminUrl;
+    // Check if this source has an existing federated connector
+    const existingFederatedConnector =
+      enterTarget.federated && federatedConnectors
+        ? federatedConnectors.find(
+            (connector) =>
+              connector.source === `federated_${enterTarget.internalName}`
+          )
+        : null;
 
-          window.open(url, "_self");
-        }
-      }
-    }
+    const url = existingFederatedConnector
+      ? `/admin/federated/${existingFederatedConnector.id}`
+      : enterTarget.adminUrl;
+
+    window.open(url, "_self");
   };
 
   return (
@@ -305,7 +304,7 @@ export default function ConnectorsPage() {
                   <div className={SOURCE_CARD_GRID}>
                     {dedupedPopular.map((source) => (
                       <SourceTileTooltipWrapper
-                        preSelect={false}
+                        preSelect={source === enterTarget}
                         key={source.internalName}
                         sourceMetadata={source}
                         federatedConnectors={federatedConnectors}
@@ -318,7 +317,7 @@ export default function ConnectorsPage() {
 
               {Object.entries(categorizedSources)
                 .filter(([_, sources]) => sources.length > 0)
-                .map(([category, sources], categoryInd) => (
+                .map(([category, sources]) => (
                   <GeneralLayouts.Section
                     key={category}
                     gap={3}
@@ -332,13 +331,9 @@ export default function ConnectorsPage() {
                       )}
                     </Text>
                     <div className={SOURCE_CARD_GRID}>
-                      {sources.map((source, sourceInd) => (
+                      {sources.map((source) => (
                         <SourceTileTooltipWrapper
-                          preSelect={
-                            (searchTerm?.length ?? 0) > 0 &&
-                            categoryInd == 0 &&
-                            sourceInd == 0
-                          }
+                          preSelect={source === enterTarget}
                           key={source.internalName}
                           sourceMetadata={source}
                           federatedConnectors={federatedConnectors}
