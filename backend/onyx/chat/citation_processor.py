@@ -182,7 +182,7 @@ class DynamicCitationProcessor:
         self.cited_documents_in_order: list[
             SearchDoc
         ] = []  # SearchDocs in citation order
-        self.cited_document_ids: set[str] = set()  # all cited document_ids
+        self.document_id_to_citation_number: dict[str, int] = {}
         self.recent_cited_documents: set[str] = (
             set()
         )  # recently cited (for deduplication)
@@ -504,8 +504,9 @@ class DynamicCitationProcessor:
             if self.citation_mode != CitationMode.HYPERLINK:
                 continue
 
-            # Format the citation text as [[n]](link)
-            formatted_citation_parts.append(f"[[{num}]]({link})")
+            # Reuse the first displayed number for each document.
+            citation_number = self.document_id_to_citation_number.get(doc_id, num)
+            formatted_citation_parts.append(f"[[{citation_number}]]({link})")
 
             # Skip creating CitationInfo for citations of the same work if cited recently (deduplication)
             if doc_id in self.recent_cited_documents:
@@ -513,8 +514,8 @@ class DynamicCitationProcessor:
             self.recent_cited_documents.add(doc_id)
 
             # Track cited documents and create CitationInfo only for new citations
-            if doc_id not in self.cited_document_ids:
-                self.cited_document_ids.add(doc_id)
+            if doc_id not in self.document_id_to_citation_number:
+                self.document_id_to_citation_number[doc_id] = num
                 self.cited_documents_in_order.append(search_doc)
                 citation_info_list.append(
                     CitationInfo(
@@ -595,7 +596,7 @@ class DynamicCitationProcessor:
         Returns:
             Number of unique documents cited. 0 if citation_mode is not HYPERLINK.
         """
-        return len(self.cited_document_ids)
+        return len(self.document_id_to_citation_number)
 
     def reset_recent_citations(self) -> None:
         """
