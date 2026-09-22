@@ -22,7 +22,7 @@ export interface ConnectorSourceCardProps {
  * "Add Provider" cards on the Language Models page. The whole card is the
  * target; the add button repeats it for discoverability.
  */
-export default function ConnectorSourceCard({
+export function ConnectorSourceCard({
   sourceMetadata,
   description,
   navigationUrl,
@@ -36,10 +36,10 @@ export default function ConnectorSourceCard({
       state="empty"
       padding={2}
       rounding={4}
-      // The add button inside is labelled "Connect <name>", so an exact
-      // match on the bare name reaches the card alone.
       // Lets the catalog find the first card to focus from the search field.
       data-source-card=""
+      // The add button inside is labelled "Connect <name>", so an exact
+      // match on the bare name reaches the card alone.
       aria-label={sourceMetadata.displayName}
       onClick={navigate}
     >

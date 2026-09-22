@@ -28,7 +28,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
 import { Credential } from "@/lib/connectors/credentials";
 import { useSettings } from "@/lib/settings/hooks";
-import ConnectorSourceCard from "@/sections/cards/ConnectorSourceCard";
+import { ConnectorSourceCard } from "@/lib/connectors/components";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import {
   SOURCE_CATEGORY_LABEL_KEYS,
