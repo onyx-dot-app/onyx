@@ -102,10 +102,13 @@ def _slim_batches(
     for scope in hosts:
         yield from _host_documents(client, scope, windows, unrecognised_types)
 
-    # A document indexed while this walk was running lands in the newest window,
+    # A recording that finishes while this walk runs lands in the newest window,
     # so every host is asked for that window again once the walk is over. This
-    # shortens the race with indexing rather than closing it. Read the date again
-    # here, because a walk that crossed midnight would otherwise stop a day short.
+    # only narrows the race with indexing: the prune task reads the indexed ids
+    # after the crawl, and #14975 closes it by reading them before.
+    # TODO(subash): drop this pass once #14975 merges; it then covers nothing.
+    # Read the date again here, because a walk that crossed midnight would
+    # otherwise stop a day short.
     now = datetime.now(timezone.utc).date()
     trailing = listing_windows(now - timedelta(days=_TRAILING_WINDOW_DAYS), now)
     for scope in hosts:
