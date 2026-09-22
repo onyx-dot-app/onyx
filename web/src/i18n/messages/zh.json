@@ -5214,9 +5214,6 @@
             "label": "私有"
           }
         },
-        "addConnectorButton": {
-          "label": "添加连接器"
-        },
         "connectorCreated": {
           "toast": "已成功创建连接器"
         },

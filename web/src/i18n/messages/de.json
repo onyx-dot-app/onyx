@@ -5214,9 +5214,6 @@
             "label": "Privat"
           }
         },
-        "addConnectorButton": {
-          "label": "Konnektor hinzufügen"
-        },
         "connectorCreated": {
           "toast": "Konnektor erfolgreich erstellt"
         },

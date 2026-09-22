@@ -11,7 +11,6 @@ import { Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import { Spacer } from "@opal/components";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
-import { Button } from "@opal/components";
 import { useSettings } from "@/lib/settings/hooks";
 import { useState, useRef, useMemo, RefObject } from "react";
 import { FilterOptions } from "./FilterComponent";
@@ -222,11 +221,6 @@ export default function IndexingStatusPage() {
       <SettingsLayouts.Header
         icon={route.icon}
         title={adminRouteTitle(route)}
-        rightChildren={
-          <Button href={ADMIN_ROUTES.CONNECTORS.path}>
-            {t("status.addConnectorButton.label")}
-          </Button>
-        }
         divider
       />
       <SettingsLayouts.Body>

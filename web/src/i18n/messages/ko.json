@@ -5214,9 +5214,6 @@
             "label": "비공개"
           }
         },
-        "addConnectorButton": {
-          "label": "커넥터 추가"
-        },
         "connectorCreated": {
           "toast": "커넥터를 생성했습니다"
         },
