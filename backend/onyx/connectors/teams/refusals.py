@@ -12,6 +12,9 @@ from office365.runtime.client_request_exception import ClientRequestException
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.models import ConnectorFailure, EntityFailure
 from onyx.connectors.teams.models import ChannelRef
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 def status(error: requests.RequestException) -> int | None:
@@ -80,6 +83,20 @@ def channel_failure(
             else f"Could not read {named}: {error}"
         ),
         exception=error,
+    )
+
+
+def warn_group_left_out(channel: ChannelRef, call: str, error: Exception) -> None:
+    """The group sync deletes the groups a failed run did not reach, so raising
+    on one refused channel would take access from every team listed after it.
+    Left out, the refusal costs the one group, which fails closed."""
+    logger.warning(
+        'The %s of channel "%s" in team %s could not be read, so its group is '
+        "left out of this sync: %s",
+        call,
+        channel.display_name,
+        channel.team_id,
+        error,
     )
 
 

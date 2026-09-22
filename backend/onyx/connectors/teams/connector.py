@@ -37,6 +37,7 @@ from onyx.connectors.models import (
 )
 from onyx.connectors.teams import listing
 from onyx.connectors.teams.files import FileSource
+from onyx.connectors.teams.groups import channel_member_groups, group_sync_channels
 from onyx.connectors.teams.models import ChannelRef
 from onyx.connectors.teams.organizers import (
     Organizer,
@@ -304,10 +305,15 @@ class TeamsConnector(
         if channel is None:
             raise RuntimeError("No channel is being walked")
 
-        # No readers is unsafe and no library means the files grant the admin
-        # turned on is missing, so either refusal is one channel failure.
+        type_failure = self._threads.type_failure(channel)
+        if type_failure is not None:
+            yield type_failure
+            self._leave_channel(checkpoint)
+            return
+
+        # No library means the files grant the admin turned on is missing, so a
+        # refusal is one channel failure.
         try:
-            self._threads.readers(channel)
             if self._files is not None:
                 try:
                     self._files.open(channel)
@@ -318,7 +324,7 @@ class TeamsConnector(
         except requests.HTTPError as e:
             if not is_permanent(e):
                 raise
-            yield channel_failure(channel, "members or files", e)
+            yield channel_failure(channel, "files", e)
             self._leave_channel(checkpoint)
             return
 
@@ -360,15 +366,20 @@ class TeamsConnector(
         self._leave_channel(checkpoint)
 
     def _leave_channel(self, checkpoint: TeamsCheckpoint) -> None:
-        if checkpoint.current_channel is not None:
-            self._threads.leave(checkpoint.current_channel)
-            if self._files is not None:
-                self._files.leave(checkpoint.current_channel)
+        if checkpoint.current_channel is not None and self._files is not None:
+            self._files.leave(checkpoint.current_channel)
         checkpoint.current_channel = None
         checkpoint.next_messages_url = None
 
-    def _channels(self) -> Iterator[ChannelRef]:
-        """Every channel of the configured teams, listed fresh."""
+    def _channels(self, for_group_sync: bool = False) -> Iterator[ChannelRef]:
+        """Every channel of the configured teams, listed fresh. The group sync
+        leaves out a team whose channel listing is refused, where the slim walk
+        raises: a channel missing from that walk would have its documents pruned."""
+        list_channels = (
+            group_sync_channels
+            if for_group_sync
+            else listing.collect_all_channels_from_team
+        )
         teams = listing.collect_all_teams(
             graph_client=self.graph(), requested=self.requested_team_list
         )
@@ -378,7 +389,7 @@ class TeamsConnector(
                     "Expected a team with an id, instead got no id: team=%r", team
                 )
                 continue
-            for channel in listing.collect_all_channels_from_team(team=team):
+            for channel in list_channels(team=team):
                 if not channel.id:
                     logger.warning(
                         "Expected a channel with an id, instead got no id: channel=%r",
@@ -392,7 +403,11 @@ class TeamsConnector(
         for the group sync."""
         if self._files is None:
             return iter(())
-        return self._files.site_urls(self._channels())
+        return self._files.site_urls(self._channels(for_group_sync=True))
+
+    def channel_member_groups(self) -> Iterator[tuple[str, list[str]]]:
+        """Each group a thread names and the emails in it, for the group sync."""
+        return channel_member_groups(self, self._channels(for_group_sync=True))
 
     def rest_context(self, site_url: str) -> ClientContext:
         if self._files is None:
@@ -405,8 +420,8 @@ class TeamsConnector(
         end: SecondsSinceUnixEpoch,
         checkpoint: TeamsCheckpoint,
     ) -> CheckpointOutput[TeamsCheckpoint]:
-        # Every document already carries its channel's access list, so the plain
-        # walk is the permission walk.
+        # Every document already carries its readers, so the plain walk is the
+        # permission walk.
         return self.load_from_checkpoint(start, end, checkpoint)
 
     # impls for SlimConnectorWithPermSync
@@ -417,8 +432,8 @@ class TeamsConnector(
         end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        """Ids alone, for pruning. Readers cost a members call per channel and a
-        SharePoint call per file, and pruning throws them away."""
+        """Ids alone, for pruning. Readers cost calls to Graph and SharePoint
+        that pruning would throw away."""
         yield from self._slim_docs(start, callback, with_readers=False)
 
     def retrieve_all_slim_docs_perm_sync(
