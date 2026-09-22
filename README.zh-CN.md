@@ -45,7 +45,7 @@ Onyx 可连接 50 多种应用，为其中的知识建立索引并提供检索�
 > curl -fsSL https://onyx.app/install_onyx.sh | bash
 > ```
 
-[![观看 Onyx 演示](https://img.youtube.com/vi/Xk3_1FywQag/maxresdefault.jpg)](https://youtu.be/Xk3_1FywQag)
+![Onyx 聊天界面回答关于使用场景的问题](docs/assets/onyx-chat-use-cases.png)
 
 ---
 
