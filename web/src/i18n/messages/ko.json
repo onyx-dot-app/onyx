@@ -798,6 +798,9 @@
         },
         "aiObservability": {
           "label": "AI 및 관측 가능성"
+        },
+        "other": {
+          "label": "기타"
         }
       },
       "popular": {

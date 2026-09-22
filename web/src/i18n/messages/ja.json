@@ -798,6 +798,9 @@
         },
         "aiObservability": {
           "label": "AI・オブザーバビリティ"
+        },
+        "other": {
+          "label": "その他"
         }
       },
       "popular": {

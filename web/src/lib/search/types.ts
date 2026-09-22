@@ -126,13 +126,8 @@ export enum SourceCategory {
   Sales = "Sales",
   CodeRepository = "Code Repository",
   AiObservability = "AI & Observability",
-  // Has no catalog section of its own: popular sources with no home
-  // category (Web, File) and internal sources.
-  Other = "Others",
+  Other = "Other",
 }
-
-/** Categories that render as a section in the connector catalog. */
-export type CatalogCategory = Exclude<SourceCategory, SourceCategory.Other>;
 
 export interface SourceMetadata {
   icon: React.FC<{ size?: number; className?: string }>;

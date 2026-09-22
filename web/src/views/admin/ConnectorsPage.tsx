@@ -5,11 +5,7 @@ import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
 import { Content, SettingsLayouts } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import {
-  type CatalogCategory,
-  SourceCategory,
-  SourceMetadata,
-} from "@/lib/search/types";
+import { SourceCategory, SourceMetadata } from "@/lib/search/types";
 import { listSourceMetadata } from "@/lib/sources";
 import {
   useCallback,
@@ -189,8 +185,6 @@ export default function ConnectorsPage() {
 
   const categorizedSources = useMemo(() => {
     const filtered = filterSources(sources);
-    // `SourceCategory.Other` has no section: its popular members (Web, File)
-    // sit in the popular grid and the rest are internal.
     const categories = CATALOG_CATEGORIES.reduce(
       (acc, category) => {
         acc[category] = sources.filter(
@@ -201,7 +195,7 @@ export default function ConnectorsPage() {
         );
         return acc;
       },
-      {} as Record<CatalogCategory, SourceMetadata[]>
+      {} as Record<SourceCategory, SourceMetadata[]>
     );
     // The extra-connectors setting hides the AI & Observability section.
     if (settings?.show_extra_connectors === false) {
@@ -209,7 +203,7 @@ export default function ConnectorsPage() {
         ([category]) => category !== SourceCategory.AiObservability
       );
       return Object.fromEntries(filteredCategories) as Record<
-        CatalogCategory,
+        SourceCategory,
         SourceMetadata[]
       >;
     }
@@ -311,7 +305,7 @@ export default function ConnectorsPage() {
                   >
                     <Text font="main-ui-action" color="text-03">
                       {t(
-                        SOURCE_CATEGORY_LABEL_KEYS[category as CatalogCategory]
+                        SOURCE_CATEGORY_LABEL_KEYS[category as SourceCategory]
                       )}
                     </Text>
                     <div className={SOURCE_CARD_GRID}>

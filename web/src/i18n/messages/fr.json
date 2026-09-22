@@ -798,6 +798,9 @@
         },
         "aiObservability": {
           "label": "IA et observabilité"
+        },
+        "other": {
+          "label": "Autres"
         }
       },
       "popular": {
