@@ -269,6 +269,7 @@ export default function Page() {
       <SettingsLayouts.Body>
         <InputTypeIn
           type="text"
+          searchIcon
           placeholder={t("search.placeholder")}
           ref={searchInputRef}
           value={rawSearchTerm} // keep the input bound to immediate state
