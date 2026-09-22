@@ -5784,6 +5784,14 @@
           "apiKeyRequired": "API キーは必須です",
           "modelNameRequired": "モデル名は必須です"
         },
+        "venice": {
+          "apiBaseField": {
+            "description": "Venice API のエンドポイント URL です（API バージョンを含む）。"
+          },
+          "apiKeyField": {
+            "description": "利用可能なモデルを読み込むには、[Venice](https://venice.ai/settings/api) の API キーを貼り付けてください。"
+          }
+        },
         "vertexAi": {
           "authMethodField": {
             "description": "Onyx が Google Vertex AI で認証する方法を選択してください。",

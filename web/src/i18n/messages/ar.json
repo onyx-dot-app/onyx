@@ -5784,6 +5784,14 @@
           "apiKeyRequired": "مفتاح API مطلوب",
           "modelNameRequired": "اسم النموذج مطلوب"
         },
+        "venice": {
+          "apiBaseField": {
+            "description": "عنوان URL لنقطة نهاية واجهة Venice البرمجية (بما في ذلك إصدار API)."
+          },
+          "apiKeyField": {
+            "description": "الصق مفتاح API من [Venice](https://venice.ai/settings/api) لتحميل النماذج المتاحة."
+          }
+        },
         "vertexAi": {
           "authMethodField": {
             "description": "اختر كيف يجب أن يصادق Onyx مع Google Vertex AI.",

@@ -34,6 +34,8 @@ import {
   type NebiusTokenfactoryModelResponse,
   type PortkeyFetchParams,
   type PortkeyModelResponse,
+  type VeniceFetchParams,
+  type VeniceModelResponse,
 } from "@/lib/languageModels/types";
 
 /**
@@ -140,7 +142,13 @@ export async function deleteLlmProvider(
 // Aggregator providers & helpers
 // ---------------------------------------------------------------------------
 
-/** Aggregator providers that host models from multiple vendors. */
+/** Aggregator providers that host models from multiple vendors.
+ *
+ * Kept in step with the set of the same name in `./index`, which the icon
+ * resolver uses. This one gates vendor sub-grouping in the model pickers, so a
+ * provider missing here stays a flat group even when the backend sends a
+ * vendor.
+ */
 export const AGGREGATOR_PROVIDERS = new Set([
   "bedrock",
   "bedrock_converse",
@@ -151,6 +159,7 @@ export const AGGREGATOR_PROVIDERS = new Set([
   "bifrost",
   "openai_compatible",
   "vertex_ai",
+  "venice",
 ]);
 
 export const isAnthropic = (provider: string, modelName?: string) =>
@@ -654,6 +663,13 @@ export const fetchModels = async (
         provider_id: formValues.id,
         signal,
       });
+    case LLMProviderName.VENICE:
+      return fetchVeniceModels({
+        api_base: formValues.api_base,
+        api_key: formValues.api_key,
+        provider_id: formValues.id,
+        signal,
+      });
     default:
       return { models: [], error: `Unknown provider: ${providerName}` };
   }
@@ -715,6 +731,65 @@ export const fetchNebiusTokenfactoryModels = async (
       country_code: modelData.country_code,
       requests_per_minute: modelData.requests_per_minute,
       supported_features: modelData.supported_features,
+      effectiveDisplayName: modelData.display_name || modelData.name,
+    }));
+
+    return { models };
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    return { models: [], error: errorMessage };
+  }
+};
+
+/**
+ * Fetches models from Venice. Context window, vision and reasoning come from
+ * Venice's own `model_spec`; LiteLLM has no Venice entries to fall back on.
+ */
+export const fetchVeniceModels = async (
+  params: VeniceFetchParams
+): Promise<{ models: ModelConfiguration[]; error?: string }> => {
+  const apiBase = params.api_base;
+  if (!apiBase) {
+    return { models: [], error: "API Base is required" };
+  }
+
+  try {
+    const response = await fetch("/api/admin/llm/venice/available-models", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        api_base: apiBase,
+        api_key: params.api_key,
+        provider_id: params.provider_id,
+      }),
+      signal: params.signal,
+    });
+
+    if (!response.ok) {
+      let errorMessage = "Failed to fetch models";
+      try {
+        const errorData: ErrorResponseBody = await response.json();
+        errorMessage = errorData.detail || errorData.message || errorMessage;
+      } catch (jsonError) {
+        console.warn(
+          "Failed to parse Venice model fetch error response",
+          jsonError
+        );
+      }
+      return { models: [], error: errorMessage };
+    }
+
+    const data: VeniceModelResponse[] = await response.json();
+    const models: ModelConfiguration[] = data.map((modelData) => ({
+      name: modelData.name,
+      display_name: modelData.display_name,
+      is_visible: true,
+      max_input_tokens: modelData.max_input_tokens,
+      supports_image_input: modelData.supports_image_input,
+      supports_reasoning: modelData.supports_reasoning,
       effectiveDisplayName: modelData.display_name || modelData.name,
     }));
 

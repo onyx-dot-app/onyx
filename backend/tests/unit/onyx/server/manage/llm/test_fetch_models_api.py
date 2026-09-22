@@ -27,6 +27,7 @@ from onyx.server.manage.llm.models import (
     OpenAICompatibleModelsRequest,
     OpenRouterFinalModelResponse,
     OpenRouterModelsRequest,
+    VeniceModelsRequest,
 )
 
 
@@ -1628,6 +1629,195 @@ class TestGetOpenAICompatibleAvailableModels:
             assert by_name["gpt-4o"] is False
             # Reasoning-named model stays True (heuristic covers cost-map misses)
             assert by_name["deepseek-r1"] is True
+
+
+class TestGetVeniceAvailableModels:
+    """Tests for the Venice model fetch endpoint.
+
+    LiteLLM has no Venice entries, so everything of value here comes out of
+    Venice's own `model_spec` block. These tests pin that it is read, and that
+    a partial or missing one degrades instead of failing the fetch.
+    """
+
+    @pytest.fixture
+    def venice_models_response(self) -> dict:
+        return {
+            "data": [
+                {
+                    "id": "zai-org-glm-5-2",
+                    "type": "text",
+                    "context_length": 1000000,
+                    "model_spec": {
+                        "name": "GLM 5.2",
+                        "availableContextTokens": 999000,
+                        "capabilities": {
+                            "supportsVision": False,
+                            "supportsReasoning": True,
+                            "supportsFunctionCalling": True,
+                        },
+                    },
+                },
+                {
+                    "id": "venice-vision-1",
+                    "type": "text",
+                    "context_length": 128000,
+                    "model_spec": {
+                        "name": "Venice Vision 1",
+                        "availableContextTokens": 128000,
+                        "capabilities": {
+                            "supportsVision": True,
+                            "supportsReasoning": False,
+                            "supportsFunctionCalling": False,
+                        },
+                    },
+                },
+            ]
+        }
+
+    def _patch_http(self, models_response: dict, traits: dict | None = None) -> Any:
+        """Route /models and /models/traits to their own payloads."""
+
+        def fake_get(url: str, **_kwargs: Any) -> MagicMock:
+            response = MagicMock()
+            response.raise_for_status = MagicMock()
+            response.json.return_value = (
+                {"data": traits or {}} if "traits" in url else models_response
+            )
+            return response
+
+        return patch("onyx.server.manage.llm.api.httpx.get", side_effect=fake_get)
+
+    def test_reads_capabilities_and_display_name_from_model_spec(
+        self, venice_models_response: dict
+    ) -> None:
+        from onyx.server.manage.llm.api import get_venice_available_models
+
+        with self._patch_http(venice_models_response):
+            results = get_venice_available_models(
+                VeniceModelsRequest(api_base="https://api.venice.ai/api/v1"),
+                MagicMock(),
+                MagicMock(),
+            )
+
+        by_name = {r.name: r for r in results}
+
+        glm = by_name["zai-org-glm-5-2"]
+        assert glm.display_name == "GLM 5.2"
+        # availableContextTokens is the usable prompt budget, so it wins over
+        # the larger advertised context_length.
+        assert glm.max_input_tokens == 999000
+        assert glm.supports_reasoning is True
+        assert glm.supports_image_input is False
+        assert glm.supports_function_calling is True
+
+        vision = by_name["venice-vision-1"]
+        assert vision.supports_image_input is True
+        # LiteLLM knows no Venice model, so a True here could only come from
+        # Venice's own answer being honoured.
+        assert vision.supports_reasoning is False
+
+    def test_falls_back_to_context_length_when_model_spec_absent(self) -> None:
+        """A model with no model_spec still has to come back usable."""
+        from onyx.server.manage.llm.api import get_venice_available_models
+
+        response = {"data": [{"id": "bare-model", "context_length": 64000}]}
+        with self._patch_http(response):
+            results = get_venice_available_models(
+                VeniceModelsRequest(api_base="https://api.venice.ai/api/v1"),
+                MagicMock(),
+                MagicMock(),
+            )
+
+        assert len(results) == 1
+        assert results[0].name == "bare-model"
+        assert results[0].display_name == "bare-model"
+        assert results[0].max_input_tokens == 64000
+        assert results[0].supports_function_calling is None
+
+    def test_partial_capabilities_fall_back_per_field(self) -> None:
+        """One missing capability key must not discard the ones present."""
+        from onyx.server.manage.llm.api import get_venice_available_models
+
+        response = {
+            "data": [
+                {
+                    "id": "venice-thinking-1",
+                    "context_length": 32000,
+                    "model_spec": {
+                        "name": "Venice Thinking 1",
+                        "capabilities": {"supportsVision": True},
+                    },
+                }
+            ]
+        }
+        with self._patch_http(response):
+            results = get_venice_available_models(
+                VeniceModelsRequest(api_base="https://api.venice.ai/api/v1"),
+                MagicMock(),
+                MagicMock(),
+            )
+
+        assert results[0].supports_image_input is True
+        # supportsReasoning was absent, so the name heuristic decides instead.
+        assert results[0].supports_reasoning is True
+
+    def test_traits_put_the_function_calling_default_first(
+        self, venice_models_response: dict
+    ) -> None:
+        """Onyx sends tools to every model, so ordering is the only steer."""
+        from onyx.server.manage.llm.api import get_venice_available_models
+
+        with self._patch_http(
+            venice_models_response,
+            traits={
+                "default": "zai-org-glm-5-2",
+                "function_calling_default": "venice-vision-1",
+            },
+        ):
+            results = get_venice_available_models(
+                VeniceModelsRequest(api_base="https://api.venice.ai/api/v1"),
+                MagicMock(),
+                MagicMock(),
+            )
+
+        assert results[0].name == "venice-vision-1"
+
+    def test_traits_failure_does_not_fail_the_fetch(
+        self, venice_models_response: dict
+    ) -> None:
+        """Traits are advisory; losing them must not cost the admin the models."""
+        from onyx.server.manage.llm.api import get_venice_available_models
+
+        def fake_get(url: str, **_kwargs: Any) -> MagicMock:
+            if "traits" in url:
+                raise httpx.ConnectError("traits endpoint down")
+            response = MagicMock()
+            response.raise_for_status = MagicMock()
+            response.json.return_value = venice_models_response
+            return response
+
+        with patch("onyx.server.manage.llm.api.httpx.get", side_effect=fake_get):
+            results = get_venice_available_models(
+                VeniceModelsRequest(api_base="https://api.venice.ai/api/v1"),
+                MagicMock(),
+                MagicMock(),
+            )
+
+        assert len(results) == 2
+
+    def test_empty_model_list_is_an_error(self) -> None:
+        from onyx.error_handling.error_codes import OnyxErrorCode
+        from onyx.server.manage.llm.api import get_venice_available_models
+
+        with self._patch_http({"data": []}):
+            with pytest.raises(OnyxError) as exc_info:
+                get_venice_available_models(
+                    VeniceModelsRequest(api_base="https://api.venice.ai/api/v1"),
+                    MagicMock(),
+                    MagicMock(),
+                )
+
+        assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
 
 
 class _StopBeforeSend(Exception):

@@ -68,6 +68,7 @@ export enum LLMProviderName {
   OPENAI_COMPATIBLE = "openai_compatible",
   NEBIUS_TOKENFACTORY = "nebius_tokenfactory",
   PORTKEY = "portkey",
+  VENICE = "venice",
   CUSTOM = "custom",
 }
 
@@ -276,6 +277,23 @@ export interface PortkeyModelResponse {
   max_input_tokens: number | null;
   supports_image_input: boolean;
   supports_reasoning: boolean;
+}
+
+export interface VeniceFetchParams {
+  api_base?: string;
+  api_key?: string;
+  provider_id?: number;
+  signal?: AbortSignal;
+}
+
+export interface VeniceModelResponse {
+  name: string;
+  display_name: string;
+  max_input_tokens: number | null;
+  supports_image_input: boolean;
+  supports_reasoning: boolean;
+  // Advisory only: Onyx sends tools to every model regardless.
+  supports_function_calling: boolean | null;
 }
 
 export interface VertexAIFetchParams {

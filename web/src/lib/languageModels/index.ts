@@ -18,6 +18,7 @@ import {
   SvgGoogle,
   SvgNebius,
   SvgPortkey,
+  SvgVenice,
 } from "@opal/logos";
 import { ZAIIcon } from "@/components/icons/icons";
 import {
@@ -39,6 +40,7 @@ import BifrostModal from "@/sections/modals/languageModels/BifrostModal";
 import OpenAICompatibleModal from "@/sections/modals/languageModels/OpenAICompatibleModal";
 import NebiusTokenfactoryModal from "@/sections/modals/languageModels/NebiusTokenfactoryModal";
 import PortkeyModal from "@/sections/modals/languageModels/PortkeyModal";
+import VeniceModal from "@/sections/modals/languageModels/VeniceModal";
 
 // ─── Text (LLM) providers ────────────────────────────────────────────────────
 
@@ -134,6 +136,12 @@ const PROVIDERS: Record<string, ProviderEntry> = {
     companyName: "Portkey",
     Modal: PortkeyModal,
   },
+  [LLMProviderName.VENICE]: {
+    icon: SvgVenice,
+    productName: "Venice",
+    companyName: "Venice AI",
+    Modal: VeniceModal,
+  },
   [LLMProviderName.CUSTOM]: {
     icon: SvgServer,
     productName: "Custom Models",
@@ -185,6 +193,8 @@ export function getProvider(
 // ─── Aggregator providers ────────────────────────────────────────────────────
 // Providers that host models from multiple vendors (e.g. Bedrock hosts Claude,
 // Llama, etc.) Used by the model-icon resolver to prioritise vendor icons.
+// A second set of the same name in `./svc` gates vendor sub-grouping in the
+// model pickers; a provider added here usually belongs there too.
 
 export const AGGREGATOR_PROVIDERS = new Set([
   LLMProviderName.BEDROCK,
@@ -198,6 +208,7 @@ export const AGGREGATOR_PROVIDERS = new Set([
   LLMProviderName.NEBIUS_TOKENFACTORY,
   LLMProviderName.PORTKEY,
   LLMProviderName.VERTEX_AI,
+  LLMProviderName.VENICE,
 ]);
 
 // ─── Model-aware icon resolver ───────────────────────────────────────────────
@@ -215,6 +226,7 @@ const MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
   [LLMProviderName.OPENAI_COMPATIBLE]: SvgPlug,
   [LLMProviderName.NEBIUS_TOKENFACTORY]: SvgNebius,
   [LLMProviderName.PORTKEY]: SvgPortkey,
+  [LLMProviderName.VENICE]: SvgVenice,
 
   amazon: SvgAws,
   gpt: SvgOpenai,

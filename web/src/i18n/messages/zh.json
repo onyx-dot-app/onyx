@@ -5784,6 +5784,14 @@
           "apiKeyRequired": "API 密钥为必填项",
           "modelNameRequired": "模型名称为必填项"
         },
+        "venice": {
+          "apiBaseField": {
+            "description": "Venice API 端点 URL（包括 API 版本）。"
+          },
+          "apiKeyField": {
+            "description": "粘贴来自 [Venice](https://venice.ai/settings/api) 的 API 密钥以加载可用模型。"
+          }
+        },
         "vertexAi": {
           "authMethodField": {
             "description": "选择 Onyx 与 Google Vertex AI 进行身份验证的方式。",
