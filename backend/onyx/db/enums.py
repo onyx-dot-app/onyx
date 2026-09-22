@@ -26,6 +26,15 @@ class AccountType(str, PyEnum):
             AccountType.EXT_PERM_USER,
         )
 
+    def allows_password_login(self) -> bool:
+        """Whether this account type may sign in or reset with a password.
+
+        Service accounts authenticate only with their API key."""
+        return self.is_web_login() and self not in (
+            AccountType.SERVICE_ACCOUNT,
+            AccountType.ANONYMOUS,
+        )
+
 
 class GrantSource(str, PyEnum):
     """How a permission grant was created."""
