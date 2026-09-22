@@ -2290,10 +2290,15 @@ def get_vercel_ai_gateway_available_models(
     )
     url = f"{api_base}/models" if api_base.endswith("/v1") else f"{api_base}/v1/models"
 
+    # On edit the form sends a masked key, so resolve the stored one.
+    api_key = _resolve_api_key(
+        request.api_key, request.provider_id, api_base, db_session
+    )
+
     response_json = _get_openai_compatible_models_response(
         url=url,
         source_name="Vercel AI Gateway",
-        api_key=request.api_key,
+        api_key=api_key,
     )
 
     models = response_json.get("data", [])
