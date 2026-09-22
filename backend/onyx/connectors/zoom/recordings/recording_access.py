@@ -45,21 +45,14 @@ ZOOM_ANY_ZOOM_USER_RULE_TYPE = "enforce_login"
 ZOOM_DOMAIN_RULE_TYPE = "enforce_login_with_domains"
 
 
-class _RuleGrant(NamedTuple):
-    """What a sign-in rule grants beyond the owner, worked out once per rule."""
+class _Grant(NamedTuple):
+    """What a share grants beyond the owner."""
 
     public: bool
     domains: frozenset[str]
 
 
-class _LinkGrant(NamedTuple):
-    public: bool
-    domains: frozenset[str]
-    # False under "Private to me", where nobody can reach the registration page.
-    viewers_may_register: bool
-
-
-_NOTHING = _LinkGrant(public=False, domains=frozenset(), viewers_may_register=False)
+_OWNER_ONLY = _Grant(public=False, domains=frozenset())
 
 
 class ZoomAccessContext:
@@ -71,7 +64,7 @@ class ZoomAccessContext:
         self.client = client
         self.treat_link_access_as_public = treat_link_access_as_public
         self._owner_emails: dict[str, str | None] = {}
-        self._rules: dict[str, _RuleGrant] | None = None
+        self._rules: dict[str, _Grant] | None = None
 
     def owner_email(self, user_id: str) -> str | None:
         """None when Zoom has no such user any more. A blank address, which Zoom
@@ -80,12 +73,12 @@ class ZoomAccessContext:
             self._owner_emails[user_id] = self._look_up_owner(user_id)
         return self._owner_emails[user_id]
 
-    def rule_grant(self, rule_id: str) -> _RuleGrant | None:
+    def rule_grant(self, rule_id: str) -> _Grant | None:
         if self._rules is None:
             self._rules = self._load_rules()
         return self._rules.get(rule_id)
 
-    def _load_rules(self) -> dict[str, _RuleGrant]:
+    def _load_rules(self) -> dict[str, _Grant]:
         """The catalogue is account-wide, so any listed user's answer serves the
         run. Asked through the listing rather than a recording's owner, who may
         have left the account since. An account with no users has no
@@ -108,9 +101,9 @@ class ZoomAccessContext:
         return next(iter(emails), None)
 
 
-def _grant_of(rule: ZoomRecordingAuthenticationRule) -> _RuleGrant:
+def _grant_of(rule: ZoomRecordingAuthenticationRule) -> _Grant:
     if rule.type in (ZOOM_ACCOUNT_RULE_TYPE, ZOOM_ANY_ZOOM_USER_RULE_TYPE):
-        return _RuleGrant(public=True, domains=frozenset())
+        return _Grant(public=True, domains=frozenset())
     if rule.type == ZOOM_DOMAIN_RULE_TYPE:
         domains = frozenset(
             d.strip().lower() for d in rule.domains.split(",") if d.strip()
@@ -121,14 +114,14 @@ def _grant_of(rule: ZoomRecordingAuthenticationRule) -> _RuleGrant:
                 "a recording shared under it is readable by its owner alone",
                 rule.id,
             )
-        return _RuleGrant(public=False, domains=domains)
+        return _Grant(public=False, domains=domains)
     logger.warning(
         "Zoom sign-in rule %s is of a type this connector does not know, %r, so a "
         "recording shared under it is readable by its owner alone",
         rule.id,
         rule.type,
     )
-    return _RuleGrant(public=False, domains=frozenset())
+    return _OWNER_ONLY
 
 
 def resolve_recording_access(
@@ -147,13 +140,19 @@ def resolve_recording_access(
             recording.uuid,
             e,
         )
-        settings, grant = None, _NOTHING
+        settings, grant = None, _OWNER_ONLY
 
     emails: set[str] = set()
     owner = context.owner_email(recording.host_id)
     if owner is not None:
         emails.add(owner)
-    if settings is not None and settings.on_demand and grant.viewers_may_register:
+    # Nobody can reach the registration page of a private recording, and an
+    # owner who went private wants everyone out.
+    if (
+        settings is not None
+        and settings.on_demand
+        and settings.share_recording is not ZoomShareRecording.NONE
+    ):
         registrants = client.list_recording_registrants(
             recording.uuid, status=APPROVED_REGISTRANT_STATUS
         )
@@ -195,17 +194,17 @@ def _link_access(
     context: ZoomAccessContext,
     settings: ZoomRecordingSettings,
     recording: ZoomRecordingEntry,
-) -> _LinkGrant:
+) -> _Grant:
     """The Link access table as code. "Only people with access" is checked
     before `share_recording`, which still says publicly for it."""
-    if settings.authentication_option == ONLY_PEOPLE_WITH_ACCESS_OPTION:
-        return _LinkGrant(False, frozenset(), viewers_may_register=True)
-    if settings.share_recording is ZoomShareRecording.NONE:
-        return _NOTHING
-    if not context.treat_link_access_as_public:
-        return _LinkGrant(False, frozenset(), viewers_may_register=True)
+    if (
+        settings.authentication_option == ONLY_PEOPLE_WITH_ACCESS_OPTION
+        or settings.share_recording is ZoomShareRecording.NONE
+        or not context.treat_link_access_as_public
+    ):
+        return _OWNER_ONLY
     if not settings.authentication_option:
-        return _LinkGrant(True, frozenset(), viewers_may_register=True)
+        return _Grant(public=True, domains=frozenset())
 
     grant = context.rule_grant(settings.authentication_option)
     if grant is None:
@@ -215,5 +214,5 @@ def _link_access(
             recording.uuid,
             settings.authentication_option,
         )
-        return _LinkGrant(False, frozenset(), viewers_may_register=True)
-    return _LinkGrant(grant.public, grant.domains, viewers_may_register=True)
+        return _OWNER_ONLY
+    return grant
