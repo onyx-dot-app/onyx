@@ -28,10 +28,9 @@
 <p align="center">
   <a href="./README.md">English</a> | <b>简体中文</b>
 </p>
+# Onyx
 
-# Onyx：为你的员工和 Agent 提供完整上下文
-
-**[Onyx](https://www.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)** 从企业知识库中为你的员工和 Agent 提供最佳上下文，数据全程不离开你的环境。
+**[Onyx](https://www.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)** 是一个运行在你自己环境中的开源 AI 平台。它为企业知识建立索引，为人和 Agent 提供准确且带权限控制的上下文，而这些数据始终不会离开你的基础设施。
 
 > [!TIP]
 > 一条命令即可部署：
@@ -46,26 +45,25 @@
 
 ## Onyx 是什么？
 
-Onyx 连接你公司已经在用的工具（Slack、Google Drive、Confluence、Jira、GitHub、Salesforce 以及 50+ 其他来源），持续建立索引，并带引用地回答问题。同一套上下文既服务于聊天中的人，也通过 MCP 服务于 Agent。
+你接入 Slack、Google Drive、Confluence、Jira、GitHub、Salesforce 以及 50+ 其他来源，Onyx 把它们持续索引到一个关键词 + 向量的混合索引中，从而带引用地回答问题。你可以通过聊天界面、Slack、Chrome 扩展来使用它，也可以把它作为 MCP 服务器，为你自己的 Agent 提供上下文。
 
-大多数 AI 工具一次只搜索一个应用，把最先返回的结果直接交给模型。Onyx 则预先索引全部内容，把你的问题改写成多种形式发出，再从所有相关来源中拼出完整答案。这就是"没有明显异常"与"多出的 4 万美元是 PR #2213 里没人拆掉的 perf-test 集群"之间的区别。
+它比逐个应用实时搜索效果更好，原因在于索引在你提问之前就已经存在。一次检索取代了跨应用的一连串实时搜索，这意味着更少的往返、每个答案更少的 token，以及来自那些没人想到去查的来源的结果。
 
-由于上下文来自预建的混合索引，而不是一连串实时应用搜索，答案更快，消耗的 token 也更少。
+开箱即有的功能：
 
-搜索质量是实测的，不是口头承诺：
-
-- 在 [EnterpriseRAG-Bench](https://www.onyx.app/enterpriserag-bench?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme) 上（我们的开源基准，基于真实工作数据的 500 个问题），Onyx 优于 Azure AI Search、OpenAI File Search 和 Vertex AI Search。
-- 在 22 万份内部文档上的 99 个真实工作问题中，由两个独立 LLM 评审盲评，Onyx 在与主流企业 AI 产品的[正面对比](https://www.onyx.app/answers?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)中胜出。
+- **Agentic RAG。** 在混合索引之上做查询改写和路由。在我们的开源基准 [EnterpriseRAG-Bench](https://www.onyx.app/enterpriserag-bench?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)（500 个问题）上，Onyx 优于 Azure AI Search、OpenAI File Search 和 Vertex AI Search。
+- **深度研究。** 多步研究，生成带引用的长篇报告。截至 2026 年 2 月位居[排行榜](https://github.com/onyx-dot-app/onyx_deep_research_bench)榜首。
+- **自定义 Agent。** 每个 Agent 拥有专属的指令、知识和 Action。
+- **Action 与 MCP。** Agent 可以调用外部 API 和 MCP 服务器。
+- **Web 搜索。** 搜索支持 Serper、Google PSE、Brave、SearXNG、Exa 和 Tavily，网页抓取支持内置爬虫、Firecrawl 或 Tavily Extract。
+- **代码执行。** 用于数据分析、绘图和文件编辑的沙箱。
+- **Artifact、语音模式和图像生成。**
 
 ---
 
-## Onyx 为什么最安全？我为什么要在意？
+## 为什么要自托管
 
-每一款企业 AI 产品都要求你把文档、向量和提示词发送到别人的云上。一旦如此，你就在信任供应商的数据保留策略、供应商的访问控制和供应商的训练条款。Onyx 把"供应商"从这句话里去掉了。
-
-### Onyx 完全运行在你的环境中
-
-把 Onyx 部署在你自己的云账户、你自己的数据中心，或完全物理隔离（air-gapped）的环境中。每一个组件都运行在你的安全团队已经掌控的边界之内。你的文档、向量和提示词永远不会离开这个边界。Onyx 自身唯一的外发请求是匿名用量遥测，一个环境变量（`DISABLE_TELEMETRY=true`）即可关闭。
+每一款托管的企业 AI 产品都希望把你的文档和提示词放进它的云里，这意味着你要接受它的数据保留策略、它的访问控制和它的训练条款。Onyx 则运行在你的环境中，这些问题都不存在。
 
 ```mermaid
 flowchart LR
@@ -101,99 +99,56 @@ flowchart LR
     W -.->|"仅在你选择时"| LLMapi
 ```
 
-这在实践中意味着：
-
-- **文档和向量留在你的基础设施中。** 索引、数据库和 embedding 模型全部运行在你控制的机器上。
-- **任何人都不会用你的数据训练，永远不会。** 链路中没有任何 Onyx 云服务可以保留或学习你的内容。匿名遥测只包含版本、事件类型和耗时数据，绝不包含文档或提示词内容。Sentry 和 PostHog 默认关闭，除非你配置了对应的密钥。
-- **模型流量由你决定。** 把 Onyx 指向自托管模型，就没有任何 token 离开你的网络。或者用你自己的合同和密钥接入托管 API 提供商。无论哪种方式，Onyx 都不会把你的提示词经由第三方代理。
-- **一切可审计。** 查询历史记录谁问了什么以及引用了哪些文档。[审计日志](docs/AUDIT_LOGGING.md)记录登录、管理员变更和访问控制变更，可接入你的 SIEM。
-
-### 开源
-
-完整的社区版采用 MIT 许可证，代码就在本仓库中。你的安全团队可以阅读所有接触你数据的代码，自行构建镜像，并验证没有隐藏的外发流量。本页的每一条说法，你都无需只凭我们的一句话来相信。
-
-### 任意模型
-
-Onyx 不绑定任何模型供应商。通过 Ollama、vLLM 或 LiteLLM 在自己的 GPU 上运行开源权重。用你自己的账户接入 Anthropic、OpenAI、Gemini 或任何其他提供商。一键切换供应商，或为每个团队路由到不同的模型。当更好的模型发布，或你的合规要求变化时，你无需重新搭建平台。
-
-### 权限同步
-
-只有尊重来源系统既有权限的搜索才是安全的。Onyx 从 Google Drive、Confluence、Jira、GitHub、Slack、SharePoint、Gmail、Outlook、Teams、Zoom、Box 和 Canvas 同步文档级访问控制，并在查询时对 Salesforce 结果按来源实时过滤。当人或 Agent 提问时，Onyx 只检索该用户在来源系统中有权查看的文档。Onyx 在每次查询时都应用该用户已同步的权限。来源系统中的权限变更会在下一次权限同步时生效，默认每 5 到 30 分钟一次。
-
-在来源权限之上，企业版还提供：
-
-- **单点登录：** Google OAuth、OIDC 或 SAML。通过 SCIM 同步用户组并自动开通用户。
-- **基于角色的访问控制：** 对 Agent、Action、Connector 等敏感资源进行 RBAC。
-- **自定义代码钩子：** 剔除 PII、拒绝敏感查询，或对每个请求运行你自己的检查。
-- **分析和查询历史：** 按团队、模型或 Agent 拆分的用量统计，以及用于审计的完整记录。
-- **SOC 2 Type II** 认证。
+- **一切都留在你的边界之内。** 索引、数据库、embedding 模型和模型流量全部运行在你控制的机器上，无论那是你的云账户、你的数据中心，还是一个物理隔离的网络。
+- **没有内容外发。** Onyx 自身唯一的外发请求是匿名用量遥测（版本、事件类型和耗时），设置 `DISABLE_TELEMETRY=true` 即可关闭。Sentry 和 PostHog 默认关闭，除非你配置了对应的密钥。
+- **任意模型。** 通过 Ollama、vLLM 或 LiteLLM 在自己的 GPU 上运行开源权重，或用你自己的密钥接入 Anthropic、OpenAI、Gemini 等。Onyx 绝不会把提示词经由第三方代理，你可以一键切换供应商，或为每个团队路由到不同的模型。
+- **开源。** 社区版采用 MIT 许可证，代码就在本仓库中，所以你的安全团队可以阅读所有接触你数据的代码，自行构建镜像，并确认没有隐藏的外发流量。
+- **权限同步（企业版）。** Onyx 从 Google Drive、Confluence、Jira、GitHub、Slack、SharePoint、Gmail、Outlook、Teams、Zoom、Box 和 Canvas 同步文档级 ACL，并在查询时对 Salesforce 结果实时过滤。无论是人还是 Agent 发起的每一次查询，都只会返回该用户在来源系统中本来就能打开的文档。同步默认每 5 到 30 分钟运行一次。
+- **审计。** 查询历史记录谁问了什么以及引用了哪些文档，[审计日志](docs/AUDIT_LOGGING.md)以 SIEM 可摄取的格式记录登录、管理员变更和访问控制变更。
 
 ---
 
-## 如何使用这些上下文
+## 在任何地方使用
 
-### Onyx 无处不在
+无论问题从哪里发出，用的都是同一套索引和同一套权限。
 
-同一套索引、同一套权限，在工作发生的任何地方：
+- **Web 和桌面应用（macOS）。** 聊天、深度研究、Agent，以及上面功能列表中的一切。
+- **Slackbot。** 答案直接出现在大家本来就在提问的频道里。
+- **MCP 服务器。** 把 Claude Code、Cursor、Codex 或任何 MCP 客户端指向 Onyx，你的 Agent 就能获得企业上下文，且访问控制与运行它的人完全一致。
+- **Chrome 扩展。** 在任意标签页中查询 Onyx。
 
-- **Web 和桌面应用（macOS）：** 聊天、深度研究、自定义 Agent、Artifact、代码执行、语音和图像生成。
-- **Slackbot：** 在问题本来就会被提出的频道里直接提问和回答。
-- **MCP：** 把 Onyx 知识暴露给 Claude Code、Cursor、Codex 或任何 MCP 客户端，让你的编码和工作流 Agent 获得企业上下文，且访问控制与运行它的人完全一致。
-- **Chrome 扩展：** 在任意标签页中查询 Onyx。
-
-### 功能特性
-
-- **Agentic RAG：** 覆盖所有来源的关键词 + 向量混合索引，配合改写和路由查询的 Agent。
-- **深度研究：** 多步研究流程，生成带引用的长篇报告。截至 2026 年 2 月位居[排行榜](https://github.com/onyx-dot-app/onyx_deep_research_bench)榜首。
-- **自定义 Agent：** 构建拥有专属指令、知识和 Action 的 Agent。
-- **Action 与 MCP：** 让 Agent 调用外部应用，支持灵活的认证方式。
-- **Web 搜索：** Serper、Google PSE、Brave、SearXNG、Exa 和 Tavily。网页内容抓取来自自研爬虫、Firecrawl 或 Tavily Extract。
-- **代码执行：** 在沙箱中运行代码，用于分析数据、绘制图表或编辑文件。
-- **Artifact：** 生成文档、图形及其他可下载文件。
-- **语音模式：** 语音转文字与文字转语音。
-- **图像生成：** 根据提示词生成图像。
-
-完整 Connector 列表见[此处](https://www.onyx.app/connectors?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)。了解更多请查看[文档](https://docs.onyx.app/welcome?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)。
+完整的 Connector 列表见[此处](https://www.onyx.app/connectors?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)，文档见[此处](https://docs.onyx.app/welcome?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)。
 
 ---
 
 ## 部署
 
-Onyx 支持 Docker Compose、Kubernetes（Helm）和 Terraform（AWS、Azure），并提供主流云厂商的部署指南。详细指南见[此处](https://docs.onyx.app/deployment/overview)。
+下面每种方式运行的都是同一组镜像，区别只在于你想自己运维多少。完整指南见 [docs.onyx.app/deployment](https://docs.onyx.app/deployment/overview)。
 
-有两种部署选项：Lite 和 Standard。
+- **引导式安装（Docker Compose）。** 页面顶部的一行命令会安装 `onyx-cli` 并运行 `onyx-cli deploy install`，它把 compose 文件写入 `~/.config/onyx`，启动整套服务，之后的 `upgrade`、`stop`、`logs` 和 `uninstall` 也由它负责。加上 `--lite` 即可部署 Onyx Lite。单机部署选这个。
+- **手动 Docker Compose。** 克隆仓库，把 `deployment/docker_compose/env.template` 复制为 `.env`，在该目录下运行 `docker compose up -d`。Lite 模式加 `-f docker-compose.onyx-lite.yml`，需要 nginx 加 Let's Encrypt TLS 则用 `docker-compose.prod.yml`。
+- **Kubernetes（Helm）。** `helm repo add onyx https://onyx-dot-app.github.io/onyx`，然后 `helm install onyx onyx/onyx`。Chart 也以 OCI 制品的形式发布在 `ghcr.io/onyx-dot-app/charts/onyx`。多节点或自动扩缩的部署用这个。
+- **Terraform。** `deployment/terraform/modules` 下有 AWS 和 Azure 的模块，另有一个用于 AWS ECS Fargate 的 CloudFormation 模板。
 
-#### Onyx Lite
+### Standard 与 Lite
 
-轻量级聊天 UI。内存占用不到 1GB，技术栈更精简。适合快速试用 Onyx，或只需要聊天和 Agent 功能的团队。
+**Standard** 是完整平台，也是 compose 文件默认启动的模式。它在 nginx 后面运行 API 服务和 Next.js Web 服务，一个负责 Connector 同步和权限同步的 Celery 后台 Worker，用于关键词 + 向量混合索引的 OpenSearch，两个模型服务（一个做索引时的 embedding，一个做查询时的 embedding 和重排序），以及 Postgres、用于缓存和认证状态的 Redis 和用于文件存储的 MinIO。凡是涉及 Connector 或 RAG 的场景都需要它。
 
-#### Standard Onyx
-
-完整功能集，推荐大型团队使用。在 Lite 的基础上增加：
-
-- 用于 RAG 的向量 + 关键词索引。
-- 从 Connector 同步知识和权限的后台 Worker。
-- 索引和搜索时使用的 embedding 与重排序模型推理服务。
-- 面向大规模使用的 Redis 缓存和 MinIO 对象存储。
+**Lite** 是同样的 API 服务和 Web UI，但只依赖 Postgres。该 overlay 把 OpenSearch、Redis、MinIO、两个模型服务和后台 Worker 移入 Compose profile，使它们默认不启动，并把缓存、认证和文件存储都指向 Postgres。这个模式下 Connector 和 RAG 搜索是关闭的。与任意 LLM 聊天、工具、自定义 Agent、项目、用户文件上传和代码执行仍然可用，整套服务内存占用不到 1GB。需要时可以用 `--profile opensearch`、`--profile redis` 等把单个服务加回来。
 
 > [!TIP]
-> **想不部署直接体验 Onyx，请访问 [Onyx Cloud](https://cloud.onyx.app/auth/signup?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)**。
+> **想不部署直接体验 Onyx，请注册 [Onyx Cloud](https://cloud.onyx.app/auth/signup?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)**。
 
 ---
 
 ## 许可证
 
-Onyx 有两个版本：
-
-- Onyx 社区版（CE）基于 MIT 许可证免费提供，涵盖聊天、RAG、Agent 和 Action 的核心功能。
-- Onyx 企业版（EE）增加主要面向大型组织的功能，包括 SSO、RBAC、权限同步和白标。
-
-功能详情见[我们的网站](https://www.onyx.app/pricing?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)。
+**社区版（CE）** 采用 MIT 许可证，涵盖聊天、RAG、Agent 和 Action。**企业版（EE）** 增加 SSO（Google OAuth、OIDC、SAML 和 SCIM 用户开通）、RBAC、权限同步、自定义代码钩子、分析和查询历史、白标，以及 SOC 2 Type II。详情见[定价页面](https://www.onyx.app/pricing?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)。
 
 ## 社区
 
-加入我们的开源社区 **[Discord](https://discord.gg/TDJ59cGV2X)**！
+加入我们的 **[Discord](https://discord.gg/TDJ59cGV2X)**。
 
 ## 贡献
 
-想要参与贡献？请查看[贡献指南](CONTRIBUTING.md)。
+请查看[贡献指南](CONTRIBUTING.md)。
