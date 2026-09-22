@@ -56,9 +56,10 @@ type SelectCardProps = Omit<InteractiveStatefulProps, "variant"> & {
  * padding, rounding, border, and overflow.
  *
  * The root stays a `<div>` so children can be buttons and links, which HTML
- * forbids inside a `<button>`. A card with `onClick` is still a control: it
- * gets `role="button"`, joins the tab order, opens on Enter or Space, and
- * paints like hover while keyboard-focused.
+ * forbids inside a `<button>`. A card with `onClick` still joins the tab
+ * order, opens on Enter or Space, and paints like hover while
+ * keyboard-focused. It takes no ARIA role of its own: a role would fold any
+ * nested button into the card's accessible name.
  *
  * Children are fully composable — use `ContentAction`, `Content`, buttons,
  * `Interactive.Foldable`, etc. inside.
@@ -89,12 +90,10 @@ function SelectCard({
   const paddingStyle = { padding: spacingToRem(paddingProp) };
   const radius = roundingToRem(roundingProp);
 
-  // A caller that assigns its own role (e.g. "radio" inside a radiogroup)
-  // or tab index keeps it; the defaults only fill the gaps.
+  // A caller with its own tab index (e.g. a roving radio group) keeps it.
   const isControl = !!onClick && !disabled;
   const controlProps = isControl
     ? {
-        role: statefulProps.role ?? "button",
         tabIndex: statefulProps.tabIndex ?? 0,
         onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => {
           onKeyDown?.(event);
