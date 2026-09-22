@@ -52,7 +52,7 @@ Remember to provide inline citations in the format [1], [2], [3], etc. based on 
 # Pushes answers to cover every part of the question with the exact values the
 # sources state. Validated on EnterpriseRAG-Bench (500 questions, paired runs).
 ANSWER_COMPLETENESS_REMINDER = """
-Address every part of the question explicitly. When the source documents state specific values, limits, dates, names, commands, or steps relevant to the question, include them exactly rather than summarizing them away. Before finishing, check the question for sub-parts you have not answered. If the requested information is not available, state that briefly without adding related background.
+Address every part of the question explicitly. When the source documents state specific values, limits, dates, names, commands, or steps relevant to the question, include them exactly rather than summarizing them away. Before finishing, check the question for sub-parts you have not answered. If the documents do not contain the requested information, say so directly rather than answering with adjacent information that does not address the question.
 """.strip()
 
 LAST_CYCLE_CITATION_REMINDER = """
