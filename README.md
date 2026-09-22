@@ -12,7 +12,7 @@
         <img src="https://img.shields.io/badge/docs-view-blue" alt="Documentation" />
     </a>
     <a href="https://www.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme" target="_blank">
-        <img src="https://img.shields.io/website?url=https://www.onyx.app&up_message=visit&up_color=blue" alt="Documentation" />
+        <img src="https://img.shields.io/website?url=https://www.onyx.app&up_message=visit&up_color=blue" alt="Website" />
     </a>
     <a href="https://github.com/onyx-dot-app/onyx/blob/main/LICENSE" target="_blank">
         <img src="https://img.shields.io/static/v1?label=license&message=MIT&color=blue" alt="License" />
@@ -25,15 +25,17 @@
   </a>
 </p>
 
-# Onyx - The Open Source AI Platform
+<p align="center">
+  <b>English</b> | <a href="./README.zh-CN.md">简体中文</a>
+</p>
 
-**[Onyx](https://www.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)** is the application layer for LLMs - bringing a feature-rich interface that can be easily hosted by anyone.
-Onyx enables LLMs through advanced capabilities like RAG, web search, code execution, file creation, deep research and more.
+# Onyx: Complete Context for Your Humans and Agents
 
-Connect your applications with over 50+ indexing based connectors provided out of the box or via MCP.
+**[Onyx](https://www.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)** gives your people and your agents the best context from your company's knowledge, without any data leaving your environment.
 
 > [!TIP]
 > Deploy with a single command:
+>
 > ```
 > curl -fsSL https://onyx.app/install_onyx.sh | bash
 > ```
@@ -42,77 +44,156 @@ Connect your applications with over 50+ indexing based connectors provided out o
 
 ---
 
-## ⭐ Features
+## What is Onyx?
 
-- **🔍 Agentic RAG:** Get best in class search and answer quality based on hybrid index + AI Agents for information retrieval
-  - Benchmark to release soon!
-- **🔬 Deep Research:** Get in depth reports with a multi-step research flow.
-  - Top of [leaderboard](https://github.com/onyx-dot-app/onyx_deep_research_bench) as of Feb 2026.
-- **🤖 Custom Agents:** Build AI Agents with unique instructions, knowledge, and actions.
-- **🌍 Web Search:** Browse the web to get up to date information.
-  - Supports Serper, Google PSE, Brave, SearXNG, and others.
-  - Comes with an in house web crawler and support for Firecrawl/Exa.
-- **📄 Artifacts:** Generate documents, graphics, and other downloadable artifacts.
-- **▶️ Actions & MCP:** Let Onyx agents interact with external applications, comes with flexible Auth options.
-- **💻 Code Execution:** Execute code in a sandbox to analyze data, render graphs, or modify files.
-- **🎙️ Voice Mode:** Chat with Onyx via text-to-speech and speech-to-text.
-- **🎨 Image Generation:** Generate images based on user prompts.
+Onyx connects to the tools your company already works in (Slack, Google Drive, Confluence, Jira, GitHub, Salesforce, and 50+ more), indexes them continuously, and answers questions with citations. The same context is available to people in chat and to agents over MCP.
 
-Onyx supports all major LLM providers, both self-hosted (like Ollama, LiteLLM, vLLM, etc.) and proprietary (like Anthropic, OpenAI, Gemini, etc.).
+Most AI tools search one app at a time and hand the model whatever comes back first. Onyx indexes everything up front, sends your question out in several forms, and assembles the answer from every source that matters. That is the difference between "no anomaly stands out" and "the $40K is the perf-test cluster from PR #2213 that nobody tore down."
 
-To learn more - check out our [docs](https://docs.onyx.app/welcome?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)!
+Because the context comes from a pre-built hybrid index instead of a chain of live app searches, answers arrive faster and use fewer tokens.
+
+The search quality is measured, not asserted:
+
+- On [EnterpriseRAG-Bench](https://www.onyx.app/enterpriserag-bench?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme), our open source benchmark of 500 questions over real workplace data, Onyx outperforms Azure AI Search, OpenAI File Search, and Vertex AI Search.
+- On 99 real workplace questions across 220K internal documents, scored blind by two independent LLM judges, Onyx wins the [head-to-head](https://www.onyx.app/answers?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme) against the leading enterprise AI products.
 
 ---
 
-## 🚀 Deployment Modes
+## How is Onyx the most secure, and why should I care?
 
-> Onyx supports deployments in Docker, Kubernetes, Helm/Terraform and provides guides for major cloud providers.
-> Detailed deployment guides found [here](https://docs.onyx.app/deployment/overview).
+Every enterprise AI product asks you to ship your documents, your embeddings, and your prompts to someone else's cloud. Once that happens you are trusting a vendor's retention policy, a vendor's access controls, and a vendor's training terms. Onyx removes the vendor from that sentence.
 
-Onyx supports two separate deployment options: standard and lite.
+### Onyx runs entirely in your environment
+
+Deploy Onyx in your own cloud account, in your own datacenter, or fully air-gapped. Every component runs inside the boundary your security team already owns. Nothing phones home.
+
+```mermaid
+flowchart LR
+    subgraph boundary["Your environment (VPC, datacenter, or air-gapped)"]
+        direction LR
+        subgraph sources["Your knowledge sources"]
+            S1[Slack]
+            S2[Google Drive]
+            S3[Confluence]
+            S4[50+ more]
+        end
+        subgraph onyx["Onyx"]
+            W[Web + API server]
+            C[Sync workers]
+            IDX[(Hybrid index<br/>OpenSearch)]
+            DB[(Postgres)]
+            EMB[Embedding + reranking<br/>inference servers]
+        end
+        LLMself[Self-hosted LLM<br/>Ollama, vLLM, open weights]
+        U[People: web, desktop, Slack, Chrome]
+        A[Agents: MCP clients]
+    end
+    LLMapi[Hosted LLM API<br/>optional]
+
+    sources -->|"documents + permissions"| C
+    C --> EMB --> IDX
+    C --> DB
+    U --> W
+    A --> W
+    W --> IDX
+    W --> DB
+    W --> LLMself
+    W -.->|"only if you choose to"| LLMapi
+```
+
+What this means in practice:
+
+- **Documents and embeddings stay in your infrastructure.** The index, the database, and the embedding models all run on machines you control.
+- **No training on your data, by anyone, ever.** There is no Onyx cloud in the loop that could retain or learn from your content.
+- **Model traffic is your decision.** Point Onyx at a self-hosted model and no token ever leaves your network. Or use a hosted API provider under your own contract and keys. Either way, Onyx never proxies your prompts through a third party.
+- **Audit everything.** Query history and [audit logging](docs/AUDIT_LOGGING.md) record who asked what, and which documents were used to answer.
+
+### Open source
+
+The full Community Edition is MIT licensed and in this repository. Your security team can read the code that touches your data, build the images themselves, and verify there is no hidden egress. You do not have to take our word for any claim on this page.
+
+### Any model
+
+Onyx is not tied to a model vendor. Run open weights on your own GPUs through Ollama, vLLM, or LiteLLM. Connect Anthropic, OpenAI, Gemini, or any other provider under your own account. Swap providers in one click, or route each team to a different model. When a better model ships, or when your compliance requirements change, you move without re-platforming.
+
+### Permission syncing
+
+Search is only safe if it respects the permissions your sources already enforce. Onyx syncs document-level access controls from Google Drive, Confluence, Jira, GitHub, Slack, SharePoint, Salesforce, Gmail, Outlook, Teams, Box, and Canvas. When a person or an agent asks a question, Onyx only retrieves documents that user is allowed to see in the source system. Permissions are checked at query time, so a document that was shared yesterday and revoked today is gone from today's answers.
+
+On top of source permissions, the Enterprise Edition adds:
+
+- **Single Sign On:** Google OAuth, OIDC, or SAML. Group sync and user provisioning via SCIM.
+- **Role Based Access Control:** RBAC for agents, actions, connectors, and other sensitive resources.
+- **Custom code hooks:** Strip PII, reject sensitive queries, or run your own checks on every request.
+- **Analytics and query history:** Usage broken down by team, model, or agent, plus a full record for audit.
+- **SOC 2 Type II** certification.
+
+---
+
+## How to use that context
+
+### Onyx anywhere
+
+The same index and the same permissions, from wherever the work happens:
+
+- **Web and desktop app:** chat, deep research, custom agents, artifacts, code execution, voice, and image generation.
+- **Slackbot:** ask and answer inside the channels where questions already get asked.
+- **MCP:** expose Onyx knowledge to Claude Code, Cursor, Codex, or any MCP client, so your coding and workflow agents get company context with the same access controls as the person running them.
+- **Chrome extension:** query Onyx from any tab.
+
+### Features
+
+- **Agentic RAG:** Hybrid keyword + vector index over all your sources, with agents that reformulate and route the query.
+- **Deep Research:** Multi-step research flow that produces long-form, cited reports. Top of the [leaderboard](https://github.com/onyx-dot-app/onyx_deep_research_bench) as of Feb 2026.
+- **Custom Agents:** Build agents with their own instructions, knowledge, and actions.
+- **Actions & MCP:** Let agents call external applications, with flexible auth options.
+- **Web Search:** Serper, Google PSE, Brave, SearXNG, and others. Includes an in-house crawler plus Firecrawl and Exa support.
+- **Code Execution:** Run code in a sandbox to analyze data, render charts, or edit files.
+- **Artifacts:** Generate documents, graphics, and other downloadable files.
+- **Voice Mode:** Speech-to-text and text-to-speech.
+- **Image Generation:** Generate images from prompts.
+
+Full connector list [here](https://www.onyx.app/connectors?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme). To learn more, check out the [docs](https://docs.onyx.app/welcome?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme).
+
+---
+
+## Deployment
+
+Onyx runs on Docker Compose, Kubernetes (Helm), and Terraform, with guides for AWS, GCP, and Azure. Detailed guides are [here](https://docs.onyx.app/deployment/overview).
+
+There are two deployment options: Lite and Standard.
 
 #### Onyx Lite
 
-The Lite mode can be thought of as a lightweight Chat UI. It requires less resources (under 1GB memory) and runs a less complex stack.
-It is great for users who want to test out Onyx quickly or for teams who are only interested in the Chat UI and Agents functionalities.
+A lightweight Chat UI. Runs in under 1GB of memory with a smaller stack. Good for trying Onyx quickly, or for teams that only need chat and agents.
 
 #### Standard Onyx
 
-The complete feature set of Onyx which is recommended for serious users and larger teams. Additional components not included in Lite mode:
-- Vector + Keyword index for RAG.
-- Background containers to run job queues and workers for syncing knowledge from connectors.
-- AI model inference servers to run deep learning models used during indexing and inference.
-- Performance optimizations for large scale use via in memory cache (Redis) and blob store (MinIO).
+The complete feature set, recommended for larger teams. Adds the components Lite leaves out:
 
-> [!TIP]  
-> **To try Onyx for free without deploying, visit [Onyx Cloud](https://cloud.onyx.app/signup?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)**.
+- Vector + keyword index for RAG.
+- Background workers that sync knowledge and permissions from connectors.
+- Inference servers for the embedding and reranking models used during indexing and search.
+- Redis cache and MinIO blob store for large-scale use.
+
+> [!TIP]
+> **To try Onyx without deploying, visit [Onyx Cloud](https://cloud.onyx.app/signup?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)**.
 
 ---
 
-## 🏢 Onyx for Enterprise
-
-Onyx is built for teams of all sizes, from individual users to the largest global enterprises:
-- 👥 Collaboration: Share chats and agents with other members of your organization.
-- 🔐 Single Sign On: SSO via Google OAuth, OIDC, or SAML. Group syncing and user provisioning via SCIM.
-- 🛡️ Role Based Access Control: RBAC for sensitive resources like access to agents, actions, etc.
-- 📊 Analytics: Usage graphs broken down by teams, LLMs, or agents.
-- 🕵️ Query History: Audit usage to ensure safe adoption of AI in your organization.
-- 💻 Custom code: Run custom code to remove PII, reject sensitive queries, or to run custom analysis.
-- 🎨 Whitelabeling: Customize the look and feel of Onyx with custom naming, icons, banners, and more.
-
-## 📚 Licensing
+## Licensing
 
 There are two editions of Onyx:
 
-- Onyx Community Edition (CE) is available freely under the MIT license and covers all of the core features for Chat, RAG, Agents, and Actions.
-- Onyx Enterprise Edition (EE) includes extra features that are primarily useful for larger organizations.
+- Onyx Community Edition (CE) is free under the MIT license and covers the core features for chat, RAG, agents, and actions.
+- Onyx Enterprise Edition (EE) adds features that are mainly useful for larger organizations, including SSO, RBAC, permission syncing, and whitelabeling.
 
-For feature details, check out [our website](https://www.onyx.app/pricing?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme).
+For feature details, see [our website](https://www.onyx.app/pricing?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme).
 
-## 👪 Community
+## Community
 
 Join our open source community on **[Discord](https://discord.gg/TDJ59cGV2X)**!
 
-## 💡 Contributing
+## Contributing
 
-Looking to contribute? Please check out the [Contribution Guide](CONTRIBUTING.md) for more details.
+Want to contribute? See the [Contribution Guide](CONTRIBUTING.md).
