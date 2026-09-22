@@ -2,7 +2,7 @@
 plus the traps the order of checks exists for. The shapes are what Zoom sent
 on 2026-09-22, read live after setting each choice."""
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from unittest.mock import MagicMock
 
 import pytest
@@ -92,14 +92,14 @@ def _resolve(
     client: MagicMock,
     *,
     box_on: bool = True,
-    rule_grants: dict[str, RuleGrant] = _RULE_GRANTS,
+    rule_grant: Callable[[str], RuleGrant | None] = _RULE_GRANTS.get,
     owner: str | None = _OWNER,
 ):
     return resolve_recording_access(
         client,
         recording_entry(uuid="rec-1", host_id="owner-1"),
         treat_link_access_as_public=box_on,
-        rule_grants=rule_grants,
+        rule_grant=rule_grant,
         owner_email=owner,
     )
 
@@ -134,9 +134,9 @@ class TestTheTraps:
     def test_only_people_with_access_is_decided_before_the_catalogue(self) -> None:
         # Live, its payload still says share_recording publicly and its id is
         # not in the catalogue; a catalogue that had it must not win either.
-        rule_grants = _RULE_GRANTS | {"specialEmail": _EVERYONE}
+        rule_grant = (_RULE_GRANTS | {"specialEmail": _EVERYONE}).get
 
-        access = _resolve(_client(ONLY_PEOPLE_WITH_ACCESS), rule_grants=rule_grants)
+        access = _resolve(_client(ONLY_PEOPLE_WITH_ACCESS), rule_grant=rule_grant)
 
         assert access.external_user_emails == {_OWNER}
         assert access.is_public is False
