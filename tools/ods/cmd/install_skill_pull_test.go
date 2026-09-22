@@ -102,3 +102,67 @@ func TestInstallSkill_plainDirectorySourceInstallsWithoutUpdateNoise(t *testing.
 		t.Fatalf("a plain directory must install without update noise, got %q", out)
 	}
 }
+
+func TestInstallSkill_pullRefusesToOverwriteUncommittedEdits(t *testing.T) {
+	skillEnv(t)
+	clone := pullFixture(t)
+	// The remote's newer commit touches skills/fresh/SKILL.md; so does this
+	// uncommitted local edit, so git refuses the fast-forward.
+	deployWriteFile(t, filepath.Join(clone, "skills", "fresh", "SKILL.md"), "local uncommitted")
+
+	out, err := skillRun(t, "--source", clone)
+	if err != nil {
+		t.Fatalf("a refused pull must not fail the install: %v", err)
+	}
+
+	if !strings.Contains(out, "Warning: could not update "+clone) {
+		t.Fatalf("expected a warning, got %q", out)
+	}
+	if got := skillReadFile(t, filepath.Join(clone, "skills", "fresh", "SKILL.md")); got != "local uncommitted" {
+		t.Fatalf("uncommitted local edits must survive: %q", got)
+	}
+}
+
+func TestInstallSkill_pullCarriesNonConflictingLocalEditsForward(t *testing.T) {
+	home, _ := skillEnv(t)
+	clone := pullFixture(t)
+	// A dirty file the remote never touched: the fast-forward proceeds and
+	// the local edit survives it.
+	scratch := filepath.Join(clone, "skills", "review", "notes.md")
+	deployWriteFile(t, scratch, "my scratch notes")
+
+	out, err := skillRun(t, "--source", clone)
+	if err != nil {
+		t.Fatalf("install-skill: %v", err)
+	}
+
+	if !strings.Contains(out, "Pulled  "+clone) {
+		t.Fatalf("expected the update to proceed, got %q", out)
+	}
+	if got := skillReadFile(t, scratch); got != "my scratch notes" {
+		t.Fatalf("non-conflicting local edits must survive: %q", got)
+	}
+	if _, err := os.Readlink(filepath.Join(home, ".claude", "skills", "fresh")); err != nil {
+		t.Fatalf("expected the pulled skill to be installed: %v", err)
+	}
+}
+
+func TestPullSourceWarnsWhenTheCheckoutCannotBeInspected(t *testing.T) {
+	requireNonRoot(t)
+	source := t.TempDir()
+	gittest.Git(t, source, "init", "--quiet")
+	if err := os.Chmod(source, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(source, 0o755) })
+
+	cmd := discardCmd()
+	var errOut strings.Builder
+	cmd.SetErr(&errOut)
+
+	pullSource(cmd, source)
+
+	if !strings.Contains(errOut.String(), "Warning: could not inspect "+source) {
+		t.Fatalf("expected an inspection warning, got %q", errOut.String())
+	}
+}

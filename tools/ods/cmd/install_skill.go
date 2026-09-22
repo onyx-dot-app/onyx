@@ -134,13 +134,23 @@ By default, looks for onyx-llm-context at ~/.claude/skills/onyx-llm-context.`,
 }
 
 // pullSource fast-forwards the source checkout so a plain rerun picks up new
-// skills without a separate git pull. A pull that cannot run (offline, a
-// diverged or dirty developer checkout, no upstream) warns and installs from
-// the local state: a stale install is better than none, and --ff-only keeps
-// this command from ever rewriting the checkout.
+// skills without a separate git pull. Local work is never lost: --ff-only
+// refuses diverged history, and git itself refuses a pull that would
+// overwrite uncommitted changes. Any pull that cannot run (those cases,
+// offline, no upstream) warns and installs from the local state, since a
+// stale install is better than none. Local edits that do not conflict
+// survive the update.
 func pullSource(cmd *cobra.Command, source string) {
 	// Not a git checkout (an exported copy, say): nothing to update.
-	if _, err := os.Stat(filepath.Join(source, ".git")); err != nil {
+	if _, err := os.Stat(filepath.Join(source, ".git")); os.IsNotExist(err) {
+		return
+	} else if err != nil {
+		_, _ = fmt.Fprintf(
+			cmd.ErrOrStderr(),
+			"Warning: could not inspect %s (%v); installing without updating it.\n",
+			source,
+			err,
+		)
 		return
 	}
 	gitCmd := exec.Command("git", "-C", source, "pull", "--ff-only")
