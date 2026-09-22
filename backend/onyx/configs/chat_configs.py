@@ -109,3 +109,21 @@ COMPRESSION_TRIGGER_RATIO = float(os.environ.get("COMPRESSION_TRIGGER_RATIO", "0
 SKIP_DEEP_RESEARCH_CLARIFICATION = (
     os.environ.get("SKIP_DEEP_RESEARCH_CLARIFICATION", "false").lower() == "true"
 )
+
+# --- zas latency overlay -----------------------------------------------------
+# Skip the LLM section-relevance classification and context expansion that the
+# search tool runs over each selected section. Each section is then passed
+# through unchanged, which is what the expansion does for MAIN_SECTION_ONLY.
+# Removes one LLM call per section at the cost of no longer filtering
+# NOT_RELEVANT sections and never pulling in adjacent or full-document context.
+SKIP_SECTION_RELEVANCE_EXPANSION = (
+    os.environ.get("SKIP_SECTION_RELEVANCE_EXPANSION", "false").lower() == "true"
+)
+
+# Skip the LLM call that picks which retrieved sections are worth expanding.
+# The top-ranked sections that fit the chat token budget are used instead.
+# Removes a second LLM round-trip from every search, at the cost of section
+# ordering coming from retrieval rank alone rather than the model's judgement.
+SKIP_SECTION_SELECTION = (
+    os.environ.get("SKIP_SECTION_SELECTION", "false").lower() == "true"
+)

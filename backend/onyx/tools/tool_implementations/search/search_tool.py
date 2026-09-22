@@ -43,6 +43,8 @@ from sqlalchemy.orm import Session
 
 from onyx.chat.emitter import Emitter
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
+from onyx.configs.chat_configs import SKIP_SECTION_RELEVANCE_EXPANSION
+from onyx.configs.chat_configs import SKIP_SECTION_SELECTION
 from onyx.configs.constants import DocumentSource, FederatedConnectorSource
 from onyx.context.search.federated.slack_search import slack_retrieval
 from onyx.context.search.models import (
@@ -1122,13 +1124,28 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # Start timing for LLM document selection
         document_selection_start_time = time.time()
 
-        # Use LLM to select the most relevant sections for expansion
-        selected_sections, best_doc_ids = select_sections_for_expansion(
-            sections=sections_for_selection,
-            user_query=secondary_flows_user_query,
-            llm=self.llm,
-            max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
-        )
+        # Use LLM to select the most relevant sections for expansion. When the
+        # selection is skipped, fall back to retrieval rank: keep the
+        # top-ranked sections that fit the *chat* token budget. The selection
+        # budget above is deliberately larger (SELECTION_TOKEN_BUDGET_MULTIPLIER),
+        # so re-trimming is required -- passing sections_for_selection straight
+        # through would hand the answer model several times the intended
+        # context and cost back more than the skipped call saves.
+        if SKIP_SECTION_SELECTION:
+            selected_sections = _trim_sections_by_tokens(
+                sections=sections_for_selection,
+                max_tokens=max_tokens_for_selection // SELECTION_TOKEN_BUDGET_MULTIPLIER,
+                token_counter=token_counter,
+                max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
+            )
+            best_doc_ids = None
+        else:
+            selected_sections, best_doc_ids = select_sections_for_expansion(
+                sections=sections_for_selection,
+                user_query=secondary_flows_user_query,
+                llm=self.llm,
+                max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
+            )
 
         # End timing for LLM document selection
         document_selection_elapsed = time.time() - document_selection_start_time
@@ -1199,8 +1216,15 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # Start timing for document expansion
         document_expansion_start_time = time.time()
 
-        # Run all expansions in parallel
-        expanded_sections = run_functions_tuples_in_parallel(expansion_functions)
+        # Run all expansions in parallel. When the expansion is skipped, each
+        # selected section is passed through unchanged -- the same result
+        # expand_section_with_context produces for MAIN_SECTION_ONLY -- so the
+        # sections stay well-formed for the merge and citation steps below.
+        expanded_sections = (
+            selected_sections
+            if SKIP_SECTION_RELEVANCE_EXPANSION
+            else run_functions_tuples_in_parallel(expansion_functions)
+        )
 
         # End timing for document expansion
         document_expansion_elapsed = time.time() - document_expansion_start_time
