@@ -314,7 +314,7 @@ export function ConnectorsCheckCard({
             )}
           </div>
           <div className="flex items-center">
-            {onRerun && (
+            {onRerun && !collapsed && (
               <Button
                 icon={SvgRefreshCw}
                 prominence="internal"
