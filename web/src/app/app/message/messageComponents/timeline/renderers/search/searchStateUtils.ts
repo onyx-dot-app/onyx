@@ -8,7 +8,7 @@ import {
   SearchToolDocumentsDelta,
   SectionEnd,
 } from "@/app/app/services/streamingModels";
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/types";
 import { getSourceDisplayName, isValidSource } from "@/lib/sources";
 import { ValidSources } from "@/lib/types";
 
