@@ -283,11 +283,7 @@ def build_price_table(api: dict[str, Any]) -> dict[str, Any]:
         f"only {total_models} models after transform — upstream regression?"
     )
 
-    return {
-        "schema_version": 2,
-        "sources": [SOURCE_URL, LITELLM_URL, OPENROUTER_URL],
-        "providers": dict(sorted(providers.items())),
-    }
+    return dict(sorted(providers.items()))
 
 
 # ---------------------------------------------------------------------------
@@ -610,7 +606,7 @@ def main() -> int:
         else (_fetch_optional(args.openrouter_url, "OpenRouter") or {}).get("data")
     )
 
-    providers = build_price_table(api)["providers"]
+    providers = build_price_table(api)
     if litellm_map:
         merge_litellm(providers, litellm_map)
     if openrouter_models:
