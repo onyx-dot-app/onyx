@@ -2,6 +2,7 @@
 plus the traps the order of checks exists for. The shapes are what Zoom sent
 on 2026-09-22, read live after setting each choice."""
 
+from collections.abc import Iterable
 from unittest.mock import MagicMock
 
 import pytest
@@ -10,17 +11,23 @@ from pydantic import ValidationError
 
 from onyx.connectors.zoom.models import (
     ZoomRecordingAuthenticationRule,
+    ZoomRecordingRegistrant,
     ZoomRecordingSettings,
+    ZoomUser,
+    ZoomUserPage,
 )
 from onyx.connectors.zoom.recordings.recording_access import (
-    ZoomAccessContext,
+    RuleGrant,
     ZoomAccessListUnavailable,
+    load_rule_grants,
+    look_up_owner_email,
     resolve_recording_access,
 )
-from tests.unit.onyx.connectors.zoom.helpers import http_error, with_recording_access
+from tests.unit.onyx.connectors.zoom.helpers import http_error, mock_zoom_client
 from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
     ACCOUNT_RULE_ID,
     recording_authentication_rule,
+    recording_authentication_settings,
     recording_entry,
     recording_registrant,
     recording_settings,
@@ -29,15 +36,15 @@ from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
 
 _DOMAIN_RULE_ID = "KtK6lLjFQp24UqYxdYQQuA"
 _ANY_ZOOM_USER_RULE_ID = "enforce_login_GB7nutLVSz-Aoi3nrsxZrw"
-_RULES = [
-    recording_authentication_rule(),
-    recording_authentication_rule(
-        id=_DOMAIN_RULE_ID,
-        type="enforce_login_with_domains",
-        domains="Onyx.app, partner.com",
-    ),
-    recording_authentication_rule(id=_ANY_ZOOM_USER_RULE_ID, type="enforce_login"),
-]
+_EVERYONE = RuleGrant(public=True, domains=frozenset())
+_OWNER_ONLY = RuleGrant(public=False, domains=frozenset())
+_DOMAINS = RuleGrant(public=False, domains=frozenset({"onyx.app", "partner.com"}))
+_RULE_GRANTS = {
+    ACCOUNT_RULE_ID: _EVERYONE,
+    _ANY_ZOOM_USER_RULE_ID: _EVERYONE,
+    _DOMAIN_RULE_ID: _DOMAINS,
+}
+_OWNER = "owner@example.com"
 
 PRIVATE_TO_ME = ZoomRecordingSettings(share_recording="none")
 ONLY_PEOPLE_WITH_ACCESS = recording_settings(
@@ -71,14 +78,29 @@ _LINK_ACCESS_IDS = [
 ]
 
 
-def _client(settings: ZoomRecordingSettings) -> MagicMock:
-    return with_recording_access(settings=settings, rules=_RULES)
+def _client(
+    settings: ZoomRecordingSettings,
+    registrants: Iterable[ZoomRecordingRegistrant] = (),
+) -> MagicMock:
+    client = mock_zoom_client()
+    client.get_recording_settings.return_value = settings
+    client.list_recording_registrants.return_value = list(registrants)
+    return client
 
 
-def _resolve(client: MagicMock, *, box_on: bool = True, host_id: str = "owner-1"):
-    context = ZoomAccessContext(client, treat_link_access_as_public=box_on)
+def _resolve(
+    client: MagicMock,
+    *,
+    box_on: bool = True,
+    rule_grants: dict[str, RuleGrant] = _RULE_GRANTS,
+    owner: str | None = _OWNER,
+):
     return resolve_recording_access(
-        context, recording_entry(uuid="rec-1", host_id=host_id)
+        client,
+        recording_entry(uuid="rec-1", host_id="owner-1"),
+        treat_link_access_as_public=box_on,
+        rule_grants=rule_grants,
+        owner_email=owner,
     )
 
 
@@ -91,7 +113,7 @@ class TestTheLinkAccessTable:
     ) -> None:
         access = _resolve(_client(settings))
 
-        assert access.external_user_emails == {"owner@example.com"}
+        assert access.external_user_emails == {_OWNER}
         assert access.is_public is public
         assert access.external_user_group_ids == groups
 
@@ -103,49 +125,42 @@ class TestTheLinkAccessTable:
     ) -> None:
         access = _resolve(_client(settings), box_on=False)
 
-        assert access.external_user_emails == {"owner@example.com"}
+        assert access.external_user_emails == {_OWNER}
         assert access.is_public is False
         assert access.external_user_group_ids == set()
 
 
 class TestTheTraps:
-    def test_only_people_with_access_never_consults_the_catalogue(self) -> None:
-        # Its rule id is not in the catalogue, and the live payload still says
-        # share_recording publicly, so it has to be decided before either.
-        client = _client(ONLY_PEOPLE_WITH_ACCESS)
+    def test_only_people_with_access_is_decided_before_the_catalogue(self) -> None:
+        # Live, its payload still says share_recording publicly and its id is
+        # not in the catalogue; a catalogue that had it must not win either.
+        rule_grants = _RULE_GRANTS | {"specialEmail": _EVERYONE}
 
-        _resolve(client)
+        access = _resolve(_client(ONLY_PEOPLE_WITH_ACCESS), rule_grants=rule_grants)
 
-        client.get_recording_authentication_rules.assert_not_called()
+        assert access.external_user_emails == {_OWNER}
+        assert access.is_public is False
 
-    @pytest.mark.parametrize(
-        ("rule_id", "rules"),
-        [
-            ("deleted-rule", [recording_authentication_rule()]),
-            (ACCOUNT_RULE_ID, [recording_authentication_rule(type="biometric")]),
-            (
-                _DOMAIN_RULE_ID,
-                [
-                    recording_authentication_rule(
-                        id=_DOMAIN_RULE_ID,
-                        type="enforce_login_with_domains",
-                        domains=" ",
-                    )
-                ],
-            ),
-        ],
-        ids=["rule-missing", "type-zoom-adds-later", "domain-rule-without-domains"],
-    )
-    def test_a_rule_the_connector_cannot_read_grants_only_the_owner(
-        self, rule_id: str, rules: list[ZoomRecordingAuthenticationRule]
+    def test_sign_in_required_under_no_named_rule_grants_only_the_owner(
+        self,
     ) -> None:
-        client = with_recording_access(
-            settings=recording_settings(authentication_option=rule_id), rules=rules
+        # Not seen live. Whatever rule Zoom applies then, the connector cannot read it.
+        settings = recording_settings(
+            recording_authentication=True, authentication_option=""
         )
 
-        access = _resolve(client)
+        access = _resolve(_client(settings))
 
-        assert access.external_user_emails == {"owner@example.com"}
+        assert access.external_user_emails == {_OWNER}
+        assert access.is_public is False
+        assert access.external_user_group_ids == set()
+
+    def test_a_rule_missing_from_the_catalogue_grants_only_the_owner(self) -> None:
+        settings = recording_settings(authentication_option="deleted-rule")
+
+        access = _resolve(_client(settings))
+
+        assert access.external_user_emails == {_OWNER}
         assert access.is_public is False
         assert access.external_user_group_ids == set()
 
@@ -159,7 +174,7 @@ class TestTheTraps:
 
         access = _resolve(client)
 
-        assert access.external_user_emails == {"owner@example.com"}
+        assert access.external_user_emails == {_OWNER}
         assert access.is_public is False
 
 
@@ -168,9 +183,8 @@ class TestRegisteredViewers:
     def test_approved_registrants_are_added_whatever_the_box_says(
         self, box_on: bool
     ) -> None:
-        client = with_recording_access(
-            settings=recording_settings(on_demand=True),
-            rules=_RULES,
+        client = _client(
+            recording_settings(on_demand=True),
             registrants=[
                 recording_registrant(email="Viewer@Example.com", status="approved"),
                 # Zoom was asked for approved only; the answer is checked anyway.
@@ -181,10 +195,7 @@ class TestRegisteredViewers:
 
         access = _resolve(client, box_on=box_on)
 
-        assert access.external_user_emails == {
-            "owner@example.com",
-            "viewer@example.com",
-        }
+        assert access.external_user_emails == {_OWNER, "viewer@example.com"}
         client.list_recording_registrants.assert_called_once_with(
             "rec-1", status="approved"
         )
@@ -200,8 +211,6 @@ class TestRegisteredViewers:
     def test_nobody_is_asked_for_otherwise(
         self, settings: ZoomRecordingSettings
     ) -> None:
-        # Nobody can reach the registration page of a private recording, and an
-        # owner who went private wants everyone out.
         client = _client(settings)
 
         _resolve(client)
@@ -209,70 +218,117 @@ class TestRegisteredViewers:
         client.list_recording_registrants.assert_not_called()
 
 
-class TestTheOwner:
-    def test_an_owner_zoom_no_longer_has_fails_the_document(self) -> None:
-        # Indexing it would bury a transcript nobody can reach.
-        client = _client(PRIVATE_TO_ME)
-        client.get_user.side_effect = http_error(404, 1001)
+class TestAMissingOwner:
+    def test_fails_a_recording_nobody_else_may_watch(self) -> None:
+        with pytest.raises(ZoomAccessListUnavailable, match="owner-1"):
+            _resolve(_client(PRIVATE_TO_ME), owner=None)
 
-        with pytest.raises(ZoomAccessListUnavailable, match="left-the-company"):
-            _resolve(client, host_id="left-the-company")
-
-    def test_an_owner_with_no_email_yet_counts_as_missing(self) -> None:
-        # Zoom keeps the address blank until an invitation is accepted.
-        client = with_recording_access(
-            settings=PRIVATE_TO_ME, owner=user(id="owner-1", email="")
-        )
-
-        with pytest.raises(ZoomAccessListUnavailable):
-            _resolve(client)
-
-    def test_a_public_recording_survives_a_missing_owner(self) -> None:
-        client = _client(ANYONE_WITH_THE_LINK)
-        client.get_user.side_effect = http_error(404, 1001)
-
-        access = _resolve(client, host_id="left-the-company")
+    def test_does_not_fail_a_public_recording(self) -> None:
+        access = _resolve(_client(ANYONE_WITH_THE_LINK), owner=None)
 
         assert access.is_public is True
         assert access.external_user_emails == set()
 
-    def test_any_other_answer_about_the_owner_reaches_the_caller(self) -> None:
+
+class TestLookUpOwnerEmail:
+    def _client(self, owner: ZoomUser) -> MagicMock:
+        client = mock_zoom_client()
+        client.get_user.return_value = owner
+        return client
+
+    def test_the_address_is_normalised(self) -> None:
+        client = self._client(user(id="owner-1", email="Owner@Example.com"))
+
+        assert look_up_owner_email(client, "owner-1") == "owner@example.com"
+        client.get_user.assert_called_once_with("owner-1")
+
+    def test_an_owner_zoom_no_longer_has_is_none(self) -> None:
+        client = mock_zoom_client()
+        client.get_user.side_effect = http_error(404, 1001)
+
+        assert look_up_owner_email(client, "left-the-company") is None
+
+    def test_an_owner_with_no_email_yet_counts_as_missing(self) -> None:
+        client = self._client(user(id="owner-1", email=""))
+
+        assert look_up_owner_email(client, "owner-1") is None
+
+    def test_any_other_answer_reaches_the_caller(self) -> None:
         # A 404 without Zoom's code, such as from a proxy, is not absence.
-        client = _client(PRIVATE_TO_ME)
+        client = mock_zoom_client()
         client.get_user.side_effect = http_error(404)
 
         with pytest.raises(requests.HTTPError):
-            _resolve(client)
+            look_up_owner_email(client, "owner-1")
 
-    def test_owners_and_rules_are_asked_for_once_per_run(self) -> None:
-        client = _client(ANYONE_IN_DOMAIN_RULE)
-        context = ZoomAccessContext(client, treat_link_access_as_public=True)
 
-        for uuid in ("rec-1", "rec-2", "rec-3"):
-            resolve_recording_access(
-                context, recording_entry(uuid=uuid, host_id="owner-1")
-            )
-
-        client.get_user.assert_called_once_with("owner-1")
-        client.list_users.assert_called_once()
-        client.get_recording_authentication_rules.assert_called_once_with("owner-1")
-
-    def test_the_catalogue_does_not_depend_on_the_owner_still_existing(self) -> None:
-        # The recording's owner has left, and the catalogue is asked for
-        # through a user Zoom still lists.
-        client = with_recording_access(
-            settings=ANYONE_IN_DOMAIN_RULE,
-            rules=_RULES,
-            owner=user(id="someone-else", email="someone@example.com"),
+class TestLoadRuleGrants:
+    def _client(
+        self,
+        *rules: ZoomRecordingAuthenticationRule,
+        users: Iterable[ZoomUser] = (user(id="someone-else"),),
+    ) -> MagicMock:
+        client = mock_zoom_client()
+        listed = list(users)
+        client.list_users.return_value = ZoomUserPage(
+            users=listed, total_records=len(listed)
         )
-        client.get_user.side_effect = http_error(404, 1001)
+        client.get_recording_authentication_rules.return_value = (
+            recording_authentication_settings(*rules)
+        )
+        return client
 
-        access = _resolve(client, host_id="left-the-company")
+    @pytest.mark.parametrize(
+        ("rule", "grant"),
+        [
+            (recording_authentication_rule(), _EVERYONE),
+            (
+                recording_authentication_rule(
+                    id=_ANY_ZOOM_USER_RULE_ID, type="enforce_login"
+                ),
+                _EVERYONE,
+            ),
+            (
+                recording_authentication_rule(
+                    id=_DOMAIN_RULE_ID,
+                    type="enforce_login_with_domains",
+                    domains="Onyx.app, partner.com",
+                ),
+                _DOMAINS,
+            ),
+            (
+                recording_authentication_rule(
+                    id=_DOMAIN_RULE_ID, type="enforce_login_with_domains", domains=" "
+                ),
+                _OWNER_ONLY,
+            ),
+            (recording_authentication_rule(type="biometric"), _OWNER_ONLY),
+        ],
+        ids=[
+            "my-account",
+            "any-zoom-user",
+            "domain-rule",
+            "domain-rule-without-domains",
+            "type-zoom-adds-later",
+        ],
+    )
+    def test_each_rule_type_maps_to_what_it_grants(
+        self, rule: ZoomRecordingAuthenticationRule, grant: RuleGrant
+    ) -> None:
+        assert load_rule_grants(self._client(rule)) == {rule.id: grant}
 
+    def test_the_catalogue_is_asked_through_a_user_the_account_lists(self) -> None:
+        client = self._client()
+
+        load_rule_grants(client)
+
+        client.list_users.assert_called_once_with(page_size=1)
         client.get_recording_authentication_rules.assert_called_once_with(
             "someone-else"
         )
-        assert access.external_user_group_ids == {
-            "zoom_domain:onyx.app",
-            "zoom_domain:partner.com",
-        }
+
+    def test_an_account_without_users_has_no_rules(self) -> None:
+        client = self._client(users=())
+
+        assert load_rule_grants(client) == {}
+        client.get_recording_authentication_rules.assert_not_called()

@@ -874,6 +874,15 @@ class TestListUsers:
         url = client._session.request.call_args.args[1]
         assert url == f"{_API_BASE_URL}/users"
 
+    def test_asks_for_the_page_size_it_is_given(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, {"users": []})
+
+        client.list_users(page_size=1)
+
+        assert client._session.request.call_args.kwargs["params"] == {"page_size": 1}
+
 
 class TestListUserRecordings:
     def _page(self) -> dict[str, Any]:
