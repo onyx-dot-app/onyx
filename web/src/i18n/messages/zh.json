@@ -819,133 +819,133 @@
       },
       "sources": {
         "web": {
-          "description": "抓取公开或内部网站"
+          "description": "链接任意公开 URL"
         },
         "github": {
-          "description": "拉取请求和议题"
+          "description": "代码与拉取请求"
         },
         "gitlab": {
-          "description": "合并请求和议题"
+          "description": "代码与 CI/CD"
         },
         "slack": {
-          "description": "频道消息和话题"
+          "description": "团队消息"
         },
         "googleDrive": {
-          "description": "文档、表格、幻灯片和文件"
+          "description": "共享文件和文件夹"
         },
         "gmail": {
-          "description": "邮件和附件"
+          "description": "Google 邮箱"
         },
         "bookstack": {
-          "description": "书籍、章节和页面"
+          "description": "自托管维基"
         },
         "outline": {
-          "description": "团队 Wiki 文档"
+          "description": "开源团队维基"
         },
         "confluence": {
-          "description": "空间和页面"
+          "description": "Atlassian 维基"
         },
         "jira": {
-          "description": "议题和项目看板"
+          "description": "Atlassian 问题跟踪"
         },
         "productboard": {
-          "description": "功能、笔记和反馈"
+          "description": "产品管理"
         },
         "slab": {
-          "description": "团队知识帖子"
+          "description": "团队维基"
         },
         "coda": {
-          "description": "文档和表格"
+          "description": "文档与数据库"
         },
         "notion": {
-          "description": "页面和数据库"
+          "description": "文档与数据库"
         },
         "guru": {
-          "description": "卡片和合集"
+          "description": "经验证的知识库"
         },
         "gong": {
-          "description": "通话录音和转录"
+          "description": "销售通话智能"
         },
         "zulip": {
-          "description": "信息流和主题"
+          "description": "开源消息"
         },
         "linear": {
-          "description": "议题和项目"
+          "description": "工程问题跟踪"
         },
         "hubspot": {
-          "description": "工单、联系人和交易"
+          "description": "营销与 CRM"
         },
         "document360": {
-          "description": "知识库文章"
+          "description": "自助服务文档"
         },
         "file": {
-          "description": "从电脑上传文件"
+          "description": "从本地文件上传"
         },
         "userFile": {
           "description": "聊天中上传的文件"
         },
         "googleSites": {
-          "description": "站点页面"
+          "description": "Google 托管页面"
         },
         "loopio": {
-          "description": "RFP 答案库"
+          "description": "RFP 应答"
         },
         "box": {
           "description": "文件、文件夹和笔记"
         },
         "dropbox": {
-          "description": "文件和共享文件夹"
+          "description": "共享文件和文件夹"
         },
         "discord": {
-          "description": "服务器频道和消息"
+          "description": "社区消息"
         },
         "salesforce": {
-          "description": "客户、个案和对象"
+          "description": "销售与 CRM"
         },
         "sharepoint": {
-          "description": "站点、页面和文档"
+          "description": "Microsoft 内网"
         },
         "teams": {
-          "description": "团队频道和聊天"
+          "description": "Microsoft 团队聊天"
         },
         "outlook": {
           "description": "邮件和邮件文件夹"
         },
         "zendesk": {
-          "description": "工单和帮助中心文章"
+          "description": "客户支持工单"
         },
         "discourse": {
-          "description": "论坛主题和帖子"
+          "description": "社区论坛"
         },
         "axero": {
-          "description": "内网空间和文章"
+          "description": "社交内网"
         },
         "clickup": {
-          "description": "任务、文档和评论"
+          "description": "项目与任务跟踪"
         },
         "wikipedia": {
-          "description": "百科全书文章"
+          "description": "公开知识库"
         },
         "mediawiki": {
-          "description": "Wiki 页面和修订"
+          "description": "维基百科式维基"
         },
         "asana": {
-          "description": "任务和项目"
+          "description": "工作管理"
         },
         "s3": {
-          "description": "Amazon S3 存储桶中的文件"
+          "description": "AWS 存储桶"
         },
         "r2": {
-          "description": "Cloudflare R2 存储桶中的文件"
+          "description": "云存储桶"
         },
         "googleCloudStorage": {
-          "description": "Cloud Storage 存储桶中的文件"
+          "description": "Google Cloud 存储桶"
         },
         "xenforo": {
-          "description": "论坛帖子和回复"
+          "description": "社区论坛"
         },
         "ociStorage": {
-          "description": "OCI 对象存储中的文件"
+          "description": "OCI 对象存储"
         },
         "notApplicable": {
           "description": "无来源"
@@ -954,34 +954,34 @@
           "description": "通过 API 发送的文档"
         },
         "freshdesk": {
-          "description": "支持工单"
+          "description": "客户服务台"
         },
         "fireflies": {
-          "description": "会议转录"
+          "description": "会议记录"
         },
         "egnyte": {
-          "description": "企业文件和文件夹"
+          "description": "托管文件服务"
         },
         "airtable": {
-          "description": "数据库和记录"
+          "description": "数据库与任务"
         },
         "gitbook": {
-          "description": "文档和空间"
+          "description": "开发者文档"
         },
         "highspot": {
-          "description": "销售内容和推介"
+          "description": "销售赋能"
         },
         "drupalWiki": {
-          "description": "Wiki 页面和书籍"
+          "description": "基于 CMS 的维基"
         },
         "imap": {
-          "description": "任意 IMAP 邮箱的邮件"
+          "description": "IMAP 邮件来源"
         },
         "bitbucket": {
-          "description": "拉取请求和仓库"
+          "description": "Atlassian 源代码管理"
         },
         "testrail": {
-          "description": "测试用例和测试运行"
+          "description": "测试用例跟踪"
         },
         "braintrust": {
           "description": "日志和评估"

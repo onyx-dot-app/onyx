@@ -819,133 +819,133 @@
       },
       "sources": {
         "web": {
-          "description": "公開または社内のウェブサイトをクロール"
+          "description": "任意の公開 URL をリンク"
         },
         "github": {
-          "description": "プルリクエストと Issue"
+          "description": "コードとプルリクエスト"
         },
         "gitlab": {
-          "description": "マージリクエストと Issue"
+          "description": "コードと CI/CD"
         },
         "slack": {
-          "description": "チャンネルのメッセージとスレッド"
+          "description": "チームメッセージング"
         },
         "googleDrive": {
-          "description": "ドキュメント、スプレッドシート、スライド、ファイル"
+          "description": "共有ファイルとフォルダー"
         },
         "gmail": {
-          "description": "メールと添付ファイル"
+          "description": "Google のメール"
         },
         "bookstack": {
-          "description": "ブック、チャプター、ページ"
+          "description": "セルフホスト型 Wiki"
         },
         "outline": {
-          "description": "チームの Wiki ドキュメント"
+          "description": "オープンソースのチーム Wiki"
         },
         "confluence": {
-          "description": "スペースとページ"
+          "description": "Atlassian の Wiki"
         },
         "jira": {
-          "description": "Issue とプロジェクトボード"
+          "description": "Atlassian の課題管理"
         },
         "productboard": {
-          "description": "機能、ノート、フィードバック"
+          "description": "プロダクトマネジメント"
         },
         "slab": {
-          "description": "チームのナレッジ投稿"
+          "description": "チーム Wiki"
         },
         "coda": {
-          "description": "ドキュメントとテーブル"
+          "description": "ドキュメントとデータベース"
         },
         "notion": {
-          "description": "ページとデータベース"
+          "description": "ドキュメントとデータベース"
         },
         "guru": {
-          "description": "カードとコレクション"
+          "description": "検証済みナレッジベース"
         },
         "gong": {
-          "description": "通話の録音と文字起こし"
+          "description": "営業通話インテリジェンス"
         },
         "zulip": {
-          "description": "ストリームとトピック"
+          "description": "オープンソースのメッセージング"
         },
         "linear": {
-          "description": "Issue とプロジェクト"
+          "description": "エンジニアリング課題管理"
         },
         "hubspot": {
-          "description": "チケット、連絡先、取引"
+          "description": "マーケティングと CRM"
         },
         "document360": {
-          "description": "ナレッジベースの記事"
+          "description": "セルフサービスドキュメント"
         },
         "file": {
-          "description": "パソコンからファイルをアップロード"
+          "description": "ローカルファイルからアップロード"
         },
         "userFile": {
           "description": "チャットでアップロードしたファイル"
         },
         "googleSites": {
-          "description": "サイトのページ"
+          "description": "Google ホストのページ"
         },
         "loopio": {
-          "description": "RFP 回答ライブラリ"
+          "description": "RFP 回答"
         },
         "box": {
           "description": "ファイル、フォルダー、ノート"
         },
         "dropbox": {
-          "description": "ファイルと共有フォルダー"
+          "description": "共有ファイルとフォルダー"
         },
         "discord": {
-          "description": "サーバーのチャンネルとメッセージ"
+          "description": "コミュニティメッセージング"
         },
         "salesforce": {
-          "description": "取引先、ケース、オブジェクト"
+          "description": "営業と CRM"
         },
         "sharepoint": {
-          "description": "サイト、ページ、ドキュメント"
+          "description": "Microsoft のイントラネット"
         },
         "teams": {
-          "description": "チームのチャネルとチャット"
+          "description": "Microsoft のチームチャット"
         },
         "outlook": {
           "description": "メールとメールフォルダー"
         },
         "zendesk": {
-          "description": "チケットとヘルプセンターの記事"
+          "description": "カスタマーサポートのチケット"
         },
         "discourse": {
-          "description": "フォーラムのトピックと投稿"
+          "description": "コミュニティフォーラム"
         },
         "axero": {
-          "description": "イントラネットのスペースと記事"
+          "description": "ソーシャルイントラネット"
         },
         "clickup": {
-          "description": "タスク、ドキュメント、コメント"
+          "description": "プロジェクトとタスクの管理"
         },
         "wikipedia": {
-          "description": "百科事典の記事"
+          "description": "公開ナレッジベース"
         },
         "mediawiki": {
-          "description": "Wiki ページと版"
+          "description": "Wikipedia 型の Wiki"
         },
         "asana": {
-          "description": "タスクとプロジェクト"
+          "description": "ワークマネジメント"
         },
         "s3": {
-          "description": "Amazon S3 バケット内のファイル"
+          "description": "AWS ストレージバケット"
         },
         "r2": {
-          "description": "Cloudflare R2 バケット内のファイル"
+          "description": "クラウドストレージバケット"
         },
         "googleCloudStorage": {
-          "description": "Cloud Storage バケット内のファイル"
+          "description": "Google Cloud バケット"
         },
         "xenforo": {
-          "description": "フォーラムのスレッドと投稿"
+          "description": "コミュニティフォーラム"
         },
         "ociStorage": {
-          "description": "OCI Object Storage 内のファイル"
+          "description": "OCI オブジェクトストレージ"
         },
         "notApplicable": {
           "description": "ソースなし"
@@ -954,34 +954,34 @@
           "description": "API 経由で送信されたドキュメント"
         },
         "freshdesk": {
-          "description": "サポートチケット"
+          "description": "カスタマーヘルプデスク"
         },
         "fireflies": {
-          "description": "会議の文字起こし"
+          "description": "会議メモ"
         },
         "egnyte": {
-          "description": "企業のファイルとフォルダー"
+          "description": "マネージドファイルサービス"
         },
         "airtable": {
-          "description": "ベースとレコード"
+          "description": "データベースとタスク"
         },
         "gitbook": {
-          "description": "ドキュメントとスペース"
+          "description": "開発者向けドキュメント"
         },
         "highspot": {
-          "description": "営業コンテンツとピッチ"
+          "description": "セールスイネーブルメント"
         },
         "drupalWiki": {
-          "description": "Wiki ページとブック"
+          "description": "CMS ベースの Wiki"
         },
         "imap": {
-          "description": "任意の IMAP メールボックスのメール"
+          "description": "IMAP メールソース"
         },
         "bitbucket": {
-          "description": "プルリクエストとリポジトリ"
+          "description": "Atlassian のソース管理"
         },
         "testrail": {
-          "description": "テストケースとテストラン"
+          "description": "テストケース管理"
         },
         "braintrust": {
           "description": "ログと評価"

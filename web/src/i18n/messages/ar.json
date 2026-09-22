@@ -819,76 +819,76 @@
       },
       "sources": {
         "web": {
-          "description": "زحف المواقع العامة أو الداخلية"
+          "description": "ربط أي عنوان URL عام"
         },
         "github": {
-          "description": "طلبات السحب والمشكلات"
+          "description": "الكود وطلبات السحب"
         },
         "gitlab": {
-          "description": "طلبات الدمج والمشكلات"
+          "description": "الكود و CI/CD"
         },
         "slack": {
-          "description": "رسائل القنوات والمحادثات المتسلسلة"
+          "description": "مراسلة الفريق"
         },
         "googleDrive": {
-          "description": "المستندات وجداول البيانات والعروض والملفات"
+          "description": "الملفات والمجلدات المشتركة"
         },
         "gmail": {
-          "description": "رسائل البريد والمرفقات"
+          "description": "بريد Google"
         },
         "bookstack": {
-          "description": "الكتب والفصول والصفحات"
+          "description": "ويكي مستضاف ذاتيًا"
         },
         "outline": {
-          "description": "مستندات ويكي الفريق"
+          "description": "ويكي فريق مفتوح المصدر"
         },
         "confluence": {
-          "description": "المساحات والصفحات"
+          "description": "ويكي Atlassian"
         },
         "jira": {
-          "description": "المشكلات ولوحات المشاريع"
+          "description": "متتبع مشكلات Atlassian"
         },
         "productboard": {
-          "description": "الميزات والملاحظات والتعليقات"
+          "description": "إدارة المنتجات"
         },
         "slab": {
-          "description": "منشورات معرفة الفريق"
+          "description": "ويكي الفريق"
         },
         "coda": {
-          "description": "المستندات والجداول"
+          "description": "المستندات وقواعد البيانات"
         },
         "notion": {
-          "description": "الصفحات وقواعد البيانات"
+          "description": "المستندات وقواعد البيانات"
         },
         "guru": {
-          "description": "البطاقات والمجموعات"
+          "description": "قاعدة معرفة موثّقة"
         },
         "gong": {
-          "description": "تسجيلات المكالمات والنصوص"
+          "description": "تحليل مكالمات المبيعات"
         },
         "zulip": {
-          "description": "التدفقات والمواضيع"
+          "description": "مراسلة مفتوحة المصدر"
         },
         "linear": {
-          "description": "المشكلات والمشاريع"
+          "description": "متتبع مشكلات الهندسة"
         },
         "hubspot": {
-          "description": "التذاكر وجهات الاتصال والصفقات"
+          "description": "التسويق وإدارة علاقات العملاء"
         },
         "document360": {
-          "description": "مقالات قاعدة المعرفة"
+          "description": "وثائق الخدمة الذاتية"
         },
         "file": {
-          "description": "رفع ملفات من جهازك"
+          "description": "رفع من الملفات المحلية"
         },
         "userFile": {
           "description": "الملفات المرفوعة في الدردشة"
         },
         "googleSites": {
-          "description": "صفحات الموقع"
+          "description": "صفحات مستضافة على Google"
         },
         "loopio": {
-          "description": "مكتبة إجابات طلبات العروض"
+          "description": "الرد على طلبات العروض"
         },
         "box": {
           "description": "الملفات والمجلدات والملاحظات"
@@ -897,55 +897,55 @@
           "description": "الملفات والمجلدات المشتركة"
         },
         "discord": {
-          "description": "قنوات الخادم والرسائل"
+          "description": "مراسلة المجتمع"
         },
         "salesforce": {
-          "description": "الحسابات والحالات والكائنات"
+          "description": "المبيعات وإدارة علاقات العملاء"
         },
         "sharepoint": {
-          "description": "المواقع والصفحات والمستندات"
+          "description": "شبكة Microsoft الداخلية"
         },
         "teams": {
-          "description": "قنوات الفريق والدردشات"
+          "description": "دردشات فرق Microsoft"
         },
         "outlook": {
           "description": "رسائل البريد ومجلداته"
         },
         "zendesk": {
-          "description": "التذاكر ومقالات مركز المساعدة"
+          "description": "تذاكر دعم العملاء"
         },
         "discourse": {
-          "description": "مواضيع المنتدى والمنشورات"
+          "description": "منتدى المجتمع"
         },
         "axero": {
-          "description": "مساحات الشبكة الداخلية والمقالات"
+          "description": "شبكة داخلية اجتماعية"
         },
         "clickup": {
-          "description": "المهام والمستندات والتعليقات"
+          "description": "متتبع المشاريع والمهام"
         },
         "wikipedia": {
-          "description": "مقالات الموسوعة"
+          "description": "قاعدة معرفة عامة"
         },
         "mediawiki": {
-          "description": "صفحات الويكي والمراجعات"
+          "description": "ويكي بنمط ويكيبيديا"
         },
         "asana": {
-          "description": "المهام والمشاريع"
+          "description": "إدارة العمل"
         },
         "s3": {
-          "description": "الملفات في حاويات Amazon S3"
+          "description": "حاويات تخزين AWS"
         },
         "r2": {
-          "description": "الملفات في حاويات Cloudflare R2"
+          "description": "حاويات التخزين السحابي"
         },
         "googleCloudStorage": {
-          "description": "الملفات في حاويات Cloud Storage"
+          "description": "حاويات Google Cloud"
         },
         "xenforo": {
-          "description": "سلاسل المنتدى والمنشورات"
+          "description": "منتدى المجتمع"
         },
         "ociStorage": {
-          "description": "الملفات في OCI Object Storage"
+          "description": "تخزين كائنات OCI"
         },
         "notApplicable": {
           "description": "لا يوجد مصدر"
@@ -954,34 +954,34 @@
           "description": "المستندات المرسلة عبر واجهة البرمجة"
         },
         "freshdesk": {
-          "description": "تذاكر الدعم"
+          "description": "مكتب مساعدة العملاء"
         },
         "fireflies": {
-          "description": "نصوص الاجتماعات"
+          "description": "ملاحظات الاجتماعات"
         },
         "egnyte": {
-          "description": "ملفات المؤسسة ومجلداتها"
+          "description": "خدمات ملفات مُدارة"
         },
         "airtable": {
-          "description": "القواعد والسجلات"
+          "description": "قاعدة بيانات ومهام"
         },
         "gitbook": {
-          "description": "المستندات والمساحات"
+          "description": "وثائق المطورين"
         },
         "highspot": {
-          "description": "محتوى المبيعات والعروض"
+          "description": "تمكين المبيعات"
         },
         "drupalWiki": {
-          "description": "صفحات الويكي والكتب"
+          "description": "ويكي قائم على نظام إدارة محتوى"
         },
         "imap": {
-          "description": "رسائل البريد من أي صندوق IMAP"
+          "description": "مصدر بريد IMAP"
         },
         "bitbucket": {
-          "description": "طلبات السحب والمستودعات"
+          "description": "إدارة الشيفرة من Atlassian"
         },
         "testrail": {
-          "description": "حالات الاختبار وعمليات التشغيل"
+          "description": "تتبع حالات الاختبار"
         },
         "braintrust": {
           "description": "السجلات والتقييمات"

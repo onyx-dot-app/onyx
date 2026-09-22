@@ -819,133 +819,133 @@
       },
       "sources": {
         "web": {
-          "description": "Öffentliche oder interne Websites crawlen"
+          "description": "Beliebige öffentliche URL verknüpfen"
         },
         "github": {
-          "description": "Pull Requests und Issues"
+          "description": "Code & Pull Requests"
         },
         "gitlab": {
-          "description": "Merge Requests und Issues"
+          "description": "Code & CI/CD"
         },
         "slack": {
-          "description": "Kanalnachrichten und Threads"
+          "description": "Team-Messaging"
         },
         "googleDrive": {
-          "description": "Docs, Sheets, Slides und Dateien"
+          "description": "Geteilte Dateien und Ordner"
         },
         "gmail": {
-          "description": "E-Mails und Anhänge"
+          "description": "Google-E-Mail"
         },
         "bookstack": {
-          "description": "Bücher, Kapitel und Seiten"
+          "description": "Selbst gehostetes Wiki"
         },
         "outline": {
-          "description": "Team-Wiki-Dokumente"
+          "description": "Open-Source-Team-Wiki"
         },
         "confluence": {
-          "description": "Bereiche und Seiten"
+          "description": "Atlassian-Wiki"
         },
         "jira": {
-          "description": "Issues und Projektboards"
+          "description": "Atlassian-Issue-Tracker"
         },
         "productboard": {
-          "description": "Features, Notizen und Feedback"
+          "description": "Produktmanagement"
         },
         "slab": {
-          "description": "Team-Wissensbeiträge"
+          "description": "Team-Wiki"
         },
         "coda": {
-          "description": "Dokumente und Tabellen"
+          "description": "Dokumente & Datenbanken"
         },
         "notion": {
-          "description": "Seiten und Datenbanken"
+          "description": "Dokumente & Datenbanken"
         },
         "guru": {
-          "description": "Karten und Sammlungen"
+          "description": "Verifizierte Wissensdatenbank"
         },
         "gong": {
-          "description": "Anrufaufzeichnungen und Transkripte"
+          "description": "Sales-Call-Intelligence"
         },
         "zulip": {
-          "description": "Streams und Themen"
+          "description": "Open-Source-Messaging"
         },
         "linear": {
-          "description": "Issues und Projekte"
+          "description": "Engineering-Issue-Tracker"
         },
         "hubspot": {
-          "description": "Tickets, Kontakte und Deals"
+          "description": "Marketing & CRM"
         },
         "document360": {
-          "description": "Wissensdatenbank-Artikel"
+          "description": "Self-Service-Dokumentation"
         },
         "file": {
-          "description": "Dateien vom Computer hochladen"
+          "description": "Aus lokalen Dateien hochladen"
         },
         "userFile": {
           "description": "Im Chat hochgeladene Dateien"
         },
         "googleSites": {
-          "description": "Website-Seiten"
+          "description": "Von Google gehostete Seiten"
         },
         "loopio": {
-          "description": "RFP-Antwortbibliothek"
+          "description": "RFP-Antworten"
         },
         "box": {
           "description": "Dateien, Ordner und Notizen"
         },
         "dropbox": {
-          "description": "Dateien und freigegebene Ordner"
+          "description": "Geteilte Dateien und Ordner"
         },
         "discord": {
-          "description": "Server-Kanäle und Nachrichten"
+          "description": "Community-Messaging"
         },
         "salesforce": {
-          "description": "Accounts, Cases und Objekte"
+          "description": "Vertrieb & CRM"
         },
         "sharepoint": {
-          "description": "Sites, Seiten und Dokumente"
+          "description": "Microsoft-Intranet"
         },
         "teams": {
-          "description": "Team-Kanäle und Chats"
+          "description": "Microsoft-Team-Chats"
         },
         "outlook": {
           "description": "E-Mails und Postfachordner"
         },
         "zendesk": {
-          "description": "Tickets und Help-Center-Artikel"
+          "description": "Kundensupport-Tickets"
         },
         "discourse": {
-          "description": "Forenthemen und Beiträge"
+          "description": "Community-Forum"
         },
         "axero": {
-          "description": "Intranet-Bereiche und Artikel"
+          "description": "Soziales Intranet"
         },
         "clickup": {
-          "description": "Aufgaben, Dokumente und Kommentare"
+          "description": "Projekt- & Aufgaben-Tracker"
         },
         "wikipedia": {
-          "description": "Enzyklopädie-Artikel"
+          "description": "Öffentliche Wissensdatenbank"
         },
         "mediawiki": {
-          "description": "Wiki-Seiten und Versionen"
+          "description": "Wiki im Wikipedia-Stil"
         },
         "asana": {
-          "description": "Aufgaben und Projekte"
+          "description": "Arbeitsmanagement"
         },
         "s3": {
-          "description": "Dateien in Amazon-S3-Buckets"
+          "description": "AWS-Storage-Buckets"
         },
         "r2": {
-          "description": "Dateien in Cloudflare-R2-Buckets"
+          "description": "Cloud-Storage-Buckets"
         },
         "googleCloudStorage": {
-          "description": "Dateien in Cloud-Storage-Buckets"
+          "description": "Google-Cloud-Buckets"
         },
         "xenforo": {
-          "description": "Forenthreads und Beiträge"
+          "description": "Community-Forum"
         },
         "ociStorage": {
-          "description": "Dateien in OCI Object Storage"
+          "description": "OCI Object Storage"
         },
         "notApplicable": {
           "description": "Keine Quelle"
@@ -954,34 +954,34 @@
           "description": "Über die API gesendete Dokumente"
         },
         "freshdesk": {
-          "description": "Support-Tickets"
+          "description": "Kunden-Helpdesk"
         },
         "fireflies": {
-          "description": "Meeting-Transkripte"
+          "description": "Meeting-Notizen"
         },
         "egnyte": {
-          "description": "Unternehmensdateien und Ordner"
+          "description": "Verwaltete Dateidienste"
         },
         "airtable": {
-          "description": "Bases und Datensätze"
+          "description": "Datenbank & Aufgaben"
         },
         "gitbook": {
-          "description": "Dokumente und Spaces"
+          "description": "Entwicklerdokumentation"
         },
         "highspot": {
-          "description": "Vertriebsinhalte und Pitches"
+          "description": "Sales Enablement"
         },
         "drupalWiki": {
-          "description": "Wiki-Seiten und Bücher"
+          "description": "CMS-basiertes Wiki"
         },
         "imap": {
-          "description": "E-Mails aus jedem IMAP-Postfach"
+          "description": "IMAP-E-Mail-Quelle"
         },
         "bitbucket": {
-          "description": "Pull Requests und Repositories"
+          "description": "Atlassian-Quellcodeverwaltung"
         },
         "testrail": {
-          "description": "Testfälle und Testläufe"
+          "description": "Testfall-Verwaltung"
         },
         "braintrust": {
           "description": "Logs und Auswertungen"

@@ -831,121 +831,121 @@
           "description": "Team messaging"
         },
         "googleDrive": {
-          "description": "Shared files & folders"
+          "description": "Shared files and folders"
         },
         "gmail": {
           "description": "Google email"
         },
         "bookstack": {
-          "description": "Books, chapters, and pages"
+          "description": "Self-hosted wiki"
         },
         "outline": {
-          "description": "Team wiki documents"
+          "description": "Open-source team wiki"
         },
         "confluence": {
-          "description": "Spaces and pages"
+          "description": "Atlassian wiki"
         },
         "jira": {
-          "description": "Issues and project boards"
+          "description": "Atlassian issue tracker"
         },
         "productboard": {
-          "description": "Features, notes, and feedback"
+          "description": "Product management"
         },
         "slab": {
-          "description": "Team knowledge posts"
+          "description": "Team wiki"
         },
         "coda": {
-          "description": "Docs and tables"
+          "description": "Docs & databases"
         },
         "notion": {
-          "description": "Pages and databases"
+          "description": "Docs & databases"
         },
         "guru": {
-          "description": "Cards and collections"
+          "description": "Verified knowledge base"
         },
         "gong": {
-          "description": "Call recordings and transcripts"
+          "description": "Sales call intelligence"
         },
         "zulip": {
-          "description": "Streams and topics"
+          "description": "Open-source messaging"
         },
         "linear": {
-          "description": "Issues and projects"
+          "description": "Engineering issue tracker"
         },
         "hubspot": {
-          "description": "Tickets, contacts, and deals"
+          "description": "Marketing & CRM"
         },
         "document360": {
-          "description": "Knowledge base articles"
+          "description": "Self-service docs"
         },
         "file": {
-          "description": "Upload files from your computer"
+          "description": "Upload from local files"
         },
         "userFile": {
           "description": "Files uploaded in chat"
         },
         "googleSites": {
-          "description": "Site pages"
+          "description": "Google-hosted pages"
         },
         "loopio": {
-          "description": "RFP answer library"
+          "description": "RFP response"
         },
         "box": {
           "description": "Files, folders, and notes"
         },
         "dropbox": {
-          "description": "Files and shared folders"
+          "description": "Shared files and folders"
         },
         "discord": {
-          "description": "Server channels and messages"
+          "description": "Community messaging"
         },
         "salesforce": {
-          "description": "Accounts, cases, and objects"
+          "description": "Sales & CRM"
         },
         "sharepoint": {
-          "description": "Sites, pages, and documents"
+          "description": "Microsoft intranet"
         },
         "teams": {
-          "description": "Team channels and chats"
+          "description": "Microsoft team chats"
         },
         "outlook": {
           "description": "Emails and mail folders"
         },
         "zendesk": {
-          "description": "Tickets and help center articles"
+          "description": "Customer support tickets"
         },
         "discourse": {
-          "description": "Forum topics and posts"
+          "description": "Community forum"
         },
         "axero": {
-          "description": "Intranet spaces and articles"
+          "description": "Social intranet"
         },
         "clickup": {
-          "description": "Tasks, docs, and comments"
+          "description": "Project & task tracker"
         },
         "wikipedia": {
-          "description": "Encyclopedia articles"
+          "description": "Public knowledge base"
         },
         "mediawiki": {
-          "description": "Wiki pages and revisions"
+          "description": "Wikipedia-style wiki"
         },
         "asana": {
-          "description": "Tasks and projects"
+          "description": "Work management"
         },
         "s3": {
-          "description": "Files in Amazon S3 buckets"
+          "description": "AWS storage buckets"
         },
         "r2": {
-          "description": "Files in Cloudflare R2 buckets"
+          "description": "Cloud storage buckets"
         },
         "googleCloudStorage": {
-          "description": "Files in Cloud Storage buckets"
+          "description": "Google cloud buckets"
         },
         "xenforo": {
-          "description": "Forum threads and posts"
+          "description": "Community forum"
         },
         "ociStorage": {
-          "description": "Files in OCI Object Storage"
+          "description": "OCI object storage"
         },
         "notApplicable": {
           "description": "No source"
@@ -954,34 +954,34 @@
           "description": "Documents sent through the API"
         },
         "freshdesk": {
-          "description": "Support tickets"
+          "description": "Customer helpdesk"
         },
         "fireflies": {
-          "description": "Meeting transcripts"
+          "description": "Meeting notes"
         },
         "egnyte": {
-          "description": "Enterprise files and folders"
+          "description": "Managed file services"
         },
         "airtable": {
-          "description": "Bases and records"
+          "description": "Database & tasks"
         },
         "gitbook": {
-          "description": "Docs and spaces"
+          "description": "Developer docs"
         },
         "highspot": {
-          "description": "Sales content and pitches"
+          "description": "Sales enablement"
         },
         "drupalWiki": {
-          "description": "Wiki pages and books"
+          "description": "CMS-based wiki"
         },
         "imap": {
-          "description": "Emails from any IMAP mailbox"
+          "description": "IMAP email source"
         },
         "bitbucket": {
-          "description": "Pull requests and repositories"
+          "description": "Atlassian source control"
         },
         "testrail": {
-          "description": "Test cases and runs"
+          "description": "Test case tracking"
         },
         "braintrust": {
           "description": "Logs and evaluations"
