@@ -1,4 +1,5 @@
 "use client";
+
 import type { Route } from "next";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
@@ -273,65 +274,79 @@ export default function ConnectorsPage() {
       </SettingsLayouts.Header>
       <SettingsLayouts.Body>
         <div className="@container/sourcecards flex flex-col gap-8">
-          {/* Popular sources open the catalog, so their heading introduces
-              the page rather than naming a category. */}
-          {dedupedPopular.length > 0 && (
+          <GeneralLayouts.Section
+            gap={3}
+            height="fit"
+            alignItems="stretch"
+            justifyContent="start"
+          >
+            <Content
+              title={t("popular.title")}
+              description={t("popular.description", { appName })}
+              sizePreset="main-content"
+              variant="section"
+            />
             <GeneralLayouts.Section
-              gap={3}
+              gap={8}
               height="fit"
               alignItems="stretch"
               justifyContent="start"
             >
-              <Content
-                title={t("popular.title")}
-                description={t("popular.description", { appName })}
-                sizePreset="main-content"
-                variant="section"
-              />
-              <div className={SOURCE_CARD_GRID}>
-                {dedupedPopular.map((source) => (
-                  <SourceTileTooltipWrapper
-                    preSelect={false}
-                    key={source.internalName}
-                    sourceMetadata={source}
-                    federatedConnectors={federatedConnectors}
-                    slackCredentials={slackCredentials}
-                  />
-                ))}
-              </div>
-            </GeneralLayouts.Section>
-          )}
+              {dedupedPopular.length > 0 && (
+                <GeneralLayouts.Section
+                  gap={3}
+                  height="fit"
+                  alignItems="stretch"
+                  justifyContent="start"
+                >
+                  <div className={SOURCE_CARD_GRID}>
+                    {dedupedPopular.map((source) => (
+                      <SourceTileTooltipWrapper
+                        preSelect={false}
+                        key={source.internalName}
+                        sourceMetadata={source}
+                        federatedConnectors={federatedConnectors}
+                        slackCredentials={slackCredentials}
+                      />
+                    ))}
+                  </div>
+                </GeneralLayouts.Section>
+              )}
 
-          {Object.entries(categorizedSources)
-            .filter(([_, sources]) => sources.length > 0)
-            .map(([category, sources], categoryInd) => (
-              <GeneralLayouts.Section
-                key={category}
-                gap={3}
-                height="fit"
-                alignItems="stretch"
-                justifyContent="start"
-              >
-                <Text font="main-ui-action" color="text-03">
-                  {t(SOURCE_CATEGORY_LABEL_KEYS[category as SourceCategory])}
-                </Text>
-                <div className={SOURCE_CARD_GRID}>
-                  {sources.map((source, sourceInd) => (
-                    <SourceTileTooltipWrapper
-                      preSelect={
-                        (searchTerm?.length ?? 0) > 0 &&
-                        categoryInd == 0 &&
-                        sourceInd == 0
-                      }
-                      key={source.internalName}
-                      sourceMetadata={source}
-                      federatedConnectors={federatedConnectors}
-                      slackCredentials={slackCredentials}
-                    />
-                  ))}
-                </div>
-              </GeneralLayouts.Section>
-            ))}
+              {Object.entries(categorizedSources)
+                .filter(([_, sources]) => sources.length > 0)
+                .map(([category, sources], categoryInd) => (
+                  <GeneralLayouts.Section
+                    key={category}
+                    gap={3}
+                    height="fit"
+                    alignItems="stretch"
+                    justifyContent="start"
+                  >
+                    <Text font="main-ui-action" color="text-03">
+                      {t(
+                        SOURCE_CATEGORY_LABEL_KEYS[category as SourceCategory]
+                      )}
+                    </Text>
+                    <div className={SOURCE_CARD_GRID}>
+                      {sources.map((source, sourceInd) => (
+                        <SourceTileTooltipWrapper
+                          preSelect={
+                            (searchTerm?.length ?? 0) > 0 &&
+                            categoryInd == 0 &&
+                            sourceInd == 0
+                          }
+                          key={source.internalName}
+                          sourceMetadata={source}
+                          federatedConnectors={federatedConnectors}
+                          slackCredentials={slackCredentials}
+                        />
+                      ))}
+                    </div>
+                  </GeneralLayouts.Section>
+                ))}
+            </GeneralLayouts.Section>
+          </GeneralLayouts.Section>
         </div>
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
