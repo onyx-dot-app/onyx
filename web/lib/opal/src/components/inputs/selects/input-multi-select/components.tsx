@@ -22,7 +22,7 @@ import type { SelectOption, SelectSection } from "../types";
 // Types
 // ---------------------------------------------------------------------------
 
-interface InputMultiSelectProps extends InputTypeInTagProps {
+type InputMultiSelectProps = InputTypeInTagProps & {
   /**
    * The selectable set. Flat or sectioned — sections render with a Divider
    * between them. Convention: a chosen option becomes a tag whose `id` is
@@ -46,7 +46,7 @@ interface InputMultiSelectProps extends InputTypeInTagProps {
 
   /** Max height of the dropdown in CSS units. Defaults to "15rem". */
   dropdownMaxHeight?: string;
-}
+};
 
 // ---------------------------------------------------------------------------
 // InputMultiSelect
@@ -151,7 +151,10 @@ function InputMultiSelect({
   const allVisibleOptions = useMemo(() => {
     const baseOptions = flattenSections(visibleSections);
     if (showCreateOption) {
-      return [{ value, label: value }, ...baseOptions];
+      // Trimmed, like the create row's own element id, so the keyboard's
+      // aria-activedescendant resolves.
+      const trimmed = value.trim();
+      return [{ value: trimmed, label: trimmed }, ...baseOptions];
     }
     return baseOptions;
   }, [visibleSections, showCreateOption, value]);
@@ -195,14 +198,18 @@ function InputMultiSelect({
 
   const autoId = useId();
   const fieldId = `multi-select-${autoId}`;
-  const ariaProps = buildAriaAttributes({
-    isOpen,
-    isValid: true,
-    highlightedIndex,
-    fieldId,
-    allVisibleOptions,
-    placeholder: placeholder ?? "",
-  });
+  const ariaProps = {
+    ...buildAriaAttributes({
+      isOpen,
+      isValid: !hasInvalidTag,
+      highlightedIndex,
+      fieldId,
+      allVisibleOptions,
+      placeholder: placeholder ?? "",
+    }),
+    // The multi has no error message element to describe, unlike the single.
+    "aria-describedby": undefined,
+  };
 
   return (
     <TagField
@@ -212,7 +219,9 @@ function InputMultiSelect({
       onChange={(next) => {
         onChange(next);
         if (!isOpen) setIsOpen(true);
-        setHighlightedIndex(0);
+        // No filter, no implicit pick: Enter on an empty input must not
+        // commit the first row.
+        setHighlightedIndex(next.trim() === "" ? -1 : 0);
         setIsKeyboardNav(false);
       }}
       placeholder={placeholder}

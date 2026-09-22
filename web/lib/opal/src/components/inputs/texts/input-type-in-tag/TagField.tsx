@@ -59,7 +59,7 @@ interface TagFieldBaseProps {
 }
 
 /** The hooks a select needs to mount its dropdown on the field. */
-interface TagFieldProps extends TagFieldBaseProps {
+type TagFieldProps = TagFieldBaseProps & {
   /** Receives the wrapper element (a select's floating reference). */
   rootRef?: (node: HTMLDivElement | null) => void;
 
@@ -82,7 +82,7 @@ interface TagFieldProps extends TagFieldBaseProps {
 
   /** Trailing controls after the clear button (a select's chevron and dropdown). */
   children?: React.ReactNode;
-}
+};
 
 // ---------------------------------------------------------------------------
 // TagField
@@ -210,6 +210,8 @@ function TagField({
         <input
           ref={inputRef}
           type="text"
+          // dir="auto": typed text decides the direction, as in InputTypeIn.
+          dir="auto"
           className="opal-input-field opal-input-type-in-tag-field"
           disabled={disabled}
           value={value}
