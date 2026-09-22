@@ -5214,9 +5214,6 @@
             "label": "خاص"
           }
         },
-        "addConnectorButton": {
-          "label": "إضافة موصل"
-        },
         "connectorCreated": {
           "toast": "تم إنشاء الموصل بنجاح"
         },
@@ -5304,7 +5301,7 @@
           "tooltip": "إدارة الموصل الموحّد"
         },
         "search": {
-          "placeholder": "البحث في الموصلات"
+          "placeholder": "البحث في الموصلات..."
         },
         "summary": {
           "activeConnectors": {
@@ -13598,8 +13595,8 @@
         "documentSets": {
           "label": "مجموعات المستندات"
         },
-        "existingConnectors": {
-          "label": "الموصلات الحالية"
+        "indexingStatus": {
+          "label": "حالة الفهرسة"
         },
         "exportLogs": {
           "label": "تصدير السجلات"

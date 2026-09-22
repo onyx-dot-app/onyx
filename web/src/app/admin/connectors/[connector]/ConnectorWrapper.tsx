@@ -56,7 +56,7 @@ export default function ConnectorWrapper({
             </HeaderTitle>
             <div className="me-auto">
               <Button
-                onClick={() => window.open("/admin/indexing/status", "_self")}
+                onClick={() => window.open("/admin/indexing-status", "_self")}
               >
                 {t("invalidConnector.homeButton.label")}
               </Button>

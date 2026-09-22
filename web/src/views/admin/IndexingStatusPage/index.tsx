@@ -5,13 +5,11 @@ import { useTranslations } from "next-intl";
 import { CCPairIndexingStatusTable } from "./CCPairIndexingStatusTable";
 import { SearchAndFilterControls } from "./SearchAndFilterControls";
 import { SettingsLayouts, useToastFromQuery } from "@opal/layouts";
-import Link from "next/link";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import { Spacer } from "@opal/components";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
-import { Button } from "@opal/components";
 import { useSettings } from "@/lib/settings/hooks";
 import { useState, useRef, useMemo, RefObject } from "react";
 import { FilterOptions } from "./FilterComponent";
@@ -206,7 +204,7 @@ function Main() {
   );
 }
 
-export default function Status() {
+export default function IndexingStatusPage() {
   const t = useTranslations("admin.indexing");
   const adminRouteTitle = useAdminRouteTitle();
 
@@ -222,11 +220,6 @@ export default function Status() {
       <SettingsLayouts.Header
         icon={route.icon}
         title={adminRouteTitle(route)}
-        rightChildren={
-          <Button href={ADMIN_ROUTES.CONNECTORS.path}>
-            {t("status.addConnectorButton.label")}
-          </Button>
-        }
         divider
       />
       <SettingsLayouts.Body>

@@ -247,7 +247,7 @@ test.describe("Permission gating — MANAGE_LLMS", () => {
 });
 
 test.describe("Permission gating — MANAGE_CONNECTORS", () => {
-  test("Admin panel and /admin/indexing/status are gated behind MANAGE_CONNECTORS", async ({
+  test("Admin panel and /admin/indexing-status are gated behind MANAGE_CONNECTORS", async ({
     page,
     adminClient,
     testUserContext,
@@ -266,7 +266,7 @@ test.describe("Permission gating — MANAGE_CONNECTORS", () => {
     const ccPairId = await adminClient.createFileConnector(connectorName);
 
     try {
-      // Phase 1: Without MANAGE_CONNECTORS — /admin/indexing/status should redirect to /app
+      // Phase 1: Without MANAGE_CONNECTORS — /admin/indexing-status should redirect to /app
       await page.context().clearCookies();
       await apiLogin(page, email, password);
       await page.goto(ADMIN_ROUTES.INDEXING_STATUS.path);
@@ -278,7 +278,7 @@ test.describe("Permission gating — MANAGE_CONNECTORS", () => {
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
 
-      // Phase 2: Grant MANAGE_CONNECTORS — /admin/indexing/status should be accessible
+      // Phase 2: Grant MANAGE_CONNECTORS — /admin/indexing-status should be accessible
       await page.context().clearCookies();
       await loginAs(page, "admin");
       await adminClient.setUserGroupPermissions(groupId, [
@@ -292,7 +292,7 @@ test.describe("Permission gating — MANAGE_CONNECTORS", () => {
 
       expect(page.url()).toContain(ADMIN_ROUTES.INDEXING_STATUS.path);
       await expect(
-        page.getByLabel("admin-page-title").getByText("Existing Connectors")
+        page.getByLabel("admin-page-title").getByText("Indexing Status")
       ).toBeVisible({ timeout: 10000 });
       await expect(page.getByRole("table")).toBeVisible();
 

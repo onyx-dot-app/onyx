@@ -54,7 +54,7 @@ export class ConnectorSetupPage {
    */
   async submitAndWaitForCreation() {
     await this.createConnectorButton.click();
-    await this.page.waitForURL("**/admin/indexing/status**", {
+    await this.page.waitForURL("**/admin/indexing-status**", {
       timeout: 30_000,
     });
   }

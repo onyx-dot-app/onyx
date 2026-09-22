@@ -19,7 +19,7 @@ const PAGE_HEADINGS: Record<string, string> = {
   [ADMIN_ROUTES.AGENTS.path]: "Agents",
   [ADMIN_ROUTES.MCP_ACTIONS.path]: "MCP Actions",
   [ADMIN_ROUTES.OPENAPI_ACTIONS.path]: "OpenAPI Actions",
-  [ADMIN_ROUTES.INDEXING_STATUS.path]: "Existing Connectors",
+  [ADMIN_ROUTES.INDEXING_STATUS.path]: "Indexing Status",
   [ADMIN_ROUTES.CONNECTORS.path]: "Connectors",
   [ADMIN_ROUTES.DOCUMENT_SETS.path]: "Document Sets",
 };

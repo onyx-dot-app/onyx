@@ -5214,9 +5214,6 @@
             "label": "비공개"
           }
         },
-        "addConnectorButton": {
-          "label": "커넥터 추가"
-        },
         "connectorCreated": {
           "toast": "커넥터를 생성했습니다"
         },
@@ -5304,7 +5301,7 @@
           "tooltip": "페더레이션 커넥터 관리"
         },
         "search": {
-          "placeholder": "커넥터 검색"
+          "placeholder": "커넥터 검색..."
         },
         "summary": {
           "activeConnectors": {
@@ -13598,8 +13595,8 @@
         "documentSets": {
           "label": "문서 세트"
         },
-        "existingConnectors": {
-          "label": "기존 커넥터"
+        "indexingStatus": {
+          "label": "인덱싱 상태"
         },
         "exportLogs": {
           "label": "로그 내보내기"

@@ -5214,9 +5214,6 @@
             "label": "Privé"
           }
         },
-        "addConnectorButton": {
-          "label": "Ajouter un connecteur"
-        },
         "connectorCreated": {
           "toast": "Connecteur créé avec succès"
         },
@@ -5304,7 +5301,7 @@
           "tooltip": "Gérer le connecteur fédéré"
         },
         "search": {
-          "placeholder": "Rechercher des connecteurs"
+          "placeholder": "Rechercher des connecteurs..."
         },
         "summary": {
           "activeConnectors": {
@@ -13598,8 +13595,8 @@
         "documentSets": {
           "label": "Ensembles de documents"
         },
-        "existingConnectors": {
-          "label": "Connecteurs existants"
+        "indexingStatus": {
+          "label": "État de l'indexation"
         },
         "exportLogs": {
           "label": "Exporter les journaux"

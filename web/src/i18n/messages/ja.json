@@ -5214,9 +5214,6 @@
             "label": "非公開"
           }
         },
-        "addConnectorButton": {
-          "label": "コネクターを追加"
-        },
         "connectorCreated": {
           "toast": "コネクターを作成しました"
         },
@@ -5304,7 +5301,7 @@
           "tooltip": "フェデレーションコネクターを管理"
         },
         "search": {
-          "placeholder": "コネクターを検索"
+          "placeholder": "コネクターを検索..."
         },
         "summary": {
           "activeConnectors": {
@@ -13598,8 +13595,8 @@
         "documentSets": {
           "label": "ドキュメントセット"
         },
-        "existingConnectors": {
-          "label": "既存のコネクター"
+        "indexingStatus": {
+          "label": "インデックス状況"
         },
         "exportLogs": {
           "label": "ログのエクスポート"

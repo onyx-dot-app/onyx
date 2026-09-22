@@ -30,7 +30,7 @@ export type AdminNavItemId =
   | "agents"
   | "mcpActions"
   | "openapiActions"
-  | "existingConnectors"
+  | "indexingStatus"
   | "connectors"
   | "documentSets"
   | "indexSettings"
@@ -86,7 +86,7 @@ export const NAV_ITEM_IDS: Record<
   AGENTS: "agents",
   MCP_ACTIONS: "mcpActions",
   OPENAPI_ACTIONS: "openapiActions",
-  INDEXING_STATUS: "existingConnectors",
+  INDEXING_STATUS: "indexingStatus",
   CONNECTORS: "connectors",
   DOCUMENT_SETS: "documentSets",
   DOCUMENT_EXPLORER: null,

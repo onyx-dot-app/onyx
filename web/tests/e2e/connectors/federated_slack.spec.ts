@@ -69,7 +69,7 @@ async function openConnectorsTab(page: Page) {
  */
 async function deleteFederatedSlackConnector(page: Page) {
   // Navigate to admin indexing status page
-  await page.goto("/admin/indexing/status");
+  await page.goto("/admin/indexing-status");
   await page.waitForLoadState("networkidle");
 
   // Expand the Slack section first (summary row toggles open on click)
@@ -121,7 +121,7 @@ async function deleteFederatedSlackConnector(page: Page) {
   await expect(deleteMenuItem).toBeVisible({ timeout: 5000 });
   await deleteMenuItem.click({ force: true });
   // Wait for deletion to complete and redirect
-  await page.waitForURL("**/admin/indexing/status*", { timeout: 15000 });
+  await page.waitForURL("**/admin/indexing-status*", { timeout: 15000 });
   await page.waitForLoadState("networkidle");
 }
 

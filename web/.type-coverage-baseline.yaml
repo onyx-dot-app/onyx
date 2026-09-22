@@ -11,9 +11,9 @@
 total: 98.8
 packages:
   .: 100
-  src: 99.4
+  src: 99.5
   src/app: 99.5
-  src/app/admin: 96.5
+  src/app/admin: 96.2
   src/app/anonymous: 100
   src/app/api: 100
   src/app/app: 98.9
@@ -22,6 +22,7 @@ packages:
   src/app/config: 100
   src/app/connector: 100
   src/app/craft: 99.2
+  src/app/dbg: 100
   src/app/ee: 95.8
   src/app/federated: 97
   src/app/mcp: 99.5
@@ -39,9 +40,7 @@ packages:
   src/components/header: 100
   src/components/icons: 100
   src/components/oauth: 89.5
-  src/components/resizable: 100
   src/components/search: 99.5
-  src/components/sidebar: 100
   src/components/standardAnswers: 99.2
   src/components/tools: 99.7
   src/components/tooltip: 100
@@ -59,23 +58,22 @@ packages:
   src/layouts: 100
   src/layouts/chromes: 99.8
   src/layouts/craft: 96.1
-  src/lib: 98.8
+  src/lib: 98.9
   src/lib/agents: 99.2
   src/lib/analytics: 99.4
   src/lib/app: 100
-  src/lib/auth: 98
+  src/lib/auth: 98.1
   src/lib/banner: 99.3
   src/lib/billing: 100
   src/lib/build: 100
-  src/lib/chat: 98.5
-  src/lib/connectors: 98.4
+  src/lib/chat: 98.6
+  src/lib/connectors: 98.5
   src/lib/constants: 100
-  src/lib/credentials: 97.3
+  src/lib/credentials: 97.8
   src/lib/extension: 100
   src/lib/externalApps: 100
-  src/lib/headers: 100
   src/lib/hierarchy: 100
-  src/lib/hooks: 95.7
+  src/lib/hooks: 95.8
   src/lib/languageModels: 98.8
   src/lib/multiModel: 100
   src/lib/notifications: 99.3
@@ -84,17 +82,17 @@ packages:
   src/lib/position: 100
   src/lib/projects: 99.7
   src/lib/search: 99.1
-  src/lib/searchFilters: 95.3
+  src/lib/searchFilters: 98.1
   src/lib/searchSettings: 99.4
   src/lib/settings: 96.6
   src/lib/sidebar: 100
   src/lib/skills: 97.4
-  src/lib/sso: 99.2
-  src/lib/tools: 97.8
+  src/lib/sso: 99.3
+  src/lib/tools: 97.9
   src/lib/tracing: 96.9
   src/lib/usage: 97.9
   src/lib/users: 99
-  src/lib/voice: 98.3
+  src/lib/voice: 99.3
   src/lib/webSearch: 97.3
   src/providers: 99.5
   src/refresh-components: 99.7

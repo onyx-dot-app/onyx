@@ -5214,9 +5214,6 @@
             "label": "Private"
           }
         },
-        "addConnectorButton": {
-          "label": "Add Connector"
-        },
         "connectorCreated": {
           "toast": "Connector created successfully"
         },
@@ -5304,7 +5301,7 @@
           "tooltip": "Manage Federated Connector"
         },
         "search": {
-          "placeholder": "Search Connectors"
+          "placeholder": "Search connectors..."
         },
         "summary": {
           "activeConnectors": {
@@ -13598,8 +13595,8 @@
         "documentSets": {
           "label": "Document Sets"
         },
-        "existingConnectors": {
-          "label": "Existing Connectors"
+        "indexingStatus": {
+          "label": "Indexing Status"
         },
         "exportLogs": {
           "label": "Export Logs"

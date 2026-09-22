@@ -5214,9 +5214,6 @@
             "label": "Privat"
           }
         },
-        "addConnectorButton": {
-          "label": "Konnektor hinzufügen"
-        },
         "connectorCreated": {
           "toast": "Konnektor erfolgreich erstellt"
         },
@@ -5304,7 +5301,7 @@
           "tooltip": "Föderierten Konnektor verwalten"
         },
         "search": {
-          "placeholder": "Konnektoren suchen"
+          "placeholder": "Konnektoren suchen..."
         },
         "summary": {
           "activeConnectors": {
@@ -13598,8 +13595,8 @@
         "documentSets": {
           "label": "Dokumentensätze"
         },
-        "existingConnectors": {
-          "label": "Vorhandene Konnektoren"
+        "indexingStatus": {
+          "label": "Indexierungsstatus"
         },
         "exportLogs": {
           "label": "Protokolle exportieren"
