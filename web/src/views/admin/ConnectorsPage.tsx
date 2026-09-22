@@ -126,19 +126,17 @@ function SourceTileTooltipWrapper({
         ) : undefined
       }
     >
-      <div>
-        <ConnectorSourceCard
-          sourceMetadata={sourceMetadata}
-          description={description}
-          preSelect={preSelect}
-          navigationUrl={navigationUrl}
-        />
-      </div>
+      <ConnectorSourceCard
+        sourceMetadata={sourceMetadata}
+        description={description}
+        preSelect={preSelect}
+        navigationUrl={navigationUrl}
+      />
     </Tooltip>
   );
 }
 
-export default function Page() {
+export default function ConnectorsPage() {
   const t = useTranslations("admin.addConnector");
   const adminRouteTitle = useAdminRouteTitle();
   const sources = useMemo(() => listSourceMetadata(), []);
@@ -260,7 +258,7 @@ export default function Page() {
   };
 
   return (
-    <SettingsLayouts.Root>
+    <SettingsLayouts.Root width="lg">
       <SettingsLayouts.Header
         icon={route.icon}
         title={adminRouteTitle(route)}
