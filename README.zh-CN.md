@@ -30,7 +30,7 @@
 </p>
 # Onyx
 
-**[Onyx](https://www.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)** 是为你的员工和 Agent 提供完整上下文的 AI 平台。它开源、运行在你自己的环境中，把企业知识索引为带权限控制的上下文，而这些数据始终不会离开你的基础设施。
+**[Onyx](https://www.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)** 是为你的员工和 Agent 提供完整上下文的 AI 平台。
 
 > [!TIP]
 > 一条命令即可部署：
@@ -45,7 +45,7 @@
 
 ## Onyx 是什么？
 
-你接入 Slack、Google Drive、Confluence、Jira、GitHub、Salesforce 以及 50+ 其他来源，Onyx 把它们持续索引到一个关键词 + 向量的混合索引中，从而带引用地回答问题。你可以通过聊天界面、Slack、Chrome 扩展来使用它，也可以把它作为 MCP 服务器，为你自己的 Agent 提供上下文。
+Onyx 开源，并运行在你自己的环境中。你接入 Slack、Google Drive、Confluence、Jira、GitHub、Salesforce 以及 50+ 其他来源，Onyx 把它们持续索引到一个关键词 + 向量的混合索引中，从而带引用地回答问题。你可以通过聊天界面、Slack、Chrome 扩展来使用它，也可以把它作为 MCP 服务器，为你自己的 Agent 提供上下文。
 
 它比逐个应用实时搜索效果更好，原因在于索引在你提问之前就已经存在。一次检索取代了跨应用的一连串实时搜索，这意味着更少的往返、每个答案更少的 token，以及来自那些没人想到去查的来源的结果。
 

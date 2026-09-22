@@ -30,7 +30,7 @@
 </p>
 # Onyx
 
-**[Onyx](https://www.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)** is the AI platform that delivers complete context to your humans and agents. It is open source, runs in your own environment, and indexes your company's knowledge into permission-aware context without any of that data leaving your infrastructure.
+**[Onyx](https://www.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)** is the AI platform that delivers complete context to your humans and agents.
 
 > [!TIP]
 > Deploy with a single command:
@@ -45,7 +45,7 @@
 
 ## What is Onyx?
 
-You connect Slack, Google Drive, Confluence, Jira, GitHub, Salesforce, and 50+ other sources, and Onyx keeps them indexed in a hybrid keyword + vector index so it can answer questions with citations. You can reach it from the chat UI, from Slack, from a Chrome extension, or as an MCP server that feeds context to your own agents.
+Onyx is open source and runs in your own environment. You connect Slack, Google Drive, Confluence, Jira, GitHub, Salesforce, and 50+ other sources, and Onyx keeps them indexed in a hybrid keyword + vector index so it can answer questions with citations. You can reach it from the chat UI, from Slack, from a Chrome extension, or as an MCP server that feeds context to your own agents.
 
 The reason it works better than searching each app live is that the index exists before you ask. One retrieval step replaces a chain of live searches across apps, which means fewer round trips, fewer tokens per answer, and results from the source nobody thought to check.
 
