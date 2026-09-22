@@ -17,11 +17,6 @@ const SvgGlobe = ({ size, ...props }: IconProps) => (
         strokeLinejoin="round"
       />
     </g>
-    <defs>
-      <clipPath id="clip0_16_2601">
-        <rect fill="white" />
-      </clipPath>
-    </defs>
   </svg>
 );
 export default SvgGlobe;
