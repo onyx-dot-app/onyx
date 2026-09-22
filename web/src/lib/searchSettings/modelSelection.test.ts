@@ -2,11 +2,11 @@ import {
   isSameModelSelection,
   resolveModelForApply,
   savedModelSelection,
-} from "@/lib/indexing/utils";
+} from "@/lib/searchSettings/utils";
 import {
   EmbeddingModelSpec,
   EmbeddingProviderName,
-} from "@/lib/indexing/types";
+} from "@/lib/searchSettings/types";
 
 /** A deployment the static registry has never heard of, which is the whole point. */
 function deployment(modelName: string): EmbeddingModelSpec {

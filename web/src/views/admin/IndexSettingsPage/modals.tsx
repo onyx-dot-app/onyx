@@ -15,8 +15,11 @@ import {
   type ConfiguredEmbeddingProvider,
   type EmbeddingModel,
   type EmbeddingProvider,
-} from "@/lib/indexing/types";
-import { connectEmbeddingProvider, testEmbedding } from "@/lib/indexing/svc";
+} from "@/lib/searchSettings/types";
+import {
+  connectEmbeddingProvider,
+  testEmbedding,
+} from "@/lib/searchSettings/svc";
 import {
   ApiKeyField,
   ApiUrlField,
