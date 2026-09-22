@@ -6,7 +6,7 @@ does it raise rather than answer short.
 """
 
 import itertools
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -22,10 +22,16 @@ from onyx.connectors.models import ConnectorMissingCredentialError, SlimDocument
 from onyx.connectors.zoom.client import ZoomNotEntitledError
 from onyx.connectors.zoom.connector import ZoomConnector
 from onyx.connectors.zoom.models import (
+    ZoomMeetingDetails,
     ZoomRecordingEntry,
     ZoomRecordingPage,
     ZoomSessionOccurrence,
+    ZoomUser,
     ZoomUserPage,
+)
+from onyx.connectors.zoom.recordings.discovery import (
+    EARLIEST_RECORDING_DATE,
+    listing_windows,
 )
 from onyx.connectors.zoom.recordings.inventory import (
     _MAX_DOCUMENTS_PER_BATCH,
@@ -46,10 +52,15 @@ _ZOOM_CREDS = {
     "zoom_client_secret": "secret",
 }
 
-# Zoom's launch is the listing floor, so this is what one host costs.
-_WINDOWS_PER_HOST = 173
 # The id every recording builder defaults to.
 _NUMBER = "6840331990"
+
+
+def _windows_per_host() -> int:
+    """What one host costs the walk. Zoom's launch is the listing floor and
+    today the ceiling, so the count grows by one every 30 days."""
+    today = datetime.now(timezone.utc).date()
+    return len(listing_windows(EARLIEST_RECORDING_DATE, today))
 
 
 def _connector(**kwargs: Any) -> tuple[ZoomConnector, MagicMock]:
@@ -78,10 +89,17 @@ def _recording(uuid: str, **overrides: Any) -> ZoomRecordingEntry:
     return recording_entry(uuid=uuid, **overrides)
 
 
+def _recording_page(*recordings: ZoomRecordingEntry) -> ZoomRecordingPage:
+    # A listing with no total_records is failed as one Zoom may have cut short.
+    return ZoomRecordingPage(recordings=list(recordings), total_records=len(recordings))
+
+
+def _user_page(*users: ZoomUser) -> ZoomUserPage:
+    return ZoomUserPage(users=list(users), total_records=len(users))
+
+
 def _listing(client: MagicMock, *recordings: ZoomRecordingEntry) -> None:
-    client.list_user_recordings.return_value = ZoomRecordingPage(
-        recordings=list(recordings)
-    )
+    client.list_user_recordings.return_value = _recording_page(*recordings)
 
 
 def _documents(connector: ZoomConnector) -> list[SlimDocument]:
@@ -98,10 +116,13 @@ def _ids(connector: ZoomConnector) -> set[str]:
 
 
 def _walked(client: MagicMock) -> list[str]:
+    """The hosts whose windows were listed. The one-day probe that checks a
+    host exists before the walk is not a window."""
     return [
         call.kwargs["user_id"]
         for call in client.list_user_recordings.call_args_list
         if "from_date" in call.kwargs
+        and call.kwargs["from_date"] != call.kwargs.get("to_date")
     ]
 
 
@@ -178,15 +199,16 @@ class TestTheWalkIgnoresThePollWindow:
         # Re-asking per host would run a minute into a half-hour walk, so the
         # catch-up pass has to come after every host.
         connector, client = _connector(group_id="group-1")
-        client.list_group_members.return_value = ZoomUserPage(
-            users=[user(id="u1"), user(id="u2")]
+        # Distinct emails, or the walk merges them into one host.
+        client.list_group_members.return_value = _user_page(
+            user(id="u1", email="u1@example.com"), user(id="u2", email="u2@example.com")
         )
         _listing(client)
 
         list(connector.retrieve_all_slim_docs())
 
         assert _walked(client)[-2:] == ["u1", "u2"]
-        assert _walked(client).count("u1") == _WINDOWS_PER_HOST + 1
+        assert _walked(client).count("u1") == _windows_per_host() + 1
 
     def test_a_start_time_we_cannot_read_costs_the_column_not_the_prune(self) -> None:
         connector, client = _connector(host_emails=["jill@example.com"])
@@ -230,12 +252,17 @@ class TestSlimFailuresNeverDeleteAnything:
             host_emails=["gone@example.com", "jill@example.com"]
         )
         client.list_user_recordings.side_effect = _listing_by_host(
-            {"jill@example.com": ZoomRecordingPage(recordings=[_recording("uuid-1")])}
+            {"jill@example.com": _recording_page(_recording("uuid-1"))}
         )
 
         assert _ids(connector) == {"ZOOM_MEETING_uuid-1"}
-        # Asked about once, then left out of the 173-window walk.
-        assert _walked(client).count("gone@example.com") == 1
+        # Asked about once, then left out of the walk.
+        asked = [
+            call.kwargs["user_id"]
+            for call in client.list_user_recordings.call_args_list
+        ]
+        assert asked.count("gone@example.com") == 1
+        assert "gone@example.com" not in _walked(client)
 
     def test_a_credential_that_recognises_nobody_stops_the_prune(self) -> None:
         # Zoom answers the same 1001 for a deleted user and for one in another
@@ -265,7 +292,7 @@ class TestSlimFailuresNeverDeleteAnything:
     def test_a_group_member_zoom_just_named_but_cannot_list_raises(self) -> None:
         # A 404 on an id Zoom handed us in the same breath is not absence.
         connector, client = _connector(group_id="group-1")
-        client.list_group_members.return_value = ZoomUserPage(users=[user(id="u1")])
+        client.list_group_members.return_value = _user_page(user(id="u1"))
         client.list_user_recordings.side_effect = http_error(404, 1001)
 
         with pytest.raises(requests.HTTPError):
@@ -327,6 +354,15 @@ class TestSessionTypeComesFromTheConfiguredField:
 
 
 class TestTheIdAllowlistFindsItsHost:
+    @staticmethod
+    def _nothing_answers(client: MagicMock) -> None:
+        client.get_recording.side_effect = http_error(404, 3301)
+        client.get_meeting_details.side_effect = http_error(404)
+        # Code 12702 means Zoom will not say. Treating it as fatal would wedge
+        # pruning for good on any account with a recording retention policy.
+        client.get_past_meeting_details.side_effect = http_error(400, 12702)
+        client.list_past_meeting_occurrences.return_value = []
+
     def test_the_recordings_endpoint_names_the_host_in_one_call(self) -> None:
         connector, client = _connector(meeting_ids=[_NUMBER])
         client.get_recording.return_value = _recording("uuid-1")
@@ -337,46 +373,78 @@ class TestTheIdAllowlistFindsItsHost:
         client.get_meeting_details.assert_not_called()
         client.get_past_meeting_details.assert_not_called()
 
-    @pytest.mark.parametrize(
-        ("answers_at", "expected"),
-        [
-            ("scheduled", {"ZOOM_MEETING_uuid-1"}),
-            ("past", {"ZOOM_MEETING_uuid-1"}),
-            ("instances", {"ZOOM_MEETING_uuid-1"}),
-            # Zoom has no record of the number anywhere, so its documents go.
-            ("nowhere", set()),
-        ],
-    )
-    def test_each_fallback_in_turn_can_name_the_host(
-        self, answers_at: str, expected: set[str]
-    ) -> None:
+    def test_the_scheduled_meeting_can_name_the_host(self) -> None:
         connector, client = _connector(meeting_ids=[_NUMBER])
-        client.get_recording.side_effect = http_error(404, 3301)
-        client.get_meeting_details.side_effect = http_error(404)
-        # Code 12702 means Zoom will not say. Treating it as fatal would wedge
-        # pruning for good on any account with a recording retention policy.
-        client.get_past_meeting_details.side_effect = http_error(400, 12702)
-        client.list_past_meeting_occurrences.return_value = []
-
-        if answers_at == "scheduled":
-            client.get_meeting_details.side_effect = None
-            client.get_meeting_details.return_value = meeting_details(host_id="u1")
-        elif answers_at == "past":
-            client.get_past_meeting_details.side_effect = None
-            client.get_past_meeting_details.return_value = past_meeting_details(
-                host_id="u1"
-            )
-        elif answers_at == "instances":
-            client.list_past_meeting_occurrences.return_value = [
-                ZoomSessionOccurrence(uuid="uuid-1", start_time="2020-01-01T10:00:00Z")
-            ]
-            client.get_recording.side_effect = [
-                http_error(404, 3301),
-                _recording("uuid-1"),
-            ]
+        self._nothing_answers(client)
+        client.get_meeting_details.side_effect = None
+        client.get_meeting_details.return_value = meeting_details(host_id="u1")
         _listing(client, _recording("uuid-1"))
 
-        assert _ids(connector) == expected
+        assert _ids(connector) == {"ZOOM_MEETING_uuid-1"}
+
+    def test_the_past_meeting_can_name_the_host(self) -> None:
+        connector, client = _connector(meeting_ids=[_NUMBER])
+        self._nothing_answers(client)
+        client.get_past_meeting_details.side_effect = None
+        client.get_past_meeting_details.return_value = past_meeting_details(
+            host_id="u1"
+        )
+        _listing(client, _recording("uuid-1"))
+
+        assert _ids(connector) == {"ZOOM_MEETING_uuid-1"}
+
+    def test_any_past_run_that_still_has_a_recording_can_name_the_host(
+        self,
+    ) -> None:
+        # Only the oldest run was recorded. Giving up after the newest few
+        # would call the series unknown and prune its documents.
+        connector, client = _connector(meeting_ids=[_NUMBER])
+        self._nothing_answers(client)
+        client.list_past_meeting_occurrences.return_value = [
+            ZoomSessionOccurrence(
+                uuid=f"uuid-{n}", start_time=f"2025-0{n}-01T10:00:00Z"
+            )
+            for n in range(1, 6)
+        ]
+
+        def recording_for(identifier: str) -> ZoomRecordingEntry:
+            if identifier == "uuid-1":
+                return _recording("uuid-1", host_id="u1")
+            raise http_error(404, 3301)
+
+        client.get_recording.side_effect = recording_for
+        _listing(client, _recording("uuid-1"))
+
+        assert _ids(connector) == {"ZOOM_MEETING_uuid-1"}
+
+    def test_a_number_zoom_has_no_record_of_anywhere_loses_its_documents(
+        self,
+    ) -> None:
+        # Only while something else proves the credential still sees the
+        # account: on its own an unrecognised number stops the prune instead.
+        connector, client = _connector(meeting_ids=[_NUMBER, "222"])
+        self._nothing_answers(client)
+
+        def recording_for(number: str) -> ZoomRecordingEntry:
+            if number == "222":
+                return _recording("uuid-2", id=222, host_id="u1")
+            raise http_error(404, 3301)
+
+        client.get_recording.side_effect = recording_for
+        _listing(client, _recording("uuid-2", id=222))
+
+        assert _ids(connector) == {"ZOOM_MEETING_uuid-2"}
+
+    def test_a_connector_whose_numbers_zoom_all_disowns_stops_the_prune(
+        self,
+    ) -> None:
+        # Zoom answers the same not-found for a deleted session and a foreign
+        # one, so this is where a rotated credential would wipe the connector.
+        connector, client = _connector(meeting_ids=[_NUMBER])
+        self._nothing_answers(client)
+
+        with pytest.raises(ConnectorValidationError, match="recognised none"):
+            list(connector.retrieve_all_slim_docs())
 
     def test_a_server_error_while_finding_the_host_raises(self) -> None:
         connector, client = _connector(meeting_ids=[_NUMBER])
@@ -401,7 +469,7 @@ class TestTheIdAllowlistFindsItsHost:
         [
             # The listing can leave out a recording Zoom still holds, such as
             # one recorded on-premise.
-            ZoomRecordingPage(),
+            _recording_page(),
             # Zoom no longer has the host it named. Raising would block the
             # prune for the whole connector until somebody edited the config.
             http_error(404, 1001),
@@ -423,7 +491,7 @@ class TestOneHostIsListedOnce:
             meeting_ids=[_NUMBER], group_id="group-1", include_meetings=False
         )
         client.get_recording.return_value = _recording("uuid-1", host_id="u1")
-        client.list_group_members.return_value = ZoomUserPage(users=[user(id="u1")])
+        client.list_group_members.return_value = _user_page(user(id="u1"))
         _listing(
             client,
             _recording("uuid-1"),
@@ -433,8 +501,23 @@ class TestOneHostIsListedOnce:
         # The id list keeps its own number whatever the checkboxes say. The
         # Group keeps webinars only, because meetings were unticked.
         assert _ids(connector) == {"ZOOM_MEETING_uuid-1", "ZOOM_WEBINAR_uuid-webinar"}
-        # One probe for the id list's host, then one walk and one trailing pass.
-        assert _walked(client).count("u1") == _WINDOWS_PER_HOST + 2
+        # One walk and one trailing pass, however many mechanisms name the host.
+        assert _walked(client).count("u1") == _windows_per_host() + 1
+
+    def test_a_host_named_by_email_and_by_group_is_walked_once(self) -> None:
+        # The host list knows the person by email and the Group by Zoom's id,
+        # and the member entry is the only thing that carries both.
+        connector, client = _connector(
+            host_emails=["jill@example.com"], group_id="group-1"
+        )
+        client.list_group_members.return_value = _user_page(
+            user(id="u1", email="Jill@Example.com")
+        )
+        _listing(client, _recording("uuid-1"))
+
+        assert _ids(connector) == {"ZOOM_MEETING_uuid-1"}
+        assert _walked(client).count("u1") == _windows_per_host() + 1
+        assert "jill@example.com" not in _walked(client)
 
 
 class TestBatchingKeepsThePruneAlive:
@@ -456,13 +539,26 @@ class TestBatchingKeepsThePruneAlive:
         connector, client = _connector(meeting_ids=numbers)
         for lookup in (
             client.get_recording,
-            client.get_meeting_details,
             client.get_past_meeting_details,
             client.list_past_meeting_occurrences,
         ):
             lookup.side_effect = http_error(404, 3001)
+        # One number has to be recognised, or the prune stops instead of walking.
 
-        assert list(connector.retrieve_all_slim_docs()) == [[]]
+        def details_for(number: str) -> ZoomMeetingDetails:
+            if number == numbers[-1]:
+                return meeting_details(host_id="u1")
+            raise http_error(404)
+
+        client.get_meeting_details.side_effect = details_for
+        _listing(client)
+
+        batches = connector.retrieve_all_slim_docs()
+
+        assert next(batches) == []
+        assert _walked(client) == []
+        list(batches)
+        assert _walked(client)
 
     def test_a_host_with_many_recordings_is_split_into_batches(self) -> None:
         connector, client = _connector(host_emails=["jill@example.com"])
