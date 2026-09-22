@@ -298,17 +298,30 @@ export function ConnectorsCheckCard({
   const hasReport = results.length > 0;
   const total = results.length;
 
-  // What the fold hides: one count per non-empty group, e.g. "2 Failed,
-  // 4 Completed, 1 Skipped".
+  // What the fold hides, as one comma-separated line in a fixed order, e.g.
+  // "2 failed, 1 skipped, 5 successful". Zero counts are left out. The
+  // backend has no per-check progress yet, so the in-progress and expected
+  // slots stay at zero until it does.
   const summary = useMemo(() => {
     if (!hasReport) return isRunning ? t("running.label") : t("empty.label");
+    const count = (status: CapabilityCheckStatus) =>
+      results.filter((result) => result.status === status).length;
+    const parts: Array<[string, number]> = [
+      [t("summary.failed", { count: count("failed") }), count("failed")],
+      [
+        t("summary.unverified", { count: count("indeterminate") }),
+        count("indeterminate"),
+      ],
+      [t("summary.inProgress", { count: 0 }), 0],
+      [t("summary.expected", { count: 0 }), 0],
+      [t("summary.skipped", { count: count("skipped") }), count("skipped")],
+      [t("summary.successful", { count: count("passed") }), count("passed")],
+    ];
     return format.list(
-      groups.map((group) =>
-        t(GROUP_LABEL_KEYS[group.status], { count: group.results.length })
-      ),
+      parts.filter(([, n]) => n > 0).map(([label]) => label),
       { type: "unit" }
     );
-  }, [hasReport, isRunning, groups, t, format]);
+  }, [hasReport, isRunning, results, t, format]);
 
   // Content wants an icon component; this one is the ring, or a spinner
   // while a run is in flight.
