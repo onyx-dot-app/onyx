@@ -10,6 +10,7 @@ its document id, with no discovery and no checkpoint.
 
 import copy
 from collections.abc import Generator
+from functools import partial
 from typing import Any
 
 from pydantic import Field
@@ -279,20 +280,24 @@ class ZoomConnector(
         return ZoomConnectorCheckpoint(has_more=True)
 
     def _resolve_access(self, recording: ZoomRecordingEntry) -> ExternalAccess:
-        if self.client is None:
+        client = self.client
+        if client is None:
             raise ConnectorMissingCredentialError("Zoom")
-        if self._rule_grants is None:
-            self._rule_grants = load_rule_grants(self.client)
         host_id = recording.host_id
         if host_id not in self._owner_emails:
-            self._owner_emails[host_id] = look_up_owner_email(self.client, host_id)
+            self._owner_emails[host_id] = look_up_owner_email(client, host_id)
         return resolve_recording_access(
-            self.client,
+            client,
             recording,
             treat_link_access_as_public=self._treat_link_access_as_public,
-            rule_grants=self._rule_grants,
+            rule_grant=partial(self._rule_grant, client),
             owner_email=self._owner_emails[host_id],
         )
+
+    def _rule_grant(self, client: ZoomClient, rule_id: str) -> RuleGrant | None:
+        if self._rule_grants is None:
+            self._rule_grants = load_rule_grants(client)
+        return self._rule_grants.get(rule_id)
 
     def validate_checkpoint_json(self, checkpoint_json: str) -> ZoomConnectorCheckpoint:
         return ZoomConnectorCheckpoint.model_validate_json(checkpoint_json)

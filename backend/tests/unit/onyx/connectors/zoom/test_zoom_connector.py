@@ -1606,6 +1606,28 @@ class TestPermissionSyncEntryPoint:
         mock_client.list_users.assert_called_once()
         mock_client.get_recording_authentication_rules.assert_called_once()
 
+    def test_the_catalogue_is_not_asked_for_unless_a_recording_names_a_rule(
+        self,
+    ) -> None:
+        connector, mock_client = _make_connector()
+        _configure_happy_path(mock_client)
+        with_transcript(mock_client, host_id="owner-1")
+        with_recording_access(
+            mock_client,
+            settings=recording_settings(
+                recording_authentication=False, authentication_option=""
+            ),
+        )
+
+        documents = [
+            d for d in _run_with_perm_sync(connector) if isinstance(d, Document)
+        ]
+
+        assert documents[0].external_access is not None
+        assert documents[0].external_access.is_public is True
+        mock_client.list_users.assert_not_called()
+        mock_client.get_recording_authentication_rules.assert_not_called()
+
     def test_a_normal_run_leaves_the_access_list_alone(self) -> None:
         connector, mock_client = _make_connector()
         self._access_configured(mock_client)
