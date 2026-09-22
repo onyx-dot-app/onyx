@@ -22,6 +22,10 @@ The key differences:
 - SelectCard has no `foldable` prop — use `Interactive.Foldable` directly inside children.
 - SelectCard's children are fully composable — use `CardHeaderLayout`, `ContentAction`, `Content`, buttons, etc. inside.
 
+## Keyboard
+
+The root is a `<div>` so children can be buttons and links, which HTML forbids inside a `<button>`. A card with `onClick` is still a control: it gets `role="button"`, joins the tab order, and fires `onClick` on Enter or Space. While keyboard-focused it paints exactly like hover, so pointer and keyboard users see the same affordance. Keys pressed on a nested control never reach the card. A nested button that only repeats the card's action can leave the tab order with `tabIndex={-1}`.
+
 ## Architecture
 
 ```

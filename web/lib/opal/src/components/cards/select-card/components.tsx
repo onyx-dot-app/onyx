@@ -55,6 +55,11 @@ type SelectCardProps = Omit<InteractiveStatefulProps, "variant"> & {
  * Stateful system owns background and foreground colors; the card owns
  * padding, rounding, border, and overflow.
  *
+ * The root stays a `<div>` so children can be buttons and links, which HTML
+ * forbids inside a `<button>`. A card with `onClick` is still a control: it
+ * gets `role="button"`, joins the tab order, opens on Enter or Space, and
+ * paints like hover while keyboard-focused.
+ *
  * Children are fully composable — use `ContentAction`, `Content`, buttons,
  * `Interactive.Foldable`, etc. inside.
  *
@@ -76,13 +81,39 @@ function SelectCard({
   border = "solid",
   ref,
   children,
+  onClick,
+  onKeyDown,
+  disabled,
   ...statefulProps
 }: SelectCardProps) {
   const paddingStyle = { padding: spacingToRem(paddingProp) };
   const radius = roundingToRem(roundingProp);
 
+  const isControl = !!onClick && !disabled;
+  const controlProps = isControl
+    ? {
+        role: "button",
+        tabIndex: 0,
+        onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => {
+          onKeyDown?.(event);
+          if (event.defaultPrevented) return;
+          // Keys pressed on a nested control belong to that control.
+          if (event.target !== event.currentTarget) return;
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          event.currentTarget.click();
+        },
+      }
+    : { onKeyDown };
+
   return (
-    <Interactive.Stateful {...statefulProps} variant="select-card">
+    <Interactive.Stateful
+      {...statefulProps}
+      {...controlProps}
+      onClick={onClick}
+      disabled={disabled}
+      variant="select-card"
+    >
       <div
         ref={ref}
         className="opal-select-card"
