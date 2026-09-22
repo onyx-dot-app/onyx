@@ -22,7 +22,7 @@ from onyx.connectors.connector_runner import CheckpointOutputWrapper
 from onyx.connectors.models import Document, IndexAttemptMetadata
 from onyx.connectors.zoom.client import ZoomClient
 from onyx.connectors.zoom.connector import ZoomConnector, ZoomConnectorCheckpoint
-from onyx.connectors.zoom.models import ZoomMeetingSettings, ZoomSessionOccurrence
+from onyx.connectors.zoom.models import ZoomSessionOccurrence
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
 from tests.external_dependency_unit.indexing_helpers import (
@@ -30,12 +30,15 @@ from tests.external_dependency_unit.indexing_helpers import (
     get_doc_row,
     make_cc_pair,
 )
+from tests.unit.onyx.connectors.zoom.helpers import (
+    with_recording_access,
+    with_transcript,
+)
 from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
-    invitee,
-    meeting_details,
-    participant,
-    recording_with_transcript,
-    registrant,
+    domain_rule,
+    past_meeting_details,
+    recording_registrant,
+    recording_settings,
 )
 
 _ZOOM_CREDS = {
@@ -76,23 +79,20 @@ def _zoom_documents(meeting_id: str) -> list[Document]:
             uuid=f"uuid-{meeting_id}", start_time="2026-01-15T10:00:00Z"
         )
     ]
-    client.get_recording.return_value = recording_with_transcript(
-        download_url="https://zoom.us/rec/download/t.vtt", meeting_topic="Weekly Sync"
+    with_transcript(client, _SAMPLE_VTT, host_id="owner-1")
+    client.get_past_meeting_details.return_value = past_meeting_details(
+        topic="Weekly Sync"
     )
-    client.download_transcript_vtt.return_value = _SAMPLE_VTT
-    client.list_past_meeting_participants.return_value = [
-        participant(user_email="attended@example.com"),
-        # Zoom blanks the email of anyone outside the host's account.
-        participant(user_email=""),
-    ]
-    client.list_meeting_registrants.return_value = [
-        registrant(email="approved@example.com", status="approved"),
-        registrant(email="cancelled@example.com", status="denied"),
-    ]
-    client.get_meeting_details.return_value = meeting_details(
-        settings=ZoomMeetingSettings(
-            meeting_invitees=[invitee(email="invited@example.com")]
-        )
+    # Shared under a domain rule, with viewers who had to register to watch.
+    rule = domain_rule(domains="example.com")
+    with_recording_access(
+        client,
+        settings=recording_settings(authentication_option=rule.id, on_demand=True),
+        rules=[rule],
+        registrants=[
+            recording_registrant(email="approved@example.com", status="approved"),
+            recording_registrant(email="cancelled@example.com", status="denied"),
+        ],
     )
     connector.client = client
 
@@ -136,10 +136,9 @@ class TestZoomAccessListReachesPostgres:
 
         assert row is not None
         assert set(row.external_user_emails or []) == {
-            "attended@example.com",
+            "owner@example.com",
             "approved@example.com",
-            "invited@example.com",
         }
-        # Zoom cannot grant a session to a Group, so this stays empty on purpose.
-        assert list(row.external_user_group_ids or []) == []
+        # Prefixed with the source, the way the group sync will prefix its rows.
+        assert list(row.external_user_group_ids or []) == ["zoom_domain:example.com"]
         assert row.is_public is False

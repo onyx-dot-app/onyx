@@ -32,18 +32,12 @@ from onyx.connectors.models import (
     HierarchyNode,
 )
 from onyx.connectors.zoom.client import ZoomClient
-from onyx.connectors.zoom.models import ZoomSessionDetails
 from onyx.connectors.zoom.rate_limit import (
     DEFAULT_RATE_LIMIT_SHARE,
     MAX_RATE_LIMIT_PERCENT,
     MIN_RATE_LIMIT_PERCENT,
     ZoomPlanTier,
     ZoomRateLimitSettings,
-)
-from onyx.connectors.zoom.recordings.access import (
-    ZoomAccessListUnavailable,
-    is_plan_denial,
-    permanently_unavailable,
 )
 from onyx.connectors.zoom.recordings.discovery import (
     GroupSource,
@@ -61,7 +55,7 @@ from onyx.connectors.zoom.recordings.processing import (
     parse_zoom_document_id,
     process_occurrence,
 )
-from onyx.connectors.zoom.recordings.session_types import get_session_type_handler
+from onyx.connectors.zoom.recordings.recording_access import ZoomAccessContext
 from onyx.connectors.zoom.validation import (
     ProbeSample,
     probe_recording_access_scopes,
@@ -103,13 +97,19 @@ def parse_session_types(
         (include_meetings, ZoomSessionType.MEETING, "include_meetings"),
         (include_webinars, ZoomSessionType.WEBINAR, "include_webinars"),
     ):
-        if value is None:
-            value = True
-        if not isinstance(value, bool):
-            raise ValueError(f"Zoom {name} must be true or false, got {value!r}")
-        if value:
+        if _parse_checkbox(value, name):
             chosen.add(session_type)
     return frozenset(chosen)
+
+
+def _parse_checkbox(value: Any, name: str) -> bool:
+    """Blank means ticked, which keeps every connector saved before a checkbox
+    existed behaving as it did."""
+    if value is None:
+        return True
+    if not isinstance(value, bool):
+        raise ValueError(f"Zoom {name} must be true or false, got {value!r}")
+    return value
 
 
 def parse_rate_limit_percent(value: Any) -> float:
@@ -127,51 +127,11 @@ def parse_rate_limit_percent(value: Any) -> float:
     return value / 100
 
 
-def _rebuilt_work(
-    client: ZoomClient,
-    session_type: ZoomSessionType,
-    occurrence_uuid: str,
-    include_permissions: bool,
-) -> OccurrenceWork:
-    """Registrants, invitees and panelists hang off the session rather than the
-    occurrence, and Zoom answers a wrong identifier with a 404 that reads as
-    "nobody has access". So a permission-synced run that can't resolve the
-    session raises rather than guess it, because guessing would index the
-    document with a narrower access list than the crawl gives it.
-    """
-    if not include_permissions:
-        return OccurrenceWork(
-            session_type=session_type,
-            session_id=occurrence_uuid,
-            occurrence_uuid=occurrence_uuid,
-        )
-
-    handler = get_session_type_handler(session_type)
-    details: ZoomSessionDetails
-    try:
-        details = handler.get_occurrence_details(client, occurrence_uuid)
-    except Exception as e:
-        if not permanently_unavailable(e):
-            raise
-        reason = (
-            "the account's plan does not cover reading it"
-            if is_plan_denial(e)
-            else "Zoom has deleted it or it is past its retention window"
-        )
-        raise ZoomAccessListUnavailable(
-            f"Zoom {session_type.value} occurrence {occurrence_uuid} was not "
-            "reindexed because permission sync is on and the session it belongs "
-            f"to could not be resolved, so its access list can't be rebuilt: "
-            f"{reason}"
-        ) from e
-
-    return OccurrenceWork(
-        session_type=session_type,
-        session_id=details.session_id,
-        occurrence_uuid=occurrence_uuid,
-        start_time=details.start_time,
-        topic=details.topic,
-    )
+def parse_treat_link_access_as_public(value: Any) -> bool:
+    """Off leaves nearly every transcript readable by its owner alone, because
+    Zoom cannot say who is in "People with access", so it is the admin's
+    deliberate choice and never the default."""
+    return _parse_checkbox(value, "treat_link_access_as_public")
 
 
 def _entity_target_unsupported(error: ConnectorFailure) -> ConnectorFailure:
@@ -209,8 +169,12 @@ class ZoomConnector(
         rate_limit_percent: int | float | None = None,
         include_meetings: bool | None = None,
         include_webinars: bool | None = None,
+        treat_link_access_as_public: bool | None = None,
     ) -> None:
         self._session_types = parse_session_types(include_meetings, include_webinars)
+        self._treat_link_access_as_public = parse_treat_link_access_as_public(
+            treat_link_access_as_public
+        )
         self._sources = build_discovery_sources(
             meeting_ids, webinar_ids, host_emails, group_id, self._session_types
         )
@@ -221,6 +185,7 @@ class ZoomConnector(
         self.plan_tier = plan_tier
         self.rate_limit_percent = rate_limit_percent
         self.client: ZoomClient | None = None
+        self._access: ZoomAccessContext | None = None
         # validate_connector_settings keeps what it sampled here so the
         # permission-sync probe asks about the same things instead of sampling
         # again. None means it has not run.
@@ -243,8 +208,10 @@ class ZoomConnector(
                 share=parse_rate_limit_percent(self.rate_limit_percent),
             ),
         )
-        # A sample from the old credential may not exist for the new one.
+        # A sample or an access context from the old credential must not
+        # outlive it.
         self._probe_sample = None
+        self._access = None
         return None
 
     def _raise_if_nothing_is_in_scope(self) -> None:
@@ -302,6 +269,18 @@ class ZoomConnector(
 
     def build_dummy_checkpoint(self) -> ZoomConnectorCheckpoint:
         return ZoomConnectorCheckpoint(has_more=True)
+
+    def _access_for(self, include_access: bool) -> ZoomAccessContext | None:
+        """One per run, so each owner and the rule catalogue are asked for once."""
+        if not include_access:
+            return None
+        if self.client is None:
+            raise ConnectorMissingCredentialError("Zoom")
+        if self._access is None:
+            self._access = ZoomAccessContext(
+                self.client, self._treat_link_access_as_public
+            )
+        return self._access
 
     def validate_checkpoint_json(self, checkpoint_json: str) -> ZoomConnectorCheckpoint:
         return ZoomConnectorCheckpoint.model_validate_json(checkpoint_json)
@@ -377,23 +356,20 @@ class ZoomConnector(
                 continue
 
             session_type, occurrence_uuid = parsed
+            # The occurrence UUID is all a rebuild needs: the recording, its
+            # transcript and its share settings all answer for it, and the
+            # session it belongs to only ever supplied a title.
+            work = OccurrenceWork(
+                session_type=session_type,
+                session_id=occurrence_uuid,
+                occurrence_uuid=occurrence_uuid,
+            )
             try:
                 processed = process_occurrence(
-                    self.client,
-                    _rebuilt_work(
-                        self.client, session_type, occurrence_uuid, include_permissions
-                    ),
-                    include_access=include_permissions,
+                    self.client, work, access=self._access_for(include_permissions)
                 )
                 if processed is not None:
                     yield processed
-            except ZoomAccessListUnavailable as e:
-                logger.warning("%s", e)
-                yield ConnectorFailure(
-                    failed_document=DocumentFailure(document_id=document_id),
-                    failure_message=str(e),
-                    exception=e,
-                )
             except Exception as e:
                 # A whole batch arrives at once, so one bad target must not
                 # cost the rest of them their retry.
@@ -424,7 +400,7 @@ class ZoomConnector(
             processed = process_occurrence(
                 self.client,
                 state.pending_work[state.work_index],
-                include_access=include_access,
+                access=self._access_for(include_access),
             )
             if processed is not None:
                 yield processed
