@@ -8862,13 +8862,6 @@
       "required": {
         "label": "Obligatoire"
       },
-      "rerunButton": {
-        "ariaLabel": "Relancer les vérifications"
-      },
-      "collapseButton": {
-        "collapse": "Réduire les vérifications",
-        "expand": "Développer les vérifications"
-      },
       "running": {
         "label": "Vérifications en cours…"
       },
@@ -8877,6 +8870,13 @@
       },
       "docsLink": {
         "label": "Documentation"
+      },
+      "rerunButton": {
+        "label": "Relancer les vérifications"
+      },
+      "foldButton": {
+        "fold": "Réduire",
+        "expand": "Développer"
       }
     }
   },

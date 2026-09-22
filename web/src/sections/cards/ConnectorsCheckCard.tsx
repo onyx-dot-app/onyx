@@ -317,7 +317,8 @@ export function ConnectorsCheckCard({
               <Button
                 icon={SvgRefreshCw}
                 prominence="internal"
-                aria-label={t("rerunButton.ariaLabel")}
+                tooltip={t("rerunButton.label")}
+                aria-label={t("rerunButton.label")}
                 disabled={isRunning || loading}
                 onClick={onRerun}
               />
@@ -325,10 +326,11 @@ export function ConnectorsCheckCard({
             <Button
               icon={SvgFold}
               prominence="internal"
+              tooltip={
+                collapsed ? t("foldButton.expand") : t("foldButton.fold")
+              }
               aria-label={
-                collapsed
-                  ? t("collapseButton.expand")
-                  : t("collapseButton.collapse")
+                collapsed ? t("foldButton.expand") : t("foldButton.fold")
               }
               aria-expanded={!collapsed}
               onClick={() => setCollapsed((value) => !value)}
