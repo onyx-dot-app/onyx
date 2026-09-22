@@ -13598,8 +13598,8 @@
         "documentSets": {
           "label": "مجموعات المستندات"
         },
-        "existingConnectors": {
-          "label": "الموصلات الحالية"
+        "indexingStatus": {
+          "label": "حالة الفهرسة"
         },
         "exportLogs": {
           "label": "تصدير السجلات"

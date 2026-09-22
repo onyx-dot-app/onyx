@@ -13598,8 +13598,8 @@
         "documentSets": {
           "label": "ドキュメントセット"
         },
-        "existingConnectors": {
-          "label": "既存のコネクター"
+        "indexingStatus": {
+          "label": "インデックス状況"
         },
         "exportLogs": {
           "label": "ログのエクスポート"

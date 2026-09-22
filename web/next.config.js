@@ -216,6 +216,13 @@ const nextConfig = {
         destination: "/admin/connectors",
         permanent: true,
       },
+      // The indexing status page moved from /admin/indexing/status to
+      // /admin/indexing-status; the /indexing/ segment held nothing else.
+      {
+        source: "/admin/indexing/status",
+        destination: "/admin/indexing-status",
+        permanent: true,
+      },
       // Replaces the redirect page that used to live at
       // /admin/configuration/craft, kept for /admin/craft/access bookmarks.
       {

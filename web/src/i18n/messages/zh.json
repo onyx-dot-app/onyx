@@ -13598,8 +13598,8 @@
         "documentSets": {
           "label": "文档集"
         },
-        "existingConnectors": {
-          "label": "现有连接器"
+        "indexingStatus": {
+          "label": "索引状态"
         },
         "exportLogs": {
           "label": "导出日志"

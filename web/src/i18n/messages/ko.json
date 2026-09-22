@@ -13598,8 +13598,8 @@
         "documentSets": {
           "label": "문서 세트"
         },
-        "existingConnectors": {
-          "label": "기존 커넥터"
+        "indexingStatus": {
+          "label": "인덱싱 상태"
         },
         "exportLogs": {
           "label": "로그 내보내기"

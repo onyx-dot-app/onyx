@@ -13598,8 +13598,8 @@
         "documentSets": {
           "label": "Ensembles de documents"
         },
-        "existingConnectors": {
-          "label": "Connecteurs existants"
+        "indexingStatus": {
+          "label": "État de l'indexation"
         },
         "exportLogs": {
           "label": "Exporter les journaux"

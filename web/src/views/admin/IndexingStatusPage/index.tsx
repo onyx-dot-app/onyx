@@ -206,7 +206,7 @@ function Main() {
   );
 }
 
-export default function Status() {
+export default function IndexingStatusPage() {
   const t = useTranslations("admin.indexing");
   const adminRouteTitle = useAdminRouteTitle();
 
