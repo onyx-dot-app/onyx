@@ -5,10 +5,12 @@ from its share settings and, for a domain rule, the account's sign-in rule
 catalogue. Nothing here touches a meeting or webinar endpoint: who attended or
 was invited is not who may watch. Zoom cannot say who is in "People with
 access", so that share, like any the connector does not recognise, grants
-nobody but the owner. The catalogue and an owner's address are the same for
-every recording in a run, so the caller loads each once and passes it in.
+nobody but the owner. An owner's address and the account's rule catalogue are
+the same for every recording in a run, so the caller memoises both, and the
+catalogue is only asked for when a recording names a rule.
 """
 
+from collections.abc import Callable
 from typing import NamedTuple
 
 from pydantic import ValidationError
@@ -108,7 +110,7 @@ def resolve_recording_access(
     recording: ZoomRecordingEntry,
     *,
     treat_link_access_as_public: bool,
-    rule_grants: dict[str, RuleGrant],
+    rule_grant: Callable[[str], RuleGrant | None],
     owner_email: str | None,
 ) -> ExternalAccess:
     """Raises ZoomAccessListUnavailable rather than answering with an empty
@@ -116,7 +118,7 @@ def resolve_recording_access(
     try:
         settings = client.get_recording_settings(recording.uuid)
         grant = _link_access(
-            settings, recording.uuid, treat_link_access_as_public, rule_grants
+            settings, recording.uuid, treat_link_access_as_public, rule_grant
         )
     except ValidationError as e:
         logger.warning(
@@ -176,7 +178,7 @@ def _link_access(
     settings: ZoomRecordingSettings,
     uuid: str,
     treat_link_access_as_public: bool,
-    rule_grants: dict[str, RuleGrant],
+    rule_grant: Callable[[str], RuleGrant | None],
 ) -> RuleGrant:
     if (
         settings.authentication_option == ONLY_PEOPLE_WITH_ACCESS_OPTION
@@ -194,7 +196,7 @@ def _link_access(
             return _OWNER_ONLY
         return _EVERYONE
 
-    grant = rule_grants.get(settings.authentication_option)
+    grant = rule_grant(settings.authentication_option)
     if grant is None:
         logger.warning(
             "Recording %s is shared under sign-in rule %s, which is not in the "
