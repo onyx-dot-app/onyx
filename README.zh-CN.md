@@ -30,7 +30,7 @@
 </p>
 # Onyx
 
-**[Onyx](https://www.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)** 是一个运行在你自己环境中的开源 AI 平台。它为企业知识建立索引，为人和 Agent 提供准确且带权限控制的上下文，而这些数据始终不会离开你的基础设施。
+**[Onyx](https://www.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)** 是为你的员工和 Agent 提供完整上下文的 AI 平台。它开源、运行在你自己的环境中，把企业知识索引为带权限控制的上下文，而这些数据始终不会离开你的基础设施。
 
 > [!TIP]
 > 一条命令即可部署：

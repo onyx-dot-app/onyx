@@ -30,7 +30,7 @@
 </p>
 # Onyx
 
-**[Onyx](https://www.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)** is an open source AI platform that you run in your own environment. It indexes your company's knowledge and gives both people and agents accurate, permission-aware context, without any of that data leaving your infrastructure.
+**[Onyx](https://www.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)** is the AI platform that delivers complete context to your humans and agents. It is open source, runs in your own environment, and indexes your company's knowledge into permission-aware context without any of that data leaving your infrastructure.
 
 > [!TIP]
 > Deploy with a single command:
