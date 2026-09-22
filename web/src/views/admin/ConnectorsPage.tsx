@@ -260,23 +260,19 @@ export default function ConnectorsPage() {
 
   return (
     <SettingsLayouts.Root width="lg">
-      <SettingsLayouts.Header
-        icon={route.icon}
-        title={adminRouteTitle(route)}
-        divider
-      />
+      <SettingsLayouts.Header icon={route.icon} title={adminRouteTitle(route)}>
+        <InputTypeIn
+          type="text"
+          searchIcon
+          placeholder={t("search.placeholder")}
+          ref={searchInputRef}
+          value={rawSearchTerm} // keep the input bound to immediate state
+          onChange={(event) => setSearchTerm(event.target.value)}
+          onKeyDown={handleKeyPress}
+        />
+      </SettingsLayouts.Header>
       <SettingsLayouts.Body>
         <div className="@container/sourcecards flex flex-col gap-8">
-          <InputTypeIn
-            type="text"
-            searchIcon
-            placeholder={t("search.placeholder")}
-            ref={searchInputRef}
-            value={rawSearchTerm} // keep the input bound to immediate state
-            onChange={(event) => setSearchTerm(event.target.value)}
-            onKeyDown={handleKeyPress}
-          />
-
           {/* Popular sources open the catalog, so their heading introduces
               the page rather than naming a category. */}
           {dedupedPopular.length > 0 && (
