@@ -639,7 +639,6 @@ class DefaultModel(BaseModel):
 class LLMProviderResponse(BaseModel, Generic[T]):
     providers: list[T]
     default_text: DefaultModel | None = None
-    default_vision: DefaultModel | None = None
     default_chat_naming: DefaultModel | None = None
     default_craft: DefaultModel | None = None
 
@@ -648,14 +647,12 @@ class LLMProviderResponse(BaseModel, Generic[T]):
         cls,
         providers: list[T],
         default_text: DefaultModel | None = None,
-        default_vision: DefaultModel | None = None,
         default_chat_naming: DefaultModel | None = None,
         default_craft: DefaultModel | None = None,
     ) -> LLMProviderResponse[T]:
         return cls(
             providers=providers,
             default_text=default_text,
-            default_vision=default_vision,
             default_chat_naming=default_chat_naming,
             default_craft=default_craft,
         )

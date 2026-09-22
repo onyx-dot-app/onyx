@@ -21,7 +21,6 @@ from onyx.db.llm import (
     fetch_default_chat_naming_model,
     fetch_default_craft_model,
     fetch_default_llm_model,
-    fetch_default_vision_model,
     fetch_existing_llm_provider_by_id,
     fetch_existing_llm_providers,
     fetch_existing_models,
@@ -33,7 +32,6 @@ from onyx.db.llm import (
     update_default_chat_naming_provider,
     update_default_craft_provider,
     update_default_provider,
-    update_default_vision_provider,
     update_no_default_chat_naming_provider,
     update_no_default_craft_provider,
     upsert_llm_provider,
@@ -556,9 +554,6 @@ def list_llm_providers(
         default_text=DefaultModel.from_model_config(
             fetch_default_llm_model(db_session)
         ),
-        default_vision=DefaultModel.from_model_config(
-            fetch_default_vision_model(db_session)
-        ),
         default_chat_naming=DefaultModel.from_model_config(
             fetch_default_chat_naming_model(db_session)
         ),
@@ -738,8 +733,9 @@ def delete_llm_provider(
 ) -> None:
     if not force:
         # Only the chat default blocks a provider delete. Deleting a provider
-        # that holds another flow's default clears that default deliberately —
-        # see test_delete_default_vision_provider_clears_vision_default.
+        # that fills another role clears that role deliberately: the image
+        # processing row cascades away and the other flow defaults are dropped
+        # with their rows.
         model = fetch_default_llm_model(db_session)
 
         if model and model.llm_provider_id == provider_id:
@@ -773,20 +769,6 @@ def set_provider_as_default(
     update_default_provider(
         provider_id=default_model_request.provider_id,
         model_name=default_model_request.model_name,
-        db_session=db_session,
-    )
-    invalidate_provider_listing_cache()
-
-
-@admin_router.post("/default-vision")
-def set_provider_as_default_vision(
-    default_model: DefaultModel,
-    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
-    db_session: Session = Depends(get_session),
-) -> None:
-    update_default_vision_provider(
-        provider_id=default_model.provider_id,
-        vision_model=default_model.model_name,
         db_session=db_session,
     )
     invalidate_provider_listing_cache()
@@ -895,9 +877,6 @@ def get_vision_capable_providers(
 
     return LLMProviderResponse[VisionProviderResponse].from_models(
         providers=vision_provider_response,
-        default_vision=DefaultModel.from_model_config(
-            fetch_default_vision_model(db_session)
-        ),
     )
 
 
@@ -960,9 +939,6 @@ def list_llm_provider_basics(
         providers=accessible_providers,
         default_text=DefaultModel.from_model_config(
             fetch_default_llm_model(db_session)
-        ),
-        default_vision=DefaultModel.from_model_config(
-            fetch_default_vision_model(db_session)
         ),
         default_chat_naming=DefaultModel.from_model_config(
             fetch_default_chat_naming_model(db_session)
@@ -1112,12 +1088,10 @@ def list_llm_providers_for_persona(
     )
 
     default_text_model = fetch_default_llm_model(db_session)
-    default_vision_model = fetch_default_vision_model(db_session)
 
-    # Build default_text and default_vision using the persona's model config FK when
-    # available, falling back to the global defaults.
+    # Build default_text using the persona's model config FK when available,
+    # falling back to the global default.
     default_text = DefaultModel.from_model_config(default_text_model)
-    default_vision = DefaultModel.from_model_config(default_vision_model)
 
     if persona.default_model_configuration_id:
         model_config = fetch_model_configuration_by_id(
@@ -1137,7 +1111,6 @@ def list_llm_providers_for_persona(
     response = LLMProviderResponse[LLMProviderDescriptor].from_models(
         providers=llm_provider_list,
         default_text=default_text,
-        default_vision=default_vision,
     )
     cache_provider_listing(
         persona_id=persona_id,

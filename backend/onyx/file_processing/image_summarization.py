@@ -4,6 +4,7 @@ from io import BytesIO
 from PIL import Image
 
 from onyx.configs.app_configs import (
+    DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB,
     IMAGE_SUMMARIZATION_SYSTEM_PROMPT,
     IMAGE_SUMMARIZATION_USER_PROMPT,
 )
@@ -33,10 +34,12 @@ class UnsupportedImageFormatError(ValueError):
     """Raised when an image uses a MIME type unsupported by the summarization flow."""
 
 
-def prepare_image_bytes(image_data: bytes) -> str:
+def prepare_image_bytes(
+    image_data: bytes, max_size_mb: int = DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB
+) -> str:
     """Prepare image bytes for summarization.
-    Resizes image if it's larger than 20MB. Encodes image as a base64 string."""
-    image_data = _resize_image_if_needed(image_data)
+    Resizes image if it's larger than `max_size_mb`. Encodes image as a base64 string."""
+    image_data = _resize_image_if_needed(image_data, max_size_mb)
 
     # encode image (base64)
     encoded_image = _encode_image_for_llm_prompt(image_data)
@@ -50,12 +53,12 @@ def summarize_image_pipeline(
     image_data: bytes,
     query: str | None = None,
     system_prompt: str | None = None,
+    max_size_mb: int = DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB,
 ) -> str:
     """Pipeline to generate a summary of an image.
-    Resizes images if it is bigger than 20MB. Encodes image as a base64 string.
+    Resizes images bigger than `max_size_mb`. Encodes image as a base64 string.
     And finally uses the Default LLM to generate a textual summary of the image."""
-    # resize image if it's bigger than 20MB
-    encoded_image = prepare_image_bytes(image_data)
+    encoded_image = prepare_image_bytes(image_data, max_size_mb)
 
     summary = _summarize_image(
         encoded_image,
@@ -73,6 +76,7 @@ def summarize_image_with_error_handling(
     context_name: str,
     system_prompt: str = IMAGE_SUMMARIZATION_SYSTEM_PROMPT,
     user_prompt_template: str = IMAGE_SUMMARIZATION_USER_PROMPT,
+    max_size_mb: int = DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB,
 ) -> str | None:
     """Wrapper function that handles error cases and configuration consistently.
 
@@ -82,6 +86,7 @@ def summarize_image_with_error_handling(
         context_name: Name or title of the image for context
         system_prompt: System prompt to use for the LLM
         user_prompt_template: User prompt to use (without title)
+        max_size_mb: Images above this size are resized before summarization
 
     Returns:
         The image summary text, or None if summarization failed or is disabled
@@ -94,7 +99,9 @@ def summarize_image_with_error_handling(
         f"The image has the file name '{context_name}'.\n{user_prompt_template}"
     )
     try:
-        return summarize_image_pipeline(llm, image_data, user_prompt, system_prompt)
+        return summarize_image_pipeline(
+            llm, image_data, user_prompt, system_prompt, max_size_mb
+        )
     except UnsupportedImageFormatError:
         magic_hex = image_data[:8].hex() if image_data else "empty"
         logger.info(
@@ -180,7 +187,9 @@ def _encode_image_for_llm_prompt(image_data: bytes) -> str:
     return f"data:{mime_type};base64,{base64_encoded_data}"
 
 
-def _resize_image_if_needed(image_data: bytes, max_size_mb: int = 20) -> bytes:
+def _resize_image_if_needed(
+    image_data: bytes, max_size_mb: int = DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB
+) -> bytes:
     """Resize image if it's larger than the specified max size in MB."""
     max_size_bytes = max_size_mb * 1024 * 1024
 

@@ -685,7 +685,7 @@ def test_run_pipeline_owns_llm_enrichment_trace() -> None:
             return_value=True,
         ),
         patch(
-            f"{_PATCH_PREFIX}.get_default_llm_with_vision",
+            f"{_PATCH_PREFIX}.get_image_processing_llm",
             return_value=vision_llm,
         ),
         patch(f"{_PATCH_PREFIX}._system_llm_enrichment_is_allowed", return_value=True),
@@ -776,7 +776,7 @@ def test_unavailable_vision_llm_does_not_enable_spend_gate() -> None:
             f"{_PATCH_PREFIX}.get_image_extraction_and_analysis_enabled",
             return_value=True,
         ),
-        patch(f"{_PATCH_PREFIX}.get_default_llm_with_vision", return_value=None),
+        patch(f"{_PATCH_PREFIX}.get_image_processing_llm", return_value=None),
         patch(
             f"{_PATCH_PREFIX}._system_llm_enrichment_is_allowed"
         ) as enrichment_allowed,
@@ -938,7 +938,7 @@ class TestProcessImageSections:
                 return_value=True,
             ),
             patch(
-                f"{_PATCH_PREFIX}.get_default_llm_with_vision",
+                f"{_PATCH_PREFIX}.get_image_processing_llm",
                 return_value=MagicMock(),
             ),
             patch(

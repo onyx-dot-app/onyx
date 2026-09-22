@@ -73,10 +73,6 @@ class Settings(BaseModel):
     # Visibility-only: hides the sidebar page; query-history APIs + recording stay on.
     hide_query_history_from_admin_panel: bool = False
 
-    # Image processing settings
-    image_extraction_and_analysis_enabled: bool | None = True
-    image_analysis_max_size_mb: int | None = 20
-
     # User Knowledge settings
     user_knowledge_enabled: bool | None = True
     user_file_max_upload_size_mb: int | None = Field(

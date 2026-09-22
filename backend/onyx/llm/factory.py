@@ -7,11 +7,10 @@ from onyx.auth.permissions import has_global_permission
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import Permission
+from onyx.db.image_processing import fetch_image_processing_settings
 from onyx.db.llm import (
     can_user_access_llm_provider,
-    fetch_default_contextual_rag_model,
     fetch_default_llm_model,
-    fetch_default_vision_model,
     fetch_existing_llm_provider,
     fetch_model_configuration_by_id,
     fetch_user_group_ids,
@@ -23,10 +22,7 @@ from onyx.llm.interfaces import LLM, LlmRequestPolicy
 from onyx.llm.models import ReasoningEffort, UserChatDefaults
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.override_models import LLMOverride
-from onyx.llm.utils import (
-    get_max_input_tokens_from_llm_provider,
-    model_supports_image_input,
-)
+from onyx.llm.utils import get_max_input_tokens_from_llm_provider
 from onyx.llm.well_known_providers.constants import (
     PROVIDERS_WITH_SPECIAL_API_KEY_HANDLING,
 )
@@ -239,53 +235,6 @@ def get_llm_for_persona(
     )
 
 
-def get_default_llm_with_vision(
-    timeout: int | None = None,
-    temperature: float | None = None,
-    additional_headers: dict[str, str] | None = None,
-) -> LLM | None:
-    """The designated default vision model, or None.
-
-    There is deliberately no fallback. With no default set, image captioning
-    is off: picking an arbitrary image-capable model would spend money on a
-    model nobody chose.
-    """
-    with get_session_with_current_tenant() as db_session:
-        default_model = fetch_default_vision_model(db_session)
-        if default_model is None:
-            logger.warning(
-                "No default vision model is set — image summarization will be "
-                "disabled. Pick a captioning model under Index Settings."
-            )
-            return None
-
-        if not model_supports_image_input(
-            default_model.name,
-            default_model.llm_provider.provider,
-            default_model.llm_provider.deployment_name,
-        ):
-            logger.warning(
-                "Default vision model %s (provider=%s) does not support image "
-                "input — image summarization will be disabled",
-                default_model.name,
-                default_model.llm_provider.provider,
-            )
-            return None
-
-        logger.info(
-            "Using default vision model: %s (provider=%s)",
-            default_model.name,
-            default_model.llm_provider.provider,
-        )
-        return llm_from_provider(
-            model_name=default_model.name,
-            llm_provider=LLMProviderView.from_model(default_model.llm_provider),
-            timeout=timeout,
-            temperature=temperature,
-            additional_headers=additional_headers,
-        )
-
-
 def llm_from_provider(
     model_name: str,
     llm_provider: LLMProviderView,
@@ -364,16 +313,44 @@ def get_llm_for_contextual_rag(model_configuration_id: int) -> LLM:
         )
 
 
+def get_image_processing_llm(
+    timeout: int | None = None,
+    temperature: float | None = None,
+    additional_headers: dict[str, str] | None = None,
+) -> LLM | None:
+    """The image processing (captioning) LLM, or None when the feature is off.
+
+    Reads the single image_processing_settings row. There is no fallback: an
+    absent row means no captioning, never "some other vision-capable model".
+    """
+    with get_session_with_current_tenant() as db_session:
+        settings = fetch_image_processing_settings(db_session)
+        if settings is None:
+            return None
+
+        model_configuration = settings.model_configuration
+        logger.info(
+            "Using image processing model: %s (provider=%s)",
+            model_configuration.name,
+            model_configuration.llm_provider.provider,
+        )
+        return llm_from_provider(
+            model_name=model_configuration.name,
+            llm_provider=LLMProviderView.from_model(model_configuration.llm_provider),
+            timeout=timeout,
+            temperature=temperature,
+            additional_headers=additional_headers,
+        )
+
+
 def get_contextual_rag_llm_for_search_settings(
     search_settings: SearchSettings,
 ) -> LLM | None:
-    """Resolve the contextual-RAG LLM for the given search settings: the explicit
-    model configuration if set, else the tenant default; None when neither exists."""
+    """The contextual-RAG LLM named on the search settings, or None when unset.
+
+    There is no tenant-wide fallback: the search settings row is the only owner.
+    """
     mc_id = search_settings.contextual_rag_model_configuration_id
-    if mc_id is None:
-        with get_session_with_current_tenant() as db_session:
-            mc = fetch_default_contextual_rag_model(db_session)
-        mc_id = mc.id if mc else None
     return get_llm_for_contextual_rag(mc_id) if mc_id is not None else None
 
 

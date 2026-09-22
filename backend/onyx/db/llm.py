@@ -5,11 +5,12 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, load_only, selectinload
 
 from onyx.auth.permissions import Permission, has_global_permission
-from onyx.db.enums import LLMModelFlowType
+from onyx.db.enums import IndexModelStatus, LLMModelFlowType
 from onyx.db.models import CloudEmbeddingProvider as CloudEmbeddingProviderModel
 from onyx.db.models import (
     DocumentSet,
     ImageGenerationConfig,
+    ImageProcessingSettings,
     LLMModelFlow,
     LLMProvider__Persona,
     LLMProvider__UserGroup,
@@ -29,7 +30,6 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import SOURCE_API_CONTEXT_LIMIT_PROVIDERS
 from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.llm.models import ReasoningEffort
-from onyx.llm.utils import model_supports_image_input
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.server.manage.embedding.models import (
     CloudEmbeddingProvider,
@@ -456,25 +456,25 @@ def upsert_llm_provider(
         ]
     )
 
-    # Every deployment default lives on a flow row pointing at a model, and
-    # _update_default_model__no_commit makes that model visible, so a model
-    # holding any default must stay present and visible. Checking only the chat
-    # default let an edit hide the model contextual RAG or Craft still resolves
-    # to, since neither resolver looks at is_visible.
+    # A model that a deployment role points at must stay present and visible:
+    # none of the resolvers look at is_visible, so a hidden model would still
+    # be used. Roles live in three places — flow-row defaults (chat, chat
+    # naming, craft), the image processing row, and the contextual RAG FK on
+    # the present or future search settings.
     #
     # Only the visible-to-hidden transition is refused, not the steady state. A
-    # default can already sit on a hidden model — sync_auto_mode_models hides
+    # role can already sit on a hidden model — sync_auto_mode_models hides
     # models dropped from the recommendations and re-points only the chat
     # default — and both the admin form and the auto-mode transition re-send
     # every model's stored visibility. Refusing the steady state would fail
     # unrelated edits such as an API key rotation.
-    defaults_by_model_id = fetch_default_flows_by_model_id(db_session)
+    usages_by_model_id = fetch_model_usages_by_model_id(db_session)
 
     for name, mc in existing_by_name.items():
-        held_flows = defaults_by_model_id.get(mc.id)
-        if not held_flows:
+        held_usages = usages_by_model_id.get(mc.id)
+        if not held_usages:
             continue
-        held = ", ".join(sorted(flow.value for flow in held_flows))
+        held = ", ".join(sorted(held_usages))
         if mc.id in removed_ids:
             raise ValueError(
                 f"Cannot remove the default model '{name}'. It is the default for: "
@@ -486,20 +486,20 @@ def upsert_llm_provider(
                 f"{held}. Please change those defaults before hiding."
             )
         # Dropping a capability deletes the flow row that represents it, so a
-        # model holding that flow's default must keep it.
-        for capability_flow in (
-            LLMModelFlowType.VISION,
-            LLMModelFlowType.REASONING,
+        # model that a role needs that capability from must keep it.
+        for capability_flow, dependent_usage in (
+            (LLMModelFlowType.VISION, IMAGE_PROCESSING_USAGE),
+            (LLMModelFlowType.REASONING, LLMModelFlowType.REASONING.value),
         ):
             if (
-                capability_flow in held_flows
+                dependent_usage in held_usages
                 and name in merged_capabilities
                 and capability_flow not in merged_capabilities[name]
             ):
                 raise ValueError(
                     f"Cannot disable {capability_flow.value} support on '{name}'. "
-                    f"It is the deployment's {capability_flow.value} default "
-                    "model. Please change that default first."
+                    f"It is the deployment's {dependent_usage} model. "
+                    "Please change that default first."
                 )
 
     if removed_ids:
@@ -994,16 +994,6 @@ def fetch_default_llm_model(db_session: Session) -> ModelConfiguration | None:
     return fetch_default_model(db_session, LLMModelFlowType.CHAT)
 
 
-def fetch_default_vision_model(db_session: Session) -> ModelConfiguration | None:
-    return fetch_default_model(db_session, LLMModelFlowType.VISION)
-
-
-def fetch_default_contextual_rag_model(
-    db_session: Session,
-) -> ModelConfiguration | None:
-    return fetch_default_model(db_session, LLMModelFlowType.CONTEXTUAL_RAG)
-
-
 def fetch_default_chat_naming_model(
     db_session: Session,
 ) -> ModelConfiguration | None:
@@ -1014,25 +1004,49 @@ def fetch_default_craft_model(db_session: Session) -> ModelConfiguration | None:
     return fetch_default_model(db_session, LLMModelFlowType.CRAFT)
 
 
-def fetch_default_flows_by_model_id(
-    db_session: Session,
-) -> dict[int, set[LLMModelFlowType]]:
-    """Which deployment defaults each model configuration currently holds.
+IMAGE_PROCESSING_USAGE = "image_processing"
+CONTEXTUAL_RAG_USAGE = LLMModelFlowType.CONTEXTUAL_RAG.value
 
-    One model commonly holds several — the chat default is very often the vision
-    default too — so the value is a set rather than a single flow.
+
+def fetch_model_usages_by_model_id(
+    db_session: Session,
+) -> dict[int, set[str]]:
+    """Which deployment roles each model configuration currently fills.
+
+    Roles are the flow-row defaults (chat, chat naming, craft), the image
+    processing row, and the contextual RAG FK on present or future search
+    settings. One model commonly fills several, so the value is a set.
     """
+    usages: dict[int, set[str]] = {}
+
     rows = db_session.execute(
         select(
             LLMModelFlow.model_configuration_id,
             LLMModelFlow.llm_model_flow_type,
         ).where(LLMModelFlow.is_default == True)  # noqa: E712
     ).all()
-
-    defaults: dict[int, set[LLMModelFlowType]] = {}
     for model_configuration_id, flow_type in rows:
-        defaults.setdefault(model_configuration_id, set()).add(flow_type)
-    return defaults
+        usages.setdefault(model_configuration_id, set()).add(flow_type.value)
+
+    image_processing = db_session.scalar(select(ImageProcessingSettings))
+    if image_processing is not None:
+        usages.setdefault(image_processing.model_configuration_id, set()).add(
+            IMAGE_PROCESSING_USAGE
+        )
+
+    contextual_ids = db_session.scalars(
+        select(SearchSettings.contextual_rag_model_configuration_id).where(
+            SearchSettings.status.in_(
+                [IndexModelStatus.PRESENT, IndexModelStatus.FUTURE]
+            ),
+            SearchSettings.contextual_rag_model_configuration_id.is_not(None),
+        )
+    ).all()
+    for model_configuration_id in contextual_ids:
+        if model_configuration_id is not None:
+            usages.setdefault(model_configuration_id, set()).add(CONTEXTUAL_RAG_USAGE)
+
+    return usages
 
 
 def fetch_default_model(
@@ -1150,33 +1164,6 @@ def update_default_provider(
     )
 
 
-def update_default_vision_provider(
-    provider_id: int, vision_model: str, db_session: Session
-) -> None:
-    provider = db_session.scalar(
-        select(LLMProviderModel).where(
-            LLMProviderModel.id == provider_id,
-        )
-    )
-
-    if provider is None:
-        raise ValueError(f"LLM Provider with id={provider_id} does not exist")
-
-    if not model_supports_image_input(
-        vision_model, provider.provider, provider.deployment_name
-    ):
-        raise ValueError(
-            f"Model '{vision_model}' for provider '{provider.provider} does not support image input"
-        )
-
-    _update_default_model(
-        db_session=db_session,
-        provider_id=provider_id,
-        model=vision_model,
-        flow_type=LLMModelFlowType.VISION,
-    )
-
-
 def update_default_chat_naming_provider(
     provider_id: int, chat_naming_model: str, db_session: Session
 ) -> None:
@@ -1252,53 +1239,6 @@ def update_no_default_craft_provider(db_session: Session) -> None:
         .values(is_default=False)
     )
     db_session.commit()
-
-
-def update_no_default_contextual_rag_provider(
-    db_session: Session,
-) -> None:
-    db_session.execute(
-        update(LLMModelFlow)
-        .where(
-            LLMModelFlow.llm_model_flow_type == LLMModelFlowType.CONTEXTUAL_RAG,
-            LLMModelFlow.is_default == True,  # noqa: E712
-        )
-        .values(is_default=False)
-    )
-    db_session.commit()
-
-
-def update_default_contextual_model(
-    db_session: Session,
-    enable_contextual_rag: bool,
-    model_configuration_id: int | None,
-) -> None:
-    """Sets or clears the default contextual RAG model.
-
-    Should be called whenever the PRESENT search settings change
-    (e.g. inline update or FUTURE → PRESENT swap).
-    """
-    if not enable_contextual_rag or model_configuration_id is None:
-        update_no_default_contextual_rag_provider(db_session=db_session)
-        return
-
-    model_config = db_session.get(ModelConfiguration, model_configuration_id)
-    if not model_config:
-        raise ValueError(f"model_configuration id={model_configuration_id} not found")
-
-    add_model_to_flow(
-        db_session=db_session,
-        model_configuration_id=model_config.id,
-        flow_type=LLMModelFlowType.CONTEXTUAL_RAG,
-    )
-    _update_default_model(
-        db_session=db_session,
-        provider_id=model_config.llm_provider_id,
-        model=model_config.name,
-        flow_type=LLMModelFlowType.CONTEXTUAL_RAG,
-    )
-
-    return
 
 
 def fetch_auto_mode_providers(db_session: Session) -> list[LLMProviderModel]:
@@ -1409,13 +1349,14 @@ def sync_auto_mode_models(
             changes += 1
 
     # Reconcile the visibility of the models the config dropped. A model still
-    # holding a deployment default stays visible: only the chat default is
-    # re-pointed above, so hiding the rest would strand a default on a model the
-    # admin can no longer see or change. Every other write path keeps a default
-    # model visible.
+    # filling a deployment role stays visible: only the chat default is
+    # re-pointed above, so hiding the rest would strand a role on a model the
+    # admin can no longer see or change. Roles are the flow-row defaults, the
+    # image processing row, and the contextual RAG FK on present or future
+    # search settings — the same three fetch_model_usages_by_model_id reads.
     #
-    # Both statements test the default in SQL rather than from a snapshot read
-    # here. A default assigned between the two would otherwise be missed, and
+    # Both statements test the role in SQL rather than from a snapshot read
+    # here. A role assigned between the two would otherwise be missed, and
     # the model hidden anyway. They synchronize the session because sessions are
     # built with expire_on_commit=False, so a caller holding these rows — as
     # put_llm_provider does — would otherwise serialize stale visibility.
@@ -1425,13 +1366,27 @@ def sync_auto_mode_models(
         name for name in existing_models if name not in recommended_visible_model_names
     ]
     if dropped_names:
-        holds_a_default = (
+        holds_a_default = or_(
             select(LLMModelFlow.id)
             .where(
                 LLMModelFlow.model_configuration_id == ModelConfiguration.id,
                 LLMModelFlow.is_default == True,  # noqa: E712
             )
-            .exists()
+            .exists(),
+            select(ImageProcessingSettings.id)
+            .where(
+                ImageProcessingSettings.model_configuration_id == ModelConfiguration.id
+            )
+            .exists(),
+            select(SearchSettings.id)
+            .where(
+                SearchSettings.contextual_rag_model_configuration_id
+                == ModelConfiguration.id,
+                SearchSettings.status.in_(
+                    [IndexModelStatus.PRESENT, IndexModelStatus.FUTURE]
+                ),
+            )
+            .exists(),
         )
         dropped_models = (
             ModelConfiguration.llm_provider_id == provider.id,
