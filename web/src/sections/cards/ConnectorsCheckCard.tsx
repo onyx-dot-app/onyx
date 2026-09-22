@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Content } from "@opal/layouts";
+import * as GeneralLayouts from "@/layouts/general-layouts";
 import { useFormatter, useTranslations } from "next-intl";
 import {
   Button,
@@ -347,7 +348,12 @@ export function ConnectorsCheckCard({
     <Card border="solid" rounding={4} padding={2}>
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-3">
-          <div className="min-w-0 flex-1">
+          <GeneralLayouts.Section
+            padding={1}
+            height="fit"
+            alignItems="start"
+            className="min-w-0 flex-1"
+          >
             <Content
               icon={HeaderIcon}
               title={
@@ -357,7 +363,7 @@ export function ConnectorsCheckCard({
               sizePreset="section"
               variant="section"
             />
-          </div>
+          </GeneralLayouts.Section>
           <div className="flex items-center">
             {onRerun && !collapsed && (
               <Button
