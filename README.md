@@ -28,6 +28,7 @@
 <p align="center">
   <b>English</b> | <a href="./README.zh-CN.md">简体中文</a>
 </p>
+
 # Onyx
 
 **[Onyx](https://www.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)** is the AI platform that delivers complete context to your humans and agents.

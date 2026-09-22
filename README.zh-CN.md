@@ -28,6 +28,7 @@
 <p align="center">
   <a href="./README.md">English</a> | <b>简体中文</b>
 </p>
+
 # Onyx
 
 **[Onyx](https://www.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)** 是为你的员工和 Agent 提供完整上下文的 AI 平台。
