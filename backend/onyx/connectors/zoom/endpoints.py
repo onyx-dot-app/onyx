@@ -81,6 +81,22 @@ MEETING_RECORDINGS = ZoomEndpoint(
     operation="recordingGet",
 )
 
+# Zoom really names this GET recordingSettingUpdate. recordingSettingsUpdate is
+# the PATCH on the same path.
+RECORDING_SETTINGS = ZoomEndpoint(
+    path="/meetings/{identifier}/recordings/settings",
+    tier=ZoomRateLimitTier.LIGHT,
+    describes="the share settings of the recording of {identifier}",
+    operation="recordingSettingUpdate",
+)
+
+RECORDING_REGISTRANTS = ZoomEndpoint(
+    path="/meetings/{identifier}/recordings/registrants",
+    tier=ZoomRateLimitTier.MEDIUM,
+    describes="the viewers registered for the recording of {identifier}",
+    operation="meetingRecordingRegistrants",
+)
+
 PAST_MEETING_DETAILS = ZoomEndpoint(
     path="/past_meetings/{identifier}",
     tier=ZoomRateLimitTier.LIGHT,
@@ -168,6 +184,13 @@ USERS = ZoomEndpoint(
     tier=ZoomRateLimitTier.MEDIUM,
     describes="the account's users",
     operation="users",
+)
+
+USER_SETTINGS = ZoomEndpoint(
+    path="/users/{identifier}/settings",
+    tier=ZoomRateLimitTier.MEDIUM,
+    describes="the settings of user {identifier}",
+    operation="userSettings",
 )
 
 USER_RECORDINGS = ZoomEndpoint(

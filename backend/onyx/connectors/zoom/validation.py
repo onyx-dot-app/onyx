@@ -10,7 +10,7 @@ every bad one as an indexing error.
 
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
-from typing import TypeVar
+from typing import NamedTuple, TypeVar
 
 import requests
 
@@ -20,6 +20,7 @@ from onyx.connectors.exceptions import (
     ValidationError,
 )
 from onyx.connectors.zoom.client import ZoomClient
+from onyx.connectors.zoom.models import APPROVED_REGISTRANT_STATUS
 from onyx.connectors.zoom.recordings.access import session_is_gone
 from onyx.connectors.zoom.recordings.discovery import session_ids
 
@@ -62,10 +63,42 @@ def _probe(description: str, call: Callable[[], _T]) -> _T | None:
         ) from e
 
 
-def _probe_transcript_scope(client: ZoomClient, uuid: str) -> None:
+class ProbeSample(NamedTuple):
+    """A recording Zoom answered for, kept as the two fields later probes need
+    rather than the whole entry with its download URLs and passcode."""
+
+    uuid: str
+    host_id: str
+
+
+def _probe_transcript_scope(client: ZoomClient, uuid: str) -> ProbeSample | None:
     """Every path reads transcripts through this endpoint. A 404 only means the
     sample session was never cloud-recorded, which says nothing about scopes."""
-    _probe(f"the recording files of {uuid}", lambda: client.get_recording(uuid))
+    entry = _probe(f"the recording files of {uuid}", lambda: client.get_recording(uuid))
+    if entry is None:
+        return None
+    return ProbeSample(uuid=entry.uuid, host_id=entry.host_id)
+
+
+def probe_share_settings_scopes(client: ZoomClient, sample: ProbeSample) -> None:
+    """Asked on a recording Zoom already answered for, so a refusal here is a
+    missing scope and nothing else. Registration is usually off, and the client
+    already reads Zoom's 400 for that as an empty list."""
+    _probe(
+        f"the share settings of {sample.uuid}",
+        lambda: client.get_recording_settings(sample.uuid),
+    )
+    # One registrant is enough to see the scope; the list could run to pages.
+    _probe(
+        f"the registered viewers of {sample.uuid}",
+        lambda: client.list_recording_registrants(
+            sample.uuid, status=APPROVED_REGISTRANT_STATUS, limit=1
+        ),
+    )
+    _probe(
+        f"the sign-in rules of user {sample.host_id}",
+        lambda: client.get_recording_authentication_rules(sample.host_id),
+    )
 
 
 def probe_zoom(
@@ -75,7 +108,9 @@ def probe_zoom(
     webinar_ids: list[str] | None,
     host_emails: list[str] | None,
     group_id: str | None,
-) -> None:
+) -> ProbeSample | None:
+    """Returns the recording it sampled so a later probe can ask about the same
+    one, or None when nothing configured has one."""
     meeting_ids = session_ids(meeting_ids)
     webinar_ids = session_ids(webinar_ids)
     host_emails = _configured(host_emails)
@@ -136,5 +171,6 @@ def probe_zoom(
     # reaches the transcript endpoint. An occurrence may have no recording at
     # all, and then a 404 hides whether the scope is granted.
     sample_uuid = recording_uuid or occurrence_uuid
-    if sample_uuid:
-        _probe_transcript_scope(client, sample_uuid)
+    if not sample_uuid:
+        return None
+    return _probe_transcript_scope(client, sample_uuid)

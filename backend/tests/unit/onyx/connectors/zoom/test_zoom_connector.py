@@ -659,6 +659,94 @@ class TestZoomConnectorValidateSettings:
         client.list_group_members.assert_not_called()
 
 
+class TestZoomConnectorProbeRecordingAccessPermissions:
+    """The permission-sync probe. It runs after validate_connector_settings,
+    on the recording that one sampled."""
+
+    def _validated(self, validate: bool = True) -> tuple[ZoomConnector, MagicMock]:
+        connector, client = _with_client(host_emails=["host@example.com"])
+        client.list_users.return_value = ZoomUserPage(users=[user(id="u1")])
+        client.list_user_recordings.return_value = ZoomRecordingPage(
+            recordings=[recording_entry(uuid="rec-1", host_id="u1")]
+        )
+        client.get_recording.return_value = recording_entry(uuid="rec-1", host_id="u1")
+        if validate:
+            connector.validate_connector_settings()
+        return connector, client
+
+    def test_every_permission_sync_scope_is_probed_on_the_sampled_recording(
+        self,
+    ) -> None:
+        connector, client = self._validated()
+
+        connector.probe_recording_access_permissions()
+
+        client.get_recording_settings.assert_called_once_with("rec-1")
+        # One registrant is enough to see the scope.
+        client.list_recording_registrants.assert_called_once_with(
+            "rec-1", status="approved", limit=1
+        )
+        client.get_recording_authentication_rules.assert_called_once_with("u1")
+
+    @pytest.mark.parametrize(
+        "refused",
+        [
+            lambda client: client.get_recording_settings,
+            lambda client: client.list_recording_registrants,
+            lambda client: client.get_recording_authentication_rules,
+        ],
+        ids=["settings", "registrants", "rules"],
+    )
+    def test_a_missing_scope_is_rejected_at_setup(
+        self, refused: Callable[[MagicMock], MagicMock]
+    ) -> None:
+        connector, client = self._validated()
+        refused(client).side_effect = InsufficientPermissionsError(
+            "does not contain scopes:[cloud_recording:read:recording_settings:admin]"
+        )
+
+        with pytest.raises(InsufficientPermissionsError):
+            connector.probe_recording_access_permissions()
+
+    def test_it_samples_on_its_own_when_settings_were_not_validated_first(
+        self,
+    ) -> None:
+        connector, client = self._validated(validate=False)
+
+        connector.probe_recording_access_permissions()
+
+        client.get_recording_settings.assert_called_once_with("rec-1")
+
+    def test_nothing_is_probed_when_no_recording_can_be_sampled(self) -> None:
+        # Same as the transcript scope: with no recording to ask about, a 404
+        # would hide whether the scope is granted.
+        connector, client = _with_client(host_emails=["host@example.com"])
+        client.list_users.return_value = ZoomUserPage(users=[user(id="u1")])
+        client.list_user_recordings.return_value = ZoomRecordingPage(recordings=[])
+        connector.validate_connector_settings()
+
+        connector.probe_recording_access_permissions()
+
+        client.get_recording_settings.assert_not_called()
+        client.get_recording_authentication_rules.assert_not_called()
+        # And it does not go looking for a sample a second time.
+        client.list_users.assert_called_once()
+
+    def test_a_sampled_recording_zoom_has_since_deleted_does_not_pause(
+        self,
+    ) -> None:
+        connector, client = self._validated()
+        client.get_recording_settings.side_effect = http_error(404)
+
+        connector.probe_recording_access_permissions()
+
+    def test_without_credentials_it_raises(self) -> None:
+        connector = ZoomConnector(host_emails=["host@example.com"])
+
+        with pytest.raises(ConnectorMissingCredentialError):
+            connector.probe_recording_access_permissions()
+
+
 class TestZoomConnectorCheckpoint:
     def test_build_dummy_checkpoint(self) -> None:
         connector, _ = _make_connector()
