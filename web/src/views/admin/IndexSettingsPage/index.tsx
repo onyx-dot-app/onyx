@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Formik } from "formik";
 import { markdown } from "@opal/utils";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import { mutate } from "swr";
 import { PageLoader } from "@opal/layouts";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -66,6 +65,7 @@ import {
 import {
   CLOUD_BASED_PROVIDERS,
   CUSTOM_PROVIDER,
+  DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB,
   MAX_IMAGE_SIZE_OPTIONS,
   SELF_HOSTED_PROVIDERS,
 } from "@/lib/searchSettings/constants";
@@ -82,22 +82,22 @@ import {
   savedModelSelection,
 } from "@/lib/searchSettings/utils";
 import {
-  saveAdminSettings,
   cancelNewEmbedding,
+  disableImageProcessing,
   disconnectEmbeddingProvider,
+  enableImageProcessing,
+  ImageProcessingRequestError,
   setNewSearchSettings,
   updateInferenceSettings,
 } from "@/lib/searchSettings/svc";
 import { useCreateModal } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
 import { ConfirmationModalLayout } from "@opal/layouts";
-import { useSettings } from "@/lib/settings/hooks";
-import { Settings, toSettings } from "@/lib/settings/types";
-import { findProviderOwningModelConfig } from "@/lib/languageModels/utils";
 import {
   useConfiguredEmbeddingProviders,
   useCurrentEmbeddingModel,
   useCurrentSearchSettings,
+  useImageProcessingSettings,
   useReindexProgress,
   useSecondarySearchSettings,
 } from "@/lib/searchSettings/hooks";
@@ -625,8 +625,6 @@ function isContextualModelOnlyChange(
 export default function IndexSettingsPage() {
   const t = useTranslations("admin.indexSettings");
   const adminRouteTitle = useAdminRouteTitle();
-  const router = useRouter();
-  const settings = useSettings();
   const editModal = useCreateModal();
   const [viewAllModelsOpen, setViewAllModelsOpen] = useState(false);
   const [activeModelTab, setActiveModelTab] = useState(MODEL_TAB_CLOUD);
@@ -663,25 +661,6 @@ export default function IndexSettingsPage() {
         ),
       };
     }, [filteredProviders]);
-
-  const saveSettings = useCallback(
-    async (updates: Partial<Settings>) => {
-      if (!settings) return;
-
-      try {
-        await saveAdminSettings({ ...toSettings(settings), ...updates });
-        router.refresh();
-        await mutate(SWR_KEYS.settings);
-        toast.success(t("toasts.settingsUpdated"));
-      } catch {
-        toast.error(t("toasts.settingsUpdateFailed"));
-      }
-    },
-    [settings, router, t]
-  );
-
-  const imageProcessingEnabled =
-    settings.image_extraction_and_analysis_enabled ?? false;
 
   const { data: secondarySearchSettings } = useSecondarySearchSettings();
   // INSTANT switchover swaps immediately — no secondary settings — and backfills on the
@@ -792,75 +771,96 @@ export default function IndexSettingsPage() {
   const connectorStatusesReady = statusesSettled && !statusesError;
 
   const {
-    llmProviders,
     hasAnyLlm,
     hasAnyVisionLlm,
-    defaultLlm,
-    defaultVision,
     isLoading: isLoadingLlmProviders,
   } = useLlmDefaults();
 
-  /**
-   * Persist a new default vision model. Onyx routes all image-captioning
-   * calls through `get_default_llm_with_vision()` (`backend/onyx/llm/factory.py`),
-   * which reads `default_vision` — so writing here switches the model the
-   * indexer uses for new captions. Existing captions stay baked into the
-   * embeddings of already-indexed documents.
-   */
-  const handleCaptioningModelChange = useCallback(
-    async ({
-      modelName,
-      modelConfigurationId,
-    }: {
-      modelName: string;
-      modelConfigurationId: number | null | undefined;
-    }) => {
-      const provider = findProviderOwningModelConfig(
-        llmProviders,
-        modelConfigurationId
-      );
-      if (!provider) {
-        toast.error(t("toasts.providerResolveFailed"));
+  const {
+    data: imageProcessing,
+    isLoading: isLoadingImageProcessing,
+    mutate: mutateImageProcessing,
+  } = useImageProcessingSettings();
+  const imageProcessingOn = imageProcessing != null;
+  // Flipping the switch on arms the picker; the row (and the feature) only
+  // exists once a model is chosen. Nothing is persisted while armed.
+  const [imageProcessingArmed, setImageProcessingArmed] = useState(false);
+  // One request at a time: the switch, the picker and the size select all
+  // write the same row, so they lock together until the request settles.
+  const [imageProcessingPending, setImageProcessingPending] = useState(false);
+  const imageProcessingLocked =
+    isLoadingImageProcessing || imageProcessingPending;
+
+  const handleImageProcessingToggle = useCallback(
+    async (checked: boolean) => {
+      if (checked) {
+        setImageProcessingArmed(true);
         return;
       }
+      setImageProcessingArmed(false);
+      if (!imageProcessingOn) return;
+      setImageProcessingPending(true);
       try {
-        const response = await fetch("/api/admin/llm/default-vision", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            provider_id: provider.id,
-            model_name: modelName,
-          }),
-        });
-        if (!response.ok) {
-          throw new Error(
-            (await response.json()).detail ?? t("toasts.captioningUpdateFailed")
-          );
-        }
-        await mutate(SWR_KEYS.llmProviders);
-        toast.success(t("toasts.captioningUpdated"));
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : t("toasts.unknownError")
-        );
+        await disableImageProcessing();
+        await mutateImageProcessing();
+        toast.success(t("toasts.settingsUpdated"));
+      } catch {
+        toast.error(t("toasts.settingsUpdateFailed"));
+      } finally {
+        setImageProcessingPending(false);
       }
     },
-    [llmProviders, t]
+    [imageProcessingOn, mutateImageProcessing, t]
   );
 
-  // Resolve defaultVision to a model_configuration_id for ModelSelector. Keyed on
-  // providerId: display names are not unique, so a name match can land on a
-  // provider that does not own this model.
-  const captioningModelConfigId = useMemo(() => {
-    if (!defaultVision?.modelName || !llmProviders) return null;
-    const provider = llmProviders.find(
-      (p) => p.id === defaultVision.providerId
-    );
-    const mc = provider?.model_configurations.find(
-      (m) => m.name === defaultVision.modelName
-    );
-    return mc?.id ?? null;
-  }, [llmProviders, defaultVision]);
+  /**
+   * Point image processing at a model. Captioning only affects documents
+   * indexed from now on; existing captions are baked into prior embeddings.
+   */
+  const handleImageProcessingModelChange = useCallback(
+    async (modelConfigurationId: number) => {
+      setImageProcessingPending(true);
+      try {
+        await enableImageProcessing({
+          modelConfigurationId,
+          maxSizeMb:
+            imageProcessing?.max_size_mb ?? DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB,
+        });
+        setImageProcessingArmed(false);
+        await mutateImageProcessing();
+        toast.success(t("toasts.captioningUpdated"));
+      } catch (error) {
+        // The server's reason when it gave one; otherwise the translated
+        // fallback, never an English string from the service layer.
+        const detail =
+          error instanceof ImageProcessingRequestError ? error.detail : null;
+        toast.error(detail ?? t("toasts.captioningUpdateFailed"));
+      } finally {
+        setImageProcessingPending(false);
+      }
+    },
+    [imageProcessing, mutateImageProcessing, t]
+  );
+
+  const handleMaxImageSizeChange = useCallback(
+    async (maxSizeMb: number) => {
+      if (!imageProcessing) return;
+      setImageProcessingPending(true);
+      try {
+        await enableImageProcessing({
+          modelConfigurationId: imageProcessing.model_configuration_id,
+          maxSizeMb,
+        });
+        await mutateImageProcessing();
+        toast.success(t("toasts.settingsUpdated"));
+      } catch {
+        toast.error(t("toasts.settingsUpdateFailed"));
+      } finally {
+        setImageProcessingPending(false);
+      }
+    },
+    [imageProcessing, mutateImageProcessing, t]
+  );
 
   const savedSelection = useMemo(
     () =>
@@ -1880,19 +1880,21 @@ export default function IndexSettingsPage() {
                                 withLabel
                               >
                                 <InputSwitch
-                                  checked={imageProcessingEnabled}
+                                  checked={
+                                    imageProcessingOn || imageProcessingArmed
+                                  }
+                                  disabled={imageProcessingLocked}
                                   onCheckedChange={(checked) => {
-                                    void saveSettings({
-                                      image_extraction_and_analysis_enabled:
-                                        checked,
-                                    });
+                                    void handleImageProcessingToggle(checked);
                                   }}
                                 />
                               </InputHorizontal>
 
                               <Disabled
                                 disabled={
-                                  !imageProcessingEnabled && !isReindexing
+                                  !imageProcessingOn &&
+                                  !imageProcessingArmed &&
+                                  !isReindexing
                                 }
                                 tooltip={t(
                                   "imageProcessing.enableFirstTooltip"
@@ -1901,28 +1903,35 @@ export default function IndexSettingsPage() {
                                 <InputHorizontal
                                   title={t("captioningModel.title")}
                                   description={t("captioningModel.description")}
-                                  disabled={!imageProcessingEnabled}
+                                  disabled={
+                                    !imageProcessingOn && !imageProcessingArmed
+                                  }
                                   withLabel
                                 >
                                   <ModelSelector
-                                    value={captioningModelConfigId}
-                                    disabled={!imageProcessingEnabled}
-                                    requiresImageInput
-                                    onChange={(opt) =>
-                                      void handleCaptioningModelChange({
-                                        modelName: opt.modelName,
-                                        modelConfigurationId:
-                                          opt.modelConfigurationId,
-                                      })
+                                    value={
+                                      imageProcessing?.model_configuration_id ??
+                                      null
                                     }
+                                    disabled={
+                                      (!imageProcessingOn &&
+                                        !imageProcessingArmed) ||
+                                      imageProcessingLocked
+                                    }
+                                    requiresImageInput
+                                    onChange={(opt) => {
+                                      if (opt.modelConfigurationId == null)
+                                        return;
+                                      void handleImageProcessingModelChange(
+                                        opt.modelConfigurationId
+                                      );
+                                    }}
                                   />
                                 </InputHorizontal>
                               </Disabled>
 
                               <Disabled
-                                disabled={
-                                  !imageProcessingEnabled && !isReindexing
-                                }
+                                disabled={!imageProcessingOn && !isReindexing}
                                 tooltip={t(
                                   "imageProcessing.enableFirstTooltip"
                                 )}
@@ -1931,22 +1940,23 @@ export default function IndexSettingsPage() {
                                   title={t("maxImageSize.title")}
                                   suffix={t("maxImageSize.suffix")}
                                   description={t("maxImageSize.description")}
-                                  disabled={!imageProcessingEnabled}
+                                  disabled={!imageProcessingOn}
                                   withLabel
                                 >
                                   <InputSelect
                                     value={String(
-                                      settings.image_analysis_max_size_mb ?? 20
+                                      imageProcessing?.max_size_mb ??
+                                        DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB
                                     )}
                                     onValueChange={(value) => {
-                                      void saveSettings({
-                                        image_analysis_max_size_mb: parseInt(
-                                          value,
-                                          10
-                                        ),
-                                      });
+                                      void handleMaxImageSizeChange(
+                                        parseInt(value, 10)
+                                      );
                                     }}
-                                    disabled={!imageProcessingEnabled}
+                                    disabled={
+                                      !imageProcessingOn ||
+                                      imageProcessingLocked
+                                    }
                                   >
                                     <InputSelect.Trigger />
                                     <InputSelect.Content>

@@ -23,7 +23,7 @@ interface ProviderFixture {
 
 function mockProvidersResponse(
   providers: ProviderFixture[],
-  defaultVision: { provider_id: number; model_name: string } | null
+  defaultText: { provider_id: number; model_name: string } | null
 ): void {
   mockUseSWR.mockReturnValue({
     data: {
@@ -43,8 +43,7 @@ function mockProvidersResponse(
           },
         ],
       })),
-      default_text: null,
-      default_vision: defaultVision,
+      default_text: defaultText,
       default_chat_naming: null,
       default_craft: null,
     },
@@ -69,7 +68,7 @@ describe("useLlmDefaults", () => {
 
     const { result } = renderHook(() => useLlmDefaults());
 
-    expect(result.current.defaultVision).toEqual({
+    expect(result.current.defaultLlm).toEqual({
       providerId: 7,
       modelName: "gpt-4o",
     });
@@ -83,7 +82,7 @@ describe("useLlmDefaults", () => {
 
     const { result } = renderHook(() => useLlmDefaults());
 
-    expect(result.current.defaultVision?.providerId).toBe(7);
+    expect(result.current.defaultLlm?.providerId).toBe(7);
   });
 
   it("returns null when the stored provider is no longer in the list", () => {
@@ -94,7 +93,7 @@ describe("useLlmDefaults", () => {
 
     const { result } = renderHook(() => useLlmDefaults());
 
-    expect(result.current.defaultVision).toBeNull();
+    expect(result.current.defaultLlm).toBeNull();
   });
 
   it("keys off provider id, not position, when display names collide", () => {
@@ -108,6 +107,6 @@ describe("useLlmDefaults", () => {
 
     const { result } = renderHook(() => useLlmDefaults());
 
-    expect(result.current.defaultVision?.providerId).toBe(54);
+    expect(result.current.defaultLlm?.providerId).toBe(54);
   });
 });

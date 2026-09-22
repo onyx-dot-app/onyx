@@ -4757,7 +4757,7 @@
         "description": "配置文档的索引方式、embedding 方式，以及为搜索和检索所做的准备。"
       },
       "imageExtraction": {
-        "description": "从上传的文件（PDF、DOCX 等）中提取内嵌图像，并用支持视觉的 LLM 进行总结，让纯图像文档也可被搜索和回答。需要支持视觉的默认 LLM。",
+        "description": "从上传的文件（PDF、DOCX 等）中提取内嵌图像，并用支持视觉的 LLM 进行总结，让纯图像文档也可被搜索和回答。需要在下方选择一个支持视觉的图注 LLM。",
         "title": "提取并描述图像"
       },
       "imageProcessing": {

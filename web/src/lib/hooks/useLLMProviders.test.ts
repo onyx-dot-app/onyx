@@ -50,7 +50,7 @@ describe("useLLMProviders", () => {
     const mockMutate = jest.fn();
     const providers = [{ name: "Persona Provider", model_configurations: [] }];
     mockUseSWR.mockReturnValue({
-      data: { providers, default_text: null, default_vision: null },
+      data: { providers, default_text: null },
       error: undefined,
       mutate: mockMutate,
       isValidating: false,

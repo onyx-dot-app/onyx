@@ -20,6 +20,8 @@ export class IndexSettingsPage {
   readonly applyReindexButton: Locator;
   readonly applyContextualModelForwardButton: Locator;
   readonly rebuildExistingDocumentsButton: Locator;
+  readonly imageProcessingSwitch: Locator;
+  readonly captioningModelTrigger: Locator;
 
   // The provider setup modal opened via `openProviderSetup`. Held so the
   // credential / model-spec fill methods scope their fields to the right
@@ -43,6 +45,15 @@ export class IndexSettingsPage {
     this.rebuildExistingDocumentsButton = page.getByRole("button", {
       name: "Rebuild all existing documents",
     });
+    this.imageProcessingSwitch = page
+      .locator("label")
+      .filter({ hasText: "Extract & Caption Images" })
+      .getByRole("switch");
+    this.captioningModelTrigger = page
+      .locator("label")
+      .filter({ hasText: "Captioning LLM" })
+      .getByTestId("llm-popover-trigger")
+      .getByRole("button");
   }
 
   // ---------------------------------------------------------------------------
@@ -161,15 +172,31 @@ export class IndexSettingsPage {
   }
 
   async stageContextualModel(displayName: string): Promise<void> {
-    const contextualModelField = this.page
+    await this.pickModelInField("Contextual Retrieval LLM", displayName);
+  }
+
+  async pickCaptioningModel(displayName: string): Promise<void> {
+    await this.pickModelInField("Captioning LLM", displayName);
+  }
+
+  /**
+   * Open the model picker inside the labeled field, filter it, and choose
+   * the row. The match is scoped to the open popover so page text with the
+   * same name (the trigger itself, other fields) cannot collide.
+   */
+  private async pickModelInField(
+    fieldLabel: string,
+    displayName: string
+  ): Promise<void> {
+    await this.page
       .locator("label")
-      .filter({ hasText: "Contextual Retrieval LLM" });
-    await contextualModelField
+      .filter({ hasText: fieldLabel })
       .getByTestId("llm-popover-trigger")
       .getByRole("button")
       .click();
-    await this.page.getByPlaceholder("Search models...").fill(displayName);
-    await this.page.getByText(displayName, { exact: true }).click();
+    const popover = this.page.getByRole("dialog");
+    await popover.getByPlaceholder("Search models...").fill(displayName);
+    await popover.getByText(displayName, { exact: true }).click();
   }
 
   async expectContextualModelActions(): Promise<void> {

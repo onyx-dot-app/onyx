@@ -4757,7 +4757,7 @@
         "description": "Konfigurieren Sie, wie Dokumente indiziert, eingebettet und für Suche und Retrieval vorbereitet werden."
       },
       "imageExtraction": {
-        "description": "Extrahieren Sie eingebettete Bilder aus hochgeladenen Dateien (PDF, DOCX usw.) und fassen Sie sie mit einem LLM mit Bildverständnis zusammen, damit reine Bilddokumente durchsuchbar und beantwortbar werden. Erfordert ein Standard-LLM mit Bildverständnis.",
+        "description": "Extrahieren Sie eingebettete Bilder aus hochgeladenen Dateien (PDF, DOCX usw.) und fassen Sie sie mit einem LLM mit Bildverständnis zusammen, damit reine Bilddokumente durchsuchbar und beantwortbar werden. Erfordert ein unten ausgewähltes LLM mit Bildverständnis für Bildbeschreibungen.",
         "title": "Bilder extrahieren & beschreiben"
       },
       "imageProcessing": {
