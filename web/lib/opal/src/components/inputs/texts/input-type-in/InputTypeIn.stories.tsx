@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
-import InputTypeIn from "@opal/components/inputs/input-type-in/components";
+import InputTypeIn from "@opal/components/inputs/texts/input-type-in/components";
 
 const meta: Meta<typeof InputTypeIn> = {
   title: "opal/components/InputTypeIn",

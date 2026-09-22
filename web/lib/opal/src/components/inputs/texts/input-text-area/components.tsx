@@ -2,8 +2,8 @@
 
 import "@opal/components/inputs/shared.css";
 // The field reuses InputTypeIn's .opal-input-field base, color, and placeholder rules.
-import "@opal/components/inputs/input-type-in/styles.css";
-import "@opal/components/inputs/input-text-area/styles.css";
+import "@opal/components/inputs/texts/input-type-in/styles.css";
+import "@opal/components/inputs/texts/input-text-area/styles.css";
 import React from "react";
 import type { InputVariants, WithoutStyles } from "@opal/types";
 import { cn, mergeRefs } from "@opal/utils";

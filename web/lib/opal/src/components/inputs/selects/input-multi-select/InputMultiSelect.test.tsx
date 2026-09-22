@@ -73,33 +73,6 @@ describe("InputMultiSelect", () => {
       expect(handleAdd).not.toHaveBeenCalled();
     });
 
-    test("no option set has no dropdown and Enter commits the text", async () => {
-      const handleAdd = jest.fn();
-      const user = setupUser();
-      render(
-        <InputMultiSelect
-          tags={[{ id: "kiwi-1", label: "Kiwi" }]}
-          value=" pear "
-          onChange={jest.fn()}
-          placeholder="Tag"
-          onAdd={handleAdd}
-          onRemoveTag={jest.fn()}
-        />
-      );
-
-      const input = screen.getByPlaceholderText("Tag");
-      // A plain textbox, not a combobox: nothing for a dropdown to cover.
-      expect(input).not.toHaveAttribute("role");
-      expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
-
-      await user.click(input);
-      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
-      expect(screen.queryByRole("option")).not.toBeInTheDocument();
-
-      await user.keyboard("{Enter}");
-      expect(handleAdd).toHaveBeenCalledWith("pear");
-    });
-
     test("closed mode does not list a tag outside the set as a row", async () => {
       const user = setupUser();
       render(

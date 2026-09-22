@@ -15,7 +15,7 @@
  * With no options it degrades to a plain input.
  */
 
-import "@opal/components/inputs/selections/input-single-select/styles.css";
+import "@opal/components/inputs/selects/input-single-select/styles.css";
 import React, {
   useCallback,
   useContext,

@@ -26,8 +26,9 @@ The barrel file at `index.ts` re-exports each component and its prop types. Each
 | [InputAvatar](./inputs/input-avatar/)          | Avatar frame with primary input chrome                       | [README](./inputs/input-avatar/README.md)      |
 | [InputImage](./inputs/input-image/)            | Circular image dropzone with edit overlay                    | [README](./inputs/input-image/README.md)       |
 | [InputKeyValue](./inputs/input-key-value/)     | Key/value pair editor with validation                        | [README](./inputs/input-key-value/README.md)   |
-| [InputSingleSelect](./inputs/selections/input-single-select/) | Filterable single select with closed/open set modes | [README](./inputs/selections/input-single-select/README.md) |
-| [InputMultiSelect](./inputs/selections/input-multi-select/) | Chips-in-input multi selection (Figma Input/Tags) | [README](./inputs/selections/input-multi-select/README.md) |
+| [InputSingleSelect](./inputs/selects/input-single-select/) | Filterable single select with closed/open set modes | [README](./inputs/selects/input-single-select/README.md) |
+| [InputMultiSelect](./inputs/selects/input-multi-select/) | Chips-in-input multi selection over the family dropdown | [README](./inputs/selects/input-multi-select/README.md) |
+| [InputTypeInTag](./inputs/texts/input-type-in-tag/) | Chips-in-input free tagging (Figma Input/Tags) | [README](./inputs/texts/input-type-in-tag/README.md) |
 | [InputCheckbox](./inputs/booleans/input-checkbox/) | Checkbox with checked/indeterminate states | [README](./inputs/booleans/input-checkbox/README.md) |
 | [InputSwitch](./inputs/booleans/input-switch/) | On/off toggle switch | [README](./inputs/booleans/input-switch/README.md) |
 | [InputNumber](./inputs/input-number/)          | Number field with steppers and reset                         | [README](./inputs/input-number/README.md)      |
