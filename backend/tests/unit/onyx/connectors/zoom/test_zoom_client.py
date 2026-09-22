@@ -218,6 +218,12 @@ _ANY_SESSION_PAYLOAD = {
     **_DOCUMENTED_PAST_MEETING,
     **_DOCUMENTED_WEBINAR,
     "share_recording": "publicly",
+    "email": "jill@example.com",
+    "first_name": "Jill",
+    "last_name": "Chill",
+    # A user id is text and a session number is an integer; pydantic reads a
+    # numeric string as either.
+    "id": str(_DOCUMENTED_RECORDING["id"]),
 }
 
 
@@ -1636,6 +1642,29 @@ class TestListRecordingRegistrants:
         client._session.request.assert_not_called()
 
 
+class TestGetUser:
+    def test_it_reads_one_user_by_id(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            200,
+            {
+                "id": "owner-1",
+                "email": "owner@example.com",
+                "type": 2,
+                "first_name": "Jill",
+                "last_name": "Chill",
+                "status": "inactive",
+            },
+        )
+
+        found = client.get_user("owner-1")
+
+        assert client._session.request.call_args.args[1].endswith("/users/owner-1")
+        assert found.email == "owner@example.com"
+        assert found.status == "inactive"
+
+
 class TestGetRecordingAuthenticationRules:
     # Read live on 2026-09-22: the built-in rule and one the admin added.
     _CATALOGUE = {
@@ -1845,6 +1874,7 @@ class TestRateLimitTiers:
             (lambda c: c.get_meeting_details("1"), ZoomRateLimitTier.LIGHT),
             (lambda c: c.list_webinar_panelists("1"), ZoomRateLimitTier.MEDIUM),
             (lambda c: c.get_recording_settings("uuid"), ZoomRateLimitTier.LIGHT),
+            (lambda c: c.get_user("u"), ZoomRateLimitTier.LIGHT),
             (
                 lambda c: c.list_recording_registrants("uuid"),
                 ZoomRateLimitTier.MEDIUM,

@@ -186,6 +186,13 @@ USERS = ZoomEndpoint(
     operation="users",
 )
 
+USER = ZoomEndpoint(
+    path="/users/{identifier}",
+    tier=ZoomRateLimitTier.LIGHT,
+    describes="user {identifier}",
+    operation="user",
+)
+
 USER_SETTINGS = ZoomEndpoint(
     path="/users/{identifier}/settings",
     tier=ZoomRateLimitTier.MEDIUM,

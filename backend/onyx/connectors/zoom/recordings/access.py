@@ -10,8 +10,8 @@ or public access, so indexing it would bury a transcript nobody can reach with
 nothing to say why.
 """
 
-from collections.abc import Callable
-from typing import TYPE_CHECKING
+from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING, Protocol
 
 import requests
 
@@ -22,7 +22,6 @@ from onyx.connectors.zoom.models import (
     ZOOM_MEETING_TOO_OLD_CODE,
     ZOOM_NOT_ENTITLED_CODE,
     ZOOM_NOT_FOUND_CODE,
-    ZoomRegistrant,
 )
 from onyx.connectors.zoom.recordings.models import OccurrenceWork, zoom_error_code
 from onyx.utils.logger import setup_logger
@@ -73,7 +72,17 @@ def permanently_unavailable(error: Exception) -> bool:
     return is_plan_denial(error) or session_is_gone(error)
 
 
-def approved_registrant_emails(registrants: list[ZoomRegistrant]) -> list[str]:
+class _Registrant(Protocol):
+    """A session registrant and a recording viewer both carry these two."""
+
+    @property
+    def email(self) -> str: ...
+
+    @property
+    def status(self) -> str | None: ...
+
+
+def approved_registrant_emails(registrants: Sequence[_Registrant]) -> list[str]:
     """The caller already asks Zoom for approved registrants only. This checks
     again so access never depends on Zoom honouring a query parameter."""
     return [
@@ -83,7 +92,7 @@ def approved_registrant_emails(registrants: list[ZoomRegistrant]) -> list[str]:
     ]
 
 
-def _usable_emails(description: str, emails: list[str]) -> set[str]:
+def usable_emails(description: str, emails: list[str]) -> set[str]:
     usable = [email.strip() for email in emails if email.strip()]
     dropped = len(emails) - len(usable)
     if dropped:
@@ -116,7 +125,7 @@ def union_source_emails(sources: list[AccessSource]) -> set[str]:
     reasons: list[str] = []
     for description, fetch in sources:
         try:
-            found = _usable_emails(description, fetch())
+            found = usable_emails(description, fetch())
         except Exception as e:
             if not permanently_unavailable(e):
                 raise
