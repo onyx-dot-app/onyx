@@ -227,10 +227,9 @@ export class UsersAdminPage {
   // Invite modal
   // ---------------------------------------------------------------------------
 
-  /** The email input inside the invite modal. It is a combobox: free-form
-   * tags with a listbox popup. */
+  /** The email input inside the invite modal. */
   get inviteEmailInput(): Locator {
-    return this.dialog.getByRole("combobox");
+    return this.dialog.getByRole("textbox");
   }
 
   async openInviteModal() {

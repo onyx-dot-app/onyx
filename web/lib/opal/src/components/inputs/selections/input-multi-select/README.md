@@ -70,10 +70,10 @@ or on the chip — removes it through `onRemoveTag`. Sections render with a
   of the dropdown as selected rows, like the single's, and picking one again
   removes it through `onRemoveTag`.
 
-Without `options` the field is an open set with nothing in it: the dropdown
-still opens, listing the free-form tags as rows and the create row for typed
-text. The types accept only `mode="open"` there (`"closed"` without a set is
-a contradiction and does not compile).
+Without `options` there is no dropdown: the field is the plain tag input
+described above, and Enter commits the typed text through `onAdd`. The
+dropdown-only props (`onSelectOption`, `mode`, `dropdownMaxHeight`) do not
+compile there.
 
 ```tsx
 <InputMultiSelect

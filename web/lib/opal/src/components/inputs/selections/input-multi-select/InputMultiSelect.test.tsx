@@ -73,14 +73,13 @@ describe("InputMultiSelect", () => {
       expect(handleAdd).not.toHaveBeenCalled();
     });
 
-    test("no option set still opens and lists free-form tags", async () => {
+    test("no option set has no dropdown and Enter commits the text", async () => {
       const handleAdd = jest.fn();
       const user = setupUser();
-      const tags = [{ id: "kiwi-1", label: "Kiwi" }];
-      const { rerender } = render(
+      render(
         <InputMultiSelect
-          tags={tags}
-          value=""
+          tags={[{ id: "kiwi-1", label: "Kiwi" }]}
+          value=" pear "
           onChange={jest.fn()}
           placeholder="Tag"
           onAdd={handleAdd}
@@ -88,26 +87,16 @@ describe("InputMultiSelect", () => {
         />
       );
 
-      await user.click(screen.getByPlaceholderText("Tag"));
+      const input = screen.getByPlaceholderText("Tag");
+      // A plain textbox, not a combobox: nothing for a dropdown to cover.
+      expect(input).not.toHaveAttribute("role");
+      expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
 
-      expect(screen.getByRole("listbox")).toBeInTheDocument();
-      expect(screen.getByRole("option", { name: /Kiwi/ })).toHaveAttribute(
-        "aria-selected",
-        "true"
-      );
+      await user.click(input);
+      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+      expect(screen.queryByRole("option")).not.toBeInTheDocument();
 
-      // Typed text is the filter, so the tag row hides and the create row shows.
-      rerender(
-        <InputMultiSelect
-          tags={tags}
-          value="pear"
-          onChange={jest.fn()}
-          placeholder="Tag"
-          onAdd={handleAdd}
-          onRemoveTag={jest.fn()}
-        />
-      );
-      await user.click(screen.getByLabelText('Create "pear"'));
+      await user.keyboard("{Enter}");
       expect(handleAdd).toHaveBeenCalledWith("pear");
     });
 

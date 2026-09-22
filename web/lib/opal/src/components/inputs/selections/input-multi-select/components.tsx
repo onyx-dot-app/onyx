@@ -48,16 +48,15 @@ interface TagItem {
  */
 type InputMultiSelectOptionsProps =
   | {
+      /**
+       * Without a set the field is the plain tag input: no dropdown, and
+       * Enter commits the typed text through `onAdd`. The dropdown-only
+       * props have nothing to configure.
+       */
       options?: never;
       onSelectOption?: never;
-      /**
-       * Without a set the input is free tagging — an open set by
-       * definition — so only `"open"` may be stated. A closed set with no
-       * options to close over is a contradiction the types reject. The
-       * dropdown still opens, listing the free-form tags and the create row.
-       */
-      mode?: "open";
-      dropdownMaxHeight?: string;
+      mode?: never;
+      dropdownMaxHeight?: never;
     }
   | {
       /**
@@ -136,7 +135,8 @@ type InputMultiSelectProps = InputMultiSelectBaseProps &
  * option set; chosen options render as Tags. Backspace on an empty input
  * arms the last tag, and Backspace or Delete on an armed tag removes it.
  *
- * Without `options` it is the plain free-tagging input it always was.
+ * Without `options` it is the plain free-tagging input: no dropdown, and
+ * Enter commits the typed text through `onAdd`.
  */
 function InputMultiSelect({
   tags,
@@ -177,9 +177,10 @@ function InputMultiSelect({
     [optionsProp]
   );
   const flatOptions = useMemo(() => flattenSections(sections), [sections]);
-  // No set is an open set with nothing in it: the dropdown still lists the
-  // free-form tags and the create row. The types only permit "open" there.
-  const freeEntry = optionsProp === undefined || mode === "open";
+  // No set, no dropdown: the field is plain free tagging. With a set, only
+  // "open" mode admits free-form text, via the create row.
+  const hasDropdown = optionsProp !== undefined;
+  const freeEntry = !hasDropdown || mode === "open";
 
   const selectedValues = useMemo(
     () => new Set(tags.map((tag) => tag.id)),
@@ -190,12 +191,12 @@ function InputMultiSelect({
   // real, selected rows — the single's `customSelected` — so re-picking one
   // routes through the toggle-off instead of the create row.
   const customSelected = useMemo<SelectOption[]>(() => {
-    if (!freeEntry) return [];
+    if (!hasDropdown || !freeEntry) return [];
     const optionValues = new Set(flatOptions.map((option) => option.value));
     return tags
       .filter((tag) => !optionValues.has(tag.id))
       .map((tag) => ({ value: tag.id, label: tag.label }));
-  }, [freeEntry, flatOptions, tags]);
+  }, [hasDropdown, freeEntry, flatOptions, tags]);
 
   // Closed-set doctrine, committed values only: a tag outside the supplied
   // set (stale seed, options shrank) flags the input chrome's error variant.
@@ -233,7 +234,8 @@ function InputMultiSelect({
         option.value.toLowerCase() === trimmedValue ||
         option.label.toLowerCase() === trimmedValue
     ) || tags.some((tag) => tag.label.toLowerCase() === trimmedValue);
-  const showCreateOption = freeEntry && hasSearchTerm && !exactOptionMatch;
+  const showCreateOption =
+    hasDropdown && freeEntry && hasSearchTerm && !exactOptionMatch;
 
   const allVisibleOptions = useMemo(() => {
     const baseOptions = flattenSections(visibleSections);
@@ -289,14 +291,21 @@ function InputMultiSelect({
     // edits the composition. Neither may add or arm tags.
     if (event.nativeEvent.isComposing) return;
 
-    handleDropdownKeyDown(event);
-    if (event.defaultPrevented) return;
+    if (hasDropdown) {
+      handleDropdownKeyDown(event);
+      if (event.defaultPrevented) return;
+    }
 
     if (event.key === "Enter") {
-      // Enter belongs to the dropdown; the create row covers free-form
-      // commits. Never submit an enclosing form.
+      // Never submit an enclosing form. With a dropdown, Enter belongs to
+      // it and the create row covers free-form commits; without one, Enter
+      // commits the text directly.
       event.preventDefault();
       event.stopPropagation();
+      if (!hasDropdown) {
+        const trimmed = value.trim();
+        if (trimmed) onAdd(trimmed);
+      }
       return;
     }
     if (event.key === "Backspace" && value === "" && tags.length > 0) {
@@ -320,14 +329,18 @@ function InputMultiSelect({
 
   const autoId = useId();
   const fieldId = `multi-select-${autoId}`;
-  const ariaProps = buildAriaAttributes({
-    isOpen,
-    isValid: true,
-    highlightedIndex,
-    fieldId,
-    allVisibleOptions,
-    placeholder: placeholder ?? "",
-  });
+  // Only a field with a dropdown is a combobox; without one it stays a
+  // plain textbox.
+  const ariaProps = hasDropdown
+    ? buildAriaAttributes({
+        isOpen,
+        isValid: true,
+        highlightedIndex,
+        fieldId,
+        allVisibleOptions,
+        placeholder: placeholder ?? "",
+      })
+    : { "aria-label": placeholder };
 
   return (
     <div
@@ -376,11 +389,14 @@ function InputMultiSelect({
           value={value}
           onChange={(event) => {
             onChange(event.target.value);
+            if (!hasDropdown) return;
             if (!isOpen) setIsOpen(true);
             setHighlightedIndex(0);
             setIsKeyboardNav(false);
           }}
-          onFocus={() => setIsOpen(true)}
+          onFocus={() => {
+            if (hasDropdown) setIsOpen(true);
+          }}
           onKeyDown={handleInputKeyDown}
           placeholder={placeholder}
           {...ariaProps}
@@ -398,50 +414,50 @@ function InputMultiSelect({
           }}
         />
       )}
-      <SelectChevron
-        isOpen={isOpen}
-        disabled={disabled}
-        onToggle={() => {
-          setIsOpen((prev) => !prev);
-          inputRef.current?.focus();
-        }}
-      />
+      {hasDropdown && (
+        <SelectChevron
+          isOpen={isOpen}
+          disabled={disabled}
+          onToggle={() => {
+            setIsOpen((prev) => !prev);
+            inputRef.current?.focus();
+          }}
+        />
+      )}
 
-      <SelectDropdown
-        ref={dropdownRef}
-        // Without a set there is no "empty set" to report: the dropdown only
-        // appears once it has a tag row or a create row to show.
-        isOpen={
-          isOpen && (optionsProp !== undefined || allVisibleOptions.length > 0)
-        }
-        disabled={disabled}
-        floatingStyles={floatingStyles}
-        setFloatingRef={setFloatingRef}
-        fieldId={fieldId}
-        placeholder={placeholder ?? ""}
-        sections={visibleSections}
-        emptySet={flatOptions.length === 0}
-        value=""
-        selectedValues={selectedValues}
-        highlightedIndex={highlightedIndex}
-        onSelect={handleOptionSelect}
-        onMouseEnter={(index) => {
-          setIsKeyboardNav(false);
-          setHighlightedIndex(index);
-        }}
-        onMouseMove={() => {
-          if (isKeyboardNav) setIsKeyboardNav(false);
-        }}
-        onMouseLeave={() => {
-          if (!isKeyboardNav) setHighlightedIndex(-1);
-        }}
-        isExactMatch={(option) => selectedValues.has(option.value)}
-        markAllMatches
-        inputValue={value}
-        allowCreate={freeEntry}
-        showCreateOption={showCreateOption}
-        dropdownMaxHeight={dropdownMaxHeight}
-      />
+      {hasDropdown && (
+        <SelectDropdown
+          ref={dropdownRef}
+          isOpen={isOpen}
+          disabled={disabled}
+          floatingStyles={floatingStyles}
+          setFloatingRef={setFloatingRef}
+          fieldId={fieldId}
+          placeholder={placeholder ?? ""}
+          sections={visibleSections}
+          emptySet={flatOptions.length === 0}
+          value=""
+          selectedValues={selectedValues}
+          highlightedIndex={highlightedIndex}
+          onSelect={handleOptionSelect}
+          onMouseEnter={(index) => {
+            setIsKeyboardNav(false);
+            setHighlightedIndex(index);
+          }}
+          onMouseMove={() => {
+            if (isKeyboardNav) setIsKeyboardNav(false);
+          }}
+          onMouseLeave={() => {
+            if (!isKeyboardNav) setHighlightedIndex(-1);
+          }}
+          isExactMatch={(option) => selectedValues.has(option.value)}
+          markAllMatches
+          inputValue={value}
+          allowCreate={freeEntry}
+          showCreateOption={showCreateOption}
+          dropdownMaxHeight={dropdownMaxHeight}
+        />
+      )}
     </div>
   );
 }
