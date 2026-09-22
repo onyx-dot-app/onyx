@@ -2277,7 +2277,7 @@ def _get_openai_compatible_server_response(
 @admin_router.post("/vercel-ai-gateway/available-models")
 def get_vercel_ai_gateway_available_models(
     request: VercelAIGatewayModelsRequest,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> list[VercelAIGatewayFinalModelResponse]:
     """Fetch available models from the Vercel AI Gateway catalog.
