@@ -779,7 +779,7 @@
     "addConnector": {
       "categories": {
         "codeRepository": {
-          "label": "Repositório de código"
+          "label": "Repositórios de código"
         },
         "messaging": {
           "label": "Mensagens"
@@ -788,20 +788,21 @@
           "label": "Outros"
         },
         "sales": {
-          "label": "Vendas"
+          "label": "Vendas e GTM"
         },
         "storage": {
           "label": "Armazenamento em nuvem"
         },
         "ticketingAndTaskManagement": {
-          "label": "Tíquetes e gestão de tarefas"
+          "label": "Tíquetes e tarefas"
         },
         "wiki": {
           "label": "Base de conhecimento e wikis"
         }
       },
       "popular": {
-        "title": "Populares"
+        "title": "Adicionar conector",
+        "description": "Conecte o {appName} às suas fontes de dados."
       },
       "search": {
         "placeholder": "Pesquisar conectores..."

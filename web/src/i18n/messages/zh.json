@@ -788,20 +788,21 @@
           "label": "其他"
         },
         "sales": {
-          "label": "销售"
+          "label": "销售与 GTM"
         },
         "storage": {
           "label": "云存储"
         },
         "ticketingAndTaskManagement": {
-          "label": "工单与任务管理"
+          "label": "工单与任务"
         },
         "wiki": {
           "label": "知识库与 Wiki"
         }
       },
       "popular": {
-        "title": "热门"
+        "title": "添加连接器",
+        "description": "将 {appName} 连接到您的数据源。"
       },
       "search": {
         "placeholder": "搜索连接器..."

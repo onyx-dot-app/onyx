@@ -146,6 +146,7 @@ export default function ConnectorsPage() {
 
   const { data: federatedConnectors } = useFederatedConnectors();
   const settings = useSettings();
+  const { appName } = settings;
 
   // Fetch Slack credentials to determine navigation behavior
   const { data: slackCredentials } = useSWR<Credential<any>[]>(
@@ -276,6 +277,8 @@ export default function ConnectorsPage() {
             onKeyDown={handleKeyPress}
           />
 
+          {/* Popular sources open the catalog, so their heading introduces
+              the page rather than naming a category. */}
           {dedupedPopular.length > 0 && (
             <GeneralLayouts.Section
               gap={3}
@@ -285,6 +288,7 @@ export default function ConnectorsPage() {
             >
               <Content
                 title={t("popular.title")}
+                description={t("popular.description", { appName })}
                 sizePreset="main-content"
                 variant="section"
               />

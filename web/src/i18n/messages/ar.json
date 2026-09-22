@@ -779,7 +779,7 @@
     "addConnector": {
       "categories": {
         "codeRepository": {
-          "label": "مستودع أكواد"
+          "label": "مستودعات الأكواد"
         },
         "messaging": {
           "label": "المراسلة"
@@ -788,20 +788,21 @@
           "label": "أخرى"
         },
         "sales": {
-          "label": "المبيعات"
+          "label": "المبيعات والتسويق"
         },
         "storage": {
           "label": "التخزين السحابي"
         },
         "ticketingAndTaskManagement": {
-          "label": "التذاكر وإدارة المهام"
+          "label": "التذاكر والمهام"
         },
         "wiki": {
           "label": "قواعد المعرفة والويكي"
         }
       },
       "popular": {
-        "title": "الشائعة"
+        "title": "إضافة موصّل",
+        "description": "اربط {appName} بمصادر بياناتك."
       },
       "search": {
         "placeholder": "البحث في الموصلات..."

@@ -788,20 +788,21 @@
           "label": "기타"
         },
         "sales": {
-          "label": "영업"
+          "label": "영업 및 GTM"
         },
         "storage": {
           "label": "클라우드 스토리지"
         },
         "ticketingAndTaskManagement": {
-          "label": "티켓팅 및 작업 관리"
+          "label": "티켓 및 작업"
         },
         "wiki": {
           "label": "지식 베이스 및 위키"
         }
       },
       "popular": {
-        "title": "인기"
+        "title": "커넥터 추가",
+        "description": "{appName}을(를) 데이터 소스에 연결하세요."
       },
       "search": {
         "placeholder": "커넥터 검색..."

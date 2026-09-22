@@ -788,20 +788,21 @@
           "label": "その他"
         },
         "sales": {
-          "label": "営業"
+          "label": "営業・GTM"
         },
         "storage": {
           "label": "クラウドストレージ"
         },
         "ticketingAndTaskManagement": {
-          "label": "チケット管理・タスク管理"
+          "label": "チケット・タスク"
         },
         "wiki": {
           "label": "ナレッジベース・Wiki"
         }
       },
       "popular": {
-        "title": "人気"
+        "title": "コネクタを追加",
+        "description": "{appName} をデータソースに接続します。"
       },
       "search": {
         "placeholder": "コネクターを検索..."

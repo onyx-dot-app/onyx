@@ -779,7 +779,7 @@
     "addConnector": {
       "categories": {
         "codeRepository": {
-          "label": "Code-Repository"
+          "label": "Code-Repositories"
         },
         "messaging": {
           "label": "Messaging"
@@ -788,20 +788,21 @@
           "label": "Sonstige"
         },
         "sales": {
-          "label": "Vertrieb"
+          "label": "Vertrieb & GTM"
         },
         "storage": {
           "label": "Cloud-Speicher"
         },
         "ticketingAndTaskManagement": {
-          "label": "Ticketing & Aufgabenverwaltung"
+          "label": "Tickets & Aufgaben"
         },
         "wiki": {
           "label": "Wissensbasis & Wikis"
         }
       },
       "popular": {
-        "title": "Beliebt"
+        "title": "Connector hinzufügen",
+        "description": "Verbinden Sie {appName} mit Ihren Datenquellen."
       },
       "search": {
         "placeholder": "Konnektoren suchen..."
