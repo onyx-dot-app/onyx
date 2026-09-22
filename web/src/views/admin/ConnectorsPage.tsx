@@ -193,6 +193,9 @@ export default function ConnectorsPage() {
         acc[category] = sources.filter(
           (source) =>
             source.category === category &&
+            // Popular sources with no home category (Web, File) already sit
+            // in the popular grid; "Others" only lists the long tail.
+            !(category === SourceCategory.Other && source.isPopular) &&
             (filtered.includes(source) ||
               category.toLowerCase().includes(searchTerm.toLowerCase()))
         );
