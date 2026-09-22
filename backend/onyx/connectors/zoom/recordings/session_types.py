@@ -30,10 +30,6 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# Each occurrence costs its own call, and this runs only after every cheaper
-# lookup has already said Zoom has no such session.
-_MAX_HOST_LOOKUP_OCCURRENCES = 3
-
 # Zoom's `type` code on an entry of the recording listing. The codes and their
 # meeting/webinar split come from `meetings[].type` on Cloud Recording > List all
 # recordings (GET /users/{userId}/recordings):
@@ -142,12 +138,13 @@ HostLookupBuilder = Callable[[ZoomClient, str], HostLookup]
 def _host_of_newest_recording(
     client: ZoomClient, occurrences: list[ZoomSessionOccurrence]
 ) -> str | None:
-    """The owner of the newest occurrence that still has a recording. An
-    occurrence Zoom has forgotten is skipped, because an older one may still
-    answer."""
-    newest = sorted(occurrences, key=lambda o: o.start_time or "", reverse=True)[
-        :_MAX_HOST_LOOKUP_OCCURRENCES
-    ]
+    """The owner of the newest occurrence that still has a recording.
+
+    Every run Zoom lists is asked, newest first. Stopping after a few would
+    report a series Zoom still lists as one it has no record of, and pruning
+    deletes the older runs' documents on that answer. The cost is one call per
+    unrecorded run, and only for a series the cheaper lookups could not name."""
+    newest = sorted(occurrences, key=lambda o: o.start_time or "", reverse=True)
     for occurrence in newest:
         try:
             return client.get_recording(occurrence.uuid).host_id

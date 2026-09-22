@@ -658,6 +658,31 @@ class TestTheIdAllowlistInventory:
         with pytest.raises(ConnectorValidationError, match="recognised none"):
             list(zoom_slim_documents(self._nothing_answers(), [source]))
 
+    def test_an_older_run_names_the_host_when_the_newer_runs_lost_theirs(
+        self,
+    ) -> None:
+        client = self._nothing_answers()
+        client.list_past_meeting_occurrences.side_effect = None
+        client.list_past_meeting_occurrences.return_value = [
+            occurrence(uuid=f"uuid-{month}", start_time=f"2025-0{month}-01T10:00:00Z")
+            for month in range(1, 6)
+        ]
+
+        def recording(identifier: str) -> ZoomRecordingEntry:
+            if identifier == "uuid-1":
+                return recording_entry(uuid="uuid-1", host_id="u1")
+            raise http_error(404, 3301)
+
+        client.get_recording.side_effect = recording
+
+        scopes = list(IdAllowlistSource(["111"]).inventory_scopes(client))
+
+        assert [scope.unrecognised for scope in scopes] == [[]]
+        assert [scope.host.user_id for scope in scopes[0].hosts] == ["u1"]
+        # Newest first, so the walk stops at the first run that still answers.
+        asked = [call.args[0] for call in client.get_recording.call_args_list]
+        assert asked == ["111", "uuid-5", "uuid-4", "uuid-3", "uuid-2", "uuid-1"]
+
     def test_one_unknown_number_goes_when_another_is_recognised(self) -> None:
         client = self._nothing_answers()
 
