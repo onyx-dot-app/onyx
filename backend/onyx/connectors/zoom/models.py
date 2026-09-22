@@ -2,8 +2,10 @@
 
 These mirror Zoom's documented responses and nothing else. A field is `| None`
 only where Zoom types it `string | null`, and it has a default only where
-Zoom's own text says the field is conditional.
+Zoom's own text says the field is conditional or Zoom was seen leaving it out.
 """
+
+from enum import Enum
 
 from pydantic import BaseModel, Field
 
@@ -302,6 +304,8 @@ APPROVED_REGISTRANT_STATUS = "approved"
 # a string on others.
 ZOOM_MEETING_TOO_OLD_CODE = "12702"
 ZOOM_NOT_FOUND_CODE = "3001"
+# Zoom's generic bad-request code; only the message says what was wrong.
+ZOOM_INVALID_REQUEST_CODE = "300"
 ZOOM_USER_NOT_FOUND_CODE = "1001"
 ZOOM_NOT_ENTITLED_CODE = "200"
 # Undocumented in the spec; the shape is a 400 with a message that lists the
@@ -361,3 +365,59 @@ class ZoomPanelist(BaseModel):
     name_tag_name: str | None = None
     name_tag_pronouns: str | None = None
     virtual_background_id: str | None = None
+
+
+class ZoomShareRecording(str, Enum):
+    """Zoom's enum is closed, so a value outside it fails validation instead of
+    being read as shared."""
+
+    PUBLICLY = "publicly"
+    INTERNALLY = "internally"
+    NONE = "none"
+
+
+class ZoomRecordingSettings(BaseModel):
+    """The fields of `GET /meetings/{meetingId}/recordings/settings` that decide
+    who may watch. Zoom marks none of them required or nullable. A recording on
+    "Private to me" answers with `share_recording` alone, so the rest default
+    to what absence means. The passcode is left out on purpose: it must never
+    be logged.
+    """
+
+    share_recording: ZoomShareRecording
+    recording_authentication: bool = False
+    authentication_option: str = ""
+    authentication_name: str = ""
+    on_demand: bool = False
+
+
+class ZoomRecordingRegistrant(BaseModel):
+    """One viewer who registered to watch, from
+    `GET /meetings/{meetingId}/recordings/registrants`. Zoom requires `email`
+    but not `status`, and a blank status never counts as approved.
+    """
+
+    email: str
+    status: str = ""
+
+
+class ZoomRecordingAuthenticationRule(BaseModel):
+    """One sign-in rule from `GET /users/{userId}/settings`. `domains` is comma
+    separated and only on a domain rule. `type` stays a plain string so a type
+    Zoom adds later fails one rule's lookup rather than the whole catalogue.
+    """
+
+    id: str
+    type: str = ""
+    name: str = ""
+    domains: str = ""
+
+
+class ZoomRecordingAuthenticationSettings(BaseModel):
+    """The rules are account-wide, so any one user's answer serves every
+    recording."""
+
+    recording_authentication: bool = False
+    authentication_options: list[ZoomRecordingAuthenticationRule] = Field(
+        default_factory=list
+    )

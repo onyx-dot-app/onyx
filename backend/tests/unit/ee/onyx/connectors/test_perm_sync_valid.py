@@ -1,5 +1,7 @@
 from unittest.mock import MagicMock
 
+import pytest
+
 from ee.onyx.connectors.perm_sync_valid import (
     source_has_perm_sync_probe,
     validate_perm_sync,
@@ -7,6 +9,7 @@ from ee.onyx.connectors.perm_sync_valid import (
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.canvas.connector import CanvasConnector
 from onyx.connectors.interfaces import BaseConnector
+from onyx.connectors.zoom.connector import ZoomConnector
 
 
 def test_probe_bearing_sources_derive_from_the_dispatch_table() -> None:
@@ -28,6 +31,7 @@ def test_probe_bearing_sources_derive_from_the_dispatch_table() -> None:
             DocumentSource.SHAREPOINT,
             DocumentSource.SLACK,
             DocumentSource.TEAMS,
+            DocumentSource.ZOOM,
         )
         if source_has_perm_sync_probe(source)
     }
@@ -37,20 +41,36 @@ def test_probe_bearing_sources_derive_from_the_dispatch_table() -> None:
         DocumentSource.CONFLUENCE,
         DocumentSource.GOOGLE_DRIVE,
         DocumentSource.SHAREPOINT,
+        DocumentSource.ZOOM,
     }
 
 
-def test_dispatch_reaches_the_matching_validator() -> None:
+@pytest.mark.parametrize(
+    "connector_class, probes",
+    [
+        (
+            CanvasConnector,
+            [
+                "probe_course_user_email_visibility",
+                "probe_account_user_listing_permission",
+            ],
+        ),
+        (ZoomConnector, ["probe_recording_access_permissions"]),
+    ],
+    ids=["canvas", "zoom"],
+)
+def test_dispatch_reaches_the_matching_validator(
+    connector_class: type[BaseConnector], probes: list[str]
+) -> None:
     """Verifies the dict dispatch preserves the old isinstance behavior."""
     # Precondition.
-    connector = MagicMock(spec=CanvasConnector)
+    connector = MagicMock(spec=connector_class)
 
     # Under test.
     validate_perm_sync(connector)
 
     # Postcondition.
-    connector.probe_course_user_email_visibility.assert_called_once_with()
-    connector.probe_account_user_listing_permission.assert_called_once_with()
+    assert sorted(name for name, _, _ in connector.method_calls) == sorted(probes)
 
 
 def test_dispatch_is_a_noop_for_probeless_connectors() -> None:
