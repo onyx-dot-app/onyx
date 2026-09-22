@@ -386,13 +386,14 @@ access-control consequence of this.
    returns 404 (not 403) on denial so a caller cannot use the status code to
    probe for existence across ownership boundaries. **This holds for
    `UserFile`-backed files** (owned, or attached to a readable persona, or
-   attached to a session the user owns or that is public) **but not for
-   `FileOrigin.CHAT_IMAGE_GEN` files**: any authenticated user who knows or
-   guesses the storage `file_id` can read a tool-generated file regardless of
-   who generated it, because `user_can_access_chat_file`'s `CHAT_IMAGE_GEN`
-   branch checks only the file origin, not session ownership. This is a
-   known, commented gap in the source (`access.py`, the `TODO(jtahara)`
-   above the branch), not a hidden bug; see §9.
+   attached to a session the user owns or that is public). For tool-generated
+   files, a `CHAT_IMAGE_GEN` file carries its owning chat session in
+   `FileRecord.file_metadata` (`file_store/utils.py:chat_image_gen_metadata`), and
+   `access.py:_user_can_access_chat_image_gen_file` grants it to the session owner,
+   or to anyone when the session is shared as `PUBLIC` and not deleted. A row
+   written before stamping carries no session and cannot be scoped; see §9.
+   Every new writer of a `CHAT_IMAGE_GEN` file must pass the session id, or the
+   file silently falls into the unscoped legacy case.
 2. **Token counts must be computed before a file is offered to a model.**
    `UserFile.token_count` is set at upload
    (`projects_file_utils.py:categorize_uploaded_files`) and read, never
@@ -515,13 +516,11 @@ tests over unit tests for anything touching the upload-to-index pipeline.
 
 ## 9. Footguns
 
-- **Any authenticated user can read another user's tool-generated file
-  (`FileOrigin.CHAT_IMAGE_GEN`) by `file_id`.** `access.py:user_can_access_chat_file`
-  grants access to every `CHAT_IMAGE_GEN` file unconditionally, with no check
-  against the session or user that produced it. The source carries its own
-  `TODO(jtahara)` acknowledging this. Do not assume `/chat/file/{file_id}` is
-  uniformly ownership-scoped; it is scoped for `UserFile`-backed files and
-  connector documents, but not for this class.
+- **A `CHAT_IMAGE_GEN` file with no session stamp is not session-scoped.**
+  Rows written before stamping existed keep the old grant-to-any-authenticated-
+  user behaviour, so existing images keep rendering. A new writer that forgets
+  to pass `chat_session_id` produces the same unscoped row, and nothing fails
+  loudly. Check the stamp whenever you add a path that saves a generated file.
 - **`FileRecord.file_id` and `UserFile.id` look interchangeable and are not.**
   `fetch_chat_file` silently translates one into the other via
   `get_file_id_by_user_file_id`; a new caller that skips this step and passes

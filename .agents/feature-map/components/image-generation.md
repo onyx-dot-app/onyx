@@ -199,15 +199,11 @@ the returned base64 data.
    `ImageGenerationTool._resolve_reference_image_file_ids` raises a
    `ToolCallException` naming the provider rather than dropping the images and
    generating from text alone.
-4. **Generated images are access-checked by origin only, not by owner or
-   session, and this is a known, tracked gap.** Every file saved with
-   `FileOrigin.CHAT_IMAGE_GEN` (`file_store/utils.py:save_file_from_url`,
-   `save_file_from_base64`) is readable by any authenticated user who knows or
-   guesses the `file_id`, because `access.py:user_can_access_chat_file`'s
-   `CHAT_IMAGE_GEN` branch checks only file origin, not session ownership
-   (`access.py`, the `TODO(jtahara)` comment). This is analyzed in full in
-   [[file-store-and-user-files]] §5 and §9; do not re-derive it here, only
-   know that it applies to every image this component generates.
+4. **Generated images are scoped to the chat session that produced them.**
+   `ImageGenerationTool` receives `chat_session_id` from `tool_constructor.py` and
+   passes it through `save_files` so every image is stamped. The access rule is in
+   [[file-store-and-user-files]] §5. Dropping the session id anywhere on that path
+   produces an unscoped row.
 5. **`response_format` is model-dependent.** `generation.py:response_format_for_model`
    omits the param entirely for `gpt-image-*` models (they reject it) and
    requests `"b64_json"` for every other model, since inline base64 is the only
@@ -295,11 +291,10 @@ cd web && npx playwright test tests/e2e/admin/image-generation/image-generation-
 
 ## 9. Footguns
 
-- **`FileOrigin.CHAT_IMAGE_GEN` files are effectively public to any logged-in
-  user.** This is a known, unresolved gap (`access.py`, `TODO(jtahara)`); see
-  [[file-store-and-user-files]] for the full analysis. Do not assume a
-  generated image is private just because it was created in a private
-  session.
+- **Images generated before session stamping are not session-scoped.** They
+  keep the old behaviour so they still render; see [[file-store-and-user-files]]
+  §9. Only images generated after the stamp was added follow the session's
+  sharing.
 - **The frontend's finished-image packet type is named
   `ImageGenerationToolDelta` even though it corresponds to the backend's
   `ImageGenerationFinal` and carries the wire value `"image_generation_final"`,

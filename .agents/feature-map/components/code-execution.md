@@ -279,7 +279,7 @@ relied on to reap them, `python_tool.py:run`).
 - `[[streaming-protocol]]`: `PythonToolStart`/`PythonToolDelta`/`BashToolStart`/`BashToolDelta`
   are packet types in the shared vocabulary (`streaming_models.py`).
 - `[[file-store-and-user-files]]`: where `run_python` generated files are saved
-  (`FileOrigin.CHAT_IMAGE_GEN`) and the access gap that origin carries.
+  (`FileOrigin.CHAT_IMAGE_GEN`) and how that origin is scoped to its chat session.
 - `[[core-chat-loop]]`: runs the LLM cycle that calls `run_python`; the coding agent runs its
   own inner loop (`fake_tools/coding_agent.py`) that reuses `llm_step.py:run_llm_step_pkt_generator`
   directly rather than going through `run_llm_loop`.
@@ -306,7 +306,7 @@ relied on to reap them, `python_tool.py:run`).
 | changes the `CodeInterpreterClient` HTTP contract (request/response shape, routes) | both `python_tool.py` and `bash_tool.py` (they share the client), the `@requires` version gates, and `is_available` for both tools |
 | changes isolation assumptions (e.g. what `CODE_INTERPRETER_BASE_URL` is allowed to point at) | this is a security-relevant change with no code-level enforcement today; document the new assumption explicitly since nothing here will catch a regression |
 | adds a new executable tool (a third code-execution surface) | `BUILT_IN_TOOL_MAP` and the seeding migration pattern (`[[tools-framework]]` §8), whether it needs a session like `bash` or is stateless like `run_python`, and whether its output needs the same truncation and generated-file handling |
-| changes output handling (truncation, generated-file save path) | `CODE_INTERPRETER_MAX_OUTPUT_LENGTH`, `FileOrigin.CHAT_IMAGE_GEN` and its access gap in `[[file-store-and-user-files]]`, and the frontend renderers that assume `stdout`/`stderr`/`file_ids` shapes |
+| changes output handling (truncation, generated-file save path) | `CODE_INTERPRETER_MAX_OUTPUT_LENGTH`, `FileOrigin.CHAT_IMAGE_GEN` and the session stamp `PythonTool` must pass (`[[file-store-and-user-files]]` §5), and the frontend renderers that assume `stdout`/`stderr`/`file_ids` shapes |
 | changes `/admin/code-interpreter` semantics | `useCodeInterpreter.ts`'s polling and status derivation, and both `is_available` implementations that read `CodeInterpreterServer.server_enabled` |
 | changes the coding-agent session lifecycle | `_setup_session`'s TTL and cleanup, and whether bash calls must stay sequential (filesystem sharing) |
 
@@ -374,10 +374,10 @@ See `backend/AGENTS.md` for authoritative commands and required env.
   `fake_tools/coding_agent.py` with a sentinel id, is never in `BUILT_IN_TOOL_MAP`'s
   persona-attach path, and its calls are not written as `ToolCall` rows. Code that assumes
   every built-in tool behaves like `run_python` will mishandle `bash`.
-- **Generated files inherit the `CHAT_IMAGE_GEN` access gap.** A file produced by `run_python`
-  is readable by any authenticated user who obtains its `file_id`, not just the user whose
-  turn produced it (`[[file-store-and-user-files]]` §9). This is not specific to code
-  execution, but code execution is a path that produces such files.
+- **Generated files are scoped by a session stamp that `PythonTool` must pass.** `run_python`
+  saves outputs as `FileOrigin.CHAT_IMAGE_GEN` with `chat_image_gen_metadata(self._chat_session_id)`.
+  A `PythonTool` built without `chat_session_id` writes unscoped rows
+  (`[[file-store-and-user-files]]` §9).
 - **Isolation is asserted in a docstring, not enforced in code.** The "no network access" claim
   for bash sessions (`code_interpreter_client.py:execute_bash_in_session`) is a statement about
   the external service's behavior. Nothing in this repository can verify or test that claim
