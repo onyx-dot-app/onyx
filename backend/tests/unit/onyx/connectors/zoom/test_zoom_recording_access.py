@@ -251,4 +251,25 @@ class TestTheOwner:
             )
 
         client.get_user.assert_called_once_with("owner-1")
+        client.list_users.assert_called_once()
         client.get_recording_authentication_rules.assert_called_once_with("owner-1")
+
+    def test_the_catalogue_does_not_depend_on_the_owner_still_existing(self) -> None:
+        # The recording's owner has left, and the catalogue is asked for
+        # through a user Zoom still lists.
+        client = with_recording_access(
+            settings=ANYONE_IN_DOMAIN_RULE,
+            rules=_RULES,
+            owner=user(id="someone-else", email="someone@example.com"),
+        )
+        client.get_user.side_effect = http_error(404, 1001)
+
+        access = _resolve(client, host_id="left-the-company")
+
+        client.get_recording_authentication_rules.assert_called_once_with(
+            "someone-else"
+        )
+        assert access.external_user_group_ids == {
+            "zoom_domain:onyx.app",
+            "zoom_domain:partner.com",
+        }

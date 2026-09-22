@@ -101,8 +101,7 @@ def probe_recording_access_scopes(client: ZoomClient, sample: ProbeSample) -> No
     an empty list. Zoom checks some endpoints for the resource before the
     scope, so the two recording-bound scopes wait until a recording exists;
     this runs again before every attempt, so one that appears later is probed
-    before anything is indexed. The owner lookup and the sign-in rules need
-    only a user.
+    before anything is indexed. The sign-in rules need only a user.
     """
     if sample.recording_uuid is None:
         logger.warning(
@@ -127,8 +126,6 @@ def probe_recording_access_scopes(client: ZoomClient, sample: ProbeSample) -> No
         page = _probe("the account's users", client.list_users)
         user_id = next((u.id for u in (page.users if page else []) if u.id), None)
     if user_id is not None:
-        # A recording's owner is looked up one at a time, behind its own scope.
-        _probe(f"user {user_id}", partial(client.get_user, user_id))
         _probe(
             f"the sign-in rules of user {user_id}",
             lambda: client.get_recording_authentication_rules(user_id),
