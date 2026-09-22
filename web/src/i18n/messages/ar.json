@@ -806,9 +806,6 @@
       "search": {
         "placeholder": "البحث في الموصلات"
       },
-      "seeConnectorsButton": {
-        "label": "عرض الموصلات"
-      },
       "sourceTile": {
         "tooltip": {
           "federatedConfigured": "<strong>موصل موحّد مهيأ بالفعل.</strong> انقر لتعديل الموصل الحالي.",

@@ -5,7 +5,6 @@ import { Content, SettingsLayouts } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { SourceCategory, SourceMetadata } from "@/lib/search/types";
 import { listSourceMetadata } from "@/lib/sources";
-import { Button } from "@opal/components";
 import {
   useCallback,
   useDeferredValue,
@@ -265,11 +264,6 @@ export default function Page() {
       <SettingsLayouts.Header
         icon={route.icon}
         title={adminRouteTitle(route)}
-        rightChildren={
-          <Button href="/admin/indexing/status">
-            {t("seeConnectorsButton.label")}
-          </Button>
-        }
         divider
       />
       <SettingsLayouts.Body>

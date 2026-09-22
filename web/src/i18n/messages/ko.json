@@ -806,9 +806,6 @@
       "search": {
         "placeholder": "커넥터 검색"
       },
-      "seeConnectorsButton": {
-        "label": "커넥터 보기"
-      },
       "sourceTile": {
         "tooltip": {
           "federatedConfigured": "<strong>페더레이션 커넥터가 이미 구성되어 있습니다.</strong> 클릭하여 기존 커넥터를 편집하세요.",

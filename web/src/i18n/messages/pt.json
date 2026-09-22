@@ -806,9 +806,6 @@
       "search": {
         "placeholder": "Pesquisar conectores"
       },
-      "seeConnectorsButton": {
-        "label": "Ver conectores"
-      },
       "sourceTile": {
         "tooltip": {
           "federatedConfigured": "<strong>Conector federado já configurado.</strong> Clique para editar o conector existente.",

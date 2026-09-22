@@ -806,9 +806,6 @@
       "search": {
         "placeholder": "搜索连接器"
       },
-      "seeConnectorsButton": {
-        "label": "查看连接器"
-      },
       "sourceTile": {
         "tooltip": {
           "federatedConfigured": "<strong>联合连接器已配置。</strong>点击可编辑现有连接器。",
