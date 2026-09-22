@@ -316,7 +316,10 @@ def main() -> int:
     existing: dict[str, str] = {}
     if args.output_dir.exists():
         for path in args.output_dir.glob("*.json"):
-            existing[path.name] = path.read_text()
+            # Files prefixed with "_" are hand-maintained (e.g.
+            # _supplement.json) and never owned by the sync.
+            if not path.name.startswith("_"):
+                existing[path.name] = path.read_text()
 
     if existing == outputs:
         print("price table already up to date")
@@ -334,7 +337,8 @@ def main() -> int:
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     for name in set(existing) - set(outputs):
-        (args.output_dir / name).unlink()
+        if not name.startswith("_"):
+            (args.output_dir / name).unlink()
     for name, content in outputs.items():
         if existing.get(name) != content:
             (args.output_dir / name).write_text(content)

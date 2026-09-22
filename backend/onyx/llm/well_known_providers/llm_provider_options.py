@@ -47,11 +47,11 @@ _cached_recommendations_time: float = 0.0
 
 
 def _get_provider_to_models_map() -> dict[str, list[str]]:
-    """Lazy-load provider model mappings to avoid importing litellm at module level.
+    """Lazy-load provider model mappings.
 
     Dynamic providers (Bedrock, Ollama, OpenRouter) return empty lists here
     because their models are fetched directly from the source API, which is
-    more up-to-date than LiteLLM's static lists.
+    more up-to-date than a static catalog.
     """
     return {
         OPENAI_PROVIDER_NAME: get_openai_model_names(),
@@ -150,10 +150,10 @@ def is_obsolete_model(model_name: str, provider: str) -> bool:
 
 
 def get_openai_model_names() -> list[str]:
-    """Get OpenAI model names dynamically from litellm."""
+    """Get OpenAI model names from the vendored model catalog."""
     import re
 
-    import litellm
+    from onyx.llm import model_catalog
 
     # TODO: remove these lists once we have a comprehensive model configuration page
     # The ideal flow should be: fetch all available models --> filter by type
@@ -185,8 +185,8 @@ def get_openai_model_names() -> list[str]:
 
     return sorted(
         (
-            model.removeprefix("openai/")
-            for model in litellm.open_ai_chat_completion_models
+            model
+            for model in model_catalog.iter_models(LlmProviderNames.OPENAI)
             if is_valid_model(model)
         ),
         reverse=True,
@@ -194,8 +194,8 @@ def get_openai_model_names() -> list[str]:
 
 
 def get_anthropic_model_names() -> list[str]:
-    """Get Anthropic model names dynamically from litellm."""
-    import litellm
+    """Get Anthropic model names from the vendored model catalog."""
+    from onyx.llm import model_catalog
 
     # Models to exclude from Anthropic's model list (deprecated or duplicates)
     _IGNORABLE_ANTHROPIC_MODELS = {
@@ -207,7 +207,7 @@ def get_anthropic_model_names() -> list[str]:
     return sorted(
         [
             model
-            for model in litellm.anthropic_models
+            for model in model_catalog.iter_models(LlmProviderNames.ANTHROPIC)
             if model not in _IGNORABLE_ANTHROPIC_MODELS
             and not is_obsolete_model(model, LlmProviderNames.ANTHROPIC)
         ],
@@ -216,29 +216,12 @@ def get_anthropic_model_names() -> list[str]:
 
 
 def get_vertexai_model_names() -> list[str]:
-    """Get Vertex AI model names dynamically from litellm model_cost."""
-    import litellm
+    """Get Vertex AI model names from the vendored model catalog (the
+    vertex_ai section already merges google-vertex and
+    google-vertex-anthropic models)."""
+    from onyx.llm import model_catalog
 
-    # Combine all vertex model sets
-    vertex_models: set[str] = set()
-    vertex_model_sets = [
-        "vertex_chat_models",
-        "vertex_language_models",
-        "vertex_anthropic_models",
-        "vertex_llama3_models",
-        "vertex_mistral_models",
-        "vertex_ai_ai21_models",
-        "vertex_deepseek_models",
-    ]
-    for attr in vertex_model_sets:
-        if hasattr(litellm, attr):
-            vertex_models.update(getattr(litellm, attr))  # ods: ignore[getattr]
-
-    # Also extract from model_cost for any models not in the sets
-    for key in litellm.model_cost.keys():
-        if key.startswith("vertex_ai/"):
-            model_name = key.replace("vertex_ai/", "")
-            vertex_models.add(model_name)
+    vertex_models = set(model_catalog.iter_models(LlmProviderNames.VERTEX_AI))
 
     return sorted(
         [

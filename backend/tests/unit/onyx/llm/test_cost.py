@@ -172,15 +172,14 @@ class TestComputeCostCents:
 
 
 class TestUnmappedGatewayModels:
-    """Gateways name models `vendor/model`. Those miss every exact cost-map
-    lookup, so litellm resolves them from capability generalization rules,
-    which carry no pricing, and coerces the rates to 0 instead of raising."""
+    """Gateway-hosted names that the catalog does not carry fall back to the
+    configured default rates instead of silently recording zero."""
 
     GATEWAY_CASES = [
-        ("anthropic/claude-sonnet-4.5", "portkey"),
-        ("openai/gpt-5", "openai_compatible"),
-        ("google/gemini-2.5-pro", "bifrost"),
-        ("anthropic/claude-sonnet-4.5", "nebius_tokenfactory"),
+        ("acme/sonnet-9-ultra", "portkey"),
+        ("acme/gpt-77", "openai_compatible"),
+        ("acme/gemini-9.9-pro", "bifrost"),
+        ("acme/claude-42-opus", "nebius_tokenfactory"),
     ]
 
     @pytest.mark.parametrize("model,provider", GATEWAY_CASES)
@@ -213,7 +212,7 @@ class TestUnmappedGatewayModels:
         monkeypatch.setattr(cost_mod, "DEFAULT_LLM_OUTPUT_COST_PER_MTOK", 0.0)
         with caplog.at_level(logging.WARNING):
             result = compute_cost_cents(
-                model="anthropic/claude-sonnet-4.5",
+                model="acme/sonnet-9-ultra",
                 provider="portkey",
                 prompt_tokens=1_000_000,
                 completion_tokens=1_000_000,
@@ -297,12 +296,12 @@ class TestLocallyHostedProviders:
         assert price.output_per_mtok is None
 
     @pytest.mark.parametrize("model", ["gpt-oss:20b-cloud", "gpt-oss:120b-cloud"])
-    def test_bare_ollama_cloud_model_defers_to_the_litellm_entry(
+    def test_bare_ollama_cloud_model_reaches_fallback_rates(
         self, model: str, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """litellm carries explicit `ollama/*-cloud` entries priced at 0. That is
-        a mapped price rather than an invented one, so it wins over the fallback
-        rates; an admin who disagrees pins it with a ModelCostOverride row."""
+        """The catalog carries no `ollama/*-cloud` entries, so cloud models
+        fall back to the configured default rates rather than the zero-cost
+        local path; an admin can pin a real price with a ModelCostOverride."""
         monkeypatch.setattr(cost_mod, "DEFAULT_LLM_INPUT_COST_PER_MTOK", 2.0)
         monkeypatch.setattr(cost_mod, "DEFAULT_LLM_OUTPUT_COST_PER_MTOK", 6.0)
         assert compute_cost_cents(
@@ -310,7 +309,7 @@ class TestLocallyHostedProviders:
             provider="ollama",
             prompt_tokens=1_000_000,
             completion_tokens=1_000_000,
-        ) == (0.0, 0.0)
+        ) == (200.0, 600.0)
 
 
 class TestImageFlow:

@@ -13,10 +13,12 @@ from onyx.tools.utils import explicit_tool_calling_supported
             "claude-haiku-4-5-20251001",
             True,
         ),
+        # Claude 3.0 supports tool use; this was False before only because
+        # litellm's registry lacked the model entirely.
         (
             LlmProviderNames.ANTHROPIC,
             "claude-3-sonnet-20240229",
-            False,
+            True,
         ),
         (
             LlmProviderNames.BEDROCK,
