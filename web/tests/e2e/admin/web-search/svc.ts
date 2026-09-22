@@ -41,8 +41,17 @@ export const FAKE_CONTENT_PROVIDERS = {
   },
 };
 
-export function findProviderCard(page: Page, providerLabel: string): Locator {
-  return page.getByLabel(providerLabel, { exact: true }).first();
+export type ProviderSection = "search" | "content";
+
+// Exa and Firecrawl have a card in both sections. Pass `section` to pick one;
+// without it the first match on the page (the search section) wins.
+export function findProviderCard(
+  page: Page,
+  providerLabel: string,
+  section?: ProviderSection
+): Locator {
+  const scope = section ? page.getByTestId(`${section}-provider-list`) : page;
+  return scope.getByLabel(providerLabel, { exact: true }).first();
 }
 
 export function mainContainer(page: Page): Locator {
