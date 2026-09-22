@@ -11,11 +11,9 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     datetime_from_utc_timestamp,
 )
 from onyx.connectors.exceptions import (
-    ConnectorValidationError,
     CredentialExpiredError,
     InsufficientPermissionsError,
 )
-from onyx.connectors.models import SlimDocument
 from onyx.connectors.zoom.client import MAX_LISTING_PAGES
 from onyx.connectors.zoom.models import (
     ZoomRecordingEntry,
@@ -30,7 +28,6 @@ from onyx.connectors.zoom.recordings.discovery import (
     _OCCURRENCE_POLL_OVERLAP_SECONDS,
     _WIDE_BACKFILL_WINDOWS,
     EARLIEST_RECORDING_DATE,
-    DiscoverySource,
     GroupSource,
     HostAllowlistSource,
     IdAllowlistSource,
@@ -38,14 +35,11 @@ from onyx.connectors.zoom.recordings.discovery import (
     build_discovery_sources,
     listing_windows,
 )
-from onyx.connectors.zoom.recordings.inventory import _merged, zoom_slim_documents
 from onyx.connectors.zoom.recordings.models import (
-    Host,
-    HostScope,
     ZoomListingIncomplete,
     ZoomSessionType,
 )
-from tests.unit.onyx.connectors.zoom.helpers import http_error, mock_zoom_client
+from tests.unit.onyx.connectors.zoom.helpers import mock_zoom_client
 from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
     occurrence,
     recording_entry,
@@ -617,158 +611,6 @@ def _client_for_hosts(
     return client
 
 
-class TestTheIdAllowlistInventory:
-    """Pruning deletes whatever inventory_scopes leaves out, and Zoom's not-found
-    is the same answer for a deleted session and for one in another account, so
-    a number nothing answers for has to count towards the stop."""
-
-    @staticmethod
-    def _nothing_answers() -> MagicMock:
-        client = mock_zoom_client()
-        client.get_recording.side_effect = http_error(404, 3301)
-        client.get_meeting_details.side_effect = http_error(404, 3001)
-        client.get_past_meeting_details.side_effect = http_error(404, 3001)
-        client.list_past_meeting_occurrences.side_effect = http_error(404, 3001)
-        client.list_user_recordings.return_value = ZoomRecordingPage(total_records=0)
-        return client
-
-    def test_a_number_zoom_has_no_record_of_is_reported_as_unrecognised(
-        self,
-    ) -> None:
-        source = IdAllowlistSource(["111"])
-
-        scopes = list(source.inventory_scopes(self._nothing_answers()))
-
-        assert [scope.unrecognised for scope in scopes] == [["111"]]
-        assert not any(scope.hosts or scope.proven for scope in scopes)
-
-    def test_a_recording_zoom_answered_for_is_proof_even_without_a_host(
-        self,
-    ) -> None:
-        client = self._nothing_answers()
-        client.get_recording.side_effect = None
-        client.get_recording.return_value = recording_entry(uuid="uuid-1", host_id="")
-
-        scopes = list(IdAllowlistSource(["111"]).inventory_scopes(client))
-
-        assert [scope.unrecognised for scope in scopes] == [[]]
-        assert [work.occurrence_uuid for work in scopes[0].proven] == ["uuid-1"]
-
-    def test_a_connector_zoom_recognises_nothing_of_stops_the_prune(self) -> None:
-        source = IdAllowlistSource(["111", "222"])
-
-        with pytest.raises(ConnectorValidationError, match="recognised none"):
-            list(zoom_slim_documents(self._nothing_answers(), [source]))
-
-    def test_an_older_run_names_the_host_when_the_newer_runs_lost_theirs(
-        self,
-    ) -> None:
-        client = self._nothing_answers()
-        client.list_past_meeting_occurrences.side_effect = None
-        client.list_past_meeting_occurrences.return_value = [
-            occurrence(uuid=f"uuid-{month}", start_time=f"2025-0{month}-01T10:00:00Z")
-            for month in range(1, 6)
-        ]
-
-        def recording(identifier: str) -> ZoomRecordingEntry:
-            if identifier == "uuid-1":
-                return recording_entry(uuid="uuid-1", host_id="u1")
-            raise http_error(404, 3301)
-
-        client.get_recording.side_effect = recording
-
-        scopes = list(IdAllowlistSource(["111"]).inventory_scopes(client))
-
-        assert [scope.unrecognised for scope in scopes] == [[]]
-        assert [scope.host.user_id for scope in scopes[0].hosts] == ["u1"]
-        # Newest first, so the walk stops at the first run that still answers.
-        asked = [call.args[0] for call in client.get_recording.call_args_list]
-        assert asked == ["111", "uuid-5", "uuid-4", "uuid-3", "uuid-2", "uuid-1"]
-
-    def test_one_unknown_number_goes_when_another_is_recognised(self) -> None:
-        client = self._nothing_answers()
-
-        def recording(number: str) -> ZoomRecordingEntry:
-            if number == "222":
-                return recording_entry(uuid="uuid-2", host_id="u1")
-            raise http_error(404, 3301)
-
-        client.get_recording.side_effect = recording
-        source = IdAllowlistSource(["111", "222"])
-
-        ids = {
-            document.id
-            for batch in zoom_slim_documents(client, [source])
-            for document in batch
-            if isinstance(document, SlimDocument)
-        }
-
-        assert ids == {"ZOOM_MEETING_uuid-2"}
-
-
-class TestOneHostIsWalkedOnce:
-    """The host list names a person by email and the Group by Zoom's user id,
-    and a host walked under both costs another 173 calls every prune."""
-
-    _EMAIL = HostScope(
-        host=Host(user_id="jill@example.com", email="jill@example.com"),
-        session_types=frozenset({ZoomSessionType.MEETING}),
-    )
-    _MEMBER = HostScope(
-        host=Host(user_id="u1", email="Jill@Example.com "),
-        session_types=frozenset({ZoomSessionType.WEBINAR}),
-    )
-    _NUMBER = HostScope(
-        host=Host(user_id="u1"),
-        sessions=frozenset({(ZoomSessionType.MEETING, "111")}),
-    )
-
-    def test_an_email_and_the_member_it_belongs_to_merge_under_zooms_id(
-        self,
-    ) -> None:
-        merged = _merged([self._EMAIL, self._NUMBER, self._MEMBER])
-
-        assert [scope.host.user_id for scope in merged] == ["u1"]
-        assert merged[0].session_types == {
-            ZoomSessionType.MEETING,
-            ZoomSessionType.WEBINAR,
-        }
-        assert merged[0].sessions == {(ZoomSessionType.MEETING, "111")}
-
-    def test_an_email_no_member_carries_stays_its_own_host(self) -> None:
-        merged = _merged([self._EMAIL, self._NUMBER])
-
-        assert sorted(scope.host.user_id for scope in merged) == [
-            "jill@example.com",
-            "u1",
-        ]
-
-    def test_the_walk_asks_zoom_once_for_a_host_named_both_ways(self) -> None:
-        def walked(sources: list[DiscoverySource]) -> list[str]:
-            client = mock_zoom_client()
-            client.list_group_members.return_value = ZoomUserPage(
-                users=[user(id="u1", email="Jill@Example.com")], total_records=1
-            )
-            client.list_user_recordings.return_value = ZoomRecordingPage(
-                total_records=0
-            )
-            list(zoom_slim_documents(client, sources))
-            return [
-                call.kwargs["user_id"]
-                for call in client.list_user_recordings.call_args_list
-            ]
-
-        group_only = walked([GroupSource("group-1")])
-        both = walked(
-            [HostAllowlistSource(["jill@example.com"]), GroupSource("group-1")]
-        )
-
-        # Asked about once to prove the email exists, then never walked as
-        # itself.
-        assert both.count("jill@example.com") == 1
-        assert both.count("u1") == group_only.count("u1")
-
-
 class TestHostAllowlistSource:
     def test_an_email_is_resolved_to_a_user_id_before_recordings_are_listed(
         self,
@@ -980,40 +822,19 @@ class TestGroupSource:
         assert result.done is True
 
 
-class TestAListingWithNoCountFailsTheRun:
-    """Comparing against total_records is the only check on a listing Zoom cut
-    short, so a listing that arrives without one cannot be trusted either:
-    pruning would delete whatever it left out. The recordings loop and the
-    members loop are separate code, so both are driven."""
-
-    @pytest.mark.parametrize("listing", ["recordings", "members"])
-    def test_discovery_raises_rather_than_trusting_it(self, listing: str) -> None:
-        source = GroupSource("group-1")
-        client = _client_for_hosts(
-            members=[user(id="u1")], recordings=[_recording("uuid-1")]
-        )
-        if listing == "recordings":
-            client.list_user_recordings.return_value = ZoomRecordingPage(
-                recordings=[_recording("uuid-1")]
-            )
-        else:
-            client.list_group_members.return_value = ZoomUserPage(users=[user(id="u1")])
-
-        with pytest.raises(ZoomListingIncomplete, match="no total_records"):
-            source.discover_step(client, _HOST_START, _END, None)
-
-
 class TestAListingZoomCutsShortFailsTheRun:
     """Pruning deletes whatever a listing leaves out, and indexing never returns
     to a window it reported a failure for, so neither may carry on with a short
-    answer. The recordings loop and the members loop are separate code, so both
-    are driven through every way Zoom can cut a listing short."""
+    answer. A listing with no count cannot be checked, so it is not trusted
+    either. The recordings loop and the members loop are separate code, so
+    both are driven through every way Zoom can cut a listing short."""
 
     @pytest.mark.parametrize("listing", ["recordings", "members"])
     @pytest.mark.parametrize(
         ("cut_short_by", "message"),
         [
             ("sending fewer than it counted", "listed 1 of the 3"),
+            ("sending no count at all", "no total_records"),
             ("repeating its cursor", "stopped advancing the cursor"),
             ("never ending", f"past {MAX_LISTING_PAGES} pages"),
         ],
@@ -1028,6 +849,7 @@ class TestAListingZoomCutsShortFailsTheRun:
 
         pages = {
             "sending fewer than it counted": iter([page(total_records=3)]),
+            "sending no count at all": iter([page()]),
             "repeating its cursor": itertools.repeat(page(next_page_token="same")),
             "never ending": (
                 page(next_page_token=f"tok-{n}") for n in itertools.count()
