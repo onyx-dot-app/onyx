@@ -551,12 +551,14 @@ class ZoomClient:
         response = self._get(endpoints.USER, user_id)
         return ZoomUser.model_validate(response.json())
 
-    def list_users(self, page_token: str | None = None) -> ZoomUserPage:
+    def list_users(
+        self, page_token: str | None = None, *, page_size: int = _MAX_PAGE_SIZE
+    ) -> ZoomUserPage:
         """Host emails are matched against this listing to get the user ids the
         recordings listing is called with. TODO(subash): that listing documents
         its `userId` as "ID or email address", so discovery could pass the email
         and drop this call and its `user:read:list_users:admin` scope."""
-        params: dict[str, Any] = {"page_size": _MAX_PAGE_SIZE}
+        params: dict[str, Any] = {"page_size": page_size}
         if page_token:
             params["next_page_token"] = page_token
 
