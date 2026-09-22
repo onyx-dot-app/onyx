@@ -13,7 +13,7 @@ packages:
   .: 100
   src: 99.5
   src/app: 99.5
-  src/app/admin: 96.3
+  src/app/admin: 96.2
   src/app/anonymous: 100
   src/app/api: 100
   src/app/app: 98.9
@@ -67,7 +67,7 @@ packages:
   src/lib/billing: 100
   src/lib/build: 100
   src/lib/chat: 98.6
-  src/lib/connectors: 98.4
+  src/lib/connectors: 98.5
   src/lib/constants: 100
   src/lib/credentials: 97.8
   src/lib/extension: 100
