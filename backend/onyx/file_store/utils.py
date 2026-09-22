@@ -1,6 +1,9 @@
 import base64
+import re
+import secrets
 from collections.abc import Callable
 from io import BytesIO
+from pathlib import PurePosixPath
 from typing import cast
 from uuid import UUID
 
@@ -20,6 +23,37 @@ from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.timing import log_function_time
 
 logger = setup_logger()
+
+_IMAGE_PROMPT_UNSAFE = re.compile(r"[^\w\s-]", re.UNICODE)
+_IMAGE_PROMPT_SPACES = re.compile(r"[-\s_]+")
+_IMAGE_MIME_TO_EXT = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+}
+_IMAGE_FILENAME_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+_MAX_IMAGE_NAME_WORDS = 5
+
+
+def slugify_image_name(name: str) -> str:
+    """Turn a short image name into kebab-case. Keep at most 5 words."""
+    source = name.strip()
+    suffix = PurePosixPath(source).suffix.lower()
+    if suffix in _IMAGE_FILENAME_EXTS:
+        source = PurePosixPath(source).stem
+    stem = _IMAGE_PROMPT_UNSAFE.sub("", source)
+    stem = _IMAGE_PROMPT_SPACES.sub("-", stem).strip("-_").lower()
+    words = [word for word in stem.split("-") if word][:_MAX_IMAGE_NAME_WORDS]
+    return "-".join(words) or "generated-image"
+
+
+def filename_from_image_prompt(prompt: str, mime_type: str = "image/png") -> str:
+    """Build a searchable file name: short stem, random id, and extension."""
+    ext = _IMAGE_MIME_TO_EXT.get(mime_type.split(";", 1)[0].strip().lower(), ".png")
+    stem = slugify_image_name(prompt)
+    return f"{stem}-{secrets.token_hex(4)}{ext}"
 
 
 def plaintext_file_name_for_id(file_id: str) -> str:
@@ -254,13 +288,14 @@ def save_file_from_url(url: str) -> str:
     return file_id
 
 
-def save_file_from_base64(base64_string: str) -> str:
+def save_file_from_base64(base64_string: str, display_name: str | None = None) -> str:
+    mime_type = get_image_type(base64_string)
     file_store = get_default_file_store()
     file_id = file_store.save_file(
         content=BytesIO(base64.b64decode(base64_string)),
-        display_name="GeneratedImage",
+        display_name=display_name or filename_from_image_prompt("", mime_type),
         file_origin=FileOrigin.CHAT_IMAGE_GEN,
-        file_type=get_image_type(base64_string),
+        file_type=mime_type,
     )
     return file_id
 

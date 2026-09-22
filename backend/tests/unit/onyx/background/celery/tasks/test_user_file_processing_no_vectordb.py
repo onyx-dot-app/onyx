@@ -17,7 +17,7 @@ from onyx.background.celery.tasks.user_file_processing.tasks import (
     process_user_file_impl,
     project_sync_user_file_impl,
 )
-from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.connectors.models import Document, TextSection
 from onyx.db.enums import UserFileStatus
 
@@ -397,7 +397,10 @@ class TestDeleteImplNoVectorDb:
         session.get.return_value = uf
         mock_get_session.return_value.__enter__.return_value = session
 
+        file_record = MagicMock()
+        file_record.file_origin = FileOrigin.USER_FILE
         file_store = MagicMock()
+        file_store.read_file_record.return_value = file_record
         mock_get_file_store.return_value = file_store
 
         delete_user_file_impl(
@@ -409,6 +412,88 @@ class TestDeleteImplNoVectorDb:
         assert file_store.delete_file.call_count == 2
         session.delete.assert_called_once_with(uf)
         session.commit.assert_called_once()
+
+    @patch(f"{TASKS_MODULE}.DISABLE_VECTOR_DB", True)
+    @patch(f"{TASKS_MODULE}.get_default_file_store")
+    @patch(f"{TASKS_MODULE}.get_session_with_current_tenant")
+    def test_transient_record_read_keeps_shared_blob(
+        self,
+        mock_get_session: MagicMock,
+        mock_get_file_store: MagicMock,
+    ) -> None:
+        uf = _make_user_file(status=UserFileStatus.DELETING)
+        session = MagicMock()
+        session.get.return_value = uf
+        mock_get_session.return_value.__enter__.return_value = session
+
+        file_store = MagicMock()
+        file_store.read_file_record.side_effect = RuntimeError("db blip")
+        mock_get_file_store.return_value = file_store
+
+        delete_user_file_impl(
+            user_file_id=str(uf.id),
+            tenant_id="test-tenant",
+            redis_locking=False,
+        )
+
+        file_store.delete_file.assert_not_called()
+        session.delete.assert_not_called()
+
+    @patch(f"{TASKS_MODULE}.DISABLE_VECTOR_DB", True)
+    @patch(f"{TASKS_MODULE}.get_default_file_store")
+    @patch(f"{TASKS_MODULE}.get_session_with_current_tenant")
+    def test_missing_record_still_deletes_orphan_blob(
+        self,
+        mock_get_session: MagicMock,
+        mock_get_file_store: MagicMock,
+    ) -> None:
+        from onyx.db.file_record import FileRecordNotFoundError
+
+        uf = _make_user_file(status=UserFileStatus.DELETING)
+        session = MagicMock()
+        session.get.return_value = uf
+        mock_get_session.return_value.__enter__.return_value = session
+
+        file_store = MagicMock()
+        file_store.read_file_record.side_effect = FileRecordNotFoundError("gone")
+        mock_get_file_store.return_value = file_store
+
+        delete_user_file_impl(
+            user_file_id=str(uf.id),
+            tenant_id="test-tenant",
+            redis_locking=False,
+        )
+
+        assert file_store.delete_file.call_count == 2
+        session.delete.assert_called_once_with(uf)
+
+    @patch(f"{TASKS_MODULE}.DISABLE_VECTOR_DB", True)
+    @patch(f"{TASKS_MODULE}.get_default_file_store")
+    @patch(f"{TASKS_MODULE}.get_session_with_current_tenant")
+    def test_chat_image_origin_keeps_source_blob(
+        self,
+        mock_get_session: MagicMock,
+        mock_get_file_store: MagicMock,
+    ) -> None:
+        uf = _make_user_file(status=UserFileStatus.DELETING)
+        session = MagicMock()
+        session.get.return_value = uf
+        mock_get_session.return_value.__enter__.return_value = session
+
+        file_record = MagicMock()
+        file_record.file_origin = FileOrigin.CHAT_IMAGE_GEN
+        file_store = MagicMock()
+        file_store.read_file_record.return_value = file_record
+        mock_get_file_store.return_value = file_store
+
+        delete_user_file_impl(
+            user_file_id=str(uf.id),
+            tenant_id="test-tenant",
+            redis_locking=False,
+        )
+
+        file_store.delete_file.assert_called_once()
+        session.delete.assert_called_once_with(uf)
 
 
 # ------------------------------------------------------------------

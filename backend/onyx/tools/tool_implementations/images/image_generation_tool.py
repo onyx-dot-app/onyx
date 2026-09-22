@@ -11,8 +11,9 @@ from onyx.configs.app_configs import IMAGE_MODEL_NAME, IMAGE_MODEL_PROVIDER
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.utils import (
     build_frontend_file_url,
+    filename_from_image_prompt,
     load_chat_file_by_id,
-    save_files,
+    save_file_from_base64,
 )
 from onyx.image_gen.factory import get_image_generation_provider
 from onyx.image_gen.generation import (
@@ -25,6 +26,8 @@ from onyx.image_gen.interfaces import (
     ImageShape,
     ReferenceImage,
 )
+from onyx.llm.interfaces import LLM
+from onyx.secondary_llm_flows.image_file_naming import generate_image_file_stem
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     GeneratedImage,
@@ -39,9 +42,12 @@ from onyx.tools.tool_implementations.images.models import (
     FinalImageGenerationResponse,
     ImageGenerationResponse,
 )
-from onyx.utils.b64 import get_image_type_from_bytes
+from onyx.utils.b64 import get_image_type, get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+from onyx.utils.threadpool_concurrency import (
+    run_functions_tuples_in_parallel,
+    start_thread_with_context,
+)
 
 logger = setup_logger()
 
@@ -65,11 +71,13 @@ class ImageGenerationTool(Tool[None]):
         model: str = IMAGE_MODEL_NAME,
         provider: str = IMAGE_MODEL_PROVIDER,
         num_imgs: int = 1,
+        llm: LLM | None = None,
     ) -> None:
         super().__init__(emitter=emitter)
         self.model = model
         self.provider = provider
         self.num_imgs = num_imgs
+        self.llm = llm
 
         self.img_provider = get_image_generation_provider(
             provider, image_generation_credentials
@@ -326,6 +334,16 @@ class ImageGenerationTool(Tool[None]):
         results: list[ImageGenerationResponse | None] = [None] * self.num_imgs
         completed = threading.Event()
         error_holder: list[Exception | None] = [None]
+        stem_holder: list[str | None] = [None]
+
+        def name_generated_image() -> None:
+            stem_holder[0] = generate_image_file_stem(prompt, self.llm)
+
+        # Name the file while the image model runs. The prompt is already known.
+        # Inherit tenant and tracing context; a raw Thread starts empty.
+        naming_thread = start_thread_with_context(
+            name_generated_image, name="image-file-naming"
+        )
 
         # TODO allow the LLM to determine number of images
         def generate_all_images() -> None:
@@ -375,6 +393,7 @@ class ImageGenerationTool(Tool[None]):
 
         # Ensure thread has completed
         generation_thread.join()
+        naming_thread.join()
 
         # Check for errors
         if error_holder[0] is not None:
@@ -389,18 +408,30 @@ class ImageGenerationTool(Tool[None]):
         image_generation_responses = valid_results
 
         # Save files and create GeneratedImage objects
-        file_ids = save_files(
-            urls=[],
-            base64_files=[img.image_data for img in image_generation_responses],
+        file_stem = stem_holder[0] or generate_image_file_stem(prompt, None)
+        named_images: list[tuple[str, str, str]] = []
+        for img in image_generation_responses:
+            mime_type = get_image_type(img.image_data)
+            file_name = filename_from_image_prompt(file_stem, mime_type)
+            named_images.append((img.image_data, img.revised_prompt, file_name))
+
+        file_ids = run_functions_tuples_in_parallel(
+            [
+                (save_file_from_base64, (image_data, file_name))
+                for image_data, _revised_prompt, file_name in named_images
+            ]
         )
         generated_images_metadata = [
             GeneratedImage(
                 file_id=file_id,
                 url=build_frontend_file_url(file_id),
-                revised_prompt=img.revised_prompt,
+                revised_prompt=revised_prompt,
                 shape=shape.value,
+                file_name=file_name,
             )
-            for img, file_id in zip(image_generation_responses, file_ids, strict=True)
+            for file_id, (_image_data, revised_prompt, file_name) in zip(
+                file_ids, named_images, strict=True
+            )
         ]
 
         # Emit final packet with generated images
@@ -420,6 +451,7 @@ class ImageGenerationTool(Tool[None]):
             [
                 {
                     "file_id": img.file_id,
+                    "file_name": img.file_name,
                     "revised_prompt": img.revised_prompt,
                 }
                 for img in generated_images_metadata

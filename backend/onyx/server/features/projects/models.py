@@ -11,6 +11,11 @@ from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.server.query_and_chat.models import ChatSessionDetails
 
 
+class IndexFileRequest(BaseModel):
+    file_id: str
+    name: str | None = None
+
+
 class UserFileSnapshot(BaseModel):
     id: UUID
     temp_id: str | None = None  # Client-side temporary ID for optimistic updates
