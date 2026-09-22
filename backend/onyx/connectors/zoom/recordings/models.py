@@ -109,8 +109,9 @@ _RETRY_WORTHY_CLIENT_ERRORS = frozenset({408, 429})
 
 
 class ZoomListingIncomplete(Exception):
-    """Zoom stopped a paged listing early: fewer entries than it counted, or a
-    cursor that stopped moving, or more pages than any account has.
+    """Zoom stopped a paged listing early: fewer entries than it counted, a
+    cursor that stopped moving, more pages than any account has, or no count
+    at all to check the entries against.
 
     Indexing fails the attempt over this rather than reporting it, because a
     reported failure lets the poll window move on and the entries Zoom left out

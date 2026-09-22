@@ -33,7 +33,10 @@ from onyx.connectors.zoom.recordings.discovery import (
     build_discovery_sources,
     listing_windows,
 )
-from onyx.connectors.zoom.recordings.models import ZoomSessionType
+from onyx.connectors.zoom.recordings.models import (
+    ZoomListingIncomplete,
+    ZoomSessionType,
+)
 from tests.unit.onyx.connectors.zoom.helpers import mock_zoom_client
 from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
     occurrence,
@@ -597,9 +600,11 @@ def _client_for_hosts(
 ) -> MagicMock:
     client = mock_zoom_client()
     client.list_users.return_value = ZoomUserPage(users=users or [])
-    client.list_group_members.return_value = ZoomUserPage(users=members or [])
+    client.list_group_members.return_value = ZoomUserPage(
+        users=members or [], total_records=len(members or [])
+    )
     client.list_user_recordings.return_value = ZoomRecordingPage(
-        recordings=recordings or []
+        recordings=recordings or [], total_records=len(recordings or [])
     )
     return client
 
@@ -742,7 +747,9 @@ class TestGroupSource:
             ]
         )
         client.list_user_recordings.side_effect = lambda user_id, **_: (
-            ZoomRecordingPage(recordings=[_recording(f"uuid-{user_id}")])
+            ZoomRecordingPage(
+                recordings=[_recording(f"uuid-{user_id}")], total_records=1
+            )
         )
 
         first = source.discover_step(client, _HOST_START, _END, None)
@@ -769,8 +776,8 @@ class TestGroupSource:
         source = GroupSource("group-1")
         client = _client_for_hosts(recordings=[_recording("uuid-1")])
         client.list_group_members.side_effect = [
-            ZoomUserPage(users=[user(id="u1")], next_page_token="tok"),
-            ZoomUserPage(users=[user(id="u2")]),
+            ZoomUserPage(users=[user(id="u1")], next_page_token="tok", total_records=2),
+            ZoomUserPage(users=[user(id="u2")], total_records=2),
         ]
 
         first = source.discover_step(client, _HOST_START, _END, None)
@@ -813,13 +820,41 @@ class TestGroupSource:
         assert result.done is True
 
 
+class TestAListingWithNoCountFailsTheRun:
+    """Comparing against total_records is the only check on a listing Zoom cut
+    short, so a listing that arrives without one cannot be trusted either:
+    pruning would delete whatever it left out. The recordings loop and the
+    members loop are separate code, so both are driven."""
+
+    @pytest.mark.parametrize("listing", ["recordings", "members"])
+    def test_discovery_raises_rather_than_trusting_it(self, listing: str) -> None:
+        source = GroupSource("group-1")
+        client = _client_for_hosts(
+            members=[user(id="u1")], recordings=[_recording("uuid-1")]
+        )
+        if listing == "recordings":
+            client.list_user_recordings.return_value = ZoomRecordingPage(
+                recordings=[_recording("uuid-1")]
+            )
+        else:
+            client.list_group_members.return_value = ZoomUserPage(users=[user(id="u1")])
+
+        with pytest.raises(ZoomListingIncomplete, match="no total_records"):
+            source.discover_step(client, _HOST_START, _END, None)
+
+
 class TestUserRecordingsPaging:
     def test_no_page_token_ever_outlives_a_step(self) -> None:
         source = GroupSource("group-1")
         client = _client_for_hosts(members=[user(id="u1")])
+        # Zoom counts the whole query on every page, not the page itself.
         client.list_user_recordings.side_effect = [
-            ZoomRecordingPage(recordings=[_recording("uuid-1")], next_page_token="tok"),
-            ZoomRecordingPage(recordings=[_recording("uuid-2")]),
+            ZoomRecordingPage(
+                recordings=[_recording("uuid-1")],
+                next_page_token="tok",
+                total_records=2,
+            ),
+            ZoomRecordingPage(recordings=[_recording("uuid-2")], total_records=2),
         ]
 
         result = source.discover_step(client, _HOST_START, _END, None)
@@ -957,7 +992,9 @@ class TestHostListChangesBetweenAttempts:
     ) -> tuple[list[str], MagicMock]:
         client = _client_for_hosts(members=members)
         client.list_user_recordings.side_effect = lambda user_id, **_: (
-            ZoomRecordingPage(recordings=[_recording(f"rec-{user_id}")])
+            ZoomRecordingPage(
+                recordings=[_recording(f"rec-{user_id}")], total_records=1
+            )
         )
         source = GroupSource("group-1")
         seen: list[str] = []
@@ -1155,7 +1192,7 @@ class TestUserRecordingsFailures:
         def _recordings(user_id: str, **_: object) -> ZoomRecordingPage:
             if user_id == "u1":
                 raise RuntimeError("boom")
-            return ZoomRecordingPage(recordings=[_recording("uuid-2")])
+            return ZoomRecordingPage(recordings=[_recording("uuid-2")], total_records=1)
 
         client.list_user_recordings.side_effect = _recordings
 
@@ -1232,14 +1269,17 @@ def _client_recording_on(
     """
     client = mock_zoom_client()
     client.list_users.return_value = ZoomUserPage(users=[])
-    client.list_group_members.return_value = ZoomUserPage(users=[user(id="u1")])
+    client.list_group_members.return_value = ZoomUserPage(
+        users=[user(id="u1")], total_records=1
+    )
 
     def listing(**kwargs: Any) -> ZoomRecordingPage:
         if to_is_exclusive:
             asked_for = kwargs["from_date"] <= day < kwargs["to_date"]
         else:
             asked_for = kwargs["from_date"] <= day <= kwargs["to_date"]
-        return ZoomRecordingPage(recordings=[entry] if asked_for else [])
+        entries = [entry] if asked_for else []
+        return ZoomRecordingPage(recordings=entries, total_records=len(entries))
 
     client.list_user_recordings.side_effect = listing
     return client

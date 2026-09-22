@@ -1132,16 +1132,20 @@ def _configure_user_recordings(
             user(id="member-user", email="member@example.com"),
         ]
     )
+    group = (
+        [user(id="member-user", email="member@example.com")]
+        if members is None
+        else members
+    )
     mock_client.list_group_members.return_value = ZoomUserPage(
-        users=(
-            [user(id="member-user", email="member@example.com")]
-            if members is None
-            else members
-        )
+        users=group, total_records=len(group)
     )
-    mock_client.list_user_recordings.side_effect = lambda user_id, **_: (
-        ZoomRecordingPage(recordings=recordings_by_user.get(user_id, []))
-    )
+
+    def recordings(user_id: str, **_: object) -> ZoomRecordingPage:
+        found = recordings_by_user.get(user_id, [])
+        return ZoomRecordingPage(recordings=found, total_records=len(found))
+
+    mock_client.list_user_recordings.side_effect = recordings
 
 
 class TestDiscoveryMechanismUnion:

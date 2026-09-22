@@ -500,8 +500,14 @@ def list_every_recording(
         if not page_token:
             # Comparing against Zoom's own count is the only way to catch a
             # listing that stopped early, because every page is a 200 and the
-            # last one simply has no token.
-            if expected is not None and len(recordings) < expected:
+            # last one simply has no token. A listing with no count cannot be
+            # checked, and pruning would delete whatever it left out.
+            if expected is None:
+                raise ZoomListingIncomplete(
+                    f"Zoom sent no total_records for {listing}, so the listing "
+                    "cannot be checked for recordings it left out"
+                )
+            if len(recordings) < expected:
                 raise ZoomListingIncomplete(
                     f"Zoom listed {len(recordings)} of the {expected} recordings "
                     f"it reported for {listing}"
@@ -891,7 +897,12 @@ class GroupSource(_UserRecordingsSource):
 
             page_token = page.next_page_token
             if not page_token:
-                if expected is not None and members < expected:
+                if expected is None:
+                    raise ZoomListingIncomplete(
+                        f"Zoom sent no total_records for {listing}, so the "
+                        "listing cannot be checked for members it left out"
+                    )
+                if members < expected:
                     raise ZoomListingIncomplete(
                         f"Zoom listed {members} of the {expected} members it "
                         f"reported for {listing}"
