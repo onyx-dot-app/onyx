@@ -89,11 +89,13 @@ function SelectCard({
   const paddingStyle = { padding: spacingToRem(paddingProp) };
   const radius = roundingToRem(roundingProp);
 
+  // A caller that assigns its own role (e.g. "radio" inside a radiogroup)
+  // or tab index keeps it; the defaults only fill the gaps.
   const isControl = !!onClick && !disabled;
   const controlProps = isControl
     ? {
-        role: "button",
-        tabIndex: 0,
+        role: statefulProps.role ?? "button",
+        tabIndex: statefulProps.tabIndex ?? 0,
         onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => {
           onKeyDown?.(event);
           if (event.defaultPrevented) return;
