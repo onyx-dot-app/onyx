@@ -217,7 +217,7 @@ export default function IndexingStatusPage() {
   });
 
   return (
-    <SettingsLayouts.Root width="full">
+    <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={route.icon}
         title={adminRouteTitle(route)}
