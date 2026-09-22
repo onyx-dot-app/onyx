@@ -126,6 +126,15 @@ That's it! The widget will appear as a floating button in the bottom-right corne
 
 **Note**: These attributes must be provided as HTML attributes. Only `backend-url` and `api-key` can optionally be set via environment variables for self-hosted builds.
 
+**Note on `include-citations`**: the attribute is a boolean flag, so its presence alone means `true`. `include-citations="false"` still turns citations **on**. Omit the attribute to turn them off.
+
+Citations are off by default. While they are off, Onyx strips the citation markers from the answer text and sends no citation data, so the widget renders no source links. Add the bare attribute to get inline `[n]` markers and clickable source badges:
+
+```html
+<onyx-chat-widget backend-url="https://onyx.example.com/api" include-citations>
+</onyx-chat-widget>
+```
+
 ### Configuration Examples
 
 **Basic Setup:**
