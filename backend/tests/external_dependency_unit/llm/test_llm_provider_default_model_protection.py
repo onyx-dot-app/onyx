@@ -13,18 +13,18 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import LLMModelFlowType
+from onyx.db.image_processing import (
+    fetch_image_processing_settings,
+    upsert_image_processing_settings,
+)
 from onyx.db.llm import (
     add_model_to_flow,
     fetch_default_chat_naming_model,
-    fetch_default_contextual_rag_model,
     fetch_default_craft_model,
-    fetch_default_vision_model,
     fetch_existing_llm_provider,
     remove_llm_provider,
-    update_default_contextual_model,
     update_default_craft_provider,
     update_default_provider,
-    update_default_vision_provider,
     upsert_llm_provider,
 )
 from onyx.db.models import LLMModelFlow, ModelConfiguration
@@ -131,35 +131,6 @@ class TestDefaultModelProtection:
                         ModelConfigurationUpsertRequest(
                             name="gpt-4o", is_visible=False
                         ),
-                        ModelConfigurationUpsertRequest(
-                            name="gpt-4o-mini", is_visible=True
-                        ),
-                    ],
-                ),
-                db_session=db_session,
-            )
-
-    def test_cannot_remove_default_vision_model(
-        self,
-        db_session: Session,
-        provider_name: str,
-    ) -> None:
-        """Removing the default vision model from a provider should raise ValueError."""
-        provider = _create_test_provider(db_session, provider_name)
-        # Set gpt-4o as both the text and vision default
-        update_default_provider(provider.id, "gpt-4o", db_session)
-        update_default_vision_provider(provider.id, "gpt-4o", db_session)
-
-        # Try to remove the default vision model
-        with pytest.raises(ValueError, match="Cannot remove the default model"):
-            upsert_llm_provider(
-                LLMProviderUpsertRequest(
-                    id=provider.id,
-                    name=provider_name,
-                    provider=LlmProviderNames.OPENAI,
-                    api_key="sk-test-key-00000000000000000000000000000000000",
-                    api_key_changed=True,
-                    model_configurations=[
                         ModelConfigurationUpsertRequest(
                             name="gpt-4o-mini", is_visible=True
                         ),
@@ -279,29 +250,6 @@ class TestPointerFlowDefaultsSurviveAProviderUpdate:
         assert default_craft is not None
         assert default_craft.name == "gpt-4o-mini"
 
-    def test_contextual_rag_default_survives(
-        self,
-        db_session: Session,
-        provider_name: str,
-    ) -> None:
-        provider = _create_test_provider(db_session, provider_name)
-        model_config = next(
-            mc for mc in provider.model_configurations if mc.name == "gpt-4o-mini"
-        )
-        update_default_contextual_model(
-            db_session=db_session,
-            enable_contextual_rag=True,
-            model_configuration_id=model_config.id,
-        )
-        db_session.commit()
-        assert fetch_default_contextual_rag_model(db_session) is not None
-
-        self._update_provider(db_session, provider.id, provider_name)
-
-        default_contextual = fetch_default_contextual_rag_model(db_session)
-        assert default_contextual is not None
-        assert default_contextual.name == "gpt-4o-mini"
-
     def _hide_mini(self, db_session: Session, provider_id: int, name: str) -> None:
         upsert_llm_provider(
             LLMProviderUpsertRequest(
@@ -331,25 +279,6 @@ class TestPointerFlowDefaultsSurviveAProviderUpdate:
         resolver checks is_visible, so a hidden default would still be used."""
         provider = _create_test_provider(db_session, provider_name)
         update_default_craft_provider(provider.id, "gpt-4o-mini", db_session)
-
-        with pytest.raises(ValueError, match="Cannot hide the default model"):
-            self._hide_mini(db_session, provider.id, provider_name)
-
-    def test_hiding_the_contextual_rag_default_is_refused(
-        self,
-        db_session: Session,
-        provider_name: str,
-    ) -> None:
-        provider = _create_test_provider(db_session, provider_name)
-        model_config = next(
-            mc for mc in provider.model_configurations if mc.name == "gpt-4o-mini"
-        )
-        update_default_contextual_model(
-            db_session=db_session,
-            enable_contextual_rag=True,
-            model_configuration_id=model_config.id,
-        )
-        db_session.commit()
 
         with pytest.raises(ValueError, match="Cannot hide the default model"):
             self._hide_mini(db_session, provider.id, provider_name)
@@ -418,18 +347,38 @@ class TestEveryFlowDefaultIsGuarded:
             db_session=db_session,
         )
 
-    def test_hiding_a_vision_only_default_is_refused(
+    def test_cannot_remove_the_image_processing_model(
         self,
         db_session: Session,
         provider_name: str,
     ) -> None:
-        """The existing vision test puts both defaults on one model, so the chat
-        check alone caught it. Here only the vision default is at stake."""
+        """The model image processing points at cannot be removed by an edit."""
         provider = _create_test_provider(db_session, provider_name)
         update_default_provider(provider.id, "gpt-4o-mini", db_session)
-        update_default_vision_provider(provider.id, "gpt-4o", db_session)
+        gpt_4o = next(mc for mc in provider.model_configurations if mc.name == "gpt-4o")
+        assert gpt_4o.id is not None
+        upsert_image_processing_settings(db_session, gpt_4o.id, 20)
 
-        with pytest.raises(ValueError, match="default for: vision"):
+        with pytest.raises(ValueError, match="default for: image_processing"):
+            self._upsert(
+                db_session,
+                provider.id,
+                provider_name,
+                [ModelConfigurationUpsertRequest(name="gpt-4o-mini", is_visible=True)],
+            )
+
+    def test_hiding_the_image_processing_model_is_refused(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        provider = _create_test_provider(db_session, provider_name)
+        update_default_provider(provider.id, "gpt-4o-mini", db_session)
+        gpt_4o = next(mc for mc in provider.model_configurations if mc.name == "gpt-4o")
+        assert gpt_4o.id is not None
+        upsert_image_processing_settings(db_session, gpt_4o.id, 20)
+
+        with pytest.raises(ValueError, match="Cannot hide the default model"):
             self._upsert(
                 db_session,
                 provider.id,
@@ -470,12 +419,14 @@ class TestEveryFlowDefaultIsGuarded:
         provider_name: str,
     ) -> None:
         """sync_auto_mode_models hides models dropped from the recommendations
-        and re-points only the chat default, so a vision default can already sit
-        on a hidden model. The form then re-sends that stored visibility, and an
+        and re-points only the chat default, so the image processing model can
+        already sit hidden. The form then re-sends that stored visibility, and an
         unrelated edit — an API key rotation — must not be refused for it."""
         provider = _create_test_provider(db_session, provider_name)
         update_default_provider(provider.id, "gpt-4o-mini", db_session)
-        update_default_vision_provider(provider.id, "gpt-4o", db_session)
+        gpt_4o = next(mc for mc in provider.model_configurations if mc.name == "gpt-4o")
+        assert gpt_4o.id is not None
+        upsert_image_processing_settings(db_session, gpt_4o.id, 20)
 
         hidden = db_session.scalar(
             select(ModelConfiguration).where(
@@ -501,9 +452,9 @@ class TestEveryFlowDefaultIsGuarded:
             ],
         )
 
-        default_vision = fetch_default_vision_model(db_session)
-        assert default_vision is not None
-        assert default_vision.name == "gpt-4o"
+        image_processing = fetch_image_processing_settings(db_session)
+        assert image_processing is not None
+        assert image_processing.model_configuration.name == "gpt-4o"
 
     def test_capability_change_still_removes_the_vision_flow(
         self,
@@ -547,16 +498,19 @@ class TestEveryFlowDefaultIsGuarded:
 
 
 class TestCapabilityChangesCannotEraseADefault:
-    """A default lives on the LLMModelFlow row, so dropping the capability that
-    row represents deletes the default along with it."""
+    """Image processing needs the VISION capability on its model, and a flow
+    default lives on the LLMModelFlow row, so dropping the capability that row
+    represents must be refused while a role depends on it."""
 
-    def test_cannot_disable_image_input_on_the_vision_default(
+    def test_cannot_disable_image_input_on_the_image_processing_model(
         self,
         db_session: Session,
         provider_name: str,
     ) -> None:
         provider = _create_test_provider(db_session, provider_name)
-        update_default_vision_provider(provider.id, "gpt-4o", db_session)
+        gpt_4o = next(mc for mc in provider.model_configurations if mc.name == "gpt-4o")
+        assert gpt_4o.id is not None
+        upsert_image_processing_settings(db_session, gpt_4o.id, 20)
 
         with pytest.raises(ValueError, match=r"Cannot disable vision support"):
             upsert_llm_provider(
@@ -580,7 +534,7 @@ class TestCapabilityChangesCannotEraseADefault:
                 db_session=db_session,
             )
 
-        assert fetch_default_vision_model(db_session) is not None
+        assert fetch_image_processing_settings(db_session) is not None
 
     def test_omitting_image_support_keeps_the_stored_capability(
         self,
@@ -588,9 +542,11 @@ class TestCapabilityChangesCannotEraseADefault:
         provider_name: str,
     ) -> None:
         """supports_image_input is optional. An omitted one used to read as false
-        and silently drop the vision flow, taking the default with it."""
+        and silently drop the vision flow, taking the captioner's model with it."""
         provider = _create_test_provider(db_session, provider_name)
-        update_default_vision_provider(provider.id, "gpt-4o", db_session)
+        gpt_4o = next(mc for mc in provider.model_configurations if mc.name == "gpt-4o")
+        assert gpt_4o.id is not None
+        upsert_image_processing_settings(db_session, gpt_4o.id, 20)
 
         upsert_llm_provider(
             LLMProviderUpsertRequest(
@@ -610,21 +566,25 @@ class TestCapabilityChangesCannotEraseADefault:
             db_session=db_session,
         )
 
-        default_vision = fetch_default_vision_model(db_session)
-        assert default_vision is not None
-        assert default_vision.name == "gpt-4o"
+        image_processing = fetch_image_processing_settings(db_session)
+        assert image_processing is not None
+        db_session.refresh(image_processing.model_configuration)
+        assert LLMModelFlowType.VISION in (
+            image_processing.model_configuration.llm_model_flow_types
+        )
 
-    def test_disabling_vision_is_caught_when_one_model_holds_several_defaults(
+    def test_disabling_vision_is_caught_when_one_model_holds_several_roles(
         self,
         db_session: Session,
         provider_name: str,
     ) -> None:
-        """The chat default is commonly the vision default too. Keying the lookup
-        by model id kept only the first flow found, so the vision default went
-        unguarded and the reconciliation deleted it."""
+        """The chat default is commonly the captioning model too. Keying the
+        lookup by model id must keep every role, not just the first found."""
         provider = _create_test_provider(db_session, provider_name)
         update_default_provider(provider.id, "gpt-4o", db_session)
-        update_default_vision_provider(provider.id, "gpt-4o", db_session)
+        gpt_4o = next(mc for mc in provider.model_configurations if mc.name == "gpt-4o")
+        assert gpt_4o.id is not None
+        upsert_image_processing_settings(db_session, gpt_4o.id, 20)
 
         with pytest.raises(ValueError, match=r"Cannot disable vision support"):
             upsert_llm_provider(

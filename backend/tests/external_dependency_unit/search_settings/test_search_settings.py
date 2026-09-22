@@ -11,11 +11,7 @@ from onyx.context.search.models import (
     SearchSettingsCreationRequest,
 )
 from onyx.db.enums import ConnectorCredentialPairStatus, EmbeddingPrecision
-from onyx.db.llm import (
-    fetch_default_contextual_rag_model,
-    update_default_contextual_model,
-    upsert_llm_provider,
-)
+from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import IndexAttempt, IndexModelStatus, SearchSettings
 from onyx.db.search_settings import (
     create_search_settings,
@@ -173,12 +169,6 @@ def baseline_search_settings(
         search_settings=baseline,
         db_session=db_session,
         status=IndexModelStatus.PRESENT,
-    )
-    # Sync default contextual model to match PRESENT (clears any leftover state)
-    update_default_contextual_model(
-        db_session=db_session,
-        enable_contextual_rag=baseline.enable_contextual_rag,
-        model_configuration_id=None,
     )
 
 
@@ -381,8 +371,8 @@ def test_indexing_pipeline_uses_contextual_rag_settings_from_create(
     db_session: Session,
 ) -> None:
     """After creating FUTURE settings and swapping to PRESENT,
-    fetch_default_contextual_rag_model should match the PRESENT settings and
-    run_indexing_pipeline should resolve the LLM from those PRESENT settings."""
+    the PRESENT settings carry the model and run_indexing_pipeline should
+    resolve the LLM from those PRESENT settings."""
     mc_id = _create_llm_provider_and_model(
         db_session=db_session,
         provider_name=TEST_PROVIDER_NAME,
@@ -395,9 +385,11 @@ def test_indexing_pipeline_uses_contextual_rag_settings_from_create(
         db_session=db_session,
     )
 
-    # PRESENT still has contextual RAG disabled, so default should be None
-    default_model = fetch_default_contextual_rag_model(db_session)
-    assert default_model is None
+    # PRESENT still has contextual RAG disabled
+    assert (
+        get_current_search_settings(db_session).contextual_rag_model_configuration_id
+        is None
+    )
 
     # Swap FUTURE → PRESENT. New settings use the port flow, whose swap gate waits
     # for each portable cc_pair's port; none require porting here (patched empty),
@@ -406,10 +398,11 @@ def test_indexing_pipeline_uses_contextual_rag_settings_from_create(
     old_settings = check_and_perform_index_swap(db_session)
     assert old_settings is not None, "Swap should have occurred"
 
-    # Now PRESENT has contextual RAG enabled, default should match
-    default_model = fetch_default_contextual_rag_model(db_session)
-    assert default_model is not None
-    assert default_model.name == TEST_MODEL_NAME
+    # Now PRESENT has contextual RAG enabled with the new model
+    assert (
+        get_current_search_settings(db_session).contextual_rag_model_configuration_id
+        == mc_id
+    )
 
     _run_indexing_pipeline_with_mocks(mock_get_llm, mock_index_handler, db_session)
 
@@ -459,9 +452,11 @@ def test_indexing_pipeline_uses_updated_contextual_rag_settings(
         db_session=db_session,
     )
 
-    # PRESENT still has contextual RAG disabled, so default should be None
-    default_model = fetch_default_contextual_rag_model(db_session)
-    assert default_model is None
+    # PRESENT still has contextual RAG disabled
+    assert (
+        get_current_search_settings(db_session).contextual_rag_model_configuration_id
+        is None
+    )
 
     # Swap FUTURE → PRESENT. New settings use the port flow, whose swap gate waits
     # for each portable cc_pair's port; none require porting here (patched empty),
@@ -470,10 +465,11 @@ def test_indexing_pipeline_uses_updated_contextual_rag_settings(
     old_settings = check_and_perform_index_swap(db_session)
     assert old_settings is not None, "Swap should have occurred"
 
-    # Now PRESENT has contextual RAG enabled, default should match
-    default_model = fetch_default_contextual_rag_model(db_session)
-    assert default_model is not None
-    assert default_model.name == TEST_MODEL_NAME
+    # Now PRESENT has contextual RAG enabled with the new model
+    assert (
+        get_current_search_settings(db_session).contextual_rag_model_configuration_id
+        == mc_id
+    )
 
     # Update the PRESENT model configuration
     current_settings = get_current_search_settings(db_session)
@@ -506,9 +502,10 @@ def test_indexing_pipeline_uses_updated_contextual_rag_settings(
         "model_configuration_id": updated_mc_id,
     }
 
-    default_model = fetch_default_contextual_rag_model(db_session)
-    assert default_model is not None
-    assert default_model.name == UPDATED_MODEL_NAME
+    assert (
+        get_current_search_settings(db_session).contextual_rag_model_configuration_id
+        == updated_mc_id
+    )
 
     _run_indexing_pipeline_with_mocks(mock_get_llm, mock_index_handler, db_session)
 
@@ -547,9 +544,11 @@ def test_indexing_pipeline_skips_llm_when_contextual_rag_disabled(
         db_session=db_session,
     )
 
-    # PRESENT has contextual RAG disabled, so default should be None
-    default_model = fetch_default_contextual_rag_model(db_session)
-    assert default_model is None
+    # PRESENT has contextual RAG disabled
+    assert (
+        get_current_search_settings(db_session).contextual_rag_model_configuration_id
+        is None
+    )
 
     _run_indexing_pipeline_with_mocks(mock_get_llm, mock_index_handler, db_session)
 

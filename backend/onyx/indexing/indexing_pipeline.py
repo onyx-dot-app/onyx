@@ -17,7 +17,10 @@ from onyx.configs.app_configs import (
     USE_DOCUMENT_SUMMARY,
 )
 from onyx.configs.chat_configs import CONTEXTUAL_RAG_LLM_TIMEOUT
-from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
+from onyx.configs.llm_configs import (
+    get_image_analysis_max_size_mb,
+    get_image_extraction_and_analysis_enabled,
+)
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
 )
@@ -89,7 +92,7 @@ from onyx.indexing.models import (
 from onyx.indexing.vector_db_insertion import write_chunks_to_vector_db_with_backoff
 from onyx.llm.factory import (
     get_contextual_rag_llm_for_search_settings,
-    get_default_llm_with_vision,
+    get_image_processing_llm,
 )
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import ReasoningEffort, UserMessage
@@ -837,14 +840,9 @@ def _get_image_summarization_llm(
     if not enabled or not has_image_section:
         return None
 
-    llm = get_default_llm_with_vision()
-    if llm is None:
-        logger.warning(
-            "Image analysis is enabled but no usable captioning model is "
-            "available — images will not be summarized. Check the captioning "
-            "model under Index Settings."
-        )
-    return llm
+    # `enabled` and the LLM read the same settings row, so a None here only
+    # means the feature was turned off between the two reads.
+    return get_image_processing_llm()
 
 
 def _process_image_sections(
@@ -908,11 +906,16 @@ def _process_image_sections(
 
     # Summarize all images in parallel
     if pending:
+        # Read the admin's size limit once per batch, not once per image.
+        max_size_mb = get_image_analysis_max_size_mb()
 
         def _summarize(image_data: bytes, context_name: str) -> str:
             return (
                 summarize_image_with_error_handling(
-                    llm=llm, image_data=image_data, context_name=context_name
+                    llm=llm,
+                    image_data=image_data,
+                    context_name=context_name,
+                    max_size_mb=max_size_mb,
                 )
                 or "[Image could not be summarized]"
             )
@@ -1682,6 +1685,17 @@ def run_indexing_pipeline(
     contextual_rag_configured = (
         search_settings.enable_contextual_rag or ENABLE_CONTEXTUAL_RAG
     )
+    llm = None
+    if contextual_rag_configured:
+        llm = get_contextual_rag_llm_for_search_settings(search_settings)
+        if llm is None:
+            # The env flag can turn contextual RAG on without a model on the
+            # search settings. Index plain chunks rather than fail the batch.
+            logger.warning(
+                "Contextual Retrieval is enabled but no Contextual Retrieval "
+                "model is configured — chunks are indexed without context."
+            )
+            contextual_rag_configured = False
     image_summarization_llm = _get_image_summarization_llm(
         document_batch, get_image_extraction_and_analysis_enabled()
     )
@@ -1692,9 +1706,8 @@ def run_indexing_pipeline(
     llm_enrichment_allowed = (
         not llm_enrichment_configured or _system_llm_enrichment_is_allowed()
     )
-    llm = None
-    if contextual_rag_configured and llm_enrichment_allowed:
-        llm = get_contextual_rag_llm_for_search_settings(search_settings)
+    if not llm_enrichment_allowed:
+        llm = None
 
     chunker = chunker or Chunker(
         tokenizer=embedder.embedding_model.tokenizer,

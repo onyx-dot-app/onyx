@@ -3782,6 +3782,32 @@ class LLMModelFlow(Base):
     )
 
 
+class ImageProcessingSettings(Base):
+    """Image processing (captioning) configuration for the tenant.
+
+    At most one row. No row means the feature is off; a row means it is on
+    with that model. The FK cascades, so deleting the model turns it off.
+    """
+
+    __tablename__ = "image_processing_settings"
+    __table_args__ = (
+        # Singleton pattern - unique index on constant ensures only one row.
+        Index("idx_image_processing_settings_singleton", text("(true)"), unique=True),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    model_configuration_id: Mapped[int] = mapped_column(
+        ForeignKey("model_configuration.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # Images above this size are skipped rather than captioned.
+    max_size_mb: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    model_configuration: Mapped["ModelConfiguration"] = relationship(
+        "ModelConfiguration"
+    )
+
+
 class ImageGenerationConfig(Base):
     __tablename__ = "image_generation_config"
 

@@ -12,9 +12,11 @@ from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.file import FileManager
+from tests.integration.common_utils.managers.image_processing import (
+    ImageProcessingManager,
+)
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
-from tests.integration.common_utils.managers.settings import SettingsManager
-from tests.integration.common_utils.test_models import DATestSettings, DATestUser
+from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.vespa import vespa_fixture
 
 FILE_NAME = "Sample.pdf"
@@ -39,18 +41,8 @@ def test_image_indexing(
         name="test_llm",
         user_performing_action=admin_user,
     )
-    assert llm_provider.default_model_name is not None
-    LLMProviderManager.set_default_vision(
-        llm_provider.id,
-        user_performing_action=admin_user,
-        model_name=llm_provider.default_model_name,
-    )
-
-    SettingsManager.update_settings(
-        DATestSettings(
-            image_extraction_and_analysis_enabled=True,
-        ),
-        user_performing_action=admin_user,
+    ImageProcessingManager.enable(
+        admin_user, model_configuration_id=llm_provider.model_configuration_ids[0]
     )
 
     file_paths = upload_response.file_paths
@@ -143,18 +135,8 @@ def test_docx_image_indexing(
         name="test_llm_docx",
         user_performing_action=admin_user,
     )
-    assert llm_provider.default_model_name is not None
-    LLMProviderManager.set_default_vision(
-        llm_provider.id,
-        user_performing_action=admin_user,
-        model_name=llm_provider.default_model_name,
-    )
-
-    SettingsManager.update_settings(
-        DATestSettings(
-            image_extraction_and_analysis_enabled=True,
-        ),
-        user_performing_action=admin_user,
+    ImageProcessingManager.enable(
+        admin_user, model_configuration_id=llm_provider.model_configuration_ids[0]
     )
 
     file_paths = upload_response.file_paths

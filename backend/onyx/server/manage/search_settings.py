@@ -30,11 +30,6 @@ from onyx.db.connector_credential_pair import (
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import IndexReclaimStatus, Permission, SwitchoverType
 from onyx.db.index_attempt import create_synthetic_seed_attempt, expire_index_attempts
-from onyx.db.llm import (
-    fetch_default_contextual_rag_model,
-    update_default_contextual_model,
-    update_no_default_contextual_rag_provider,
-)
 from onyx.db.models import IndexModelStatus, SearchSettings, User
 from onyx.db.port_attempt import (
     ReindexErrorRow,
@@ -684,7 +679,6 @@ def update_saved_search_settings(
     update_current_search_settings(
         search_settings=search_settings, db_session=db_session
     )
-    _sync_default_contextual_model(db_session)
 
     logger.info(
         "Updated current contextual retrieval model from %s to %s",
@@ -736,14 +730,11 @@ def validate_contextual_rag_model(
     enable_contextual_rag: bool = False,
 ) -> None:
     if model_configuration_id is None:
-        if (
-            enable_contextual_rag
-            and fetch_default_contextual_rag_model(db_session) is None
-        ):
+        if enable_contextual_rag:
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,
                 "Contextual Retrieval is enabled but no Contextual Retrieval "
-                "model is configured, and no tenant default exists.",
+                "model is configured.",
             )
         return
     from onyx.db.models import ModelConfiguration
@@ -752,24 +743,4 @@ def validate_contextual_rag_model(
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             f"model_configuration id={model_configuration_id} not found",
-        )
-
-
-def _sync_default_contextual_model(db_session: Session) -> None:
-    """Syncs the default CONTEXTUAL_RAG flow to match the PRESENT search settings."""
-    primary = get_current_search_settings(db_session)
-
-    try:
-        update_default_contextual_model(
-            db_session=db_session,
-            enable_contextual_rag=primary.enable_contextual_rag,
-            model_configuration_id=primary.contextual_rag_model_configuration_id,
-        )
-    except ValueError as e:
-        logger.error(
-            "Error syncing default contextual model, defaulting to no contextual model: %s",
-            e,
-        )
-        update_no_default_contextual_rag_provider(
-            db_session=db_session,
         )

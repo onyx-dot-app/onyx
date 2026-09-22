@@ -34,10 +34,6 @@ from onyx.db.index_attempt import (
     count_unique_active_cc_pairs_with_successful_index_attempts,
     count_unique_cc_pairs_with_successful_index_attempts,
 )
-from onyx.db.llm import (
-    update_default_contextual_model,
-    update_no_default_contextual_rag_provider,
-)
 from onyx.db.models import ConnectorCredentialPair, SearchSettings
 from onyx.db.port_attempt import (
     all_user_scopes_ported,
@@ -144,22 +140,6 @@ def _perform_index_swap(
             new_search_settings.id,
             reason="Canceled: FUTURE promoted by index swap",
         )
-
-    # Update the default contextual model to match the newly promoted settings
-    try:
-        update_default_contextual_model(
-            db_session=db_session,
-            enable_contextual_rag=new_search_settings.enable_contextual_rag,
-            model_configuration_id=new_search_settings.contextual_rag_model_configuration_id,
-        )
-    except ValueError as e:
-        logger.error("Model not found, defaulting to no contextual model: %s", e)
-        update_no_default_contextual_rag_provider(
-            db_session=db_session,
-        )
-        new_search_settings.enable_contextual_rag = False
-        new_search_settings.contextual_rag_model_configuration_id = None
-        db_session.commit()
 
     # This flow is for checking and possibly creating an index so we get all
     # indices.

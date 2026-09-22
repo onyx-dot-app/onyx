@@ -49,7 +49,6 @@ def _make_response() -> LLMProviderResponse[LLMProviderDescriptor]:
     return LLMProviderResponse[LLMProviderDescriptor].from_models(
         providers=[descriptor],
         default_text=DefaultModel(provider_id=1, model_name="gpt-5-mini"),
-        default_vision=None,
     )
 
 

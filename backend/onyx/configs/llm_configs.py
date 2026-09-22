@@ -1,32 +1,28 @@
 from onyx.configs.app_configs import DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB
-from onyx.server.settings.store import load_settings
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.image_processing import fetch_image_processing_settings
 
 
 def get_image_extraction_and_analysis_enabled() -> bool:
-    """Return the workspace setting for image extraction/analysis.
+    """True when the tenant has an image processing row.
 
-    The pydantic `Settings` model defaults this field to True, so production
-    tenants get the feature on by default on first read. The fallback here
-    stays False so environments where settings cannot be loaded at all
-    (e.g. unit tests with no DB/Redis) don't trigger downstream vision-LLM
-    code paths that assume the DB is reachable.
+    The row is the on switch: no row means no extraction and no captioning.
+    Fails closed when the DB cannot be reached (e.g. unit tests without one).
     """
     try:
-        settings = load_settings()
-        if settings.image_extraction_and_analysis_enabled is not None:
-            return settings.image_extraction_and_analysis_enabled
+        with get_session_with_current_tenant() as db_session:
+            return fetch_image_processing_settings(db_session) is not None
     except Exception:
-        pass
-
-    return False
+        return False
 
 
 def get_image_analysis_max_size_mb() -> int:
-    """Get image analysis max size MB setting from workspace settings or fallback to environment variable"""
+    """The configured max image size, or the default when the feature is off."""
     try:
-        settings = load_settings()
-        if settings.image_analysis_max_size_mb is not None:
-            return settings.image_analysis_max_size_mb
+        with get_session_with_current_tenant() as db_session:
+            settings = fetch_image_processing_settings(db_session)
+            if settings is not None:
+                return settings.max_size_mb
     except Exception:
         pass
 
