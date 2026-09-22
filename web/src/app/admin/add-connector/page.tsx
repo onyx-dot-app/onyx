@@ -2,7 +2,7 @@
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
 import { SettingsLayouts } from "@opal/layouts";
-import { SourceCategory, SourceMetadata } from "@/lib/search/interfaces";
+import { SourceCategory, SourceMetadata } from "@/lib/search/types";
 import { listSourceMetadata } from "@/lib/sources";
 import { Button } from "@opal/components";
 import {
