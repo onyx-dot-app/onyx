@@ -6,7 +6,7 @@ An embeddable, lightweight chat widget that brings AI-powered conversations to a
 
 The widget runs in the browser, so whatever credential it holds is visible to the visitor. Pick one of the two modes below.
 
-- **JWT passthrough** — the host page supplies the visitor's own identity-provider token, and each visitor acts as their own Onyx user. No shared secret goes in the page. Use this when the host page already signs the visitor in with the same IdP as Onyx. See [docs/WIDGET_JWT_PASSTHROUGH.md](../docs/WIDGET_JWT_PASSTHROUGH.md).
+- **JWT passthrough** — the host page supplies the visitor's own identity-provider token, and each visitor acts as their own Onyx user. No shared secret goes in the page. Use this when the host page already signs the visitor in with the same IdP as Onyx. Single-tenant (self-hosted) deployments only. See [docs/WIDGET_JWT_PASSTHROUGH.md](../docs/WIDGET_JWT_PASSTHROUGH.md).
 - **API key** — ⚠️ **always use a limited-scope API key.** The key is visible in client-side code, so it should have restricted permissions and rate limits. Never use admin or full-access keys.
 
 ## Features
@@ -184,7 +184,9 @@ Set the `api-key` attribute. The same key is used for every visitor, so all conv
 
 ### JWT passthrough (`tokenProvider`)
 
-Assign a `tokenProvider` function and leave `api-key` off. The widget calls it before every request, so the host controls expiry and refresh. Each visitor is a separate Onyx user, and per-user document permissions apply.
+Assign a `tokenProvider` function and leave `api-key` off. The widget calls it before every request attempt, retries included, so the host controls expiry and refresh. Each visitor is a separate Onyx user, and per-user document permissions apply.
+
+The stored transcript is scoped to the token subject, so a second person signing in on the same tab starts a fresh conversation instead of seeing the previous one.
 
 ```html
 <onyx-chat-widget id="onyx-widget" backend-url="https://onyx.example.com/api">

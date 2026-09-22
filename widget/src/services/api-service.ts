@@ -30,11 +30,11 @@ export class ApiService {
 
     const response = await this.fetchWithRetry(
       `${this.backendUrl}/chat/create-chat-session`,
-      {
+      async () => ({
         method: "POST",
         headers: await this.getHeaders(),
         body: JSON.stringify(request),
-      }
+      })
     );
 
     if (!response.ok) {
@@ -75,12 +75,12 @@ export class ApiService {
 
     const response = await this.fetchWithRetry(
       `${this.backendUrl}/chat/send-chat-message`,
-      {
+      async () => ({
         method: "POST",
         headers: await this.getHeaders(),
         body: JSON.stringify(request),
         signal: params.signal,
-      }
+      })
     );
 
     if (!response.ok) {
@@ -183,22 +183,24 @@ export class ApiService {
   }
 
   /**
-   * Fetch with retry logic for network failures and 5xx errors
+   * Fetch with retry logic for network failures and 5xx errors.
+   * Options are rebuilt per attempt so each retry carries a freshly resolved
+   * credential; a short-lived token can otherwise expire during the backoff.
    */
   private async fetchWithRetry(
     url: string,
-    options: RequestInit,
+    buildOptions: () => Promise<RequestInit>,
     retries = 0
   ): Promise<Response> {
     try {
-      const response = await fetch(url, options);
+      const response = await fetch(url, await buildOptions());
 
       // Retry on 5xx errors only (not 4xx — those are permanent)
       if (!response.ok && retries < this.maxRetries) {
         if (response.status >= 500) {
           const delay = this.retryDelay * Math.pow(2, retries);
           await new Promise((resolve) => setTimeout(resolve, delay));
-          return this.fetchWithRetry(url, options, retries + 1);
+          return this.fetchWithRetry(url, buildOptions, retries + 1);
         }
       }
 
@@ -213,7 +215,7 @@ export class ApiService {
       if (retries < this.maxRetries) {
         const delay = this.retryDelay * Math.pow(2, retries);
         await new Promise((resolve) => setTimeout(resolve, delay));
-        return this.fetchWithRetry(url, options, retries + 1);
+        return this.fetchWithRetry(url, buildOptions, retries + 1);
       }
       throw error;
     }

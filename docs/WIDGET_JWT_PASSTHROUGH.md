@@ -7,6 +7,19 @@ account. With **JWT passthrough**, each visitor authenticates as themselves.
 Use this guide when the page that hosts the widget already signs the visitor in
 with the same identity provider (IdP) that Onyx uses.
 
+## Scope: single-tenant deployments
+
+JWT passthrough works on a single-tenant deployment, which means self-hosted
+Onyx. It does not work on multi-tenant Onyx Cloud.
+
+A multi-tenant deployment reads the workspace from the credential itself. See
+`_get_tenant_id_from_request` in
+`backend/ee/onyx/server/middleware/tenant_tracking.py`: it accepts an Onyx API
+key or PAT prefix, a server-issued session token, or the anonymous-user cookie.
+An external IdP token carries none of these, so the request falls back to the
+default schema, which owns no workspace data. Use an API key on multi-tenant
+Onyx until the backend binds a tenant to these tokens.
+
 ## What you get
 
 | | `api-key` | JWT passthrough |
@@ -130,15 +143,20 @@ widget.tokenProvider = async () => {
 ```
 
 Most IdP SDKs cache the token and refresh it only when it is near expiry, so
-calling the SDK per request is cheap. The widget does not retry a 401 with a
-new token, so a stale token surfaces as an error in the chat panel.
+calling the SDK per request is cheap. The widget also calls the provider again
+for each retry attempt, so a token that expires during a backoff is replaced
+rather than resent. The widget does not retry a 401, so a provider that returns
+an already-expired token surfaces as an error in the chat panel.
 
-### Clear the conversation when the visitor changes
+### Conversations are scoped to the signed-in user
 
-The widget keeps the transcript in `sessionStorage`. That store is per tab and
-clears when the tab closes, and Onyx rejects a chat session that belongs to
-another user. Even so, call `resetConversation()` on sign-out so no message text
-stays in the tab for the next person:
+The widget keeps the transcript in `sessionStorage`. It tags each stored
+transcript with the token subject (the `sub` claim), and it discards a stored
+transcript whose subject does not match the current one. A second person who
+signs in on the same tab therefore starts a fresh conversation and never sees
+the first person's messages.
+
+You can still clear the conversation on demand, for example on sign-out:
 
 ```js
 widget.resetConversation();

@@ -10,7 +10,11 @@ import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { WidgetConfig, ChatMessage, TokenProvider } from "./types/widget-types";
 import { SearchDocument, ResolvedCitation } from "./types/api-types";
-import { resolveConfig, resolveAuthToken } from "./config/config";
+import {
+  resolveConfig,
+  resolveAuthToken,
+  deriveCredentialIdentity,
+} from "./config/config";
 import { theme } from "./styles/theme";
 import { widgetStyles } from "./styles/widget-styles";
 import { ApiService } from "./services/api-service";
@@ -51,6 +55,7 @@ export class OnyxChatWidget extends LitElement {
 
   private config!: WidgetConfig;
   private apiService!: ApiService;
+  private sessionRestored = false;
   private abortController?: AbortController;
   // Citation state — plain fields (not @state) since Map mutations don't trigger Lit re-renders
   private documentMap = new Map<string, SearchDocument>();
@@ -67,6 +72,12 @@ export class OnyxChatWidget extends LitElement {
 
   updated(changedProperties: Map<string, any>) {
     super.updated(changedProperties);
+
+    // A host that assigns `tokenProvider` after mount only becomes able to
+    // identify the stored transcript now.
+    if (changedProperties.has("tokenProvider")) {
+      this.restoreSession();
+    }
 
     // Auto-scroll when messages change or streaming status changes
     if (
@@ -113,17 +124,46 @@ export class OnyxChatWidget extends LitElement {
       resolveAuthToken(this.tokenProvider, this.config.apiKey)
     );
 
-    // Load persisted session
-    const stored = loadSession();
-    if (stored) {
-      this.chatSessionId = stored.sessionId;
-      this.messages = stored.messages;
-    }
-
     // Auto-open if inline mode
     if (this.config.mode === "inline") {
       this.isOpen = true;
     }
+
+    this.restoreSession();
+  }
+
+  /**
+   * Restore the persisted transcript, once a credential identifies who it
+   * belongs to. This waits rather than restoring at mount because a host
+   * normally assigns `tokenProvider` after the element is parsed, and a
+   * transcript must never be shown to a different signed-in user.
+   */
+  private restoreSession(): void {
+    if (this.sessionRestored) return;
+
+    void (async () => {
+      let identity: string;
+      try {
+        identity = await this.currentIdentity();
+      } catch {
+        // No credential yet. A later `tokenProvider` assignment retries.
+        return;
+      }
+
+      this.sessionRestored = true;
+
+      const stored = loadSession(identity);
+      if (!stored) return;
+      this.chatSessionId = stored.sessionId;
+      this.messages = stored.messages;
+    })();
+  }
+
+  /** Who the current credential represents; scopes the stored transcript. */
+  private async currentIdentity(): Promise<string> {
+    return deriveCredentialIdentity(
+      await resolveAuthToken(this.tokenProvider, this.config.apiKey)
+    );
   }
 
   private applyCustomColors() {
@@ -353,6 +393,10 @@ export class OnyxChatWidget extends LitElement {
         this.isLoading = false;
       }
 
+      // Resolved once per send, so every persisted transcript is tagged with
+      // the user who actually produced it.
+      const identity = await this.currentIdentity();
+
       // Get parent message ID (last assistant message with a numeric ID from backend)
       const parentMessage = [...this.messages]
         .reverse()
@@ -474,7 +518,7 @@ export class OnyxChatWidget extends LitElement {
           if (!currentMessage.isStreaming) {
             this.isStreaming = false;
             this.streamingStatus = "";
-            saveSession(this.chatSessionId, this.messages);
+            saveSession(this.chatSessionId, this.messages, identity);
           }
         }
       }

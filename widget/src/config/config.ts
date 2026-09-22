@@ -1,5 +1,7 @@
 import { TokenProvider, WidgetConfig } from "@/types/widget-types";
 
+const SHARED_CREDENTIAL_IDENTITY = "shared-credential";
+
 const MISSING_CREDENTIAL_MESSAGE =
   "No Onyx credential available. Set the `api-key` attribute, or assign a " +
   "`tokenProvider` function on the <onyx-chat-widget> element.";
@@ -46,4 +48,37 @@ export function resolveAuthToken(
     return apiKey;
   }
   throw new Error(MISSING_CREDENTIAL_MESSAGE);
+}
+
+/**
+ * Stable identifier for whoever the credential represents, used to scope the
+ * stored transcript. A JWT yields its subject, so a second person signing in
+ * on the same tab never sees the first person's messages. Anything else is a
+ * shared credential, which every visitor already has in common.
+ */
+export function deriveCredentialIdentity(token: string): string {
+  const claims = decodeJwtClaims(token);
+  const subject = claims?.sub ?? claims?.email;
+  return typeof subject === "string" && subject
+    ? subject
+    : SHARED_CREDENTIAL_IDENTITY;
+}
+
+function decodeJwtClaims(token: string): Record<string, unknown> | null {
+  const segments = token.split(".");
+  if (segments.length !== 3) {
+    return null;
+  }
+
+  try {
+    const base64 = segments[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(
+      base64.length + ((4 - (base64.length % 4)) % 4),
+      "="
+    );
+    const bytes = Uint8Array.from(atob(padded), (char) => char.charCodeAt(0));
+    return JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    return null;
+  }
 }
