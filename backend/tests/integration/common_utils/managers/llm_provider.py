@@ -161,17 +161,17 @@ class LLMProviderManager:
 
     @staticmethod
     def set_default_vision(
-        llm_provider: DATestLLMProvider,
+        provider_id: int,
         user_performing_action: DATestUser,
-        model_name: str | None = None,
+        model_name: str,
     ) -> None:
         """Point image captioning at this provider's model. Without a default
         vision model, indexing skips captions entirely."""
         response = client.post(
             f"{API_SERVER_URL}/admin/llm/default-vision",
             json={
-                "provider_id": llm_provider.id,
-                "model_name": model_name or llm_provider.default_model_name,
+                "provider_id": provider_id,
+                "model_name": model_name,
             },
             headers=user_performing_action.headers,
         )

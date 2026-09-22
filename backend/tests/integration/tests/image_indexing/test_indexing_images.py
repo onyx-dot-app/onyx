@@ -39,8 +39,11 @@ def test_image_indexing(
         name="test_llm",
         user_performing_action=admin_user,
     )
+    assert llm_provider.default_model_name is not None
     LLMProviderManager.set_default_vision(
-        llm_provider, user_performing_action=admin_user
+        llm_provider.id,
+        user_performing_action=admin_user,
+        model_name=llm_provider.default_model_name,
     )
 
     SettingsManager.update_settings(
@@ -140,8 +143,11 @@ def test_docx_image_indexing(
         name="test_llm_docx",
         user_performing_action=admin_user,
     )
+    assert llm_provider.default_model_name is not None
     LLMProviderManager.set_default_vision(
-        llm_provider, user_performing_action=admin_user
+        llm_provider.id,
+        user_performing_action=admin_user,
+        model_name=llm_provider.default_model_name,
     )
 
     SettingsManager.update_settings(
