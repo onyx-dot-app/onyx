@@ -65,7 +65,7 @@ Every enterprise AI product asks you to ship your documents, your embeddings, an
 
 ### Onyx runs entirely in your environment
 
-Deploy Onyx in your own cloud account, in your own datacenter, or fully air-gapped. Every component runs inside the boundary your security team already owns. Nothing phones home.
+Deploy Onyx in your own cloud account, in your own datacenter, or fully air-gapped. Every component runs inside the boundary your security team already owns. Your documents, embeddings, and prompts never leave it. The only outbound call Onyx makes on its own is anonymous usage telemetry, and one env var (`DISABLE_TELEMETRY=true`) turns that off.
 
 ```mermaid
 flowchart LR
@@ -104,9 +104,9 @@ flowchart LR
 What this means in practice:
 
 - **Documents and embeddings stay in your infrastructure.** The index, the database, and the embedding models all run on machines you control.
-- **No training on your data, by anyone, ever.** There is no Onyx cloud in the loop that could retain or learn from your content.
+- **No training on your data, by anyone, ever.** There is no Onyx cloud in the loop that could retain or learn from your content. Anonymous telemetry carries version, event types, and timing data, never document or prompt content. Sentry and PostHog are off unless you set their keys.
 - **Model traffic is your decision.** Point Onyx at a self-hosted model and no token ever leaves your network. Or use a hosted API provider under your own contract and keys. Either way, Onyx never proxies your prompts through a third party.
-- **Audit everything.** Query history and [audit logging](docs/AUDIT_LOGGING.md) record who asked what, and which documents were used to answer.
+- **Audit everything.** Query history records who asked what and which documents were cited. [Audit logging](docs/AUDIT_LOGGING.md) records logins, admin changes, and access-control changes for your SIEM.
 
 ### Open source
 
@@ -118,7 +118,7 @@ Onyx is not tied to a model vendor. Run open weights on your own GPUs through Ol
 
 ### Permission syncing
 
-Search is only safe if it respects the permissions your sources already enforce. Onyx syncs document-level access controls from Google Drive, Confluence, Jira, GitHub, Slack, SharePoint, Salesforce, Gmail, Outlook, Teams, Box, and Canvas. When a person or an agent asks a question, Onyx only retrieves documents that user is allowed to see in the source system. Permissions are checked at query time, so a document that was shared yesterday and revoked today is gone from today's answers.
+Search is only safe if it respects the permissions your sources already enforce. Onyx syncs document-level access controls from Google Drive, Confluence, Jira, GitHub, Slack, SharePoint, Gmail, Outlook, Teams, Zoom, Box, and Canvas, and filters Salesforce results live against the source at query time. When a person or an agent asks a question, Onyx only retrieves documents that user is allowed to see in the source system. Onyx applies the user's synced permissions on every query. Access changes in the source propagate on the next permission sync, every 5 to 30 minutes by default.
 
 On top of source permissions, the Enterprise Edition adds:
 
@@ -136,7 +136,7 @@ On top of source permissions, the Enterprise Edition adds:
 
 The same index and the same permissions, from wherever the work happens:
 
-- **Web and desktop app:** chat, deep research, custom agents, artifacts, code execution, voice, and image generation.
+- **Web and desktop app (macOS):** chat, deep research, custom agents, artifacts, code execution, voice, and image generation.
 - **Slackbot:** ask and answer inside the channels where questions already get asked.
 - **MCP:** expose Onyx knowledge to Claude Code, Cursor, Codex, or any MCP client, so your coding and workflow agents get company context with the same access controls as the person running them.
 - **Chrome extension:** query Onyx from any tab.
@@ -147,7 +147,7 @@ The same index and the same permissions, from wherever the work happens:
 - **Deep Research:** Multi-step research flow that produces long-form, cited reports. Top of the [leaderboard](https://github.com/onyx-dot-app/onyx_deep_research_bench) as of Feb 2026.
 - **Custom Agents:** Build agents with their own instructions, knowledge, and actions.
 - **Actions & MCP:** Let agents call external applications, with flexible auth options.
-- **Web Search:** Serper, Google PSE, Brave, SearXNG, and others. Includes an in-house crawler plus Firecrawl and Exa support.
+- **Web Search:** Serper, Google PSE, Brave, SearXNG, Exa, and Tavily. Page content comes from the in-house crawler, Firecrawl, or Tavily Extract.
 - **Code Execution:** Run code in a sandbox to analyze data, render charts, or edit files.
 - **Artifacts:** Generate documents, graphics, and other downloadable files.
 - **Voice Mode:** Speech-to-text and text-to-speech.
@@ -159,7 +159,7 @@ Full connector list [here](https://www.onyx.app/connectors?utm_source=onyx_repo&
 
 ## Deployment
 
-Onyx runs on Docker Compose, Kubernetes (Helm), and Terraform, with guides for AWS, GCP, and Azure. Detailed guides are [here](https://docs.onyx.app/deployment/overview).
+Onyx runs on Docker Compose, Kubernetes (Helm), and Terraform (AWS, Azure), with guides for the major cloud providers. Detailed guides are [here](https://docs.onyx.app/deployment/overview).
 
 There are two deployment options: Lite and Standard.
 
@@ -177,7 +177,7 @@ The complete feature set, recommended for larger teams. Adds the components Lite
 - Redis cache and MinIO blob store for large-scale use.
 
 > [!TIP]
-> **To try Onyx without deploying, visit [Onyx Cloud](https://cloud.onyx.app/signup?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)**.
+> **To try Onyx without deploying, visit [Onyx Cloud](https://cloud.onyx.app/auth/signup?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)**.
 
 ---
 
