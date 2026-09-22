@@ -784,9 +784,6 @@
         "messaging": {
           "label": "即时通讯"
         },
-        "other": {
-          "label": "其他"
-        },
         "sales": {
           "label": "销售与 GTM"
         },
@@ -798,6 +795,9 @@
         },
         "wiki": {
           "label": "知识库与 Wiki"
+        },
+        "aiObservability": {
+          "label": "AI 与可观测性"
         }
       },
       "popular": {

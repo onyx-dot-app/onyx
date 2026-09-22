@@ -1,4 +1,4 @@
-import { SourceCategory } from "@/lib/search/types";
+import { type CatalogCategory, SourceCategory } from "@/lib/search/types";
 import { ValidSources } from "@/lib/types";
 
 /**
@@ -14,8 +14,14 @@ export const SOURCE_CATEGORY_LABEL_KEYS = {
   [SourceCategory.Messaging]: "categories.messaging.label",
   [SourceCategory.Sales]: "categories.sales.label",
   [SourceCategory.CodeRepository]: "categories.codeRepository.label",
-  [SourceCategory.Other]: "categories.other.label",
-} as const satisfies Record<SourceCategory, string>;
+  [SourceCategory.AiObservability]: "categories.aiObservability.label",
+} as const satisfies Record<CatalogCategory, string>;
+
+/** The catalog sections, in display order. */
+// SAFETY: the mapping above is keyed by every CatalogCategory and nothing else.
+export const CATALOG_CATEGORIES = Object.keys(
+  SOURCE_CATEGORY_LABEL_KEYS
+) as CatalogCategory[];
 
 /**
  * Message key, inside the `admin.addConnector` namespace, for the one-line

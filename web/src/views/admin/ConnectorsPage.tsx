@@ -5,7 +5,11 @@ import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
 import { Content, SettingsLayouts } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import { SourceCategory, SourceMetadata } from "@/lib/search/types";
+import {
+  type CatalogCategory,
+  SourceCategory,
+  SourceMetadata,
+} from "@/lib/search/types";
 import { listSourceMetadata } from "@/lib/sources";
 import {
   useCallback,
@@ -31,6 +35,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import { ConnectorSourceCard } from "@/lib/connectors/components";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import {
+  CATALOG_CATEGORIES,
   SOURCE_CATEGORY_LABEL_KEYS,
   SOURCE_DESCRIPTION_KEYS,
 } from "@/lib/connectors/constants";
@@ -184,28 +189,27 @@ export default function ConnectorsPage() {
 
   const categorizedSources = useMemo(() => {
     const filtered = filterSources(sources);
-    const categories = Object.values(SourceCategory).reduce(
+    // `SourceCategory.Other` has no section: its popular members (Web, File)
+    // sit in the popular grid and the rest are internal.
+    const categories = CATALOG_CATEGORIES.reduce(
       (acc, category) => {
         acc[category] = sources.filter(
           (source) =>
             source.category === category &&
-            // Popular sources with no home category (Web, File) already sit
-            // in the popular grid; "Others" only lists the long tail.
-            !(category === SourceCategory.Other && source.isPopular) &&
             (filtered.includes(source) ||
               category.toLowerCase().includes(searchTerm.toLowerCase()))
         );
         return acc;
       },
-      {} as Record<SourceCategory, SourceMetadata[]>
+      {} as Record<CatalogCategory, SourceMetadata[]>
     );
-    // Filter out the "Other" category if show_extra_connectors is false
+    // The extra-connectors setting hides the AI & Observability section.
     if (settings?.show_extra_connectors === false) {
       const filteredCategories = Object.entries(categories).filter(
-        ([category]) => category !== SourceCategory.Other
+        ([category]) => category !== SourceCategory.AiObservability
       );
       return Object.fromEntries(filteredCategories) as Record<
-        SourceCategory,
+        CatalogCategory,
         SourceMetadata[]
       >;
     }
@@ -307,7 +311,7 @@ export default function ConnectorsPage() {
                   >
                     <Text font="main-ui-action" color="text-03">
                       {t(
-                        SOURCE_CATEGORY_LABEL_KEYS[category as SourceCategory]
+                        SOURCE_CATEGORY_LABEL_KEYS[category as CatalogCategory]
                       )}
                     </Text>
                     <div className={SOURCE_CARD_GRID}>

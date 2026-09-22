@@ -784,9 +784,6 @@
         "messaging": {
           "label": "メッセージング"
         },
-        "other": {
-          "label": "その他"
-        },
         "sales": {
           "label": "営業・GTM"
         },
@@ -798,6 +795,9 @@
         },
         "wiki": {
           "label": "ナレッジベース・Wiki"
+        },
+        "aiObservability": {
+          "label": "AI・オブザーバビリティ"
         }
       },
       "popular": {

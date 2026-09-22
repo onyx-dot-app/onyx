@@ -784,9 +784,6 @@
         "messaging": {
           "label": "Messagerie"
         },
-        "other": {
-          "label": "Autres"
-        },
         "sales": {
           "label": "Ventes et GTM"
         },
@@ -798,6 +795,9 @@
         },
         "wiki": {
           "label": "Bases de connaissances et wikis"
+        },
+        "aiObservability": {
+          "label": "IA et observabilité"
         }
       },
       "popular": {

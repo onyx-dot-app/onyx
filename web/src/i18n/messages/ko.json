@@ -784,9 +784,6 @@
         "messaging": {
           "label": "메시징"
         },
-        "other": {
-          "label": "기타"
-        },
         "sales": {
           "label": "영업 및 GTM"
         },
@@ -798,6 +795,9 @@
         },
         "wiki": {
           "label": "지식 베이스 및 위키"
+        },
+        "aiObservability": {
+          "label": "AI 및 관측 가능성"
         }
       },
       "popular": {

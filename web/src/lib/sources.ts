@@ -445,7 +445,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
   braintrust: {
     icon: BraintrustIcon,
     displayName: "Braintrust",
-    category: SourceCategory.Other,
+    category: SourceCategory.AiObservability,
   },
 
   // Other
