@@ -204,9 +204,18 @@ def find_model_entry(provider: str, model_name: str) -> dict[str, Any] | None:
     return None
 
 
+# Providers whose inference runs on customer-owned hardware — there is no
+# per-token API bill, so catalog pricing (and the cross-provider fallback scan,
+# which could match identically-named hosted models) must not apply. Admins
+# can still assign a rate via ModelCostOverride.
+_LOCAL_PROVIDERS = frozenset({"ollama_chat", "lm_studio"})
+
+
 def find_model_cost(provider: str, model_name: str) -> dict[str, Any] | None:
     """Cost block for a model: {input, output, cache_read?, cache_write?,
     context_over_200k?}. Values are USD per million tokens."""
+    if provider in _LOCAL_PROVIDERS:
+        return None
     entry = find_model_entry(provider, model_name)
     return entry.get("cost") if entry else None
 

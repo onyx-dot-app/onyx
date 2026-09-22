@@ -37,7 +37,8 @@ PROVIDER_MAP: dict[str, list[str]] = {
     "bedrock_converse": ["amazon-bedrock"],
     "openrouter": ["openrouter"],
     "azure": ["azure", "azure-cognitive-services"],
-    "ollama_chat": ["ollama-cloud"],
+    # ollama_chat is deliberately unmapped: self-hosted Ollama has no API bill,
+    # and mapping it to ollama-cloud would price local inference at cloud rates.
     "lm_studio": ["lmstudio"],
     "mistral": ["mistral"],
     "nebius_tokenfactory": ["nebius"],
