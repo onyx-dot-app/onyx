@@ -219,11 +219,11 @@ function CheckRow({ result }: { result: CapabilityCheckResult }) {
   );
 
   return blocking ? (
-    <Card color="status-error-00" rounding={3} padding={3} data-blocking>
+    <Card color="status-error-00" rounding={3} padding={2} data-blocking>
       {row}
     </Card>
   ) : (
-    <div className="p-3">{row}</div>
+    <div className="p-2">{row}</div>
   );
 }
 
@@ -290,8 +290,8 @@ export function ConnectorsCheckCard({
   const hasReport = results.length > 0;
 
   return (
-    <Card border="solid" rounding={4} padding={4}>
-      <div className="flex flex-col gap-4">
+    <Card border="solid" rounding={4} padding={3}>
+      <div className="flex flex-col gap-3">
         <div className="flex items-center gap-3">
           {isRunning ? (
             <IconLoader size={24} color="text-03" />
