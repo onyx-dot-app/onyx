@@ -26,28 +26,34 @@ test.describe("Web Content Provider Configuration", () => {
 
     test("should configure Firecrawl as web crawler", async ({ page }) => {
       // Click Connect on the Firecrawl card (or key icon if already configured)
-      await openProviderModal(page, "Firecrawl");
+      await openProviderModal(page, "Firecrawl", "content");
 
       const modalDialog = page.getByRole("dialog");
       await expect(modalDialog).toBeVisible({ timeout: 10000 });
+      // "Set up" on first connect, "Configure" when credentials already exist
+      // (another spec in the same run may have connected Firecrawl first).
       await expect(
-        page.getByText("Set up Firecrawl", { exact: false })
+        page.getByText(/(Set up|Configure) Firecrawl/)
       ).toBeVisible();
 
       // Firecrawl has a base URL field (shown first) and API key
-      const baseUrlInput = page.locator('input[placeholder="https://"]');
+      const baseUrlInput = modalDialog.locator(
+        'input[placeholder^="https://"]'
+      );
       await baseUrlInput.waitFor({ state: "visible", timeout: 5000 });
       // Don't check value - it might have a custom value from previous config
 
       // Enter API key - clear first in case modal opened with masked credentials.
-      const apiKeyInput = modalDialog.getByTestId("web-provider-api-key-input");
+      const apiKeyInput = modalDialog.getByPlaceholder("API Key", {
+        exact: true,
+      });
       await apiKeyInput.waitFor({ state: "visible", timeout: 5000 });
       await apiKeyInput.clear();
       await apiKeyInput.fill(FIRECRAWL_API_KEY!);
 
+      // "Connect" on first setup, "Update" when editing existing credentials.
       const modalConnectButton = modalDialog.getByRole("button", {
-        name: "Connect",
-        exact: true,
+        name: /^(Connect|Update)$/,
       });
       await expect(modalConnectButton).toBeEnabled({ timeout: 5000 });
       await modalConnectButton.click();
@@ -81,6 +87,7 @@ test.describe("Web Content Provider Configuration", () => {
 
       const connectButton = firecrawlCard.getByRole("button", {
         name: "Connect",
+        exact: true,
       });
       const setDefaultButton = firecrawlCard.getByRole("button", {
         name: "Set as Default",
@@ -93,13 +100,13 @@ test.describe("Web Content Provider Configuration", () => {
         const modalDialog = page.getByRole("dialog");
         await expect(modalDialog).toBeVisible({ timeout: 10000 });
         await expect(
-          page.getByText("Set up Firecrawl", { exact: false })
+          page.getByText(/(Set up|Configure) Firecrawl/)
         ).toBeVisible();
 
         // Enter API key - clear first in case modal opened with masked credentials.
-        const apiKeyInput = modalDialog.getByTestId(
-          "web-provider-api-key-input"
-        );
+        const apiKeyInput = modalDialog.getByPlaceholder("API Key", {
+          exact: true,
+        });
         await apiKeyInput.waitFor({ state: "visible", timeout: 5000 });
         await apiKeyInput.clear();
         await apiKeyInput.fill(FIRECRAWL_API_KEY!);
