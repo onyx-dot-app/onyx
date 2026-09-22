@@ -80,14 +80,22 @@ class ZoomAccessContext:
             self._owner_emails[user_id] = self._look_up_owner(user_id)
         return self._owner_emails[user_id]
 
-    def rule_grant(self, rule_id: str, any_user_id: str) -> _RuleGrant | None:
-        """The catalogue is account-wide, so any user's answer serves the run."""
+    def rule_grant(self, rule_id: str) -> _RuleGrant | None:
         if self._rules is None:
-            catalogue = self.client.get_recording_authentication_rules(any_user_id)
-            self._rules = {
-                rule.id: _grant_of(rule) for rule in catalogue.authentication_options
-            }
+            self._rules = self._load_rules()
         return self._rules.get(rule_id)
+
+    def _load_rules(self) -> dict[str, _RuleGrant]:
+        """The catalogue is account-wide, so any listed user's answer serves the
+        run. Asked through the listing rather than a recording's owner, who may
+        have left the account since. An account with no users has no
+        recordings to ask about either."""
+        page = self.client.list_users()
+        user_id = next((u.id for u in page.users if u.id), None)
+        if user_id is None:
+            return {}
+        catalogue = self.client.get_recording_authentication_rules(user_id)
+        return {rule.id: _grant_of(rule) for rule in catalogue.authentication_options}
 
     def _look_up_owner(self, user_id: str) -> str | None:
         try:
@@ -199,7 +207,7 @@ def _link_access(
     if not settings.authentication_option:
         return _LinkGrant(True, frozenset(), viewers_may_register=True)
 
-    grant = context.rule_grant(settings.authentication_option, recording.host_id)
+    grant = context.rule_grant(settings.authentication_option)
     if grant is None:
         logger.warning(
             "Recording %s is shared under sign-in rule %s, which is not in the "

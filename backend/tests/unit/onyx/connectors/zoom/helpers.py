@@ -20,6 +20,7 @@ from onyx.connectors.zoom.models import (
     ZoomRecordingSettings,
     ZoomRegistrant,
     ZoomUser,
+    ZoomUserPage,
 )
 from onyx.connectors.zoom.recordings.models import OccurrenceWork, ZoomSessionType
 from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
@@ -127,13 +128,14 @@ def with_recording_access(
 ) -> MagicMock:
     """An account with one owner, the built-in sign-in rule, and a recording
     shared with the account, unless told otherwise. The owner answers for any
-    id asked for, since a test names the owner it wants on the recording."""
+    id asked for, since a test names the owner it wants on the recording, and
+    is also the one user the account lists."""
     if client is None:
         client = mock_zoom_client()
     client.get_recording_settings.return_value = settings or recording_settings()
-    client.get_user.return_value = owner or user(
-        id="owner-1", email="Owner@Example.com"
-    )
+    owner = owner or user(id="owner-1", email="Owner@Example.com")
+    client.get_user.return_value = owner
+    client.list_users.return_value = ZoomUserPage(users=[owner], total_records=1)
     client.get_recording_authentication_rules.return_value = (
         recording_authentication_settings(*(rules or []))
     )
