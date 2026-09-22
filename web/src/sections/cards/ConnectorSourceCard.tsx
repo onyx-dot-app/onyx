@@ -56,6 +56,9 @@ export default function ConnectorSourceCard({
           <Button
             icon={SvgPlusCircle}
             prominence="tertiary"
+            // The card is the tab stop; the button repeats its action for
+            // pointer users only.
+            tabIndex={-1}
             aria-label={t("sourceCard.connectButton.ariaLabel", {
               source: sourceMetadata.displayName,
             })}
