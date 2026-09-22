@@ -12,8 +12,9 @@ async function createFederatedSlackConnector(page: Page) {
   await page.goto("/admin/connectors");
   await page.waitForLoadState("networkidle");
 
-  // Click on Slack connector tile (specifically the one with "Logo Slack" text, not "Slack Bots")
-  await page.getByRole("link", { name: "Logo Slack" }).first().click();
+  // Slack is listed under Popular and Messaging; either card leads to the
+  // same wizard. The card's add button carries the "Connect <source>" label.
+  await page.getByRole("button", { name: "Connect Slack" }).first().click();
   await page.waitForLoadState("networkidle");
 
   if (!SLACK_CLIENT_ID || !SLACK_CLIENT_SECRET) {
