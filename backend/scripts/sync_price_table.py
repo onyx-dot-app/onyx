@@ -163,8 +163,7 @@ def _build_provider_section(
             if alias not in models:
                 claims.setdefault(alias, set()).add(model_id)
     aliases = {
-        alias: sorted(ids)[0] if len(ids) == 1 else None
-        for alias, ids in claims.items()
+        alias: min(ids) if len(ids) == 1 else None for alias, ids in claims.items()
     }
     aliases = {a: c for a, c in aliases.items() if c is not None}
 
