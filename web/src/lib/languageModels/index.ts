@@ -205,6 +205,7 @@ export const AGGREGATOR_PROVIDERS = new Set([
   LLMProviderName.OPENAI_COMPATIBLE,
   LLMProviderName.NEBIUS_TOKENFACTORY,
   LLMProviderName.PORTKEY,
+  LLMProviderName.VERCEL_AI_GATEWAY,
   LLMProviderName.VERTEX_AI,
 ]);
 

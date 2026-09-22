@@ -170,6 +170,7 @@ AGGREGATOR_PROVIDERS: set[str] = {
     LlmProviderNames.OPENAI_COMPATIBLE,
     LlmProviderNames.NEBIUS_TOKENFACTORY,
     LlmProviderNames.PORTKEY,
+    LlmProviderNames.VERCEL_AI_GATEWAY,
 }
 
 # Dynamic providers fetch models directly from source APIs (not LiteLLM).
@@ -188,12 +189,14 @@ DYNAMIC_LLM_PROVIDERS: frozenset[str] = frozenset(
 # Providers whose `available-models` endpoint reads a context limit from the
 # source API and persists it as `max_input_tokens`. Those values are
 # authoritative and must never be second-guessed against LiteLLM's model map.
-# Nebius TokenFactory and Portkey do this without being dynamic providers, so
-# this is deliberately a superset of DYNAMIC_LLM_PROVIDERS rather than a reuse.
+# Nebius TokenFactory, Portkey, and Vercel AI Gateway do this without being
+# dynamic providers, so this is deliberately a superset of
+# DYNAMIC_LLM_PROVIDERS rather than a reuse.
 SOURCE_API_CONTEXT_LIMIT_PROVIDERS: frozenset[str] = DYNAMIC_LLM_PROVIDERS | frozenset(
     {
         LlmProviderNames.NEBIUS_TOKENFACTORY,
         LlmProviderNames.PORTKEY,
+        LlmProviderNames.VERCEL_AI_GATEWAY,
     }
 )
 
