@@ -5033,7 +5033,7 @@
           "toast": "Konnektor erfolgreich erstellt"
         },
         "empty": {
-          "message": "Sie haben anscheinend noch keine Konnektoren eingerichtet. Öffnen Sie die Seite [Konnektor hinzufügen](/admin/add-connector), um zu beginnen!"
+          "message": "Sie haben anscheinend noch keine Konnektoren eingerichtet. Öffnen Sie die Seite [Konnektor hinzufügen](/admin/connectors), um zu beginnen!"
         },
         "federated": {
           "access": {
@@ -13374,8 +13374,8 @@
         }
       },
       "items": {
-        "addConnector": {
-          "label": "Konnektor hinzufügen"
+        "connectors": {
+          "label": "Konnektoren"
         },
         "agents": {
           "label": "Agenten"

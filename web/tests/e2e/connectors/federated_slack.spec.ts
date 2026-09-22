@@ -9,7 +9,7 @@ const SLACK_CLIENT_SECRET = process.env.SLACK_CLIENT_SECRET;
 
 async function createFederatedSlackConnector(page: Page) {
   // Navigate to add connector page
-  await page.goto("/admin/add-connector");
+  await page.goto("/admin/connectors");
   await page.waitForLoadState("networkidle");
 
   // Click on Slack connector tile (specifically the one with "Logo Slack" text, not "Slack Bots")

@@ -5033,7 +5033,7 @@
           "toast": "Conector criado com sucesso"
         },
         "empty": {
-          "message": "Parece que você ainda não configurou nenhum conector. Acesse a página [Adicionar conector](/admin/add-connector) para começar!"
+          "message": "Parece que você ainda não configurou nenhum conector. Acesse a página [Adicionar conector](/admin/connectors) para começar!"
         },
         "federated": {
           "access": {
@@ -13374,8 +13374,8 @@
         }
       },
       "items": {
-        "addConnector": {
-          "label": "Adicionar conector"
+        "connectors": {
+          "label": "Conectores"
         },
         "agents": {
           "label": "Agentes"

@@ -19,6 +19,7 @@ import {
   SvgGlobe,
   SvgHistory,
   SvgImage,
+  SvgLinkedDots,
   SvgMcp,
   SvgOnyxOctagon,
   SvgPaintBrush,
@@ -29,7 +30,6 @@ import {
   SvgSliders,
   SvgTerminal,
   SvgThumbsUp,
-  SvgUploadCloud,
   SvgUser,
   SvgUserCheck,
   SvgUserKey,
@@ -241,11 +241,11 @@ export const ADMIN_ROUTES = {
     requiredTier: null,
     visibleWhen: (f: FeatureFlags) => f.vectorDbEnabled,
   },
-  ADD_CONNECTOR: {
-    path: "/admin/add-connector",
-    icon: SvgUploadCloud,
-    title: "Add Connector",
-    sidebarLabel: "Add Connector",
+  CONNECTORS: {
+    path: "/admin/connectors",
+    icon: SvgLinkedDots,
+    title: "Connectors",
+    sidebarLabel: "Connectors",
     requiredPermission: Permission.MANAGE_CONNECTORS,
     section: "Documents & Knowledge",
     requiredTier: null,
@@ -533,7 +533,7 @@ export function sidebarItem(route: AdminRouteEntry) {
  */
 export const VECTOR_DB_REQUIRED_ROUTE_PREFIXES: readonly string[] = [
   ADMIN_ROUTES.INDEXING_STATUS.path,
-  ADMIN_ROUTES.ADD_CONNECTOR.path,
+  ADMIN_ROUTES.CONNECTORS.path,
   // Covers /sets, /explorer, and /feedback — all require a vector DB.
   ADMIN_ROUTES.DOCUMENTS.path,
   ADMIN_ROUTES.INDEX_SETTINGS.path,

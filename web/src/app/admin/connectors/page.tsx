@@ -1,7 +1,8 @@
 "use client";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
-import { SettingsLayouts } from "@opal/layouts";
+import { Content, SettingsLayouts } from "@opal/layouts";
+import * as GeneralLayouts from "@/layouts/general-layouts";
 import { SourceCategory, SourceMetadata } from "@/lib/search/types";
 import { listSourceMetadata } from "@/lib/sources";
 import { Button } from "@opal/components";
@@ -30,7 +31,7 @@ import { InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
-const route = ADMIN_ROUTES.ADD_CONNECTOR;
+const route = ADMIN_ROUTES.CONNECTORS;
 
 // The category headings come from the `SourceCategory` enum, whose values are
 // identifiers shared across the app. Map each one to a message key (inside the
@@ -260,7 +261,7 @@ export default function Page() {
   };
 
   return (
-    <SettingsLayouts.Root width="full">
+    <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={route.icon}
         title={adminRouteTitle(route)}
@@ -282,11 +283,18 @@ export default function Page() {
         />
 
         {dedupedPopular.length > 0 && (
-          <div className="pt-8">
-            <Text as="p" headingH3>
-              {t("popular.title")}
-            </Text>
-            <div className="flex flex-wrap gap-4 p-4">
+          <GeneralLayouts.Section
+            gap={3}
+            height="fit"
+            alignItems="stretch"
+            justifyContent="start"
+          >
+            <Content
+              title={t("popular.title")}
+              sizePreset="main-content"
+              variant="section"
+            />
+            <div className="flex flex-wrap gap-4">
               {dedupedPopular.map((source) => (
                 <SourceTileTooltipWrapper
                   preSelect={false}
@@ -297,17 +305,25 @@ export default function Page() {
                 />
               ))}
             </div>
-          </div>
+          </GeneralLayouts.Section>
         )}
 
         {Object.entries(categorizedSources)
           .filter(([_, sources]) => sources.length > 0)
           .map(([category, sources], categoryInd) => (
-            <div key={category} className="pt-8">
-              <Text as="p" headingH3>
-                {t(CATEGORY_LABEL_KEYS[category as SourceCategory])}
-              </Text>
-              <div className="flex flex-wrap gap-4 p-4">
+            <GeneralLayouts.Section
+              key={category}
+              gap={3}
+              height="fit"
+              alignItems="stretch"
+              justifyContent="start"
+            >
+              <Content
+                title={t(CATEGORY_LABEL_KEYS[category as SourceCategory])}
+                sizePreset="main-content"
+                variant="section"
+              />
+              <div className="flex flex-wrap gap-4">
                 {sources.map((source, sourceInd) => (
                   <SourceTileTooltipWrapper
                     preSelect={
@@ -322,7 +338,7 @@ export default function Page() {
                   />
                 ))}
               </div>
-            </div>
+            </GeneralLayouts.Section>
           ))}
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>

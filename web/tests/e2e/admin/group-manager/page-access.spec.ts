@@ -20,7 +20,7 @@ const PAGE_HEADINGS: Record<string, string> = {
   [ADMIN_ROUTES.MCP_ACTIONS.path]: "MCP Actions",
   [ADMIN_ROUTES.OPENAPI_ACTIONS.path]: "OpenAPI Actions",
   [ADMIN_ROUTES.INDEXING_STATUS.path]: "Existing Connectors",
-  [ADMIN_ROUTES.ADD_CONNECTOR.path]: "Add Connector",
+  [ADMIN_ROUTES.CONNECTORS.path]: "Connectors",
   [ADMIN_ROUTES.DOCUMENT_SETS.path]: "Document Sets",
 };
 
@@ -33,7 +33,7 @@ const ALWAYS_PAGES = [
 
 /** Also require `vectorDbEnabled`. */
 const VECTOR_DB_PAGES = [
-  ADMIN_ROUTES.ADD_CONNECTOR.path,
+  ADMIN_ROUTES.CONNECTORS.path,
   ADMIN_ROUTES.DOCUMENT_SETS.path,
   ADMIN_ROUTES.INDEXING_STATUS.path,
 ];

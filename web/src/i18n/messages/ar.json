@@ -5033,7 +5033,7 @@
           "toast": "تم إنشاء الموصل بنجاح"
         },
         "empty": {
-          "message": "يبدو أنه ليس لديك أي موصلات معدّة بعد. زر صفحة [إضافة موصل](/admin/add-connector) للبدء!"
+          "message": "يبدو أنه ليس لديك أي موصلات معدّة بعد. زر صفحة [إضافة موصل](/admin/connectors) للبدء!"
         },
         "federated": {
           "access": {
@@ -13374,8 +13374,8 @@
         }
       },
       "items": {
-        "addConnector": {
-          "label": "إضافة موصل"
+        "connectors": {
+          "label": "الموصلات"
         },
         "agents": {
           "label": "الوكلاء"

@@ -29,7 +29,7 @@ export function useAdminNavLabels(): Record<AdminNavItemId, string> {
       mcpActions: t("adminNav.items.mcpActions.label"),
       openapiActions: t("adminNav.items.openapiActions.label"),
       existingConnectors: t("adminNav.items.existingConnectors.label"),
-      addConnector: t("adminNav.items.addConnector.label"),
+      connectors: t("adminNav.items.connectors.label"),
       documentSets: t("adminNav.items.documentSets.label"),
       indexSettings: t("adminNav.items.indexSettings.label"),
       serviceAccounts: t("adminNav.items.serviceAccounts.label"),

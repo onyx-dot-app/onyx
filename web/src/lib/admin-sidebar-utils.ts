@@ -31,7 +31,7 @@ export type AdminNavItemId =
   | "mcpActions"
   | "openapiActions"
   | "existingConnectors"
-  | "addConnector"
+  | "connectors"
   | "documentSets"
   | "indexSettings"
   | "serviceAccounts"
@@ -87,7 +87,7 @@ export const NAV_ITEM_IDS: Record<
   MCP_ACTIONS: "mcpActions",
   OPENAPI_ACTIONS: "openapiActions",
   INDEXING_STATUS: "existingConnectors",
-  ADD_CONNECTOR: "addConnector",
+  CONNECTORS: "connectors",
   DOCUMENT_SETS: "documentSets",
   DOCUMENT_EXPLORER: null,
   DOCUMENT_FEEDBACK: null,

@@ -5033,7 +5033,7 @@
           "toast": "已成功创建连接器"
         },
         "empty": {
-          "message": "您似乎还没有设置任何连接器。请访问[添加连接器](/admin/add-connector)页面开始使用！"
+          "message": "您似乎还没有设置任何连接器。请访问[添加连接器](/admin/connectors)页面开始使用！"
         },
         "federated": {
           "access": {
@@ -13374,8 +13374,8 @@
         }
       },
       "items": {
-        "addConnector": {
-          "label": "添加连接器"
+        "connectors": {
+          "label": "连接器"
         },
         "agents": {
           "label": "智能体"

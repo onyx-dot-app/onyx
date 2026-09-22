@@ -273,8 +273,8 @@ test.describe("Permission gating — MANAGE_CONNECTORS", () => {
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
 
-      // Also verify /admin/add-connector redirects
-      await page.goto(ADMIN_ROUTES.ADD_CONNECTOR.path);
+      // Also verify /admin/connectors redirects
+      await page.goto(ADMIN_ROUTES.CONNECTORS.path);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
 
@@ -296,16 +296,16 @@ test.describe("Permission gating — MANAGE_CONNECTORS", () => {
       ).toBeVisible({ timeout: 10000 });
       await expect(page.getByRole("table")).toBeVisible();
 
-      // Also verify /admin/add-connector is accessible
-      await page.goto(ADMIN_ROUTES.ADD_CONNECTOR.path);
+      // Also verify /admin/connectors is accessible
+      await page.goto(ADMIN_ROUTES.CONNECTORS.path);
       await page.waitForLoadState("networkidle");
-      expect(page.url()).toContain(ADMIN_ROUTES.ADD_CONNECTOR.path);
+      expect(page.url()).toContain(ADMIN_ROUTES.CONNECTORS.path);
       await expect(
-        page.getByLabel("admin-page-title").getByText("Add Connector")
+        page.getByLabel("admin-page-title").getByText("Connectors")
       ).toBeVisible({ timeout: 10000 });
 
       // Access type and groups live on the wizard's second step, so reaching
-      // /admin/add-connector says nothing about them. `web` has no credential
+      // /admin/connectors says nothing about them. `web` has no credential
       // template, so the wizard skips straight there.
       await page.goto("/admin/connectors/web");
       await page.waitForLoadState("networkidle");
