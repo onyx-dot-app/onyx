@@ -807,7 +807,7 @@ class OpenAICompatibleFinalModelResponse(BaseModel):
     supports_reasoning: bool
 
 
-# Portkey dynamic models fetch
+# Vercel AI Gateway dynamic models fetch
 class VercelAIGatewayModelsRequest(BaseModel):
     # The catalog is public, so api_base alone is enough to list models.
     api_base: str | None = None
@@ -824,6 +824,7 @@ class VercelAIGatewayFinalModelResponse(BaseModel):
     supports_reasoning: bool
 
 
+# Portkey dynamic models fetch
 class PortkeyModelsRequest(BaseModel):
     api_base: str
     api_key: str | None = None

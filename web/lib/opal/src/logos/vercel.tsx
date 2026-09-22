@@ -9,7 +9,6 @@ const SvgVercel = ({ size, ...props }: IconProps) => (
     xmlns="http://www.w3.org/2000/svg"
     {...props}
   >
-    <title>Vercel</title>
     <path d="M12 1.5L23.2 21H0.8L12 1.5Z" fill="currentColor" />
   </svg>
 );
