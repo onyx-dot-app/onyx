@@ -8605,7 +8605,6 @@
     },
     "connectorChecks": {
       "title": "Vérifications du connecteur",
-      "count": "({passed}/{total})",
       "groups": {
         "failed": "{count} échouées",
         "indeterminate": "{count} non vérifiées",
@@ -8636,7 +8635,8 @@
       "foldButton": {
         "fold": "Réduire",
         "expand": "Développer"
-      }
+      },
+      "titleWithCount": "Vérifications du connecteur ({passed}/{total})"
     }
   },
   "agents": {
