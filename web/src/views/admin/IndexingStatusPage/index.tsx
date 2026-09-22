@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import { CCPairIndexingStatusTable } from "./CCPairIndexingStatusTable";
 import { SearchAndFilterControls } from "./SearchAndFilterControls";
 import { SettingsLayouts, useToastFromQuery } from "@opal/layouts";
-import Link from "next/link";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Text } from "@opal/components";
 import { markdown } from "@opal/utils";
@@ -217,7 +216,7 @@ export default function IndexingStatusPage() {
   });
 
   return (
-    <SettingsLayouts.Root>
+    <SettingsLayouts.Root width="full">
       <SettingsLayouts.Header
         icon={route.icon}
         title={adminRouteTitle(route)}
