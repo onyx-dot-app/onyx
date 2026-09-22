@@ -375,6 +375,7 @@ export default function LanguageModelsPage() {
           LLMProviderName.VERTEX_AI,
           LLMProviderName.BEDROCK,
           LLMProviderName.AZURE,
+          LLMProviderName.OCI,
         ],
       },
       {

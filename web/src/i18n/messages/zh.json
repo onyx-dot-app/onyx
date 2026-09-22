@@ -5476,6 +5476,40 @@
             "description": "粘贴来自 [Nebius TokenFactory](https://tokenfactory.nebius.com/) 的 API 密钥以加载可用模型。"
           }
         },
+        "oci": {
+          "compartmentIdField": {
+            "description": "执行 Generative AI 请求所在区间（compartment）的 OCID。",
+            "title": "区间 OCID"
+          },
+          "fingerprintField": {
+            "description": "API 签名密钥的指纹，与 OCI 控制台中显示的一致。",
+            "title": "API 密钥指纹"
+          },
+          "privateKeyField": {
+            "description": "附加与上述指纹配对的 PEM 私钥。",
+            "title": "API 签名私钥"
+          },
+          "regionField": {
+            "description": "托管 Generative AI 端点的 OCI 区域，例如 us-chicago-1。",
+            "title": "区域"
+          },
+          "tenancyField": {
+            "description": "您的租户（tenancy）OCID。",
+            "title": "租户 OCID"
+          },
+          "userField": {
+            "description": "API 签名密钥所属用户的 OCID。",
+            "title": "用户 OCID"
+          },
+          "validation": {
+            "compartmentIdRequired": "区间 OCID 为必填项",
+            "fingerprintRequired": "API 密钥指纹为必填项",
+            "privateKeyRequired": "私钥为必填项",
+            "regionRequired": "区域为必填项",
+            "tenancyRequired": "租户 OCID 为必填项",
+            "userRequired": "用户 OCID 为必填项"
+          }
+        },
         "ollama": {
           "apiBaseField": {
             "description": "您的 Ollama 实例的基础 URL。",

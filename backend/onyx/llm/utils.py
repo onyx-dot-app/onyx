@@ -351,6 +351,7 @@ SENSITIVE_CUSTOM_CONFIG_KEY_FRAGMENTS: frozenset[str] = frozenset(
         "aws_secret_access_key",
         "aws_access_key_id",
         "aws_bearer_token_bedrock",
+        "oci_key",
         "private_key",
         "api_key",
         "secret",

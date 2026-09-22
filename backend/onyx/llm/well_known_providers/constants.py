@@ -68,3 +68,24 @@ AWS_SESSION_TOKEN_KWARG_ENV_VAR_FORMAT = "AWS_SESSION_TOKEN"
 
 AZURE_AD_TOKEN_KWARG = "azure_ad_token"
 AZURE_AD_TOKEN_KWARG_ENV_VAR_FORMAT = "AZURE_AD_TOKEN"
+
+OCI_PROVIDER_NAME = "oci"
+# OCI Generative AI authenticates with an API signing key (tenancy / user /
+# fingerprint / PEM private key). LiteLLM accepts these as `oci_*` kwargs and
+# also reads the upper-case spellings from the environment.
+OCI_REGION_KWARG = "oci_region"
+OCI_REGION_KWARG_ENV_VAR_FORMAT = "OCI_REGION"
+OCI_COMPARTMENT_ID_KWARG = "oci_compartment_id"
+OCI_COMPARTMENT_ID_KWARG_ENV_VAR_FORMAT = "OCI_COMPARTMENT_ID"
+OCI_TENANCY_KWARG = "oci_tenancy"
+OCI_TENANCY_KWARG_ENV_VAR_FORMAT = "OCI_TENANCY"
+OCI_USER_KWARG = "oci_user"
+OCI_USER_KWARG_ENV_VAR_FORMAT = "OCI_USER"
+OCI_FINGERPRINT_KWARG = "oci_fingerprint"
+OCI_FINGERPRINT_KWARG_ENV_VAR_FORMAT = "OCI_FINGERPRINT"
+# PEM contents of the API signing private key (not a path).
+OCI_KEY_KWARG = "oci_key"
+OCI_KEY_KWARG_ENV_VAR_FORMAT = "OCI_KEY"
+# Path to the private key on the Onyx host; only useful for self-hosted setups.
+OCI_KEY_FILE_KWARG = "oci_key_file"
+OCI_KEY_FILE_KWARG_ENV_VAR_FORMAT = "OCI_KEY_FILE"

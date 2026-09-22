@@ -239,3 +239,64 @@ def test_production_observed_key_sets_are_fully_supported() -> None:
         assert get_unsupported_custom_config_keys(provider, config) == set(), (
             f"{provider}: {sorted(config)} should be fully supported"
         )
+
+
+def test_oci_env_format_keys_map_to_kwargs() -> None:
+    """The OCI modal stores LiteLLM's OCI_* env-var spellings; every one must
+    become an explicit kwarg so the PEM key never has to be env-injected."""
+    mapping = map_custom_config_to_model_kwargs(
+        model_provider=LlmProviderNames.OCI,
+        custom_config={
+            "OCI_REGION": "us-chicago-1",
+            "OCI_COMPARTMENT_ID": "ocid1.compartment.oc1..example",
+            "OCI_TENANCY": "ocid1.tenancy.oc1..example",
+            "OCI_USER": "ocid1.user.oc1..example",
+            "OCI_FINGERPRINT": "aa:bb:cc",
+            "OCI_KEY": "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----",
+        },
+        api_key=None,
+        api_base=None,
+    )
+    assert mapping.model_kwargs == {
+        "oci_region": "us-chicago-1",
+        "oci_compartment_id": "ocid1.compartment.oc1..example",
+        "oci_tenancy": "ocid1.tenancy.oc1..example",
+        "oci_user": "ocid1.user.oc1..example",
+        "oci_fingerprint": "aa:bb:cc",
+        "oci_key": "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----",
+    }
+    assert mapping.consumed_keys == {
+        "OCI_REGION",
+        "OCI_COMPARTMENT_ID",
+        "OCI_TENANCY",
+        "OCI_USER",
+        "OCI_FINGERPRINT",
+        "OCI_KEY",
+    }
+    assert (
+        get_unsupported_custom_config_keys(
+            LlmProviderNames.OCI, dict.fromkeys(mapping.consumed_keys, "x")
+        )
+        == set()
+    )
+
+
+def test_oci_kwarg_format_keys_pass_through() -> None:
+    """Providers created through the custom form may already use the kwarg
+    spellings; both spellings land on the same kwarg."""
+    mapping = map_custom_config_to_model_kwargs(
+        model_provider=LlmProviderNames.OCI,
+        custom_config={
+            "oci_region": "eu-frankfurt-1",
+            "oci_compartment_id": "ocid1.compartment.oc1..example",
+            "oci_key_file": "/run/secrets/oci_api_key.pem",
+        },
+        api_key=None,
+        api_base=None,
+    )
+    assert mapping.model_kwargs == {
+        "oci_region": "eu-frankfurt-1",
+        "oci_compartment_id": "ocid1.compartment.oc1..example",
+        "oci_key_file": "/run/secrets/oci_api_key.pem",
+    }
+    assert mapping.consumed_keys == {"oci_region", "oci_compartment_id", "oci_key_file"}

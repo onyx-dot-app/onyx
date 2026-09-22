@@ -30,6 +30,7 @@ class LlmProviderNames(str, Enum):
     OPENAI_COMPATIBLE = "openai_compatible"
     NEBIUS_TOKENFACTORY = "nebius_tokenfactory"
     PORTKEY = "portkey"
+    OCI = "oci"
 
     def __str__(self) -> str:
         """Needed so things like:
@@ -53,6 +54,7 @@ WELL_KNOWN_PROVIDER_NAMES = [
     LlmProviderNames.OPENAI_COMPATIBLE,
     LlmProviderNames.NEBIUS_TOKENFACTORY,
     LlmProviderNames.PORTKEY,
+    LlmProviderNames.OCI,
 ]
 
 
@@ -74,6 +76,7 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     LlmProviderNames.OPENAI_COMPATIBLE: "OpenAI-Compatible",
     LlmProviderNames.NEBIUS_TOKENFACTORY: "Nebius TokenFactory",
     LlmProviderNames.PORTKEY: "Portkey",
+    LlmProviderNames.OCI: "OCI",
     "groq": "Groq",
     "anyscale": "Anyscale",
     "deepseek": "DeepSeek",
@@ -120,7 +123,6 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     "minimax": "MiniMax",
     "nlp_cloud": "NLP Cloud",
     "nvidia_nim": "NVIDIA NIM",
-    "oci": "OCI",
     "ovhcloud": "OVHcloud",
     "palm": "PaLM",
     "publicai": "PublicAI",
@@ -167,6 +169,7 @@ AGGREGATOR_PROVIDERS: set[str] = {
     LlmProviderNames.OPENAI_COMPATIBLE,
     LlmProviderNames.NEBIUS_TOKENFACTORY,
     LlmProviderNames.PORTKEY,
+    LlmProviderNames.OCI,
 }
 
 # Dynamic providers fetch models directly from source APIs (not LiteLLM).

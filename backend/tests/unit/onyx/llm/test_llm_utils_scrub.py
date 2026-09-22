@@ -78,6 +78,9 @@ def test_is_sensitive_custom_config_key_matches_known_fragments() -> None:
     assert is_sensitive_custom_config_key("API_KEY")
     assert is_sensitive_custom_config_key("aws_secret_access_key")
     assert is_sensitive_custom_config_key("vertex_credentials")
+    # OCI API signing key (PEM) is stored under LiteLLM's env-var spelling.
+    assert is_sensitive_custom_config_key("OCI_KEY")
+    assert is_sensitive_custom_config_key("oci_key")
     assert is_sensitive_custom_config_key("my_password")
     assert is_sensitive_custom_config_key("auth_token")
 
