@@ -29,7 +29,7 @@ import type {
   CapabilityReportSnapshot,
 } from "@/lib/connectors/checks/types";
 
-export interface ConnectorChecksCardProps {
+export interface ConnectorsCheckCardProps {
   /** The stored report row; `null` when no run has happened yet. */
   snapshot: CapabilityReportSnapshot | null;
   /** True while the first fetch is pending. */
@@ -254,7 +254,7 @@ function CheckGroup({ status, results }: CheckGroupProps) {
 }
 
 // ---------------------------------------------------------------------------
-// ConnectorChecksCard
+// ConnectorsCheckCard
 // ---------------------------------------------------------------------------
 
 /**
@@ -263,12 +263,12 @@ function CheckGroup({ status, results }: CheckGroupProps) {
  * completed run and a running flag, so a re-run shows the previous results
  * under a spinner until the new report lands.
  */
-export function ConnectorChecksCard({
+export function ConnectorsCheckCard({
   snapshot,
   loading = false,
   running = false,
   onRerun,
-}: ConnectorChecksCardProps) {
+}: ConnectorsCheckCardProps) {
   const t = useTranslations("admin.connectorChecks");
   const [collapsed, setCollapsed] = useState(false);
 
