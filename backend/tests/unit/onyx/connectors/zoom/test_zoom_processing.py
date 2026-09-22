@@ -21,7 +21,8 @@ from tests.unit.onyx.connectors.zoom.helpers import (
 )
 from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
     past_meeting_details,
-    transcript,
+    recording_entry,
+    recording_with_transcript,
 )
 
 
@@ -106,13 +107,13 @@ class TestProcessOccurrence:
         assert doc.sections[0].text is not None
         assert "Jane Doe: Hello everyone" in doc.sections[0].text
         assert doc.doc_created_at is not None
-        client.get_transcript.assert_called_once_with("uuid-abc")
+        client.get_recording.assert_called_once_with("uuid-abc")
         client.get_past_meeting_details.assert_called_once_with("uuid-abc")
 
     def test_never_recorded_is_skipped(self) -> None:
         # Zoom answers 404 for a session it holds no cloud recording for.
         client = _client_with_transcript()
-        client.get_transcript.side_effect = http_error(404)
+        client.get_recording.side_effect = http_error(404)
 
         assert _run(client, occurrence_work()) == []
         client.download_transcript_vtt.assert_not_called()
@@ -120,14 +121,14 @@ class TestProcessOccurrence:
     def test_a_recording_without_a_transcript_is_skipped(self) -> None:
         # Zoom reports this as a recording with nothing to read, not an error.
         client = _client_with_transcript()
-        client.get_transcript.return_value = None
+        client.get_recording.return_value = recording_entry(recording_files=[])
 
         assert _run(client, occurrence_work()) == []
         client.download_transcript_vtt.assert_not_called()
 
     def test_not_ready_transcript_is_skipped(self) -> None:
         client = _client_with_transcript()
-        client.get_transcript.return_value = transcript(
+        client.get_recording.return_value = recording_with_transcript(
             download_url=None, is_ready=False
         )
 
@@ -137,7 +138,7 @@ class TestProcessOccurrence:
     def test_a_transcript_still_processing_is_skipped_even_with_a_url(self) -> None:
         # Zoom fills in the download URL before the file is finished.
         client = _client_with_transcript()
-        client.get_transcript.return_value = transcript(
+        client.get_recording.return_value = recording_with_transcript(
             download_url="https://zoom.example/t.vtt",
             is_ready=False,
         )
@@ -147,7 +148,7 @@ class TestProcessOccurrence:
 
     def test_a_ready_transcript_downloads(self) -> None:
         client = _client_with_transcript()
-        client.get_transcript.return_value = transcript(
+        client.get_recording.return_value = recording_with_transcript(
             download_url="https://zoom.example/t.vtt"
         )
 
@@ -162,14 +163,14 @@ class TestProcessOccurrence:
 
     def test_missing_download_url_is_skipped(self) -> None:
         client = _client_with_transcript()
-        client.get_transcript.return_value = transcript(download_url=None)
+        client.get_recording.return_value = recording_with_transcript(download_url=None)
 
         assert _run(client, occurrence_work()) == []
         client.download_transcript_vtt.assert_not_called()
 
     def test_transcript_fetch_failure_yields_document_failure(self) -> None:
         client = _client_with_transcript()
-        client.get_transcript.side_effect = RuntimeError("boom")
+        client.get_recording.side_effect = RuntimeError("boom")
 
         items = _run(client, occurrence_work())
 
@@ -287,7 +288,7 @@ class TestSystemicFailuresStopTheRun:
         self, error: Exception
     ) -> None:
         client = _client_with_transcript()
-        client.get_transcript.side_effect = error
+        client.get_recording.side_effect = error
 
         with pytest.raises(type(error)):
             _run(client, occurrence_work())
@@ -308,7 +309,7 @@ class TestSystemicFailuresStopTheRun:
     @pytest.mark.parametrize("status", [400, 403, 410])
     def test_client_errors_stay_scoped_to_the_one_document(self, status: int) -> None:
         client = _client_with_transcript()
-        client.get_transcript.side_effect = http_error(status)
+        client.get_recording.side_effect = http_error(status)
 
         items = _run(client, occurrence_work())
 
@@ -339,7 +340,7 @@ class TestSystemicFailuresStopTheRun:
         self,
     ) -> None:
         client = _client_with_transcript()
-        client.get_transcript.side_effect = requests.HTTPError("no response")
+        client.get_recording.side_effect = requests.HTTPError("no response")
 
         items = _run(client, occurrence_work())
 
@@ -353,7 +354,7 @@ class TestTopicComesFromTheTranscript:
 
     def test_transcript_topic_is_used_without_a_details_call(self) -> None:
         client = _client_with_transcript()
-        client.get_transcript.return_value = transcript(
+        client.get_recording.return_value = recording_with_transcript(
             download_url="https://zoom.example/transcript.vtt",
             meeting_topic="Quarterly Review",
         )
@@ -375,7 +376,7 @@ class TestTopicComesFromTheTranscript:
 
     def test_discovery_topic_still_wins_over_the_transcript(self) -> None:
         client = _client_with_transcript()
-        client.get_transcript.return_value = transcript(
+        client.get_recording.return_value = recording_with_transcript(
             download_url="https://zoom.example/transcript.vtt",
             meeting_topic="Quarterly Review",
         )
@@ -387,7 +388,7 @@ class TestTopicComesFromTheTranscript:
 
     def test_a_missing_start_time_still_costs_a_details_call(self) -> None:
         client = _client_with_transcript()
-        client.get_transcript.return_value = transcript(
+        client.get_recording.return_value = recording_with_transcript(
             download_url="https://zoom.example/transcript.vtt",
             meeting_topic="Quarterly Review",
         )

@@ -12,6 +12,7 @@ from onyx.connectors.models import (
 )
 from onyx.connectors.zoom.client import ZoomNotEntitledError
 from onyx.connectors.zoom.connector import ZoomConnector
+from onyx.connectors.zoom.models import ZoomMeetingSettings
 from onyx.connectors.zoom.recordings.models import OccurrenceWork, ZoomSessionType
 from onyx.connectors.zoom.recordings.processing import process_occurrence
 from tests.unit.onyx.connectors.zoom.helpers import (
@@ -21,11 +22,12 @@ from tests.unit.onyx.connectors.zoom.helpers import (
 )
 from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
     invitee,
+    meeting_details,
     panelist,
     participant,
     past_meeting_details,
+    recording_with_transcript,
     registrant,
-    transcript,
     webinar_details,
 )
 
@@ -84,7 +86,7 @@ class TestResolveTargets:
         assert doc.metadata == {"session_type": "meeting"}
         assert doc.sections[0].text is not None
         assert "Jane Doe: Hello everyone" in doc.sections[0].text
-        client.get_transcript.assert_called_once_with("uuid-abc")
+        client.get_recording.assert_called_once_with("uuid-abc")
 
     def test_webinar_target_uses_the_webinar_handler(self) -> None:
         client = _client()
@@ -110,7 +112,7 @@ class TestResolveTargets:
         items = _reindex(client, [_target(_MEETING_DOC_ID)])
 
         assert [d.id for d in items if isinstance(d, Document)] == [_MEETING_DOC_ID]
-        client.get_transcript.assert_called_once_with("uuid-abc")
+        client.get_recording.assert_called_once_with("uuid-abc")
         client.list_user_recordings.assert_not_called()
         client.list_past_meeting_occurrences.assert_not_called()
         client.list_users.assert_not_called()
@@ -153,9 +155,11 @@ class TestUnresolvableTargets:
 
     def test_one_broken_target_does_not_cost_the_others_their_retry(self) -> None:
         client = _client()
-        client.get_transcript.side_effect = [
+        client.get_recording.side_effect = [
             RuntimeError("boom"),
-            transcript(download_url="https://zoom.example/transcript.vtt"),
+            recording_with_transcript(
+                download_url="https://zoom.example/transcript.vtt"
+            ),
         ]
 
         items = _reindex(
@@ -173,7 +177,7 @@ class TestUnresolvableTargets:
         # Expired credentials hit every remaining target too, so a batch of
         # identical failure rows tells the admin less than one loud error does.
         client = _client()
-        client.get_transcript.side_effect = CredentialExpiredError("expired")
+        client.get_recording.side_effect = CredentialExpiredError("expired")
 
         with pytest.raises(CredentialExpiredError):
             _reindex(client, [_target(_MEETING_DOC_ID)])
@@ -190,7 +194,7 @@ class TestPermissionParity:
         the session.
         """
 
-        def _for_session(session_id: str, found: list[object]) -> list[object]:
+        def _for_session[T](session_id: str, found: list[T]) -> list[T]:
             if session_id in ("111", "222"):
                 return found
             raise http_error(404)
@@ -204,8 +208,12 @@ class TestPermissionParity:
                 [registrant(email="registrant@example.com", status="approved")],
             )
         )
-        client.list_meeting_invitees.side_effect = lambda session_id: _for_session(
-            session_id, [invitee(email="invitee@example.com")]
+        client.get_meeting_details.side_effect = lambda session_id: meeting_details(
+            settings=ZoomMeetingSettings(
+                meeting_invitees=_for_session(
+                    session_id, [invitee(email="invitee@example.com")]
+                )
+            )
         )
         client.list_past_webinar_participants.return_value = [
             participant(user_email="viewer@example.com")
