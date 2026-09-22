@@ -115,15 +115,19 @@ def _ids(connector: ZoomConnector) -> set[str]:
     return {document.id for document in _documents(connector)}
 
 
-def _walked(client: MagicMock) -> list[str]:
-    """The hosts whose windows were listed. The one-day probe that checks a
-    host exists before the walk is not a window."""
+def _windows(client: MagicMock) -> list[dict[str, Any]]:
+    """The listing calls that were windows of the walk. The one-day probe that
+    checks a host exists before the walk is not one."""
     return [
-        call.kwargs["user_id"]
+        call.kwargs
         for call in client.list_user_recordings.call_args_list
         if "from_date" in call.kwargs
         and call.kwargs["from_date"] != call.kwargs.get("to_date")
     ]
+
+
+def _walked(client: MagicMock) -> list[str]:
+    return [window["user_id"] for window in _windows(client)]
 
 
 class TestPruningUsesTheSlimPath:
@@ -185,13 +189,11 @@ class TestTheWalkIgnoresThePollWindow:
         _listing(client, _recording("uuid-1", start_time=start_time))
 
         found = _ids(connector)
-        asked_from = [
-            call.kwargs["from_date"]
-            for call in client.list_user_recordings.call_args_list
-        ]
 
         assert found == {"ZOOM_MEETING_uuid-1"}
-        assert min(asked_from) == date(2013, 1, 1)
+        assert min(window["from_date"] for window in _windows(client)) == date(
+            2013, 1, 1
+        )
 
     def test_every_host_gets_its_newest_window_again_after_the_whole_walk(
         self,
