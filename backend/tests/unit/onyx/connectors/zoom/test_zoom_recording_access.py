@@ -322,7 +322,7 @@ class TestLoadRuleGrants:
 
         load_rule_grants(client)
 
-        client.list_users.assert_called_once_with(page_size=1)
+        client.list_users.assert_called_once_with()
         client.get_recording_authentication_rules.assert_called_once_with(
             "someone-else"
         )
