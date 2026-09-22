@@ -22,7 +22,7 @@ from onyx.connectors.connector_runner import CheckpointOutputWrapper
 from onyx.connectors.models import Document, IndexAttemptMetadata
 from onyx.connectors.zoom.client import ZoomClient
 from onyx.connectors.zoom.connector import ZoomConnector, ZoomConnectorCheckpoint
-from onyx.connectors.zoom.models import ZoomSessionOccurrence
+from onyx.connectors.zoom.models import ZoomMeetingSettings, ZoomSessionOccurrence
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
 from tests.external_dependency_unit.indexing_helpers import (
@@ -32,9 +32,10 @@ from tests.external_dependency_unit.indexing_helpers import (
 )
 from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
     invitee,
+    meeting_details,
     participant,
+    recording_with_transcript,
     registrant,
-    transcript,
 )
 
 _ZOOM_CREDS = {
@@ -75,7 +76,7 @@ def _zoom_documents(meeting_id: str) -> list[Document]:
             uuid=f"uuid-{meeting_id}", start_time="2026-01-15T10:00:00Z"
         )
     ]
-    client.get_transcript.return_value = transcript(
+    client.get_recording.return_value = recording_with_transcript(
         download_url="https://zoom.us/rec/download/t.vtt", meeting_topic="Weekly Sync"
     )
     client.download_transcript_vtt.return_value = _SAMPLE_VTT
@@ -88,7 +89,11 @@ def _zoom_documents(meeting_id: str) -> list[Document]:
         registrant(email="approved@example.com", status="approved"),
         registrant(email="cancelled@example.com", status="denied"),
     ]
-    client.list_meeting_invitees.return_value = [invitee(email="invited@example.com")]
+    client.get_meeting_details.return_value = meeting_details(
+        settings=ZoomMeetingSettings(
+            meeting_invitees=[invitee(email="invited@example.com")]
+        )
+    )
     connector.client = client
 
     documents: list[Document] = []

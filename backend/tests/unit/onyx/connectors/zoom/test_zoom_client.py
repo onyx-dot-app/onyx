@@ -530,13 +530,13 @@ class TestRequestErrorMapping:
         assert headers["Authorization"] == "Bearer tok"
 
 
-class TestGetMeetingTranscript:
+class TestGetRecording:
     def test_picks_the_transcript_out_of_the_recording_files(self) -> None:
         client = _client()
         client._session = MagicMock()
         client._session.request.return_value = _response(200, _DOCUMENTED_RECORDING)
 
-        transcript = client.get_transcript("111")
+        transcript = client.get_recording("111").transcript
 
         assert transcript is not None
         assert transcript.download_url == "https://zoom.example/t.vtt"
@@ -547,7 +547,7 @@ class TestGetMeetingTranscript:
         client._session = MagicMock()
         client._session.request.return_value = _response(200, _DOCUMENTED_RECORDING)
 
-        client.get_transcript("111")
+        client.get_recording("111")
 
         url = client._session.request.call_args.args[1]
         assert url.endswith("/meetings/111/recordings")
@@ -565,7 +565,7 @@ class TestGetMeetingTranscript:
             },
         )
 
-        transcript = client.get_transcript("111")
+        transcript = client.get_recording("111").transcript
 
         assert transcript is not None
         assert transcript.is_ready is False
@@ -578,7 +578,7 @@ class TestGetMeetingTranscript:
             200, _DOCUMENTED_RECORDING | {"recording_files": [_DOCUMENTED_MP4_FILE]}
         )
 
-        assert client.get_transcript("111") is None
+        assert client.get_recording("111").transcript is None
 
     def test_keeps_the_topic_that_saves_a_second_api_call(self) -> None:
         # The topic is the only reason to call /past_meetings, and that call is
@@ -587,7 +587,7 @@ class TestGetMeetingTranscript:
         client._session = MagicMock()
         client._session.request.return_value = _response(200, _DOCUMENTED_RECORDING)
 
-        transcript = client.get_transcript("111")
+        transcript = client.get_recording("111").transcript
 
         assert transcript is not None
         assert transcript.meeting_topic == "My Personal Meeting"
@@ -635,14 +635,14 @@ class TestGetMeetingTranscript:
         client._session.request.return_value = _response(404)
 
         with pytest.raises(requests.HTTPError):
-            client.get_transcript("111")
+            client.get_recording("111")
 
     def test_identifier_is_encoded_into_the_path(self) -> None:
         client = _client()
         client._session = MagicMock()
         client._session.request.return_value = _response(200, _DOCUMENTED_RECORDING)
 
-        client.get_transcript("ab/cd==")
+        client.get_recording("ab/cd==")
 
         url = client._session.request.call_args.args[1]
         assert "ab%2Fcd%3D%3D" in url
@@ -1487,7 +1487,7 @@ class TestListRegistrants:
             client.list_meeting_registrants("111")
 
 
-class TestListMeetingInvitees:
+class TestGetMeetingDetails:
     def test_invitees_are_read_out_of_the_settings_block(self) -> None:
         client = _client()
         client._session = MagicMock()
@@ -1503,7 +1503,7 @@ class TestListMeetingInvitees:
             },
         )
 
-        invitees = client.list_meeting_invitees("111")
+        invitees = client.get_meeting_details("111").settings.meeting_invitees
 
         assert [i.email for i in invitees] == ["a@example.com", "b@example.com"]
         assert [i.internal_user for i in invitees] == [True, False]
@@ -1514,7 +1514,7 @@ class TestListMeetingInvitees:
         client._session = MagicMock()
         client._session.request.return_value = _response(200, {"settings": {}})
 
-        assert client.list_meeting_invitees("111") == []
+        assert client.get_meeting_details("111").settings.meeting_invitees == []
 
     def test_a_deleted_meeting_reaches_the_caller_as_a_404(self) -> None:
         """Returning an empty list here would read as a meeting nobody was invited
@@ -1524,7 +1524,7 @@ class TestListMeetingInvitees:
         client._session.request.return_value = _response(404)
 
         with pytest.raises(requests.HTTPError):
-            client.list_meeting_invitees("111")
+            client.get_meeting_details("111")
 
 
 class TestListWebinarPanelists:
@@ -1600,7 +1600,7 @@ class TestRateLimitTiers:
     @pytest.mark.parametrize(
         "call, expected_tier",
         [
-            (lambda c: c.get_transcript("1"), ZoomRateLimitTier.LIGHT),
+            (lambda c: c.get_recording("1"), ZoomRateLimitTier.LIGHT),
             (lambda c: c.get_past_meeting_details("1"), ZoomRateLimitTier.LIGHT),
             (lambda c: c.list_past_meeting_occurrences("1"), ZoomRateLimitTier.MEDIUM),
             (lambda c: c.get_webinar_details("1"), ZoomRateLimitTier.LIGHT),
@@ -1623,7 +1623,7 @@ class TestRateLimitTiers:
             ),
             (lambda c: c.list_meeting_registrants("1"), ZoomRateLimitTier.MEDIUM),
             (lambda c: c.list_webinar_registrants("1"), ZoomRateLimitTier.MEDIUM),
-            (lambda c: c.list_meeting_invitees("1"), ZoomRateLimitTier.LIGHT),
+            (lambda c: c.get_meeting_details("1"), ZoomRateLimitTier.LIGHT),
             (lambda c: c.list_webinar_panelists("1"), ZoomRateLimitTier.MEDIUM),
             (
                 lambda c: c.download_transcript_vtt(_ZOOM_DOWNLOAD_URL),

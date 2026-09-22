@@ -21,17 +21,17 @@ from onyx.connectors.zoom.models import (
     ZoomUserPage,
 )
 from onyx.connectors.zoom.recordings.discovery import (
-    _EARLIEST_RECORDING_DATE,
     _MAX_LISTING_WINDOW_DAYS,
     _MAX_WORK_PER_STEP,
     _OCCURRENCE_POLL_OVERLAP_SECONDS,
     _WIDE_BACKFILL_WINDOWS,
+    EARLIEST_RECORDING_DATE,
     GroupSource,
     HostAllowlistSource,
     IdAllowlistSource,
-    _listing_windows,
     _poll_window_dates,
     build_discovery_sources,
+    listing_windows,
 )
 from onyx.connectors.zoom.recordings.models import ZoomSessionType
 from tests.unit.onyx.connectors.zoom.helpers import mock_zoom_client
@@ -1030,7 +1030,7 @@ class TestUserRecordingsPollWindow:
 
         source.discover_step(client, 0, end, None)
 
-        assert self._window(client)[0] == _EARLIEST_RECORDING_DATE.isoformat()
+        assert self._window(client)[0] == EARLIEST_RECORDING_DATE.isoformat()
 
     def test_a_window_that_ends_before_zoom_existed_asks_nothing(self) -> None:
         source = GroupSource("group-1")
@@ -1274,7 +1274,7 @@ class TestUserRecordingsListingWindow:
 
         from_date, _ = _poll_window_dates(0, end.timestamp())
 
-        assert from_date == _EARLIEST_RECORDING_DATE
+        assert from_date == EARLIEST_RECORDING_DATE
 
     def test_a_start_date_after_zoom_launch_is_left_alone(self) -> None:
         end = datetime(2026, 3, 17, 12, 0, tzinfo=timezone.utc)
@@ -1288,7 +1288,7 @@ class TestUserRecordingsListingWindow:
         )
 
     def test_each_window_starts_on_the_day_the_last_one_ended(self) -> None:
-        windows = _listing_windows(date(2025, 1, 1), date(2025, 6, 30))
+        windows = listing_windows(date(2025, 1, 1), date(2025, 6, 30))
 
         assert windows[0][0] == date(2025, 1, 1)
         assert windows[-1][1] == date(2025, 7, 1)
@@ -1304,7 +1304,7 @@ class TestUserRecordingsListingWindow:
         against an account-wide rate limit."""
         end = datetime(2026, 3, 17, 12, 0, tzinfo=timezone.utc)
         start = end - timedelta(days=365)
-        windows = _listing_windows(
+        windows = listing_windows(
             *_poll_window_dates(start.timestamp(), end.timestamp())
         )
         source = GroupSource("group-1")
@@ -1319,7 +1319,7 @@ class TestUserRecordingsListingWindow:
         its own date, abutting windows would ask for every day except this one."""
         end = datetime(2026, 3, 17, 12, 0, tzinfo=timezone.utc)
         start = end - timedelta(days=365)
-        windows = _listing_windows(
+        windows = listing_windows(
             *_poll_window_dates(start.timestamp(), end.timestamp())
         )
         boundary = windows[0][1]
@@ -1333,7 +1333,7 @@ class TestUserRecordingsListingWindow:
         assert "uuid-boundary" in found
 
     def test_a_single_day_is_one_window(self) -> None:
-        assert _listing_windows(date(2025, 1, 1), date(2025, 1, 1)) == [
+        assert listing_windows(date(2025, 1, 1), date(2025, 1, 1)) == [
             (date(2025, 1, 1), date(2025, 1, 2))
         ]
 
@@ -1372,7 +1372,7 @@ class TestUserRecordingsListingWindow:
         assert found == []
 
     def test_a_window_that_ends_before_it_starts_asks_zoom_for_nothing(self) -> None:
-        assert _listing_windows(date(2025, 1, 2), date(2025, 1, 1)) == []
+        assert listing_windows(date(2025, 1, 2), date(2025, 1, 1)) == []
 
     def test_no_single_call_asks_for_more_than_zoom_allows(self) -> None:
         source = GroupSource("group-1")

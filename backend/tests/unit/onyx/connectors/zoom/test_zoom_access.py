@@ -176,7 +176,7 @@ class TestWebinarSources:
 
         _resolve(client, occurrence_work(ZoomSessionType.WEBINAR))
 
-        client.list_meeting_invitees.assert_not_called()
+        client.get_meeting_details.assert_not_called()
 
     def test_meetings_never_ask_for_panelists(self) -> None:
         client = with_access(
@@ -285,7 +285,7 @@ class TestPermanentVersusTransientFailures:
         client = with_access()
         client.list_past_meeting_participants.side_effect = http_error(400, 12702)
         client.list_meeting_registrants.side_effect = http_error(404)
-        client.list_meeting_invitees.side_effect = http_error(404)
+        client.get_meeting_details.side_effect = http_error(404)
 
         with pytest.raises(ZoomAccessListUnavailable):
             _resolve(client, occurrence_work())
@@ -294,7 +294,7 @@ class TestPermanentVersusTransientFailures:
         client = with_access()
         client.list_past_meeting_participants.side_effect = http_error(400, 12702)
         client.list_meeting_registrants.side_effect = http_error(404)
-        client.list_meeting_invitees.side_effect = http_error(404)
+        client.get_meeting_details.side_effect = http_error(404)
 
         with pytest.raises(ZoomAccessListUnavailable) as raised:
             _resolve(client, occurrence_work())
