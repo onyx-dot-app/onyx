@@ -20,6 +20,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "MiniMax-M2.5",
       "open_weights": true,
       "reasoning": true,
@@ -47,6 +48,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "DeepSeek V3.1",
       "open_weights": true,
       "reasoning": true,
@@ -188,6 +190,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Kimi K2.5",
       "open_weights": true,
       "reasoning": true,
@@ -330,6 +333,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Nemotron Super",
       "open_weights": true,
       "reasoning": true,
@@ -357,6 +361,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "OpenAI GPT 120B",
       "open_weights": true,
       "reasoning": true,
@@ -442,6 +447,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GLM 4.7",
       "open_weights": true,
       "reasoning": true,
@@ -470,6 +476,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GLM 5",
       "open_weights": true,
       "reasoning": true,
@@ -585,6 +592,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GLM 5.3",
       "open_weights": true,
       "reasoning": true,

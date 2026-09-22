@@ -85,6 +85,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Haiku 4.5 (latest)",
       "open_weights": false,
       "reasoning": true,
@@ -394,6 +395,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GPT-5 Mini",
       "open_weights": false,
       "reasoning": true,
@@ -425,6 +427,7 @@
           "text"
         ]
       },
+      "mode": "responses",
       "name": "GPT-5.3 Codex",
       "open_weights": false,
       "reasoning": true,
@@ -1043,6 +1046,27 @@
       "release_date": "2026-08-11",
       "structured_output": true,
       "tool_call": true
+    },
+    "text-embedding-3-small": {
+      "limit": {
+        "context": 8191
+      },
+      "mode": "embedding",
+      "name": "text-embedding-3-small"
+    },
+    "text-embedding-3-small-inference": {
+      "limit": {
+        "context": 8191
+      },
+      "mode": "embedding",
+      "name": "text-embedding-3-small-inference"
+    },
+    "text-embedding-ada-002": {
+      "limit": {
+        "context": 8191
+      },
+      "mode": "embedding",
+      "name": "text-embedding-ada-002"
     }
   },
   "models_dev_providers": [

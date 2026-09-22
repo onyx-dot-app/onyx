@@ -20,6 +20,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Granite-4.0-H-Small",
       "open_weights": true,
       "reasoning": false,
@@ -47,6 +48,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Llama-3.3-70B-Instruct",
       "open_weights": true,
       "reasoning": false,
@@ -74,6 +76,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Llama 4 Maverick 17B 128E Instruct FP8",
       "open_weights": true,
       "reasoning": false,
@@ -101,6 +104,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Mistral Small 3.1 24B",
       "open_weights": true,
       "reasoning": false,
@@ -128,6 +132,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GPT OSS 120B",
       "open_weights": true,
       "reasoning": true,
@@ -135,6 +140,14 @@
       "structured_output": true,
       "temperature": true,
       "tool_call": true
+    },
+    "whisper-large-v3-turbo": {
+      "cost": {
+        "second": 0.0001,
+        "second_input": 0.0001
+      },
+      "mode": "audio_transcription",
+      "name": "whisper-large-v3-turbo"
     }
   },
   "models_dev_providers": [

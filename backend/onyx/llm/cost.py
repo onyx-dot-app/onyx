@@ -1,7 +1,8 @@
 """LLM cost calculation utilities.
 
-Pricing comes from the vendored models.dev catalog (see
-`onyx.llm.model_catalog`); litellm's model_cost table is not consulted.
+Pricing comes from the vendored model catalog (see `onyx.llm.model_catalog`),
+which the weekly sync aggregates from models.dev, litellm's cost map, and
+OpenRouter. litellm's model_cost table is not consulted at runtime.
 Catalog rates are USD per million tokens.
 """
 
@@ -117,10 +118,19 @@ def get_model_price_per_million(
     )
 
 
-def _image_cost_cents() -> float:
-    """models.dev carries no per-image pricing, so image flows bill at the
-    configured flat rate."""
-    return DEFAULT_IMAGE_COST_CENTS
+def _image_cost_cents(model: str, provider: str | None, image_count: int) -> float:
+    """Per-image pricing comes from the catalog (litellm-derived `image`/`image_input`
+    cost fields, USD per image); models without one bill the configured flat rate."""
+    try:
+        cost = find_model_cost(provider or "", model)
+    except Exception:
+        logger.exception("Catalog lookup failed for model %s", model)
+        cost = None
+    if cost:
+        per_image = cost.get("image") or cost.get("image_input")
+        if per_image is not None:
+            return float(per_image) * max(image_count, 1) * 100
+    return DEFAULT_IMAGE_COST_CENTS * max(image_count, 1)
 
 
 def _override_cost_cents(
@@ -218,7 +228,7 @@ def compute_cost_cents(
     Resolution order: image pricing → admin override → model catalog → default
     fallback rates (0 unless set). Never raises (usage hot path)."""
     if flow in IMAGE_FLOWS:
-        return 0.0, _image_cost_cents() * max(image_count, 1)
+        return 0.0, _image_cost_cents(model, provider, image_count)
 
     if cache_read_tokens + cache_creation_tokens > prompt_tokens:
         logger.warning(

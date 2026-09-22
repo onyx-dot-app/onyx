@@ -1841,6 +1841,66 @@
       "temperature": false,
       "tool_call": true
     },
+    "anthropic/claude-opus-5.5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "cache_write": 5,
+        "input": 4,
+        "output": 20
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 5.5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "temperature": false,
+      "tool_call": true
+    },
+    "anthropic/claude-opus-5.5-fast": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.4,
+        "cache_write": 10,
+        "input": 8,
+        "output": 40
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 5.5 (Fast)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "temperature": false,
+      "tool_call": true
+    },
     "anthropic/claude-sonnet-4": {
       "attachment": true,
       "cost": {

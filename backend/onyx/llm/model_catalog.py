@@ -1,11 +1,14 @@
-"""Typed access to the vendored models.dev catalog in ``price_table/``.
+"""Typed access to the vendored model catalog in ``price_table/``.
 
 This catalog is the single source of truth for model pricing, limits, and
-capability metadata. LiteLLM's ``model_cost`` table is no longer consulted —
+capability metadata. LiteLLM's ``model_cost`` table is not consulted —
 litellm remains only as the provider call/translation layer.
 
 The catalog is refreshed by ``backend/scripts/sync_price_table.py`` (weekly CI
-job). ``model_metadata_enrichments.json`` adds Onyx-owned display fields
+job), which aggregates models.dev (canonical chat pricing), litellm's cost map
+(``mode``, per-image/per-second pricing, the 1h cache-write tier, non-chat
+models), and OpenRouter (gap-fill pricing for its section).
+``model_metadata_enrichments.json`` adds Onyx-owned display fields
 (display_name / model_vendor / model_version) on top.
 """
 
@@ -230,6 +233,7 @@ def _compat_entry(provider: str, entry: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "litellm_provider": provider,
+        "mode": entry.get("mode") or "chat",
         "max_input_tokens": limit.get("input") or limit.get("context"),
         "max_tokens": limit.get("context"),
         "max_output_tokens": limit.get("output"),
@@ -288,9 +292,9 @@ def build_model_map() -> dict[str, dict[str, Any]]:
     return model_map
 
 
-# Name-pattern heuristic replacing litellm's ``mode == "embedding"`` flag,
-# which the catalog does not carry. Used to filter model lists fetched from
-# user gateways (LiteLLM proxy, OpenRouter, LM Studio).
+# Name-pattern heuristic for models outside the catalog — used to filter
+# model lists fetched from user gateways (LiteLLM proxy, OpenRouter, LM
+# Studio). Catalog-known models use their ``mode`` field instead.
 _EMBEDDING_NAME_PATTERN = re.compile(
     r"embed|e5-|bge-|gte-|jina|voyage|rerank|colbert|uae-|instructor",
     re.IGNORECASE,
@@ -298,4 +302,7 @@ _EMBEDDING_NAME_PATTERN = re.compile(
 
 
 def is_embedding_model_name(model_name: str) -> bool:
+    entry = build_model_map().get(model_name)
+    if entry is not None and entry.get("mode"):
+        return entry["mode"] == "embedding"
     return bool(_EMBEDDING_NAME_PATTERN.search(model_name.split("/")[-1]))
