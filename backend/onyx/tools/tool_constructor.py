@@ -296,6 +296,11 @@ def _construct_tools_impl(
                         model=img_generation_llm_config.model_name,
                         tool_id=db_tool_model.id,
                         emitter=emitter,
+                        chat_session_id=(
+                            custom_tool_config.chat_session_id
+                            if custom_tool_config
+                            else None
+                        ),
                     )
                 ]
 
@@ -340,7 +345,15 @@ def _construct_tools_impl(
             # Handle Python/Code Interpreter Tool
             elif tool_cls.__name__ == PythonTool.__name__:
                 tool_dict[db_tool_model.id] = [
-                    PythonTool(tool_id=db_tool_model.id, emitter=emitter)
+                    PythonTool(
+                        tool_id=db_tool_model.id,
+                        emitter=emitter,
+                        chat_session_id=(
+                            custom_tool_config.chat_session_id
+                            if custom_tool_config
+                            else None
+                        ),
+                    )
                 ]
 
             # Handle Coding Agent Tool
