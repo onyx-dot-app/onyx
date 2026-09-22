@@ -290,7 +290,7 @@ export function ConnectorsCheckCard({
   const hasReport = results.length > 0;
 
   return (
-    <Card border="solid" rounding={4} padding={3}>
+    <Card border="solid" rounding={4} padding={2}>
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-3">
           {isRunning ? (
