@@ -90,9 +90,10 @@ You can also choose a trusted embedding model and LLM provider (both of which ca
 The same security and fine grained permissions apply no matter where the question comes from.
 
 - **Web and desktop app** - Ask questions, interface with Onyx AI agents, and everything else in the feature list above.
-- **Slackbot** - Get answers directly in Slack from a SlackBot connected to your org's knowledge.
+- **Slack and Discord bot** - Get answers directly in Slack or Discord from a bot connected to your org's knowledge.
 - **MCP server** - Point Claude Code, Open Code, Codex, or any MCP client at Onyx. Your AI agents get company context with the same access controls as the person running them.
 - **Chrome extension** - Query Onyx from any tab with context from the page, directly in Chrome.
+- **Embeddable Widget** - Easily add Onyx functionality to your app or website.
 
 ---
 
