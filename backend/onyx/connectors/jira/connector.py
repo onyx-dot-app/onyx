@@ -768,12 +768,20 @@ class JiraConnector(
         issue: Issue,  # noqa: ARG002
         parent_hierarchy_raw_node_id: str | None,  # noqa: ARG002
         ticket_document_id: str,  # noqa: ARG002
+        include_permissions: bool = False,  # noqa: ARG002
+        project_key: str | None = None,  # noqa: ARG002
     ) -> list[SlimDocument]:
         """Hook: slim counterparts of ``_process_issue_attachments``.
 
         IDs must exactly match the main-pass attachment document IDs: extra
         slim docs become permanent ``chunk_count IS NULL`` rows, while
         missing ones stop pruning from cleaning up de-indexed attachments.
+
+        When ``include_permissions`` is set (permission-sync path) the slim
+        docs must carry the ticket's resolved ``external_access`` — the
+        generic doc-sync pipeline treats permission-less slim docs as an
+        error. ``project_key`` is the resolved key of the issue's project,
+        for connectors that resolve per-project access.
         """
         return []
 
@@ -1097,6 +1105,8 @@ class JiraConnector(
                             else None
                         ),
                         ticket_document_id=doc_id,
+                        include_permissions=include_permissions,
+                        project_key=project_key,
                     )
                 )
                 current_offset += 1

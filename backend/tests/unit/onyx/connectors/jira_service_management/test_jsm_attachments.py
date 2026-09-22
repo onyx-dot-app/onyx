@@ -19,11 +19,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 from jira import JIRA
 
+from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import SlimDocument
 from onyx.connectors.jira_service_management.connector import (
     JiraServiceManagementConnector,
 )
+from onyx.connectors.jira_service_management.utils import JsmFieldMap
 from onyx.connectors.models import ConnectorFailure, Document
 from tests.unit.onyx.connectors.jira_service_management.conftest import (
     TEST_BASE_URL,
@@ -64,6 +66,15 @@ class MockAttachment:
         return self._content_bytes
 
 
+# Minimal stand-in for the ExternalAccess returned by project-permission
+# resolution in the permission-sync path.
+_TEST_PROJECT_ACCESS = ExternalAccess(
+    external_user_emails=set(),
+    external_user_group_ids=set(),
+    is_public=True,
+)
+
+
 def _wire_attachment_fetch(
     mock_jira_client: MagicMock,
     attachments: list[MockAttachment],
@@ -78,9 +89,19 @@ def _make_connector_with_attachments(
     mock_jira_client: MagicMock,
     attachments: list[MockAttachment],
     include_attachments: bool = True,
+    include_permissions: bool = False,
 ) -> JiraServiceManagementConnector:
     connector = make_jsm_connector(include_attachments=include_attachments)
     _wire_attachment_fetch(mock_jira_client, attachments)
+    if include_permissions:
+        # Short-circuit project-permission resolution: these tests cover
+        # slim-pass propagation, not the admin-gated permission lookup.
+        connector._project_permissions_cache = {
+            f"{TEST_PROJECT_KEY}:unprefixed": _TEST_PROJECT_ACCESS
+        }
+    # Parity tracking is per-run state; make every test start clean.
+    connector._attachment_admission_failures.clear()
+    connector._failed_attachment_doc_ids.clear()
     return connector
 
 
@@ -132,7 +153,7 @@ class TestAttachmentIndexing:
     ) -> None:
         attachments = [
             MockAttachment(id="1001", filename="server-log.txt"),
-            MockAttachment(id="1002", filename="screenshot.png", content=b""),
+            MockAttachment(id="1002", filename="screenshot.png", content=b"png-bytes"),
         ]
         connector = _make_connector_with_attachments(
             make_jsm_connector, mock_jira_client, attachments
@@ -216,9 +237,11 @@ class TestAttachmentIndexing:
         make_jsm_connector: Callable[..., JiraServiceManagementConnector],
         mock_jira_client: MagicMock,
     ) -> None:
-        # Simulates true->false pruning: attachments previously indexed must
-        # disappear from the slim pass once the flag is turned off, letting
-        # pruning clean them up.
+        # Verifies the flag-off steady state: with include_attachments=False
+        # from the start, neither pass ever admits attachment IDs, so a
+        # later full sync prunes any attachments indexed while the flag was
+        # on. (The true->false transition itself is exercised by the full
+        # indexing + pruning pipeline, not by unit-level calls like these.)
         attachments = [MockAttachment(id="3001", filename="old-report.pdf")]
         connector = _make_connector_with_attachments(
             make_jsm_connector,
@@ -310,11 +333,167 @@ class TestAttachmentFailureIsolation:
             f"{ticket_doc_id}/attachments"
         )
 
+    def test_slim_pass_stays_empty_after_listing_failure_parity(
+        self,
+        make_jsm_connector: Callable[..., JiraServiceManagementConnector],
+        mock_jira_client: MagicMock,
+    ) -> None:
+        connector = _make_connector_with_attachments(
+            make_jsm_connector, mock_jira_client, []
+        )
+        issue = make_mock_jsm_issue()
+        ticket_doc_id = f"{TEST_BASE_URL}/browse/{issue.key}"
+
+        # Main pass: listing fails -> one failure for the set, no IDs.
+        main_outputs = connector._process_issue_attachments(
+            issue=issue,
+            parent_hierarchy_raw_node_id=None,
+            ticket_document_id=ticket_doc_id,
+        )
+        assert [out for out in main_outputs if isinstance(out, Document)] == []
+
+        # Slim pass must mirror that emptiness instead of re-listing: a
+        # fresh enumeration could succeed here and admit IDs the main pass
+        # never indexed (chunk_count IS NULL rows), or — on a later full
+        # sync whose listing fails again — prune healthy attachments.
+        assert connector._process_issue_attachments_slim(
+            issue=issue,
+            parent_hierarchy_raw_node_id=None,
+            ticket_document_id=ticket_doc_id,
+        ) == []
+
+    def test_slim_pass_admits_only_attachments_that_produced_documents(
+        self,
+        make_jsm_connector: Callable[..., JiraServiceManagementConnector],
+        mock_jira_client: MagicMock,
+    ) -> None:
+        attachments = [
+            MockAttachment(
+                id="6001",
+                filename="broken.bin",
+                raise_on_get=RuntimeError("download failed"),
+            ),
+            MockAttachment(id="6002", filename="healthy.txt"),
+        ]
+        connector = _make_connector_with_attachments(
+            make_jsm_connector, mock_jira_client, attachments
+        )
+        issue = make_mock_jsm_issue()
+        ticket_doc_id = f"{TEST_BASE_URL}/browse/{issue.key}"
+
+        outputs = connector._process_issue_attachments(
+            issue=issue,
+            parent_hierarchy_raw_node_id=None,
+            ticket_document_id=ticket_doc_id,
+        )
+        main_ids = {out.id for out in outputs if isinstance(out, Document)}
+        assert main_ids == {f"{ticket_doc_id}/attachment/6002"}
+
+        # Parity: the failed attachment's ID is not admitted in the slim
+        # pass, so no chunk_count IS NULL row can be created for it.
+        slim_docs = connector._process_issue_attachments_slim(
+            issue=issue,
+            parent_hierarchy_raw_node_id=None,
+            ticket_document_id=ticket_doc_id,
+        )
+        assert [sd.id for sd in slim_docs] == [
+            f"{ticket_doc_id}/attachment/6002"
+        ]
+
+
+class TestSlimPermissionPropagation:
+    def test_perm_sync_slim_docs_carry_project_access(
+        self,
+        make_jsm_connector: Callable[..., JiraServiceManagementConnector],
+        mock_jira_client: MagicMock,
+    ) -> None:
+        attachments = [MockAttachment(id="7001", filename="perm.txt")]
+        connector = _make_connector_with_attachments(
+            make_jsm_connector,
+            mock_jira_client,
+            attachments,
+            include_permissions=True,
+        )
+        issue = make_mock_jsm_issue()
+        ticket_doc_id = f"{TEST_BASE_URL}/browse/{issue.key}"
+
+        slim_docs = connector._process_issue_attachments_slim(
+            issue=issue,
+            parent_hierarchy_raw_node_id=None,
+            ticket_document_id=ticket_doc_id,
+            include_permissions=True,
+            project_key=TEST_PROJECT_KEY,
+        )
+        assert len(slim_docs) == 1
+        assert slim_docs[0].external_access == _TEST_PROJECT_ACCESS
+
+    def test_indexing_path_slim_docs_have_no_permissions(
+        self,
+        make_jsm_connector: Callable[..., JiraServiceManagementConnector],
+        mock_jira_client: MagicMock,
+    ) -> None:
+        attachments = [MockAttachment(id="7002", filename="noperm.txt")]
+        connector = _make_connector_with_attachments(
+            make_jsm_connector, mock_jira_client, attachments
+        )
+        issue = make_mock_jsm_issue()
+        ticket_doc_id = f"{TEST_BASE_URL}/browse/{issue.key}"
+
+        slim_docs = connector._process_issue_attachments_slim(
+            issue=issue,
+            parent_hierarchy_raw_node_id=None,
+            ticket_document_id=ticket_doc_id,
+        )
+        assert len(slim_docs) == 1
+        assert slim_docs[0].external_access is None
+
+
+class TestEmptyAttachmentContent:
+    @pytest.mark.usefixtures("mock_extract")
+    def test_zero_byte_attachment_fails_instead_of_empty_document(
+        self,
+        make_jsm_connector: Callable[..., JiraServiceManagementConnector],
+        mock_jira_client: MagicMock,
+    ) -> None:
+        attachments = [
+            MockAttachment(id="8001", filename="empty.bin", content=b""),
+            MockAttachment(id="8002", filename="real.txt"),
+        ]
+        connector = _make_connector_with_attachments(
+            make_jsm_connector, mock_jira_client, attachments
+        )
+        issue = make_mock_jsm_issue()
+        ticket_doc_id = f"{TEST_BASE_URL}/browse/{issue.key}"
+
+        outputs = connector._process_issue_attachments(
+            issue=issue,
+            parent_hierarchy_raw_node_id=None,
+            ticket_document_id=ticket_doc_id,
+        )
+        failures = [out for out in outputs if isinstance(out, ConnectorFailure)]
+        documents = [out for out in outputs if isinstance(out, Document)]
+        assert [f.failed_document.document_id for f in failures] == [
+            f"{ticket_doc_id}/attachment/8001"
+        ]
+        assert [d.id for d in documents] == [
+            f"{ticket_doc_id}/attachment/8002"
+        ]
+
+        # Parity holds for the surviving attachment only.
+        slim_docs = connector._process_issue_attachments_slim(
+            issue=issue,
+            parent_hierarchy_raw_node_id=None,
+            ticket_document_id=ticket_doc_id,
+        )
+        assert [sd.id for sd in slim_docs] == [
+            f"{ticket_doc_id}/attachment/8002"
+        ]
+
 
 @pytest.fixture
 def jsm_connector(
     make_jsm_connector: Callable[..., JiraServiceManagementConnector],
-    jsm_field_map: Any,
+    jsm_field_map: JsmFieldMap,
 ) -> Generator[JiraServiceManagementConnector, None, None]:
     """Connector with JSM field discovery short-circuited for determinism."""
     connector = make_jsm_connector()

@@ -83,6 +83,16 @@ class JiraServiceManagementConnector(JiraConnector):
         self.include_internal_comments = include_internal_comments
         self.include_attachments = include_attachments
         self._jsm_field_map: JsmFieldMap | None = None
+        # Ticket document IDs whose attachment listing failed this run. The
+        # slim pass admits nothing for these tickets, keeping the two ID
+        # sets in parity when no enumeration is available.
+        self._attachment_admission_failures: set[str] = set()
+        # Ticket document ID -> doc IDs of attachments that failed in the
+        # main pass (download or content errors). The slim pass excludes
+        # exactly these IDs so admitted IDs stay in exact parity with the
+        # documents the main pass actually produced, without penalizing
+        # healthy sibling attachments.
+        self._failed_attachment_doc_ids: dict[str, set[str]] = {}
 
     @property
     def jsm_field_map(self) -> JsmFieldMap:
@@ -183,15 +193,55 @@ class JiraServiceManagementConnector(JiraConnector):
                 )
             ]
 
-        return [
-            self._build_attachment_output(
+        try:
+            attachments = self._fetch_issue_attachments(issue.key)
+        except Exception as e:
+            # Listing failed entirely: record one failure for the issue's
+            # attachment set without losing the ticket itself. The slim pass
+            # admits no attachment IDs when listing fails (it also records
+            # the failure and emits nothing), so the two ID sets stay in
+            # exact parity and pruning never acts on a partial enumeration.
+            logger.exception("Failed to list attachments for %s", issue.key)
+            self._attachment_admission_failures.add(ticket_document_id)
+            return [
+                ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=f"{ticket_document_id}/attachments",
+                        document_link=build_jira_url(self.jira_base, issue.key),
+                    ),
+                    failure_message=(
+                        f"Failed to list attachments for JSM issue {issue.key}"
+                    ),
+                    exception=e,
+                )
+            ]
+
+        # Download/convert every attachment first. Attachments that fail are
+        # tracked per doc ID so the slim pass admits exactly the IDs that
+        # produced a main-pass document (full/slim parity): extra slim docs
+        # would become permanent ``chunk_count IS NULL`` rows, and excluding
+        # only the failed IDs keeps healthy siblings unaffected.
+        self._attachment_admission_failures.discard(ticket_document_id)
+        outputs: list[Document | ConnectorFailure] = []
+        failed_doc_ids: set[str] = set()
+        for attachment in attachments:
+            attachment_id = str(getattr(attachment, "id", "") or "")
+            output = self._build_attachment_output(
                 issue=issue,
                 attachment=attachment,
                 parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
                 ticket_document_id=ticket_document_id,
             )
-            for attachment in attachments
-        ]
+            if isinstance(output, ConnectorFailure):
+                failed_doc_ids.add(
+                    f"{ticket_document_id}/attachment/{attachment_id}"
+                )
+            outputs.append(output)
+        if failed_doc_ids:
+            self._failed_attachment_doc_ids[ticket_document_id] = failed_doc_ids
+        else:
+            self._failed_attachment_doc_ids.pop(ticket_document_id, None)
+        return outputs
 
     def _build_attachment_output(
         self,
@@ -238,10 +288,37 @@ class JiraServiceManagementConnector(JiraConnector):
                 exception=e,
             )
 
-        sections = []
-        if text:
-            sections.append(
-                TextSection(text=text, link=str(getattr(attachment, "content", "")))
+        if not file_bytes:
+            # Zero-length or undecodable-to-empty attachments: downloading
+            # succeeded but there is no indexable content. Emitting a
+            # contentless document would create a junk record, and admitting
+            # the ID in the slim pass while skipping it here would break
+            # full/slim parity — so fail it like any other processing error.
+            return ConnectorFailure(
+                failed_document=DocumentFailure(
+                    document_id=doc_id,
+                    document_link=build_jira_url(self.jira_base, issue.key),
+                ),
+                failure_message=(
+                    f"Attachment '{filename}' ({attachment_id}) of JSM issue "
+                    f"{issue.key} is empty; skipping indexing"
+                ),
+            )
+
+        sections = [
+            TextSection(text=text, link=str(getattr(attachment, "content", "")))
+        ]
+        if not text:
+            # Extraction produced nothing usable: same reasoning as above.
+            return ConnectorFailure(
+                failed_document=DocumentFailure(
+                    document_id=doc_id,
+                    document_link=build_jira_url(self.jira_base, issue.key),
+                ),
+                failure_message=(
+                    f"No extractable content in attachment '{filename}' "
+                    f"({attachment_id}) of JSM issue {issue.key}"
+                ),
             )
 
         return Document(
@@ -264,9 +341,29 @@ class JiraServiceManagementConnector(JiraConnector):
         issue: Issue,
         parent_hierarchy_raw_node_id: str | None,
         ticket_document_id: str,
+        include_permissions: bool = False,
+        project_key: str | None = None,
     ) -> list[SlimDocument]:
         if not self.include_attachments:
             return []
+
+        # Full/slim parity guard, two layers:
+        # 1. When the listing failed in the main pass (ticket-level mark),
+        #    no enumeration is trustworthy this run — admit nothing.
+        # 2. Attachments that failed individually in the main pass (download
+        #    or content errors) are excluded by doc ID, so admitted IDs match
+        #    the documents the main pass actually produced. Healthy siblings
+        #    are unaffected.
+        if ticket_document_id in self._attachment_admission_failures:
+            logger.warning(
+                "Skipping slim admission for %s: attachment listing failed in "
+                "the main pass for this issue",
+                issue.key,
+            )
+            return []
+        failed_ids = self._failed_attachment_doc_ids.get(
+            ticket_document_id, set()
+        )
 
         try:
             attachments = self._fetch_issue_attachments(issue.key)
@@ -274,22 +371,37 @@ class JiraServiceManagementConnector(JiraConnector):
             # Mirrors the main pass: when listing fails, no attachment IDs
             # are admitted there either (the whole set is recorded as a
             # failure), so emitting nothing here keeps the ID sets aligned.
+            # The failure is logged loudly (and recorded for the main pass
+            # set as well) rather than silently treated as "no attachments",
+            # so pruning can never act on an unavailable enumeration.
             logger.exception("Failed to list attachment slim docs for %s", issue.key)
+            self._attachment_admission_failures.add(ticket_document_id)
             return []
+
+        external_access = (
+            self._get_project_permissions(project_key)
+            if include_permissions and project_key
+            else None
+        )
 
         slim_docs: list[SlimDocument] = []
         for attachment in attachments:
             attachment_id = str(getattr(attachment, "id", "") or "")
-            if not attachment_id:
+            doc_id = f"{ticket_document_id}/attachment/{attachment_id}"
+            if doc_id in failed_ids:
+                # Failed in the main pass: no document exists for it, so
+                # admitting the ID would create a chunk_count IS NULL row.
                 continue
             created = str(getattr(attachment, "created", "") or "")
             slim_docs.append(
                 SlimDocument(
                     # Must exactly match the main-pass attachment document ID
-                    id=f"{ticket_document_id}/attachment/{attachment_id}",
-                    # Permission sync path - don't prefix,
-                    # upsert_document_external_perms handles it
-                    external_access=None,
+                    id=doc_id,
+                    # Permission sync path: inherit the ticket's resolved
+                    # project access so attachment permissions stay in sync
+                    # with their parent ticket (generic_doc_sync requires it
+                    # and upsert_document_external_perms replaces wholesale).
+                    external_access=external_access,
                     parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
                     doc_created_at=time_str_to_utc(created) if created else None,
                 )
