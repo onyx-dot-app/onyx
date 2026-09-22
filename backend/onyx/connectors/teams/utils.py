@@ -1,4 +1,5 @@
 import re
+import threading
 import time
 from collections.abc import Callable, Generator
 from datetime import datetime, timezone
@@ -7,9 +8,13 @@ from typing import Any
 
 import requests
 from office365.graph_client import GraphClient
+from office365.runtime.http.http_method import HttpMethod
+from office365.runtime.http.request_options import RequestOptions
 from office365.runtime.queries.client_query import ClientQuery
 
 from onyx.access.models import ExternalAccess
+from onyx.access.utils import build_ext_group_name_for_onyx
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.microsoft_utils.graph_client import (
     GRAPH_API_MAX_RETRIES,
@@ -17,11 +22,21 @@ from onyx.connectors.microsoft_utils.graph_client import (
     backoff_seconds,
     sleep_and_retry,
 )
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.teams.models import ChannelFilesFolder, ChannelMember, Message
+from onyx.connectors.teams.models import (
+    ChannelFilesFolder,
+    ChannelMember,
+    ChannelRef,
+    Message,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def escape_odata_string(name: str) -> str:
+    """An OData string literal doubles its apostrophes. Other characters that
+    break Graph's OData parser are handled by filtering on the client instead."""
+    return name.replace("'", "''")
 
 
 def execute_query_with_retry(
@@ -70,10 +85,45 @@ class GraphRetriesExhausted(RuntimeError):
     """Graph kept answering with a retryable status for every attempt."""
 
 
-def _retry(
+def get_json_with_retry(
     graph_client: GraphClient,
     request_url: str,
+    headers: dict[str, str] | None = None,
+    json_body: dict[str, Any] | None = None,
 ) -> dict:
+    json = request_with_retry(graph_client, request_url, headers, json_body).json()
+    if not isinstance(json, dict):
+        raise RuntimeError(f"Expected a JSON object, instead got {json=}")
+    return json
+
+
+def _execute(
+    graph_client: GraphClient,
+    request_url: str,
+    headers: dict[str, str] | None,
+    json_body: dict[str, Any] | None,
+) -> requests.Response:
+    """The SDK's direct request. Headers ride along when the route needs them,
+    a format to serve or an advanced query, and a body makes it a POST. The SDK
+    adds the bearer token to every shape."""
+    if not headers and json_body is None:
+        return graph_client.execute_request_direct(request_url)
+    request = RequestOptions(f"{graph_client.service_root_url()}/{request_url}")
+    request.headers.update(headers or {})
+    if json_body is not None:
+        request.method = HttpMethod.Post
+        request.data = json_body
+    return graph_client.pending_request().execute_request_direct(request)
+
+
+def request_with_retry(
+    graph_client: GraphClient,
+    request_url: str,
+    headers: dict[str, str] | None = None,
+    json_body: dict[str, Any] | None = None,
+) -> requests.Response:
+    """One Graph request under Teams' retry policy, as a raw response rather
+    than parsed JSON."""
     MAX_RETRIES = 10
     retry_number = 0
 
@@ -81,17 +131,13 @@ def _retry(
         # The SDK raises on every non-2xx status, so the response is taken from
         # the exception to apply one retry policy to raised and returned errors.
         try:
-            response = graph_client.execute_request_direct(request_url)
+            response = _execute(graph_client, request_url, headers, json_body)
         except requests.HTTPError as e:
             if e.response is None:
                 raise
             response = e.response
         if response.ok:
-            json = response.json()
-            if not isinstance(json, dict):
-                raise RuntimeError(f"Expected a JSON object, instead got {json=}")
-
-            return json
+            return response
 
         # Transient Graph errors (rate limits + 5xx gateway/server hiccups) are
         # retried with backoff; any other status is surfaced immediately.
@@ -125,10 +171,12 @@ def _retry(
     )
 
 
-def _get_next_url(
+def next_page_url(
     graph_client: GraphClient,
     json_response: dict,
+    page_url: str,
 ) -> str | None:
+    """The link to the page after ``page_url``, relative to the service root."""
     next_url = json_response.get("@odata.nextLink")
 
     if not next_url:
@@ -139,54 +187,87 @@ def _get_next_url(
             f"Expected a string for the `@odata.nextUrl`, instead got {next_url=}"
         )
 
-    return next_url.removeprefix(graph_client.service_root_url()).removeprefix("/")
+    next_url = next_url.removeprefix(graph_client.service_root_url()).removeprefix("/")
+    # A listing has no name to stop on, so a page that points back at itself
+    # would be read for ever, by a walk or by a checkpoint that saves the link.
+    if next_url == page_url:
+        raise RuntimeError(f"Graph repeated a page: {page_url}")
+    return next_url
 
 
-def _iter_values(
-    graph_client: GraphClient, request_url: str
+def iter_values(
+    graph_client: GraphClient,
+    request_url: str,
+    before_page: Callable[[], None] | None = None,
+    headers: dict[str, str] | None = None,
 ) -> Generator[dict[str, Any]]:
-    """Every row of a paged Graph collection."""
+    """Every row of a paged Graph collection. ``before_page`` runs ahead of
+    each page request, so a walk can honor a stop between pages. ``headers``
+    ride on every page."""
     url: str | None = request_url
     while url:
-        json_response = _retry(graph_client=graph_client, request_url=url)
+        if before_page is not None:
+            before_page()
+        json_response = get_json_with_retry(graph_client, url, headers)
         for value in json_response.get("value", []):
             if isinstance(value, dict):
                 yield value
-        url = _get_next_url(graph_client=graph_client, json_response=json_response)
+        url = next_page_url(graph_client, json_response, url)
 
 
-def _member_email(graph_client: GraphClient, member: ChannelMember) -> str | None:
-    """A member row carries its email for users of any tenant. A row without
-    one is looked up by user id, which only resolves users of this tenant."""
-    if member.email:
-        return member.email
+# The most ids Graph names in one getByIds request.
+USER_LOOKUP_BATCH_SIZE = 1000
+USER_LOOKUP_URL = "directoryObjects/getByIds?$select=id,userPrincipalName"
 
-    if not member.user_id:
-        logger.warning("Channel member %r has no user id; skipping", member)
-        return None
 
-    # Only a missing user is skipped: a user of another tenant is not in this
-    # directory. Any other refusal propagates, or a partial list would revoke access.
-    try:
-        json_data = _retry(
-            graph_client=graph_client, request_url=f"users/{member.user_id}"
+class UserDirectory:
+    """User id to principal name for the members a run meets, once per run. A
+    channel can hold thousands of members whose rows carry no email, and Graph
+    names 1000 ids per request, so the cost follows the members seen."""
+
+    def __init__(self, graph_client: GraphClient) -> None:
+        self._graph_client = graph_client
+        # None records an id Graph did not name, so it is not asked for again.
+        self._principal_names: dict[str, str | None] = {}
+        # Workers share one directory, and two asking for the same unknown ids
+        # would each pay for the lookup.
+        self._lock = threading.Lock()
+
+    def principal_names(self, user_ids: list[str]) -> dict[str, str]:
+        """The names Graph has for these ids. One it omits is not in this
+        directory, such as a user of another tenant. A refusal raises, or a
+        partial list would revoke access."""
+        with self._lock:
+            unknown = [
+                uid
+                for uid in dict.fromkeys(user_ids)
+                if uid not in self._principal_names
+            ]
+            for start in range(0, len(unknown), USER_LOOKUP_BATCH_SIZE):
+                batch = unknown[start : start + USER_LOOKUP_BATCH_SIZE]
+                self._principal_names.update(self._lookup(batch))
+            return {
+                uid: name
+                for uid in user_ids
+                if (name := self._principal_names.get(uid)) is not None
+            }
+
+    def _lookup(self, batch: list[str]) -> dict[str, str | None]:
+        rows = get_json_with_retry(
+            self._graph_client,
+            USER_LOOKUP_URL,
+            json_body={"ids": batch, "types": ["user"]},
         )
-    except requests.HTTPError as e:
-        if e.response is not None and e.response.status_code == 404:
-            logger.warning(
-                "Channel member %s is not in this directory; skipping",
-                member.display_name,
-            )
-            return None
-        raise
-
-    email = json_data.get("userPrincipalName")
-    if not isinstance(email, str) or not email:
-        logger.warning(
-            "Channel member %s has no principal name; skipping", member.user_id
-        )
-        return None
-    return email
+        # A batch answers in one page. A second page would hold names this
+        # reads as missing, and a missing name takes a reader's access away.
+        if rows.get("@odata.nextLink"):
+            raise RuntimeError("Graph paged a user lookup of one batch")
+        named = {
+            row["id"]: row["userPrincipalName"]
+            for row in rows.get("value", [])
+            if row.get("id") and row.get("userPrincipalName")
+        }
+        return {uid: named.get(uid) for uid in batch}
 
 
 def fetch_channel_members(
@@ -197,40 +278,83 @@ def fetch_channel_members(
     all-members call serves every channel type."""
     return [
         ChannelMember(**row)
-        for row in _iter_values(
+        for row in iter_values(
             graph_client, f"teams/{team_id}/channels/{channel_id}/allMembers"
         )
     ]
 
 
-def channel_access(expert_infos: list[BasicExpertInfo]) -> ExternalAccess:
-    """A channel is readable by its members and no one else. A standard channel
-    is visible to its team, not the tenant, so no channel is ever public."""
+def fetch_channel_membership_type(
+    graph_client: GraphClient, team_id: str, channel_id: str
+) -> str | None:
+    row = get_json_with_retry(
+        graph_client, f"teams/{team_id}/channels/{channel_id}?$select=membershipType"
+    )
+    return row.get("membershipType")
+
+
+def channel_group_id(channel: ChannelRef) -> str:
+    """The group whose members read the channel. A standard channel is read by
+    every member of its team, so a team's standard channels share one group,
+    where a private or shared channel has a member list of its own."""
+    if channel.membership_type == "standard":
+        return f"team-members:{channel.team_id}"
+    return f"channel-members:{channel.id}"
+
+
+def source_group_ids(group_ids: set[str], for_indexing: bool) -> set[str]:
+    """Group ids as a document carries them. Indexing stores what it is handed,
+    so it needs the source prefix the group sync saves groups under. The
+    permission sync adds that prefix itself, and a second one matches no group."""
+    if not for_indexing:
+        return group_ids
+    return {
+        build_ext_group_name_for_onyx(group_id, DocumentSource.TEAMS)
+        for group_id in group_ids
+    }
+
+
+def channel_access(channel: ChannelRef, for_indexing: bool) -> ExternalAccess:
+    """A channel is readable by its members and no one else, so no channel is
+    ever public. The document names the group and the group sync names the
+    people: a team of thousands would otherwise put every email on every
+    thread, and a join or a leave would rewrite them all."""
     return ExternalAccess(
-        external_user_emails={
-            expert_info.email.lower()
-            for expert_info in expert_infos
-            if expert_info.email
-        },
-        external_user_group_ids=set(),
+        external_user_emails=set(),
+        external_user_group_ids=source_group_ids(
+            {channel_group_id(channel)}, for_indexing
+        ),
         is_public=False,
     )
 
 
-def fetch_channel_readers(
-    graph_client: GraphClient, team_id: str, channel_id: str
-) -> tuple[list[BasicExpertInfo], ExternalAccess]:
-    """The channel's members as document owners and as its access list."""
-    expert_infos: list[BasicExpertInfo] = []
-    for member in fetch_channel_members(graph_client, team_id, channel_id):
-        email = _member_email(graph_client, member)
-        if email is None:
-            continue
-        # The email is what grants access, so a member without a name still reads.
-        expert_infos.append(
-            BasicExpertInfo(display_name=member.display_name, email=email)
+def fetch_channel_member_emails(
+    graph_client: GraphClient,
+    team_id: str,
+    channel_id: str,
+    directory: UserDirectory,
+) -> list[str]:
+    """The emails of everyone who reads the channel, for the group sync. A row
+    carries its email for users of any tenant, and one without is named through
+    ``directory``, which only knows users of this tenant."""
+    members = fetch_channel_members(graph_client, team_id, channel_id)
+    names = directory.principal_names(
+        [m.user_id for m in members if not m.email and m.user_id]
+    )
+    emails = [
+        email.lower()
+        for member in members
+        if (email := member.email or names.get(member.user_id or ""))
+    ]
+    if len(emails) < len(members):
+        logger.warning(
+            "%s member(s) of channel %s are not in this directory; skipping",
+            len(members) - len(emails),
+            channel_id,
         )
-    return expert_infos, channel_access(expert_infos)
+    # The sync makes a user per distinct spelling and then lowercases them, so
+    # one person spelled two ways would fail the whole run on a duplicate.
+    return list(dict.fromkeys(emails))
 
 
 # The largest page Graph serves for channel messages.
@@ -254,15 +378,15 @@ def fetch_message_page(
 ) -> tuple[list[Message], str | None]:
     """One page of root messages and the link to the next, so a checkpoint can
     resume mid-channel."""
-    json_response = _retry(graph_client=graph_client, request_url=request_url)
+    json_response = get_json_with_retry(
+        graph_client=graph_client, request_url=request_url
+    )
     messages = [
         Message(**_sanitize_message_user_display_name(value))
         for value in json_response.get("value", [])
         if isinstance(value, dict)
     ]
-    return messages, _get_next_url(
-        graph_client=graph_client, json_response=json_response
-    )
+    return messages, next_page_url(graph_client, json_response, request_url)
 
 
 def fetch_messages(
@@ -271,7 +395,7 @@ def fetch_messages(
     channel_id: str,
     start: SecondsSinceUnixEpoch,
 ) -> Generator[Message]:
-    for value in _iter_values(
+    for value in iter_values(
         graph_client, message_delta_url(team_id, channel_id, start)
     ):
         yield Message(**_sanitize_message_user_display_name(value))
@@ -281,7 +405,7 @@ def fetch_channel_files_folder(
     graph_client: GraphClient, team_id: str, channel_id: str
 ) -> ChannelFilesFolder:
     """Needs Files.Read.All or Sites.Read.All on Graph."""
-    json_data = _retry(
+    json_data = get_json_with_retry(
         graph_client=graph_client,
         request_url=f"teams/{team_id}/channels/{channel_id}/filesFolder",
     )
@@ -297,7 +421,7 @@ def fetch_drive_library(graph_client: GraphClient, drive_id: str) -> tuple[str, 
     """The document library's name, which SharePoint REST looks the list up by,
     and the url of its site. The site comes from the drive because the files
     folder can leave its own site id empty."""
-    drive = _retry(
+    drive = get_json_with_retry(
         graph_client=graph_client,
         request_url=f"drives/{drive_id}?$select=name,sharePointIds",
     )
@@ -355,5 +479,5 @@ def fetch_replies(
         f"teams/{team_id}/channels/{channel_id}/messages/{root_message_id}/replies"
     )
 
-    for value in _iter_values(graph_client, request_url):
+    for value in iter_values(graph_client, request_url):
         yield Message(**_sanitize_message_user_display_name(value))

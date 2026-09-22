@@ -62,30 +62,32 @@ import {
   type EmbeddingModelSelection,
   type EmbeddingModelState,
   type EmbeddingProvider,
-} from "@/lib/indexing/types";
+} from "@/lib/searchSettings/types";
 import {
   CLOUD_BASED_PROVIDERS,
   CUSTOM_PROVIDER,
+  MAX_IMAGE_SIZE_OPTIONS,
   SELF_HOSTED_PROVIDERS,
+} from "@/lib/searchSettings/constants";
+import {
   embeddingModelDescription,
   findProvider,
   findRegistryModel,
   isCloudBased,
-  MAX_IMAGE_SIZE_OPTIONS,
   resolveProviderName,
-} from "@/lib/indexing";
+} from "@/lib/searchSettings";
 import {
   isSameModelSelection,
   resolveModelForApply,
   savedModelSelection,
-} from "@/lib/indexing/utils";
+} from "@/lib/searchSettings/utils";
 import {
   saveAdminSettings,
   cancelNewEmbedding,
   disconnectEmbeddingProvider,
   setNewSearchSettings,
   updateInferenceSettings,
-} from "@/lib/indexing/svc";
+} from "@/lib/searchSettings/svc";
 import { useCreateModal } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
 import { ConfirmationModalLayout } from "@opal/layouts";
@@ -98,7 +100,7 @@ import {
   useCurrentSearchSettings,
   useReindexProgress,
   useSecondarySearchSettings,
-} from "@/lib/indexing/hooks";
+} from "@/lib/searchSettings/hooks";
 import { useLlmDefaults } from "@/lib/languageModels/hooks";
 import useFilter from "@/hooks/useFilter";
 import ModelSelector from "@/sections/model-selector/ModelSelector";

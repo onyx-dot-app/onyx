@@ -43,6 +43,7 @@ func NewInstallSkillCommand() *cobra.Command {
 		source    string
 		copyMode  bool
 		cloneRepo bool
+		noPull    bool
 		agents    []string
 	)
 
@@ -66,6 +67,9 @@ codex:
   (git-excluded; the committed AGENTS.md points agents at it), since Codex
   skills cannot be always-on. Manual skills are symlinked into
   ~/.agents/skills/, Codex's native skill directory, invoked via $skill-name.
+
+The checkout is fast-forwarded before installing, so a plain rerun picks up
+new skills; --no-pull installs from the checkout as it is.
 
 By default, looks for onyx-llm-context at ~/.claude/skills/onyx-llm-context.`,
 		Example: `  ods install-skill --clone
@@ -98,6 +102,8 @@ By default, looks for onyx-llm-context at ~/.claude/skills/onyx-llm-context.`,
 				if err := gitCmd.Run(); err != nil {
 					return fmt.Errorf("git clone failed: %w", err)
 				}
+			} else if !noPull {
+				pullSource(cmd, source)
 			}
 
 			repoRoot, err := paths.GitRoot()
@@ -121,9 +127,45 @@ By default, looks for onyx-llm-context at ~/.claude/skills/onyx-llm-context.`,
 	cmd.Flags().StringVar(&source, "source", "", "Path to onyx-llm-context (default: ~/.claude/skills/onyx-llm-context)")
 	cmd.Flags().BoolVar(&copyMode, "copy", false, "Copy files instead of symlinking (claude-code and codex manual skills)")
 	cmd.Flags().BoolVar(&cloneRepo, "clone", false, fmt.Sprintf("Clone onyx-llm-context from %s if not already present", llmContextCloneURL))
+	cmd.Flags().BoolVar(&noPull, "no-pull", false, "Install from the checkout as it is, without updating it first")
 	cmd.Flags().StringSliceVar(&agents, "agent", []string{agentClaudeCode}, "Agents to install for (repeatable): claude-code, cursor, codex")
 
 	return cmd
+}
+
+// pullSource fast-forwards the source checkout so a plain rerun picks up new
+// skills without a separate git pull. Local work is never lost: --ff-only
+// refuses diverged history, and git itself refuses a pull that would
+// overwrite uncommitted changes. Any pull that cannot run (those cases,
+// offline, no upstream) warns and installs from the local state, since a
+// stale install is better than none. Local edits that do not conflict
+// survive the update.
+func pullSource(cmd *cobra.Command, source string) {
+	// Not a git checkout (an exported copy, say): nothing to update.
+	if _, err := os.Stat(filepath.Join(source, ".git")); os.IsNotExist(err) {
+		return
+	} else if err != nil {
+		_, _ = fmt.Fprintf(
+			cmd.ErrOrStderr(),
+			"Warning: could not inspect %s (%v); installing without updating it.\n",
+			source,
+			err,
+		)
+		return
+	}
+	gitCmd := exec.Command("git", "-C", source, "pull", "--ff-only")
+	out, err := gitCmd.CombinedOutput()
+	if err != nil {
+		_, _ = fmt.Fprintf(
+			cmd.ErrOrStderr(),
+			"Warning: could not update %s; installing from the local state.\n%s",
+			source,
+			out,
+		)
+		return
+	}
+	summary, _, _ := strings.Cut(strings.TrimSpace(string(out)), "\n")
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Pulled  %s (%s)\n", source, summary)
 }
 
 // resolveAgents maps the --agent values to installers, in the given order and

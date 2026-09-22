@@ -3,7 +3,7 @@
 import { adminSearch } from "@/lib/searchFilters/svc";
 import { useState, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/types";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
 import { InputCheckbox } from "@opal/components";
 import { updateHiddenStatus } from "../lib";

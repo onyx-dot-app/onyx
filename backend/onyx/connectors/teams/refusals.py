@@ -4,6 +4,7 @@ attempt so it is retried."""
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import Any
 
 import requests
 from office365.runtime.client_request_exception import ClientRequestException
@@ -11,6 +12,9 @@ from office365.runtime.client_request_exception import ClientRequestException
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.models import ConnectorFailure, EntityFailure
 from onyx.connectors.teams.models import ChannelRef
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 def status(error: requests.RequestException) -> int | None:
@@ -79,4 +83,54 @@ def channel_failure(
             else f"Could not read {named}: {error}"
         ),
         exception=error,
+    )
+
+
+def warn_group_left_out(channel: ChannelRef, call: str, error: Exception) -> None:
+    """The group sync deletes the groups a failed run did not reach, so raising
+    on one refused channel would take access from every team listed after it.
+    Left out, the refusal costs the one group, which fails closed."""
+    logger.warning(
+        'The %s of channel "%s" in team %s could not be read, so its group is '
+        "left out of this sync: %s",
+        call,
+        channel.display_name,
+        channel.team_id,
+        error,
+    )
+
+
+def _error_body(error: requests.HTTPError) -> dict[str, Any]:
+    """Graph's error object, empty when the body is not one."""
+    if error.response is None:
+        return {}
+    try:
+        payload = error.response.json()
+    except ValueError:
+        return {}
+    body = payload.get("error") if isinstance(payload, dict) else None
+    return body if isinstance(body, dict) else {}
+
+
+def graph_inner_error_code(error: requests.HTTPError) -> str:
+    """Graph's inner error code, or its outer code, or the empty string. The
+    inner one comes first: it names the cause, where the outer one repeats the
+    status."""
+    body = _error_body(error)
+    inner = body.get("innerError")
+    if isinstance(inner, dict) and inner.get("code"):
+        return str(inner["code"])
+    return str(body.get("code") or "")
+
+
+def graph_error_message(error: requests.HTTPError) -> str:
+    return str(_error_body(error).get("message") or "")
+
+
+def graph_said(error: requests.HTTPError) -> str:
+    """Graph's own code and message. A refusal the connector cannot name is
+    otherwise unreadable, and a missing grant is only its most common cause."""
+    return (
+        f"Graph said: {graph_inner_error_code(error) or 'no code'}, "
+        f"{graph_error_message(error) or 'no message'}"
     )

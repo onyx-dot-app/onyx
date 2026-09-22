@@ -6,14 +6,13 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import has_global_permission
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import LLMModelFlowType, Permission
+from onyx.db.enums import Permission
 from onyx.db.llm import (
     can_user_access_llm_provider,
     fetch_default_contextual_rag_model,
     fetch_default_llm_model,
     fetch_default_vision_model,
     fetch_existing_llm_provider,
-    fetch_existing_models,
     fetch_model_configuration_by_id,
     fetch_user_group_ids,
 )
@@ -245,104 +244,46 @@ def get_default_llm_with_vision(
     temperature: float | None = None,
     additional_headers: dict[str, str] | None = None,
 ) -> LLM | None:
-    """Get an LLM that supports image input, with the following priority:
-    1. Use the designated default vision provider if it exists and supports image input
-    2. Fall back to the first LLM provider that supports image input
+    """The designated default vision model, or None.
 
-    Returns None if no providers exist or if no provider supports images.
+    There is deliberately no fallback. With no default set, image captioning
+    is off: picking an arbitrary image-capable model would spend money on a
+    model nobody chose.
     """
+    with get_session_with_current_tenant() as db_session:
+        default_model = fetch_default_vision_model(db_session)
+        if default_model is None:
+            logger.warning(
+                "No default vision model is set — image summarization will be "
+                "disabled. Pick a captioning model under Index Settings."
+            )
+            return None
 
-    def create_vision_llm(provider: LLMProviderView, model: str) -> LLM:
-        """Helper to create an LLM if the provider supports image input."""
+        if not model_supports_image_input(
+            default_model.name,
+            default_model.llm_provider.provider,
+            default_model.llm_provider.deployment_name,
+        ):
+            logger.warning(
+                "Default vision model %s (provider=%s) does not support image "
+                "input — image summarization will be disabled",
+                default_model.name,
+                default_model.llm_provider.provider,
+            )
+            return None
+
+        logger.info(
+            "Using default vision model: %s (provider=%s)",
+            default_model.name,
+            default_model.llm_provider.provider,
+        )
         return llm_from_provider(
-            model_name=model,
-            llm_provider=provider,
+            model_name=default_model.name,
+            llm_provider=LLMProviderView.from_model(default_model.llm_provider),
             timeout=timeout,
             temperature=temperature,
             additional_headers=additional_headers,
         )
-
-    provider_map = {}
-    with get_session_with_current_tenant() as db_session:
-        # Try the default vision provider first
-        default_model = fetch_default_vision_model(db_session)
-        if default_model:
-            if model_supports_image_input(
-                default_model.name,
-                default_model.llm_provider.provider,
-                default_model.llm_provider.deployment_name,
-            ):
-                logger.info(
-                    "Using default vision model: %s (provider=%s)",
-                    default_model.name,
-                    default_model.llm_provider.provider,
-                )
-                return create_vision_llm(
-                    LLMProviderView.from_model(default_model.llm_provider),
-                    default_model.name,
-                )
-            else:
-                logger.warning(
-                    "Default vision model %s (provider=%s) does not support "
-                    "image input — falling back to searching all providers",
-                    default_model.name,
-                    default_model.llm_provider.provider,
-                )
-
-        # Fall back to searching all providers
-        models = fetch_existing_models(
-            db_session=db_session,
-            flow_types=[LLMModelFlowType.VISION, LLMModelFlowType.CHAT],
-        )
-
-        if not models:
-            logger.warning(
-                "No LLM models with VISION or CHAT flow type found — "
-                "image summarization will be disabled"
-            )
-            return None
-
-        for model in models:
-            if model.llm_provider_id not in provider_map:
-                provider_map[model.llm_provider_id] = LLMProviderView.from_model(
-                    model.llm_provider
-                )
-
-    # Search for viable vision model followed by chat models
-    # Sort models from VISION to CHAT priority
-    sorted_models = sorted(
-        models,
-        key=lambda x: (
-            LLMModelFlowType.VISION in x.llm_model_flow_types,
-            LLMModelFlowType.CHAT in x.llm_model_flow_types,
-        ),
-        reverse=True,
-    )
-
-    for model in sorted_models:
-        if model_supports_image_input(
-            model.name, model.llm_provider.provider, model.llm_provider.deployment_name
-        ):
-            logger.info(
-                "Using fallback vision model: %s (provider=%s)",
-                model.name,
-                model.llm_provider.provider,
-            )
-            return create_vision_llm(
-                provider_map[model.llm_provider_id],
-                model.name,
-            )
-
-    checked_models = [
-        f"{m.name} (provider={m.llm_provider.provider})" for m in sorted_models
-    ]
-    logger.warning(
-        "No vision-capable model found among %d candidates: %s — "
-        "image summarization will be disabled",
-        len(sorted_models),
-        ", ".join(checked_models),
-    )
-    return None
 
 
 def llm_from_provider(

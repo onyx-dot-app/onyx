@@ -3,7 +3,7 @@
 import { createContext, useContext } from "react";
 import { paidTierGated } from "@/ce";
 import { QueryControllerProvider as EEQueryControllerProvider } from "@/ee/providers/QueryControllerProvider";
-import { SearchDocWithContent, BaseFilters } from "@/lib/search/interfaces";
+import { SearchDocWithContent, BaseFilters } from "@/lib/search/types";
 
 export type AppMode = "auto" | "search" | "chat";
 

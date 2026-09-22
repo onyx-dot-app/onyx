@@ -33,8 +33,15 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
 3. OpenAI Responses API Non-Streaming (_patch_openai_responses_transform_response):
    - LiteLLM's transform_response joins multiple reasoning summary parts with spaces
    - We prefer double newlines for readability
+   - Also returns an empty assistant message with finish_reason "length" when the
+     response is incomplete (max_output_tokens) and carries no message item, e.g.
+     a reasoning model that spent the whole budget on reasoning. Upstream raises
+     ValueError there, which surfaces as APIConnectionError; streaming returns an
+     empty message for the same reply.
    STATUS: STILL NEEDED - Upstream now uses " ".join() instead of discarding earlier
            parts, but we override to use "\\n\\n".join() for readable section breaks.
+           The incomplete-reply handling is fixed upstream in v1.99.0 (BerriAI/litellm
+           PR #37710); drop _incomplete_response_as_empty_message once we are on >= 1.99.0.
 
 4. Responses API Fake Streaming (_patch_openai_responses_should_fake_stream):
    - LiteLLM fake-streams (MockResponsesAPIStreamingIterator) any responses-API
@@ -367,6 +374,81 @@ def _patch_responses_reasoning_summary_newlines() -> None:
     )
 
 
+_INCOMPLETE_REASON_TO_FINISH_REASON = {
+    "max_output_tokens": "length",
+    "content_filter": "content_filter",
+}
+
+
+def _incomplete_response_as_empty_message(
+    model: str, raw_response: Any, model_response: Any
+) -> Any | None:
+    """Build the chat response for an incomplete Responses API reply whose
+    output holds nothing but reasoning items, or None for any other reply.
+
+    A reasoning model can spend all of max_output_tokens on reasoning. The
+    reply is then "incomplete" with no message item, upstream finds no
+    choices and raises. Streaming returns an empty message for the same
+    reply; mirror that, keep the reasoning summary, and report the truncation
+    as the finish reason. Every other shape, including an incomplete reply
+    that does carry a message, goes through upstream untouched.
+    """
+    from litellm.responses.utils import ResponseAPILoggingUtils
+    from litellm.types.llms.openai import ResponsesAPIResponse
+    from litellm.types.utils import Choices, Message
+    from openai.types.responses.response_reasoning_item import ResponseReasoningItem
+
+    if not isinstance(raw_response, ResponsesAPIResponse):
+        return None
+    if raw_response.error is not None:
+        return None
+    details = raw_response.incomplete_details
+    if details is None or not details.reason:
+        return None
+    if not raw_response.output or not all(
+        isinstance(item, ResponseReasoningItem) for item in raw_response.output
+    ):
+        return None
+
+    summary_texts: list[str] = [
+        summary.text
+        for item in raw_response.output
+        if isinstance(item, ResponseReasoningItem)
+        for summary in item.summary
+        if summary.text
+    ]
+    model_response.choices = [
+        Choices(
+            finish_reason=_INCOMPLETE_REASON_TO_FINISH_REASON.get(
+                details.reason, "stop"
+            ),
+            index=0,
+            message=Message(
+                content=None,
+                role="assistant",
+                reasoning_content="\n\n".join(summary_texts) or None,
+            ),
+        )
+    ]
+    model_response.model = model
+    model_response.usage = (
+        ResponseAPILoggingUtils._transform_response_api_usage_to_chat_usage(
+            raw_response.usage
+        )
+    )
+    # Same as upstream's completed path: keep provider headers (x-request-id)
+    # so a truncated reply is as traceable as a complete one.
+    hidden_params = getattr(  # ods: ignore[getattr]
+        raw_response, "_hidden_params", None
+    )
+    if hidden_params:
+        model_response._hidden_params = {
+            **(model_response._hidden_params or {}),
+            **hidden_params,
+        }
+    return model_response
+
+
 def _patch_openai_responses_transform_response() -> None:
     """
     Patches LiteLLMResponsesTransformationHandler.transform_response to properly
@@ -402,6 +484,12 @@ def _patch_openai_responses_transform_response() -> None:
     ) -> Any:
         from litellm.types.llms.openai import ResponsesAPIResponse
         from openai.types.responses.response_reasoning_item import ResponseReasoningItem
+
+        incomplete = _incomplete_response_as_empty_message(
+            model, raw_response, model_response
+        )
+        if incomplete is not None:
+            return incomplete
 
         result = original_transform_response(
             self,
