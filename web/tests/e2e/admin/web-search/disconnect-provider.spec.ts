@@ -209,7 +209,7 @@ test.describe("Web Search Provider Disconnect", () => {
       await page.goto(WEB_SEARCH_URL);
       await page.waitForSelector("text=Web Crawler", { timeout: 20000 });
 
-      const firecrawlCard = findProviderCard(page, "Firecrawl");
+      const firecrawlCard = findProviderCard(page, "Firecrawl", "content");
       await firecrawlCard.waitFor({ state: "visible", timeout: 10000 });
 
       await firecrawlCard.hover();
@@ -278,7 +278,7 @@ test.describe("Web Search Provider Disconnect", () => {
       await page.goto(WEB_SEARCH_URL);
       await page.waitForSelector("text=Web Crawler", { timeout: 20000 });
 
-      const firecrawlCard = findProviderCard(page, "Firecrawl");
+      const firecrawlCard = findProviderCard(page, "Firecrawl", "content");
       await firecrawlCard.waitFor({ state: "visible", timeout: 10000 });
 
       await firecrawlCard.hover();

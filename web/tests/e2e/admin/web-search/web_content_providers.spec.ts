@@ -64,7 +64,7 @@ test.describe("Web Content Provider Configuration", () => {
 
       await page.waitForLoadState("networkidle");
 
-      const firecrawlCard = findProviderCard(page, "Firecrawl");
+      const firecrawlCard = findProviderCard(page, "Firecrawl", "content");
       await expect(
         firecrawlCard.getByRole("button", { name: "Current Crawler" })
       ).toBeVisible({ timeout: 15000 });
@@ -76,7 +76,7 @@ test.describe("Web Content Provider Configuration", () => {
       page,
     }) => {
       // First, ensure Firecrawl is configured and active
-      const firecrawlCard = findProviderCard(page, "Firecrawl");
+      const firecrawlCard = findProviderCard(page, "Firecrawl", "content");
       await firecrawlCard.waitFor({ state: "visible", timeout: 10000 });
 
       const connectButton = firecrawlCard.getByRole("button", {
@@ -116,7 +116,11 @@ test.describe("Web Content Provider Configuration", () => {
       }
 
       // Verify Firecrawl is now the current crawler
-      const updatedFirecrawlCard = findProviderCard(page, "Firecrawl");
+      const updatedFirecrawlCard = findProviderCard(
+        page,
+        "Firecrawl",
+        "content"
+      );
       await expect(
         updatedFirecrawlCard.getByRole("button", { name: "Current Crawler" })
       ).toBeVisible({ timeout: 15000 });

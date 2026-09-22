@@ -129,7 +129,7 @@ const SEARCH_PROVIDER_CAPABILITIES: Record<
   },
   firecrawl: {
     requiresApiKey: true,
-    requiredConfigKeys: [],
+    requiredConfigKeys: ["base_url"],
   },
 };
 
@@ -391,6 +391,14 @@ export function getSearchConfigField(
       title: t("configFields.searxngBaseUrl.label"),
       placeholder: "https://your-searxng-instance.com",
       subDescription: markdown(t("configFields.searxngBaseUrl.description")),
+    };
+  }
+  if (providerType === "firecrawl") {
+    return {
+      title: t("configFields.firecrawlBaseUrl.label"),
+      placeholder: "https://api.firecrawl.dev/v2/search",
+      defaultValue: "https://api.firecrawl.dev/v2/search",
+      subDescription: t("configFields.firecrawlBaseUrl.description"),
     };
   }
   return undefined;

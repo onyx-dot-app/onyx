@@ -248,6 +248,64 @@ def test_search_retries_transient_request_errors(
     assert len(results) == 1
 
 
+def test_search_retries_non_json_body_then_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _no_sleep(monkeypatch)
+    client = FirecrawlSearchClient(api_key="test-key", num_results=5)
+    calls = 0
+
+    def _mock_post(*args: Any, **kwargs: Any) -> DummyResponse:  # noqa: ARG001
+        nonlocal calls
+        calls += 1
+        # payload=None makes DummyResponse.json() raise, like a proxy HTML page.
+        return DummyResponse(status_code=200, payload=None, text="<html>502</html>")
+
+    monkeypatch.setattr(firecrawl_module.requests, "post", _mock_post)
+
+    with pytest.raises(ValueError, match="non-JSON"):
+        client.search("onyx")
+    assert calls == 3
+
+
+def test_search_rejects_malformed_web_section(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = FirecrawlSearchClient(api_key="test-key", num_results=5)
+
+    def _mock_post(*args: Any, **kwargs: Any) -> DummyResponse:  # noqa: ARG001
+        return DummyResponse(
+            status_code=200, payload={"success": True, "data": {"web": 42}}
+        )
+
+    monkeypatch.setattr(firecrawl_module.requests, "post", _mock_post)
+
+    with pytest.raises(ValueError, match="data.web"):
+        client.search("onyx")
+
+
+def test_search_returns_empty_when_web_section_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = FirecrawlSearchClient(api_key="test-key", num_results=5)
+
+    def _mock_post(*args: Any, **kwargs: Any) -> DummyResponse:  # noqa: ARG001
+        return DummyResponse(
+            status_code=200, payload={"success": True, "data": {"news": []}}
+        )
+
+    monkeypatch.setattr(firecrawl_module.requests, "post", _mock_post)
+
+    assert client.search("onyx") == []
+
+
+def test_constructor_accepts_custom_tbs_range() -> None:
+    client = FirecrawlSearchClient(
+        api_key="test-key", tbs="cdr:1,cd_min:1/1/2026,cd_max:2/1/2026"
+    )
+    assert client._tbs == "cdr:1,cd_min:1/1/2026,cd_max:2/1/2026"  # noqa: SLF001
+
+
 def test_search_raises_on_success_false_body(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -271,6 +329,7 @@ def test_search_raises_on_success_false_body(
         ({"country": "USA"}, "country"),
         ({"tbs": "last-week"}, "tbs"),
         ({"base_url": "firecrawl.internal/v2/search"}, "base_url"),
+        ({"timeout_seconds": 0}, "timeout_seconds"),
     ],
 )
 def test_constructor_rejects_invalid_config_values(
@@ -281,61 +340,71 @@ def test_constructor_rejects_invalid_config_values(
         FirecrawlSearchClient(api_key="test-key", **kwargs)
 
 
-def test_test_connection_maps_invalid_key_errors() -> None:
+def test_test_connection_maps_invalid_key_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     client = FirecrawlSearchClient(api_key="test-key")
 
     def _mock_search(query: str) -> list[Any]:  # noqa: ARG001
         raise ValueError("Firecrawl search failed (status 401): Unauthorized")
 
-    client.search = _mock_search  # ty: ignore[invalid-assignment]
+    monkeypatch.setattr(client, "search", _mock_search)
 
     with pytest.raises(HTTPException, match="Invalid Firecrawl API key"):
         client.test_connection()
 
 
-def test_test_connection_maps_insufficient_credit_errors() -> None:
+def test_test_connection_maps_insufficient_credit_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     client = FirecrawlSearchClient(api_key="test-key")
 
     def _mock_search(query: str) -> list[Any]:  # noqa: ARG001
         raise ValueError("Firecrawl search failed (status 402): Payment Required")
 
-    client.search = _mock_search  # ty: ignore[invalid-assignment]
+    monkeypatch.setattr(client, "search", _mock_search)
 
     with pytest.raises(HTTPException, match="insufficient credits"):
         client.test_connection()
 
 
-def test_test_connection_maps_rate_limit_errors() -> None:
+def test_test_connection_maps_rate_limit_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     client = FirecrawlSearchClient(api_key="test-key")
 
     def _mock_search(query: str) -> list[Any]:  # noqa: ARG001
         raise ValueError("Firecrawl search failed (status 429): Too many requests")
 
-    client.search = _mock_search  # ty: ignore[invalid-assignment]
+    monkeypatch.setattr(client, "search", _mock_search)
 
     with pytest.raises(HTTPException, match="rate limit exceeded"):
         client.test_connection()
 
 
-def test_test_connection_fails_on_empty_results() -> None:
+def test_test_connection_fails_on_empty_results(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     client = FirecrawlSearchClient(api_key="test-key")
 
     def _mock_search(query: str) -> list[Any]:  # noqa: ARG001
         return []
 
-    client.search = _mock_search  # ty: ignore[invalid-assignment]
+    monkeypatch.setattr(client, "search", _mock_search)
 
     with pytest.raises(HTTPException, match="returned no results"):
         client.test_connection()
 
 
-def test_test_connection_propagates_unexpected_errors() -> None:
+def test_test_connection_propagates_unexpected_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     client = FirecrawlSearchClient(api_key="test-key")
 
     def _mock_search(query: str) -> list[Any]:  # noqa: ARG001
         raise RuntimeError("unexpected parsing bug")
 
-    client.search = _mock_search  # ty: ignore[invalid-assignment]
+    monkeypatch.setattr(client, "search", _mock_search)
 
     with pytest.raises(RuntimeError, match="unexpected parsing bug"):
         client.test_connection()

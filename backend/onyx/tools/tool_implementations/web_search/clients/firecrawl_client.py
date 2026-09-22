@@ -16,8 +16,10 @@ logger = setup_logger()
 
 FIRECRAWL_SEARCH_URL = "https://api.firecrawl.dev/v2/search"
 FIRECRAWL_MAX_RESULTS = 100
-FIRECRAWL_TBS_OPTIONS = {"qdr:h", "qdr:d", "qdr:w", "qdr:m", "qdr:y"}
+FIRECRAWL_TBS_PRESETS = {"qdr:h", "qdr:d", "qdr:w", "qdr:m", "qdr:y"}
+FIRECRAWL_TBS_CUSTOM_PREFIX = "cdr:"
 _DEFAULT_TIMEOUT_SECONDS = 30
+_MAX_ERROR_DETAIL_CHARS = 200
 
 
 class RetryableFirecrawlSearchError(Exception):
@@ -30,6 +32,9 @@ class FirecrawlSearchClient(WebSearchProvider):
     This is the search half of the Firecrawl integration. Page fetching is
     handled separately by `open_url.firecrawl.FirecrawlClient`. Both use the
     same Firecrawl API key.
+
+    Firecrawl forwards the `site:` operator to the search engine, so the
+    inherited `supports_site_filter = True` default applies.
     """
 
     def __init__(
@@ -43,6 +48,9 @@ class FirecrawlSearchClient(WebSearchProvider):
         location: str | None = None,
         country: str | None = None,
     ) -> None:
+        if timeout_seconds <= 0:
+            raise ValueError("Firecrawl provider config 'timeout_seconds' must be > 0.")
+
         self._api_key = api_key
         self._num_results = max(1, min(num_results, FIRECRAWL_MAX_RESULTS))
         self._base_url = _normalize_base_url(base_url)
@@ -50,12 +58,6 @@ class FirecrawlSearchClient(WebSearchProvider):
         self._tbs = _normalize_tbs(tbs)
         self._location = _normalize_location(location)
         self._country = _normalize_country(country)
-
-    @property
-    def supports_site_filter(self) -> bool:
-        # Firecrawl Search passes `site:` through to the underlying engine as a
-        # supported query operator, so the default site-filter guidance applies.
-        return True
 
     def _build_request_body(self, query: str) -> dict[str, Any]:
         body: dict[str, Any] = {
@@ -104,7 +106,14 @@ class FirecrawlSearchClient(WebSearchProvider):
                 raise RetryableFirecrawlSearchError(error_msg) from exc
             raise ValueError(error_msg) from exc
 
-        data = response.json()
+        try:
+            data = response.json()
+        except ValueError as exc:
+            # A 200 with a non-JSON body is a transient gateway or proxy fault.
+            raise RetryableFirecrawlSearchError(
+                "Firecrawl search returned a non-JSON response."
+            ) from exc
+
         if isinstance(data, dict) and data.get("success") is False:
             raise ValueError(
                 "Firecrawl search failed: "
@@ -137,7 +146,6 @@ class FirecrawlSearchClient(WebSearchProvider):
                 or "status 403" in lower
                 or "api key" in lower
                 or "unauthorized" in lower
-                or "auth" in lower
             ):
                 raise HTTPException(
                     status_code=400,
@@ -166,11 +174,14 @@ def _parse_results(data: Any) -> list[WebSearchResult]:
     # v2 returns {"success": true, "data": {"web": [...], "news": [...], ...}}.
     # Only the `web` source is requested, so only that list is read.
     data_section = data.get("data") if isinstance(data, dict) else None
-    raw_results: Any = []
-    if isinstance(data_section, dict):
-        raw_results = data_section.get("web") or []
-    elif isinstance(data_section, list):
-        raw_results = data_section
+    raw_results = data_section.get("web") if isinstance(data_section, dict) else None
+    if raw_results is None:
+        raw_results = []
+    if not isinstance(raw_results, list):
+        raise ValueError(
+            "Firecrawl search returned an unexpected response shape: "
+            f"'data.web' is {type(raw_results).__name__}, expected a list."
+        )
 
     results: list[WebSearchResult] = []
     for result in raw_results:
@@ -208,14 +219,14 @@ def _extract_error_detail(response: requests.Response) -> str:
         payload: Any = response.json()
     except Exception:
         text = response.text.strip()
-        return text[:200] if text else "No error details"
+        return text[:_MAX_ERROR_DETAIL_CHARS] if text else "No error details"
 
     if isinstance(payload, dict):
         detail = payload.get("error") or payload.get("message") or payload.get("detail")
         if isinstance(detail, str):
-            return detail
+            return detail[:_MAX_ERROR_DETAIL_CHARS]
 
-    return str(payload)[:200]
+    return str(payload)[:_MAX_ERROR_DETAIL_CHARS]
 
 
 def _is_retryable_status(status_code: int) -> bool:
@@ -245,10 +256,15 @@ def _normalize_tbs(tbs: str | None) -> str | None:
     normalized = tbs.strip().lower()
     if not normalized:
         return None
-    if normalized not in FIRECRAWL_TBS_OPTIONS:
-        allowed = ", ".join(sorted(FIRECRAWL_TBS_OPTIONS))
-        raise ValueError(f"Firecrawl provider config 'tbs' must be one of: {allowed}.")
-    return normalized
+    if normalized in FIRECRAWL_TBS_PRESETS or normalized.startswith(
+        FIRECRAWL_TBS_CUSTOM_PREFIX
+    ):
+        return normalized
+    allowed = ", ".join(sorted(FIRECRAWL_TBS_PRESETS))
+    raise ValueError(
+        f"Firecrawl provider config 'tbs' must be one of {allowed}, "
+        f"or a custom range starting with '{FIRECRAWL_TBS_CUSTOM_PREFIX}'."
+    )
 
 
 def _normalize_location(location: str | None) -> str | None:

@@ -93,15 +93,17 @@ export default function WebSearchPage() {
     // Exa, Tavily and Firecrawl share one API key across the search and content
     // sides, so pre-fill the search modal from the stored content-provider key
     // when the search side has none yet (the backend syncs the two on save).
+    const sharedContentProviders = new Map<
+      WebSearchProviderType,
+      WebContentProviderView | undefined
+    >([
+      ["exa", exaContentProvider],
+      ["tavily", tavilyContentProvider],
+      ["firecrawl", firecrawlContentProvider],
+    ]);
     const sharedContentMaskedKey = hasStoredKey
       ? null
-      : providerType === "exa"
-        ? (exaContentProvider?.masked_api_key ?? null)
-        : providerType === "tavily"
-          ? (tavilyContentProvider?.masked_api_key ?? null)
-          : providerType === "firecrawl"
-            ? (firecrawlContentProvider?.masked_api_key ?? null)
-            : null;
+      : (sharedContentProviders.get(providerType)?.masked_api_key ?? null);
 
     const effectiveProvider: WebSearchProviderView | null =
       provider ??
@@ -392,7 +394,10 @@ export default function WebSearchPage() {
               />
             )}
 
-            <div className="flex flex-col gap-2">
+            <div
+              className="flex flex-col gap-2"
+              data-testid="search-provider-list"
+            >
               {combinedSearchProviders.map(
                 ({
                   key,
@@ -490,7 +495,10 @@ export default function WebSearchPage() {
               variant="section"
             />
 
-            <div className="flex flex-col gap-2">
+            <div
+              className="flex flex-col gap-2"
+              data-testid="content-provider-list"
+            >
               {combinedContentProviders.map((provider) => {
                 const label =
                   provider.name ||
