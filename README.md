@@ -100,11 +100,11 @@ flowchart LR
 ```
 
 - **Everything stays inside your boundary.** The index, the database, the embedding models, and the model traffic all run on machines you control, whether that is your cloud account, your datacenter, or an air-gapped network.
-- **No content leaves.** The only outbound call Onyx makes on its own is anonymous usage telemetry (version, event types, and timings), and `DISABLE_TELEMETRY=true` turns it off. Sentry and PostHog stay off unless you set their keys.
-- **Any model.** Run open weights on your own GPUs through Ollama, vLLM, or LiteLLM, or connect Anthropic, OpenAI, Gemini, and others under your own keys. Onyx never proxies prompts through a third party, and you can swap providers in one click or route each team to a different model.
+- **No content leaves.** The only outbound call Onyx makes on its own is usage telemetry: an installation UUID, version, event types, timings, and on Enterprise deployments the instance's email domain. It never includes documents or prompts, and `DISABLE_TELEMETRY=true` turns it off. Sentry and PostHog stay off unless you set their keys.
+- **Any model.** Run open weights on your own GPUs through Ollama, vLLM, or LiteLLM, or connect Anthropic, OpenAI, Gemini, and others under your own keys. Onyx never proxies prompts through a third party, and you can swap providers in one click or restrict which providers each user group can use.
 - **Open source.** The Community Edition is MIT licensed and lives in this repo, so your security team can read the code that touches your data, build the images themselves, and confirm there is no hidden egress.
 - **Permission syncing (Enterprise Edition).** Onyx syncs document-level ACLs from Google Drive, Confluence, Jira, GitHub, Slack, SharePoint, Gmail, Outlook, Teams, Zoom, Box, and Canvas, and filters Salesforce results live at query time. Every query, whether it comes from a person or an agent, only returns documents that user can already open at the source. Syncs run every 5 to 30 minutes by default.
-- **Audit.** Query history records who asked what and which documents were cited, and [audit logging](docs/AUDIT_LOGGING.md) records logins, admin changes, and access-control changes in a format your SIEM can ingest.
+- **Audit (Enterprise Edition).** Query history records who asked what and which documents were cited, and [audit logging](docs/AUDIT_LOGGING.md) records logins, admin changes, and access-control changes in a format your SIEM can ingest.
 
 ---
 

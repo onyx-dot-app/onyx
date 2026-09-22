@@ -100,11 +100,11 @@ flowchart LR
 ```
 
 - **一切都留在你的边界之内。** 索引、数据库、embedding 模型和模型流量全部运行在你控制的机器上，无论那是你的云账户、你的数据中心，还是一个物理隔离的网络。
-- **没有内容外发。** Onyx 自身唯一的外发请求是匿名用量遥测（版本、事件类型和耗时），设置 `DISABLE_TELEMETRY=true` 即可关闭。Sentry 和 PostHog 默认关闭，除非你配置了对应的密钥。
-- **任意模型。** 通过 Ollama、vLLM 或 LiteLLM 在自己的 GPU 上运行开源权重，或用你自己的密钥接入 Anthropic、OpenAI、Gemini 等。Onyx 绝不会把提示词经由第三方代理，你可以一键切换供应商，或为每个团队路由到不同的模型。
+- **没有内容外发。** Onyx 自身唯一的外发请求是用量遥测：一个安装 UUID、版本、事件类型、耗时，以及企业版部署中实例的邮箱域名。其中绝不包含文档或提示词，设置 `DISABLE_TELEMETRY=true` 即可关闭。Sentry 和 PostHog 默认关闭，除非你配置了对应的密钥。
+- **任意模型。** 通过 Ollama、vLLM 或 LiteLLM 在自己的 GPU 上运行开源权重，或用你自己的密钥接入 Anthropic、OpenAI、Gemini 等。Onyx 绝不会把提示词经由第三方代理，你可以一键切换供应商，或限制每个用户组可以使用哪些供应商。
 - **开源。** 社区版采用 MIT 许可证，代码就在本仓库中，所以你的安全团队可以阅读所有接触你数据的代码，自行构建镜像，并确认没有隐藏的外发流量。
 - **权限同步（企业版）。** Onyx 从 Google Drive、Confluence、Jira、GitHub、Slack、SharePoint、Gmail、Outlook、Teams、Zoom、Box 和 Canvas 同步文档级 ACL，并在查询时对 Salesforce 结果实时过滤。无论是人还是 Agent 发起的每一次查询，都只会返回该用户在来源系统中本来就能打开的文档。同步默认每 5 到 30 分钟运行一次。
-- **审计。** 查询历史记录谁问了什么以及引用了哪些文档，[审计日志](docs/AUDIT_LOGGING.md)以 SIEM 可摄取的格式记录登录、管理员变更和访问控制变更。
+- **审计（企业版）。** 查询历史记录谁问了什么以及引用了哪些文档，[审计日志](docs/AUDIT_LOGGING.md)以 SIEM 可摄取的格式记录登录、管理员变更和访问控制变更。
 
 ---
 
