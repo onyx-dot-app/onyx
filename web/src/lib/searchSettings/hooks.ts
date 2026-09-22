@@ -21,7 +21,6 @@ import {
   ImageProcessingSettings,
   SavedSearchSettings,
 } from "@/lib/searchSettings/types";
-import { IMAGE_PROCESSING_SETTINGS_URL } from "@/lib/searchSettings/constants";
 
 /**
  * Determines the SWR `refreshInterval` for the secondary (in-progress)
@@ -138,7 +137,7 @@ export function useConfiguredEmbeddingProviders() {
  */
 export function useImageProcessingSettings() {
   return useSWR<ImageProcessingSettings | null>(
-    IMAGE_PROCESSING_SETTINGS_URL,
+    SWR_KEYS.imageProcessingSettings,
     errorHandlingFetcher
   );
 }

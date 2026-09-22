@@ -10,7 +10,6 @@ import {
   SwitchoverType,
 } from "@/lib/searchSettings/types";
 import { isCloudBased } from "@/lib/searchSettings";
-import { IMAGE_PROCESSING_SETTINGS_URL } from "@/lib/searchSettings/constants";
 
 interface TestEmbeddingArgs {
   provider_type: string;
@@ -289,7 +288,7 @@ export async function enableImageProcessing({
   modelConfigurationId,
   maxSizeMb,
 }: EnableImageProcessingArgs): Promise<ImageProcessingSettings> {
-  const response = await fetch(IMAGE_PROCESSING_SETTINGS_URL, {
+  const response = await fetch(SWR_KEYS.imageProcessingSettings, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -303,7 +302,7 @@ export async function enableImageProcessing({
 
 /** Turns image processing off. */
 export async function disableImageProcessing(): Promise<void> {
-  const response = await fetch(IMAGE_PROCESSING_SETTINGS_URL, {
+  const response = await fetch(SWR_KEYS.imageProcessingSettings, {
     method: "DELETE",
   });
   await throwOnError(response);
