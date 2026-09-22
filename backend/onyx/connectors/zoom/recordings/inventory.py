@@ -78,14 +78,16 @@ def _slim_batches(
 
     hosts = _merged(scopes)
     if unrecognised and not hosts and not anchors:
-        # Zoom answers the same code for a user who was deleted and for one who
-        # belongs to a different account, so a credential pointed at the wrong
-        # account makes every host look departed and would wipe the connector.
+        # Zoom answers the same not-found for a user or session that was deleted
+        # and for one in another account, so a credential pointed at the wrong
+        # account makes everything look deleted and would wipe the connector.
         # One recording Zoom did answer for proves the account is right.
         raise ConnectorValidationError(
-            "Zoom recognised none of this connector's hosts, so pruning stopped "
-            "rather than delete every document it has indexed. Check that the "
-            "credentials still belong to the same Zoom account"
+            "Zoom recognised none of the hosts or sessions this connector names, "
+            "so pruning stopped rather than delete every document it has "
+            "indexed. Either they were all deleted in Zoom, or the credentials "
+            "now point at a different account. To prune them anyway, replace "
+            "the entries Zoom no longer has or delete the connector"
         )
     today = datetime.now(timezone.utc).date()
     windows = listing_windows(EARLIEST_RECORDING_DATE, today)
