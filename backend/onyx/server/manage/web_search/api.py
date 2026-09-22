@@ -57,12 +57,14 @@ _SEARCH_TO_CONTENT_SYNC: list[
 ] = [
     (WebSearchProviderType.EXA, "Exa", WebContentProviderType.EXA),
     (WebSearchProviderType.TAVILY, "Tavily", WebContentProviderType.TAVILY),
+    (WebSearchProviderType.FIRECRAWL, "Firecrawl", WebContentProviderType.FIRECRAWL),
 ]
 _CONTENT_TO_SEARCH_SYNC: list[
     tuple[WebContentProviderType, str, WebSearchProviderType]
 ] = [
     (WebContentProviderType.EXA, "Exa", WebSearchProviderType.EXA),
     (WebContentProviderType.TAVILY, "Tavily", WebSearchProviderType.TAVILY),
+    (WebContentProviderType.FIRECRAWL, "Firecrawl", WebSearchProviderType.FIRECRAWL),
 ]
 
 
@@ -117,7 +119,7 @@ def upsert_search_provider_endpoint(
         db_session=db_session,
     )
 
-    # Sync API key from search provider to content provider (Exa / Tavily)
+    # Sync API key from search provider to content provider (Exa / Tavily / Firecrawl)
     if request.api_key_changed and request.api_key:
         for search_type, name, content_type in _SEARCH_TO_CONTENT_SYNC:
             if request.provider_type == search_type:
@@ -297,7 +299,7 @@ def upsert_content_provider_endpoint(
         db_session=db_session,
     )
 
-    # Sync API key from content provider to search provider (Exa / Tavily)
+    # Sync API key from content provider to search provider (Exa / Tavily / Firecrawl)
     if request.api_key_changed and request.api_key:
         for content_type, name, search_type in _CONTENT_TO_SEARCH_SYNC:
             if request.provider_type == content_type:
