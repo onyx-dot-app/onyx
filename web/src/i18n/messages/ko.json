@@ -8559,13 +8559,6 @@
       "required": {
         "label": "필수"
       },
-      "rerunButton": {
-        "ariaLabel": "검사 다시 실행"
-      },
-      "collapseButton": {
-        "collapse": "검사 접기",
-        "expand": "검사 펼치기"
-      },
       "running": {
         "label": "검사 실행 중…"
       },
@@ -8574,6 +8567,13 @@
       },
       "docsLink": {
         "label": "문서"
+      },
+      "rerunButton": {
+        "label": "검사 다시 실행"
+      },
+      "foldButton": {
+        "fold": "접기",
+        "expand": "펼치기"
       }
     }
   },

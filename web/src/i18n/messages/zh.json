@@ -8559,13 +8559,6 @@
       "required": {
         "label": "必需"
       },
-      "rerunButton": {
-        "ariaLabel": "重新运行检查"
-      },
-      "collapseButton": {
-        "collapse": "收起检查",
-        "expand": "展开检查"
-      },
       "running": {
         "label": "正在运行检查…"
       },
@@ -8574,6 +8567,13 @@
       },
       "docsLink": {
         "label": "文档"
+      },
+      "rerunButton": {
+        "label": "重新运行检查"
+      },
+      "foldButton": {
+        "fold": "收起",
+        "expand": "展开"
       }
     }
   },

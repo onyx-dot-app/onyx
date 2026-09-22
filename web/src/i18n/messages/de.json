@@ -8559,13 +8559,6 @@
       "required": {
         "label": "Erforderlich"
       },
-      "rerunButton": {
-        "ariaLabel": "Prüfungen erneut ausführen"
-      },
-      "collapseButton": {
-        "collapse": "Prüfungen einklappen",
-        "expand": "Prüfungen ausklappen"
-      },
       "running": {
         "label": "Prüfungen laufen…"
       },
@@ -8574,6 +8567,13 @@
       },
       "docsLink": {
         "label": "Dokumentation"
+      },
+      "rerunButton": {
+        "label": "Prüfungen erneut ausführen"
+      },
+      "foldButton": {
+        "fold": "Einklappen",
+        "expand": "Ausklappen"
       }
     }
   },

@@ -8559,13 +8559,6 @@
       "required": {
         "label": "Obligatoria"
       },
-      "rerunButton": {
-        "ariaLabel": "Volver a ejecutar las comprobaciones"
-      },
-      "collapseButton": {
-        "collapse": "Contraer comprobaciones",
-        "expand": "Expandir comprobaciones"
-      },
       "running": {
         "label": "Ejecutando comprobaciones…"
       },
@@ -8574,6 +8567,13 @@
       },
       "docsLink": {
         "label": "Documentación"
+      },
+      "rerunButton": {
+        "label": "Volver a ejecutar las comprobaciones"
+      },
+      "foldButton": {
+        "fold": "Contraer",
+        "expand": "Expandir"
       }
     }
   },

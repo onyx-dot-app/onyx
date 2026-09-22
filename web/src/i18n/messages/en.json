@@ -8559,13 +8559,6 @@
       "required": {
         "label": "Required"
       },
-      "rerunButton": {
-        "ariaLabel": "Re-run checks"
-      },
-      "collapseButton": {
-        "collapse": "Collapse checks",
-        "expand": "Expand checks"
-      },
       "running": {
         "label": "Running checks…"
       },
@@ -8574,6 +8567,13 @@
       },
       "docsLink": {
         "label": "Documentation"
+      },
+      "rerunButton": {
+        "label": "Rerun Checks"
+      },
+      "foldButton": {
+        "fold": "Fold",
+        "expand": "Expand"
       }
     }
   },
