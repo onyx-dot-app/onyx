@@ -25,7 +25,7 @@
   </a>
 </p>
 
-# Onyx - The context layer fed by all your apps
+# Onyx - The context layer powered by all your apps
 
 > "LLMs know about everything public, but what if it could also know what's going on in our team? I want an AI coworker, not an AI new hire."
 
