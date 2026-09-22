@@ -784,35 +784,223 @@
         "messaging": {
           "label": "メッセージング"
         },
-        "other": {
-          "label": "その他"
-        },
         "sales": {
-          "label": "営業"
+          "label": "営業・GTM"
         },
         "storage": {
           "label": "クラウドストレージ"
         },
         "ticketingAndTaskManagement": {
-          "label": "チケット管理・タスク管理"
+          "label": "チケット・タスク"
         },
         "wiki": {
           "label": "ナレッジベース・Wiki"
+        },
+        "aiObservability": {
+          "label": "AI・オブザーバビリティ"
+        },
+        "other": {
+          "label": "その他"
         }
       },
       "popular": {
-        "title": "人気"
+        "title": "コネクタを追加",
+        "description": "{appName} をデータソースに接続します。"
       },
       "search": {
-        "placeholder": "コネクターを検索"
-      },
-      "seeConnectorsButton": {
-        "label": "コネクターを表示"
+        "placeholder": "コネクターを検索..."
       },
       "sourceTile": {
         "tooltip": {
           "federatedConfigured": "<strong>フェデレーテッドコネクターは設定済みです。</strong> クリックすると、既存のコネクターを編集できます。",
           "slackCredentialsFound": "<strong>既存の Slack 資格情報が見つかりました。</strong> クリックすると、Slack コネクターを管理できます。"
+        }
+      },
+      "sourceCard": {
+        "connectButton": {
+          "ariaLabel": "{source} を接続"
+        }
+      },
+      "sources": {
+        "web": {
+          "description": "任意の公開 URL をリンク"
+        },
+        "github": {
+          "description": "コードとプルリクエスト"
+        },
+        "gitlab": {
+          "description": "コードと CI/CD"
+        },
+        "slack": {
+          "description": "チームメッセージング"
+        },
+        "googleDrive": {
+          "description": "共有ファイルとフォルダー"
+        },
+        "gmail": {
+          "description": "Google のメール"
+        },
+        "bookstack": {
+          "description": "セルフホスト型 Wiki"
+        },
+        "outline": {
+          "description": "オープンソースのチーム Wiki"
+        },
+        "confluence": {
+          "description": "Atlassian の Wiki"
+        },
+        "jira": {
+          "description": "Atlassian の課題管理"
+        },
+        "productboard": {
+          "description": "プロダクトマネジメント"
+        },
+        "slab": {
+          "description": "チーム Wiki"
+        },
+        "coda": {
+          "description": "ドキュメントとデータベース"
+        },
+        "notion": {
+          "description": "ドキュメントとデータベース"
+        },
+        "guru": {
+          "description": "検証済みナレッジベース"
+        },
+        "gong": {
+          "description": "営業通話インテリジェンス"
+        },
+        "zulip": {
+          "description": "オープンソースのメッセージング"
+        },
+        "linear": {
+          "description": "エンジニアリング課題管理"
+        },
+        "hubspot": {
+          "description": "マーケティングと CRM"
+        },
+        "document360": {
+          "description": "セルフサービスドキュメント"
+        },
+        "file": {
+          "description": "ローカルファイルからアップロード"
+        },
+        "userFile": {
+          "description": "チャットでアップロードしたファイル"
+        },
+        "googleSites": {
+          "description": "Google ホストのページ"
+        },
+        "loopio": {
+          "description": "RFP 回答"
+        },
+        "box": {
+          "description": "ファイル、フォルダー、ノート"
+        },
+        "dropbox": {
+          "description": "共有ファイルとフォルダー"
+        },
+        "discord": {
+          "description": "コミュニティメッセージング"
+        },
+        "salesforce": {
+          "description": "営業と CRM"
+        },
+        "sharepoint": {
+          "description": "Microsoft のイントラネット"
+        },
+        "teams": {
+          "description": "Microsoft のチームチャット"
+        },
+        "outlook": {
+          "description": "メールとメールフォルダー"
+        },
+        "zendesk": {
+          "description": "カスタマーサポートのチケット"
+        },
+        "discourse": {
+          "description": "コミュニティフォーラム"
+        },
+        "axero": {
+          "description": "ソーシャルイントラネット"
+        },
+        "clickup": {
+          "description": "プロジェクトとタスクの管理"
+        },
+        "wikipedia": {
+          "description": "公開ナレッジベース"
+        },
+        "mediawiki": {
+          "description": "Wikipedia 型の Wiki"
+        },
+        "asana": {
+          "description": "ワークマネジメント"
+        },
+        "s3": {
+          "description": "AWS ストレージバケット"
+        },
+        "r2": {
+          "description": "クラウドストレージバケット"
+        },
+        "googleCloudStorage": {
+          "description": "Google Cloud バケット"
+        },
+        "xenforo": {
+          "description": "コミュニティフォーラム"
+        },
+        "ociStorage": {
+          "description": "OCI オブジェクトストレージ"
+        },
+        "notApplicable": {
+          "description": "ソースなし"
+        },
+        "ingestionApi": {
+          "description": "API 経由で送信されたドキュメント"
+        },
+        "freshdesk": {
+          "description": "カスタマーヘルプデスク"
+        },
+        "fireflies": {
+          "description": "会議メモ"
+        },
+        "egnyte": {
+          "description": "マネージドファイルサービス"
+        },
+        "airtable": {
+          "description": "データベースとタスク"
+        },
+        "gitbook": {
+          "description": "開発者向けドキュメント"
+        },
+        "highspot": {
+          "description": "セールスイネーブルメント"
+        },
+        "drupalWiki": {
+          "description": "CMS ベースの Wiki"
+        },
+        "imap": {
+          "description": "IMAP メールソース"
+        },
+        "bitbucket": {
+          "description": "Atlassian のソース管理"
+        },
+        "testrail": {
+          "description": "テストケース管理"
+        },
+        "braintrust": {
+          "description": "ログと評価"
+        },
+        "lumapps": {
+          "description": "イントラネットのページとコミュニティ"
+        },
+        "canvas": {
+          "description": "コース、ページ、お知らせ"
+        },
+        "craftFile": {
+          "description": "アップロードしたファイル"
+        },
+        "federatedSlack": {
+          "description": "クエリ時に Slack を検索"
         }
       }
     },
@@ -5033,7 +5221,7 @@
           "toast": "コネクターを作成しました"
         },
         "empty": {
-          "message": "コネクターがまだ設定されていないようです。[コネクターを追加](/admin/add-connector) ページで開始してください。"
+          "message": "コネクターがまだ設定されていないようです。[コネクターを追加](/admin/connectors) ページで開始してください。"
         },
         "federated": {
           "access": {
@@ -13374,8 +13562,8 @@
         }
       },
       "items": {
-        "addConnector": {
-          "label": "コネクターを追加"
+        "connectors": {
+          "label": "コネクター"
         },
         "agents": {
           "label": "エージェント"

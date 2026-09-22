@@ -223,7 +223,7 @@ export default function Status() {
         icon={route.icon}
         title={adminRouteTitle(route)}
         rightChildren={
-          <Button href="/admin/add-connector">
+          <Button href={ADMIN_ROUTES.CONNECTORS.path}>
             {t("status.addConnectorButton.label")}
           </Button>
         }

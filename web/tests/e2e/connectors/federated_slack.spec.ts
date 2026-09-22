@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { loginAs, loginAsRandomUser } from "@tests/e2e/utils/auth";
+import { ConnectorCatalogPage } from "@tests/e2e/admin/connector/ConnectorCatalogPage";
 
 test.use({ storageState: "admin_auth.json" });
 
@@ -8,13 +9,9 @@ const SLACK_CLIENT_ID = process.env.SLACK_CLIENT_ID;
 const SLACK_CLIENT_SECRET = process.env.SLACK_CLIENT_SECRET;
 
 async function createFederatedSlackConnector(page: Page) {
-  // Navigate to add connector page
-  await page.goto("/admin/add-connector");
-  await page.waitForLoadState("networkidle");
-
-  // Click on Slack connector tile (specifically the one with "Logo Slack" text, not "Slack Bots")
-  await page.getByRole("link", { name: "Logo Slack" }).first().click();
-  await page.waitForLoadState("networkidle");
+  const catalog = new ConnectorCatalogPage(page);
+  await catalog.goto();
+  await catalog.openSource("Slack");
 
   if (!SLACK_CLIENT_ID || !SLACK_CLIENT_SECRET) {
     throw new Error("SLACK_CLIENT_ID and SLACK_CLIENT_SECRET must be set");

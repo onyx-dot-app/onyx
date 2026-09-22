@@ -1,5 +1,5 @@
 /**
- * Page Object Model for the add-connector wizard
+ * Page Object Model for the connector setup wizard
  * (`/admin/connectors/<source>?step=1`).
  *
  * The wizard renders every connector's configuration form through the shared

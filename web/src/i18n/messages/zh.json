@@ -784,35 +784,223 @@
         "messaging": {
           "label": "即时通讯"
         },
-        "other": {
-          "label": "其他"
-        },
         "sales": {
-          "label": "销售"
+          "label": "销售与 GTM"
         },
         "storage": {
           "label": "云存储"
         },
         "ticketingAndTaskManagement": {
-          "label": "工单与任务管理"
+          "label": "工单与任务"
         },
         "wiki": {
           "label": "知识库与 Wiki"
+        },
+        "aiObservability": {
+          "label": "AI 与可观测性"
+        },
+        "other": {
+          "label": "其他"
         }
       },
       "popular": {
-        "title": "热门"
+        "title": "添加连接器",
+        "description": "将 {appName} 连接到您的数据源。"
       },
       "search": {
-        "placeholder": "搜索连接器"
-      },
-      "seeConnectorsButton": {
-        "label": "查看连接器"
+        "placeholder": "搜索连接器..."
       },
       "sourceTile": {
         "tooltip": {
           "federatedConfigured": "<strong>联合连接器已配置。</strong>点击可编辑现有连接器。",
           "slackCredentialsFound": "<strong>已找到现有的 Slack 凭据。</strong>点击可管理您的 Slack 连接器。"
+        }
+      },
+      "sourceCard": {
+        "connectButton": {
+          "ariaLabel": "连接 {source}"
+        }
+      },
+      "sources": {
+        "web": {
+          "description": "链接任意公开 URL"
+        },
+        "github": {
+          "description": "代码与拉取请求"
+        },
+        "gitlab": {
+          "description": "代码与 CI/CD"
+        },
+        "slack": {
+          "description": "团队消息"
+        },
+        "googleDrive": {
+          "description": "共享文件和文件夹"
+        },
+        "gmail": {
+          "description": "Google 邮箱"
+        },
+        "bookstack": {
+          "description": "自托管维基"
+        },
+        "outline": {
+          "description": "开源团队维基"
+        },
+        "confluence": {
+          "description": "Atlassian 维基"
+        },
+        "jira": {
+          "description": "Atlassian 问题跟踪"
+        },
+        "productboard": {
+          "description": "产品管理"
+        },
+        "slab": {
+          "description": "团队维基"
+        },
+        "coda": {
+          "description": "文档与数据库"
+        },
+        "notion": {
+          "description": "文档与数据库"
+        },
+        "guru": {
+          "description": "经验证的知识库"
+        },
+        "gong": {
+          "description": "销售通话智能"
+        },
+        "zulip": {
+          "description": "开源消息"
+        },
+        "linear": {
+          "description": "工程问题跟踪"
+        },
+        "hubspot": {
+          "description": "营销与 CRM"
+        },
+        "document360": {
+          "description": "自助服务文档"
+        },
+        "file": {
+          "description": "从本地文件上传"
+        },
+        "userFile": {
+          "description": "聊天中上传的文件"
+        },
+        "googleSites": {
+          "description": "Google 托管页面"
+        },
+        "loopio": {
+          "description": "RFP 应答"
+        },
+        "box": {
+          "description": "文件、文件夹和笔记"
+        },
+        "dropbox": {
+          "description": "共享文件和文件夹"
+        },
+        "discord": {
+          "description": "社区消息"
+        },
+        "salesforce": {
+          "description": "销售与 CRM"
+        },
+        "sharepoint": {
+          "description": "Microsoft 内网"
+        },
+        "teams": {
+          "description": "Microsoft 团队聊天"
+        },
+        "outlook": {
+          "description": "邮件和邮件文件夹"
+        },
+        "zendesk": {
+          "description": "客户支持工单"
+        },
+        "discourse": {
+          "description": "社区论坛"
+        },
+        "axero": {
+          "description": "社交内网"
+        },
+        "clickup": {
+          "description": "项目与任务跟踪"
+        },
+        "wikipedia": {
+          "description": "公开知识库"
+        },
+        "mediawiki": {
+          "description": "维基百科式维基"
+        },
+        "asana": {
+          "description": "工作管理"
+        },
+        "s3": {
+          "description": "AWS 存储桶"
+        },
+        "r2": {
+          "description": "云存储桶"
+        },
+        "googleCloudStorage": {
+          "description": "Google Cloud 存储桶"
+        },
+        "xenforo": {
+          "description": "社区论坛"
+        },
+        "ociStorage": {
+          "description": "OCI 对象存储"
+        },
+        "notApplicable": {
+          "description": "无来源"
+        },
+        "ingestionApi": {
+          "description": "通过 API 发送的文档"
+        },
+        "freshdesk": {
+          "description": "客户服务台"
+        },
+        "fireflies": {
+          "description": "会议记录"
+        },
+        "egnyte": {
+          "description": "托管文件服务"
+        },
+        "airtable": {
+          "description": "数据库与任务"
+        },
+        "gitbook": {
+          "description": "开发者文档"
+        },
+        "highspot": {
+          "description": "销售赋能"
+        },
+        "drupalWiki": {
+          "description": "基于 CMS 的维基"
+        },
+        "imap": {
+          "description": "IMAP 邮件来源"
+        },
+        "bitbucket": {
+          "description": "Atlassian 源代码管理"
+        },
+        "testrail": {
+          "description": "测试用例跟踪"
+        },
+        "braintrust": {
+          "description": "日志和评估"
+        },
+        "lumapps": {
+          "description": "内网页面和社区"
+        },
+        "canvas": {
+          "description": "课程、页面和公告"
+        },
+        "craftFile": {
+          "description": "你上传的文件"
+        },
+        "federatedSlack": {
+          "description": "查询时搜索 Slack"
         }
       }
     },
@@ -5033,7 +5221,7 @@
           "toast": "已成功创建连接器"
         },
         "empty": {
-          "message": "您似乎还没有设置任何连接器。请访问[添加连接器](/admin/add-connector)页面开始使用！"
+          "message": "您似乎还没有设置任何连接器。请访问[添加连接器](/admin/connectors)页面开始使用！"
         },
         "federated": {
           "access": {
@@ -13374,8 +13562,8 @@
         }
       },
       "items": {
-        "addConnector": {
-          "label": "添加连接器"
+        "connectors": {
+          "label": "连接器"
         },
         "agents": {
           "label": "智能体"

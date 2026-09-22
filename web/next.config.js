@@ -209,6 +209,13 @@ const nextConfig = {
         destination: "/admin/web-search",
         permanent: true,
       },
+      // The connector catalog moved from /admin/add-connector to
+      // /admin/connectors, beside the per-source wizard at /admin/connectors/:source.
+      {
+        source: "/admin/add-connector",
+        destination: "/admin/connectors",
+        permanent: true,
+      },
       // Replaces the redirect page that used to live at
       // /admin/configuration/craft, kept for /admin/craft/access bookmarks.
       {

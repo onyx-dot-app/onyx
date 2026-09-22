@@ -125,7 +125,8 @@ export enum SourceCategory {
   Messaging = "Messaging",
   Sales = "Sales",
   CodeRepository = "Code Repository",
-  Other = "Others",
+  AiObservability = "AI & Observability",
+  Other = "Other",
 }
 
 export interface SourceMetadata {

@@ -784,35 +784,223 @@
         "messaging": {
           "label": "메시징"
         },
-        "other": {
-          "label": "기타"
-        },
         "sales": {
-          "label": "영업"
+          "label": "영업 및 GTM"
         },
         "storage": {
           "label": "클라우드 스토리지"
         },
         "ticketingAndTaskManagement": {
-          "label": "티켓팅 및 작업 관리"
+          "label": "티켓 및 작업"
         },
         "wiki": {
           "label": "지식 베이스 및 위키"
+        },
+        "aiObservability": {
+          "label": "AI 및 관측 가능성"
+        },
+        "other": {
+          "label": "기타"
         }
       },
       "popular": {
-        "title": "인기"
+        "title": "커넥터 추가",
+        "description": "{appName}을(를) 데이터 소스에 연결하세요."
       },
       "search": {
-        "placeholder": "커넥터 검색"
-      },
-      "seeConnectorsButton": {
-        "label": "커넥터 보기"
+        "placeholder": "커넥터 검색..."
       },
       "sourceTile": {
         "tooltip": {
           "federatedConfigured": "<strong>페더레이션 커넥터가 이미 구성되어 있습니다.</strong> 클릭하여 기존 커넥터를 편집하세요.",
           "slackCredentialsFound": "<strong>기존 Slack 자격 증명을 찾았습니다.</strong> 클릭하여 Slack 커넥터를 관리하세요."
+        }
+      },
+      "sourceCard": {
+        "connectButton": {
+          "ariaLabel": "{source} 연결"
+        }
+      },
+      "sources": {
+        "web": {
+          "description": "공개 URL 연결"
+        },
+        "github": {
+          "description": "코드 및 풀 리퀘스트"
+        },
+        "gitlab": {
+          "description": "코드 및 CI/CD"
+        },
+        "slack": {
+          "description": "팀 메시징"
+        },
+        "googleDrive": {
+          "description": "공유 파일과 폴더"
+        },
+        "gmail": {
+          "description": "Google 이메일"
+        },
+        "bookstack": {
+          "description": "자체 호스팅 위키"
+        },
+        "outline": {
+          "description": "오픈소스 팀 위키"
+        },
+        "confluence": {
+          "description": "Atlassian 위키"
+        },
+        "jira": {
+          "description": "Atlassian 이슈 트래커"
+        },
+        "productboard": {
+          "description": "제품 관리"
+        },
+        "slab": {
+          "description": "팀 위키"
+        },
+        "coda": {
+          "description": "문서 및 데이터베이스"
+        },
+        "notion": {
+          "description": "문서 및 데이터베이스"
+        },
+        "guru": {
+          "description": "검증된 지식 베이스"
+        },
+        "gong": {
+          "description": "영업 통화 인텔리전스"
+        },
+        "zulip": {
+          "description": "오픈소스 메시징"
+        },
+        "linear": {
+          "description": "엔지니어링 이슈 트래커"
+        },
+        "hubspot": {
+          "description": "마케팅 및 CRM"
+        },
+        "document360": {
+          "description": "셀프서비스 문서"
+        },
+        "file": {
+          "description": "로컬 파일 업로드"
+        },
+        "userFile": {
+          "description": "채팅에서 업로드한 파일"
+        },
+        "googleSites": {
+          "description": "Google 호스팅 페이지"
+        },
+        "loopio": {
+          "description": "RFP 응답"
+        },
+        "box": {
+          "description": "파일, 폴더, 노트"
+        },
+        "dropbox": {
+          "description": "공유 파일과 폴더"
+        },
+        "discord": {
+          "description": "커뮤니티 메시징"
+        },
+        "salesforce": {
+          "description": "영업 및 CRM"
+        },
+        "sharepoint": {
+          "description": "Microsoft 인트라넷"
+        },
+        "teams": {
+          "description": "Microsoft 팀 채팅"
+        },
+        "outlook": {
+          "description": "이메일과 메일 폴더"
+        },
+        "zendesk": {
+          "description": "고객 지원 티켓"
+        },
+        "discourse": {
+          "description": "커뮤니티 포럼"
+        },
+        "axero": {
+          "description": "소셜 인트라넷"
+        },
+        "clickup": {
+          "description": "프로젝트 및 작업 트래커"
+        },
+        "wikipedia": {
+          "description": "공개 지식 베이스"
+        },
+        "mediawiki": {
+          "description": "위키백과 스타일 위키"
+        },
+        "asana": {
+          "description": "업무 관리"
+        },
+        "s3": {
+          "description": "AWS 스토리지 버킷"
+        },
+        "r2": {
+          "description": "클라우드 스토리지 버킷"
+        },
+        "googleCloudStorage": {
+          "description": "Google Cloud 버킷"
+        },
+        "xenforo": {
+          "description": "커뮤니티 포럼"
+        },
+        "ociStorage": {
+          "description": "OCI 오브젝트 스토리지"
+        },
+        "notApplicable": {
+          "description": "소스 없음"
+        },
+        "ingestionApi": {
+          "description": "API로 전송된 문서"
+        },
+        "freshdesk": {
+          "description": "고객 헬프데스크"
+        },
+        "fireflies": {
+          "description": "회의 노트"
+        },
+        "egnyte": {
+          "description": "관리형 파일 서비스"
+        },
+        "airtable": {
+          "description": "데이터베이스 및 작업"
+        },
+        "gitbook": {
+          "description": "개발자 문서"
+        },
+        "highspot": {
+          "description": "세일즈 인에이블먼트"
+        },
+        "drupalWiki": {
+          "description": "CMS 기반 위키"
+        },
+        "imap": {
+          "description": "IMAP 이메일 소스"
+        },
+        "bitbucket": {
+          "description": "Atlassian 소스 관리"
+        },
+        "testrail": {
+          "description": "테스트 케이스 관리"
+        },
+        "braintrust": {
+          "description": "로그와 평가"
+        },
+        "lumapps": {
+          "description": "인트라넷 페이지와 커뮤니티"
+        },
+        "canvas": {
+          "description": "강좌, 페이지, 공지"
+        },
+        "craftFile": {
+          "description": "업로드한 파일"
+        },
+        "federatedSlack": {
+          "description": "질의 시 Slack 검색"
         }
       }
     },
@@ -5033,7 +5221,7 @@
           "toast": "커넥터를 생성했습니다"
         },
         "empty": {
-          "message": "아직 설정된 커넥터가 없는 것 같습니다. [커넥터 추가](/admin/add-connector) 페이지에서 시작하세요!"
+          "message": "아직 설정된 커넥터가 없는 것 같습니다. [커넥터 추가](/admin/connectors) 페이지에서 시작하세요!"
         },
         "federated": {
           "access": {
@@ -13374,8 +13562,8 @@
         }
       },
       "items": {
-        "addConnector": {
-          "label": "커넥터 추가"
+        "connectors": {
+          "label": "커넥터"
         },
         "agents": {
           "label": "에이전트"

@@ -779,40 +779,228 @@
     "addConnector": {
       "categories": {
         "codeRepository": {
-          "label": "Code-Repository"
+          "label": "Code-Repositories"
         },
         "messaging": {
           "label": "Messaging"
         },
-        "other": {
-          "label": "Sonstige"
-        },
         "sales": {
-          "label": "Vertrieb"
+          "label": "Vertrieb & GTM"
         },
         "storage": {
           "label": "Cloud-Speicher"
         },
         "ticketingAndTaskManagement": {
-          "label": "Ticketing & Aufgabenverwaltung"
+          "label": "Tickets & Aufgaben"
         },
         "wiki": {
           "label": "Wissensbasis & Wikis"
+        },
+        "aiObservability": {
+          "label": "KI & Observability"
+        },
+        "other": {
+          "label": "Sonstige"
         }
       },
       "popular": {
-        "title": "Beliebt"
+        "title": "Connector hinzufügen",
+        "description": "Verbinden Sie {appName} mit Ihren Datenquellen."
       },
       "search": {
-        "placeholder": "Konnektoren suchen"
-      },
-      "seeConnectorsButton": {
-        "label": "Konnektoren anzeigen"
+        "placeholder": "Konnektoren suchen..."
       },
       "sourceTile": {
         "tooltip": {
           "federatedConfigured": "<strong>Föderierter Konnektor bereits konfiguriert.</strong> Klicken Sie, um den vorhandenen Konnektor zu bearbeiten.",
           "slackCredentialsFound": "<strong>Vorhandene Slack-Anmeldedaten gefunden.</strong> Klicken Sie, um Ihren Slack-Konnektor zu verwalten."
+        }
+      },
+      "sourceCard": {
+        "connectButton": {
+          "ariaLabel": "{source} verbinden"
+        }
+      },
+      "sources": {
+        "web": {
+          "description": "Beliebige öffentliche URL verknüpfen"
+        },
+        "github": {
+          "description": "Code & Pull Requests"
+        },
+        "gitlab": {
+          "description": "Code & CI/CD"
+        },
+        "slack": {
+          "description": "Team-Messaging"
+        },
+        "googleDrive": {
+          "description": "Geteilte Dateien und Ordner"
+        },
+        "gmail": {
+          "description": "Google-E-Mail"
+        },
+        "bookstack": {
+          "description": "Selbst gehostetes Wiki"
+        },
+        "outline": {
+          "description": "Open-Source-Team-Wiki"
+        },
+        "confluence": {
+          "description": "Atlassian-Wiki"
+        },
+        "jira": {
+          "description": "Atlassian-Issue-Tracker"
+        },
+        "productboard": {
+          "description": "Produktmanagement"
+        },
+        "slab": {
+          "description": "Team-Wiki"
+        },
+        "coda": {
+          "description": "Dokumente & Datenbanken"
+        },
+        "notion": {
+          "description": "Dokumente & Datenbanken"
+        },
+        "guru": {
+          "description": "Verifizierte Wissensdatenbank"
+        },
+        "gong": {
+          "description": "Sales-Call-Intelligence"
+        },
+        "zulip": {
+          "description": "Open-Source-Messaging"
+        },
+        "linear": {
+          "description": "Engineering-Issue-Tracker"
+        },
+        "hubspot": {
+          "description": "Marketing & CRM"
+        },
+        "document360": {
+          "description": "Self-Service-Dokumentation"
+        },
+        "file": {
+          "description": "Aus lokalen Dateien hochladen"
+        },
+        "userFile": {
+          "description": "Im Chat hochgeladene Dateien"
+        },
+        "googleSites": {
+          "description": "Von Google gehostete Seiten"
+        },
+        "loopio": {
+          "description": "RFP-Antworten"
+        },
+        "box": {
+          "description": "Dateien, Ordner und Notizen"
+        },
+        "dropbox": {
+          "description": "Geteilte Dateien und Ordner"
+        },
+        "discord": {
+          "description": "Community-Messaging"
+        },
+        "salesforce": {
+          "description": "Vertrieb & CRM"
+        },
+        "sharepoint": {
+          "description": "Microsoft-Intranet"
+        },
+        "teams": {
+          "description": "Microsoft-Team-Chats"
+        },
+        "outlook": {
+          "description": "E-Mails und Postfachordner"
+        },
+        "zendesk": {
+          "description": "Kundensupport-Tickets"
+        },
+        "discourse": {
+          "description": "Community-Forum"
+        },
+        "axero": {
+          "description": "Soziales Intranet"
+        },
+        "clickup": {
+          "description": "Projekt- & Aufgaben-Tracker"
+        },
+        "wikipedia": {
+          "description": "Öffentliche Wissensdatenbank"
+        },
+        "mediawiki": {
+          "description": "Wiki im Wikipedia-Stil"
+        },
+        "asana": {
+          "description": "Arbeitsmanagement"
+        },
+        "s3": {
+          "description": "AWS-Storage-Buckets"
+        },
+        "r2": {
+          "description": "Cloud-Storage-Buckets"
+        },
+        "googleCloudStorage": {
+          "description": "Google-Cloud-Buckets"
+        },
+        "xenforo": {
+          "description": "Community-Forum"
+        },
+        "ociStorage": {
+          "description": "OCI Object Storage"
+        },
+        "notApplicable": {
+          "description": "Keine Quelle"
+        },
+        "ingestionApi": {
+          "description": "Über die API gesendete Dokumente"
+        },
+        "freshdesk": {
+          "description": "Kunden-Helpdesk"
+        },
+        "fireflies": {
+          "description": "Meeting-Notizen"
+        },
+        "egnyte": {
+          "description": "Verwaltete Dateidienste"
+        },
+        "airtable": {
+          "description": "Datenbank & Aufgaben"
+        },
+        "gitbook": {
+          "description": "Entwicklerdokumentation"
+        },
+        "highspot": {
+          "description": "Sales Enablement"
+        },
+        "drupalWiki": {
+          "description": "CMS-basiertes Wiki"
+        },
+        "imap": {
+          "description": "IMAP-E-Mail-Quelle"
+        },
+        "bitbucket": {
+          "description": "Atlassian-Quellcodeverwaltung"
+        },
+        "testrail": {
+          "description": "Testfall-Verwaltung"
+        },
+        "braintrust": {
+          "description": "Logs und Auswertungen"
+        },
+        "lumapps": {
+          "description": "Intranet-Seiten und Communities"
+        },
+        "canvas": {
+          "description": "Kurse, Seiten und Ankündigungen"
+        },
+        "craftFile": {
+          "description": "Von Ihnen hochgeladene Dateien"
+        },
+        "federatedSlack": {
+          "description": "Slack zur Abfragezeit durchsuchen"
         }
       }
     },
@@ -5033,7 +5221,7 @@
           "toast": "Konnektor erfolgreich erstellt"
         },
         "empty": {
-          "message": "Sie haben anscheinend noch keine Konnektoren eingerichtet. Öffnen Sie die Seite [Konnektor hinzufügen](/admin/add-connector), um zu beginnen!"
+          "message": "Sie haben anscheinend noch keine Konnektoren eingerichtet. Öffnen Sie die Seite [Konnektor hinzufügen](/admin/connectors), um zu beginnen!"
         },
         "federated": {
           "access": {
@@ -13374,8 +13562,8 @@
         }
       },
       "items": {
-        "addConnector": {
-          "label": "Konnektor hinzufügen"
+        "connectors": {
+          "label": "Konnektoren"
         },
         "agents": {
           "label": "Agenten"

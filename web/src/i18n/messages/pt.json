@@ -779,40 +779,228 @@
     "addConnector": {
       "categories": {
         "codeRepository": {
-          "label": "Repositório de código"
+          "label": "Repositórios de código"
         },
         "messaging": {
           "label": "Mensagens"
         },
-        "other": {
-          "label": "Outros"
-        },
         "sales": {
-          "label": "Vendas"
+          "label": "Vendas e GTM"
         },
         "storage": {
           "label": "Armazenamento em nuvem"
         },
         "ticketingAndTaskManagement": {
-          "label": "Tíquetes e gestão de tarefas"
+          "label": "Tíquetes e tarefas"
         },
         "wiki": {
           "label": "Base de conhecimento e wikis"
+        },
+        "aiObservability": {
+          "label": "IA e observabilidade"
+        },
+        "other": {
+          "label": "Outros"
         }
       },
       "popular": {
-        "title": "Populares"
+        "title": "Adicionar conector",
+        "description": "Conecte o {appName} às suas fontes de dados."
       },
       "search": {
-        "placeholder": "Pesquisar conectores"
-      },
-      "seeConnectorsButton": {
-        "label": "Ver conectores"
+        "placeholder": "Pesquisar conectores..."
       },
       "sourceTile": {
         "tooltip": {
           "federatedConfigured": "<strong>Conector federado já configurado.</strong> Clique para editar o conector existente.",
           "slackCredentialsFound": "<strong>Credenciais do Slack existentes encontradas.</strong> Clique para gerenciar seu conector do Slack."
+        }
+      },
+      "sourceCard": {
+        "connectButton": {
+          "ariaLabel": "Conectar {source}"
+        }
+      },
+      "sources": {
+        "web": {
+          "description": "Vincule qualquer URL pública"
+        },
+        "github": {
+          "description": "Código e pull requests"
+        },
+        "gitlab": {
+          "description": "Código e CI/CD"
+        },
+        "slack": {
+          "description": "Mensagens de equipe"
+        },
+        "googleDrive": {
+          "description": "Arquivos e pastas compartilhados"
+        },
+        "gmail": {
+          "description": "E-mail do Google"
+        },
+        "bookstack": {
+          "description": "Wiki auto-hospedada"
+        },
+        "outline": {
+          "description": "Wiki de equipe de código aberto"
+        },
+        "confluence": {
+          "description": "Wiki da Atlassian"
+        },
+        "jira": {
+          "description": "Rastreador de issues da Atlassian"
+        },
+        "productboard": {
+          "description": "Gestão de produto"
+        },
+        "slab": {
+          "description": "Wiki da equipe"
+        },
+        "coda": {
+          "description": "Documentos e bancos de dados"
+        },
+        "notion": {
+          "description": "Documentos e bancos de dados"
+        },
+        "guru": {
+          "description": "Base de conhecimento verificada"
+        },
+        "gong": {
+          "description": "Inteligência de chamadas de vendas"
+        },
+        "zulip": {
+          "description": "Mensagens de código aberto"
+        },
+        "linear": {
+          "description": "Rastreador de issues de engenharia"
+        },
+        "hubspot": {
+          "description": "Marketing e CRM"
+        },
+        "document360": {
+          "description": "Documentação de autoatendimento"
+        },
+        "file": {
+          "description": "Enviar arquivos locais"
+        },
+        "userFile": {
+          "description": "Arquivos enviados no chat"
+        },
+        "googleSites": {
+          "description": "Páginas hospedadas pelo Google"
+        },
+        "loopio": {
+          "description": "Respostas a RFP"
+        },
+        "box": {
+          "description": "Arquivos, pastas e notas"
+        },
+        "dropbox": {
+          "description": "Arquivos e pastas compartilhados"
+        },
+        "discord": {
+          "description": "Mensagens da comunidade"
+        },
+        "salesforce": {
+          "description": "Vendas e CRM"
+        },
+        "sharepoint": {
+          "description": "Intranet da Microsoft"
+        },
+        "teams": {
+          "description": "Chats de equipe da Microsoft"
+        },
+        "outlook": {
+          "description": "E-mails e pastas de e-mail"
+        },
+        "zendesk": {
+          "description": "Tickets de suporte ao cliente"
+        },
+        "discourse": {
+          "description": "Fórum da comunidade"
+        },
+        "axero": {
+          "description": "Intranet social"
+        },
+        "clickup": {
+          "description": "Rastreador de projetos e tarefas"
+        },
+        "wikipedia": {
+          "description": "Base de conhecimento pública"
+        },
+        "mediawiki": {
+          "description": "Wiki no estilo Wikipédia"
+        },
+        "asana": {
+          "description": "Gestão de trabalho"
+        },
+        "s3": {
+          "description": "Buckets de armazenamento da AWS"
+        },
+        "r2": {
+          "description": "Buckets de armazenamento em nuvem"
+        },
+        "googleCloudStorage": {
+          "description": "Buckets do Google Cloud"
+        },
+        "xenforo": {
+          "description": "Fórum da comunidade"
+        },
+        "ociStorage": {
+          "description": "Armazenamento de objetos da OCI"
+        },
+        "notApplicable": {
+          "description": "Sem fonte"
+        },
+        "ingestionApi": {
+          "description": "Documentos enviados pela API"
+        },
+        "freshdesk": {
+          "description": "Helpdesk de clientes"
+        },
+        "fireflies": {
+          "description": "Notas de reunião"
+        },
+        "egnyte": {
+          "description": "Serviços de arquivos gerenciados"
+        },
+        "airtable": {
+          "description": "Banco de dados e tarefas"
+        },
+        "gitbook": {
+          "description": "Documentação para desenvolvedores"
+        },
+        "highspot": {
+          "description": "Capacitação de vendas"
+        },
+        "drupalWiki": {
+          "description": "Wiki baseada em CMS"
+        },
+        "imap": {
+          "description": "Fonte de e-mail IMAP"
+        },
+        "bitbucket": {
+          "description": "Controle de código da Atlassian"
+        },
+        "testrail": {
+          "description": "Acompanhamento de casos de teste"
+        },
+        "braintrust": {
+          "description": "Logs e avaliações"
+        },
+        "lumapps": {
+          "description": "Páginas e comunidades da intranet"
+        },
+        "canvas": {
+          "description": "Cursos, páginas e avisos"
+        },
+        "craftFile": {
+          "description": "Arquivos que você enviou"
+        },
+        "federatedSlack": {
+          "description": "Pesquisar no Slack na consulta"
         }
       }
     },
@@ -5033,7 +5221,7 @@
           "toast": "Conector criado com sucesso"
         },
         "empty": {
-          "message": "Parece que você ainda não configurou nenhum conector. Acesse a página [Adicionar conector](/admin/add-connector) para começar!"
+          "message": "Parece que você ainda não configurou nenhum conector. Acesse a página [Adicionar conector](/admin/connectors) para começar!"
         },
         "federated": {
           "access": {
@@ -13374,8 +13562,8 @@
         }
       },
       "items": {
-        "addConnector": {
-          "label": "Adicionar conector"
+        "connectors": {
+          "label": "Conectores"
         },
         "agents": {
           "label": "Agentes"

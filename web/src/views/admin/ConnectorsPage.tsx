@@ -1,10 +1,12 @@
 "use client";
+
+import type { Route } from "next";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
-import { SettingsLayouts } from "@opal/layouts";
+import { Content, SettingsLayouts } from "@opal/layouts";
+import * as GeneralLayouts from "@/layouts/general-layouts";
 import { SourceCategory, SourceMetadata } from "@/lib/search/types";
 import { listSourceMetadata } from "@/lib/sources";
-import { Button } from "@opal/components";
 import {
   useCallback,
   useDeferredValue,
@@ -13,7 +15,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { Tooltip } from "@opal/components";
+import { Tooltip, InputTypeIn, Text } from "@opal/components";
+import { richNodes } from "@opal/utils";
 import { useFederatedConnectors } from "@/lib/hooks";
 import {
   FederatedConnectorDetail,
@@ -25,39 +28,32 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
 import { Credential } from "@/lib/connectors/credentials";
 import { useSettings } from "@/lib/settings/hooks";
-import SourceTile from "@/components/SourceTile";
-import { InputTypeIn } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { ConnectorSourceCard } from "@/lib/connectors/components";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import {
+  CATALOG_CATEGORIES,
+  SOURCE_CATEGORY_LABEL_KEYS,
+  SOURCE_DESCRIPTION_KEYS,
+} from "@/lib/connectors/constants";
 
-const route = ADMIN_ROUTES.ADD_CONNECTOR;
+const route = ADMIN_ROUTES.CONNECTORS;
 
-// The category headings come from the `SourceCategory` enum, whose values are
-// identifiers shared across the app. Map each one to a message key (inside the
-// `admin.addConnector` namespace) so the component can resolve it with `t`.
-const CATEGORY_LABEL_KEYS = {
-  [SourceCategory.Wiki]: "categories.wiki.label",
-  [SourceCategory.Storage]: "categories.storage.label",
-  [SourceCategory.TicketingAndTaskManagement]:
-    "categories.ticketingAndTaskManagement.label",
-  [SourceCategory.Messaging]: "categories.messaging.label",
-  [SourceCategory.Sales]: "categories.sales.label",
-  [SourceCategory.CodeRepository]: "categories.codeRepository.label",
-  [SourceCategory.Other]: "categories.other.label",
-} as const satisfies Record<SourceCategory, string>;
+// Four columns at the full settings width, three and then two as the
+// `sourcecards` container narrows.
+const SOURCE_CARD_GRID =
+  "grid grid-cols-2 @xl/sourcecards:grid-cols-3 @3xl/sourcecards:grid-cols-4 gap-2";
 
 function SourceTileTooltipWrapper({
   sourceMetadata,
-  preSelect,
   federatedConnectors,
   slackCredentials,
 }: {
   sourceMetadata: SourceMetadata;
-  preSelect?: boolean;
   federatedConnectors?: FederatedConnectorDetail[];
   slackCredentials?: Credential<any>[];
 }) {
   const t = useTranslations("admin.addConnector");
+  const description = t(SOURCE_DESCRIPTION_KEYS[sourceMetadata.internalName]);
 
   // Check if there's already a federated connector for this source
   const existingFederatedConnector = useMemo(() => {
@@ -82,11 +78,11 @@ function SourceTileTooltipWrapper({
   const navigationUrl = useMemo(() => {
     // If there's an existing federated connector, route to edit it
     if (existingFederatedConnector) {
-      return `/admin/federated/${existingFederatedConnector.id}`;
+      return `/admin/federated/${existingFederatedConnector.id}` as Route;
     }
 
     // For all other sources (including Slack), use the regular admin URL
-    return sourceMetadata.adminUrl;
+    return sourceMetadata.adminUrl as Route;
   }, [existingFederatedConnector, sourceMetadata]);
 
   // Compute whether to hide the tooltip
@@ -98,11 +94,10 @@ function SourceTileTooltipWrapper({
   // If tooltip should be hidden, just render the tile as a component
   if (shouldHideTooltip) {
     return (
-      <SourceTile
+      <ConnectorSourceCard
         sourceMetadata={sourceMetadata}
-        preSelect={preSelect}
+        description={description}
         navigationUrl={navigationUrl}
-        hasExistingSlackCredentials={!!hasExistingSlackCredentials}
       />
     );
   }
@@ -112,33 +107,34 @@ function SourceTileTooltipWrapper({
       side="top"
       tooltip={
         existingFederatedConnector ? (
-          <Text as="p" textLight05 secondaryBody>
-            {t.rich("sourceTile.tooltip.federatedConfigured", {
-              strong: (chunks) => <strong>{chunks}</strong>,
-            })}
+          <Text as="p" font="secondary-body" color="inherit">
+            {richNodes(
+              t.rich("sourceTile.tooltip.federatedConfigured", {
+                strong: (chunks) => <strong>{chunks}</strong>,
+              })
+            )}
           </Text>
         ) : hasExistingSlackCredentials ? (
-          <Text as="p" textLight05 secondaryBody>
-            {t.rich("sourceTile.tooltip.slackCredentialsFound", {
-              strong: (chunks) => <strong>{chunks}</strong>,
-            })}
+          <Text as="p" font="secondary-body" color="inherit">
+            {richNodes(
+              t.rich("sourceTile.tooltip.slackCredentialsFound", {
+                strong: (chunks) => <strong>{chunks}</strong>,
+              })
+            )}
           </Text>
         ) : undefined
       }
     >
-      <div>
-        <SourceTile
-          sourceMetadata={sourceMetadata}
-          preSelect={preSelect}
-          navigationUrl={navigationUrl}
-          hasExistingSlackCredentials={!!hasExistingSlackCredentials}
-        />
-      </div>
+      <ConnectorSourceCard
+        sourceMetadata={sourceMetadata}
+        description={description}
+        navigationUrl={navigationUrl}
+      />
     </Tooltip>
   );
 }
 
-export default function Page() {
+export default function ConnectorsPage() {
   const t = useTranslations("admin.addConnector");
   const adminRouteTitle = useAdminRouteTitle();
   const sources = useMemo(() => listSourceMetadata(), []);
@@ -148,6 +144,7 @@ export default function Page() {
 
   const { data: federatedConnectors } = useFederatedConnectors();
   const settings = useSettings();
+  const { appName } = settings;
 
   // Fetch Slack credentials to determine navigation behavior
   const { data: slackCredentials } = useSWR<Credential<any>[]>(
@@ -188,7 +185,7 @@ export default function Page() {
 
   const categorizedSources = useMemo(() => {
     const filtered = filterSources(sources);
-    const categories = Object.values(SourceCategory).reduce(
+    const categories = CATALOG_CATEGORIES.reduce(
       (acc, category) => {
         acc[category] = sources.filter(
           (source) =>
@@ -200,10 +197,10 @@ export default function Page() {
       },
       {} as Record<SourceCategory, SourceMetadata[]>
     );
-    // Filter out the "Other" category if show_extra_connectors is false
+    // The extra-connectors setting hides the AI & Observability section.
     if (settings?.show_extra_connectors === false) {
       const filteredCategories = Object.entries(categories).filter(
-        ([category]) => category !== SourceCategory.Other
+        ([category]) => category !== SourceCategory.AiObservability
       );
       return Object.fromEntries(filteredCategories) as Record<
         SourceCategory,
@@ -228,102 +225,104 @@ export default function Page() {
     return popularSources.filter((s) => !resultIds.has(s.internalName));
   }, [popularSources, resultIds, searchTerm]);
 
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      const filteredCategories = Object.entries(categorizedSources).filter(
-        ([_, sources]) => sources.length > 0
-      );
-      if (
-        filteredCategories.length > 0 &&
-        filteredCategories[0] !== undefined &&
-        filteredCategories[0][1].length > 0
-      ) {
-        const firstSource = filteredCategories[0][1][0];
-        if (firstSource) {
-          // Check if this source has an existing federated connector
-          const existingFederatedConnector =
-            firstSource.federated && federatedConnectors
-              ? federatedConnectors.find(
-                  (connector) =>
-                    connector.source === `federated_${firstSource.internalName}`
-                )
-              : null;
-
-          const url = existingFederatedConnector
-            ? `/admin/federated/${existingFederatedConnector.id}`
-            : firstSource.adminUrl;
-
-          window.open(url, "_self");
-        }
-      }
-    }
+  // Enter or ArrowDown in the search field moves focus to the first card;
+  // a focused card opens on Enter.
+  const catalogRef = useRef<HTMLDivElement>(null);
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter" && e.key !== "ArrowDown") return;
+    const card =
+      catalogRef.current?.querySelector<HTMLElement>("[data-source-card]");
+    if (!card) return;
+    e.preventDefault();
+    card.focus();
   };
 
   return (
-    <SettingsLayouts.Root width="full">
-      <SettingsLayouts.Header
-        icon={route.icon}
-        title={adminRouteTitle(route)}
-        rightChildren={
-          <Button href="/admin/indexing/status">
-            {t("seeConnectorsButton.label")}
-          </Button>
-        }
-        divider
-      />
-      <SettingsLayouts.Body>
+    <SettingsLayouts.Root width="lg">
+      <SettingsLayouts.Header icon={route.icon} title={adminRouteTitle(route)}>
         <InputTypeIn
           type="text"
+          searchIcon
           placeholder={t("search.placeholder")}
           ref={searchInputRef}
           value={rawSearchTerm} // keep the input bound to immediate state
           onChange={(event) => setSearchTerm(event.target.value)}
-          onKeyDown={handleKeyPress}
+          onKeyDown={handleSearchKeyDown}
         />
+      </SettingsLayouts.Header>
+      <SettingsLayouts.Body>
+        <div
+          ref={catalogRef}
+          className="@container/sourcecards flex flex-col gap-8"
+        >
+          <GeneralLayouts.Section
+            gap={3}
+            height="fit"
+            alignItems="stretch"
+            justifyContent="start"
+          >
+            <Content
+              title={t("popular.title")}
+              description={t("popular.description", { appName })}
+              sizePreset="main-content"
+              variant="section"
+            />
+            <GeneralLayouts.Section
+              gap={8}
+              height="fit"
+              alignItems="stretch"
+              justifyContent="start"
+            >
+              {dedupedPopular.length > 0 && (
+                <GeneralLayouts.Section
+                  gap={3}
+                  height="fit"
+                  alignItems="stretch"
+                  justifyContent="start"
+                >
+                  <div className={SOURCE_CARD_GRID}>
+                    {dedupedPopular.map((source) => (
+                      <SourceTileTooltipWrapper
+                        key={source.internalName}
+                        sourceMetadata={source}
+                        federatedConnectors={federatedConnectors}
+                        slackCredentials={slackCredentials}
+                      />
+                    ))}
+                  </div>
+                </GeneralLayouts.Section>
+              )}
 
-        {dedupedPopular.length > 0 && (
-          <div className="pt-8">
-            <Text as="p" headingH3>
-              {t("popular.title")}
-            </Text>
-            <div className="flex flex-wrap gap-4 p-4">
-              {dedupedPopular.map((source) => (
-                <SourceTileTooltipWrapper
-                  preSelect={false}
-                  key={source.internalName}
-                  sourceMetadata={source}
-                  federatedConnectors={federatedConnectors}
-                  slackCredentials={slackCredentials}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {Object.entries(categorizedSources)
-          .filter(([_, sources]) => sources.length > 0)
-          .map(([category, sources], categoryInd) => (
-            <div key={category} className="pt-8">
-              <Text as="p" headingH3>
-                {t(CATEGORY_LABEL_KEYS[category as SourceCategory])}
-              </Text>
-              <div className="flex flex-wrap gap-4 p-4">
-                {sources.map((source, sourceInd) => (
-                  <SourceTileTooltipWrapper
-                    preSelect={
-                      (searchTerm?.length ?? 0) > 0 &&
-                      categoryInd == 0 &&
-                      sourceInd == 0
-                    }
-                    key={source.internalName}
-                    sourceMetadata={source}
-                    federatedConnectors={federatedConnectors}
-                    slackCredentials={slackCredentials}
-                  />
+              {Object.entries(categorizedSources)
+                .filter(([_, sources]) => sources.length > 0)
+                .map(([category, sources]) => (
+                  <GeneralLayouts.Section
+                    key={category}
+                    gap={3}
+                    height="fit"
+                    alignItems="stretch"
+                    justifyContent="start"
+                  >
+                    <Text font="main-ui-action" color="text-03">
+                      {t(
+                        SOURCE_CATEGORY_LABEL_KEYS[category as SourceCategory]
+                      )}
+                    </Text>
+                    <div className={SOURCE_CARD_GRID}>
+                      {sources.map((source) => (
+                        <SourceTileTooltipWrapper
+                          key={source.internalName}
+                          sourceMetadata={source}
+                          federatedConnectors={federatedConnectors}
+                          slackCredentials={slackCredentials}
+                        />
+                      ))}
+                    </div>
+                  </GeneralLayouts.Section>
                 ))}
-              </div>
-            </div>
-          ))}
+            </GeneralLayouts.Section>
+          </GeneralLayouts.Section>
+        </div>
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
