@@ -8821,7 +8821,6 @@
     },
     "connectorChecks": {
       "title": "Verificações do conector",
-      "count": "({passed}/{total})",
       "groups": {
         "failed": "{count} com falha",
         "indeterminate": "{count} não verificadas",
@@ -8852,7 +8851,8 @@
       "foldButton": {
         "fold": "Recolher",
         "expand": "Expandir"
-      }
+      },
+      "titleWithCount": "Verificações do conector ({passed}/{total})"
     },
     "llmGateway": {
       "header": {

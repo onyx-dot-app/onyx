@@ -8821,7 +8821,6 @@
     },
     "connectorChecks": {
       "title": "커넥터 검사",
-      "count": "({passed}/{total})",
       "groups": {
         "failed": "실패 {count}개",
         "indeterminate": "미확인 {count}개",
@@ -8852,7 +8851,8 @@
       "foldButton": {
         "fold": "접기",
         "expand": "펼치기"
-      }
+      },
+      "titleWithCount": "커넥터 검사 ({passed}/{total})"
     },
     "llmGateway": {
       "header": {
