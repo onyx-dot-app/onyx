@@ -102,10 +102,15 @@ and before the websocket is accepted:
    preview iframe or top-level navigation should not just render a bare
    401 page); the websocket path raises `WebSocketException(code=1008)`
    directly, since a websocket handshake has no redirect.
-3. `SharingScope.PRIVATE` sessions are visible only to their owner; any
-   other scope allows the request through.
+3. `SharingScope` has two values. `PRIVATE` (the column default) admits only
+   the owner. `PUBLIC_ORG` (the "Organization" option in `ShareButton.tsx`)
+   admits any authenticated user in the tenant, by design. The DB session and
+   the cache are both tenant-scoped, so no grant crosses tenants.
 4. A grant is cached for 30 seconds so a burst of asset requests for one
-   page load does not re-hit the database per file.
+   page load does not re-hit the database per file. The cache key is per
+   viewer, so `set_build_session_sharing_scope` does not evict it: a viewer
+   who already loaded a `PUBLIC_ORG` preview keeps access for up to 30
+   seconds after the owner sets it back to `PRIVATE`.
 
 **The security answer:** a preview is reachable only by the session owner,
 or by anyone else if and only if the session's sharing scope is not
