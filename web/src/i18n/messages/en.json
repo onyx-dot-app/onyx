@@ -5301,7 +5301,7 @@
           "tooltip": "Manage Federated Connector"
         },
         "search": {
-          "placeholder": "Search Connectors"
+          "placeholder": "Search connectors..."
         },
         "summary": {
           "activeConnectors": {

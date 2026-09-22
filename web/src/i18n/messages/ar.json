@@ -5301,7 +5301,7 @@
           "tooltip": "إدارة الموصل الموحّد"
         },
         "search": {
-          "placeholder": "البحث في الموصلات"
+          "placeholder": "البحث في الموصلات..."
         },
         "summary": {
           "activeConnectors": {

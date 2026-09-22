@@ -5301,7 +5301,7 @@
           "tooltip": "Föderierten Konnektor verwalten"
         },
         "search": {
-          "placeholder": "Konnektoren suchen"
+          "placeholder": "Konnektoren suchen..."
         },
         "summary": {
           "activeConnectors": {

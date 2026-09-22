@@ -5301,7 +5301,7 @@
           "tooltip": "管理联合连接器"
         },
         "search": {
-          "placeholder": "搜索连接器"
+          "placeholder": "搜索连接器..."
         },
         "summary": {
           "activeConnectors": {

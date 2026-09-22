@@ -5301,7 +5301,7 @@
           "tooltip": "フェデレーションコネクターを管理"
         },
         "search": {
-          "placeholder": "コネクターを検索"
+          "placeholder": "コネクターを検索..."
         },
         "summary": {
           "activeConnectors": {

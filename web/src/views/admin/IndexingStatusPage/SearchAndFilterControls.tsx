@@ -55,6 +55,7 @@ export function SearchAndFilterControls({
   return (
     <div className="flex items-center gap-x-2">
       <InputTypeIn
+        searchIcon
         placeholder={t("status.search.placeholder")}
         type="text"
         value={localSearchValue}

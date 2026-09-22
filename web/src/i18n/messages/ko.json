@@ -5301,7 +5301,7 @@
           "tooltip": "페더레이션 커넥터 관리"
         },
         "search": {
-          "placeholder": "커넥터 검색"
+          "placeholder": "커넥터 검색..."
         },
         "summary": {
           "activeConnectors": {
