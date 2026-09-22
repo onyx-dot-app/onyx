@@ -60,19 +60,25 @@ export function mainContainer(page: Page): Locator {
 
 export async function openProviderModal(
   page: Page,
-  providerLabel: string
+  providerLabel: string,
+  section?: ProviderSection
 ): Promise<void> {
-  const card = findProviderCard(page, providerLabel);
+  const card = findProviderCard(page, providerLabel, section);
   await card.waitFor({ state: "visible", timeout: 10000 });
 
   // First try to find the Connect button
-  const connectButton = card.getByRole("button", { name: "Connect" });
+  const connectButton = card.getByRole("button", {
+    name: "Connect",
+    exact: true,
+  });
   if (await connectButton.isVisible({ timeout: 1000 }).catch(() => false)) {
     await connectButton.click();
     return;
   }
 
-  // If no Connect button, click the Edit icon button to update credentials
+  // If no Connect button, click the Edit icon button to update credentials.
+  // The icon buttons only render on hover.
+  await card.hover();
   const editButton = card.getByRole("button", { name: /^Edit / });
   await editButton.waitFor({ state: "visible", timeout: 5000 });
   await editButton.click();
