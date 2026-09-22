@@ -445,7 +445,10 @@ class ZoomClient:
     ) -> list[ZoomRecordingRegistrant]:
         """The viewers who registered to watch, when the owner switched that on.
         With it off Zoom answers a 400 rather than an empty list, and that reads
-        here as nobody registered."""
+        here as nobody registered. Zoom's reference names only the meeting
+        number here, but against a live account the occurrence UUID answered the
+        same way as it does for the settings endpoint, and the number would
+        point at the series' latest recording instead of the sampled one."""
         return self._list_registrants(
             endpoints.RECORDING_REGISTRANTS,
             meeting_identifier,
