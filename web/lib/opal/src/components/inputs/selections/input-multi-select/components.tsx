@@ -409,7 +409,11 @@ function InputMultiSelect({
 
       <SelectDropdown
         ref={dropdownRef}
-        isOpen={isOpen}
+        // Without a set there is no "empty set" to report: the dropdown only
+        // appears once it has a tag row or a create row to show.
+        isOpen={
+          isOpen && (optionsProp !== undefined || allVisibleOptions.length > 0)
+        }
         disabled={disabled}
         floatingStyles={floatingStyles}
         setFloatingRef={setFloatingRef}
