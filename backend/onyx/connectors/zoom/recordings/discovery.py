@@ -183,8 +183,9 @@ class InventoryScope(BaseModel):
     # on to say later. A listing reaches neither a recording made on-premise nor
     # one whose owner nobody can resolve.
     proven: list[OccurrenceWork] = Field(default_factory=list)
-    # Tracked so the walk can tell one departed host from a credential pointed
-    # at the wrong Zoom account, which makes every host look departed.
+    # Hosts and sessions Zoom has no record of. Tracked so the walk can tell
+    # one that was deleted from a credential pointed at the wrong Zoom account,
+    # which makes every one of them look deleted.
     unrecognised: list[str] = Field(default_factory=list)
 
 
@@ -357,7 +358,12 @@ class IdAllowlistSource(DiscoverySource):
 
             host_id = found.host_id
             if host_id is None:
-                yield InventoryScope(proven=proven)
+                # Zoom answers the same not-found for a session that was deleted
+                # and for one in another account, so a number nothing answered
+                # for counts towards the stop exactly as a host email nobody has.
+                yield InventoryScope(
+                    proven=proven, unrecognised=[] if proven else [session_id]
+                )
                 continue
             if not listable[host_id]:
                 yield InventoryScope(proven=proven, unrecognised=[host_id])

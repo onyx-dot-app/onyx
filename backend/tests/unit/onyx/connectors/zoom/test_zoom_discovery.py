@@ -10,9 +10,11 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     datetime_from_utc_timestamp,
 )
 from onyx.connectors.exceptions import (
+    ConnectorValidationError,
     CredentialExpiredError,
     InsufficientPermissionsError,
 )
+from onyx.connectors.models import SlimDocument
 from onyx.connectors.zoom.models import (
     ZoomRecordingEntry,
     ZoomRecordingPage,
@@ -33,11 +35,12 @@ from onyx.connectors.zoom.recordings.discovery import (
     build_discovery_sources,
     listing_windows,
 )
+from onyx.connectors.zoom.recordings.inventory import zoom_slim_documents
 from onyx.connectors.zoom.recordings.models import (
     ZoomListingIncomplete,
     ZoomSessionType,
 )
-from tests.unit.onyx.connectors.zoom.helpers import mock_zoom_client
+from tests.unit.onyx.connectors.zoom.helpers import http_error, mock_zoom_client
 from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
     occurrence,
     recording_entry,
@@ -607,6 +610,70 @@ def _client_for_hosts(
         recordings=recordings or [], total_records=len(recordings or [])
     )
     return client
+
+
+class TestTheIdAllowlistInventory:
+    """Pruning deletes whatever inventory_scopes leaves out, and Zoom's not-found
+    is the same answer for a deleted session and for one in another account, so
+    a number nothing answers for has to count towards the stop."""
+
+    @staticmethod
+    def _nothing_answers() -> MagicMock:
+        client = mock_zoom_client()
+        client.get_recording.side_effect = http_error(404, 3301)
+        client.get_meeting_details.side_effect = http_error(404, 3001)
+        client.get_past_meeting_details.side_effect = http_error(404, 3001)
+        client.list_past_meeting_occurrences.side_effect = http_error(404, 3001)
+        client.list_user_recordings.return_value = ZoomRecordingPage(total_records=0)
+        return client
+
+    def test_a_number_zoom_has_no_record_of_is_reported_as_unrecognised(
+        self,
+    ) -> None:
+        source = IdAllowlistSource(["111"])
+
+        scopes = list(source.inventory_scopes(self._nothing_answers()))
+
+        assert [scope.unrecognised for scope in scopes] == [["111"]]
+        assert not any(scope.hosts or scope.proven for scope in scopes)
+
+    def test_a_recording_zoom_answered_for_is_proof_even_without_a_host(
+        self,
+    ) -> None:
+        client = self._nothing_answers()
+        client.get_recording.side_effect = None
+        client.get_recording.return_value = recording_entry(uuid="uuid-1", host_id="")
+
+        scopes = list(IdAllowlistSource(["111"]).inventory_scopes(client))
+
+        assert [scope.unrecognised for scope in scopes] == [[]]
+        assert [work.occurrence_uuid for work in scopes[0].proven] == ["uuid-1"]
+
+    def test_a_connector_zoom_recognises_nothing_of_stops_the_prune(self) -> None:
+        source = IdAllowlistSource(["111", "222"])
+
+        with pytest.raises(ConnectorValidationError, match="recognised none"):
+            list(zoom_slim_documents(self._nothing_answers(), [source]))
+
+    def test_one_unknown_number_goes_when_another_is_recognised(self) -> None:
+        client = self._nothing_answers()
+
+        def recording(number: str) -> ZoomRecordingEntry:
+            if number == "222":
+                return recording_entry(uuid="uuid-2", host_id="u1")
+            raise http_error(404, 3301)
+
+        client.get_recording.side_effect = recording
+        source = IdAllowlistSource(["111", "222"])
+
+        ids = {
+            document.id
+            for batch in zoom_slim_documents(client, [source])
+            for document in batch
+            if isinstance(document, SlimDocument)
+        }
+
+        assert ids == {"ZOOM_MEETING_uuid-2"}
 
 
 class TestHostAllowlistSource:

@@ -273,8 +273,7 @@ class SessionTypeHandler(abc.ABC):
                 return SessionHost(host_id=host_id, anchor=anchor)
 
         logger.warning(
-            "Zoom has no record of %s %s under any lookup, so its documents will "
-            "be pruned",
+            "Zoom has no record of %s %s under any lookup",
             self.session_type.value,
             session_id,
         )
