@@ -5,6 +5,12 @@ from unittest.mock import patch
 
 import pytest
 
+_SAMPLE_MODELS = (
+    "ollama_chat/gpt-oss:20b",
+    "ollama_chat/deepseek-r1:14b",
+    "ollama/glm-4.6",
+)
+
 
 @pytest.fixture
 def configured_litellm() -> ModuleType:
@@ -37,13 +43,18 @@ def test_register_ollama_models_needs_one_pass_and_no_server(
     Ollama server for it, then stores the entry under the prefix-stripped name.
     Seeding the keys keeps it on the static path.
     """
-    from onyx.llm.litellm_singleton.config import (
-        _OLLAMA_MODEL_COST,
-        register_ollama_models,
-    )
+    from onyx.llm.litellm_singleton.config import register_ollama_models
 
-    keys = set(_OLLAMA_MODEL_COST) | {
-        name.split("/", 1)[1] for name in _OLLAMA_MODEL_COST
+    # The names litellm checks before deciding a model is a live deployment.
+    keys = {
+        name
+        for model in _SAMPLE_MODELS
+        for name in (
+            model,
+            model.split("/", 1)[1],
+            "ollama/" + model.split("/", 1)[1],
+            "ollama_chat/" + model.split("/", 1)[1],
+        )
     }
     snapshot = {
         key: copy.deepcopy(configured_litellm.model_cost[key])
@@ -62,7 +73,7 @@ def test_register_ollama_models_needs_one_pass_and_no_server(
         ):
             register_ollama_models()
 
-        for model in ("ollama_chat/gpt-oss:20b", "ollama_chat/deepseek-r1:14b"):
+        for model in _SAMPLE_MODELS:
             assert configured_litellm.supports_function_calling(model=model) is True
     finally:
         configured_litellm.model_cost.update(snapshot)
