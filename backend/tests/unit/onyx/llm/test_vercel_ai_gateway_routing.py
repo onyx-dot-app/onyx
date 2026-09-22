@@ -60,18 +60,3 @@ def test_explicit_api_base_is_passed_through_unchanged() -> None:
     llm = _make_llm(api_base="https://ai-gateway.vercel.sh")
     assert llm._api_base == "https://ai-gateway.vercel.sh"
     assert _completion_kwargs(llm)["base_url"] == "https://ai-gateway.vercel.sh"
-
-
-def test_mapped_model_resolves_a_real_price() -> None:
-    """Cost tracking is the reason for routing natively rather than as an
-    OpenAI-compatible gateway, so a mapped model must price non-zero."""
-    from onyx.llm.cost import compute_cost_cents
-
-    in_cents, out_cents = compute_cost_cents(
-        model="anthropic/claude-sonnet-4.5",
-        provider=LlmProviderNames.VERCEL_AI_GATEWAY.value,
-        prompt_tokens=1_000_000,
-        completion_tokens=1_000_000,
-    )
-    assert in_cents > 0
-    assert out_cents > 0

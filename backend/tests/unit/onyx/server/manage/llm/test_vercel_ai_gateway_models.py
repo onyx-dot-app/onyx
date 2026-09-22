@@ -15,7 +15,10 @@ from sqlalchemy.orm import Session
 from onyx.db.models import User
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.llm.api import get_vercel_ai_gateway_available_models
-from onyx.server.manage.llm.models import VercelAIGatewayModelsRequest
+from onyx.server.manage.llm.models import (
+    VercelAIGatewayFinalModelResponse,
+    VercelAIGatewayModelsRequest,
+)
 
 # Trimmed catalog payload: a reasoning+vision chat model, a text-only chat
 # model, an embedding model (dropped), a media model (dropped), and an id-less
@@ -51,7 +54,7 @@ _SAMPLE = {
 }
 
 
-def _fetch(payload: dict = _SAMPLE) -> list:
+def _fetch(payload: dict = _SAMPLE) -> list[VercelAIGatewayFinalModelResponse]:
     with patch(
         "onyx.server.manage.llm.api._get_openai_compatible_models_response",
         return_value=payload,

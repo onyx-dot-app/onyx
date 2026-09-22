@@ -10,6 +10,8 @@ Two tiers:
   live LLM provider tests.
 """
 
+import time
+
 import httpx
 import pytest
 
@@ -23,11 +25,29 @@ from tests.utils.secret_names import TestSecret
 _TEST_MODEL = "meta/llama-3.1-8b"
 
 
+def _fetch_catalog() -> list[dict]:
+    """The contract tests gate every PR, so a single transient network blip
+    must not fail unrelated merges. Retry briefly, then let the error surface."""
+    last_error: Exception | None = None
+    for attempt in range(3):
+        try:
+            response = httpx.get(
+                f"{VERCEL_AI_GATEWAY_DEFAULT_API_BASE}/models", timeout=30.0
+            )
+            response.raise_for_status()
+            return response.json()["data"]
+        except (httpx.HTTPError, KeyError, ValueError) as err:
+            last_error = err
+            if attempt < 2:
+                time.sleep(2**attempt)
+    raise AssertionError(
+        f"Vercel AI Gateway catalog unreachable after 3 attempts: {last_error}"
+    )
+
+
 def test_public_catalog_still_carries_the_fields_onyx_maps() -> None:
     """`get_vercel_ai_gateway_available_models` reads these fields by name."""
-    response = httpx.get(f"{VERCEL_AI_GATEWAY_DEFAULT_API_BASE}/models", timeout=30.0)
-    response.raise_for_status()
-    models = response.json()["data"]
+    models = _fetch_catalog()
 
     language_models = [m for m in models if m.get("type") == "language"]
     assert language_models, "catalog returned no language models"
@@ -37,21 +57,42 @@ def test_public_catalog_still_carries_the_fields_onyx_maps() -> None:
         "catalog no longer distinguishes non-language models"
     )
 
-    sample = next(m for m in language_models if m["id"] == _TEST_MODEL)
-    assert isinstance(sample["context_window"], int)
-    assert isinstance(sample["modalities"]["input"], list)
-    assert isinstance(sample["supported_parameters"], list)
+    by_id = {m["id"]: m for m in language_models}
+    assert _TEST_MODEL in by_id, (
+        f"{_TEST_MODEL} is gone from the catalog; the nightly inference test "
+        f"pins that id and needs repointing"
+    )
+
+    sample = by_id[_TEST_MODEL]
+    missing = [
+        field
+        for field, ok in (
+            ("context_window", isinstance(sample.get("context_window"), int)),
+            (
+                "modalities.input",
+                isinstance((sample.get("modalities") or {}).get("input"), list),
+            ),
+            (
+                "supported_parameters",
+                isinstance(sample.get("supported_parameters"), list),
+            ),
+        )
+        if not ok
+    ]
+    assert not missing, f"{_TEST_MODEL} no longer carries: {', '.join(missing)}"
 
 
 def test_namespaced_model_ids_are_still_vendor_prefixed() -> None:
     """Onyx hands LiteLLM `vercel_ai_gateway/<vendor>/<model>`. If the catalog
     stopped namespacing ids, that spelling would break."""
-    response = httpx.get(f"{VERCEL_AI_GATEWAY_DEFAULT_API_BASE}/models", timeout=30.0)
-    response.raise_for_status()
-    language_models = [
-        m for m in response.json()["data"] if m.get("type") == "language"
+    unprefixed = [
+        m["id"]
+        for m in _fetch_catalog()
+        if m.get("type") == "language" and "/" not in m["id"]
     ]
-    assert all("/" in m["id"] for m in language_models)
+    assert not unprefixed, (
+        f"catalog ids are no longer vendor-prefixed: {unprefixed[:5]}"
+    )
 
 
 @pytest.mark.nightly
