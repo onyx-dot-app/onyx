@@ -347,7 +347,7 @@ export function ConnectorsCheckCard({
   return (
     <Card border="solid" rounding={4} padding={2}>
       <div className="flex flex-col gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex items-start gap-3">
           <GeneralLayouts.Section
             padding={1}
             height="fit"
