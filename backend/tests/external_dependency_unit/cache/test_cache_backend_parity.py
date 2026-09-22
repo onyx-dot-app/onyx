@@ -101,15 +101,15 @@ class TestListParity:
 def test_conditional_expiry_preserves_current_owner(cache: CacheBackend) -> None:
     key = f"conditional-expiry:{uuid4()}"
     try:
-        assert not cache.renew_if_value(key, b"first", 60)
+        assert not cache.expire_if_value(key, b"first", 60)
         cache.set(key, b"first", ex=10)
-        assert not cache.renew_if_value(key, b"other", 60)
-        assert cache.renew_if_value(key, b"first", 60)
+        assert not cache.expire_if_value(key, b"other", 60)
+        assert cache.expire_if_value(key, b"first", 60)
         assert cache.ttl(key) > 10
         cache.set(key, b"replacement", ex=10)
-        assert not cache.renew_if_value(key, b"first", 60)
+        assert not cache.expire_if_value(key, b"first", 60)
         assert cache.get(key) == b"replacement"
         cache.expire(key, 0)
-        assert not cache.renew_if_value(key, b"replacement", 60)
+        assert not cache.expire_if_value(key, b"replacement", 60)
     finally:
         cache.delete(key)

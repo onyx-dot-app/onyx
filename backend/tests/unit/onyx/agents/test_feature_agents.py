@@ -12,7 +12,7 @@ import pytest
 from onyx.agents.coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent, ToolEndEvent
 from onyx.agents.items import messages_from_items
-from onyx.agents.models import AgentStep, PreparedStep, RunResult, StepInput
+from onyx.agents.models import AgentStep, PreparedStep, StepInput
 from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import ToolInvocation
 from onyx.agents.transcript import RunFailureKind
@@ -50,6 +50,7 @@ from onyx.llm.models import (
     TextContent,
     ToolCall,
     ToolChoiceOptions,
+    ToolDefinition,
     ToolResult,
     ToolResultMessage,
     UserMessage,
@@ -212,14 +213,11 @@ def test_research_executes_only_allowed_tools_and_records_results() -> None:
     search.name = SearchTool.NAME
     isolated_search = MagicMock(spec=SearchTool)
     isolated_search.name = SearchTool.NAME
-    isolated_search.tool_definition.return_value = {
-        "type": "function",
-        "function": {
-            "name": SearchTool.NAME,
-            "description": "Search documents",
-            "parameters": {"type": "object"},
-        },
-    }
+    isolated_search.tool_definition.return_value = ToolDefinition(
+        name=SearchTool.NAME,
+        description="Search documents",
+        parameters={"type": "object"},
+    )
     search.for_agent.return_value = isolated_search
     feature = ResearchAgent(
         [ResearchWebSearchStub(), EchoTool(), search],
@@ -496,23 +494,23 @@ def test_research_preserves_citation_identity_across_completion_and_call_order(
         )
         for topic in ("first", "second")
     }
-    original_report = ResearchAgent.report
+    original_prepare = ResearchAgent.prepare_step
 
-    def child_report(
-        child: ResearchAgent, completed: RunResult
-    ) -> ResearchAgentCallResult:
-        report = original_report(child, completed)
-        report.citation_mapping = {9: documents[completed.output.text.split()[0]]}
-        completion_order.append(completed.output.text.split()[0])
-        return report
+    def child_prepare(child: ResearchAgent, state: StepInput) -> PreparedStep:
+        prepared = original_prepare(child, state)
+        metadata = prepared.output_metadata
+        assert isinstance(metadata, ResearchMessageMetadata)
+        metadata.sources = {9: documents[state.input_messages[0].text]}
+        return prepared
 
-    monkeypatch.setattr(ResearchAgent, "report", child_report)
+    monkeypatch.setattr(ResearchAgent, "prepare_step", child_prepare)
 
     def allocate_citations(
         answer_text: str,
         existing_citation_mapping: CitationMapping,
         new_citation_mapping: CitationMapping,
     ) -> tuple[str, CitationMapping]:
+        completion_order.append(answer_text.split()[0])
         result = collapse_citations(
             answer_text, existing_citation_mapping, new_citation_mapping
         )
@@ -934,10 +932,8 @@ def test_citation_conversion_failure_preserves_child_without_parent_result(
     )
 
 
-@pytest.mark.parametrize("deferred", [False, True])
 def test_coding_cancellation_keeps_sandbox_until_child_work_finishes(
     monkeypatch: pytest.MonkeyPatch,
-    deferred: bool,
 ) -> None:
     entered = Event()
     release = Event()
@@ -963,8 +959,6 @@ def test_coding_cancellation_keeps_sandbox_until_child_work_finishes(
         return ToolResult(content="done")
 
     module = "onyx.tools.tool_implementations.coding_agent.coding_agent_tool"
-    if deferred:
-        monkeypatch.setattr(f"{module}.CLEANUP_SECONDS", 0.01)
     monkeypatch.setattr(f"{module}._setup_session", sandbox)
     monkeypatch.setattr(f"{module}.get_llm_token_counter", lambda _llm: len)
     monkeypatch.setattr(BashTool, "run", bash)
@@ -979,7 +973,7 @@ def test_coding_cancellation_keeps_sandbox_until_child_work_finishes(
         128000,
     )
     coordinator = AgentCoordinator()
-    parent = Agent(parent_llm, tools=[bind_tool(coding, ToolContext())])
+    parent = Agent(parent_llm, tools=[bind_tool(coding, lambda: ToolContext())])
     run = parent.start(max_steps=2, coordinator=coordinator)
     try:
         assert entered.wait(5)

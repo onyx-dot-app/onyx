@@ -112,7 +112,8 @@ def make_agent(client: LLM, flow: LLMFlow) -> Agent:
     )
 ```
 
-Call `agent.run(messages=[UserMessage(content="Echo hello")], max_steps=2)` to generate, execute tools, and continue.
+Call `agent.execute(messages=[UserMessage(content="Echo hello")], max_steps=2)` to generate, execute tools, and continue.
+It returns a `Run` handle at completion or suspension. Call `run.result()` to wait for the final answer.
 Use `agent.start(...)` to receive a `Run` handle; call `run.cancel()` to cancel that execution.
 Tools receive the same cancellation signal and must cooperate with interruption.
 See [Agent execution](../agents/README.md) for snapshots, child execution, and lifecycle behavior.

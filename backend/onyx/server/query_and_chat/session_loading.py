@@ -351,7 +351,7 @@ def _response_packets(
             obj=RunUpdate(status=response.status),
         )
     )
-    if response.parent_run_id is None and response.status != RunStatus.RUNNING:
+    if response.parent_run_id is None and response.status.is_terminal:
         packets.append(
             Packet(
                 identity=base.model_copy(update={"part_id": "run"}),

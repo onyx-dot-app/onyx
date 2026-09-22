@@ -116,7 +116,7 @@ def test_lazy_attachments_share_resources_but_not_message_data(
     assert isinstance(metadata, PromptMetadata) and metadata.image_files
     metadata.image_files[0].filename = "changed.png"
     assert attachment.filename == "original.png"
-    agent.run(max_steps=1)
+    agent.execute(max_steps=1).result()
     assert loads == 1
     with ThreadPoolExecutor(max_workers=2) as executor:
         contents = list(executor.map(lambda _: attachment.content, range(2)))
@@ -206,10 +206,13 @@ def test_tool_finalization_has_one_commit_point(replace: bool) -> None:
     )
 
 
-def test_subscribers_cannot_edit_history_or_each_others_events() -> None:
+@pytest.mark.parametrize("inherited", [False, True])
+def test_listeners_cannot_edit_history_or_each_others_events(inherited: bool) -> None:
     def corrupt(event: AgentEvent) -> None:
         if event.type == "message_end":
             event.message.content.clear()
+        elif event.type == "message_update":
+            event.generation_event.message.content.clear()
         elif event.type == "tool_end":
             event.result.content = "corrupted"
             event.tool_call.arguments["bad"] = True
@@ -224,7 +227,11 @@ def test_subscribers_cannot_edit_history_or_each_others_events() -> None:
 
     agent = Agent(FakeModelClient(generate), tools=[_tool()])
     observed: list[AgentEvent] = []
-    run = agent.start(max_steps=2, on_event=corrupt)
+    run = agent.start(
+        max_steps=2,
+        on_event=None if inherited else corrupt,
+        inherited_event_sink=corrupt if inherited else None,
+    )
     run.subscribe(observed.append)
     ready.set()
     result = run.result()

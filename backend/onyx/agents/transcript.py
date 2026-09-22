@@ -13,10 +13,15 @@ logger = setup_logger()
 
 class RunStatus(str, Enum):
     RUNNING = "running"
+    SUSPENDED = "suspended"
     COMPLETE = "complete"
     LIMIT = "limit"
     CANCELLED = "cancelled"
     ERROR = "error"
+
+    @property
+    def is_terminal(self) -> bool:
+        return self not in (RunStatus.RUNNING, RunStatus.SUSPENDED)
 
 
 class RunFailureKind(str, Enum):
@@ -39,6 +44,11 @@ class CompactionCheckpoint(BaseModel):
 
 
 class OperationSnapshot(BaseModel):
+    """Recorded generation or tool outcome; tool enrichment can revise the result.
+
+    A completed tool outcome does not imply its callbacks or cleanup have finished.
+    """
+
     step_index: int
     message_index: int
     tool_call_id: str | None = None

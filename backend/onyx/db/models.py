@@ -3184,6 +3184,18 @@ class ChatSession(Base):
     persona: Mapped["Persona"] = relationship("Persona")
 
 
+class ChatResponseCheckpoint(Base):
+    """Supplemental progress for resuming an intentionally paused response."""
+
+    __tablename__ = "chat_response_checkpoint"
+
+    chat_message_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="CASCADE"), primary_key=True
+    )
+    revision: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+    progress: Mapped[dict[str, JsonValue]] = mapped_column(PGJSONB)
+
+
 class ChatMessage(Base):
     """Questions, complete responses, and context summaries in a conversation tree."""
 
@@ -3196,6 +3208,9 @@ class ChatMessage(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
+
+    # Correlate live SDK output with its response before and after archival.
+    run_id: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
 
     response_status: Mapped[RunStatus | None] = mapped_column(
         Enum(

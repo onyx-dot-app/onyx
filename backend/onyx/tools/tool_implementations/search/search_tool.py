@@ -55,7 +55,7 @@ from onyx.federated_connectors.federated_retrieval import (
 )
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM
-from onyx.llm.models import ToolResult
+from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.secondary_llm_flows.document_filter import (
@@ -70,7 +70,6 @@ from onyx.secondary_llm_flows.source_filter import SearchCycle, decide_search_sc
 from onyx.secondary_llm_flows.time_filter import TimeFilter, decide_time_filter
 from onyx.tools.interface import (
     CITATIONS_PER_TOOL_CALL,
-    FunctionToolDefinition,
     Tool,
     ToolContext,
     parse_tool_arguments,
@@ -89,6 +88,7 @@ from onyx.tools.tool_implementations.search.constants import (
     ORIGINAL_QUERY_WEIGHT,
     SELECTION_TOKEN_BUDGET_MULTIPLIER,
 )
+from onyx.tools.tool_implementations.search.models import SearchToolState
 from onyx.tools.tool_implementations.search.search_utils import (
     expand_section_with_context,
     merge_overlapping_sections,
@@ -292,6 +292,23 @@ class SearchTool(Tool):
     @property
     def execution_mode(self) -> ToolExecutionMode:
         return ToolExecutionMode.SEQUENTIAL
+
+    def capture_state(self) -> SearchToolState:
+        return SearchToolState(
+            search_cycles=self._search_cycles,
+            cached_expansion=self._cached_expansion,
+            scope_decision_settled=self._scope_decision_settled,
+            time_filter=self._time_filter,
+            time_filter_computed=self._time_filter_computed,
+        ).model_copy(deep=True)
+
+    def restore_state(self, state: SearchToolState) -> None:
+        saved = state.model_copy(deep=True)
+        self._search_cycles = saved.search_cycles
+        self._cached_expansion = saved.cached_expansion
+        self._scope_decision_settled = saved.scope_decision_settled
+        self._time_filter = saved.time_filter
+        self._time_filter_computed = saved.time_filter_computed
 
     def for_agent(self) -> "SearchTool":
         """Share search dependencies while keeping conversation-derived state separate."""
@@ -552,30 +569,27 @@ class SearchTool(Tool):
 
     """For explicit tool calling"""
 
-    def tool_definition(self) -> FunctionToolDefinition:
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        QUERIES_FIELD: {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": (
-                                "List of search queries to execute, typically a single query. "
-                                "Query expansion and filter extraction steps will be run "
-                                "automatically downstream, do not include time or source type "
-                                "scoping details in your query."
-                            ),
-                        },
+    def tool_definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            name=self.name,
+            description=self.description,
+            parameters={
+                "type": "object",
+                "properties": {
+                    QUERIES_FIELD: {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "List of search queries to execute, typically a single query. "
+                            "Query expansion and filter extraction steps will be run "
+                            "automatically downstream, do not include time or source type "
+                            "scoping details in your query."
+                        ),
                     },
-                    "required": [QUERIES_FIELD],
                 },
+                "required": [QUERIES_FIELD],
             },
-        }
+        )
 
     @log_function_time(
         func_name="Search tool - query expansion + scope decision",

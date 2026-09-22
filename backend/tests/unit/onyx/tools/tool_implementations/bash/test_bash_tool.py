@@ -86,10 +86,8 @@ def test_tool_definition_shape() -> None:
     tool, emitter = _make_tool()
     definition = tool.tool_definition()
 
-    assert definition["type"] == "function"
-    fn = definition["function"]
-    assert fn["name"] == "bash"
-    params = fn["parameters"]
+    assert definition.name == "bash"
+    params = definition.parameters
     assert params["type"] == "object"
     properties = params["properties"]
     assert isinstance(properties, dict)

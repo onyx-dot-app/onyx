@@ -6,6 +6,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from onyx.agents.compaction import history_digest
+from onyx.agents.coordination import AgentCoordinator
 from onyx.agents.items import (
     build_response_items,
 )
@@ -224,6 +225,7 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
             )
         ],
     )
+    coordinator: AgentCoordinator | None = None
     try:
         saved_child = load_agent_history(response_id, agent_id)
         assert saved_child.sources[1].document_id == "source"
@@ -242,11 +244,13 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
         )
         assert root.id == root_id
         assert (
-            root.run(
+            root.execute(
                 max_steps=2,
                 messages=[UserMessage(content="Continue")],
                 coordinator=coordinator,
-            ).output.text
+            )
+            .result()
+            .output.text
             == "Done"
         )
         assert len(requests) == 1
@@ -260,8 +264,16 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
             "Check the evidence again" in message.text
             for message in requests[0].messages
         )
-        assert load_agent_history(response_id, agent_id).previous_run_id == saved_run_id
+        assert coordinator.close(timeout=10)
+        continued = load_agent_history(response_id, agent_id)
+        assert continued.previous_run_id != saved_run_id
+        assert any(
+            message.text == "Additional cedar evidence [1]."
+            for message in continued.messages
+        )
     finally:
+        if coordinator is not None:
+            assert coordinator.close(timeout=10)
         db_session.execute(
             delete(ChatMessage).where(ChatMessage.chat_session_id == session_id)
         )

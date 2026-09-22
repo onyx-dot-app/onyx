@@ -18,8 +18,11 @@ from uuid import uuid4
 import pytest
 from litellm.exceptions import ContextWindowExceededError
 
-from onyx.agents.coordination import AgentCoordinator
-from onyx.agents.runtime import Agent
+from onyx.agents.coordination import AgentCoordinator, AgentInfo
+from onyx.agents.events import AgentEvent
+from onyx.agents.runtime import Agent, Run
+from onyx.agents.tools import AgentTool, InputMode, PendingToolInput
+from onyx.agents.transcript import RunStatus
 from onyx.chat.agent import ChatAgent
 from onyx.chat.emitter import Emitter
 from onyx.chat.errors import EmptyLLMResponseError
@@ -42,6 +45,7 @@ from onyx.chat.process_message import (
     _stream_chat_turn,
     gather_stream_full,
 )
+from onyx.chat.run_store import ChatRunStore
 from onyx.chat.stream_buffer import ChatStream, StreamBufferWriter
 from onyx.configs.constants import MessageType
 from onyx.db.chat import set_preferred_response
@@ -58,6 +62,7 @@ from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
     TextContent,
+    ToolCall,
     ToolChoiceOptions,
 )
 from onyx.llm.override_models import LLMOverride
@@ -1179,18 +1184,16 @@ def mock_model_execution(
     def execute(
         turn: ChatTurnExecution,
         index: int,
-        response_future: Future[ChatResponseOutcome],
         emitter: Emitter,
         auto_filters: bool,
         *,
         startup_error: BaseException | None = None,
     ) -> None:
         with lock:
-            captured[index] = (response_future, emitter)
+            captured[index] = (turn._response_futures[index], emitter)
         original_execute(
             turn,
             index,
-            response_future,
             emitter,
             auto_filters,
             startup_error=startup_error,
@@ -1464,6 +1467,7 @@ def test_overflowed_stream_storage_finishes_retention_cleanup() -> None:
     writing = threading.Event()
     release = threading.Event()
     closed = threading.Event()
+    overflowed = threading.Event()
     buffer = MagicMock(truncated=False)
     turns = ActiveChatTurns()
 
@@ -1488,10 +1492,11 @@ def test_overflowed_stream_storage_finishes_retention_cleanup() -> None:
         assert writing.wait(2)
         for _ in range(10):
             emitter.emit(Packet(obj=ItemUpdate(item=ReasoningItem())))
+        overflowed.set()
 
     with (
         patch("onyx.chat.stream_buffer._BUFFER_WORK_CAPACITY", 1),
-        patch("onyx.chat.stream_buffer._BUFFER_CLEANUP_SECONDS", 0.02),
+        patch("onyx.agents.concurrency.CLEANUP_SECONDS", 0.02),
         mock_model_execution(side_effect=execute),
         patch("onyx.chat.execution.save_chat_response") as save,
     ):
@@ -1502,9 +1507,10 @@ def test_overflowed_stream_storage_finishes_retention_cleanup() -> None:
                 stream_buffer=buffer,
                 active_chat_turns=turns,
             )
-            list(reader)
+            assert overflowed.wait(2)
             with patch("onyx.chat.execution._PERSISTENCE_WAIT_SECONDS", 0.01):
                 assert not turns.close()
+            list(reader)
             assert save.call_count == 1
             assert buffer.append_line.call_count == 1
         finally:
@@ -1537,6 +1543,7 @@ def test_cache_failure_does_not_finalize_active_execution() -> None:
         assert release.wait(5)
 
     buffer.append_line.side_effect = fail_cache
+    buffer.mark_truncated.side_effect = lambda: setattr(buffer, "truncated", True)
     with (
         mock_model_execution(side_effect=execute),
         patch("onyx.chat.execution.save_chat_response") as persist,
@@ -2028,3 +2035,174 @@ def test_closed_chat_supervisor_rejects_without_starting_storage() -> None:
             response_future.result(timeout=1)
         create_agent.assert_not_called()
         save.assert_not_called()
+
+
+def test_response_workers_execute_models_and_share_one_event_consumer() -> None:
+    setup = _make_setup(n_models=2)
+    tasks = ActiveChatTurns()
+    models_entered = threading.Barrier(2)
+    model_threads: dict[int, int] = {}
+    preparation_threads: dict[int, int] = {}
+    observer_threads: set[int] = set()
+    lock = threading.Lock()
+
+    def prepare(
+        _setup: ChatTurnSetup,
+        _user: User,
+        index: int,
+        _cancellation: CancellationSignal,
+        _auto_filters: bool,
+    ) -> ChatAgent:
+        with lock:
+            preparation_threads[index] = threading.get_ident()
+
+        def generate(
+            _request: GenerationRequest, _signal: CancellationSignal
+        ) -> AssistantMessage:
+            with lock:
+                model_threads[index] = threading.get_ident()
+            models_entered.wait(timeout=5)
+            return AssistantMessage(content=[TextContent(text=f"answer {index}")])
+
+        return _chat_agent(Agent(FakeModelClient(generate)))
+
+    def observe(_event: AgentEvent) -> None:
+        with lock:
+            observer_threads.add(threading.get_ident())
+
+    with (
+        patch("onyx.chat.execution.create_chat_agent", side_effect=prepare),
+        patch("onyx.chat.execution.ResponsePresenter") as presenter,
+        patch("onyx.chat.execution.save_chat_response") as save,
+    ):
+        presenter.return_value.consume.side_effect = observe
+        reader = start_chat_turn(setup, MagicMock(), active_chat_turns=tasks)
+        try:
+            list(reader)
+            assert tasks.close()
+        finally:
+            reader.close()
+        assert save.call_count == 2
+    assert model_threads == preparation_threads
+    assert len(set(model_threads.values())) == 2
+    assert len(observer_threads) == 1
+    assert observer_threads.isdisjoint(model_threads.values())
+
+
+def test_stop_after_suspension_retains_root_cancellation_and_saves_once() -> None:
+    setup = _make_setup()
+    tasks = ActiveChatTurns()
+    started = threading.Event()
+    runs: list[Run] = []
+    response_future = Future[ChatResponseOutcome]()
+
+    def on_start(_agent: Agent, run: Run, _info: AgentInfo) -> None:
+        runs.append(run)
+        started.set()
+
+    coordinator = AgentCoordinator(on_start=on_start)
+    agent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(
+                content=[ToolCall(id="question", name="question", arguments={})]
+            )
+        ),
+        tools=[
+            AgentTool(
+                name="question",
+                description="",
+                parameters={},
+                execute=lambda _: PendingToolInput(
+                    request_id="answer", prompt="Question", mode=InputMode.RESULT
+                ),
+            )
+        ],
+    )
+    with (
+        patch("onyx.chat.execution.create_chat_agent", return_value=_chat_agent(agent)),
+        patch(
+            "onyx.chat.execution.create_chat_agent_coordinator",
+            return_value=coordinator,
+        ),
+        patch("onyx.chat.execution.save_chat_response") as save,
+    ):
+        reader = start_chat_turn(
+            setup, MagicMock(), response_future, active_chat_turns=tasks
+        )
+        try:
+            assert started.wait(5)
+            assert runs[0].wait_until_settled(5).status == RunStatus.SUSPENDED
+            assert runs[0].wait_for_idle(5)
+            assert not response_future.done()
+            setup.cache.exists.return_value = True
+            outcome = response_future.result(timeout=5)
+            assert outcome.response.cancelled
+            assert outcome.persistence_status == PersistenceStatus.SAVED
+            list(reader)
+            assert tasks.close()
+            assert save.call_count == 1
+        finally:
+            reader.close()
+            assert coordinator.close(5)
+
+
+def test_stop_cache_failure_keeps_polling_retained_ownership_after_root_finishes() -> (
+    None
+):
+    setup = _make_setup()
+    provider_entered = threading.Event()
+    polled_after_completion = threading.Event()
+    outcome = Future[ChatResponseOutcome]()
+    tasks = ActiveChatTurns()
+    store = MagicMock(spec=ChatRunStore)
+    store.has_owned_work = True
+
+    def generate(
+        _request: GenerationRequest, signal: CancellationSignal
+    ) -> AssistantMessage:
+        cancelled = threading.Event()
+        with signal.on_cancel(cancelled.set):
+            provider_entered.set()
+            assert cancelled.wait(5)
+        signal.check()
+        raise AssertionError("Cancelled provider must not produce an answer")
+
+    def stop_read(_key: str) -> bool:
+        if provider_entered.is_set():
+            raise ConnectionError("Control cache unavailable")
+        return False
+
+    def poll_owned_runs() -> None:
+        if turn._delivery_closed:
+            polled_after_completion.set()
+            store.has_owned_work = False
+
+    store.poll_control.side_effect = poll_owned_runs
+    setup.cache.exists.side_effect = stop_read
+    turn = ChatTurnExecution(setup, MagicMock(), outcome)
+    turn._register_store(store)
+    with (
+        patch(
+            "onyx.chat.execution.create_chat_agent",
+            return_value=_chat_agent(Agent(FakeModelClient(generate))),
+        ),
+        patch("onyx.chat.execution.save_chat_response") as save,
+        patch("onyx.chat.execution._CANCEL_POLL_INTERVAL_S", 0.01),
+        patch("onyx.chat.execution.PROCESSING_REFRESH_INTERVAL_S", 0),
+        patch("onyx.chat.execution.set_processing_status") as processing,
+    ):
+        turn.begin()
+        tasks.start(turn)
+        try:
+            assert outcome.result(timeout=5).response.cancelled
+            assert polled_after_completion.wait(5)
+            turn.finished.result(timeout=5)
+            assert save.call_count == 1
+            processing_values = [
+                call.kwargs["value"] for call in processing.call_args_list
+            ]
+            assert processing_values[-1] is False
+            assert False not in processing_values[:-1]
+        finally:
+            turn.delivery.reader.close()
+            assert tasks.close()

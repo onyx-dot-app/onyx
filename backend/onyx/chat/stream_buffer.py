@@ -13,6 +13,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ValidationError
 
+from onyx.agents.concurrency import EventDispatcher
 from onyx.cache.interface import CacheBackend
 from onyx.chat.models import StreamingError
 from onyx.configs.chat_configs import (
@@ -24,7 +25,6 @@ from onyx.configs.chat_configs import (
 from onyx.server.query_and_chat.streaming_models import Packet, heartbeat_packet
 from onyx.server.utils import get_json_line
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import start_thread_with_context
 
 logger = setup_logger()
 
@@ -33,8 +33,6 @@ _PREFIX = "chatstream"
 _FLUSH_THRESHOLD_BYTES = 32 * 1024
 _STREAM_QUEUE_CAPACITY = 1024
 _BUFFER_WORK_CAPACITY = 128
-_DELIVERY_POLL_INTERVAL_S = 0.05
-_BUFFER_CLEANUP_SECONDS = 5.0
 
 
 class StreamBufferMeta(BaseModel):
@@ -349,20 +347,13 @@ class ChatDelivery:
         self._buffer = buffer
         self._lines: queue.Queue[str] = queue.Queue(_BUFFER_WORK_CAPACITY)
         self._finished = threading.Event()
+        self._closing = False
         self._gap = threading.Event()
         self._publish_lock = threading.RLock()
-        self._worker: threading.Thread | None = None
+        self.events = EventDispatcher(flush=self._flush)
 
     def start(self) -> None:
-        if self._buffer is None:
-            return
-        try:
-            self._worker = start_thread_with_context(
-                self._store, name="chat-stream-storage", daemon=True
-            )
-        except Exception:
-            logger.exception("Chat cache delivery could not start")
-            self.report_gap()
+        self.events.start()
 
     def publish(self, item: Packet | StreamingError) -> None:
         line = get_json_line(item.model_dump()) if self._buffer is not None else None
@@ -388,48 +379,56 @@ class ChatDelivery:
 
     def finish(self) -> None:
         with self._publish_lock:
-            if self._finished.is_set():
+            if self._closing:
                 return
-            self._finished.set()
-        if self._worker is None and self._buffer is not None:
-            self._store()
-        if self._worker is not None:
-            self._worker.join(timeout=_BUFFER_CLEANUP_SECONDS)
-            if self._worker.is_alive():
-                logger.warning("Chat cache delivery cleanup exceeded its wait bound")
-                self.report_gap()
-        self.reader.publish(_StreamStatus.DONE)
-        if self._buffer is None:
-            self.finished.set_result(None)
-
-    def _store(self) -> None:
-        buffer = self._buffer
-        if buffer is None:
-            raise RuntimeError("Cache delivery requires a stream buffer")
+            self._closing = True
         try:
-            while not self._finished.is_set() or not self._lines.empty():
-                try:
-                    line = self._lines.get(timeout=_DELIVERY_POLL_INTERVAL_S)
-                except queue.Empty:
-                    buffer.flush()
-                else:
-                    if self._gap.is_set():
-                        if not buffer.truncated:
-                            buffer.mark_truncated()
-                    else:
+            self.events.close()
+        except Exception:
+            logger.exception("Chat delivery could not finalize")
+            self._finished.set()
+            self.report_gap()
+            if not self.finished.done():
+                self.finished.set_result(None)
+        if not self.finished.done():
+            logger.warning("Chat cache delivery cleanup exceeded its wait bound")
+            self.report_gap()
+        self.reader.publish(_StreamStatus.DONE)
+
+    def _flush(self, final: bool) -> None:
+        if final:
+            with self._publish_lock:
+                self._finished.set()
+        if self.finished.done():
+            return
+        buffer = self._buffer
+        try:
+            if buffer is not None:
+                # Bound each batch so cache producers cannot starve agent events.
+                for _ in range(_BUFFER_WORK_CAPACITY):
+                    try:
+                        line = self._lines.get_nowait()
+                    except queue.Empty:
+                        break
+                    if not self._gap.is_set():
                         buffer.append_line(line)
+                if self._gap.is_set() and not buffer.truncated:
+                    buffer.mark_truncated()
+                buffer.flush()
                 if buffer.truncated:
                     self.report_gap()
         except Exception:
             logger.exception("Chat cache delivery failed")
             self.report_gap()
-        finally:
-            try:
+        if not final:
+            return
+        try:
+            if buffer is not None:
                 if self._gap.is_set() and not buffer.truncated:
                     buffer.mark_truncated()
                 buffer.mark_done()
-            except Exception:
-                logger.exception("Chat cache delivery could not finalize")
-                self.report_gap()
-            finally:
-                self.finished.set_result(None)
+        except Exception:
+            logger.exception("Chat cache delivery could not finalize")
+            self.report_gap()
+        finally:
+            self.finished.set_result(None)

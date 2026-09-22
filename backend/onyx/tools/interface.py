@@ -1,29 +1,21 @@
 import abc
-from typing import Literal, NotRequired, TypedDict
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
 from sqlalchemy.orm import Session
 
-from onyx.agents.tools import ToolExecutionMode, ToolInvocation
+from onyx.agents.tools import ToolExecutionMode, ToolInvocation, ToolOutcome
 from onyx.configs.constants import MessageType
 from onyx.context.messages import prompt_metadata
 from onyx.db.memory import UserMemoryContext
-from onyx.llm.models import Message, ToolResult
+from onyx.llm.models import Message, ToolDefinition, ToolResult
 from onyx.tools.models import ChatFile, ChatMinimalTextMessage, ToolCallException
 
+if TYPE_CHECKING:
+    from onyx.agents.models import RunSnapshot
+
+
 CITATIONS_PER_TOOL_CALL = 100
-
-
-class ToolFunctionDefinition(TypedDict):
-    name: str
-    description: str
-    parameters: dict[str, JsonValue]
-    strict: NotRequired[bool]
-
-
-class FunctionToolDefinition(TypedDict):
-    type: Literal["function"]
-    function: ToolFunctionDefinition
 
 
 class ToolContext(BaseModel):
@@ -112,9 +104,17 @@ class Tool(abc.ABC):
         return True
 
     @abc.abstractmethod
-    def tool_definition(self) -> FunctionToolDefinition:
+    def tool_definition(self) -> ToolDefinition:
         raise NotImplementedError
 
     @abc.abstractmethod
-    def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
+    def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolOutcome:
         raise NotImplementedError
+
+    def complete_children(
+        self,
+        invocation: ToolInvocation,
+        context: ToolContext,
+        children: list["RunSnapshot"],
+    ) -> ToolResult:
+        raise NotImplementedError(f"Tool {self.name} does not support child completion")

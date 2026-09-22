@@ -18,8 +18,8 @@ from onyx.agents.tools import ToolInvocation
 from onyx.db.enums import MCPAuthenticationType, MCPOAuthProviderMode
 from onyx.db.models import MCPServer
 from onyx.llm.cancellation import CancellationSignal
-from onyx.llm.models import ToolResult
-from onyx.tools.interface import FunctionToolDefinition, Tool, ToolContext
+from onyx.llm.models import ToolDefinition, ToolResult
+from onyx.tools.interface import Tool, ToolContext
 from onyx.tools.tool_constructor import _disambiguate_mcp_tool_names
 from onyx.tools.tool_implementations.mcp.mcp_tool import (
     MCPTool,
@@ -96,15 +96,12 @@ class _StaticTool(Tool):
     def display_name(self) -> str:
         return self._name
 
-    def tool_definition(self) -> FunctionToolDefinition:
-        return {
-            "type": "function",
-            "function": {
-                "name": self._name,
-                "description": self.description,
-                "parameters": {"type": "object", "properties": {}},
-            },
-        }
+    def tool_definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            name=self._name,
+            description=self.description,
+            parameters={"type": "object", "properties": {}},
+        )
 
     def emit_start(self, invocation: ToolInvocation) -> None:
         pass
@@ -144,14 +141,14 @@ class TestMCPToolDefinition:
         # rejected. The parameters field must always include `properties`.
         tool = _make_tool({"type": "object"})
 
-        params = tool.tool_definition()["function"]["parameters"]
+        params = tool.tool_definition().parameters
 
         assert params == {"type": "object", "properties": {}}
 
     def test_empty_input_schema_emits_valid_openai_schema(self) -> None:
         tool = _make_tool({})
 
-        params = tool.tool_definition()["function"]["parameters"]
+        params = tool.tool_definition().parameters
 
         assert params == {"type": "object", "properties": {}}
 
@@ -163,7 +160,7 @@ class TestMCPToolDefinition:
         }
         tool = _make_tool(input_schema)
 
-        params = tool.tool_definition()["function"]["parameters"]
+        params = tool.tool_definition().parameters
 
         assert params == input_schema
 
@@ -185,7 +182,7 @@ class TestMCPToolLLMNames:
         _disambiguate_mcp_tool_names([tool])
 
         assert tool.name == "aws___list_regions"
-        assert tool.tool_definition()["function"]["name"] == "aws___list_regions"
+        assert tool.tool_definition().name == "aws___list_regions"
 
     def test_mcp_tool_disambiguates_at_construction_when_names_conflict(self) -> None:
         mcp_tool = _make_tool(
@@ -196,9 +193,7 @@ class TestMCPToolLLMNames:
         _disambiguate_mcp_tool_names([mcp_tool, static_tool])
 
         assert mcp_tool.name == "mcp_server_name_shared"
-        assert (
-            mcp_tool.tool_definition()["function"]["name"] == "mcp_server_name_shared"
-        )
+        assert mcp_tool.tool_definition().name == "mcp_server_name_shared"
         assert static_tool.name == "shared"
 
     def test_second_order_disambiguated_name_conflicts_are_allowed(self) -> None:

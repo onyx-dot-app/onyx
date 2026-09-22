@@ -1,4 +1,4 @@
-"""Store typed response items and child conversations.
+"""Store agent responses, child conversations, and resumable checkpoints.
 
 Revision ID: 7a03b6e90c12
 Revises: ad99acb9be41
@@ -129,8 +129,26 @@ def upgrade() -> None:
         ["chat_message_id"],
     )
 
+    op.add_column("chat_message", sa.Column("run_id", sa.String(), nullable=True))
+    op.create_unique_constraint("uq_chat_message_run_id", "chat_message", ["run_id"])
+    op.create_table(
+        "chat_response_checkpoint",
+        sa.Column(
+            "chat_message_id",
+            sa.Integer(),
+            sa.ForeignKey("chat_message.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
+        sa.Column("revision", sa.BigInteger(), server_default="0", nullable=False),
+        sa.Column("progress", postgresql.JSONB(), nullable=False),
+    )
+
 
 def downgrade() -> None:
+    op.drop_table("chat_response_checkpoint")
+    op.drop_constraint("uq_chat_message_run_id", "chat_message", type_="unique")
+    op.drop_column("chat_message", "run_id")
+
     # The public answer projections remain readable by the original schema.
     op.execute("""
         UPDATE tool_call SET tool_call_response = CASE jsonb_typeof(result->'content')

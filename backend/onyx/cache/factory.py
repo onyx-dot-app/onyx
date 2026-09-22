@@ -73,3 +73,21 @@ def get_shared_cache_backend() -> CacheBackend:
     from shared_configs.configs import DEFAULT_REDIS_PREFIX
 
     return get_cache_backend(tenant_id=DEFAULT_REDIS_PREFIX)
+
+
+def get_control_cache_backend(*, tenant_id: str | None = None) -> CacheBackend:
+    """Use short I/O deadlines for polling that must not block execution control."""
+    if tenant_id is None:
+        from shared_configs.contextvars import get_current_tenant_id
+
+        tenant_id = get_current_tenant_id()
+    if CACHE_BACKEND == CacheBackendType.REDIS:
+        from onyx.cache.redis_backend import RedisCacheBackend
+        from onyx.redis.redis_pool import redis_pool
+
+        return RedisCacheBackend(redis_pool.get_control_client(tenant_id))
+    if CACHE_BACKEND == CacheBackendType.POSTGRES:
+        from onyx.cache.postgres_backend import PostgresCacheBackend
+
+        return PostgresCacheBackend(tenant_id, control=True)
+    raise ValueError(f"Unsupported CACHE_BACKEND={CACHE_BACKEND!r}")

@@ -27,6 +27,7 @@ from onyx.db.models import (
     ChatMessage__SearchDoc,
     ChatSession,
     ChatSessionSharedStatus,
+    FileRecord,
     Persona,
     ToolCall,
     User,
@@ -35,6 +36,7 @@ from onyx.db.models import SearchDoc as DBSearchDoc
 from onyx.db.persona import get_best_persona_id_for_user, user_can_access_persona
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.constants import AGENT_CHECKPOINT_FILE_PREFIX
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.models import GenerationRequestParams
@@ -289,6 +291,18 @@ def delete_messages_and_files_from_chat_session(
                 # user files are managed by the user file lifecycle
                 continue
             file_store.delete_file(file_id=file_info["id"], error_on_missing=False)
+
+    checkpoint_files = db_session.scalars(
+        select(FileRecord.file_id)
+        .where(
+            FileRecord.file_id.startswith(
+                f"{AGENT_CHECKPOINT_FILE_PREFIX}{chat_session_id}/"
+            )
+        )
+        .execution_options(yield_per=FILE_CLEANUP_BATCH_SIZE)
+    )
+    for file_id in checkpoint_files:
+        file_store.delete_file(file_id=file_id, error_on_missing=False)
 
     # Delete ChatMessage records - CASCADE constraints will automatically handle:
     # - ChatMessage__StandardAnswer relationship records

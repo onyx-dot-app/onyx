@@ -246,7 +246,7 @@ def test_response_projection_uses_the_selected_run_after_agent_reuse() -> None:
     )
     first_run = _run_observed(agent)
     first = project_response(first_run.snapshot(), response_id=42, tool_ids={})
-    latest = agent.run(max_steps=1)
+    latest = agent.execute(max_steps=1).result()
     assert project_response(first_run.snapshot(), response_id=42, tool_ids={}) == first
     assert first.answer == "First response"
     assert latest.output.text == "Second response"

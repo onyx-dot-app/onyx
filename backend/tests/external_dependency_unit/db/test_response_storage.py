@@ -1,5 +1,6 @@
 """Response storage preserves accepted content, branch lineage, and compaction."""
 
+import threading
 from collections.abc import Generator
 from contextlib import nullcontext
 from queue import Queue
@@ -30,15 +31,21 @@ from onyx.agents.transcript import (
     RunStatus,
 )
 from onyx.chat.emitter import Emitter
-from onyx.chat.models import MessageRendering, ResponseRecord
+from onyx.chat.models import ChatResponseSnapshot, MessageRendering, ResponseRecord
 from onyx.chat.presentation import ResponsePresenter, project_response
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.configs.constants import MessageType
 from onyx.db.chat import (
     delete_chat_session,
+    delete_messages_and_files_from_chat_session,
     get_chat_message,
     get_or_create_root_message,
     reserve_chat_response_ids,
+)
+from onyx.db.chat_checkpoint import (
+    check_checkpoint_owner__no_commit,
+    read_response__no_commit,
+    save_response_progress__no_commit,
 )
 from onyx.db.chat_history import (
     capture_chat_history,
@@ -90,6 +97,7 @@ from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
     CodingAgentTool,
 )
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
+from onyx.utils.threadpool_concurrency import start_thread_future
 
 
 @pytest.fixture
@@ -947,18 +955,22 @@ def test_session_delete_removes_reused_child_history_and_tool_items(
 
 
 @pytest.mark.parametrize("unfinished_child", [False, True])
+@pytest.mark.parametrize("status", [RunStatus.RUNNING, RunStatus.SUSPENDED])
 def test_unsettled_execution_is_rejected_before_saving(
-    db_session: Session, conversation: ChatSession, unfinished_child: bool
+    db_session: Session,
+    status: RunStatus,
+    conversation: ChatSession,
+    unfinished_child: bool,
 ) -> None:
     response = _response(db_session, conversation)
     record = _record(response)
     if unfinished_child:
         child = _child_record(record, uuid4(), "Partial child output")
-        child.status = RunStatus.RUNNING
+        child.status = status
         record.child_runs = [child]
     else:
-        record.status = RunStatus.RUNNING
-    with pytest.raises(ValueError, match="settled execution records"):
+        record.status = status
+    with pytest.raises(ValueError, match="terminal execution records"):
         _save(db_session, response, record)
     assert response.response_status is None
     assert response.response_items == []
@@ -1138,3 +1150,109 @@ def test_response_storage_sanitizes_postgres_text_without_mutating_input(
     assert isinstance(first, AssistantMessage)
     assert first.tool_calls[0].arguments == {"query": "beforeafter"}
     assert record == original
+
+
+@pytest.mark.parametrize(
+    "save_order", ["lifecycle_first", "display_first", "concurrent"]
+)
+def test_lifecycle_and_display_saves_share_response_content(
+    db_session: Session, conversation: ChatSession, save_order: str
+) -> None:
+    response = _response(db_session, conversation)
+    record = _record(response)
+    child_id = uuid4()
+    child = _child_record(record, child_id, "Child answer")
+    child.checkpoint = CompactionCheckpoint(
+        summary="Child summary", covered_count=1, covered_digest="child-history"
+    )
+    root_id = response.id
+    root_session_id = conversation.id
+    initial = record.model_copy(
+        update={"items": [], "child_runs": [], "status": RunStatus.RUNNING}
+    )
+    save_response_progress__no_commit(db_session, root_id, initial)
+    db_session.commit()
+    try:
+        display = ChatResponseSnapshot(
+            answer="Answer",
+            reasoning=None,
+            request_params=None,
+            citation_to_doc={},
+            tool_calls=[],
+            is_clarification=False,
+            all_search_docs={},
+            pre_answer_processing_time=None,
+            response=record,
+            cancelled=False,
+        )
+        barrier = threading.Barrier(2) if save_order == "concurrent" else None
+        engine = db_session.get_bind()
+
+        def save_lifecycle() -> None:
+            if barrier is not None:
+                barrier.wait(timeout=10)
+            with Session(engine) as session:
+                check_checkpoint_owner__no_commit(session, root_id, None)
+                save_response_progress__no_commit(
+                    session, root_id, record.model_copy(update={"child_runs": []})
+                )
+                save_response_progress__no_commit(session, root_id, child)
+                session.commit()
+
+        def save_display() -> None:
+            if barrier is not None:
+                barrier.wait(timeout=10)
+            save_chat_response(message_id=root_id, response=display)
+
+        if save_order == "concurrent":
+            lifecycle = start_thread_future(save_lifecycle, name="test-lifecycle-save")
+            presentation = start_thread_future(save_display, name="test-display-save")
+            lifecycle.result(timeout=20)
+            presentation.result(timeout=20)
+        elif save_order == "lifecycle_first":
+            save_lifecycle()
+            save_display()
+        else:
+            save_display()
+            save_lifecycle()
+        db_session.expire_all()
+        saved_root = db_session.get(ChatMessage, root_id)
+        assert saved_root is not None
+        assert saved_root.message == "Answer"
+        assert read_response_items(saved_root) == record.items
+        saved_child = read_response__no_commit(db_session, child.run_id)
+        assert saved_child is not None
+        assert saved_child.response.parent_run_id == record.run_id
+        assert saved_child.response.checkpoint == child.checkpoint
+        assert saved_child.response.items == child.items
+        assert (
+            db_session.scalar(
+                select(func.count())
+                .select_from(ChatSession)
+                .where(ChatSession.spawned_by_message_id == root_id)
+            )
+            == 1
+        )
+        assert (
+            db_session.scalar(
+                select(func.count())
+                .select_from(StoredToolCall)
+                .where(StoredToolCall.chat_session_id == root_session_id)
+            )
+            == 1
+        )
+        assert (
+            db_session.scalar(
+                select(func.count())
+                .select_from(ChatMessage)
+                .where(
+                    ChatMessage.chat_session_id == child_id,
+                    ChatMessage.message_type == MessageType.SUMMARY,
+                )
+            )
+            == 1
+        )
+    finally:
+        db_session.rollback()
+        delete_messages_and_files_from_chat_session(root_session_id, db_session)
+        db_session.commit()

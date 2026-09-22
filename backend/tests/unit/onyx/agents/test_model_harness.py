@@ -145,7 +145,7 @@ def test_model_honors_cancelled_signal() -> None:
     from onyx.llm.cancellation import AgentCancelled
 
     with pytest.raises(AgentCancelled):
-        Agent(llm).run(max_steps=1, cancellation=signal)
+        Agent(llm).execute(max_steps=1, cancellation=signal).result()
     assert not llm.requests
 
 

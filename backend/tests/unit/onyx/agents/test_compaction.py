@@ -186,7 +186,7 @@ def test_provider_context_rejection_preserves_execution_settings(
         ),
         prepare_step=prepare,
     )
-    result = agent.run(max_steps=1)
+    result = agent.execute(max_steps=1).result()
     assert prepared == [0]
     assert [context.flow for context in model.contexts] == [
         LLMFlow.RESEARCH_AGENT,

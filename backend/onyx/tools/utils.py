@@ -27,7 +27,7 @@ def explicit_tool_calling_supported(model_provider: str, model_name: str) -> boo
 
 
 def compute_tool_tokens(tool: Tool, token_counter: Callable[[str], int]) -> int:
-    return token_counter(json.dumps(tool.tool_definition()))
+    return token_counter(json.dumps(tool.tool_definition().model_dump()))
 
 
 def compute_all_tool_tokens(

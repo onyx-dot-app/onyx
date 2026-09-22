@@ -260,10 +260,7 @@ def test_binary_tool_details_can_be_delivered() -> None:
     assert any(event.type == "tool_end" for event in events)
 
 
-def test_late_tool_completion_cannot_change_a_closed_run(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr("onyx.agents.runtime.CLEANUP_SECONDS", 0.02)
+def test_late_tool_completion_cannot_change_a_closed_run() -> None:
     entered = threading.Event()
     release = threading.Event()
 
@@ -322,10 +319,13 @@ def test_selected_tool_definition_and_callback_stay_paired() -> None:
 
 
 def test_provider_receives_acceptance_before_reading_next_chunk() -> None:
+    started = threading.Event()
+
     class StreamingModel(FakeModelClient):
         def stream(
             self, request: GenerationRequest, context: GenerationContext | None = None
         ) -> Generator[GenerationEvent, None, None]:
+            assert started.wait(3)
             assert request.messages == []
             assert context is not None
             text = ""
@@ -342,6 +342,7 @@ def test_provider_receives_acceptance_before_reading_next_chunk() -> None:
             )
 
     run = Agent(StreamingModel(answer)).start(max_steps=1)
+    started.set()
     assert (run.result()).output.text == "x" * 30
     assert run.wait_for_idle(2)
 
@@ -432,7 +433,7 @@ def test_tool_argument_mutation_does_not_change_recorded_model_call() -> None:
             AgentTool(name="lookup", description="", parameters={}, execute=execute)
         ],
     )
-    result = agent.run(max_steps=1)
+    result = agent.execute(max_steps=1).result()
     message = agent.context.messages[0]
     assert isinstance(message, AssistantMessage)
     assert message.tool_calls[0].arguments == {"query": "original"}

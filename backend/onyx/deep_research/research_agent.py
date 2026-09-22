@@ -10,6 +10,7 @@ from onyx.agents.models import (
     StepInput,
     StepResult,
 )
+from onyx.agents.restoration import FeatureRestoration
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool
 from onyx.agents.transcript import CompactionCheckpoint
@@ -61,8 +62,15 @@ from onyx.prompts.deep_research.research_agent import (
 from onyx.prompts.prompt_utils import get_current_llm_day_time
 from onyx.prompts.tool_prompts import INTERNAL_SEARCH_GUIDANCE
 from onyx.tools.interface import Tool, ToolContext
+from onyx.tools.restoration import (
+    capture_search_state,
+    restore_search_state,
+)
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
-from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.search.models import SearchToolState
+from onyx.tools.tool_implementations.search.search_tool import (
+    SearchTool,
+)
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.tool_runner import bind_tool
@@ -78,7 +86,14 @@ class ResearchConfiguration(BaseModel):
     reasoning_effort: ReasoningEffort
 
 
-class ResearchAgent:
+class ResearchFeatureState(BaseModel):
+    configuration: ResearchConfiguration
+    citation_sources: CitationMapping
+    citation_mapping: dict[int, str]
+    search_tools: dict[str, SearchToolState]
+
+
+class ResearchAgent(FeatureRestoration):
     """Investigate one question and return a report with source references."""
 
     def __init__(
@@ -94,6 +109,7 @@ class ResearchAgent:
         checkpoint: CompactionCheckpoint | None = None,
         sources: CitationMapping | None = None,
         previous_run_id: str | None = None,
+        agent_id: str | None = None,
     ) -> None:
         allowed_names = {SearchTool.NAME, WebSearchTool.NAME, OpenURLTool.NAME}
         self.tools = [tool.for_agent() for tool in tools if tool.name in allowed_names]
@@ -114,15 +130,70 @@ class ResearchAgent:
         }
         self.agent = Agent(
             llm,
+            tools=[bind_tool(tool, self._tool_context) for tool in self.tools]
+            + self._control_tools(),
+            agent_id=agent_id,
             previous_run_id=previous_run_id,
             context=AgentContext(
                 messages=messages or [],
                 checkpoint=checkpoint,
             ),
+            restoration=self,
             prepare_step=self.prepare_step,
             after_step=self.after_step,
             execution=GenerationContext(
                 flow=LLMFlow.RESEARCH_AGENT, user_identity=user_identity
+            ),
+        )
+
+    def capture_state(self) -> ResearchFeatureState:
+        return ResearchFeatureState(
+            configuration=ResearchConfiguration(
+                language_section=self.language_section,
+                reasoning_effort=self.reasoning_effort,
+            ),
+            citation_sources=self.citation_processor.citation_to_doc,
+            citation_mapping=self.citation_mapping,
+            search_tools=capture_search_state(self.tools),
+        ).model_copy(deep=True)
+
+    def restore_state(self, state: BaseModel) -> None:
+        if not isinstance(state, ResearchFeatureState):
+            raise ValueError("Research restoration requires ResearchFeatureState")
+        saved = state.model_copy(deep=True)
+        if (
+            saved.configuration.language_section != self.language_section
+            or saved.configuration.reasoning_effort != self.reasoning_effort
+        ):
+            raise ValueError("Research restoration configuration does not match")
+        restore_search_state(self.tools, saved.search_tools)
+        self.citation_processor.citation_to_doc = saved.citation_sources
+        self.citation_mapping = saved.citation_mapping
+
+    def _control_tools(self) -> list[AgentTool]:
+        return [
+            AgentTool(
+                name=definition.name,
+                description=definition.description,
+                parameters=definition.parameters,
+                execute=lambda _invocation, name=definition.name: ToolResult(
+                    content="Ready to produce the research report."
+                    if name == GENERATE_REPORT_TOOL_NAME
+                    else THINK_TOOL_RESPONSE_MESSAGE
+                ),
+            )
+            for definition in get_research_agent_additional_tool_definitions(
+                not self.is_reasoning_model
+            )
+        ]
+
+    def _tool_context(self) -> ToolContext:
+        """Read feature state that advances only after a completed step."""
+        return ToolContext(
+            citation_mapping=dict(self.citation_mapping),
+            next_citation_num=self.citation_processor.get_next_citation_number(),
+            url_snippet_map=extract_url_snippet_map(
+                list(self.citation_processor.citation_to_doc.values())
             ),
         )
 
@@ -168,30 +239,7 @@ class ResearchAgent:
             )
             reminder = USER_REPORT_QUERY.format(research_topic=research_topic)
         else:
-            tool_context = ToolContext(
-                citation_mapping=dict(self.citation_mapping),
-                next_citation_num=self.citation_processor.get_next_citation_number(),
-                url_snippet_map=extract_url_snippet_map(
-                    list(self.citation_processor.citation_to_doc.values())
-                ),
-            )
-            tools = [bind_tool(tool, tool_context) for tool in self.tools]
-            for definition in get_research_agent_additional_tool_definitions(
-                not self.is_reasoning_model
-            ):
-                function = definition["function"]
-                tools.append(
-                    AgentTool(
-                        name=function["name"],
-                        description=function["description"],
-                        parameters=function["parameters"],
-                        execute=lambda _invocation, name=function["name"]: ToolResult(
-                            content="Ready to produce the research report."
-                            if name == GENERATE_REPORT_TOOL_NAME
-                            else THINK_TOOL_RESPONSE_MESSAGE
-                        ),
-                    )
-                )
+            tools = list(self.agent.tools)
             tool_names = {tool.name for tool in self.tools}
             has_open_url = OpenURLTool.NAME in tool_names
             template = (
@@ -223,9 +271,9 @@ class ResearchAgent:
                 else None
             )
         output_metadata = ResearchMessageMetadata(
+            is_reasoning_model=self.is_reasoning_model,
             phase=ResearchPhase.REPORT if is_final_step else ResearchPhase.RESEARCH,
             is_intermediate=True,
-            is_reasoning_model=self.is_reasoning_model,
             sources=dict(self.citation_processor.citation_to_doc),
         )
         return PreparedStep(
@@ -251,7 +299,7 @@ class ResearchAgent:
     def after_step(self, result: StepResult) -> bool:
         for tool_result in result.tool_results:
             self._update_sources(tool_result)
-        if result.request.options.tool_choice != ToolChoiceOptions.NONE:
+        if result.options.tool_choice != ToolChoiceOptions.NONE:
             return True
         if not result.message.text:
             raise ValueError("Model failed to produce a research report")

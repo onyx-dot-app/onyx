@@ -473,7 +473,7 @@ class TestSanitizeToolName(unittest.TestCase):
         # what the user wrote, even though the LLM sees the sanitized form.
         self.assertEqual(specs[0].raw_name, "ServiceNow.list incidents")
         self.assertEqual(
-            specs[0].to_tool_definition()["function"]["name"],
+            specs[0].to_tool_definition().name,
             "ServiceNow_list_incidents",
         )
 

@@ -2,10 +2,11 @@
 
 import os
 import threading
+import time
+from collections import deque
 from collections.abc import Callable
 from concurrent.futures import Future
 from contextvars import copy_context
-from queue import Queue
 
 from pydantic_core import to_json
 
@@ -21,6 +22,7 @@ logger = setup_logger()
 OPERATION_TIMEOUT_SECONDS = 1800.0
 CLEANUP_SECONDS = 2.0
 EVENT_QUEUE_CAPACITY = 1024
+EVENT_FLUSH_INTERVAL_SECONDS = 0.05
 AGENT_EVENT_BUFFER_MAX_BYTES = int(
     os.environ.get("AGENT_EVENT_BUFFER_MAX_BYTES", 4 * 1024 * 1024)
 )
@@ -164,21 +166,140 @@ class ExecutionWork:
         future.add_done_callback(finished)
 
 
-class EventDelivery:
-    """Deliver ordered, isolated events; listeners must finish their own I/O within a timeout."""
+class EventDispatcher:
+    """Serialize listeners and flush their output on one worker.
 
-    def __init__(self) -> None:
-        self._lock = threading.Lock()
-        self._condition = threading.Condition(self._lock)
-        self._listeners: list[Callable[[AgentEvent], None]] = []
-        self._queue: Queue[tuple[AgentEvent, int]] = Queue(EVENT_QUEUE_CAPACITY)
+    The flush callback receives True after close drains all accepted events.
+    """
+
+    def __init__(
+        self,
+        *,
+        flush: Callable[[bool], None] | None = None,
+    ) -> None:
+        self._flush = flush
+        self._context = copy_context()
+        self._condition = threading.Condition()
+        self._queue: deque[tuple[EventDelivery, AgentEvent, int]] = deque()
         self._bytes = 0
+        self._closed = False
+        self._release_when_idle = False
+        self._worker: threading.Thread | None = None
+
+    def publish(self, delivery: "EventDelivery", event: AgentEvent) -> bool:
+        size = len(to_json(event.model_dump(mode="python"), bytes_mode="base64"))
+        with self._condition:
+            if self._closed:
+                logger.warning("Agent event dispatcher is closed")
+                return False
+            if (
+                len(self._queue) >= EVENT_QUEUE_CAPACITY
+                or self._bytes + size > AGENT_EVENT_BUFFER_MAX_BYTES
+            ):
+                logger.error("Agent observer backlog exceeded its bound")
+                return False
+            owned_event = event.model_copy(deep=True)
+            try:
+                self.start()
+            except Exception:
+                logger.exception("Agent observer delivery could not start")
+                return False
+            delivery.tracker.started()
+            self._bytes += size
+            self._queue.append((delivery, owned_event, size))
+            self._condition.notify()
+            return True
+
+    def start(self) -> None:
+        with self._condition:
+            if self._worker is None and not self._closed:
+                self._worker = start_thread_with_context(
+                    self._deliver, name="agent-events", daemon=True
+                )
+
+    def _deliver(self) -> None:
+        last_flush = time.monotonic()
+        while True:
+            with self._condition:
+                self._condition.wait_for(
+                    lambda: self._closed or self._release_when_idle or self._queue,
+                    EVENT_FLUSH_INTERVAL_SECONDS
+                    if self._flush is not None
+                    else OPERATION_TIMEOUT_SECONDS,
+                )
+                item = self._queue.popleft() if self._queue else None
+                exiting = item is None and (
+                    self._closed or self._release_when_idle or self._flush is None
+                )
+                final_flush = exiting and self._closed
+            if item is not None:
+                delivery, event, size = item
+                try:
+                    delivery._context.run(delivery._send, event)
+                finally:
+                    with self._condition:
+                        self._bytes -= size
+                    delivery._context.run(delivery.tracker.finished)
+            if self._flush is not None and (
+                exiting or time.monotonic() - last_flush >= EVENT_FLUSH_INTERVAL_SECONDS
+            ):
+                try:
+                    self._context.run(self._flush, final_flush)
+                except Exception:
+                    logger.exception("Agent event sink flush failed")
+                last_flush = time.monotonic()
+            if exiting:
+                with self._condition:
+                    if self._queue or (
+                        self._flush is not None and self._closed and not final_flush
+                    ):
+                        continue
+                    self._worker = None
+                    return
+
+    @property
+    def is_dispatch_thread(self) -> bool:
+        with self._condition:
+            return (
+                self._worker is not None and self._worker.ident == threading.get_ident()
+            )
+
+    def pause(self) -> None:
+        """Release the worker when accepted events drain."""
+        with self._condition:
+            self._release_when_idle = True
+            self._condition.notify_all()
+
+    def resume(self) -> None:
+        with self._condition:
+            self._release_when_idle = False
+
+    def close(self) -> None:
+        """Reject new events and drain accepted events within the cleanup bound."""
+        with self._condition:
+            if self._flush is not None:
+                self.start()
+            self._closed = True
+            self._condition.notify_all()
+            worker = self._worker
+        if worker is not None and worker.ident != threading.get_ident():
+            worker.join(timeout=CLEANUP_SECONDS)
+            if worker.is_alive():
+                logger.warning("Agent event dispatcher exceeded its cleanup bound")
+
+
+class EventDelivery:
+    """Deliver a run's events independently of other channels on its dispatcher."""
+
+    def __init__(self, dispatcher: EventDispatcher | None = None) -> None:
+        self._lock = threading.Lock()
+        self._listeners: list[Callable[[AgentEvent], None]] = []
         self._closing = False
-        self._dispatch_thread_id: int | None = None
         self.failed = threading.Event()
         self.tracker = WorkTracker()
         self._context = copy_context()
-        self._scheduled = False
+        self._owns_dispatcher = dispatcher is None
+        self.dispatcher = dispatcher if dispatcher is not None else EventDispatcher()
 
     def subscribe(self, listener: Callable[[AgentEvent], None]) -> Callable[[], None]:
         with self._lock:
@@ -196,93 +317,50 @@ class EventDelivery:
         with self._lock:
             if self._closing or self.failed.is_set() or not self._listeners:
                 return
-            size = len(to_json(event.model_dump(mode="python"), bytes_mode="base64"))
-            if self._queue.full() or self._bytes + size > AGENT_EVENT_BUFFER_MAX_BYTES:
+            if not self.dispatcher.publish(self, event):
                 self.failed.set()
-                logger.error("Agent observer backlog exceeded its bound")
-                return
-            self._bytes += size
-            self._queue.put_nowait((event.model_copy(deep=True), size))
-            self._condition.notify()
-            if self._scheduled:
-                return
-            self._scheduled = True
-            self.tracker.started()
-            try:
-                context = self._context.copy()
-                start_thread_with_context(
-                    self._deliver, name="agent-events", daemon=True, context=context
-                )
-            except Exception:
-                self._scheduled = False
-                self.tracker.finished()
-                self.failed.set()
-                self._discard_pending()
-                logger.exception("Agent observer delivery could not start")
-                return
 
     @property
     def is_dispatch_thread(self) -> bool:
-        with self._lock:
-            return self._dispatch_thread_id == threading.get_ident()
+        return self.dispatcher.is_dispatch_thread
 
     def _send(self, event: AgentEvent) -> None:
         with self._lock:
             listeners = tuple(self._listeners)
-            self._dispatch_thread_id = threading.get_ident()
-        try:
-            for index, listener in enumerate(listeners):
-                with self._lock:
-                    if listener not in self._listeners:
-                        continue
-                try:
-                    # The queue owns this copy; its last listener can consume it directly.
-                    listener(
-                        event
-                        if index == len(listeners) - 1
-                        else event.model_copy(deep=True)
-                    )
-                except AgentCancelled:
-                    self.failed.set()
-                    logger.debug("Agent observer cancelled")
-                except Exception:
-                    self.failed.set()
-                    logger.exception("Agent observer failed")
-        finally:
+        for index, listener in enumerate(listeners):
             with self._lock:
-                self._dispatch_thread_id = None
+                if listener not in self._listeners:
+                    continue
+            try:
+                # The queue owns this copy; its last listener can consume it directly.
+                listener(
+                    event
+                    if index == len(listeners) - 1
+                    else event.model_copy(deep=True)
+                )
+            except AgentCancelled:
+                self.failed.set()
+                logger.debug("Agent observer cancelled")
+            except Exception:
+                self.failed.set()
+                logger.exception("Agent observer failed")
 
-    def _deliver(self) -> None:
-        try:
-            while True:
-                with self._condition:
-                    self._condition.wait_for(
-                        lambda: self._closing or not self._queue.empty()
-                    )
-                    if self._queue.empty():
-                        self._scheduled = False
-                        return
-                    event, size = self._queue.get_nowait()
-                try:
-                    self._send(event)
-                finally:
-                    with self._lock:
-                        self._bytes -= size
-        finally:
-            self.tracker.finished()
+    def resume(self) -> None:
+        if self._owns_dispatcher:
+            self.dispatcher.resume()
 
-    def _discard_pending(self) -> None:
-        while not self._queue.empty():
-            _, size = self._queue.get_nowait()
-            self._bytes -= size
+    def pause(self) -> None:
+        """Drain accepted events while retaining subscriptions for later segments."""
+        if self._owns_dispatcher:
+            self.dispatcher.pause()
 
     def close(self) -> None:
         with self._lock:
             self._closing = True
-            self._condition.notify_all()
         if not self.tracker.wait_idle(CLEANUP_SECONDS):
             self.failed.set()
             logger.warning("Agent event delivery exceeded its cleanup bound")
         with self._lock:
-            self._discard_pending()
             self._listeners.clear()
+        if self._owns_dispatcher:
+            self.dispatcher.close()

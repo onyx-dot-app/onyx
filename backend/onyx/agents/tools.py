@@ -1,10 +1,11 @@
 """Executable tools and their invocation-scoped services."""
 
 from collections.abc import Callable, Sequence
+from concurrent.futures import Future
 from enum import Enum
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, JsonValue, SerializeAsAny
+from pydantic import BaseModel, ConfigDict, JsonValue, SerializeAsAny, model_validator
 
 from onyx.agents.transcript import AgentRestorationConfig
 from onyx.llm.cancellation import CancellationSignal
@@ -12,11 +13,58 @@ from onyx.llm.models import Message, ToolDefinition, ToolResult
 
 if TYPE_CHECKING:
     from onyx.agents.coordination import AgentInfo
-    from onyx.agents.models import RunResult
+    from onyx.agents.models import RunResult, RunSnapshot
     from onyx.agents.runtime import Agent
 
 
 DEFAULT_AGENT_WAIT_SECONDS = 60.0
+
+
+class AgentLifetime(str, Enum):
+    FOREGROUND = "foreground"
+    BACKGROUND = "background"
+
+
+class InputMode(str, Enum):
+    EXECUTE = "execute"
+    RESULT = "result"
+
+
+class InputDecision(str, Enum):
+    APPROVE = "approve"
+    DENY = "deny"
+    RESULT = "result"
+
+
+class PendingToolInput(BaseModel):
+    """Release the tool worker until an identified answer permits execution or supplies output."""
+
+    kind: Literal["input"] = "input"
+    request_id: str
+    prompt: str
+    mode: InputMode
+
+
+class ToolAnswer(BaseModel):
+    request_id: str
+    decision: InputDecision
+    result: ToolResult | None = None
+
+    @model_validator(mode="after")
+    def validate_result(self) -> "ToolAnswer":
+        if (self.decision == InputDecision.RESULT) != (self.result is not None):
+            raise ValueError("Only a result answer requires a tool result")
+        return self
+
+
+class ChildRunWait(BaseModel):
+    """Complete a delegation call when these child runs reach terminal output."""
+
+    kind: Literal["children"] = "children"
+    run_ids: list[str]
+
+
+ToolOutcome = ToolResult | PendingToolInput | ChildRunWait
 
 
 class SpawnResult(BaseModel):
@@ -39,10 +87,16 @@ class AgentControl(Protocol):
         max_steps: int,
         messages: Sequence[Message],
         restoration_config: AgentRestorationConfig | None = None,
+        lifetime: AgentLifetime = AgentLifetime.FOREGROUND,
     ) -> SpawnResult: ...
 
     def start_run(
-        self, agent_id: str, *, max_steps: int, messages: Sequence[Message]
+        self,
+        agent_id: str,
+        *,
+        max_steps: int,
+        messages: Sequence[Message],
+        lifetime: AgentLifetime = AgentLifetime.FOREGROUND,
     ) -> str: ...
 
     def wait_run(
@@ -54,6 +108,10 @@ class AgentControl(Protocol):
     def wait_for_idle(self, run_id: str, *, timeout: float = 1800.0) -> bool: ...
 
     def add_idle_callback(self, run_id: str, callback: Callable[[], None]) -> None: ...
+
+    def add_completion_cleanup(
+        self, run_id: str, callback: Callable[[], None]
+    ) -> Future[None]: ...
 
     def discovery(self) -> list["AgentInfo"]: ...
 
@@ -101,19 +159,24 @@ class ToolExecutionMode(str, Enum):
 
 
 class AgentTool:
+    """An executable SDK tool with application dependencies bound into its callbacks."""
+
     def __init__(
         self,
         *,
         name: str,
         description: str,
         parameters: dict[str, JsonValue],
-        execute: Callable[[ToolInvocation], ToolResult],
+        execute: Callable[[ToolInvocation], ToolOutcome],
+        complete_children: Callable[[ToolInvocation, list["RunSnapshot"]], ToolResult]
+        | None = None,
         execution_mode: ToolExecutionMode = ToolExecutionMode.PARALLEL,
     ) -> None:
         self.definition = ToolDefinition(
             name=name, description=description, parameters=parameters
         )
         self.execute = execute
+        self.complete_children = complete_children
         self.execution_mode = execution_mode
 
     def snapshot(self) -> "AgentTool":
@@ -123,6 +186,7 @@ class AgentTool:
             description=definition.description,
             parameters=definition.parameters,
             execute=self.execute,
+            complete_children=self.complete_children,
             execution_mode=self.execution_mode,
         )
 

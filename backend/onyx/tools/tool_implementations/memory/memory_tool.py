@@ -5,10 +5,9 @@ from onyx.agents.tools import ToolExecutionMode, ToolInvocation
 from onyx.db.memory import add_memory, update_memory_at_index
 from onyx.llm.cancellation import check_cancelled
 from onyx.llm.interfaces import LLM
-from onyx.llm.models import ToolResult
+from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.secondary_llm_flows.memory_update import process_memory_update
 from onyx.tools.interface import (
-    FunctionToolDefinition,
     Tool,
     ToolContext,
     parse_tool_arguments,
@@ -63,29 +62,26 @@ class MemoryTool(Tool):
         return self.DISPLAY_NAME
 
     @override
-    def tool_definition(self) -> FunctionToolDefinition:
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        MEMORY_FIELD: {
-                            "type": "string",
-                            "description": (
-                                "The text of the memory to add or update. "
-                                "Should be a concise, standalone statement that "
-                                "captures the key information. For example: "
-                                "'User prefers dark mode' or 'User's favorite frontend framework is React'."
-                            ),
-                        },
+    def tool_definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            name=self.name,
+            description=self.description,
+            parameters={
+                "type": "object",
+                "properties": {
+                    MEMORY_FIELD: {
+                        "type": "string",
+                        "description": (
+                            "The text of the memory to add or update. "
+                            "Should be a concise, standalone statement that "
+                            "captures the key information. For example: "
+                            "'User prefers dark mode' or 'User's favorite frontend framework is React'."
+                        ),
                     },
-                    "required": [MEMORY_FIELD],
                 },
+                "required": [MEMORY_FIELD],
             },
-        }
+        )
 
     @override
     def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:

@@ -9,13 +9,8 @@ from onyx.context.search.models import SearchDocsResponse
 from onyx.context.search.utils import convert_inference_sections_to_search_docs
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.web_search import fetch_active_web_search_provider
-from onyx.llm.models import ToolResult
-from onyx.tools.interface import (
-    CITATIONS_PER_TOOL_CALL,
-    FunctionToolDefinition,
-    Tool,
-    ToolContext,
-)
+from onyx.llm.models import ToolDefinition, ToolResult
+from onyx.tools.interface import CITATIONS_PER_TOOL_CALL, Tool, ToolContext
 from onyx.tools.models import ToolCallException
 from onyx.tools.tool_implementations.utils import (
     convert_inference_sections_to_llm_string,
@@ -138,27 +133,22 @@ class WebSearchTool(Tool):
             provider = fetch_active_web_search_provider(session)
             return provider is not None
 
-    def tool_definition(self) -> FunctionToolDefinition:
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": (
-                    "Search the web for information. Returns a list of search results with titles, metadata, and snippets."
-                ),
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        QUERIES_FIELD: {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": "One or more queries to look up on the web. Must contain only printable characters",
-                        },
+    def tool_definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            name=self.name,
+            description="Search the web for information. Returns a list of search results with titles, metadata, and snippets.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    QUERIES_FIELD: {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "One or more queries to look up on the web. Must contain only printable characters",
                     },
-                    "required": [QUERIES_FIELD],
                 },
+                "required": [QUERIES_FIELD],
             },
-        }
+        )
 
     def _safe_execute_single_search(
         self,

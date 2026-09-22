@@ -34,6 +34,7 @@ from onyx.server.query_and_chat.streaming_models import (
     CitationInfo,
     Packet,
 )
+from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
 from onyx.tools.models import (
     ChatFile,
     GeneratedImage,
@@ -42,6 +43,7 @@ from onyx.tools.models import (
     ToolCallInfo,
 )
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
+from onyx.tools.tool_implementations.search.models import SearchToolState
 
 MAX_DISCOVERED_AGENTS = 128
 
@@ -285,6 +287,11 @@ PERSISTENCE_ERROR_MESSAGES = {
 }
 
 
+class PendingChatResponseSave(BaseModel):
+    response: ChatResponseSnapshot
+    deadline: float
+
+
 class ChatResponseOutcome(BaseModel):
     """Frozen execution output and the application's persistence outcome."""
 
@@ -318,6 +325,32 @@ class PersonaPromptConfig(BaseModel):
     task_prompt: str | None
     datetime_aware: bool
     replace_base_system_prompt: bool
+
+
+class ChatRestoreConfiguration(BaseModel):
+    persona: PersonaPromptConfig | None
+    context_files: SavedContextFiles
+    file_metadata: dict[str, FileToolMetadata] | None
+    memory: UserMemoryContext | None
+    reasoning_effort: ReasoningEffort
+    include_citations: bool
+    inject_memories: bool
+    forced_tool_id: int | None
+    base_prompt: str
+    custom_prompt: str | None
+    reminders_enabled: bool
+
+
+class ChatFeatureState(BaseModel):
+    configuration: ChatRestoreConfiguration
+    elapsed_seconds: float
+    citation_sources: dict[int, SearchDoc]
+    citation_mapping: dict[int, str]
+    gathered_documents: list[SearchDoc]
+    chat_files: list[SavedChatFile]
+    has_called_search_tool: bool
+    ran_image_gen: bool
+    search_tools: dict[str, SearchToolState]
 
 
 class ReservedChatResponse(BaseModel):

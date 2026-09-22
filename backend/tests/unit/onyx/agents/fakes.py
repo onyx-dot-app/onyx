@@ -22,10 +22,11 @@ from onyx.llm.models import (
     GenerationEvent,
     GenerationRequest,
     Message,
+    ToolDefinition,
     ToolResult,
 )
 from onyx.llm.multi_llm import LitellmLLM, LitellmTransport
-from onyx.tools.interface import FunctionToolDefinition, Tool, ToolContext
+from onyx.tools.interface import Tool, ToolContext
 
 
 class ScriptedTransport(LitellmTransport):
@@ -122,18 +123,15 @@ class EchoTool(Tool):
     def display_name(self) -> str:
         return "Echo"
 
-    def tool_definition(self) -> FunctionToolDefinition:
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": {
-                    "type": "object",
-                    "properties": {"value": {"type": "string"}},
-                },
+    def tool_definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            name=self.name,
+            description=self.description,
+            parameters={
+                "type": "object",
+                "properties": {"value": {"type": "string"}},
             },
-        }
+        )
 
     def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         invocation.cancellation.check()

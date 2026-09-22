@@ -66,7 +66,7 @@ def test_compacted_tool_history_preserves_answer_and_source(
         ),
         context=AgentContext(messages=history),
     )
-    result = agent.run(max_steps=1)
+    result = agent.execute(max_steps=1).result()
     assert agent.context.checkpoint is not None
     assert "731" in result.output.text
     assert "[1]" in result.output.text

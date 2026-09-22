@@ -82,7 +82,7 @@ def test_disabled_tool_needs_no_content_provider_and_says_so() -> None:
     tool = _build_tool(web_fetch_disabled=True)
     assert tool._provider is None
     assert "disabled" in tool.description
-    assert tool.tool_definition()["function"]["description"] == tool.description
+    assert tool.tool_definition().description == tool.description
 
 
 def test_enabled_tool_keeps_default_description() -> None:
