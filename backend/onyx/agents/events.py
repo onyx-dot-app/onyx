@@ -5,7 +5,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny
 
-from onyx.agents.tools import ToolProgress
+from onyx.agents.tools import PendingToolInput, ToolProgress
 from onyx.agents.transcript import RunStatus
 from onyx.llm.models import (
     AssistantMessage,
@@ -18,6 +18,8 @@ from onyx.llm.models import (
 class AgentEventType(str, Enum):
     AGENT_START = "agent_start"
     AGENT_END = "agent_end"
+    AGENT_SUSPENDED = "agent_suspended"
+    INPUT_REQUIRED = "input_required"
     MESSAGE_START = "message_start"
     MESSAGE_UPDATE = "message_update"
     MESSAGE_END = "message_end"
@@ -40,6 +42,16 @@ class _AgentEvent(_Event):
 
 class AgentStartEvent(_AgentEvent):
     type: Literal[AgentEventType.AGENT_START] = AgentEventType.AGENT_START
+
+
+class AgentSuspendedEvent(_AgentEvent):
+    type: Literal[AgentEventType.AGENT_SUSPENDED] = AgentEventType.AGENT_SUSPENDED
+
+
+class InputRequiredEvent(_AgentEvent):
+    type: Literal[AgentEventType.INPUT_REQUIRED] = AgentEventType.INPUT_REQUIRED
+    tool_call_id: str
+    request: PendingToolInput
 
 
 class AgentEndEvent(_AgentEvent):
@@ -93,6 +105,8 @@ class ToolEndEvent(ToolResultEvent):
 
 AgentEvent = Annotated[
     AgentStartEvent
+    | AgentSuspendedEvent
+    | InputRequiredEvent
     | AgentEndEvent
     | MessageStartEvent
     | MessageUpdateEvent

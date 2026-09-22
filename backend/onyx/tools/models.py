@@ -133,6 +133,7 @@ class ChatFile(BaseModel):
 
     filename: str
     content: bytes
+    file_id: str | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -142,6 +143,7 @@ class ChatFile(BaseModel):
         *,
         filename: str,
         loader: Callable[[], bytes],
+        file_id: str | None = None,
     ) -> "ChatFile":
         """Construct a ChatFile whose ``content`` is loaded on first access.
 
@@ -149,7 +151,7 @@ class ChatFile(BaseModel):
         is unchanged. PythonTool's ``.content`` access transparently triggers
         the loader and memoizes the result.
         """
-        inst = cls(filename=filename, content=b"")
+        inst = cls(filename=filename, content=b"", file_id=file_id)
         install_lazy_content_loader(inst, loader)
         return inst
 

@@ -12,13 +12,8 @@ from onyx.db.user_file import get_user_file_by_id
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.models import ChatFileType, InMemoryChatFile, UserFileMetadata
 from onyx.file_store.utils import load_chat_file_by_id, load_user_file_content
-from onyx.llm.models import ToolResult
-from onyx.tools.interface import (
-    FunctionToolDefinition,
-    Tool,
-    ToolContext,
-    parse_tool_arguments,
-)
+from onyx.llm.models import ToolDefinition, ToolResult
+from onyx.tools.interface import Tool, ToolContext, parse_tool_arguments
 from onyx.tools.models import FileReadResult, ToolCallException
 from onyx.utils.logger import setup_logger
 
@@ -80,36 +75,33 @@ class FileReaderTool(Tool):
         # generalised for standard (vector-DB-enabled) deployments.
         return DISABLE_VECTOR_DB
 
-    def tool_definition(self) -> FunctionToolDefinition:
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.DESCRIPTION,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        FILE_ID_FIELD: {
-                            "type": "string",
-                            "description": "The UUID of the file to read.",
-                        },
-                        START_CHAR_FIELD: {
-                            "type": "integer",
-                            "description": (
-                                "Character offset to start reading from. Defaults to 0."
-                            ),
-                        },
-                        NUM_CHARS_FIELD: {
-                            "type": "integer",
-                            "description": (
-                                "Number of characters to return (max 16000). Defaults to 16000."
-                            ),
-                        },
+    def tool_definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            name=self.name,
+            description=self.DESCRIPTION,
+            parameters={
+                "type": "object",
+                "properties": {
+                    FILE_ID_FIELD: {
+                        "type": "string",
+                        "description": "The UUID of the file to read.",
                     },
-                    "required": [FILE_ID_FIELD],
+                    START_CHAR_FIELD: {
+                        "type": "integer",
+                        "description": (
+                            "Character offset to start reading from. Defaults to 0."
+                        ),
+                    },
+                    NUM_CHARS_FIELD: {
+                        "type": "integer",
+                        "description": (
+                            "Number of characters to return (max 16000). Defaults to 16000."
+                        ),
+                    },
                 },
+                "required": [FILE_ID_FIELD],
             },
-        }
+        )
 
     def _validate_file_id(self, raw_file_id: str) -> UUID:
         try:

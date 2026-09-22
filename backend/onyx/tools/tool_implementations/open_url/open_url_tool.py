@@ -24,13 +24,8 @@ from onyx.db.document import fetch_document_ids_by_links, filter_existing_docume
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
 from onyx.document_index.interfaces_new import DocumentIndex, DocumentSectionRequest
-from onyx.llm.models import ToolResult
-from onyx.tools.interface import (
-    CITATIONS_PER_TOOL_CALL,
-    FunctionToolDefinition,
-    Tool,
-    ToolContext,
-)
+from onyx.llm.models import ToolDefinition, ToolResult
+from onyx.tools.interface import CITATIONS_PER_TOOL_CALL, Tool, ToolContext
 from onyx.tools.models import ToolCallException
 from onyx.tools.tool_implementations.open_url.models import (
     FailedFetch,
@@ -497,28 +492,25 @@ class OpenURLTool(Tool):
         """
         return True
 
-    def tool_definition(self) -> FunctionToolDefinition:
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        URLS_FIELD: {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": (
-                                "List of URLs to open and read, can be a single URL or multiple URLs. "
-                                "This will return the text content of the page(s)."
-                            ),
-                        },
+    def tool_definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            name=self.name,
+            description=self.description,
+            parameters={
+                "type": "object",
+                "properties": {
+                    URLS_FIELD: {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "List of URLs to open and read, can be a single URL or multiple URLs. "
+                            "This will return the text content of the page(s)."
+                        ),
                     },
-                    "required": [URLS_FIELD],
                 },
+                "required": [URLS_FIELD],
             },
-        }
+        )
 
     def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
         urls = _normalize_string_list(invocation.arguments.get(URLS_FIELD))

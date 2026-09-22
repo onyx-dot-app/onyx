@@ -21,7 +21,6 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.access.access import user_can_access_chat_file
-from onyx.agents.transcript import RunStatus
 from onyx.auth.api_key import get_hashed_api_key_from_request
 from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.permissions import require_permission
@@ -435,7 +434,8 @@ def get_chat_session(
         processing_key = get_processing_key(session_id, cache)
         has_saved_outcome = any(
             message.id == processing_key
-            and message.response_status not in (None, RunStatus.RUNNING)
+            and message.response_status is not None
+            and message.response_status.is_terminal
             for message in session_messages
         )
         if processing_key is not None and not has_saved_outcome:

@@ -15,7 +15,12 @@ from onyx.agents.items import (
 )
 from onyx.chat.models import MessageRendering, ResponseRecord
 from onyx.configs.constants import MessageType
-from onyx.db.models import ChatMessage, ChatResponseItem, StoredResponseContent
+from onyx.db.models import (
+    ChatMessage,
+    ChatResponseCheckpoint,
+    ChatResponseItem,
+    StoredResponseContent,
+)
 from onyx.db.models import ToolCall as StoredToolCall
 from onyx.llm.models import ToolCall, UserMessage
 
@@ -143,19 +148,33 @@ def write_response_items(
     """Save accepted output and its tool records; the caller owns the transaction."""
     tools: dict[tuple[str, str], StoredToolCall] = {}
     generation_id: str | None = None
+    existing = {row.id: row for row in response.response_items}
+    incoming_ids = {item.id for item in items}
+    if len(incoming_ids) != len(items):
+        raise ValueError("Response contains duplicate item identities")
+    if existing.keys() - incoming_ids:
+        raise ValueError("Response update cannot discard recorded items")
     for position, item in enumerate(items):
         content = item.content
-        row = ChatResponseItem(
+        row = existing.get(item.id) or ChatResponseItem(
             id=item.id,
             chat_message_id=response.id,
             position=position,
             step_index=item.step_index,
             kind=content.kind,
         )
+        if (
+            row.chat_message_id != response.id
+            or row.position != position
+            or row.step_index != item.step_index
+            or row.kind != content.kind
+        ):
+            raise ValueError("Response item identity or order changed")
         if isinstance(content, ResponseGeneration):
             generation_id = item.id
             setting = presentation.pop(item.id, None)
-            row.rendering = setting.model_dump(mode="json") if setting else None
+            if setting is not None:
+                row.rendering = setting.model_dump(mode="json")
         if isinstance(content, (ResponseGeneration, ResponseText, ResponseReasoning)):
             row.content = StoredResponseContent(value=content)
         elif isinstance(content, ResponseToolCall):
@@ -164,7 +183,7 @@ def write_response_items(
             key = (generation_id, content.call.id)
             if key in tools:
                 raise ValueError("Duplicate tool call within one generation")
-            tool = StoredToolCall(
+            tool = row.tool_call or StoredToolCall(
                 chat_session_id=response.chat_session_id,
                 parent_chat_message_id=response.id,
                 turn_number=item.step_index,
@@ -183,6 +202,7 @@ def write_response_items(
             db_session.add(tool)
             db_session.flush()
             row.tool_call_id = tool.id
+            tool.operation_status = content.status
             tools[key] = tool
         else:
             tool = tools.get((generation_id or "", content.result.tool_call_id))
@@ -190,6 +210,13 @@ def write_response_items(
                 raise ValueError("Tool result has no call in its generation")
             tool.result = content.result
             row.tool_call_id = tool.id
-        response.response_items.append(row)
+        if item.id not in existing:
+            response.response_items.append(row)
     db_session.flush()
     return tools
+
+
+def finish_checkpoint__no_commit(session: Session, message_id: int) -> None:
+    row = session.get(ChatResponseCheckpoint, message_id)
+    if row is not None:
+        session.delete(row)

@@ -7,7 +7,7 @@ from mcp.client.auth import OAuthClientProvider
 from onyx.agents.tools import ToolInvocation
 from onyx.db.enums import MCPAuthenticationType, MCPTransport
 from onyx.db.models import MCPConnectionConfig, MCPServer
-from onyx.llm.models import ToolResult
+from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.server.features.mcp.client import call_mcp_tool
 from onyx.server.features.mcp.credentials import ResolvedMCPCredentials
 from onyx.server.features.mcp.models import (
@@ -22,7 +22,7 @@ from onyx.server.features.mcp.oauth import (
 )
 from onyx.server.metrics.mcp_client import record_mcp_client_tool_outcome
 from onyx.server.metrics.mcp_common import MCPToolCallStatus
-from onyx.tools.interface import FunctionToolDefinition, Tool, ToolContext
+from onyx.tools.interface import Tool, ToolContext
 from onyx.tools.models import CustomToolCallSummary
 from onyx.tools.tool_name import sanitize_tool_name
 from onyx.utils.logger import setup_logger
@@ -117,17 +117,13 @@ class MCPTool(Tool):
     def use_disambiguated_name(self) -> None:
         self._name = self._llm_name
 
-    def tool_definition(self) -> FunctionToolDefinition:
+    def tool_definition(self) -> ToolDefinition:
         """Return the tool definition from the MCP server"""
-        # Convert MCP tool definition to OpenAI function calling format
-        return {
-            "type": "function",
-            "function": {
-                "name": self._name,
-                "description": self._description,
-                "parameters": _normalize_parameters_schema(self._tool_definition),
-            },
-        }
+        return ToolDefinition(
+            name=self._name,
+            description=self._description,
+            parameters=_normalize_parameters_schema(self._tool_definition),
+        )
 
     def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         _start = time.monotonic()

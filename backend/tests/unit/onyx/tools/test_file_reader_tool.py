@@ -63,15 +63,13 @@ class TestToolMetadata:
     def test_tool_definition_schema(self) -> None:
         tool = _make_tool()
         defn = tool.tool_definition()
-        assert defn["type"] == "function"
-        func = defn["function"]
-        assert func["name"] == "read_file"
-        props = func["parameters"]["properties"]
+        assert defn.name == "read_file"
+        props = defn.parameters["properties"]
         assert isinstance(props, dict)
         assert FILE_ID_FIELD in props
         assert START_CHAR_FIELD in props
         assert NUM_CHARS_FIELD in props
-        assert func["parameters"]["required"] == [FILE_ID_FIELD]
+        assert defn.parameters["required"] == [FILE_ID_FIELD]
 
 
 # ------------------------------------------------------------------

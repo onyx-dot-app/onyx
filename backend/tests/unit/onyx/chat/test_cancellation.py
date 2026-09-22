@@ -64,6 +64,12 @@ class _MemoryCacheBackend(CacheBackend):
         if key in self._store:
             self._ttls[key] = seconds
 
+    def expire_if_value(self, key: str, expected: bytes, seconds: int) -> bool:
+        if self.get(key) != expected:
+            return False
+        self.expire(key, seconds)
+        return True
+
     def ttl(self, key: str) -> int:
         return self._ttls.get(key, -2)
 

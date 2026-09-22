@@ -172,7 +172,7 @@ def test_cancelled_image_run_retains_provider_work_until_idle(
             0.01,
         ),
     ):
-        agent = Agent(llm, tools=[bind_tool(tool, ToolContext())])
+        agent = Agent(llm, tools=[bind_tool(tool, lambda: ToolContext())])
         run = agent.start(max_steps=1)
         try:
             assert started.wait(2)

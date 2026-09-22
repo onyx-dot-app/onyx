@@ -47,7 +47,7 @@ def test_first_step_failure_is_recorded_and_agent_can_retry() -> None:
     with pytest.raises(RunFailed):
         run_agent(agent, max_steps=1, runs=handles)
     assert handles[0].snapshot().status == RunStatus.ERROR
-    assert agent.run(max_steps=1).output.text == "Recovered"
+    assert agent.execute(max_steps=1).result().output.text == "Recovered"
     assert attempts == 2
 
 
@@ -292,10 +292,12 @@ def test_timed_out_wait_does_not_observe_a_later_child_failure(
     cancel_child: bool,
 ) -> None:
     release = Event()
+    child_started = Event()
 
     def fail(
         _request: GenerationRequest, _signal: CancellationSignal
     ) -> AssistantMessage:
+        child_started.set()
         assert release.wait(3)
         raise ValueError("Child failed")
 
@@ -308,6 +310,7 @@ def test_timed_out_wait_does_not_observe_a_later_child_failure(
             max_steps=1,
         )
         assert invocation.agents.wait_run(submission.run_id, timeout=0) is None
+        assert child_started.wait(3)
         if cancel_child:
             invocation.agents.cancel_run(submission.run_id)
         release.set()

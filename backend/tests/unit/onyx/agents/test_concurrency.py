@@ -6,10 +6,12 @@ from contextvars import ContextVar
 
 import pytest
 
-from onyx.agents import concurrency
+from onyx.agents import concurrency, runtime
 from onyx.agents.concurrency import ExecutionWork
 from onyx.agents.coordination import AgentCoordinator
-from onyx.agents.runtime import Agent
+from onyx.agents.events import AgentEvent, AgentStartEvent
+from onyx.agents.models import AgentStep, RunSnapshot
+from onyx.agents.runtime import Agent, RunFailed
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.models import AssistantMessage, TextContent, ToolCall, ToolResult
@@ -269,11 +271,6 @@ def test_cancelled_callback_retains_late_provider_cleanup() -> None:
 def test_terminal_snapshot_rejects_tool_result_during_context_commit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from onyx.agents import runtime
-    from onyx.agents.models import RunSnapshot
-    from onyx.agents.runtime import RunFailed
-    from onyx.llm.models import ToolResultMessage
-
     commit_entered, release_commit = threading.Event(), threading.Event()
     tool_entered, release_tool, recorded = (
         threading.Event(),
@@ -319,10 +316,11 @@ def test_terminal_snapshot_rejects_tool_result_during_context_commit(
         result_start: int,
         call_indices: dict[str, int],
         index: int,
-    ) -> ToolResultMessage:
+        step: AgentStep,
+    ) -> None:
         try:
-            return original_record(
-                execution, result, call, result_start, call_indices, index
+            original_record(
+                execution, result, call, result_start, call_indices, index, step
             )
         finally:
             recorded.set()
@@ -446,3 +444,120 @@ def test_inherited_sink_failure_keeps_terminal_and_idle_results() -> None:
     assert run.result(2).output.text == "answer"
     assert run.wait_for_idle(2)
     assert run.delivery_failed
+
+
+def test_paused_delivery_drains_late_child_events_without_retaining_worker() -> None:
+    entered = threading.Event()
+    release = threading.Event()
+    received: list[str] = []
+    delivery = concurrency.EventDelivery()
+
+    def receive(event: AgentEvent) -> None:
+        if event.run_id == "parent":
+            entered.set()
+            assert release.wait(2)
+        received.append(event.run_id)
+
+    delivery.subscribe(receive)
+    try:
+        delivery.publish(AgentStartEvent(run_id="parent"))
+        assert entered.wait(2)
+        delivery.pause()
+        delivery.publish(AgentStartEvent(run_id="child"))
+        release.set()
+        assert delivery.tracker.wait_idle(2)
+        assert received == ["parent", "child"]
+        delivery.resume()
+        delivery.publish(AgentStartEvent(run_id="resumed"))
+    finally:
+        release.set()
+        delivery.close()
+    assert received == ["parent", "child", "resumed"]
+
+
+def test_shared_dispatcher_keeps_channel_context_and_independent_completion() -> None:
+    tenant = ContextVar("test_delivery_tenant", default="unset")
+    dispatcher = concurrency.EventDispatcher()
+    token = tenant.set("first")
+    first = concurrency.EventDelivery(dispatcher)
+    tenant.set("second")
+    second = concurrency.EventDelivery(dispatcher)
+    tenant.reset(token)
+    entered = threading.Event()
+    release = threading.Event()
+    received: list[tuple[str, str, int]] = []
+    drained_contexts: list[str] = []
+
+    def receive(event: AgentEvent) -> None:
+        assert first.is_dispatch_thread
+        assert second.is_dispatch_thread
+        received.append((event.run_id, tenant.get(), threading.get_ident()))
+        if event.run_id == "blocked":
+            entered.set()
+            assert release.wait(3)
+
+    first.subscribe(receive)
+    second.subscribe(receive)
+    try:
+        first.publish(AgentStartEvent(run_id="first"))
+        second.publish(AgentStartEvent(run_id="blocked"))
+        assert entered.wait(2)
+        first.close()
+        assert first.tracker.idle
+        assert not second.tracker.idle
+        second.tracker.on_idle(lambda: drained_contexts.append(tenant.get()))
+        assert not first.failed.is_set()
+        second.publish(AgentStartEvent(run_id="last"))
+        release.set()
+        second.close()
+        assert [(run, context) for run, context, _ in received] == [
+            ("first", "first"),
+            ("blocked", "second"),
+            ("last", "second"),
+        ]
+        assert len({worker for _, _, worker in received}) == 1
+        assert drained_contexts == ["second"]
+    finally:
+        release.set()
+        first.close()
+        second.close()
+        dispatcher.close()
+
+
+def test_shared_dispatcher_bounds_combined_backlog(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(concurrency, "EVENT_QUEUE_CAPACITY", 1)
+    dispatcher = concurrency.EventDispatcher()
+    first = concurrency.EventDelivery(dispatcher)
+    second = concurrency.EventDelivery(dispatcher)
+    entered = threading.Event()
+    release = threading.Event()
+    received: list[str] = []
+
+    def receive(event: AgentEvent) -> None:
+        if event.run_id == "blocked":
+            entered.set()
+            assert release.wait(3)
+        received.append(event.run_id)
+
+    first.subscribe(receive)
+    second.subscribe(receive)
+    try:
+        first.publish(AgentStartEvent(run_id="blocked"))
+        assert entered.wait(2)
+        second.publish(AgentStartEvent(run_id="accepted"))
+        first.publish(AgentStartEvent(run_id="overflow"))
+        assert first.failed.is_set()
+        assert not second.failed.is_set()
+        release.set()
+        first.close()
+        second.close()
+        assert received == ["blocked", "accepted"]
+        assert first.tracker.idle
+        assert second.tracker.idle
+    finally:
+        release.set()
+        first.close()
+        second.close()
+        dispatcher.close()

@@ -81,6 +81,7 @@ def _convert_loaded_files_to_chat_files(
             ChatFile.lazy_from_filename(
                 filename=filename,
                 loader=lambda lf=loaded_file: lf.content,
+                file_id=loaded_file.file_id,
             )
         )
     return chat_files
@@ -136,7 +137,11 @@ def _load_context_user_files_for_tools(
                 )
                 return b""
 
-        chat_files.append(ChatFile.lazy_from_filename(filename=filename, loader=_load))
+        chat_files.append(
+            ChatFile.lazy_from_filename(
+                filename=filename, loader=_load, file_id=user_file.file_id
+            )
+        )
 
     return chat_files
 
@@ -623,6 +628,8 @@ def build_python_chat_files_from_search_docs(
             continue
 
         filename = sandbox_filename_for_document(doc.semantic_identifier, doc.file_id)
-        chat_files.append(ChatFile(filename=filename, content=content))
+        chat_files.append(
+            ChatFile(filename=filename, content=content, file_id=doc.file_id)
+        )
 
     return chat_files

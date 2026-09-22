@@ -1,10 +1,11 @@
 from collections.abc import Callable
+from enum import Enum
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny
 
 from onyx.agents.items import ResponseItem, build_response_items
-from onyx.agents.tools import AgentTool
+from onyx.agents.tools import AgentTool, ChildRunWait, PendingToolInput, ToolAnswer
 from onyx.agents.transcript import (
     CompactionCheckpoint,
     OperationSnapshot,
@@ -19,7 +20,9 @@ from onyx.llm.models import (
     GenerationRequestParams,
     Message,
     ToolCall,
+    ToolDefinition,
     ToolResultMessage,
+    UserMessage,
 )
 
 
@@ -69,7 +72,7 @@ class ToolCallContext(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     step: AgentStep
     call: ToolCall
-    request: GenerationRequest
+    options: GenerationOptions
     messages: list[Message]
 
 
@@ -77,7 +80,7 @@ class StepResult(BaseModel):
     step: AgentStep
     message: AssistantMessage
     tool_results: list[ToolResultMessage]
-    request: GenerationRequest
+    options: GenerationOptions
 
 
 class StepInput(BaseModel):
@@ -97,12 +100,43 @@ class RunResult(BaseModel):
     output: AssistantMessage
 
 
+class RunAction(str, Enum):
+    PREPARE = "prepare"
+    TOOLS = "tools"
+    AFTER_STEP = "after_step"
+    FINISH = "finish"
+
+
+class RunProgress(BaseModel):
+    """Saved execution position; message indices refer to the run's recorded output."""
+
+    step_index: int = 0
+    step_limit: int = Field(gt=0)
+    action: RunAction = RunAction.PREPARE
+    message_index: int | None = None
+    options: GenerationOptions | None = None
+    tools: list[ToolDefinition] = Field(default_factory=list)
+    previous_message_index: int | None = None
+    previous_options: GenerationOptions | None = None
+    finalized_tools: int = 0
+    feature_state: SerializeAsAny[BaseModel] | None = None
+    pending: dict[str, PendingToolInput | ChildRunWait] = Field(default_factory=dict)
+    answers: dict[str, ToolAnswer] = Field(default_factory=dict)
+    steering: list[UserMessage] = Field(default_factory=list)
+    child_run_ids: list[str] = Field(default_factory=list)
+    observed_child_run_ids: list[str] = Field(default_factory=list)
+    outcome: RunStatus | None = None
+
+
 class RunSnapshot(BaseModel):
-    """One run’s initial input and subsequent messages, including partial work.
+    """Isolated output and progress; suspended records can resume with their context.
 
     Operation indices address messages; input_messages is a separate prefix.
+    Child records are collected when parent execution finishes.
     """
 
+    revision: int = 0
+    progress: RunProgress | None = None
     input_messages: list[Message] = Field(default_factory=list)
     run_id: str
     agent_id: str | None = None
@@ -127,3 +161,11 @@ class RunSnapshot(BaseModel):
             self.operations,
             answer_message_index=self.answer_message_index,
         )
+
+
+class ExecutionCheckpoint(BaseModel):
+    """Run progress and the conversation history preceding its input."""
+
+    model_config = ConfigDict(extra="forbid")
+    context: AgentContext
+    snapshot: RunSnapshot

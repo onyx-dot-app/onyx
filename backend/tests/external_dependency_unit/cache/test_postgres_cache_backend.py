@@ -5,20 +5,16 @@ locks (acquire / release / contention), list operations (rpush / blpop),
 and the periodic cleanup function.
 """
 
-import math
 import time
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 
-from onyx.cache import factory as cache_factory
-from onyx.cache.factory import get_cache_backend
-from onyx.cache.interface import TTL_KEY_NOT_FOUND, TTL_NO_EXPIRY, CacheBackendType
+from onyx.cache.interface import TTL_KEY_NOT_FOUND, TTL_NO_EXPIRY
 from onyx.cache.postgres_backend import (
     PostgresCacheBackend,
-    PostgresCacheLock,
     cleanup_expired_cache_entries,
 )
 from onyx.db.engine.sql_engine import get_session_with_tenant
@@ -269,11 +265,11 @@ class TestCleanup:
         assert pg_cache.get(k) == b"permanent"
 
 
-def test_statement_timeout_bounds_wait_on_a_locked_cache_row(
+def test_control_lease_renewal_does_not_wait_for_a_locked_cache_row(
     pg_cache: PostgresCacheBackend,
 ) -> None:
     tenant_id = POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-    bounded = PostgresCacheBackend(tenant_id, statement_timeout_ms=1000)
+    control = PostgresCacheBackend(tenant_id, control=True)
     key = _key()
     pg_cache.set(key, b"owner", ex=60)
     try:
@@ -282,36 +278,7 @@ def test_statement_timeout_bounds_wait_on_a_locked_cache_row(
                 select(CacheStore).where(CacheStore.key == key).with_for_update()
             )
             with pytest.raises(OperationalError, match="timeout"):
-                bounded.expire(key, 120)
-        bounded.expire(key, 120)
-        assert bounded.ttl(key) > 60
+                control.expire_if_value(key, b"owner", 60)
+        assert control.expire_if_value(key, b"owner", 60)
     finally:
         pg_cache.delete(key)
-
-
-@pytest.mark.parametrize("timeout", [0, -1, math.inf, math.nan])
-def test_invalid_operation_timeout_is_rejected(timeout: float) -> None:
-    with pytest.raises(ValueError, match="finite and positive"):
-        get_cache_backend(operation_timeout_s=timeout)
-
-
-@pytest.mark.parametrize(
-    ("operation_timeout_s", "expected"),
-    # Sub-millisecond values round up: a 0 ms timeout would disable it.
-    [(1, "1s"), (0.0001, "1ms")],
-)
-def test_operation_timeout_applies_to_lock_session(
-    monkeypatch: pytest.MonkeyPatch, operation_timeout_s: float, expected: str
-) -> None:
-    monkeypatch.setattr(cache_factory, "CACHE_BACKEND", CacheBackendType.POSTGRES)
-    bounded = get_cache_backend(operation_timeout_s=operation_timeout_s)
-    lock = bounded.lock(_key())
-    assert isinstance(lock, PostgresCacheLock)
-    assert lock.acquire(blocking=False)
-    try:
-        assert lock._session is not None
-        for setting in ("statement_timeout", "lock_timeout"):
-            value = lock._session.execute(text(f"SHOW {setting}")).scalar()
-            assert value == expected
-    finally:
-        lock.release()

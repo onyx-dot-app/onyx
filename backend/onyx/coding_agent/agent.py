@@ -30,6 +30,7 @@ from onyx.llm.models import (
     ReasoningEffort,
     SystemMessage,
     ToolChoiceOptions,
+    ToolDefinition,
     ToolResult,
     UserMessage,
 )
@@ -40,7 +41,7 @@ from onyx.prompts.coding_agent.coding_agent import (
     USER_FINAL_ANSWER_QUERY,
 )
 from onyx.prompts.prompt_utils import get_current_llm_day_time
-from onyx.tools.interface import FunctionToolDefinition, ToolContext
+from onyx.tools.interface import ToolContext
 from onyx.tools.tool_implementations.bash.bash_tool import BashTool
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
@@ -150,12 +151,22 @@ class CodingAgent:
         )
         self.agent = Agent(
             llm,
+            tools=self._build_tools(),
             prepare_step=self.prepare_step,
             after_step=self.after_step,
             execution=GenerationContext(
                 flow=LLMFlow.CODING_AGENT, user_identity=user_identity
             ),
         )
+
+    def _build_tools(self) -> list[AgentTool]:
+        tools = [
+            self._tool(BASH_TOOL_DESCRIPTION, self._bash),
+            self._tool(GENERATE_ANSWER_TOOL_DESCRIPTION, self._request_answer),
+        ]
+        if not self.is_reasoning_model:
+            tools.append(self._tool(CODING_AGENT_THINK_TOOL_DESCRIPTION, self._think))
+        return tools
 
     def prepare_step(self, state: StepInput) -> PreparedStep:
         if state.previous is None and not self.is_sandbox_available:
@@ -188,14 +199,7 @@ class CodingAgent:
                 current_datetime=get_current_llm_day_time(full_sentence=False),
                 current_cycle_count=step.index,
             )
-            tools = [
-                self._tool(BASH_TOOL_DESCRIPTION, self._bash),
-                self._tool(GENERATE_ANSWER_TOOL_DESCRIPTION, self._request_answer),
-            ]
-            if not self.is_reasoning_model:
-                tools.append(
-                    self._tool(CODING_AGENT_THINK_TOOL_DESCRIPTION, self._think)
-                )
+            tools = list(self.agent.tools)
             options.tool_choice = ToolChoiceOptions.REQUIRED
         options.max_tokens = (
             MAX_FINAL_ANSWER_TOKENS if is_final_step else MAX_INVESTIGATION_TOKENS
@@ -230,7 +234,7 @@ class CodingAgent:
         )
 
     def after_step(self, result: StepResult) -> bool:
-        if result.request.options.tool_choice != ToolChoiceOptions.NONE:
+        if result.options.tool_choice != ToolChoiceOptions.NONE:
             return True
         if not result.message.text:
             raise ValueError("Coding agent produced no final answer")
@@ -238,20 +242,22 @@ class CodingAgent:
 
     def _tool(
         self,
-        definition: FunctionToolDefinition,
+        definition: ToolDefinition,
         execute: Callable[[ToolInvocation], ToolResult],
     ) -> AgentTool:
-        function = definition["function"]
         return AgentTool(
-            name=function["name"],
-            description=function["description"],
-            parameters=function["parameters"],
+            name=definition.name,
+            description=definition.description,
+            parameters=definition.parameters,
             execute=execute,
             execution_mode=ToolExecutionMode.SEQUENTIAL,
         )
 
     def _bash(self, invocation: ToolInvocation) -> ToolResult:
-        return run_tool(self.bash_tool, invocation, ToolContext())
+        result = run_tool(self.bash_tool, invocation, ToolContext())
+        if not isinstance(result, ToolResult):
+            raise TypeError("The coding bash tool must return a completed result")
+        return result
 
     @staticmethod
     def _request_answer(_invocation: ToolInvocation) -> ToolResult:

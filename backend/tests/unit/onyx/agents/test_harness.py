@@ -9,8 +9,8 @@ from pydantic import ValidationError
 
 from onyx.agents.coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent, AgentEventType
-from onyx.agents.models import AgentContext, PreparedStep
-from onyx.agents.runtime import Agent, Run, RunFailed, _Execution
+from onyx.agents.models import AgentContext, PreparedStep, RunSnapshot
+from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import (
     AgentTool,
     ToolExecutionMode,
@@ -160,10 +160,7 @@ def test_all_calls_record_in_order_for_each_execution_mode(sequential: bool) -> 
         "tool_end",
     ],
 )
-def test_cancellation_stops_before_next_operation(
-    event_type: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    runs: list[Run] = []
+def test_cancellation_stops_before_next_operation(event_type: str) -> None:
     signal = CancellationSignal()
     executed: list[str] = []
 
@@ -174,22 +171,25 @@ def test_cancellation_stops_before_next_operation(
     agent = Agent(scripted(calls(), answer()), tools=[echo(execute)])
     events: list[AgentEvent] = []
 
-    original_emit = _Execution._emit
-
-    def emit(self: _Execution, event: AgentEvent) -> None:
-        original_emit(self, event)
+    def cancel(event: AgentEvent) -> None:
         if event.type == event_type:
             signal.cancel()
 
-    monkeypatch.setattr(_Execution, "_emit", emit)
-    with pytest.raises(AgentCancelled):
-        run_agent(
-            agent, runs=runs, max_steps=3, cancellation=signal, listener=events.append
-        )
+    run = agent.start(
+        max_steps=3,
+        cancellation=signal,
+        on_event=events.append,
+        inherited_event_sink=cancel,
+    )
+    try:
+        with pytest.raises(AgentCancelled):
+            run.result(timeout=3)
+    finally:
+        run.cancel()
+        assert run.wait_for_idle(timeout=3)
     last_event = events[-1]
     assert last_event.type == "agent_end"
     assert last_event.outcome == "cancelled"
-    assert runs[-1].wait_for_idle(timeout=0)
     if event_type in {"message_start", "message_end", "tool_start"}:
         assert executed == []
 
@@ -524,7 +524,9 @@ def test_busy_run_rejects_input_without_changing_history() -> None:
     agent = Agent(FakeModelClient(generate))
     with ThreadPoolExecutor(max_workers=1) as workers:
         running = workers.submit(
-            agent.run, messages=[UserMessage(content="accepted")], max_steps=1
+            lambda: agent.execute(
+                messages=[UserMessage(content="accepted")], max_steps=1
+            ).result()
         )
         try:
             assert entered.wait(2)
@@ -540,4 +542,37 @@ def test_busy_run_rejects_input_without_changing_history() -> None:
         running.result(timeout=2)
     assert [message.text for message in agent.context.messages] == ["accepted", "done"]
     # The rejected attempt must not leave the agent unusable.
-    assert agent.run(max_steps=1).output.text == "done"
+    assert agent.execute(max_steps=1).result().output.text == "done"
+
+
+def test_execute_uses_caller_thread_and_completes_storage_before_terminal_hook() -> (
+    None
+):
+    caller = threading.current_thread()
+    visited: list[str] = []
+
+    def generate(
+        _request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        assert threading.current_thread() is caller
+        visited.append("model")
+        return answer()
+
+    def save(_snapshot: RunSnapshot) -> None:
+        assert threading.current_thread() is caller
+        visited.append("save")
+
+    coordinator = AgentCoordinator(on_complete=save)
+
+    def terminal(run: Run) -> None:
+        assert threading.current_thread() is caller
+        assert coordinator.completion(run.id).done()
+        assert coordinator.completion(run.id).result().run_id == run.id
+        visited.append("terminal")
+
+    run = Agent(FakeModelClient(generate)).execute(
+        max_steps=1, coordinator=coordinator, on_terminal=terminal
+    )
+    assert run.result(0).output.text == "done"
+    assert visited == ["model", "save", "terminal"]
+    assert coordinator.close(3)

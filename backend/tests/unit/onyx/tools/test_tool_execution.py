@@ -27,7 +27,7 @@ def test_tool_binding_preserves_failure_policy(
     )
     tool = MemoryTool(tool_id=1, llm=MagicMock(spec=LLM))
     monkeypatch.setattr(tool, "run", MagicMock(side_effect=error))
-    execute = bind_tool(tool, ToolContext()).execute
+    execute = bind_tool(tool, lambda: ToolContext()).execute
     assert execute is not None
     invocation = ToolInvocation(
         call_id="memory",
@@ -37,6 +37,7 @@ def test_tool_binding_preserves_failure_policy(
     )
     if failure == "domain":
         result = execute(invocation)
+        assert isinstance(result, ToolResult)
         assert result.is_error
         assert result.text == "Please provide a memory"
     else:
@@ -57,7 +58,7 @@ def test_tool_binding_preserves_complete_result(
     expected = ToolResult(content="Saved", details=details, terminate=True)
     tool = MemoryTool(tool_id=1, llm=MagicMock(spec=LLM))
     monkeypatch.setattr(tool, "run", MagicMock(return_value=expected))
-    execute = bind_tool(tool, ToolContext()).execute
+    execute = bind_tool(tool, lambda: ToolContext()).execute
     assert execute is not None
     result = execute(
         ToolInvocation(
@@ -78,7 +79,7 @@ def test_tool_binding_checks_cancellation_before_running(
     tool = MemoryTool(tool_id=1, llm=MagicMock(spec=LLM))
     run = MagicMock()
     monkeypatch.setattr(tool, "run", run)
-    execute = bind_tool(tool, ToolContext()).execute
+    execute = bind_tool(tool, lambda: ToolContext()).execute
     assert execute is not None
     cancellation = CancellationSignal()
     cancellation.cancel()

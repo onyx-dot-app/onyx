@@ -55,6 +55,12 @@ class _MemoryCache(CacheBackend):
     def exists(self, key: str) -> bool:
         return key in self.values
 
+    def expire_if_value(self, key: str, expected: bytes, seconds: int) -> bool:
+        if self.get(key) != expected:
+            return False
+        self.expire(key, seconds)
+        return True
+
     def ttl(self, key: str) -> int:  # noqa: ARG002
         raise NotImplementedError
 

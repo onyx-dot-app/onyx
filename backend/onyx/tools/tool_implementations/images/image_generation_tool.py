@@ -28,13 +28,8 @@ from onyx.image_gen.interfaces import (
     ReferenceImage,
 )
 from onyx.llm.cancellation import AgentCancelled
-from onyx.llm.models import ToolResult
-from onyx.tools.interface import (
-    FunctionToolDefinition,
-    Tool,
-    ToolContext,
-    parse_tool_arguments,
-)
+from onyx.llm.models import ToolDefinition, ToolResult
+from onyx.tools.interface import Tool, ToolContext, parse_tool_arguments
 from onyx.tools.models import GeneratedImage, ToolCallException, ToolExecutionException
 from onyx.tools.tool_implementations.images.models import (
     FinalImageGenerationResponse,
@@ -105,45 +100,42 @@ class ImageGenerationTool(Tool):
         """Available if a default image generation config exists with valid credentials."""
         return is_image_generation_configured(db_session)
 
-    def tool_definition(self) -> FunctionToolDefinition:
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        PROMPT_FIELD: {
+    def tool_definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            name=self.name,
+            description=self.description,
+            parameters={
+                "type": "object",
+                "properties": {
+                    PROMPT_FIELD: {
+                        "type": "string",
+                        "description": "Prompt used to generate the image",
+                    },
+                    "shape": {
+                        "type": "string",
+                        "description": (
+                            "Optional - only specify if you want a specific shape."
+                            " Image shape: 'square', 'portrait', or 'landscape'."
+                        ),
+                        "enum": [shape.value for shape in ImageShape],
+                    },
+                    REFERENCE_IMAGE_FILE_IDS_FIELD: {
+                        "type": "array",
+                        "description": (
+                            "Optional file_ids of existing images to edit or use as reference;"
+                            " the first is the primary edit source."
+                            " Get file_ids from `[attached image — file_id: <id>]` tags on"
+                            " user-attached images or from prior generate_image tool responses."
+                            " Omit for a fresh, unrelated generation."
+                        ),
+                        "items": {
                             "type": "string",
-                            "description": "Prompt used to generate the image",
-                        },
-                        "shape": {
-                            "type": "string",
-                            "description": (
-                                "Optional - only specify if you want a specific shape."
-                                " Image shape: 'square', 'portrait', or 'landscape'."
-                            ),
-                            "enum": [shape.value for shape in ImageShape],
-                        },
-                        REFERENCE_IMAGE_FILE_IDS_FIELD: {
-                            "type": "array",
-                            "description": (
-                                "Optional file_ids of existing images to edit or use as reference;"
-                                " the first is the primary edit source."
-                                " Get file_ids from `[attached image — file_id: <id>]` tags on"
-                                " user-attached images or from prior generate_image tool responses."
-                                " Omit for a fresh, unrelated generation."
-                            ),
-                            "items": {
-                                "type": "string",
-                            },
                         },
                     },
-                    "required": [PROMPT_FIELD],
                 },
+                "required": [PROMPT_FIELD],
             },
-        }
+        )
 
     def _generate_image(
         self,

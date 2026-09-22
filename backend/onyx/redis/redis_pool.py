@@ -13,6 +13,7 @@ from redis.backoff import ExponentialBackoff
 from redis.client import Redis
 from redis.exceptions import BusyLoadingError
 from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import TimeoutError as RedisTimeoutError
 from redis.lock import Lock as RedisLock
 from redis.retry import Retry
 from redis.sentinel import Sentinel
@@ -61,36 +62,22 @@ logger = setup_logger()
 
 SCAN_ITER_COUNT_DEFAULT = 4096
 
+# Retry transient Redis errors — in particular BusyLoadingError, which is
+# raised while Redis is loading its RDB snapshot after a restart or
+# failover. redis-py's default retry policy only covers ConnectionError,
+# so these surface as uncaught exceptions and ship to Sentry
+# (ONYX-BACKEND-H4NT / H43M).
+_RETRYABLE_ERRORS: list[type[Exception]] = [
+    BusyLoadingError,
+    RedisConnectionError,
+    RedisTimeoutError,
+]
 
-def _pool_retry_kwargs(operation_timeout: float | None = None) -> dict[str, Any]:
-    """Connection retry settings for a pool.
 
-    redis-py reads retries from the pool's connections and ignores ``retry``
-    passed to ``redis.Redis(connection_pool=...)``.
-
-    Commands retry only BusyLoadingError, which Redis returns without running
-    the command while it loads its snapshot after a restart or failover. Other
-    connection errors and timeouts can arrive after the command ran, so a
-    retry could apply a write twice. ``supported_errors`` also lets health
-    check PINGs and Sentinel reconnects retry ConnectionError; they send no
-    command. The health check PINGs connections idle longer than
-    REDIS_HEALTH_CHECK_INTERVAL, so dropped idle connections reconnect.
-
-    Timeout pools scale the backoff so that all retry sleeps take less than
-    the operation timeout.
-    """
-    backoff = (
-        ExponentialBackoff(cap=2.0, base=0.1)
-        if operation_timeout is None
-        else ExponentialBackoff(cap=operation_timeout / 4, base=operation_timeout / 20)
-    )
+def _client_retry_kwargs() -> dict[str, Any]:
     return {
-        "retry": Retry(
-            backoff,
-            retries=3,
-            supported_errors=(RedisConnectionError,),
-        ),
-        "retry_on_error": [BusyLoadingError],
+        "retry": Retry(ExponentialBackoff(cap=2.0, base=0.1), retries=3),
+        "retry_on_error": _RETRYABLE_ERRORS,
     }
 
 
@@ -136,6 +123,9 @@ def _sentinel_connection_kwargs() -> tuple[dict[str, Any], dict[str, Any]]:
     return connection_kwargs, sentinel_kwargs
 
 
+CONTROL_IO_TIMEOUT_SECONDS = 1.0
+
+
 class RedisPool:
     _instance: Optional["RedisPool"] = None
     _lock: threading.Lock = threading.Lock()
@@ -152,37 +142,32 @@ class RedisPool:
 
     def _init_pools(self) -> None:
         self._pool = RedisPool.create_pool(ssl=REDIS_SSL)
-        self._timeout_pools: dict[float, redis.ConnectionPool] = {}
-        self._timeout_pool_lock = threading.Lock()
+        self._control_pool = RedisPool.create_pool(
+            ssl=REDIS_SSL, operation_timeout=CONTROL_IO_TIMEOUT_SECONDS
+        )
         self._replica_pool = RedisPool.create_pool(
             host=REDIS_REPLICA_HOST, ssl=REDIS_SSL, replica=True
         )
 
-    def get_client(
-        self, tenant_id: str, *, operation_timeout_s: float | None = None
-    ) -> TenantRedisClient:
-        pool = (
-            self._pool
-            if operation_timeout_s is None
-            else self._get_timeout_pool(operation_timeout_s)
+    def get_control_client(self, tenant_id: str) -> TenantRedisClient:
+        return TenantRedisClient(
+            tenant_id,
+            redis.Redis(
+                connection_pool=self._control_pool,
+                retry=Retry(ExponentialBackoff(), retries=0),
+            ),
         )
-        return TenantRedisClient(tenant_id, redis.Redis(connection_pool=pool))
 
-    def _get_timeout_pool(self, operation_timeout_s: float) -> redis.ConnectionPool:
-        """One pool per timeout value, since socket timeouts are set per connection."""
-        with self._timeout_pool_lock:
-            pool = self._timeout_pools.get(operation_timeout_s)
-            if pool is None:
-                pool = RedisPool.create_pool(
-                    ssl=REDIS_SSL, operation_timeout=operation_timeout_s
-                )
-                self._timeout_pools[operation_timeout_s] = pool
-            return pool
+    def get_client(self, tenant_id: str) -> TenantRedisClient:
+        return TenantRedisClient(
+            tenant_id,
+            redis.Redis(connection_pool=self._pool, **_client_retry_kwargs()),
+        )
 
     def get_replica_client(self, tenant_id: str) -> TenantRedisClient:
         return TenantRedisClient(
             tenant_id,
-            redis.Redis(connection_pool=self._replica_pool),
+            redis.Redis(connection_pool=self._replica_pool, **_client_retry_kwargs()),
         )
 
     def get_raw_client(self) -> Redis:
@@ -190,14 +175,14 @@ class RedisPool:
         Returns a Redis client with direct access to the primary connection pool,
         without tenant prefixing.
         """
-        return redis.Redis(connection_pool=self._pool)
+        return redis.Redis(connection_pool=self._pool, **_client_retry_kwargs())
 
     def get_raw_replica_client(self) -> Redis:
         """
         Returns a Redis client with direct access to the replica connection pool,
         without tenant prefixing.
         """
-        return redis.Redis(connection_pool=self._replica_pool)
+        return redis.Redis(connection_pool=self._replica_pool, **_client_retry_kwargs())
 
     @staticmethod
     def create_pool(
@@ -239,10 +224,6 @@ class RedisPool:
             if operation_timeout is not None
             else REDIS_SOCKET_TIMEOUT_KWARGS
         )
-        connection_settings = {
-            **socket_timeouts,
-            **_pool_retry_kwargs(operation_timeout),
-        }
         # Using ConnectionPool is not well documented.
         # Useful examples: https://github.com/redis/redis-py/issues/780
 
@@ -272,7 +253,7 @@ class RedisPool:
                 socket_keepalive_options=REDIS_SOCKET_KEEPALIVE_OPTIONS,
                 connection_class=redis.SSLConnection,
                 ssl_context=ssl_context,  # Use IAM auth SSL context
-                **connection_settings,
+                **socket_timeouts,
             )
 
         if ssl:
@@ -292,7 +273,7 @@ class RedisPool:
                 ssl_check_hostname=ssl_check_hostname,
                 ssl_certfile=ssl_certfile,
                 ssl_keyfile=ssl_keyfile,
-                **connection_settings,
+                **socket_timeouts,
             )
 
         return redis.BlockingConnectionPool(
@@ -305,7 +286,7 @@ class RedisPool:
             health_check_interval=REDIS_HEALTH_CHECK_INTERVAL,
             socket_keepalive=True,
             socket_keepalive_options=REDIS_SOCKET_KEEPALIVE_OPTIONS,
-            **connection_settings,
+            **socket_timeouts,
         )
 
     @staticmethod
@@ -324,9 +305,7 @@ class RedisPool:
             for kwargs in (connection_kwargs, sentinel_kwargs):
                 kwargs["socket_timeout"] = operation_timeout
                 kwargs["socket_connect_timeout"] = operation_timeout
-        # Data connections only: discover_master already moves on to the next
-        # sentinel node on errors.
-        connection_kwargs.update(_pool_retry_kwargs(operation_timeout))
+                kwargs["retry"] = Retry(ExponentialBackoff(), retries=0)
         sentinel = Sentinel(
             REDIS_SENTINEL_HOSTS,
             sentinel_kwargs=sentinel_kwargs,

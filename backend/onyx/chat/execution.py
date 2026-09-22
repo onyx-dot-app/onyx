@@ -3,10 +3,12 @@
 import threading
 import time
 from concurrent.futures import Future, wait
+from contextlib import ExitStack
 
 from onyx.agents.coordination import AgentCoordinator
+from onyx.agents.models import RunSnapshot
 from onyx.agents.runtime import Run
-from onyx.agents.transcript import RunStatus
+from onyx.cache.interface import CacheBackend
 from onyx.chat.agent import ChatAgent
 from onyx.chat.cancellation import clear_stop, is_stop_requested
 from onyx.chat.chat_processing_checker import (
@@ -20,11 +22,13 @@ from onyx.chat.models import (
     ChatResponseOutcome,
     ChatResponseSnapshot,
     ChatTurnSetup,
+    PendingChatResponseSave,
     PersistenceStatus,
     StreamingError,
 )
 from onyx.chat.prepare import create_chat_agent
 from onyx.chat.presentation import ResponsePresenter, project_response
+from onyx.chat.run_store import ChatRunStore
 from onyx.chat.stream_buffer import ChatDelivery, ChatStream, StreamBufferWriter
 from onyx.chat.subagents import create_chat_agent_coordinator
 from onyx.configs.chat_configs import (
@@ -46,15 +50,6 @@ from onyx.utils.threadpool_concurrency import start_thread_future
 logger = setup_logger()
 _CANCEL_POLL_INTERVAL_S = 0.25
 _PERSISTENCE_WAIT_SECONDS = 30.0
-
-
-def _log_late_save(future: Future[None]) -> None:
-    try:
-        future.result()
-    except Exception:
-        logger.exception("Response save failed after its wait bound")
-    else:
-        logger.debug("Response save completed after its wait bound")
 
 
 class ActiveChatTurns:
@@ -113,8 +108,11 @@ def start_chat_turn(
     stream_buffer: StreamBufferWriter | None = None,
     *,
     active_chat_turns: ActiveChatTurns | None = None,
+    control_cache: CacheBackend | None = None,
 ) -> ChatStream:
-    turn = ChatTurnExecution(setup, user, response_future, stream_buffer)
+    turn = ChatTurnExecution(
+        setup, user, response_future, stream_buffer, control_cache=control_cache
+    )
     startup_error: Exception | None = None
     try:
         turn.begin()
@@ -133,10 +131,19 @@ class ChatTurnExecution:
         user: User,
         response_future: Future[ChatResponseOutcome] | None = None,
         stream_buffer: StreamBufferWriter | None = None,
+        *,
+        control_cache: CacheBackend | None = None,
     ) -> None:
         self.setup = setup
+        self.control_cache = control_cache or setup.cache
         self.user = user
         self.delivery = ChatDelivery(stream_buffer)
+        self.events = self.delivery.events
+        self._stores: list[ChatRunStore] = []
+        self._pending_saves: dict[int, PendingChatResponseSave] = {}
+        self._reported_responses: set[int] = set()
+        self._delivery_closed = False
+        self._completion_reported = False
         self.cancellation = CancellationSignal()
         self.finished: Future[None] = Future()
         self._response_futures = [
@@ -159,12 +166,12 @@ class ChatTurnExecution:
         self._auto_filters = load_settings().auto_detect_search_filters is not False
         clear_stop(
             self.setup.chat_session_id,
-            self.setup.cache,
+            self.control_cache,
             processing_key=self.setup.processing_key,
         )
         set_processing_status(
             chat_session_id=self.setup.chat_session_id,
-            cache=self.setup.cache,
+            cache=self.control_cache,
             value=True,
             processing_key=self.setup.processing_key,
         )
@@ -174,6 +181,7 @@ class ChatTurnExecution:
             response_future.set_exception(error)
             self._finish_response(index)
         self._close_delivery()
+        self._maybe_finish()
 
     def _publish(self, packet: Packet) -> None:
         if not self.cancellation.cancelled:
@@ -195,75 +203,101 @@ class ChatTurnExecution:
                     is_retryable=True,
                 )
             )
-        for index, response_future in enumerate(self._response_futures):
+        for index in range(len(self._response_futures)):
             emitter = Emitter(
                 self._publish, self.setup.responses[index].message_id, index
             )
             try:
                 start_thread_future(
-                    lambda index=index, response_future=response_future, emitter=emitter: (
-                        self._run_response(
-                            index,
-                            response_future,
-                            emitter,
-                            self._auto_filters,
-                            startup_error=startup_error,
-                        )
+                    lambda index=index, emitter=emitter: self._run_response(
+                        index,
+                        emitter,
+                        self._auto_filters,
+                        startup_error=startup_error,
                     ),
                     name="chat-response",
                 )
             except Exception as error:
                 self._run_response(
                     index,
-                    response_future,
                     emitter,
                     self._auto_filters,
                     startup_error=error,
                 )
-        deadline = (
-            time.monotonic()
-            + CHAT_RESPONSE_WAIT_TIMEOUT_S
-            + 2 * _PERSISTENCE_WAIT_SECONDS
-        )
+        deadline = time.monotonic() + CHAT_RESPONSE_WAIT_TIMEOUT_S
+        timed_out = False
         try:
-            while time.monotonic() < deadline:
+            while True:
                 self._poll_control()
+                self._poll_saves()
                 with self._lock:
                     drained = len(self._execution_drained) == len(
                         self._response_futures
                     )
-                if all(future.done() for future in self._response_futures) and (
-                    drained or self.cancellation.cancelled
+                    pending = bool(self._unfinished)
+                    save_overdue = any(
+                        pending_save.deadline <= time.monotonic()
+                        for pending_save in self._pending_saves.values()
+                    )
+                    stores = tuple(self._stores)
+                if (
+                    not self._delivery_closed
+                    and not timed_out
+                    and time.monotonic() >= deadline
                 ):
+                    timed_out = True
+                    logger.error("Chat turn exceeded its response wait bound")
+                    self.cancellation.cancel()
+                responses_done = all(future.done() for future in self._response_futures)
+                if not self._delivery_closed and (
+                    (
+                        responses_done
+                        and (drained or self.cancellation.cancelled or save_overdue)
+                    )
+                    or timed_out
+                ):
+                    if self._stopped_by_user:
+                        self.delivery.publish(
+                            Packet(obj=OverallStop(stop_reason="user_cancelled"))
+                        )
+                    self._close_delivery()
+                if not pending and not any(store.has_owned_work for store in stores):
                     break
-                self._changed.wait(
-                    timeout=min(
-                        _CANCEL_POLL_INTERVAL_S, max(0.0, deadline - time.monotonic())
-                    )
-                )
+                self._changed.wait(timeout=_CANCEL_POLL_INTERVAL_S)
                 self._changed.clear()
-            else:
-                logger.error("Chat turn exceeded its response wait bound")
-                self.cancellation.cancel()
-            if self._stopped_by_user:
-                self.delivery.publish(
-                    Packet(
-                        obj=OverallStop(stop_reason="user_cancelled"),
-                    )
-                )
         except Exception:
             self.cancellation.cancel()
             logger.exception("Chat turn control failed")
         finally:
             self._close_delivery()
+            self._maybe_finish()
+
+    def _register_store(self, store: ChatRunStore) -> None:
+        with self._lock:
+            self._stores.append(store)
+        self._changed.set()
+
+    def _maybe_finish(self) -> None:
+        with self._lock:
+            finished = not self._unfinished and self._delivery_finished
+            stores = tuple(self._stores)
+        if finished and not any(store.has_owned_work for store in stores):
+            with self._lock:
+                if self._completion_reported:
+                    return
+                self._completion_reported = True
+            self.finished.set_result(None)
 
     def _close_delivery(self) -> None:
+        if self._delivery_closed:
+            return
+        self._delivery_closed = True
+
         def drained(_future: Future[None]) -> None:
             with self._lock:
                 self._delivery_finished = True
-                finished = not self._unfinished
-            if finished:
-                self.finished.set_result(None)
+            self._changed.set()
+            self._maybe_finish()
 
         try:
             self._finish_delivery()
@@ -273,23 +307,15 @@ class ChatTurnExecution:
     def _finish_response(self, index: int) -> None:
         with self._lock:
             self._unfinished.remove(index)
-            finished = not self._unfinished and self._delivery_finished
-        if finished:
-            self.finished.set_result(None)
+        self._changed.set()
 
-    def _retain_resources(
-        self, index: int, run: Run | None, save: Future[None] | None
-    ) -> None:
+    def _retain_resources(self, index: int, run: Run | None) -> None:
         def drained() -> None:
             if run is not None and run.delivery_failed:
                 self.delivery.report_gap()
             with self._lock:
                 self._execution_drained.add(index)
-            self._changed.set()
-            if save is None:
-                self._finish_response(index)
-            else:
-                save.add_done_callback(lambda _: self._finish_response(index))
+            self._finish_response(index)
 
         if run is None:
             drained()
@@ -299,142 +325,126 @@ class ChatTurnExecution:
     def _run_response(
         self,
         index: int,
-        response_future: Future[ChatResponseOutcome],
         emitter: Emitter,
         auto_filters: bool,
         *,
         startup_error: BaseException | None = None,
     ) -> None:
         cancellation = CancellationSignal()
-        run: Run | None = None
+        links = ExitStack()
+        links.enter_context(self.cancellation.on_cancel(cancellation.cancel))
         chat_agent: ChatAgent | DeepResearchAgent | None = None
         coordinator: AgentCoordinator | None = None
-        error: BaseException | None = None
-        save: Future[None] | None = None
-        with self.cancellation.on_cancel(cancellation.cancel):
+        finalized = False
+
+        def persist(snapshot: RunSnapshot) -> None:
+            nonlocal finalized
+            if coordinator is None:
+                raise RuntimeError("Response persistence requires its coordinator")
+            finalized = True
+            self._finalize_response(
+                index, coordinator.run(snapshot.run_id), chat_agent, coordinator
+            )
+
+        def terminal(run: Run) -> None:
+            nonlocal finalized
             try:
-                if startup_error is not None:
-                    raise startup_error
-                cancellation.check()
-                chat_agent = create_chat_agent(
-                    self.setup, self.user, index, cancellation, auto_filters
-                )
-                coordinator = create_chat_agent_coordinator(
-                    chat_agent.agent,
-                    message_id=self.setup.responses[index].message_id,
-                    previous_run_id=self.setup.previous_run_id,
-                    chat_session_id=self.setup.chat_session_id,
-                    persist_content=record_mode_persists_content(
-                        self.setup.incognito_record_mode
-                    ),
-                    llm=self.setup.responses[index].llm,
-                    tools=chat_agent.tools,
-                    user_identity=self.setup.user_identity,
-                )
-                cancellation.check()
-                research = (
-                    len(self.setup.responses) == 1
-                    and self.setup.new_msg_req.deep_research
-                )
-                with trace(
-                    "run_deep_research" if research else "chat",
-                    group_id=str(self.setup.chat_session_id),
-                    metadata=ChatTraceMetadata(
-                        chat_session_id=str(self.setup.chat_session_id),
-                        user_id=self.setup.user_identity.user_id,
-                    ).model_dump(),
-                ):
-                    run = chat_agent.agent.start(
-                        messages=self.setup.input_messages,
-                        max_steps=chat_agent.max_steps,
-                        cancellation=cancellation,
-                        coordinator=coordinator,
-                        on_event=ResponsePresenter(
-                            emitter,
-                            coordinator,
-                            tool_ids={tool.name: tool.id for tool in chat_agent.tools},
-                        ).consume,
+                if not finalized:
+                    finalized = True
+                    completion_error = (
+                        coordinator.completion(run.id).exception(timeout=0)
+                        if coordinator
+                        else None
                     )
-                    run.result(timeout=CHAT_RESPONSE_WAIT_TIMEOUT_S)
-            except BaseException as failure:
-                error = failure
-                if run is not None and run.status == RunStatus.RUNNING:
-                    if isinstance(failure, TimeoutError):
-                        logger.error(
-                            "Response %s exceeded its execution wait bound", run.id
+                    if completion_error is not None:
+                        snapshot = self._project_response(
+                            index, run, chat_agent, coordinator, completion_error
                         )
-                    run.cancel()
-                    try:
-                        run.result(timeout=_PERSISTENCE_WAIT_SECONDS)
-                    except TimeoutError:
-                        logger.error(
-                            "Response %s did not settle after cancellation", run.id
+                        self._report_response(
+                            index,
+                            ChatResponseOutcome(
+                                response=snapshot,
+                                persistence_status=PersistenceStatus.FAILED,
+                            ),
                         )
-                    except AgentCancelled:
-                        logger.debug("Response cancelled")
-                    except Exception:
-                        logger.exception("Response failed during cancellation")
+                    else:
+                        self._finalize_response(index, run, chat_agent, coordinator)
+            except Exception as error:
+                logger.exception("Response finalization failed for model %d", index)
+                self._report_response_error(index, error)
+            finally:
+                links.close()
+                self._retain_resources(index, run)
+
+        try:
+            if startup_error is not None:
+                raise startup_error
+            cancellation.check()
+            chat_agent = create_chat_agent(
+                self.setup, self.user, index, cancellation, auto_filters
+            )
+            coordinator = create_chat_agent_coordinator(
+                chat_agent.agent,
+                message_id=self.setup.responses[index].message_id,
+                previous_run_id=self.setup.previous_run_id,
+                chat_session_id=self.setup.chat_session_id,
+                persist_content=record_mode_persists_content(
+                    self.setup.incognito_record_mode
+                ),
+                llm=self.setup.responses[index].llm,
+                tools=chat_agent.tools,
+                user_identity=self.setup.user_identity,
+                register_store=self._register_store,
+                control_cache=self.control_cache,
+                on_root_complete=persist,
+            )
+            cancellation.check()
+            research = (
+                len(self.setup.responses) == 1 and self.setup.new_msg_req.deep_research
+            )
+            with trace(
+                "run_deep_research" if research else "chat",
+                group_id=str(self.setup.chat_session_id),
+                metadata=ChatTraceMetadata(
+                    chat_session_id=str(self.setup.chat_session_id),
+                    user_id=self.setup.user_identity.user_id,
+                ).model_dump(),
+            ):
+                chat_agent.agent.execute(
+                    messages=self.setup.input_messages,
+                    max_steps=chat_agent.max_steps,
+                    cancellation=cancellation,
+                    coordinator=coordinator,
+                    event_dispatcher=self.events,
+                    on_terminal=terminal,
+                    on_event=ResponsePresenter(
+                        emitter,
+                        coordinator,
+                        tool_ids={tool.name: tool.id for tool in chat_agent.tools},
+                    ).consume,
+                )
+        except BaseException as failure:
             try:
-                snapshot = self._project_response(
-                    index, run, chat_agent, coordinator, error
-                )
-                if error is not None and not isinstance(error, AgentCancelled):
-                    failure = (
-                        error
-                        if isinstance(error, Exception)
-                        else RuntimeError("Agent task failed")
+                if not finalized:
+                    finalized = True
+                    self._finalize_response(
+                        index, None, chat_agent, coordinator, failure
                     )
-                    packet = chat_error(failure, self.setup.responses[index].llm, index)
-                    self.delivery.publish(packet)
-                    snapshot = snapshot.model_copy(update={"error": packet.error})
-                save = start_thread_future(
-                    lambda: save_chat_response(
-                        message_id=self.setup.responses[index].message_id,
-                        response=snapshot,
-                    ),
-                    name="chat-storage",
-                )
-                self._save_response(index, response_future, snapshot, save)
-            except Exception as failure:
-                logger.exception("Failed to finalize response for model %d", index)
-                response_future.set_exception(failure)
-                self.delivery.publish(
-                    StreamingError(
-                        error=PERSISTENCE_ERROR_MESSAGES[PersistenceStatus.FAILED],
-                        error_code="RESPONSE_SAVE_ERROR",
-                        is_retryable=True,
-                        details={"model_index": index},
-                    )
+            except Exception:
+                logger.exception(
+                    "Response startup finalization failed for model %d", index
                 )
             finally:
-                self._retain_resources(index, run, save)
-                self._changed.set()
+                links.close()
+                self._retain_resources(index, None)
 
-    def _save_response(
-        self,
-        index: int,
-        response_future: Future[ChatResponseOutcome],
-        snapshot: ChatResponseSnapshot,
-        save: Future[None],
-    ) -> None:
-        status = PersistenceStatus.SAVED
-        done, _ = wait({save}, timeout=_PERSISTENCE_WAIT_SECONDS)
-        if done:
-            try:
-                save.result()
-            except Exception:
-                logger.exception("Failed to save response for model %d", index)
-                status = PersistenceStatus.FAILED
-        else:
-            logger.error(
-                "Response persistence exceeded its wait bound for model %d", index
-            )
-            status = PersistenceStatus.UNCONFIRMED
-            save.add_done_callback(_log_late_save)
-        response_future.set_result(
-            ChatResponseOutcome(response=snapshot, persistence_status=status)
-        )
-        if message := PERSISTENCE_ERROR_MESSAGES.get(status):
+    def _report_response(self, index: int, outcome: ChatResponseOutcome) -> None:
+        with self._lock:
+            if index in self._reported_responses:
+                return
+            self._reported_responses.add(index)
+        self._response_futures[index].set_result(outcome)
+        if message := PERSISTENCE_ERROR_MESSAGES.get(outcome.persistence_status):
             self.delivery.publish(
                 StreamingError(
                     error=message,
@@ -443,6 +453,104 @@ class ChatTurnExecution:
                     details={"model_index": index},
                 )
             )
+        self._changed.set()
+
+    def _report_response_error(self, index: int, error: Exception) -> None:
+        with self._lock:
+            if index in self._reported_responses:
+                return
+            self._reported_responses.add(index)
+        self._response_futures[index].set_exception(error)
+        self.delivery.publish(
+            StreamingError(
+                error=PERSISTENCE_ERROR_MESSAGES[PersistenceStatus.FAILED],
+                error_code="RESPONSE_SAVE_ERROR",
+                is_retryable=True,
+                details={"model_index": index},
+            )
+        )
+        self._changed.set()
+
+    def _poll_saves(self) -> None:
+        with self._lock:
+            overdue = [
+                (index, pending.response)
+                for index, pending in self._pending_saves.items()
+                if pending.deadline <= time.monotonic()
+                and index not in self._reported_responses
+            ]
+        for index, response in overdue:
+            logger.error(
+                "Response persistence exceeded its wait bound for model %d", index
+            )
+            self._report_response(
+                index,
+                ChatResponseOutcome(
+                    response=response,
+                    persistence_status=PersistenceStatus.UNCONFIRMED,
+                ),
+            )
+
+    def _finalize_response(
+        self,
+        index: int,
+        run: Run | None,
+        chat_agent: ChatAgent | DeepResearchAgent | None,
+        coordinator: AgentCoordinator | None,
+        error: BaseException | None = None,
+    ) -> None:
+        if run is not None:
+            try:
+                run.result(timeout=0)
+            except BaseException as failure:
+                error = failure
+        try:
+            snapshot = self._project_response(
+                index, run, chat_agent, coordinator, error
+            )
+            if error is not None and not isinstance(error, AgentCancelled):
+                failure = (
+                    error
+                    if isinstance(error, Exception)
+                    else RuntimeError("Agent task failed")
+                )
+                packet = chat_error(failure, self.setup.responses[index].llm, index)
+                self.delivery.publish(packet)
+                snapshot = snapshot.model_copy(update={"error": packet.error})
+            with self._lock:
+                self._pending_saves[index] = PendingChatResponseSave(
+                    response=snapshot,
+                    deadline=time.monotonic() + _PERSISTENCE_WAIT_SECONDS,
+                )
+            try:
+                save_chat_response(
+                    message_id=self.setup.responses[index].message_id, response=snapshot
+                )
+            except Exception:
+                self._report_response(
+                    index,
+                    ChatResponseOutcome(
+                        response=snapshot,
+                        persistence_status=PersistenceStatus.FAILED,
+                    ),
+                )
+                raise
+            else:
+                self._report_response(
+                    index,
+                    ChatResponseOutcome(
+                        response=snapshot,
+                        persistence_status=PersistenceStatus.SAVED,
+                    ),
+                )
+            finally:
+                with self._lock:
+                    del self._pending_saves[index]
+        except Exception as failure:
+            self._report_response_error(index, failure)
+            raise
+        finally:
+            self._changed.set()
 
     def _project_response(
         self,
@@ -483,25 +591,35 @@ class ChatTurnExecution:
         return snapshot
 
     def _poll_control(self) -> bool:
+        with self._lock:
+            stores = tuple(self._stores)
+        for store in stores:
+            store.poll_control()
+        if self._delivery_closed:
+            return self.cancellation.cancelled
         now = time.monotonic()
         if (
             not self.cancellation.cancelled
             and now - self._last_stop_check >= _CANCEL_POLL_INTERVAL_S
         ):
             self._last_stop_check = now
-            if is_stop_requested(
-                self.setup.chat_session_id,
-                self.setup.cache,
-                processing_key=self.setup.processing_key,
-            ):
-                self._stopped_by_user = True
+            try:
+                if is_stop_requested(
+                    self.setup.chat_session_id,
+                    self.control_cache,
+                    processing_key=self.setup.processing_key,
+                ):
+                    self._stopped_by_user = True
+                    self.cancellation.cancel()
+            except Exception:
                 self.cancellation.cancel()
+                logger.exception("Failed to read chat Stop request")
         if now - self._last_refresh >= PROCESSING_REFRESH_INTERVAL_S:
             self._last_refresh = now
             try:
                 set_processing_status(
                     chat_session_id=self.setup.chat_session_id,
-                    cache=self.setup.cache,
+                    cache=self.control_cache,
                     value=True,
                     processing_key=self.setup.processing_key,
                 )
@@ -517,7 +635,7 @@ class ChatTurnExecution:
             try:
                 set_processing_status(
                     chat_session_id=self.setup.chat_session_id,
-                    cache=self.setup.cache,
+                    cache=self.control_cache,
                     value=False,
                 )
             except Exception:

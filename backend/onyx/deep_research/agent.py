@@ -8,11 +8,13 @@ from pydantic import BaseModel
 from onyx.agents.models import (
     AgentContext,
     PreparedStep,
+    RunSnapshot,
     StepInput,
     StepResult,
 )
-from onyx.agents.runtime import Agent, RunFailed
-from onyx.agents.tools import AgentTool, ToolInvocation
+from onyx.agents.restoration import FeatureRestoration
+from onyx.agents.runtime import Agent, RunFailed, result_from_snapshot
+from onyx.agents.tools import AgentTool, ChildRunWait, ToolInvocation
 from onyx.agents.transcript import (
     AgentRestorationConfig,
     CompactionCheckpoint,
@@ -52,6 +54,7 @@ from onyx.llm.models import (
     ReasoningEffort,
     SystemMessage,
     ToolChoiceOptions,
+    ToolDefinition,
     ToolResult,
     ToolResultMessage,
     UserMessage,
@@ -70,7 +73,7 @@ from onyx.prompts.deep_research.orchestration_layer import (
 )
 from onyx.prompts.deep_research.research_agent import MAX_RESEARCH_CYCLES
 from onyx.prompts.prompt_utils import get_current_llm_day_time
-from onyx.tools.interface import FunctionToolDefinition, Tool, parse_tool_arguments
+from onyx.tools.interface import Tool, parse_tool_arguments
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tracing.flows import LLMFlow
 from onyx.utils.logger import setup_logger
@@ -88,7 +91,16 @@ class ResearchTask(BaseModel):
     task: str
 
 
-class DeepResearchAgent:
+class DeepResearchFeatureState(BaseModel):
+    language_section: str
+    reasoning_effort: ReasoningEffort
+    file_metadata: dict[str, FileToolMetadata] | None
+    skip_clarification: bool
+    elapsed_seconds: float
+    citation_mapping: CitationMapping
+
+
+class DeepResearchAgent(FeatureRestoration):
     """Clarify a question, coordinate research children, and write a report."""
 
     def __init__(
@@ -104,6 +116,7 @@ class DeepResearchAgent:
         skip_clarification: bool = False,
         checkpoint: CompactionCheckpoint | None = None,
         previous_run_id: str | None = None,
+        agent_id: str | None = None,
     ) -> None:
         self.tools = allowed_tools
         self.llm = llm
@@ -128,19 +141,74 @@ class DeepResearchAgent:
         )
         self.citation_mapping: CitationMapping = {}
         self._citation_lock = Lock()
+        self.clarification_tools = [
+            self._control_tool(definition, "Proceed to planning.")
+            for definition in get_clarification_tool_definitions()
+        ]
+        self.research_tools = self._build_research_tools()
         self.agent = Agent(
             llm,
+            tools=[*self.clarification_tools, *self.research_tools],
+            agent_id=agent_id,
             previous_run_id=previous_run_id,
             context=AgentContext(
                 messages=messages,
                 checkpoint=checkpoint,
             ),
+            restoration=self,
             prepare_step=self.prepare_step,
             after_step=self.after_step,
             execution=GenerationContext(
                 flow=LLMFlow.DEEP_RESEARCH, user_identity=user_identity
             ),
         )
+
+    def capture_state(self) -> DeepResearchFeatureState:
+        with self._citation_lock:
+            return DeepResearchFeatureState(
+                language_section=self.language_section,
+                reasoning_effort=self.reasoning_effort,
+                file_metadata=self.file_metadata,
+                skip_clarification=self.skip_clarification,
+                elapsed_seconds=max(0.0, time.monotonic() - self.started),
+                citation_mapping=self.citation_mapping,
+            ).model_copy(deep=True)
+
+    def restore_state(self, state: BaseModel) -> None:
+        if not isinstance(state, DeepResearchFeatureState):
+            raise ValueError(
+                "Deep research restoration requires DeepResearchFeatureState"
+            )
+        saved = state.model_copy(deep=True)
+        if (
+            saved.language_section != self.language_section
+            or saved.reasoning_effort != self.reasoning_effort
+            or saved.file_metadata != self.file_metadata
+            or saved.skip_clarification != self.skip_clarification
+        ):
+            raise ValueError("Deep research restoration configuration does not match")
+        with self._citation_lock:
+            self.citation_mapping = saved.citation_mapping
+            self.started = time.monotonic() - saved.elapsed_seconds
+
+    def _build_research_tools(self) -> list[AgentTool]:
+        return [
+            AgentTool(
+                name=definition.name,
+                description=definition.description,
+                parameters=definition.parameters,
+                execute=self._research,
+                complete_children=self._complete_research,
+            )
+            if definition.name == RESEARCH_AGENT_TOOL_NAME
+            else self._control_tool(
+                definition,
+                "Ready to produce the final report."
+                if definition.name == GENERATE_REPORT_TOOL_NAME
+                else THINK_TOOL_RESPONSE_MESSAGE,
+            )
+            for definition in get_orchestrator_tools(not self.is_reasoning_model)
+        ]
 
     def prepare_step(self, state: StepInput) -> PreparedStep:
         if state.previous is None:
@@ -184,10 +252,7 @@ class DeepResearchAgent:
                 ),
                 self.language_section,
             )
-            tools = [
-                self._control_tool(definition, "Proceed to planning.")
-                for definition in get_clarification_tool_definitions()
-            ]
+            tools = list(self.clarification_tools)
             options.tool_choice = ToolChoiceOptions.AUTO
         elif phase == ResearchPhase.PLANNING:
             system_prompt = RESEARCH_PLAN_PROMPT.format(current_datetime=now)
@@ -208,23 +273,7 @@ class DeepResearchAgent:
                 else "",
             )
             reminder = FIRST_CYCLE_REMINDER if research_steps == 1 else None
-            for definition in get_orchestrator_tools(not self.is_reasoning_model):
-                function = definition["function"]
-                tools.append(
-                    AgentTool(
-                        name=function["name"],
-                        description=function["description"],
-                        parameters=function["parameters"],
-                        execute=self._research,
-                    )
-                    if function["name"] == RESEARCH_AGENT_TOOL_NAME
-                    else self._control_tool(
-                        definition,
-                        "Ready to produce the final report."
-                        if function["name"] == GENERATE_REPORT_TOOL_NAME
-                        else THINK_TOOL_RESPONSE_MESSAGE,
-                    )
-                )
+            tools = list(self.research_tools)
             options.tool_choice = ToolChoiceOptions.REQUIRED
         else:
             system_prompt = with_language_section(
@@ -234,8 +283,8 @@ class DeepResearchAgent:
         with self._citation_lock:
             sources = dict(self.citation_mapping)
         output_metadata = ResearchMessageMetadata(
-            phase=phase,
             is_reasoning_model=self.is_reasoning_model,
+            phase=phase,
             sources=sources,
             elapsed_seconds=time.monotonic() - self.started,
         )
@@ -300,16 +349,15 @@ class DeepResearchAgent:
         return True
 
     @staticmethod
-    def _control_tool(definition: FunctionToolDefinition, result: str) -> AgentTool:
-        function = definition["function"]
+    def _control_tool(definition: ToolDefinition, result: str) -> AgentTool:
         return AgentTool(
-            name=function["name"],
-            description=function["description"],
-            parameters=function["parameters"],
+            name=definition.name,
+            description=definition.description,
+            parameters=definition.parameters,
             execute=lambda _invocation: ToolResult(content=result),
         )
 
-    def _research(self, invocation: ToolInvocation) -> ToolResult:
+    def _research(self, invocation: ToolInvocation) -> ToolResult | ChildRunWait:
         task = parse_tool_arguments(ResearchTask, invocation.arguments)
         child = ResearchAgent(
             tools=self.tools,
@@ -342,8 +390,7 @@ class DeepResearchAgent:
                     ).model_dump(mode="json"),
                 ),
             )
-            while (completed := invocation.agents.wait_run(submission.run_id)) is None:
-                invocation.cancellation.check()
+            return ChildRunWait(run_ids=[submission.run_id])
 
         except RunFailed as error:
             if error.failure.kind not in {
@@ -357,7 +404,35 @@ class DeepResearchAgent:
                 content="Research failed. Continue with other sources or try a different task.",
                 is_error=True,
             )
-        result = child.report(completed)
+
+    def _complete_research(
+        self, _invocation: ToolInvocation, completed: list[RunSnapshot]
+    ) -> ToolResult:
+        if len(completed) != 1:
+            raise ValueError("Research delegation requires one child result")
+        try:
+            output = result_from_snapshot(completed[0]).output
+        except RunFailed as error:
+            if error.failure.kind not in {
+                RunFailureKind.LLM,
+                RunFailureKind.LLM_TIMEOUT,
+                RunFailureKind.LLM_RATE_LIMIT,
+            }:
+                raise
+            return ToolResult(
+                content="Research failed. Continue with other sources or try a different task.",
+                is_error=True,
+            )
+        if not isinstance(output.metadata, ResearchMessageMetadata) or not output.text:
+            raise ValueError("Research child requires a report with source metadata")
+        result = ResearchAgentCallResult(
+            intermediate_report=output.text,
+            citation_mapping={
+                number: output.metadata.sources[number]
+                for number in extract_citation_order_from_text(output.text)
+                if number in output.metadata.sources
+            },
+        )
         with self._citation_lock:
             report, self.citation_mapping = collapse_citations(
                 answer_text=result.intermediate_report,

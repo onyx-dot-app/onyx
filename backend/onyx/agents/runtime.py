@@ -3,7 +3,8 @@
 import threading
 from collections.abc import Callable, Sequence
 from concurrent.futures import Future
-from contextlib import closing
+from contextlib import ExitStack, closing
+from contextvars import copy_context
 from typing import TYPE_CHECKING, Literal, TypedDict
 from uuid import uuid4
 
@@ -16,15 +17,16 @@ from onyx.agents.compaction import (
     working_messages,
 )
 from onyx.agents.concurrency import (
-    CLEANUP_SECONDS,
     OPERATION_TIMEOUT_SECONDS,
     EventDelivery,
+    EventDispatcher,
     ExecutionWork,
 )
 from onyx.agents.events import (
     AgentEndEvent,
     AgentEvent,
     AgentStartEvent,
+    AgentSuspendedEvent,
     MessageEndEvent,
     MessageStartEvent,
     MessageUpdateEvent,
@@ -35,17 +37,25 @@ from onyx.agents.events import (
 from onyx.agents.models import (
     AgentContext,
     AgentStep,
+    ExecutionCheckpoint,
     PreparedStep,
+    RunAction,
+    RunProgress,
     RunResult,
     RunSnapshot,
     StepInput,
     StepResult,
     ToolCallContext,
 )
+from onyx.agents.tool_execution import ToolBatch
 from onyx.agents.tools import (
     AgentTool,
-    ToolExecutionMode,
+    InputDecision,
+    InputMode,
+    PendingToolInput,
+    ToolAnswer,
     ToolInvocation,
+    ToolOutcome,
     ToolProgress,
 )
 from onyx.agents.transcript import (
@@ -79,15 +89,16 @@ from onyx.llm.models import (
     ToolChoiceOptions,
     ToolResult,
     ToolResultMessage,
+    UserMessage,
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_with_context
 
 if TYPE_CHECKING:
     from onyx.agents.coordination import AgentCoordinator, RunCoordination
+    from onyx.agents.restoration import FeatureRestoration
 
 logger = setup_logger()
-MAX_TOOL_CALLS_PER_STEP = 64
 
 
 class _Ancestry(TypedDict):
@@ -96,6 +107,10 @@ class _Ancestry(TypedDict):
     parent_run_id: str | None
     parent_tool_call_id: str | None
     parent_message_id: str | None
+
+
+class RunNotTransferable(RuntimeError):
+    """Execution changed before its owner could release a suspended run."""
 
 
 class RunFailed(RuntimeError):
@@ -154,15 +169,46 @@ def result_from_snapshot(record: RunSnapshot) -> RunResult:
 
 
 class _RunState:
-    def __init__(self, record: RunSnapshot, signal: CancellationSignal) -> None:
+    def __init__(
+        self,
+        record: RunSnapshot,
+        signal: CancellationSignal,
+        event_dispatcher: EventDispatcher | None = None,
+    ) -> None:
         self.lock = threading.RLock()
         self.record = record
         self.signal = signal
         self.accepting = True
         self.completed: Future[None] = Future()
         self.idle: Future[None] = Future()
-        self.delivery: EventDelivery | None = EventDelivery()
+        self.delivery: EventDelivery | None = EventDelivery(event_dispatcher)
         self.delivery_failed = False
+        self.changed = threading.Condition(self.lock)
+        self.settled: Future[None] = Future()
+        self.segment_active = True
+        self.wake_requested = False
+        self.watched_children: set[str] = set()
+        self.suspend_requested = False
+        self.model_input_closed = False
+        self.restart: Callable[[], None] | None = None
+        self.detach: Callable[[], None] | None = None
+        self.validate_handoff: Callable[[], None] | None = None
+        self.handoff: ExecutionCheckpoint | None = None
+        self.remote_cancel: Callable[[], None] | None = None
+        self.shutdown_requested = False
+        self.terminal_callbacks: list[Callable[[Run], None]] = []
+        self.finalization_started = False
+        self.finalization_context = copy_context()
+
+    def wake(self) -> None:
+        with self.changed:
+            if not self.accepting:
+                return
+            self.wake_requested = True
+            self.changed.notify_all()
+            restart = self.restart
+        if restart is not None:
+            restart()
 
 
 class Run:
@@ -175,10 +221,45 @@ class Run:
             raise ValueError("Executable run requires an agent identity")
         self.agent_id = state.record.agent_id
 
+    @classmethod
+    def from_snapshot(cls, snapshot: RunSnapshot) -> "Run":
+        """Reattach a terminal child result without starting execution."""
+        if snapshot.status in (RunStatus.RUNNING, RunStatus.SUSPENDED):
+            raise ValueError("Only terminal snapshots can become completed handles")
+        state = _RunState(snapshot.model_copy(deep=True), CancellationSignal())
+        state.delivery = None
+        state.accepting = False
+        state.segment_active = False
+        state.completed.set_result(None)
+        state.idle.set_result(None)
+        state.settled.set_result(None)
+        return cls(state)
+
     @property
     def status(self) -> RunStatus:
         with self._state.lock:
             return self._state.record.status
+
+    @property
+    def is_remote(self) -> bool:
+        """Whether this handle delegates cancellation to another execution owner."""
+        with self._state.lock:
+            return self._state.remote_cancel is not None
+
+    @property
+    def pending_inputs(self) -> list[PendingToolInput]:
+        """Copy unanswered tool requests without copying execution history."""
+        with self._state.lock:
+            progress = self._state.record.progress
+            return (
+                [
+                    pending.model_copy(deep=True)
+                    for pending in progress.pending.values()
+                    if isinstance(pending, PendingToolInput)
+                ]
+                if progress is not None
+                else []
+            )
 
     def snapshot(self) -> RunSnapshot:
         with self._state.lock:
@@ -189,9 +270,254 @@ class Run:
         delivery = self._state.delivery
         return delivery.failed.is_set() if delivery else self._state.delivery_failed
 
+    def _cancel_if_local(self) -> bool:
+        """Reserve local shutdown without forwarding cancellation to another owner."""
+        with self._state.lock:
+            if self._state.remote_cancel is not None:
+                return False
+            self._state.shutdown_requested = True
+        self.cancel()
+        return True
+
     def cancel(self) -> None:
-        if not self._state.completed.done():
-            self._state.signal.cancel()
+        with self._state.lock:
+            remote_cancel = self._state.remote_cancel
+        if remote_cancel is not None:
+            if not self._state.completed.done():
+                remote_cancel()
+            return
+        if self._state.completed.done():
+            return
+        self._state.signal.cancel()
+        with self._state.lock:
+            remote_cancel = self._state.remote_cancel
+        if remote_cancel is not None:
+            remote_cancel()
+            return
+        with self._state.lock:
+            idle = self._state.idle
+            delivery = self._state.delivery
+            transferred = (
+                not self._state.segment_active
+                and self._state.handoff is not None
+                and self._state.restart is None
+                and self._state.accepting
+            )
+            if transferred:
+                self._state.accepting = False
+                self._state.handoff = None
+                self._state.record.status = RunStatus.CANCELLED
+                self._state.record.revision += 1
+                for operation in self._state.record.operations:
+                    if operation.status == RunStatus.RUNNING:
+                        operation.status = RunStatus.CANCELLED
+                self._state.idle = Future()
+                idle = self._state.idle
+                delivery = self._state.delivery
+                if delivery is not None:
+                    delivery.publish(
+                        AgentEndEvent(
+                            agent_id=self.agent_id,
+                            run_id=self.id,
+                            parent_run_id=self._state.record.parent_run_id,
+                            parent_tool_call_id=self._state.record.parent_tool_call_id,
+                            parent_message_id=self._state.record.parent_message_id,
+                            outcome=RunStatus.CANCELLED,
+                            answer_message_id=None,
+                        )
+                    )
+            restart = self._state.restart
+        if not transferred:
+            if restart is not None:
+                restart()
+            return
+        self._state.completed.set_result(None)
+        if delivery is not None:
+            delivery.pause()
+
+            def drained() -> None:
+                delivery.close()
+                with self._state.lock:
+                    self._state.delivery_failed = delivery.failed.is_set()
+                    self._state.delivery = None
+                idle.set_result(None)
+
+            delivery.tracker.on_idle(drained)
+        else:
+            idle.set_result(None)
+        start_thread_with_context(
+            self._finalize,
+            name="agent-finalize",
+            daemon=True,
+            context=self._state.finalization_context.copy(),
+        )
+
+    def claim_resume(
+        self, snapshot: RunSnapshot, context: AgentContext
+    ) -> Callable[[], None]:
+        """Claim an explicitly transferred owner while retaining this logical handle."""
+        with self._state.lock:
+            transferred = self._state.handoff
+            if (
+                self._state.segment_active
+                or transferred is None
+                or not self._state.accepting
+            ):
+                raise RuntimeError("Run has not transferred execution ownership")
+            if self._state.remote_cancel is not None:
+                # The durable store can replace local file data with stored references.
+                if (
+                    snapshot.run_id != self.id
+                    or snapshot.revision < transferred.snapshot.revision
+                ):
+                    raise ValueError("Resume does not match the transferred revision")
+                self._state.record = snapshot.model_copy(deep=True)
+            elif transferred.snapshot != snapshot or transferred.context != context:
+                raise ValueError("Resume does not match the transferred checkpoint")
+            remote_cancel = self._state.remote_cancel
+            self._state.remote_cancel = None
+            self._state.segment_active = True
+            self._state.idle = Future()
+            self._state.settled = Future()
+
+        def rollback() -> None:
+            with self._state.lock:
+                self._state.remote_cancel = remote_cancel
+                self._state.restart = None
+                self._state.detach = None
+                self._state.segment_active = False
+                self._state.record.status = RunStatus.SUSPENDED
+                idle, settled = self._state.idle, self._state.settled
+                delivery = self._state.delivery
+            if delivery is not None:
+                delivery.pause()
+            idle.set_result(None)
+            settled.set_result(None)
+
+        return rollback
+
+    def suspend(self) -> None:
+        """Request suspension at the next safe execution boundary."""
+        with self._state.changed:
+            if self._state.remote_cancel is not None:
+                raise RuntimeError(
+                    "Input must be delivered to the current owner after transfer"
+                )
+            if self._state.completed.done():
+                raise ValueError("Cannot suspend a terminal run")
+            self._state.suspend_requested = True
+            self._state.changed.notify_all()
+
+    def resume(self) -> None:
+        """Continue a resident suspended run without changing its identity."""
+        with self._state.lock:
+            if self._state.completed.done():
+                raise ValueError("Cannot resume a terminal run")
+            self._state.suspend_requested = False
+            restart = self._state.restart
+        if restart is None:
+            raise RuntimeError("Run has no execution owner")
+        restart()
+
+    def submit(self, answer: ToolAnswer) -> None:
+        with self._state.changed:
+            if self._state.remote_cancel is not None:
+                raise RuntimeError(
+                    "Input must be delivered to the current owner after transfer"
+                )
+            progress = self._state.record.progress
+            if progress is None:
+                raise ValueError("Run has no input state")
+            existing = progress.answers.get(answer.request_id)
+            if existing is not None:
+                if existing != answer:
+                    raise ValueError("Conflicting answer for request")
+                if not self._state.accepting:
+                    return
+            else:
+                if not self._state.accepting:
+                    raise ValueError("Run is not accepting input")
+                request = next(
+                    (
+                        pending
+                        for pending in progress.pending.values()
+                        if isinstance(pending, PendingToolInput)
+                        and pending.request_id == answer.request_id
+                    ),
+                    None,
+                )
+                if request is None:
+                    raise ValueError("Unknown input request")
+                if (request.mode == InputMode.RESULT) != (
+                    answer.decision == InputDecision.RESULT
+                ):
+                    raise ValueError("Answer does not match the request mode")
+                progress.answers[answer.request_id] = answer.model_copy(deep=True)
+                self._state.record.revision += 1
+            self._state.suspend_requested = False
+            restart = self._state.restart
+            self._state.changed.notify_all()
+        if restart is not None:
+            restart()
+
+    def steer(self, message: UserMessage) -> None:
+        with self._state.changed:
+            if self._state.remote_cancel is not None:
+                raise RuntimeError(
+                    "Input must be delivered to the current owner after transfer"
+                )
+            progress = self._state.record.progress
+            if (
+                progress is None
+                or not self._state.accepting
+                or progress.action == RunAction.FINISH
+            ):
+                raise ValueError("Run is not accepting steering")
+            if progress.step_index + 1 >= progress.step_limit and (
+                progress.action != RunAction.PREPARE or self._state.model_input_closed
+            ):
+                raise ValueError("No model steps remain for steering")
+            progress.steering.append(message.model_copy(deep=True))
+            self._state.record.revision += 1
+            self._state.suspend_requested = False
+            restart = self._state.restart
+            self._state.changed.notify_all()
+        if restart is not None:
+            restart()
+
+    def wait_until_settled(
+        self, timeout: float = OPERATION_TIMEOUT_SECONDS
+    ) -> RunSnapshot:
+        """Wait until execution suspends or finishes; this does not wait for user input."""
+        with self._state.lock:
+            settled = self._state.settled
+        settled.result(timeout=timeout)
+        return self.snapshot()
+
+    def add_done_callback(self, callback: Callable[[RunSnapshot], None]) -> None:
+        self._state.completed.add_done_callback(
+            lambda _future: callback(self.snapshot())
+        )
+
+    def _add_terminal_callback(self, callback: Callable[["Run"], None]) -> None:
+        with self._state.lock:
+            if self._state.finalization_started:
+                raise RuntimeError("Terminal handling has already started")
+            self._state.terminal_callbacks.append(callback)
+
+    def _finalize(self) -> None:
+        """Run application completion on an execution or finalization worker."""
+        with self._state.lock:
+            if self._state.finalization_started:
+                return
+            self._state.finalization_started = True
+            callbacks = self._state.terminal_callbacks
+            self._state.terminal_callbacks = []
+        for callback in callbacks:
+            try:
+                callback(self)
+            except Exception:
+                logger.exception("Agent terminal handling failed")
 
     def subscribe(self, listener: Callable[[AgentEvent], None]) -> Callable[[], None]:
         delivery = self._state.delivery
@@ -230,7 +556,7 @@ def _capture_unsettled_child(run: Run) -> RunSnapshot:
     while pending:
         record = pending.pop()
         pending.extend(record.child_runs)
-        if record.status != RunStatus.RUNNING:
+        if record.status.is_terminal:
             continue
         record.status = RunStatus.ERROR
         record.failure = RunFailure(
@@ -257,11 +583,15 @@ class Agent:
         execution: GenerationContext | None = None,
         prepare_step: Callable[[StepInput], PreparedStep] | None = None,
         after_step: Callable[[StepResult], bool] | None = None,
-        before_tool_call: Callable[[ToolCallContext], ToolResult | None] | None = None,
+        before_tool_call: Callable[
+            [ToolCallContext], ToolResult | PendingToolInput | None
+        ]
+        | None = None,
         after_tool_call: Callable[[ToolCallContext, ToolResult], ToolResult]
         | None = None,
         agent_id: str | None = None,
         previous_run_id: str | None = None,
+        restoration: "FeatureRestoration | None" = None,
     ) -> None:
         self.id = agent_id or str(uuid4())
         self.llm = llm
@@ -273,6 +603,7 @@ class Agent:
         self.after_step = after_step
         self.before_tool_call = before_tool_call
         self.after_tool_call = after_tool_call
+        self.restoration = restoration
         self._context = (context or AgentContext()).snapshot()
         self._previous_run_id = previous_run_id
         self._lock = threading.RLock()
@@ -312,11 +643,86 @@ class Agent:
         parent_message_id: str | None = None,
         inherited_event_sink: Callable[[AgentEvent], None] | None = None,
         on_event: Callable[[AgentEvent], None] | None = None,
+        on_terminal: Callable[[Run], None] | None = None,
+        event_dispatcher: EventDispatcher | None = None,
+        _snapshot: RunSnapshot | None = None,
+    ) -> Run:
+        return self._start(
+            max_steps=max_steps,
+            messages=messages,
+            cancellation=cancellation,
+            coordinator=coordinator,
+            parent_run_id=parent_run_id,
+            parent_tool_call_id=parent_tool_call_id,
+            parent_message_id=parent_message_id,
+            inherited_event_sink=inherited_event_sink,
+            on_event=on_event,
+            on_terminal=on_terminal,
+            event_dispatcher=event_dispatcher,
+            _snapshot=_snapshot,
+            background=True,
+        )
+
+    def execute(
+        self,
+        *,
+        max_steps: int,
+        messages: Sequence[Message] = (),
+        cancellation: CancellationSignal | None = None,
+        coordinator: "AgentCoordinator | None" = None,
+        parent_run_id: str | None = None,
+        parent_tool_call_id: str | None = None,
+        parent_message_id: str | None = None,
+        inherited_event_sink: Callable[[AgentEvent], None] | None = None,
+        on_event: Callable[[AgentEvent], None] | None = None,
+        on_terminal: Callable[[Run], None] | None = None,
+        event_dispatcher: EventDispatcher | None = None,
+        _snapshot: RunSnapshot | None = None,
+    ) -> Run:
+        """Execute the first segment here; return when it finishes or suspends."""
+        return self._start(
+            max_steps=max_steps,
+            messages=messages,
+            cancellation=cancellation,
+            coordinator=coordinator,
+            parent_run_id=parent_run_id,
+            parent_tool_call_id=parent_tool_call_id,
+            parent_message_id=parent_message_id,
+            inherited_event_sink=inherited_event_sink,
+            on_event=on_event,
+            on_terminal=on_terminal,
+            event_dispatcher=event_dispatcher,
+            _snapshot=_snapshot,
+            background=False,
+        )
+
+    def _start(
+        self,
+        *,
+        max_steps: int,
+        background: bool,
+        messages: Sequence[Message] = (),
+        cancellation: CancellationSignal | None = None,
+        coordinator: "AgentCoordinator | None" = None,
+        parent_run_id: str | None = None,
+        parent_tool_call_id: str | None = None,
+        parent_message_id: str | None = None,
+        inherited_event_sink: Callable[[AgentEvent], None] | None = None,
+        on_event: Callable[[AgentEvent], None] | None = None,
+        on_terminal: Callable[[Run], None] | None = None,
+        event_dispatcher: EventDispatcher | None = None,
+        _snapshot: RunSnapshot | None = None,
     ) -> Run:
         AgentStep(index=0, limit=max_steps)
+        rollback_resume: Callable[[], None] | None = None
+        _run: Run | None = None
         with self._lock:
             if self._reserved:
                 raise RuntimeError("Agent is already running or draining")
+            if _snapshot is not None and coordinator is not None:
+                _run, rollback_resume = coordinator.claim_resume(
+                    _snapshot, self._context
+                )
             history = self._context.snapshot()
             signal = (
                 cancellation
@@ -324,29 +730,49 @@ class Agent:
                 or self.execution.cancellation
                 or CancellationSignal()
             )
-            state = _RunState(
-                RunSnapshot(
-                    run_id=str(uuid4()),
-                    agent_id=self.id,
-                    previous_run_id=self._previous_run_id,
-                    parent_run_id=parent_run_id,
-                    parent_tool_call_id=parent_tool_call_id,
-                    parent_message_id=parent_message_id,
-                    status=RunStatus.RUNNING,
-                    input_messages=[
-                        message.model_copy(deep=True) for message in messages
-                    ],
-                    messages=[],
-                    checkpoint=history.checkpoint,
-                ),
-                signal,
+            state = (
+                _run._state
+                if _run is not None
+                else _RunState(
+                    _snapshot.model_copy(deep=True)
+                    if _snapshot is not None
+                    else RunSnapshot(
+                        progress=RunProgress(step_limit=max_steps),
+                        run_id=str(uuid4()),
+                        agent_id=self.id,
+                        previous_run_id=self._previous_run_id,
+                        parent_run_id=parent_run_id,
+                        parent_tool_call_id=parent_tool_call_id,
+                        parent_message_id=parent_message_id,
+                        status=RunStatus.RUNNING,
+                        input_messages=[
+                            message.model_copy(deep=True) for message in messages
+                        ],
+                        messages=[],
+                        checkpoint=history.checkpoint,
+                    ),
+                    signal,
+                    event_dispatcher,
+                )
             )
+            state.record.status = RunStatus.RUNNING
             self._active = state
             self._reserved = True
-        run = Run(state)
+        run = _run if _run is not None else Run(state)
+        signal = state.signal
         if on_event is not None:
             run.subscribe(on_event)
+        executor: _Execution | None = None
+        rollback_start: Callable[[], None] | None = None
         try:
+            if _snapshot is not None and _snapshot.progress is not None:
+                feature_state = _snapshot.progress.feature_state
+                if feature_state is not None:
+                    if self.restoration is None:
+                        raise ValueError(
+                            "Feature restoration is required for this snapshot"
+                        )
+                    self.restoration.restore_state(feature_state)
             executor = _Execution(
                 state=state,
                 history=history.messages,
@@ -370,32 +796,129 @@ class Agent:
                 commit=self._commit,
                 release=self._release,
                 inherited_event_sink=inherited_event_sink,
+                restoration=self.restoration,
             )
+            state.detach = executor.detach
             if coordinator is not None:
                 executor.coordination = coordinator.bind(
-                    run, executor.work, executor.publish_child, signal
+                    run, executor.work, executor.publish_event, signal
                 )
+                coordinator.bind_agent(self)
+                state.validate_handoff = executor.coordination.validate_handoff
+                if _snapshot is not None and _snapshot.progress is not None:
+                    executor.coordination.attach_children(
+                        _snapshot.progress.child_run_ids
+                    )
+                    executor.coordination.observe_children(
+                        _snapshot.progress.observed_child_run_ids
+                    )
+                rollback_start = coordinator.notify_start(self, run)
+            if on_terminal is not None:
+                run._add_terminal_callback(on_terminal)
         except BaseException:
-            with self._lock:
-                self._active = None
-                self._reserved = False
-            if state.delivery:
-                state.delivery.close()
-            raise
-        try:
-            start_thread_with_context(
-                lambda: executor.execute(max_steps), name="agent-run", daemon=True
-            )
-        except BaseException:
-            if executor.coordination is not None:
+            if (
+                _run is None
+                and executor is not None
+                and executor.coordination is not None
+            ):
                 executor.coordination.release()
             with self._lock:
                 self._active = None
                 self._reserved = False
-            if state.delivery:
+            if rollback_resume is not None:
+                rollback_resume()
+            elif state.delivery:
+                state.delivery.close()
+            raise
+        try:
+            executor.begin(max_steps, background=background)
+        except BaseException:
+            executor.detach()
+            if rollback_start is not None:
+                try:
+                    rollback_start()
+                except Exception:
+                    logger.exception("Agent start registration rollback failed")
+            if _run is None and executor.coordination is not None:
+                executor.coordination.release()
+            with self._lock:
+                self._active = None
+                self._reserved = False
+            if rollback_resume is not None:
+                rollback_resume()
+            elif state.delivery:
                 state.delivery.close()
             raise
         return run
+
+    def resume(
+        self,
+        snapshot: RunSnapshot,
+        *,
+        coordinator: "AgentCoordinator | None" = None,
+        on_event: Callable[[AgentEvent], None] | None = None,
+    ) -> Run:
+        """Restore a suspended run after its previous owner has released execution."""
+        if snapshot.status != RunStatus.SUSPENDED or snapshot.progress is None:
+            raise ValueError("Only a suspended execution snapshot can resume")
+        if snapshot.agent_id != self.id:
+            raise ValueError("Snapshot belongs to another agent")
+        return self.start(
+            max_steps=snapshot.progress.step_limit,
+            coordinator=coordinator,
+            on_event=on_event,
+            _snapshot=snapshot,
+        )
+
+    def handoff(
+        self, *, remote_cancel: Callable[[], None] | None = None
+    ) -> ExecutionCheckpoint:
+        """Release a suspended owner; its coordinator retains controls and subscribers."""
+        with self._lock:
+            active = self._active
+            if active is None:
+                raise RunNotTransferable("Agent has no execution to transfer")
+            with active.lock:
+                if (
+                    active.record.status != RunStatus.SUSPENDED
+                    or active.signal.cancelled
+                    or active.shutdown_requested
+                    or active.segment_active
+                    or not active.idle.done()
+                ):
+                    raise RunNotTransferable(
+                        "Execution must be suspended and idle before transfer"
+                    )
+                if active.validate_handoff is not None:
+                    active.validate_handoff()
+                captured = ExecutionCheckpoint(
+                    context=self._context.snapshot(),
+                    snapshot=active.record.model_copy(deep=True),
+                )
+                active.handoff = captured.model_copy(deep=True)
+                active.remote_cancel = remote_cancel
+                active.restart = None
+                active.validate_handoff = None
+                self._active = None
+                self._reserved = True
+                detach = active.detach
+                active.detach = None
+        if detach is not None:
+            detach()
+        return captured
+
+    def capture(self) -> ExecutionCheckpoint:
+        """Capture the active run with its history prefix under the same locks."""
+        with self._lock:
+            active = self._active
+            if active is None:
+                raise ValueError("Agent has no active execution to capture")
+            with active.lock:
+                active.record.revision += 1
+                return ExecutionCheckpoint(
+                    context=self._context.snapshot(),
+                    snapshot=active.record.model_copy(deep=True),
+                )
 
     def _commit(self, record: RunSnapshot) -> None:
         with self._lock:
@@ -413,31 +936,6 @@ class Agent:
         with self._lock:
             self._reserved = False
 
-    def run(
-        self,
-        *,
-        max_steps: int,
-        messages: Sequence[Message] = (),
-        cancellation: CancellationSignal | None = None,
-        coordinator: "AgentCoordinator | None" = None,
-    ) -> RunResult:
-        run = self.start(
-            max_steps=max_steps,
-            messages=messages,
-            cancellation=cancellation,
-            coordinator=coordinator,
-        )
-        try:
-            return run.result()
-        except TimeoutError:
-            run.cancel()
-            raise
-        finally:
-            try:
-                run._state.idle.result(timeout=CLEANUP_SECONDS)
-            except TimeoutError:
-                logger.warning("Agent returned while cancelled work is still draining")
-
 
 class _Execution:
     def __init__(
@@ -450,13 +948,19 @@ class _Execution:
         execution: GenerationContext,
         prepare_step: Callable[[StepInput], PreparedStep] | None,
         after_step: Callable[[StepResult], bool] | None,
-        before_tool_call: Callable[[ToolCallContext], ToolResult | None] | None,
+        before_tool_call: Callable[
+            [ToolCallContext], ToolResult | PendingToolInput | None
+        ]
+        | None,
         after_tool_call: Callable[[ToolCallContext, ToolResult], ToolResult] | None,
         commit: Callable[[RunSnapshot], None],
         release: Callable[[], None],
         inherited_event_sink: Callable[[AgentEvent], None] | None,
+        restoration: "FeatureRestoration | None",
     ) -> None:
         self.state = state
+        self._thread_context = copy_context()
+        self._cancellation_link = ExitStack()
         self.history = history
         self.llm = llm
         self.defaults = defaults
@@ -465,6 +969,8 @@ class _Execution:
         self.after_step = after_step
         self.before_tool_call = before_tool_call
         self.after_tool_call = after_tool_call
+        self.restoration = restoration
+        self.prepared: PreparedStep | None = None
         self.work = ExecutionWork()
         self.commit = commit
         self.release = release
@@ -487,7 +993,7 @@ class _Execution:
     def context_messages(self) -> list[Message]:
         return [*self.history, *self.state.record.input_messages, *self.messages]
 
-    def publish_child(self, event: AgentEvent) -> None:
+    def publish_event(self, event: AgentEvent) -> None:
         with self.state.lock:
             if not self.state.accepting:
                 return
@@ -499,128 +1005,244 @@ class _Execution:
         if self.inherited_event_sink is None:
             return
         try:
-            self.inherited_event_sink(event)
+            self.inherited_event_sink(event.model_copy(deep=True))
         except Exception:
             if self.state.delivery:
                 self.state.delivery.failed.set()
             logger.exception("Inherited agent event delivery failed")
 
-    def _emit(self, event: AgentEvent) -> None:
+    @property
+    def progress(self) -> RunProgress:
+        progress = self.state.record.progress
+        if progress is None:
+            raise RuntimeError("Execution requires recorded progress")
+        return progress
+
+    def detach(self) -> None:
+        self._cancellation_link.close()
+        if self.coordination is not None:
+            self.coordination.coordinator.release_execution(Run(self.state))
+
+    def begin(self, max_steps: int, *, background: bool) -> None:
+        self.state.restart = self.start_segment
+        self._cancellation_link.enter_context(
+            self.state.signal.on_cancel(self.state.wake)
+        )
+        if self.state.delivery is not None:
+            self.state.delivery.resume()
         with self.state.lock:
+            self.state.handoff = None
+        if background:
+            start_thread_with_context(
+                lambda: self.execute(max_steps),
+                name="agent-run",
+                daemon=True,
+                context=self._thread_context.copy(),
+            )
+        else:
+            self.execute(max_steps)
+
+    def start_segment(self) -> None:
+        with self.state.changed:
             if not self.state.accepting:
                 return
-            record = self.state.record
-            if isinstance(event, MessageStartEvent):
-                record.operations.append(
-                    OperationSnapshot(
-                        step_index=event.step_index,
-                        message_index=len(self.messages) - 1,
-                        status=RunStatus.RUNNING,
-                    )
+            self.state.wake_requested = True
+            self.state.changed.notify_all()
+            if self.state.segment_active:
+                return
+            self.state.segment_active = True
+            self.state.wake_requested = False
+            self.state.idle = Future()
+            self.state.settled = Future()
+            self.state.record.status = RunStatus.RUNNING
+            if self.state.delivery is not None:
+                self.state.delivery.resume()
+            self.work = ExecutionWork()
+            if self.coordination is not None:
+                self.coordination.rebind(
+                    self.work, self.publish_event, self.state.signal
                 )
-            elif isinstance(event, ToolStartEvent):
-                if self.step_start is None:
-                    raise RuntimeError("Tool requires an assistant message")
-                record.operations.append(
-                    OperationSnapshot(
-                        step_index=event.step_index,
-                        message_index=self.step_start,
-                        tool_call_id=event.tool_call.id,
-                        status=RunStatus.RUNNING,
-                    )
+            try:
+                start_thread_with_context(
+                    lambda: self.execute(self.progress.step_limit),
+                    name="agent-run",
+                    daemon=True,
+                    context=self._thread_context.copy(),
                 )
-            elif isinstance(event, (MessageEndEvent, ToolEndEvent)):
-                call_id = (
-                    event.tool_call.id if isinstance(event, ToolEndEvent) else None
+            except BaseException:
+                self.state.segment_active = False
+                self.state.record.status = RunStatus.SUSPENDED
+                if self.state.delivery is not None:
+                    self.state.delivery.pause()
+                self.state.idle.set_result(None)
+                self.state.settled.set_result(None)
+                raise
+
+    def _suspend(self) -> None:
+        if self.restoration is not None:
+            feature_state = self.work.blocking(
+                self.restoration.capture_state, self.state.signal
+            )
+            with self.state.lock:
+                self.progress.feature_state = feature_state.model_copy(deep=True)
+        if self.coordination is not None:
+            with self.state.lock:
+                self.progress.child_run_ids = list(self.coordination.children)
+                self.progress.observed_child_run_ids = (
+                    self.coordination.observed_children()
                 )
-                for operation in record.operations:
-                    if (
-                        operation.step_index == event.step_index
-                        and operation.tool_call_id == call_id
-                    ):
-                        operation.status = (
-                            RunStatus.ERROR
-                            if isinstance(event, ToolEndEvent) and event.result.is_error
-                            else RunStatus.COMPLETE
-                        )
-                        break
-            elif isinstance(event, AgentEndEvent):
-                for operation in record.operations:
-                    if operation.status == RunStatus.RUNNING:
-                        operation.status = event.outcome
-            if self.state.delivery:
-                self.state.delivery.publish(event)
-        self._publish_inherited(event)
+        idle = self.state.idle
+        settled = self.state.settled
+
+        def released() -> None:
+            with self.state.lock:
+                self.state.record.status = RunStatus.SUSPENDED
+                self.state.record.revision += 1
+                self.state.segment_active = False
+                restart = self.state.wake_requested or self.state.signal.cancelled
+            idle.set_result(None)
+            settled.set_result(None)
+            if restart:
+                self.start_segment()
+
+        def drained() -> None:
+            with self.state.lock:
+                self.state.record.status = RunStatus.SUSPENDED
+            self.publish_event(AgentSuspendedEvent(**self.ancestry))
+            delivery = self.state.delivery
+            if delivery is not None:
+                delivery.pause()
+                delivery.tracker.on_idle(released)
+            else:
+                released()
+
+        self.work.tracker.on_idle(drained)
+
+    def _step_result(
+        self, index: int | None, options: GenerationOptions | None, step_index: int
+    ) -> StepResult:
+        if index is None or options is None:
+            raise ValueError("Saved step is missing its message or generation options")
+        message = self.messages[index]
+        if not isinstance(message, AssistantMessage):
+            raise ValueError("Saved step does not point to an assistant message")
+        results: list[ToolResultMessage] = []
+        for item in self.messages[index + 1 :]:
+            if not isinstance(item, ToolResultMessage):
+                break
+            results.append(item.model_copy(deep=True))
+        return StepResult(
+            step=AgentStep(index=step_index, limit=self.progress.step_limit),
+            message=message.model_copy(deep=True),
+            tool_results=results,
+            options=options.model_copy(deep=True),
+        )
+
+    def watch_children(self, children: list[Run]) -> None:
+        for child in children:
+            with self.state.lock:
+                if child.id in self.state.watched_children:
+                    continue
+                self.state.watched_children.add(child.id)
+            child.add_done_callback(lambda _record, state=self.state: state.wake())
 
     def execute(self, max_steps: int) -> None:
         signal = self.state.signal
-        previous: StepResult | None = None
         outcome = RunStatus.ERROR
+        suspended = False
         try:
             with (
                 cancellation_scope(signal),
                 signal.on_operation(self.work.track_operation),
             ):
                 signal.check()
-                self._emit(AgentStartEvent(**self.ancestry))
-                for index in range(max_steps):
+                if not self.messages:
+                    self.publish_event(AgentStartEvent(**self.ancestry))
+                while self.progress.step_index < max_steps:
                     signal.check()
-                    decision = StepInput(
-                        history=[m.model_copy(deep=True) for m in self.history],
-                        input_messages=[
-                            m.model_copy(deep=True)
-                            for m in self.state.record.input_messages
-                        ],
-                        messages=[m.model_copy(deep=True) for m in self.messages],
-                        step=AgentStep(index=index, limit=max_steps),
-                        previous=previous.model_copy(deep=True) if previous else None,
-                    )
-                    prepare = self.prepare_step
-                    prepared = (
-                        self.work.blocking(
-                            lambda prepare=prepare, decision=decision: prepare(
-                                decision
-                            ),
-                            signal,
-                        )
-                        if prepare
-                        else self.defaults
-                    )
-                    previous = self._step(prepared, decision.step)
-                    after_step = self.after_step
-                    completed = previous.model_copy(deep=True)
-                    should_continue = (
-                        self.work.blocking(
-                            lambda after_step=after_step, completed=completed: (
-                                after_step(completed)
-                            ),
-                            signal,
-                        )
-                        if after_step
-                        else bool(completed.message.tool_calls)
-                        and not (
-                            bool(completed.tool_results)
-                            and all(
-                                result.terminate for result in completed.tool_results
-                            )
-                        )
-                    )
-                    signal.check()
-                    if not should_continue:
+                    progress = self.progress
+                    if progress.action == RunAction.FINISH:
                         with self.state.lock:
-                            self.state.record.answer_message_index = self.step_start
-                        outcome = RunStatus.COMPLETE
+                            if self.state.suspend_requested:
+                                self.state.wake_requested = False
+                                suspended = True
+                                return
+                        if self.coordination:
+                            pending = self.coordination.pending_children()
+                            if pending:
+                                self.watch_children(pending)
+                                suspended = True
+                                return
+                            children = self.coordination.finish(cancel=False)
+                            with self.state.lock:
+                                self.state.record.child_runs = children
+                        if progress.outcome not in (
+                            RunStatus.COMPLETE,
+                            RunStatus.LIMIT,
+                        ):
+                            raise RuntimeError(
+                                "Execution is missing its terminal decision"
+                            )
+                        outcome = progress.outcome
                         break
-                    if decision.step.is_last:
-                        outcome = RunStatus.LIMIT
-                if self.coordination:
-                    children = self.coordination.finish(cancel=False)
-                    with self.state.lock:
-                        self.state.record.child_runs = children
-                if previous is None:
-                    raise RuntimeError("Execution ended without output")
-                if outcome not in (RunStatus.COMPLETE, RunStatus.LIMIT):
-                    raise RuntimeError("Execution ended without a terminal outcome")
+                    if progress.action == RunAction.PREPARE:
+                        with self.state.lock:
+                            self.messages.extend(progress.steering)
+                            progress.steering = []
+                            suspend = self.state.suspend_requested
+                            self.state.wake_requested = False
+                            self.state.model_input_closed = not suspend
+                        if suspend:
+                            suspended = True
+                            return
+                        previous = (
+                            self._step_result(
+                                progress.previous_message_index,
+                                progress.previous_options,
+                                progress.step_index - 1,
+                            )
+                            if progress.previous_message_index is not None
+                            else None
+                        )
+                        decision = StepInput(
+                            history=[m.model_copy(deep=True) for m in self.history],
+                            input_messages=[
+                                m.model_copy(deep=True)
+                                for m in self.state.record.input_messages
+                            ],
+                            messages=[m.model_copy(deep=True) for m in self.messages],
+                            step=AgentStep(index=progress.step_index, limit=max_steps),
+                            previous=previous,
+                        )
+                        prepare = self.prepare_step
+                        prepared = (
+                            self.work.blocking(
+                                lambda prepare=prepare, decision=decision: prepare(
+                                    decision
+                                ),
+                                signal,
+                            )
+                            if prepare
+                            else self.defaults
+                        )
+                        self.prepared = prepared
+                        completed = self._step(prepared, decision.step)
+                        if completed is None:
+                            suspended = True
+                            return
+                    elif progress.action == RunAction.TOOLS:
+                        self.step_start = progress.message_index
+                        completed = self._continue_tools()
+                        if completed is None:
+                            suspended = True
+                            return
+                    if progress.action == RunAction.AFTER_STEP:
+                        completed = self._step_result(
+                            progress.message_index,
+                            progress.options,
+                            progress.step_index,
+                        )
+                        self._complete_step(completed)
         except AgentCancelled:
             outcome = RunStatus.CANCELLED
             signal.cancel()
@@ -631,7 +1253,61 @@ class _Execution:
             outcome = RunStatus.ERROR
             signal.cancel()
         finally:
-            self._finish(outcome)
+            if suspended:
+                try:
+                    self._suspend()
+                except AgentCancelled:
+                    self._finish(RunStatus.CANCELLED)
+                except Exception as error:
+                    logger.exception("Agent suspension failed")
+                    with self.state.lock:
+                        self.state.record.failure = _failure(error, self.llm)
+                    signal.cancel()
+                    self._finish(RunStatus.ERROR)
+            else:
+                self._finish(outcome)
+
+    def _complete_step(self, completed: StepResult) -> None:
+        signal = self.state.signal
+        progress = self.progress
+        after_step = self.after_step
+        should_continue = (
+            self.work.blocking(
+                lambda after_step=after_step, completed=completed: after_step(
+                    completed
+                ),
+                signal,
+            )
+            if after_step
+            else bool(completed.message.tool_calls)
+            and not (
+                completed.tool_results
+                and all(result.terminate for result in completed.tool_results)
+            )
+        )
+        signal.check()
+        with self.state.lock:
+            if progress.steering:
+                should_continue = True
+            progress.previous_message_index = progress.message_index
+            progress.previous_options = progress.options
+            if not should_continue or completed.step.is_last:
+                progress.outcome = (
+                    RunStatus.COMPLETE if not should_continue else RunStatus.LIMIT
+                )
+                progress.action = RunAction.FINISH
+                if not should_continue:
+                    self.state.record.answer_message_index = progress.message_index
+            else:
+                progress.step_index += 1
+                progress.action = RunAction.PREPARE
+                self.state.model_input_closed = False
+                progress.finalized_tools = 0
+                progress.pending = {}
+                progress.options = None
+                progress.tools = []
+                progress.message_index = None
+            self.state.record.revision += 1
 
     def _finish(
         self,
@@ -639,6 +1315,7 @@ class _Execution:
             RunStatus.COMPLETE, RunStatus.LIMIT, RunStatus.CANCELLED, RunStatus.ERROR
         ],
     ) -> None:
+        self._cancellation_link.close()
         if self.coordination and outcome in (RunStatus.ERROR, RunStatus.CANCELLED):
             try:
                 children = self.coordination.finish(cancel=True)
@@ -678,10 +1355,12 @@ class _Execution:
             if self.state.delivery:
                 self.state.delivery.publish(terminal)
             self.state.accepting = False
+            self.state.record.revision += 1
             record = self.state.record.model_copy(deep=True)
         self._publish_inherited(terminal)
         self.commit(record)
         self.state.completed.set_result(None)
+        self.state.settled.set_result(None)
         delivery = self.state.delivery
         if delivery is not None:
             delivery.close()
@@ -694,11 +1373,16 @@ class _Execution:
             if self.coordination is not None:
                 self.coordination.release()
             self.release()
+            self.state.restart = None
+            self.state.detach = None
+            self.state.validate_handoff = None
+            self.state.segment_active = False
             self.state.idle.set_result(None)
 
         self.work.tracker.on_idle(release)
+        Run(self.state)._finalize()
 
-    def _step(self, prepared: PreparedStep, step: AgentStep) -> StepResult:
+    def _step(self, prepared: PreparedStep, step: AgentStep) -> StepResult | None:
         signal = self.state.signal
         if len({tool.name for tool in prepared.tools}) != len(prepared.tools):
             raise ValueError("Tool names must be unique")
@@ -711,6 +1395,7 @@ class _Execution:
                 else None,
             }
         )
+        self.prepared = prepared
         execution = self.execution.model_copy(
             update={
                 "cancellation": signal,
@@ -718,23 +1403,31 @@ class _Execution:
             }
         )
         request = self._fit_context(prepared, execution)
+        started = MessageStartEvent(
+            **self.ancestry, step_index=step.index, metadata=prepared.output_metadata
+        )
         with self.state.lock:
+            signal.check()
             self.step_start = len(self.messages)
             start = self.step_start
             self.generating = True
             self.messages.append(
                 AssistantMessage(
                     id=f"{self.state.record.run_id}:{step.index}",
-                    metadata=prepared.output_metadata,
+                    metadata=prepared.output_metadata.model_copy(deep=True)
+                    if prepared.output_metadata
+                    else None,
                 )
             )
-        self._emit(
-            MessageStartEvent(
-                **self.ancestry,
+            generation = OperationSnapshot(
                 step_index=step.index,
-                metadata=prepared.output_metadata,
+                message_index=start,
+                status=RunStatus.RUNNING,
             )
-        )
+            self.state.record.operations.append(generation)
+            if self.state.delivery:
+                self.state.delivery.publish(started)
+        self._publish_inherited(started)
 
         def accept(event: GenerationEvent) -> None:
             with self.state.lock:
@@ -751,20 +1444,26 @@ class _Execution:
                     else None
                 )
                 self.messages[start] = event.message.model_copy(deep=True)
-            self._emit(
-                MessageUpdateEvent(
+                update = MessageUpdateEvent(
                     **self.ancestry, step_index=step.index, generation_event=event
                 )
-            )
+                if self.state.delivery:
+                    self.state.delivery.publish(update)
+            self._publish_inherited(update)
 
         def generate() -> AssistantMessage:
             final: AssistantMessage | None = None
-            with closing(self.llm.stream(request, execution)) as events:
-                for event in events:
-                    signal.check()
-                    accept(event)
-                    if event.type == "done":
-                        final = event.message.model_copy(deep=True)
+            try:
+                with closing(self.llm.stream(request, execution)) as events:
+                    for event in events:
+                        signal.check()
+                        accept(event)
+                        if event.type == "done":
+                            final = event.message.model_copy(deep=True)
+            except Exception:
+                signal.check()
+                raise
+            signal.check()
             if final is None:
                 raise RuntimeError("Model stream ended without completed output")
             return final
@@ -782,31 +1481,58 @@ class _Execution:
         with self.state.lock:
             signal.check()
             message.id = f"{self.state.record.run_id}:{step.index}"
-            self.messages[start] = message
+            self.messages[start] = message.model_copy(deep=True)
             self.generating = False
-        self._emit(
-            MessageEndEvent(**self.ancestry, step_index=step.index, message=message)
+            generation.status = RunStatus.COMPLETE
+            ended = MessageEndEvent(
+                **self.ancestry, step_index=step.index, message=message
+            )
+            if self.state.delivery:
+                self.state.delivery.publish(ended)
+        self._publish_inherited(ended)
+        with self.state.lock:
+            self.progress.message_index = start
+            self.progress.options = request.options.model_copy(deep=True)
+            self.progress.tools = [tool.model_copy(deep=True) for tool in request.tools]
+            self.progress.action = RunAction.TOOLS
+            self.state.record.revision += 1
+        return self._continue_tools()
+
+    def _continue_tools(self) -> StepResult | None:
+        progress = self.progress
+        completed = self._step_result(
+            progress.message_index, progress.options, progress.step_index
         )
-        tool_messages = working_messages(
-            [*self.history, *self.state.record.input_messages, *self.messages[:start]],
-            self.state.record.checkpoint,
-        )
-        results = self._tools(
-            self.work,
-            signal,
-            prepared,
-            step,
-            message,
-            self.ancestry,
-            request=request,
-            messages=tool_messages,
-        )
-        return StepResult(
-            step=step,
-            message=message.model_copy(deep=True),
-            tool_results=results,
-            request=request,
-        )
+        if self.prepared is None:
+            available = {tool.name: tool for tool in self.defaults.tools}
+            tools: list[AgentTool] = []
+            for declaration in progress.tools:
+                tool = available.get(declaration.name)
+                if tool is None or tool.definition != declaration:
+                    raise ValueError("Restored tools do not match the saved step")
+                tools.append(tool)
+            self.prepared = PreparedStep(tools=tools, options=completed.options)
+        if progress.message_index is None:
+            raise ValueError("Tool phase requires a message index")
+        results = ToolBatch(
+            self,
+            self.prepared,
+            completed,
+            working_messages(
+                [
+                    *self.history,
+                    *self.state.record.input_messages,
+                    *self.messages[: progress.message_index],
+                ],
+                self.state.record.checkpoint,
+            ),
+        ).run()
+        if results is None:
+            return None
+        with self.state.lock:
+            progress.action = RunAction.AFTER_STEP
+            self.state.record.revision += 1
+        return completed.model_copy(update={"tool_results": results})
 
     def _fit_context(
         self,
@@ -863,168 +1589,57 @@ class _Execution:
             self.state.record.checkpoint = checkpoint
         return request
 
-    def _tools(
+    def _finalize_tool_result(
         self,
-        scope: ExecutionWork,
-        signal: CancellationSignal,
-        prepared: PreparedStep,
+        result: ToolResult,
+        call: ToolCall,
         step: AgentStep,
-        message: AssistantMessage,
-        ancestry: _Ancestry,
-        *,
-        request: GenerationRequest,
-        messages: list[Message],
-    ) -> list[ToolResultMessage]:
-        calls = message.tool_calls
-        if len(calls) > MAX_TOOL_CALLS_PER_STEP or len(
-            {call.id for call in calls}
-        ) != len(calls):
-            raise ValueError(
-                f"A step requires unique tool call IDs and at most {MAX_TOOL_CALLS_PER_STEP} calls"
-            )
-        tools = {tool.name: tool for tool in prepared.tools}
-        sequential = any(
-            tool.execution_mode == ToolExecutionMode.SEQUENTIAL
-            for call in calls
-            if (tool := tools.get(call.name)) is not None
+        result_start: int,
+    ) -> ToolResultMessage:
+        item = ToolResultMessage(
+            content=result.content,
+            metadata=result.metadata,
+            cacheable=result.cacheable,
+            details=result.details,
+            is_error=result.is_error,
+            terminate=result.terminate,
+            tool_call_id=call.id,
+            tool_name=call.name,
         )
-        result_start = len(self.messages)
-        call_indices = {call.id: index for index, call in enumerate(calls)}
-        condition = threading.Condition()
-        futures: list[Future[ToolResultMessage]] = []
-        finalized = 0
-
-        def context(call: ToolCall) -> ToolCallContext:
-            return ToolCallContext(
-                step=step,
-                call=call,
-                request=request.model_copy(deep=True),
-                messages=[item.model_copy(deep=True) for item in messages],
-            )
-
-        def execute(call: ToolCall, index: int) -> ToolResultMessage:
-            nonlocal finalized
-            result = self._execute_tool(
-                signal=signal,
-                context=context(call),
-                tool=tools.get(call.name),
-                index=index,
-                ancestry=ancestry,
-                is_truncated=message.stop_reason == "length",
-            )
-            item = self._record_tool_result(
-                result, call, result_start, call_indices, index
-            )
-            self._emit(
-                ToolUpdateEvent(
-                    **ancestry,
-                    step_index=step.index,
-                    tool_call=call,
-                    progress=ToolProgress(content=result.text, details=result.details),
-                )
-            )
-            try:
-                with condition:
-                    ready = condition.wait_for(
-                        lambda: finalized == index or signal.cancelled,
-                        OPERATION_TIMEOUT_SECONDS,
-                    )
-                signal.check()
-                if not ready:
-                    raise TimeoutError("Tool result finalization exceeded its bound")
-                if self.after_tool_call:
-                    result = self.after_tool_call(
-                        context(call), result.model_copy(deep=True)
-                    )
-                    item = ToolResultMessage(
-                        content=result.content,
-                        details=result.details,
-                        is_error=result.is_error,
-                        terminate=result.terminate,
-                        tool_call_id=call.id,
-                        tool_name=call.name,
-                    )
-                    self._replace_tool_result(item, result_start)
-                return item
-            finally:
-                try:
-                    self._emit(
-                        ToolEndEvent(
-                            **ancestry,
-                            step_index=step.index,
-                            tool_call=call,
-                            result=result,
-                        )
-                    )
-                finally:
-                    with condition:
-                        if finalized == index:
-                            finalized += 1
-                        condition.notify_all()
-
-        def wake(_future: Future[ToolResultMessage] | None = None) -> None:
-            with condition:
-                condition.notify_all()
-
-        def start(call: ToolCall, index: int) -> None:
-            def operation() -> ToolResultMessage:
-                with signal.on_operation(scope.track_operation):
-                    return execute(call, index)
-
-            future = scope.start(operation)
-            futures.append(future)
-            future.add_done_callback(wake)
-
-        results: list[ToolResultMessage] = []
-        try:
-            if not sequential:
-                for index, call in enumerate(calls):
-                    signal.check()
-                    start(call, index)
-            with signal.on_cancel(wake):
-                for index, call in enumerate(calls):
-                    signal.check()
-                    if sequential:
-                        start(call, index)
-                    future = futures[index]
-                    with condition:
-                        ready = condition.wait_for(
-                            lambda future=future: (
-                                signal.cancelled
-                                or future.done()
-                                or any(
-                                    item.done() and item.exception() is not None
-                                    for item in futures
-                                )
-                            ),
-                            OPERATION_TIMEOUT_SECONDS,
-                        )
-                    signal.check()
-                    if not ready:
-                        raise TimeoutError("Agent tool exceeded its execution bound")
-                    for item in futures:
-                        if item.done() and (error := item.exception()) is not None:
-                            raise error
-                    results.append(future.result())
-            return results
-        except BaseException:
-            signal.cancel()
-            wake()
-            raise
-
-    def _replace_tool_result(self, item: ToolResultMessage, result_start: int) -> None:
+        event = ToolEndEvent(
+            **self.ancestry, step_index=step.index, tool_call=call, result=result
+        )
         with self.state.lock:
-            self.state.signal.check()
-            for offset, stored in enumerate(
-                self.messages[result_start:], start=result_start
-            ):
-                if (
-                    isinstance(stored, ToolResultMessage)
-                    and stored.tool_call_id == item.tool_call_id
-                ):
-                    self.messages[offset] = item.model_copy(deep=True)
-                    return
-            raise RuntimeError("Completed tool result is missing from history")
+            if not self.state.accepting or self.state.signal.cancelled:
+                logger.debug("Ignoring late tool finalization: %s", call.id)
+                return item
+            offset = next(
+                (
+                    offset
+                    for offset, stored in enumerate(
+                        self.messages[result_start:], start=result_start
+                    )
+                    if isinstance(stored, ToolResultMessage)
+                    and stored.tool_call_id == call.id
+                ),
+                None,
+            )
+            if offset is None:
+                raise RuntimeError("Completed tool result is missing from history")
+            operation = next(
+                operation
+                for operation in self.state.record.operations
+                if operation.message_index == self.step_start
+                and operation.tool_call_id == call.id
+            )
+            self.messages[offset] = item.model_copy(deep=True)
+            operation.status = (
+                RunStatus.ERROR if result.is_error else RunStatus.COMPLETE
+            )
+            if self.state.delivery:
+                self.state.delivery.publish(event)
+        self._publish_inherited(event)
+        return item
 
     def _record_tool_result(
         self,
@@ -1033,14 +1648,23 @@ class _Execution:
         result_start: int,
         call_indices: dict[str, int],
         index: int,
-    ) -> ToolResultMessage:
+        step: AgentStep,
+    ) -> None:
         item = ToolResultMessage(
             content=result.content,
+            metadata=result.metadata,
+            cacheable=result.cacheable,
             details=result.details,
             is_error=result.is_error,
             terminate=result.terminate,
             tool_call_id=call.id,
             tool_name=call.name,
+        )
+        event = ToolUpdateEvent(
+            **self.ancestry,
+            step_index=step.index,
+            tool_call=call,
+            progress=ToolProgress(content=result.text, details=result.details),
         )
         with self.state.lock:
             if not self.state.accepting:
@@ -1052,17 +1676,19 @@ class _Execution:
                 for previous in self.messages[result_start:]
                 if isinstance(previous, ToolResultMessage)
             )
+            operation = next(
+                operation
+                for operation in self.state.record.operations
+                if operation.message_index == self.step_start
+                and operation.tool_call_id == call.id
+            )
             self.messages.insert(result_start + offset, item.model_copy(deep=True))
-            for operation in reversed(self.state.record.operations):
-                if (
-                    operation.message_index == self.step_start
-                    and operation.tool_call_id == call.id
-                ):
-                    operation.status = (
-                        RunStatus.ERROR if result.is_error else RunStatus.COMPLETE
-                    )
-                    break
-        return item
+            operation.status = (
+                RunStatus.ERROR if result.is_error else RunStatus.COMPLETE
+            )
+            if self.state.delivery:
+                self.state.delivery.publish(event)
+        self._publish_inherited(event)
 
     def _execute_tool(
         self,
@@ -1073,19 +1699,43 @@ class _Execution:
         is_truncated: bool,
         index: int,
         ancestry: _Ancestry,
-    ) -> ToolResult:
+        approved: bool = False,
+        children: list[RunSnapshot] | None = None,
+    ) -> ToolOutcome:
         call = context.call
         step = context.step
-        request = context.request
-        self._emit(ToolStartEvent(**ancestry, step_index=step.index, tool_call=call))
+        options = context.options
+        started = ToolStartEvent(**ancestry, step_index=step.index, tool_call=call)
+        with self.state.lock:
+            signal.check()
+            if self.step_start is None:
+                raise RuntimeError("Tool requires an assistant message")
+            first_start = not any(
+                operation.message_index == self.step_start
+                and operation.tool_call_id == call.id
+                for operation in self.state.record.operations
+            )
+            if first_start:
+                self.state.record.operations.append(
+                    OperationSnapshot(
+                        step_index=step.index,
+                        message_index=self.step_start,
+                        tool_call_id=call.id,
+                        status=RunStatus.RUNNING,
+                    )
+                )
+                if self.state.delivery:
+                    self.state.delivery.publish(started)
+        if first_start:
+            self._publish_inherited(started)
         signal.check()
         context = ToolCallContext(
             step=step,
             call=call.model_copy(deep=True),
-            request=request.model_copy(deep=True),
+            options=options.model_copy(deep=True),
             messages=[message.model_copy(deep=True) for message in context.messages],
         )
-        if tool is None or request.options.tool_choice == ToolChoiceOptions.NONE:
+        if tool is None or options.tool_choice == ToolChoiceOptions.NONE:
             return ToolResult(
                 content=f"Tool {call.name} is unavailable for this step.",
                 is_error=True,
@@ -1096,7 +1746,7 @@ class _Execution:
                 is_error=True,
             )
         before_tool_call = self.before_tool_call
-        if before_tool_call:
+        if before_tool_call and not approved and children is None:
             result = before_tool_call(context)
             if result is not None:
                 return result
@@ -1130,7 +1780,24 @@ class _Execution:
             else None,
         )
         try:
-            return tool.execute(invocation)
+            if children is not None:
+                if tool.complete_children is None:
+                    raise ValueError(
+                        "Tool does not support completing child dependencies"
+                    )
+                result = tool.complete_children(invocation, children)
+                if self.coordination is not None:
+                    self.coordination.observe_children(
+                        [child.run_id for child in children]
+                    )
+                return result
+            outcome = tool.execute(invocation)
+            if (
+                isinstance(outcome, PendingToolInput)
+                and outcome.mode == InputMode.EXECUTE
+            ):
+                raise ValueError("Execution approval belongs in before_tool_call")
+            return outcome
         finally:
             with self.state.lock:
                 active.clear()

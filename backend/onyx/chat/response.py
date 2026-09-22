@@ -58,7 +58,7 @@ def response_record(
 
 
 def response_snapshot(record: ResponseRecord) -> RunSnapshot:
-    """Restore SDK inspection data only when an archived child run is requested."""
+    """Reconstruct SDK output and operation outcomes from saved response content."""
     operations: list[OperationSnapshot] = []
     message_index = -1
     generation_index = -1

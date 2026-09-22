@@ -20,18 +20,9 @@ from onyx.configs.app_configs import (
 )
 from onyx.configs.constants import FileOrigin
 from onyx.db.code_interpreter import fetch_code_interpreter_server
-from onyx.file_store.utils import (
-    build_full_frontend_file_url,
-    chat_image_gen_metadata,
-    get_default_file_store,
-)
-from onyx.llm.models import ToolResult
-from onyx.tools.interface import (
-    FunctionToolDefinition,
-    Tool,
-    ToolContext,
-    parse_tool_arguments,
-)
+from onyx.file_store.utils import build_full_frontend_file_url, chat_image_gen_metadata, get_default_file_store
+from onyx.llm.models import ToolDefinition, ToolResult
+from onyx.tools.interface import Tool, ToolContext, parse_tool_arguments
 from onyx.tools.models import (
     ChatFile,
     LlmPythonExecutionResult,
@@ -271,24 +262,21 @@ class PythonTool(Tool):
         with CodeInterpreterClient() as client:
             return client.health(use_cache=True).healthy
 
-    def tool_definition(self) -> FunctionToolDefinition:
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        CODE_FIELD: {
-                            "type": "string",
-                            "description": "Python source code to execute",
-                        },
+    def tool_definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            name=self.name,
+            description=self.description,
+            parameters={
+                "type": "object",
+                "properties": {
+                    CODE_FIELD: {
+                        "type": "string",
+                        "description": "Python source code to execute",
                     },
-                    "required": [CODE_FIELD],
                 },
+                "required": [CODE_FIELD],
             },
-        }
+        )
 
     def _upload_and_stage(
         self,

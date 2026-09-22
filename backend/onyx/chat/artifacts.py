@@ -1,6 +1,6 @@
 from collections.abc import Mapping
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer, field_validator
 
 from onyx.agents.models import RunSnapshot
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
@@ -14,6 +14,7 @@ from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.file_store.models import ExtractedContextFiles
 from onyx.llm.models import AssistantMessage, ToolCall, ToolResultMessage
 from onyx.tools.built_in_tools import STOPPING_TOOLS_NAMES
+from onyx.tools.file_snapshot import SavedChatFile
 from onyx.tools.models import (
     ChatFile,
     CustomToolCallSummary,
@@ -29,6 +30,22 @@ class ChatSearchResult(SearchDocsResponse):
     """Search documents with files staged before the tool result is committed."""
 
     staged_files: list[ChatFile]
+
+    @field_serializer("staged_files")
+    def serialize_staged_files(self, files: list[ChatFile]) -> list[SavedChatFile]:
+        return [SavedChatFile.capture(file) for file in files]
+
+    @field_validator("staged_files", mode="before")
+    @classmethod
+    def restore_staged_files(cls, value: object) -> list[ChatFile]:
+        if not isinstance(value, list):
+            raise ValueError("Staged files must be a list")
+        return [
+            file
+            if isinstance(file, ChatFile)
+            else SavedChatFile.model_validate(file).restore()
+            for file in value
+        ]
 
 
 class ChatArtifacts:

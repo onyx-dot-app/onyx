@@ -11,8 +11,8 @@ from requests import JSONDecodeError
 from onyx.agents.tools import ToolInvocation
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
-from onyx.llm.models import ToolResult
-from onyx.tools.interface import FunctionToolDefinition, Tool, ToolContext
+from onyx.llm.models import ToolDefinition, ToolResult
+from onyx.tools.interface import Tool, ToolContext
 from onyx.tools.models import (
     CHAT_SESSION_ID_PLACEHOLDER,
     MESSAGE_ID_PLACEHOLDER,
@@ -50,9 +50,7 @@ class CustomTool(Tool):
 
         self._base_url = base_url
         self._method_spec = method_spec
-        self._tool_definition = TypeAdapter(FunctionToolDefinition).validate_python(
-            self._method_spec.to_tool_definition()
-        )
+        self._tool_definition = self._method_spec.to_tool_definition()
         self._user_oauth_token = user_oauth_token
         self._id = id
 
@@ -93,7 +91,7 @@ class CustomTool(Tool):
         # (e.g. "ServiceNow.GetIncident" vs "ServiceNow_GetIncident").
         return self._method_spec.raw_name
 
-    def tool_definition(self) -> FunctionToolDefinition:
+    def tool_definition(self) -> ToolDefinition:
         return self._tool_definition
 
     def _save_and_get_file_references(
