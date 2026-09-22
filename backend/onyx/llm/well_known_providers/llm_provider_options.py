@@ -143,7 +143,7 @@ def get_openai_model_names() -> list[str]:
     return sorted(
         (
             model
-            for model in model_catalog.iter_models(LlmProviderNames.OPENAI)
+            for model in model_catalog.iter_models(LlmProviderNames.OPENAI, mode="chat")
             if is_valid_model(model)
         ),
         reverse=True,
@@ -154,7 +154,9 @@ def get_anthropic_model_names() -> list[str]:
     """Get Anthropic model names from the vendored model catalog."""
     from onyx.llm import model_catalog
 
-    return sorted(model_catalog.iter_models(LlmProviderNames.ANTHROPIC), reverse=True)
+    return sorted(
+        model_catalog.iter_models(LlmProviderNames.ANTHROPIC, mode="chat"), reverse=True
+    )
 
 
 def get_vertexai_model_names() -> list[str]:
@@ -163,7 +165,9 @@ def get_vertexai_model_names() -> list[str]:
     google-vertex-anthropic models)."""
     from onyx.llm import model_catalog
 
-    vertex_models = set(model_catalog.iter_models(LlmProviderNames.VERTEX_AI))
+    vertex_models = set(
+        model_catalog.iter_models(LlmProviderNames.VERTEX_AI, mode="chat")
+    )
 
     return sorted(
         [

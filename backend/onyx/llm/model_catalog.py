@@ -158,9 +158,18 @@ def provider_names() -> list[str]:
     return sorted(_catalog())
 
 
-def iter_models(provider: str) -> list[str]:
-    """Real model ids under a provider (aliases excluded)."""
-    return sorted(_catalog().get(provider, {}).get("models", {}))
+def iter_models(provider: str, mode: str | None = None) -> list[str]:
+    """Real model ids under a provider (aliases excluded). Pass ``mode``
+    (e.g. "chat") to restrict to that kind; entries without a mode field
+    are chat models."""
+    models = _catalog().get(provider, {}).get("models", {})
+    if mode is None:
+        return sorted(models)
+    return sorted(
+        model_id
+        for model_id, entry in models.items()
+        if entry.get("mode", "chat") == mode
+    )
 
 
 def _lookup_provider(provider: str, model_name: str) -> dict[str, Any] | None:

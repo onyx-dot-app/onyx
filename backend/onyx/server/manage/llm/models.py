@@ -376,7 +376,7 @@ class ModelConfigurationView(BaseModel):
                 max_input_tokens=model_configuration_model.max_input_tokens,
                 configured_max_input_tokens=model_configuration_model.max_input_tokens,
                 # Dynamic/custom-config providers under-report vision; fall back
-                # to the LiteLLM cost map when no VISION flow is stored.
+                # to the model catalog when no VISION flow is stored.
                 supports_image_input=(
                     LLMModelFlowType.VISION
                     in model_configuration_model.llm_model_flow_types
@@ -386,7 +386,7 @@ class ModelConfigurationView(BaseModel):
                     )
                 ),
                 # Prefer the stored flow, then the Claude version parse, then
-                # the LiteLLM cost map, then a name/display-name substring
+                # the model catalog, then a name/display-name substring
                 # heuristic. Mirrors multi_llm.py's is_reasoning.
                 supports_reasoning=(
                     LLMModelFlowType.REASONING
