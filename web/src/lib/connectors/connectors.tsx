@@ -1977,6 +1977,19 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
         default: true,
       },
       {
+        type: "checkbox",
+        query: "Treat link access as public?",
+        label: "Treat link access as public",
+        name: "treat_link_access_as_public",
+        description:
+          "Only matters with permission sync. When on, a recording whose Link " +
+          'access is "Anyone with the link" or a signed-in rule is visible ' +
+          "to all Onyx users, and a domain rule to users of those domains. " +
+          "When off, every transcript is visible to the recording's owner " +
+          'alone, because Zoom cannot say who is in "People with access".',
+        default: true,
+      },
+      {
         type: "select",
         query: "Select the Zoom plan:",
         label: "Zoom Plan",

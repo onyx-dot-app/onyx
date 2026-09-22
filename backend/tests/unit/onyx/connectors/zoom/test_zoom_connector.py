@@ -30,9 +30,9 @@ from onyx.connectors.zoom.connector import (
     ZoomConnector,
     ZoomConnectorCheckpoint,
     parse_session_types,
+    parse_treat_link_access_as_public,
 )
 from onyx.connectors.zoom.models import (
-    ZoomMeetingSettings,
     ZoomRecordingEntry,
     ZoomRecordingPage,
     ZoomSessionOccurrence,
@@ -68,16 +68,16 @@ from tests.unit.onyx.connectors.zoom.helpers import (
     SAMPLE_VTT,
     http_error,
     mock_zoom_client,
+    with_recording_access,
+    with_transcript,
 )
 from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
-    invitee,
-    meeting_details,
     occurrence,
-    participant,
     past_meeting_details,
     recording_entry,
+    recording_registrant,
+    recording_settings,
     recording_with_transcript,
-    registrant,
     user,
     webinar_details,
 )
@@ -115,6 +115,7 @@ def _make_connector(
     group_id: str | None = None,
     include_meetings: bool | None = None,
     include_webinars: bool | None = None,
+    treat_link_access_as_public: bool | None = None,
 ) -> tuple[ZoomConnector, MagicMock]:
     # Don't write `meeting_ids or [...]` here: it swaps a caller's empty list
     # for the default, and the empty-allowlist tests below then pass for the
@@ -126,6 +127,7 @@ def _make_connector(
         group_id=group_id,
         include_meetings=include_meetings,
         include_webinars=include_webinars,
+        treat_link_access_as_public=treat_link_access_as_public,
     )
     connector.load_credentials(_ZOOM_CREDS)
     mock_client = mock_zoom_client()
@@ -361,6 +363,18 @@ class TestZoomConnectorValidateSettings:
     ) -> None:
         with pytest.raises(ValueError):
             parse_session_types(value, True)
+
+    def test_connectors_saved_before_the_link_access_box_have_it_on(self) -> None:
+        # Off leaves nearly every transcript readable by its owner alone.
+        assert parse_treat_link_access_as_public(None) is True
+        assert parse_treat_link_access_as_public(False) is False
+
+    @pytest.mark.parametrize("value", ["true", 1, ["on"]])
+    def test_a_link_access_value_that_is_not_a_boolean_is_rejected(
+        self, value: Any
+    ) -> None:
+        with pytest.raises(ValueError, match="true or false"):
+            parse_treat_link_access_as_public(value)
 
     def test_a_host_with_both_types_unticked_is_rejected_at_setup(self) -> None:
         connector = ZoomConnector(
@@ -744,6 +758,7 @@ class TestZoomConnectorProbeRecordingAccessPermissions:
         client.list_recording_registrants.assert_called_once_with(
             "rec-1", status="approved", limit=1
         )
+        client.get_user.assert_called_once_with("u1")
         client.get_recording_authentication_rules.assert_called_once_with("u1")
 
     @pytest.mark.parametrize(
@@ -751,9 +766,10 @@ class TestZoomConnectorProbeRecordingAccessPermissions:
         [
             lambda client: client.get_recording_settings,
             lambda client: client.list_recording_registrants,
+            lambda client: client.get_user,
             lambda client: client.get_recording_authentication_rules,
         ],
-        ids=["settings", "registrants", "rules"],
+        ids=["settings", "registrants", "user", "rules"],
     )
     def test_a_missing_scope_is_rejected_at_setup(
         self, refused: Callable[[MagicMock], MagicMock]
@@ -1531,18 +1547,13 @@ class TestPermissionSyncEntryPoint:
 
     def _access_configured(self, mock_client: MagicMock) -> None:
         _configure_happy_path(mock_client)
-        mock_client.list_past_meeting_participants.return_value = [
-            participant(user_email="attended@example.com"),
-            participant(user_email=""),
-        ]
-        mock_client.list_meeting_registrants.return_value = [
-            registrant(email="approved@example.com", status="approved"),
-            registrant(email="cancelled@example.com", status="denied"),
-        ]
-        mock_client.get_meeting_details.return_value = meeting_details(
-            settings=ZoomMeetingSettings(
-                meeting_invitees=[invitee(email="invited@example.com")]
-            )
+        with_transcript(mock_client, host_id="owner-1")
+        with_recording_access(
+            mock_client,
+            settings=recording_settings(on_demand=True),
+            registrants=[
+                recording_registrant(email="viewer@example.com", status="approved")
+            ],
         )
 
     def test_perm_sync_run_populates_the_access_list(self) -> None:
@@ -1557,12 +1568,65 @@ class TestPermissionSyncEntryPoint:
         access = documents[0].external_access
         assert access is not None
         assert access.external_user_emails == {
-            "attended@example.com",
-            "approved@example.com",
-            "invited@example.com",
+            "owner@example.com",
+            "viewer@example.com",
         }
         assert access.external_user_group_ids == set()
+        assert access.is_public is True
+
+    def test_the_box_off_leaves_link_access_out(self) -> None:
+        connector, mock_client = _make_connector(treat_link_access_as_public=False)
+        self._access_configured(mock_client)
+
+        documents = [
+            d for d in _run_with_perm_sync(connector) if isinstance(d, Document)
+        ]
+
+        access = documents[0].external_access
+        assert access is not None
         assert access.is_public is False
+
+    def test_the_catalogue_and_each_owner_are_asked_for_once_per_run(self) -> None:
+        connector, mock_client = _make_connector(meeting_ids=["111"])
+        self._access_configured(mock_client)
+        mock_client.list_past_meeting_occurrences.side_effect = None
+        mock_client.list_past_meeting_occurrences.return_value = [
+            ZoomSessionOccurrence(uuid="uuid-1", start_time=_days_ago(21)),
+            ZoomSessionOccurrence(uuid="uuid-2", start_time=_days_ago(14)),
+            ZoomSessionOccurrence(uuid="uuid-3", start_time=_days_ago(7)),
+        ]
+
+        documents = [
+            d for d in _run_with_perm_sync(connector) if isinstance(d, Document)
+        ]
+
+        assert len(documents) == 3
+        assert mock_client.get_recording_settings.call_count == 3
+        mock_client.get_user.assert_called_once_with("owner-1")
+        mock_client.list_users.assert_called_once()
+        mock_client.get_recording_authentication_rules.assert_called_once()
+
+    def test_the_catalogue_is_not_asked_for_unless_a_recording_names_a_rule(
+        self,
+    ) -> None:
+        connector, mock_client = _make_connector()
+        _configure_happy_path(mock_client)
+        with_transcript(mock_client, host_id="owner-1")
+        with_recording_access(
+            mock_client,
+            settings=recording_settings(
+                recording_authentication=False, authentication_option=""
+            ),
+        )
+
+        documents = [
+            d for d in _run_with_perm_sync(connector) if isinstance(d, Document)
+        ]
+
+        assert documents[0].external_access is not None
+        assert documents[0].external_access.is_public is True
+        mock_client.list_users.assert_not_called()
+        mock_client.get_recording_authentication_rules.assert_not_called()
 
     def test_a_normal_run_leaves_the_access_list_alone(self) -> None:
         connector, mock_client = _make_connector()
@@ -1580,9 +1644,8 @@ class TestPermissionSyncEntryPoint:
 
         assert len(documents) == 1
         assert documents[0].external_access is None
-        mock_client.list_past_meeting_participants.assert_not_called()
-        mock_client.list_meeting_registrants.assert_not_called()
-        mock_client.get_meeting_details.assert_not_called()
+        mock_client.get_recording_settings.assert_not_called()
+        mock_client.get_user.assert_not_called()
 
     def test_an_access_list_failure_becomes_a_document_failure(self) -> None:
         """A document indexed with the wrong access is worse than one a targeted
@@ -1592,7 +1655,7 @@ class TestPermissionSyncEntryPoint:
         response = requests.Response()
         response.status_code = 400
         response._content = b'{"code": 300, "message": "unexpected"}'
-        mock_client.list_past_meeting_participants.side_effect = requests.HTTPError(
+        mock_client.get_recording_settings.side_effect = requests.HTTPError(
             "boom", response=response
         )
 
