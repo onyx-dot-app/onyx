@@ -1,9 +1,10 @@
 import { useMemo, useEffect } from "react";
-import { ComboBoxOption } from "../types";
+import { useOpalStrings } from "@opal/strings";
+import { SelectOption } from "../types";
 
 interface UseValidationProps {
   value: string;
-  options: ComboBoxOption[];
+  options: SelectOption[];
   strict: boolean;
   externalIsError?: boolean;
   onValidationError?: (errorMessage: string | null) => void;
@@ -27,7 +28,7 @@ export function useValidation({
   externalIsError,
   onValidationError,
 }: UseValidationProps): ValidationResult {
-  const hasOptions = options.length > 0;
+  const strings = useOpalStrings();
 
   // Validation logic - use external error if provided, otherwise use internal validation
   const { isValid, errorMessage } = useMemo(() => {
@@ -36,23 +37,23 @@ export function useValidation({
       return { isValid: !externalIsError, errorMessage: null };
     }
 
-    // Otherwise use internal validation
-    if (!strict || !hasOptions || !value) {
+    // Otherwise use internal validation. An empty closed set rejects any
+    // committed value rather than accepting everything.
+    if (!strict || !value) {
       return { isValid: true, errorMessage: null };
     }
 
-    // In strict mode with options, value must be one of the option values
     const isValidOption = options.some((opt) => opt.value === value);
 
     if (!isValidOption) {
       return {
         isValid: false,
-        errorMessage: "Please select a valid option from the list",
+        errorMessage: strings.selectInvalidOption,
       };
     }
 
     return { isValid: true, errorMessage: null };
-  }, [externalIsError, strict, hasOptions, value, options]);
+  }, [externalIsError, strict, value, options, strings]);
 
   // Notify parent of error state
   useEffect(() => {

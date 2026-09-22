@@ -52,6 +52,9 @@
 }
 
 .opal-input-multi-select-field {
-  @apply h-auto w-auto min-w-20 flex-1;
-  padding: 2px 4px;
+  /* Keep the family's 24px inner rhythm: h-6 like every .opal-input-field.
+     Vertical padding here made the field 28px and the whole input 42px,
+     4px taller than its siblings. */
+  @apply h-6 w-auto min-w-20 flex-1;
+  padding: 0 4px;
 }

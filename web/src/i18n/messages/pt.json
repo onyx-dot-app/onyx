@@ -5364,7 +5364,6 @@
             "title": "Modelos"
           },
           "providerField": {
-            "createPrefix": "Usar",
             "description": "Veja a lista completa de provedores de LLM compatíveis no [LiteLLM](https://docs.litellm.ai/docs/providers).",
             "placeholder": "String do ID do provedor conforme mostrado no LiteLLM",
             "title": "Provedor"
@@ -5814,36 +5813,66 @@
         "contextualRagDocumentSummary": {
           "label": "Resumos contextuais de documentos RAG"
         },
-        "imageSummarization": { "label": "Resumo de imagens" },
-        "kgDeepExtraction": { "label": "Extração do grafo de conhecimento" },
+        "imageSummarization": {
+          "label": "Resumo de imagens"
+        },
+        "kgDeepExtraction": {
+          "label": "Extração do grafo de conhecimento"
+        },
         "kgDocumentClassification": {
           "label": "Classificação do grafo de conhecimento"
         },
-        "other": { "label": "Outros" },
-        "unattributed": { "label": "Não atribuído" }
+        "other": {
+          "label": "Outros"
+        },
+        "unattributed": {
+          "label": "Não atribuído"
+        }
       },
       "filters": {
-        "allModels": { "label": "Todos os modelos" },
-        "allProviders": { "label": "Todos os provedores" }
+        "allModels": {
+          "label": "Todos os modelos"
+        },
+        "allProviders": {
+          "label": "Todos os provedores"
+        }
       },
       "panel": {
         "description": "{start} – {end} · O uso do sistema é a atividade de LLM que o Onyx executa em segundo plano, e não para um usuário específico. Alguns exemplos são resumos de imagens, processamento RAG contextual e extração do grafo de conhecimento.",
         "emptyDescription": "O uso do sistema é a atividade de LLM que o Onyx executa em segundo plano, e não para um usuário específico. Alguns exemplos são resumos de imagens, processamento RAG contextual e extração do grafo de conhecimento.",
-        "error": { "title": "Falha ao carregar o uso do sistema neste período." },
+        "error": {
+          "title": "Falha ao carregar o uso do sistema neste período."
+        },
         "title": "Uso do sistema"
       },
       "summary": {
-        "spend": { "label": "Gastos do sistema" },
-        "tokens": { "label": "Total de tokens" },
-        "unattributed": { "label": "Gastos não atribuídos" }
+        "spend": {
+          "label": "Gastos do sistema"
+        },
+        "tokens": {
+          "label": "Total de tokens"
+        },
+        "unattributed": {
+          "label": "Gastos não atribuídos"
+        }
       },
       "table": {
         "columns": {
-          "category": { "header": "Categoria" },
-          "input": { "header": "Entrada" },
-          "output": { "header": "Saída" },
-          "spend": { "header": "Gastos" },
-          "tokens": { "header": "Tokens" }
+          "category": {
+            "header": "Categoria"
+          },
+          "input": {
+            "header": "Entrada"
+          },
+          "output": {
+            "header": "Saída"
+          },
+          "spend": {
+            "header": "Gastos"
+          },
+          "tokens": {
+            "header": "Tokens"
+          }
         },
         "empty": {
           "description": "Nenhum uso do sistema corresponde aos filtros atuais."
@@ -12848,6 +12877,10 @@
       "nextPage": "Próxima página",
       "previousPage": "Página anterior",
       "rangeOfTotal": "<range></range> de <total></total>"
+    },
+    "select": {
+      "emptySet": "Nenhum item encontrado",
+      "invalidOption": "Selecione uma opção válida da lista"
     },
     "table": {
       "alwaysShown": "Sempre exibida",
