@@ -30,22 +30,9 @@ import ConnectorSourceCard from "@/sections/cards/ConnectorSourceCard";
 import { InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { SOURCE_CATEGORY_LABEL_KEYS } from "@/lib/connectors/constants";
 
 const route = ADMIN_ROUTES.CONNECTORS;
-
-// The category headings come from the `SourceCategory` enum, whose values are
-// identifiers shared across the app. Map each one to a message key (inside the
-// `admin.addConnector` namespace) so the component can resolve it with `t`.
-const CATEGORY_LABEL_KEYS = {
-  [SourceCategory.Wiki]: "categories.wiki.label",
-  [SourceCategory.Storage]: "categories.storage.label",
-  [SourceCategory.TicketingAndTaskManagement]:
-    "categories.ticketingAndTaskManagement.label",
-  [SourceCategory.Messaging]: "categories.messaging.label",
-  [SourceCategory.Sales]: "categories.sales.label",
-  [SourceCategory.CodeRepository]: "categories.codeRepository.label",
-  [SourceCategory.Other]: "categories.other.label",
-} as const satisfies Record<SourceCategory, string>;
 
 function SourceTileTooltipWrapper({
   sourceMetadata,
@@ -59,7 +46,7 @@ function SourceTileTooltipWrapper({
   slackCredentials?: Credential<any>[];
 }) {
   const t = useTranslations("admin.addConnector");
-  const description = t(CATEGORY_LABEL_KEYS[sourceMetadata.category]);
+  const description = t(SOURCE_CATEGORY_LABEL_KEYS[sourceMetadata.category]);
 
   // Check if there's already a federated connector for this source
   const existingFederatedConnector = useMemo(() => {
@@ -317,7 +304,9 @@ export default function Page() {
                 justifyContent="start"
               >
                 <Content
-                  title={t(CATEGORY_LABEL_KEYS[category as SourceCategory])}
+                  title={t(
+                    SOURCE_CATEGORY_LABEL_KEYS[category as SourceCategory]
+                  )}
                   sizePreset="main-content"
                   variant="section"
                 />
