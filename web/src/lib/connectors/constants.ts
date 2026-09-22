@@ -1,4 +1,4 @@
-import { SourceCategory } from "@/lib/search/interfaces";
+import { SourceCategory } from "@/lib/search/types";
 import { ValidSources } from "@/lib/types";
 
 /**

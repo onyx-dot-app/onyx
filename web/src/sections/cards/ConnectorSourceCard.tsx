@@ -6,7 +6,7 @@ import { useTranslations } from "next-intl";
 import { Button, SelectCard } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
 import { SvgPlusCircle } from "@opal/icons";
-import type { SourceMetadata } from "@/lib/search/interfaces";
+import type { SourceMetadata } from "@/lib/search/types";
 
 export interface ConnectorSourceCardProps {
   sourceMetadata: SourceMetadata;
