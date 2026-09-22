@@ -520,7 +520,9 @@ export function listSourceMetadata(): SourceMetadata[] {
         // use the "regular" slack connector when listing
         source !== "federated_slack" &&
         // user_file is for internal use (projects), not the Add Connector page
-        source !== "user_file"
+        source !== "user_file" &&
+        // craft_file is managed through the Craft library UI, not a connector
+        source !== "craft_file"
     )
     .map(([source, metadata]) => {
       return fillSourceMetadata(metadata, source as ValidSources);
