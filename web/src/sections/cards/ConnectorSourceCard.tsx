@@ -15,8 +15,6 @@ export interface ConnectorSourceCardProps {
   /** Where the card and its add button lead: the setup wizard, or an
    * existing federated connector's edit page. */
   navigationUrl: Route;
-  /** Highlights the card as the one Enter would open. */
-  preSelect?: boolean;
 }
 
 /**
@@ -28,7 +26,6 @@ export default function ConnectorSourceCard({
   sourceMetadata,
   description,
   navigationUrl,
-  preSelect = false,
 }: ConnectorSourceCardProps) {
   const t = useTranslations("admin.addConnector");
   const router = useRouter();
@@ -39,9 +36,10 @@ export default function ConnectorSourceCard({
       state="empty"
       padding={2}
       rounding={4}
-      interaction={preSelect ? "hover" : undefined}
       // The add button inside is labelled "Connect <name>", so an exact
       // match on the bare name reaches the card alone.
+      // Lets the catalog find the first card to focus from the search field.
+      data-source-card=""
       aria-label={sourceMetadata.displayName}
       onClick={navigate}
     >

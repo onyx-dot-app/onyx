@@ -44,12 +44,10 @@ const SOURCE_CARD_GRID =
 
 function SourceTileTooltipWrapper({
   sourceMetadata,
-  preSelect,
   federatedConnectors,
   slackCredentials,
 }: {
   sourceMetadata: SourceMetadata;
-  preSelect?: boolean;
   federatedConnectors?: FederatedConnectorDetail[];
   slackCredentials?: Credential<any>[];
 }) {
@@ -98,7 +96,6 @@ function SourceTileTooltipWrapper({
       <ConnectorSourceCard
         sourceMetadata={sourceMetadata}
         description={description}
-        preSelect={preSelect}
         navigationUrl={navigationUrl}
       />
     );
@@ -130,7 +127,6 @@ function SourceTileTooltipWrapper({
       <ConnectorSourceCard
         sourceMetadata={sourceMetadata}
         description={description}
-        preSelect={preSelect}
         navigationUrl={navigationUrl}
       />
     </Tooltip>
@@ -231,34 +227,16 @@ export default function ConnectorsPage() {
     return popularSources.filter((s) => !resultIds.has(s.internalName));
   }, [popularSources, resultIds, searchTerm]);
 
-  // The source Enter opens while searching: the first card in the first
-  // category with results, else the first popular card (Web and File only
-  // live in the popular grid).
-  const enterTarget = useMemo(() => {
-    if (!searchTerm) return undefined;
-    const firstCategory = Object.values(categorizedSources).find(
-      (sources) => sources.length > 0
-    );
-    return firstCategory?.[0] ?? dedupedPopular[0];
-  }, [searchTerm, categorizedSources, dedupedPopular]);
-
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key !== "Enter" || !enterTarget) return;
-
-    // Check if this source has an existing federated connector
-    const existingFederatedConnector =
-      enterTarget.federated && federatedConnectors
-        ? federatedConnectors.find(
-            (connector) =>
-              connector.source === `federated_${enterTarget.internalName}`
-          )
-        : null;
-
-    const url = existingFederatedConnector
-      ? `/admin/federated/${existingFederatedConnector.id}`
-      : enterTarget.adminUrl;
-
-    window.open(url, "_self");
+  // Enter or ArrowDown in the search field moves focus to the first card;
+  // a focused card opens on Enter.
+  const catalogRef = useRef<HTMLDivElement>(null);
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter" && e.key !== "ArrowDown") return;
+    const card =
+      catalogRef.current?.querySelector<HTMLElement>("[data-source-card]");
+    if (!card) return;
+    e.preventDefault();
+    card.focus();
   };
 
   return (
@@ -271,11 +249,14 @@ export default function ConnectorsPage() {
           ref={searchInputRef}
           value={rawSearchTerm} // keep the input bound to immediate state
           onChange={(event) => setSearchTerm(event.target.value)}
-          onKeyDown={handleKeyPress}
+          onKeyDown={handleSearchKeyDown}
         />
       </SettingsLayouts.Header>
       <SettingsLayouts.Body>
-        <div className="@container/sourcecards flex flex-col gap-8">
+        <div
+          ref={catalogRef}
+          className="@container/sourcecards flex flex-col gap-8"
+        >
           <GeneralLayouts.Section
             gap={3}
             height="fit"
@@ -304,7 +285,6 @@ export default function ConnectorsPage() {
                   <div className={SOURCE_CARD_GRID}>
                     {dedupedPopular.map((source) => (
                       <SourceTileTooltipWrapper
-                        preSelect={source === enterTarget}
                         key={source.internalName}
                         sourceMetadata={source}
                         federatedConnectors={federatedConnectors}
@@ -333,7 +313,6 @@ export default function ConnectorsPage() {
                     <div className={SOURCE_CARD_GRID}>
                       {sources.map((source) => (
                         <SourceTileTooltipWrapper
-                          preSelect={source === enterTarget}
                           key={source.internalName}
                           sourceMetadata={source}
                           federatedConnectors={federatedConnectors}
