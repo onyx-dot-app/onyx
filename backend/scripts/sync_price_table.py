@@ -537,7 +537,11 @@ def merge_openrouter(
 
 def _fetch_json(url: str, timeout: int = 60) -> Any:
     assert url.startswith("https://"), f"refusing non-https source: {url}"
-    with urllib.request.urlopen(url, timeout=timeout) as resp:  # noqa: S310
+    # models.dev's edge blocks the default Python-urllib UA with a 403.
+    req = urllib.request.Request(  # noqa: S310
+        url, headers={"User-Agent": "onyx-price-sync"}
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
         return json.loads(resp.read())
 
 
@@ -623,8 +627,9 @@ def main() -> int:
     if args.output_dir.exists():
         for path in args.output_dir.glob("*.json"):
             # Files prefixed with "_" are hand-maintained (e.g.
-            # _supplement.json) and never owned by the sync.
-            if not path.name.startswith("_"):
+            # _supplement.json) and never owned by the sync — except
+            # _meta.json, which the sync writes itself.
+            if not path.name.startswith("_") or path.name == "_meta.json":
                 existing[path.name] = path.read_text()
 
     if existing == outputs:
