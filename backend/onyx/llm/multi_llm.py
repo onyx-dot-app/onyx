@@ -1227,15 +1227,15 @@ class LitellmLLM(LLM):
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
         total_timeout_override: float | None = None,
-        plain_request: bool = False,
+        stream: bool = False,
     ) -> ModelResponse:
-        """One complete response, streamed from the provider and reassembled
-        unless the caller opts into a plain request.
+        """One complete response. By default it is one non-streamed request,
+        2-4x cheaper in CPU than streaming and reassembling.
 
-        plain_request skips the streaming round trip (2-4x less CPU) and is
-        meant for short answers: without chunks the socket read timeout bounds
-        the whole response. It is ignored when total_timeout_override is set
-        (the deadline is checked between chunks) or when env injection of
+        Pass stream=True for long or unbounded answers: without chunks the
+        socket read timeout bounds the whole response, so a long generation
+        could time out. Streaming is also forced when total_timeout_override is
+        set (the deadline is checked between chunks) or when env injection of
         custom_config is enabled (the env rwlock must not be held for a full
         inference; self-hosted default).
         """
@@ -1294,9 +1294,7 @@ class LitellmLLM(LLM):
 
         env_injection_enabled = _env_injection_enabled()
         use_stream = (
-            not plain_request
-            or total_timeout_override is not None
-            or env_injection_enabled
+            stream or total_timeout_override is not None or env_injection_enabled
         )
 
         try:

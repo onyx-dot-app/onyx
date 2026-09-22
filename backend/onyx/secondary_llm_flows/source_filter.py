@@ -117,7 +117,6 @@ def decide_search_scope(
             response = llm.invoke(
                 prompt=messages,
                 reasoning_effort=ReasoningEffort.OFF,
-                plain_request=True,
             )
             record_llm_response(span_generation, response)
             content = response.choice.message.content

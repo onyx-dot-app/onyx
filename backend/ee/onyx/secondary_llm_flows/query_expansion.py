@@ -53,7 +53,6 @@ def expand_keywords(
             reasoning_effort=ReasoningEffort.OFF,
             # Limit output - we only expect a few short keyword queries
             max_tokens=150,
-            plain_request=True,
         )
 
         content = llm_response_to_string(response).strip()

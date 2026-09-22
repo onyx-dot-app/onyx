@@ -138,9 +138,7 @@ def semantic_query_rephrase(
     with llm_generation_span(
         llm=llm, flow=LLMFlow.SEMANTIC_QUERY_REPHRASE, input_messages=messages
     ) as span_generation:
-        response = llm.invoke(
-            prompt=messages, reasoning_effort=ReasoningEffort.OFF, plain_request=True
-        )
+        response = llm.invoke(prompt=messages, reasoning_effort=ReasoningEffort.OFF)
         record_llm_response(span_generation, response)
         final_query = response.choice.message.content
 
@@ -220,9 +218,7 @@ def keyword_query_expansion(
     with llm_generation_span(
         llm=llm, flow=LLMFlow.KEYWORD_QUERY_EXPANSION, input_messages=messages
     ) as span_generation:
-        response = llm.invoke(
-            prompt=messages, reasoning_effort=ReasoningEffort.OFF, plain_request=True
-        )
+        response = llm.invoke(prompt=messages, reasoning_effort=ReasoningEffort.OFF)
         record_llm_response(span_generation, response)
         content = response.choice.message.content
 

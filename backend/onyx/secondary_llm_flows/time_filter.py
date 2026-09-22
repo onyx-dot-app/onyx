@@ -187,7 +187,6 @@ def decide_time_filter(
             response = llm.invoke(
                 prompt=messages,
                 reasoning_effort=ReasoningEffort.OFF,
-                plain_request=True,
             )
             record_llm_response(span_generation, response)
             content = response.choice.message.content

@@ -3313,7 +3313,7 @@ def test_ui_only_keys_never_injected_or_warned(
 def _invoke_stream_flag(
     llm: LitellmLLM,
     injection_enabled: bool,
-    plain_request: bool = False,
+    stream: bool = False,
     total_timeout_override: float | None = None,
 ) -> tuple[bool, ModelResponse]:
     """Run invoke() with litellm mocked and report the stream kwarg it sent."""
@@ -3334,7 +3334,7 @@ def _invoke_stream_flag(
         response = llm.invoke(
             [UserMessage(content="Hi")],
             total_timeout_override=total_timeout_override,
-            plain_request=plain_request,
+            stream=stream,
         )
 
     # One snapshot drives both the stream choice and the env lock, so the two
@@ -3349,50 +3349,43 @@ def _invoke_stream_flag(
     return kwargs["stream"], response
 
 
-def test_invoke_streams_by_default(default_multi_llm: LitellmLLM) -> None:
-    """Without an opt-in, invoke() keeps streaming and reassembling."""
+def test_invoke_plain_request_by_default(default_multi_llm: LitellmLLM) -> None:
+    """Cloud posture: invoke() sends one non-streamed request and takes the
+    response as one body."""
     streamed, response = _invoke_stream_flag(default_multi_llm, injection_enabled=False)
-
-    assert streamed is True
-    assert response.choice.message.content == "Hi"
-
-
-def test_invoke_plain_request_when_injection_disabled(
-    default_multi_llm: LitellmLLM,
-) -> None:
-    """Cloud posture: an opted-in short call skips the streaming round trip and
-    takes the response as one body."""
-    streamed, response = _invoke_stream_flag(
-        default_multi_llm, injection_enabled=False, plain_request=True
-    )
 
     assert streamed is False
     assert response.choice.message.content == "Hi"
     assert response.choice.finish_reason == "stop"
 
 
-def test_invoke_plain_request_streams_when_injection_enabled(
-    default_multi_llm: LitellmLLM,
-) -> None:
-    """Self-hosted posture: streaming keeps the env rwlock to connection setup."""
+def test_invoke_stream_true_streams(default_multi_llm: LitellmLLM) -> None:
+    """Long-answer callers ask for streaming and get the reassembled response."""
     streamed, response = _invoke_stream_flag(
-        default_multi_llm, injection_enabled=True, plain_request=True
+        default_multi_llm, injection_enabled=False, stream=True
     )
 
     assert streamed is True
     assert response.choice.message.content == "Hi"
 
 
-def test_invoke_plain_request_streams_when_total_timeout_requested(
+def test_invoke_streams_when_injection_enabled(
+    default_multi_llm: LitellmLLM,
+) -> None:
+    """Self-hosted posture: streaming keeps the env rwlock to connection setup."""
+    streamed, response = _invoke_stream_flag(default_multi_llm, injection_enabled=True)
+
+    assert streamed is True
+    assert response.choice.message.content == "Hi"
+
+
+def test_invoke_streams_when_total_timeout_requested(
     default_multi_llm: LitellmLLM,
 ) -> None:
     """The wall-clock deadline is enforced between chunks, so a total timeout
-    wins over the opt-in."""
+    forces streaming."""
     streamed, _ = _invoke_stream_flag(
-        default_multi_llm,
-        injection_enabled=False,
-        plain_request=True,
-        total_timeout_override=30,
+        default_multi_llm, injection_enabled=False, total_timeout_override=30
     )
 
     assert streamed is True
