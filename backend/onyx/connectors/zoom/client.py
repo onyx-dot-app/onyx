@@ -399,7 +399,9 @@ class ZoomClient:
             records.extend(parse(entry) for entry in body.get(response_key, []))
 
             page_token = _next_page_token(body)
-            if not page_token or (limit is not None and len(records) >= limit):
+            if limit is not None and len(records) >= limit:
+                return records[:limit]
+            if not page_token:
                 return records
             if page_token in seen_tokens:
                 raise ValueError(
