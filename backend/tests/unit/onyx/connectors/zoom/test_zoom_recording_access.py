@@ -8,7 +8,10 @@ import pytest
 import requests
 from pydantic import ValidationError
 
-from onyx.connectors.zoom.models import ZoomRecordingSettings
+from onyx.connectors.zoom.models import (
+    ZoomRecordingAuthenticationRule,
+    ZoomRecordingSettings,
+)
 from onyx.connectors.zoom.recordings.recording_access import (
     ZoomAccessContext,
     ZoomAccessListUnavailable,
@@ -134,7 +137,7 @@ class TestTheTraps:
         ids=["rule-missing", "type-zoom-adds-later", "domain-rule-without-domains"],
     )
     def test_a_rule_the_connector_cannot_read_grants_only_the_owner(
-        self, rule_id: str, rules: list
+        self, rule_id: str, rules: list[ZoomRecordingAuthenticationRule]
     ) -> None:
         client = with_recording_access(
             settings=recording_settings(authentication_option=rule_id), rules=rules
