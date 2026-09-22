@@ -52,7 +52,7 @@ Onyx creates a representation of knowledge across all connected sources. It pull
 
 Compared to MCP based searches and index-free approaches, Onyx provides a more reliable, low latency, and low cost context for any given query whether it's a simple keyword query or a complex research task.
 
-Instead of an agent coordinating and iteratively searching dozens of MCP and burning many thousands of tokens, Onyx fetches the context across it's internal representation instantly and filters down to only the most relevant ground truth documents.
+Instead of an agent coordinating and iteratively searching dozens of MCP and burning many thousands of tokens, Onyx fetches the context across its internal representation instantly and filters down to only the most relevant ground truth documents.
 
 ## ⭐ Features
 
