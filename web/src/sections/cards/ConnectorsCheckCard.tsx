@@ -14,6 +14,7 @@ import {
 import {
   SvgAlertCircle,
   SvgCheckCircle,
+  SvgExpand,
   SvgFold,
   SvgInfo,
   SvgMinusCircle,
@@ -324,7 +325,7 @@ export function ConnectorsCheckCard({
               />
             )}
             <Button
-              icon={SvgFold}
+              icon={collapsed ? SvgExpand : SvgFold}
               prominence="internal"
               tooltip={
                 collapsed ? t("foldButton.expand") : t("foldButton.fold")
