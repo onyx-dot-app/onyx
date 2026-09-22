@@ -295,7 +295,7 @@ def filter_model_configurations(
     custom_config: dict[str, str] | None = None,
     deployment_name: str | None = None,
 ) -> list:
-    """Filter out obsolete and dated duplicate models from configurations.
+    """Filter out dated duplicate models from configurations.
 
     Args:
         model_configurations: List of ModelConfiguration DB models
@@ -309,19 +309,14 @@ def filter_model_configurations(
             model's own name doesn't carry its identity.
 
     Returns:
-        List of ModelConfigurationView objects with obsolete/duplicate models removed
+        List of ModelConfigurationView objects with duplicate models removed
     """
-    # Import here to avoid circular imports
-    from onyx.llm.well_known_providers.llm_provider_options import is_obsolete_model
     from onyx.server.manage.llm.models import ModelConfigurationView
 
     all_model_names = {mc.name for mc in model_configurations}
 
     filtered_configs = []
     for model_configuration in model_configurations:
-        # Skip obsolete models
-        if is_obsolete_model(model_configuration.name, provider):
-            continue
         # Skip dated duplicates when non-dated version exists
         if should_filter_as_dated_duplicate(model_configuration.name, all_model_names):
             continue

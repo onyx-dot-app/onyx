@@ -106,49 +106,6 @@ def get_recommendations() -> LLMRecommendations:
         return result
 
 
-def is_obsolete_model(model_name: str, provider: str) -> bool:
-    """Check if a model is obsolete and should be filtered out.
-
-    Filters models that are 2+ major versions behind or deprecated.
-    This is the single source of truth for obsolete model detection.
-    """
-    model_lower = model_name.lower()
-
-    # OpenAI obsolete models
-    if provider == LlmProviderNames.OPENAI:
-        # GPT-3 models are obsolete
-        if "gpt-3" in model_lower:
-            return True
-        # Legacy models
-        deprecated = {
-            "text-davinci-003",
-            "text-davinci-002",
-            "text-curie-001",
-            "text-babbage-001",
-            "text-ada-001",
-            "davinci",
-            "curie",
-            "babbage",
-            "ada",
-        }
-        if model_lower in deprecated:
-            return True
-
-    # Anthropic obsolete models
-    if provider == LlmProviderNames.ANTHROPIC:
-        if "claude-2" in model_lower or "claude-instant" in model_lower:
-            return True
-
-    # Vertex AI obsolete models
-    if provider == LlmProviderNames.VERTEX_AI:
-        if "gemini-1.0" in model_lower:
-            return True
-        if "palm" in model_lower or "bison" in model_lower:
-            return True
-
-    return False
-
-
 def get_openai_model_names() -> list[str]:
     """Get OpenAI model names from the vendored model catalog."""
     import re
@@ -158,7 +115,9 @@ def get_openai_model_names() -> list[str]:
     # TODO: remove these lists once we have a comprehensive model configuration page
     # The ideal flow should be: fetch all available models --> filter by type
     # --> allow user to modify filters and select models based on current context
-    non_chat_model_terms = {
+    # NOTE: deprecated-but-still-served models (e.g. gpt-3.5-turbo, gpt-4) are
+    # intentionally kept — the catalog only contains models OpenAI still serves.
+    excluded_terms = {
         "embed",
         "audio",
         "tts",
@@ -169,8 +128,6 @@ def get_openai_model_names() -> list[str]:
         "sora",
         "container",
     }
-    deprecated_model_terms = {"babbage", "davinci", "gpt-3.5", "gpt-4-"}
-    excluded_terms = non_chat_model_terms | deprecated_model_terms
 
     # NOTE: We are explicitly excluding all "timestamped" models
     # because they are mostly just noise in the admin configuration panel
@@ -197,22 +154,7 @@ def get_anthropic_model_names() -> list[str]:
     """Get Anthropic model names from the vendored model catalog."""
     from onyx.llm import model_catalog
 
-    # Models to exclude from Anthropic's model list (deprecated or duplicates)
-    _IGNORABLE_ANTHROPIC_MODELS = {
-        "claude-2",
-        "claude-instant-1",
-        "anthropic/claude-3-5-sonnet-20241022",
-    }
-
-    return sorted(
-        [
-            model
-            for model in model_catalog.iter_models(LlmProviderNames.ANTHROPIC)
-            if model not in _IGNORABLE_ANTHROPIC_MODELS
-            and not is_obsolete_model(model, LlmProviderNames.ANTHROPIC)
-        ],
-        reverse=True,
-    )
+    return sorted(model_catalog.iter_models(LlmProviderNames.ANTHROPIC), reverse=True)
 
 
 def get_vertexai_model_names() -> list[str]:
@@ -238,7 +180,6 @@ def get_vertexai_model_names() -> list[str]:
             and "/" not in model  # filter out prefixed models like openai/gpt-oss
             and "search_api" not in model.lower()  # not a model
             and "-maas" not in model.lower()  # marketplace models
-            and not is_obsolete_model(model, LlmProviderNames.VERTEX_AI)
         ],
         reverse=True,
     )
