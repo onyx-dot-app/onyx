@@ -184,10 +184,7 @@ def decide_time_filter(
             flow=LLMFlow.TIME_FILTER_EXTRACTION,
             input_messages=messages,
         ) as span_generation:
-            response = llm.invoke(
-                prompt=messages,
-                reasoning_effort=ReasoningEffort.OFF,
-            )
+            response = llm.invoke(prompt=messages, reasoning_effort=ReasoningEffort.OFF)
             record_llm_response(span_generation, response)
             content = response.choice.message.content
         return _parse_time_decision(content, now)

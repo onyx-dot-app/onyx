@@ -108,8 +108,7 @@ def generate_session_name(db_session: DBSession, session_id: UUID) -> str:
                 input_messages=prompt_messages,
             ) as span_generation:
                 response = llm.invoke(
-                    prompt_messages,
-                    reasoning_effort=ReasoningEffort.OFF,
+                    prompt_messages, reasoning_effort=ReasoningEffort.OFF
                 )
                 record_llm_response(span_generation, response)
                 generated = llm_response_to_string(response).strip().strip('"')
