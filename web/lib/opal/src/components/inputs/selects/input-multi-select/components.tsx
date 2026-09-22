@@ -22,7 +22,7 @@ import type { SelectOption, SelectSection } from "../types";
 // Types
 // ---------------------------------------------------------------------------
 
-type InputMultiSelectProps = InputTypeInTagProps & {
+interface InputMultiSelectProps extends InputTypeInTagProps {
   /**
    * The selectable set. Flat or sectioned — sections render with a Divider
    * between them. Convention: a chosen option becomes a tag whose `id` is
@@ -46,7 +46,7 @@ type InputMultiSelectProps = InputTypeInTagProps & {
 
   /** Max height of the dropdown in CSS units. Defaults to "15rem". */
   dropdownMaxHeight?: string;
-};
+}
 
 // ---------------------------------------------------------------------------
 // InputMultiSelect

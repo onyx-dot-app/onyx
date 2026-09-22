@@ -59,7 +59,7 @@ interface TagFieldBaseProps {
 }
 
 /** The hooks a select needs to mount its dropdown on the field. */
-type TagFieldProps = TagFieldBaseProps & {
+interface TagFieldProps extends TagFieldBaseProps {
   /** Receives the wrapper element (a select's floating reference). */
   rootRef?: (node: HTMLDivElement | null) => void;
 
@@ -82,7 +82,7 @@ type TagFieldProps = TagFieldBaseProps & {
 
   /** Trailing controls after the clear button (a select's chevron and dropdown). */
   children?: React.ReactNode;
-};
+}
 
 // ---------------------------------------------------------------------------
 // TagField

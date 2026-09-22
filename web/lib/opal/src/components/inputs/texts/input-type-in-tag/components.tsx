@@ -6,10 +6,10 @@ import {
   type TagItem,
 } from "@opal/components/inputs/texts/input-type-in-tag/TagField";
 
-type InputTypeInTagProps = TagFieldBaseProps & {
+interface InputTypeInTagProps extends TagFieldBaseProps {
   /** Called with the trimmed input text on Enter (no-op when empty). */
   onAdd: (value: string) => void;
-};
+}
 
 /**
  * Free tagging, the Figma `Input/Tags` component: editable `Tag`s inline
