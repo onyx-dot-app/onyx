@@ -4,8 +4,9 @@ import { ConnectorSetupPage } from "@tests/e2e/admin/connector/ConnectorSetupPag
 
 /**
  * The credential gate on the single-page connector setup: for a source that
- * needs a credential, Connect stays disabled until one is selected, and the
- * configuration renders on the same page rather than behind a step.
+ * needs a credential, the configuration stays disabled and Connect stays
+ * disabled until one is selected; once selected and the required fields are
+ * filled, Connect enables.
  *
  * Confluence is the source because it needs a credential and the credential
  * endpoint stores the JSON without contacting the source, so a placeholder
@@ -13,6 +14,7 @@ import { ConnectorSetupPage } from "@tests/e2e/admin/connector/ConnectorSetupPag
  * submitted: that would validate against a real Confluence instance.
  */
 const SOURCE = "confluence";
+const WIKI_BASE = "https://example.atlassian.net/wiki";
 
 test.describe("Credentialed connector setup", () => {
   let credentialName: string;
@@ -40,21 +42,28 @@ test.describe("Credentialed connector setup", () => {
     credentialId = null;
   });
 
-  test("Connect stays disabled until a credential is selected", async ({
-    page,
-  }) => {
+  test("configuration and Connect wait for a credential", async ({ page }) => {
     const setupPage = new ConnectorSetupPage(page, SOURCE);
     await setupPage.goto();
 
-    // Every section is on the page at once: the credential list and the
-    // configuration fields render together, with no step in between.
+    // Every section is on the page at once, but without a credential the
+    // configuration is disabled and so is Connect.
     await expect(setupPage.credentialRow(credentialName)).toBeVisible({
       timeout: 10_000,
     });
-    await expect(setupPage.connectorNameInput).toBeVisible();
+    await expect(setupPage.connectorNameInput).toBeDisabled();
     await expect(setupPage.createConnectorButton).toBeDisabled();
 
     await setupPage.selectCredential(credentialName);
+
+    // Selecting a credential unlocks the configuration. Connect still waits
+    // for the required fields, since validation runs as soon as the form
+    // changes.
+    await expect(setupPage.connectorNameInput).toBeEnabled();
+    await expect(setupPage.createConnectorButton).toBeDisabled();
+
+    await setupPage.connectorNameInput.fill(`Confluence E2E ${Date.now()}`);
+    await setupPage.textField("wiki_base").fill(WIKI_BASE);
 
     await expect(setupPage.createConnectorButton).toBeEnabled();
   });
