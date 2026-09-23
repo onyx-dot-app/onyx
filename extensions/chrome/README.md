@@ -32,13 +32,14 @@ policy are read-only in the extension UI. Supported keys (see
 | `onyxExtensionDomain`        | string  | Root URL of your Onyx instance                  |
 | `onyxExtensionDefaultNewTab` | boolean | Force the "Use Onyx as new tab page" toggle     |
 
-Example (Linux, `/etc/opt/chrome/policies/managed/onyx.json`):
+Example (Linux, `/etc/opt/chrome/policies/managed/onyx.json`; the Chrome Web
+Store extension ID is `dacfbnglakogghooelgjflkhjcdbemia`):
 
 ```json
 {
   "3rdparty": {
     "extensions": {
-      "<extension-id>": {
+      "dacfbnglakogghooelgjflkhjcdbemia": {
         "onyxExtensionDomain": "https://onyx.example.com",
         "onyxExtensionDefaultNewTab": false
       }
