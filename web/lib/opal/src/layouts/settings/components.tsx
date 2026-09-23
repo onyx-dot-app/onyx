@@ -57,6 +57,9 @@ function SettingsRoot({ width = "md", ...props }: SettingsRootProps) {
 
 export interface SettingsHeaderProps {
   icon: IconFunctionComponent;
+  /** Extra icons after `icon` in the title's icon row; see `Content`. */
+  moreIcon1?: IconFunctionComponent;
+  moreIcon2?: IconFunctionComponent;
   title: string | RichStr;
   description?: string | RichStr;
   children?: React.ReactNode;
@@ -74,6 +77,8 @@ export interface SettingsHeaderProps {
  */
 function SettingsHeader({
   icon: Icon,
+  moreIcon1,
+  moreIcon2,
   title,
   description,
   children,
@@ -132,6 +137,8 @@ function SettingsHeader({
           <div aria-label="admin-page-title">
             <Content
               icon={Icon}
+              moreIcon1={moreIcon1}
+              moreIcon2={moreIcon2}
               title={title}
               description={description}
               sizePreset="headline"

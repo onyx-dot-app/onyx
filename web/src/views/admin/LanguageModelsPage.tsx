@@ -384,6 +384,7 @@ export default function LanguageModelsPage() {
           LLMProviderName.OPENROUTER,
           LLMProviderName.LITELLM_PROXY,
           LLMProviderName.PORTKEY,
+          LLMProviderName.VERCEL_AI_GATEWAY,
           LLMProviderName.NEBIUS_TOKENFACTORY,
           LLMProviderName.BIFROST,
         ],

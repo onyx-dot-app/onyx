@@ -1,7 +1,7 @@
-import {
+import type {
   CredentialBase,
   CredentialWithPrivateKey,
-} from "./connectors/credentials";
+} from "@/lib/connectors/types";
 import { AccessType, ProcessingMode } from "@/lib/types";
 import { TypedFile } from "./connectors/fileTypes";
 import {

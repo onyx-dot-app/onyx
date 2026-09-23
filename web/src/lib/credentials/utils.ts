@@ -1,12 +1,12 @@
 import * as Yup from "yup";
 
-import {
+import { credentialTemplates } from "@/lib/connectors/credentials";
+import { getDisplayNameForCredentialKey } from "@/lib/connectors/utils";
+import type {
   Credential,
   CredentialTemplateWithAuth,
-  credentialTemplates,
-  getDisplayNameForCredentialKey,
-} from "@/lib/connectors/credentials";
-import { isTypedFileField } from "@/lib/connectors/fileTypes";
+} from "@/lib/connectors/types";
+import { isTypedFileField } from "@/lib/connectors/utils";
 import type {
   CredentialFieldValues,
   CredentialFormValues,

@@ -40,7 +40,7 @@ import { Spacer } from "@opal/components";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import { SvgUser, SvgMenu, SvgAlertTriangle } from "@opal/icons";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
-import { MinimalOnyxDocument } from "@/lib/search/interfaces";
+import { MinimalOnyxDocument } from "@/lib/search/types";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import { useQueryController } from "@/providers/QueryControllerProvider";
@@ -66,7 +66,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   const searchParams = useSearchParams();
   // Shared with the tools popover in AppInputBar below. Mounted by the route.
-  const { user, authTypeMetadata } = useUser();
+  const { user, authTypeMetadata, refreshUser } = useUser();
 
   // Chat sessions
   const { refreshChatSessions } = useChatSessions();
@@ -219,6 +219,23 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const anchorSelector = anchorNodeId ? `#message-${anchorNodeId}` : undefined;
 
   useSendMessageToParent();
+
+  // Sign-in from this embedded page happens in another tab, so re-check the
+  // session whenever the user comes back to this one.
+  useEffect(() => {
+    if (user) return;
+
+    function handleVisible() {
+      if (document.visibilityState === "visible") void refreshUser();
+    }
+
+    document.addEventListener("visibilitychange", handleVisible);
+    window.addEventListener("focus", handleVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisible);
+      window.removeEventListener("focus", handleVisible);
+    };
+  }, [user, refreshUser]);
 
   // Listen for tab URL updates from the Chrome extension
   useEffect(() => {
@@ -466,7 +483,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           <div
             {...getRootProps()}
             className={cn(
-              "flex-1 min-h-0 w-full flex flex-col items-center outline-hidden",
+              "relative flex-1 min-h-0 w-full flex flex-col items-center outline-hidden",
               isSidePanel && "px-3"
             )}
           >
@@ -524,6 +541,9 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
               </div>
             )}
 
+            {/* Keeps the input bar below the absolute settings button when pinned to the top */}
+            {!hasMessages && isSearch && !isSidePanel && <Spacer rem={4} />}
+
             {/* AppInputBar container - in normal flex flow like AppPage */}
             <div
               ref={inputRef}
@@ -573,7 +593,13 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
             {/* Search results - shown when query is classified as search */}
             {isSearch && (
-              <div className="flex-1 w-full max-w-(--app-page-main-content-width) px-4 min-h-0 overflow-auto">
+              <div
+                className={cn(
+                  "flex-1 w-full max-w-(--app-page-main-content-width) px-4 min-h-0 overflow-hidden flex flex-col",
+                  !isSidePanel &&
+                    "pb-[calc(var(--nrf-footer-height,0px)_+_0.5rem)]"
+                )}
+              >
                 <Spacer rem={0.75} />
                 <SearchUI onDocumentClick={handleSearchDocumentClick} />
               </div>

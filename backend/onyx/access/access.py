@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from typing import cast
+from uuid import UUID
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy import cast as sa_cast
@@ -8,7 +9,12 @@ from sqlalchemy.orm import Session
 
 from onyx.access.models import DocumentAccess
 from onyx.access.utils import prefix_user_email
-from onyx.configs.constants import PUBLIC_DOC_PAT, DocumentSource, FileOrigin
+from onyx.configs.constants import (
+    CHAT_SESSION_ID_FILE_METADATA_KEY,
+    PUBLIC_DOC_PAT,
+    DocumentSource,
+    FileOrigin,
+)
 from onyx.db.document import get_access_info_for_document, get_access_info_for_documents
 from onyx.db.models import (
     ChatMessage,
@@ -230,7 +236,8 @@ def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> 
       or directly shared via `Persona.users`).
     - `ChatMessage.files` of a session the user owns or that is shared as
       `ChatSessionSharedStatus.PUBLIC`.
-    - `FileRecord` with origin `CHAT_IMAGE_GEN` (see inline TODO).
+    - `FileRecord` with origin `CHAT_IMAGE_GEN` whose stamped chat session the
+      user may read (owned, or shared as `PUBLIC`).
     - `Document` whose ACL grants access (covers connector-ingested files).
 
     TODO(auth-perf): split `/chat/file` into per-asset-class endpoints so the
@@ -266,24 +273,55 @@ def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> 
     if db_session.execute(chat_file_stmt).first() is not None:
         return True
 
-    # TODO(jtahara): every CHAT_IMAGE_GEN file is public, which overrides the session
-    # checks above. Generated images never reach ChatMessage.files, and a
-    # code-interpreter file reaches it only when the reply cites the id, so
-    # this branch is the real access path for the rest. Scoping it needs
-    # chat_session_id stamped into FileRecord.file_metadata at save time.
-    # Kept above the connector branch so previews hit a PK lookup.
-    is_chat_image_gen = db_session.query(
-        select(FileRecord.file_id)
-        .where(
+    # Generated images never reach ChatMessage.files, and a code-interpreter file
+    # reaches it only when the reply cites the id, so this branch is the real
+    # access path for them. Kept above the connector branch so previews hit a PK
+    # lookup.
+    chat_image_gen_row = db_session.execute(
+        select(FileRecord.file_metadata).where(
             FileRecord.file_id == file_id,
             FileRecord.file_origin == FileOrigin.CHAT_IMAGE_GEN,
         )
-        .exists()
-    ).scalar()
-    if is_chat_image_gen:
-        return True
+    ).first()
+    if chat_image_gen_row is not None:
+        return _user_can_access_chat_image_gen_file(
+            chat_image_gen_row.file_metadata, user, db_session
+        )
 
     return _user_can_access_connector_file(file_id, user, db_session)
+
+
+def _user_can_access_chat_image_gen_file(
+    file_metadata: object, user: User, db_session: Session
+) -> bool:
+    raw_session_id = (
+        file_metadata.get(CHAT_SESSION_ID_FILE_METADATA_KEY)
+        if isinstance(file_metadata, dict)
+        else None
+    )
+    if raw_session_id is None:
+        # Written before generated files were stamped with their session.
+        return True
+    try:
+        chat_session_id = UUID(str(raw_session_id))
+    except ValueError:
+        return False
+
+    stmt = (
+        select(ChatSession.id)
+        .where(ChatSession.id == chat_session_id)
+        .where(
+            or_(
+                ChatSession.user_id == user.id,
+                and_(
+                    ChatSession.shared_status == ChatSessionSharedStatus.PUBLIC,
+                    ChatSession.deleted.is_(False),
+                ),
+            )
+        )
+        .limit(1)
+    )
+    return db_session.execute(stmt).first() is not None
 
 
 def _user_can_access_persona_attached_file(

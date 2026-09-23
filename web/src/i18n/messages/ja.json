@@ -784,35 +784,223 @@
         "messaging": {
           "label": "メッセージング"
         },
-        "other": {
-          "label": "その他"
-        },
         "sales": {
-          "label": "営業"
+          "label": "営業・GTM"
         },
         "storage": {
           "label": "クラウドストレージ"
         },
         "ticketingAndTaskManagement": {
-          "label": "チケット管理・タスク管理"
+          "label": "チケット・タスク"
         },
         "wiki": {
           "label": "ナレッジベース・Wiki"
+        },
+        "aiObservability": {
+          "label": "AI・オブザーバビリティ"
+        },
+        "other": {
+          "label": "その他"
         }
       },
       "popular": {
-        "title": "人気"
+        "title": "コネクタを追加",
+        "description": "{appName} をデータソースに接続します。"
       },
       "search": {
-        "placeholder": "コネクターを検索"
-      },
-      "seeConnectorsButton": {
-        "label": "コネクターを表示"
+        "placeholder": "コネクターを検索..."
       },
       "sourceTile": {
         "tooltip": {
           "federatedConfigured": "<strong>フェデレーテッドコネクターは設定済みです。</strong> クリックすると、既存のコネクターを編集できます。",
           "slackCredentialsFound": "<strong>既存の Slack 資格情報が見つかりました。</strong> クリックすると、Slack コネクターを管理できます。"
+        }
+      },
+      "sourceCard": {
+        "connectButton": {
+          "ariaLabel": "{source} を接続"
+        }
+      },
+      "sources": {
+        "web": {
+          "description": "任意の公開 URL をリンク"
+        },
+        "github": {
+          "description": "コードとプルリクエスト"
+        },
+        "gitlab": {
+          "description": "コードと CI/CD"
+        },
+        "slack": {
+          "description": "チームメッセージング"
+        },
+        "googleDrive": {
+          "description": "共有ファイルとフォルダー"
+        },
+        "gmail": {
+          "description": "Google のメール"
+        },
+        "bookstack": {
+          "description": "セルフホスト型 Wiki"
+        },
+        "outline": {
+          "description": "オープンソースのチーム Wiki"
+        },
+        "confluence": {
+          "description": "Atlassian の Wiki"
+        },
+        "jira": {
+          "description": "Atlassian の課題管理"
+        },
+        "productboard": {
+          "description": "プロダクトマネジメント"
+        },
+        "slab": {
+          "description": "チーム Wiki"
+        },
+        "coda": {
+          "description": "ドキュメントとデータベース"
+        },
+        "notion": {
+          "description": "ドキュメントとデータベース"
+        },
+        "guru": {
+          "description": "検証済みナレッジベース"
+        },
+        "gong": {
+          "description": "営業通話インテリジェンス"
+        },
+        "zulip": {
+          "description": "オープンソースのメッセージング"
+        },
+        "linear": {
+          "description": "エンジニアリング課題管理"
+        },
+        "hubspot": {
+          "description": "マーケティングと CRM"
+        },
+        "document360": {
+          "description": "セルフサービスドキュメント"
+        },
+        "file": {
+          "description": "ローカルファイルからアップロード"
+        },
+        "userFile": {
+          "description": "チャットでアップロードしたファイル"
+        },
+        "googleSites": {
+          "description": "Google ホストのページ"
+        },
+        "loopio": {
+          "description": "RFP 回答"
+        },
+        "box": {
+          "description": "ファイル、フォルダー、ノート"
+        },
+        "dropbox": {
+          "description": "共有ファイルとフォルダー"
+        },
+        "discord": {
+          "description": "コミュニティメッセージング"
+        },
+        "salesforce": {
+          "description": "営業と CRM"
+        },
+        "sharepoint": {
+          "description": "Microsoft のイントラネット"
+        },
+        "teams": {
+          "description": "Microsoft のチームチャット"
+        },
+        "outlook": {
+          "description": "メールとメールフォルダー"
+        },
+        "zendesk": {
+          "description": "カスタマーサポートのチケット"
+        },
+        "discourse": {
+          "description": "コミュニティフォーラム"
+        },
+        "axero": {
+          "description": "ソーシャルイントラネット"
+        },
+        "clickup": {
+          "description": "プロジェクトとタスクの管理"
+        },
+        "wikipedia": {
+          "description": "公開ナレッジベース"
+        },
+        "mediawiki": {
+          "description": "Wikipedia 型の Wiki"
+        },
+        "asana": {
+          "description": "ワークマネジメント"
+        },
+        "s3": {
+          "description": "AWS ストレージバケット"
+        },
+        "r2": {
+          "description": "クラウドストレージバケット"
+        },
+        "googleCloudStorage": {
+          "description": "Google Cloud バケット"
+        },
+        "xenforo": {
+          "description": "コミュニティフォーラム"
+        },
+        "ociStorage": {
+          "description": "OCI オブジェクトストレージ"
+        },
+        "notApplicable": {
+          "description": "ソースなし"
+        },
+        "ingestionApi": {
+          "description": "API 経由で送信されたドキュメント"
+        },
+        "freshdesk": {
+          "description": "カスタマーヘルプデスク"
+        },
+        "fireflies": {
+          "description": "会議メモ"
+        },
+        "egnyte": {
+          "description": "マネージドファイルサービス"
+        },
+        "airtable": {
+          "description": "データベースとタスク"
+        },
+        "gitbook": {
+          "description": "開発者向けドキュメント"
+        },
+        "highspot": {
+          "description": "セールスイネーブルメント"
+        },
+        "drupalWiki": {
+          "description": "CMS ベースの Wiki"
+        },
+        "imap": {
+          "description": "IMAP メールソース"
+        },
+        "bitbucket": {
+          "description": "Atlassian のソース管理"
+        },
+        "testrail": {
+          "description": "テストケース管理"
+        },
+        "braintrust": {
+          "description": "ログと評価"
+        },
+        "lumapps": {
+          "description": "イントラネットのページとコミュニティ"
+        },
+        "canvas": {
+          "description": "コース、ページ、お知らせ"
+        },
+        "craftFile": {
+          "description": "アップロードしたファイル"
+        },
+        "federatedSlack": {
+          "description": "クエリ時に Slack を検索"
         }
       }
     },
@@ -2429,6 +2617,9 @@
         "label": "コネクター名",
         "subtext": "コネクターの内容がわかる名前です。"
       },
+      "credentialRequired": {
+        "tooltip": "最初に認証情報を選択してください。"
+      },
       "credentialsLoadError": {
         "title": "認証情報の読み込みに失敗しました。"
       },
@@ -2556,6 +2747,15 @@
           "placeholder": "サービスアカウントの JSON キーをアップロードまたは貼り付け"
         }
       },
+      "header": {
+        "cancelButton": {
+          "label": "キャンセル"
+        },
+        "connectButton": {
+          "label": "接続"
+        },
+        "description": "{source} に接続し、{appName} 用のコネクタを設定します。"
+      },
       "invalidConnector": {
         "homeButton": {
           "label": "ホームに戻る"
@@ -2564,20 +2764,6 @@
       },
       "listInput": {
         "placeholder": "{label} を入力"
-      },
-      "navigation": {
-        "advancedButton": {
-          "label": "詳細設定"
-        },
-        "continueButton": {
-          "label": "次へ"
-        },
-        "createButton": {
-          "label": "コネクターを作成"
-        },
-        "previousButton": {
-          "label": "戻る"
-        }
       },
       "oauth": {
         "error": {
@@ -2669,6 +2855,11 @@
         "submitError": {
           "description": "送信の処理中にエラーが発生しました。もう一度お試しください。",
           "title": "送信中にエラーが発生しました。"
+        }
+      },
+      "sections": {
+        "configuration": {
+          "title": "設定"
         }
       },
       "selectInput": {
@@ -5026,14 +5217,11 @@
             "label": "非公開"
           }
         },
-        "addConnectorButton": {
-          "label": "コネクターを追加"
-        },
         "connectorCreated": {
           "toast": "コネクターを作成しました"
         },
         "empty": {
-          "message": "コネクターがまだ設定されていないようです。[コネクターを追加](/admin/add-connector) ページで開始してください。"
+          "message": "コネクターがまだ設定されていないようです。[コネクターを追加](/admin/connectors) ページで開始してください。"
         },
         "federated": {
           "access": {
@@ -5116,7 +5304,7 @@
           "tooltip": "フェデレーションコネクターを管理"
         },
         "search": {
-          "placeholder": "コネクターを検索"
+          "placeholder": "コネクターを検索..."
         },
         "summary": {
           "activeConnectors": {
@@ -5364,7 +5552,6 @@
             "title": "モデル"
           },
           "providerField": {
-            "createPrefix": "使用",
             "description": "対応する LLM プロバイダーの全一覧は [LiteLLM](https://docs.litellm.ai/docs/providers) を参照してください。",
             "placeholder": "LiteLLM に表示されるプロバイダー ID 文字列",
             "title": "プロバイダー"
@@ -5542,6 +5729,12 @@
           "restoreDefaultButton": {
             "ariaLabel": "デフォルトの API ベース URL を復元",
             "tooltip": "デフォルトに戻す"
+          }
+        },
+        "vercelAiGateway": {
+          "apiBaseField": {
+            "description": "Vercel AI Gateway のエンドポイントを使用するか、カスタムのベース URL を貼り付けてください。",
+            "placeholder": "Vercel AI Gateway のベース URL"
           }
         },
         "setup": {
@@ -5814,36 +6007,66 @@
         "contextualRagDocumentSummary": {
           "label": "コンテキスト RAG ドキュメント要約"
         },
-        "imageSummarization": { "label": "画像要約" },
-        "kgDeepExtraction": { "label": "ナレッジグラフ抽出" },
+        "imageSummarization": {
+          "label": "画像要約"
+        },
+        "kgDeepExtraction": {
+          "label": "ナレッジグラフ抽出"
+        },
         "kgDocumentClassification": {
           "label": "ナレッジグラフ分類"
         },
-        "other": { "label": "その他" },
-        "unattributed": { "label": "未帰属" }
+        "other": {
+          "label": "その他"
+        },
+        "unattributed": {
+          "label": "未帰属"
+        }
       },
       "filters": {
-        "allModels": { "label": "すべてのモデル" },
-        "allProviders": { "label": "すべてのプロバイダー" }
+        "allModels": {
+          "label": "すべてのモデル"
+        },
+        "allProviders": {
+          "label": "すべてのプロバイダー"
+        }
       },
       "panel": {
         "description": "{start} – {end} · システム使用状況とは、特定のユーザー向けではなく、Onyx がバックグラウンドで実行する LLM 処理です。例として、画像要約、コンテキスト RAG 処理、ナレッジグラフ抽出があります。",
         "emptyDescription": "システム使用状況とは、特定のユーザー向けではなく、Onyx がバックグラウンドで実行する LLM 処理です。例として、画像要約、コンテキスト RAG 処理、ナレッジグラフ抽出があります。",
-        "error": { "title": "この期間のシステム使用状況を読み込めませんでした。" },
+        "error": {
+          "title": "この期間のシステム使用状況を読み込めませんでした。"
+        },
         "title": "システム使用状況"
       },
       "summary": {
-        "spend": { "label": "システム費用" },
-        "tokens": { "label": "合計トークン" },
-        "unattributed": { "label": "未帰属の費用" }
+        "spend": {
+          "label": "システム費用"
+        },
+        "tokens": {
+          "label": "合計トークン"
+        },
+        "unattributed": {
+          "label": "未帰属の費用"
+        }
       },
       "table": {
         "columns": {
-          "category": { "header": "カテゴリー" },
-          "input": { "header": "入力" },
-          "output": { "header": "出力" },
-          "spend": { "header": "費用" },
-          "tokens": { "header": "トークン" }
+          "category": {
+            "header": "カテゴリー"
+          },
+          "input": {
+            "header": "入力"
+          },
+          "output": {
+            "header": "出力"
+          },
+          "spend": {
+            "header": "費用"
+          },
+          "tokens": {
+            "header": "トークン"
+          }
         },
         "empty": {
           "description": "現在のフィルターに一致するシステム使用状況はありません。"
@@ -12849,6 +13072,10 @@
       "previousPage": "前のページ",
       "rangeOfTotal": "<range></range> / <total></total>"
     },
+    "select": {
+      "emptySet": "項目が見つかりません",
+      "invalidOption": "リストから有効なオプションを選択してください"
+    },
     "table": {
       "alwaysShown": "常に表示",
       "ascending": "昇順",
@@ -13341,8 +13568,8 @@
         }
       },
       "items": {
-        "addConnector": {
-          "label": "コネクターを追加"
+        "connectors": {
+          "label": "コネクター"
         },
         "agents": {
           "label": "エージェント"
@@ -13377,8 +13604,8 @@
         "documentSets": {
           "label": "ドキュメントセット"
         },
-        "existingConnectors": {
-          "label": "既存のコネクター"
+        "indexingStatus": {
+          "label": "インデックス状況"
         },
         "exportLogs": {
           "label": "ログのエクスポート"
@@ -13606,20 +13833,6 @@
       },
       "sessionsFilter": {
         "label": "セッション"
-      }
-    },
-    "createConnector": {
-      "advancedStep": {
-        "label": "詳細設定（任意）"
-      },
-      "connectorStep": {
-        "label": "コネクター"
-      },
-      "credentialStep": {
-        "label": "認証情報"
-      },
-      "exitSetup": {
-        "label": "コネクター設定を終了"
       }
     },
     "notifications": {

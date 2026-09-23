@@ -1,10 +1,38 @@
 "use client";
 
-import { useMemo } from "react";
-import { useFederatedConnectors } from "@/lib/hooks";
+import { useEffect, useMemo, useState } from "react";
+import useSWR from "swr";
+import { useTranslations } from "next-intl";
+import { useFederatedConnectors, usePublicCredentials } from "@/lib/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
-import { ValidSources } from "@/lib/types";
+import type {
+  Credential,
+  GmailCredentialJson,
+  GmailServiceAccountCredentialJson,
+  GoogleDriveCredentialJson,
+  GoogleDriveServiceAccountCredentialJson,
+  OAuthDetails,
+} from "@/lib/connectors/types";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import type {
+  ConfigurableSources,
+  CredentialSchemaResponse,
+  FederatedConnectorDetail,
+  ValidSources,
+} from "@/lib/types";
+
+/** The OAuth capabilities of a source: whether it supports OAuth, manual credentials, and any extra fields. */
+export function useOAuthDetails(sourceType: ValidSources) {
+  return useSWR<OAuthDetails>(
+    SWR_KEYS.connectorOAuthDetails(sourceType),
+    errorHandlingFetcher,
+    {
+      shouldRetryOnError: false,
+    }
+  );
+}
 
 /**
  * The source types this workspace has connected — indexed connectors first,
@@ -64,5 +92,156 @@ export function useAvailableSources(): {
     settled:
       !settingsLoading && ccPairsHasLoaded && federatedConnectors !== undefined,
     error: ccPairsError ?? federatedError,
+  };
+}
+
+export const useGmailCredentials = (connector: string) => {
+  const {
+    data: credentialsData,
+    isLoading: isCredentialsLoading,
+    error: credentialsError,
+    refreshCredentials,
+  } = usePublicCredentials();
+
+  const gmailPublicCredential: Credential<GmailCredentialJson> | undefined =
+    credentialsData?.find(
+      (credential) =>
+        credential.credential_json?.google_tokens &&
+        credential.admin_public &&
+        credential.source === connector
+    );
+
+  const gmailServiceAccountCredential:
+    | Credential<GmailServiceAccountCredentialJson>
+    | undefined = credentialsData?.find(
+    (credential) =>
+      credential.credential_json?.google_service_account_key &&
+      credential.admin_public &&
+      credential.source === connector
+  );
+
+  const liveGmailCredential =
+    gmailPublicCredential || gmailServiceAccountCredential;
+
+  return {
+    liveGmailCredential: liveGmailCredential,
+  };
+};
+
+export const useGoogleDriveCredentials = (connector: string) => {
+  const { data: credentialsData } = usePublicCredentials();
+
+  const googleDrivePublicCredential:
+    | Credential<GoogleDriveCredentialJson>
+    | undefined = credentialsData?.find(
+    (credential) =>
+      credential.credential_json?.google_tokens &&
+      credential.admin_public &&
+      credential.source === connector
+  );
+
+  const googleDriveServiceAccountCredential:
+    | Credential<GoogleDriveServiceAccountCredentialJson>
+    | undefined = credentialsData?.find(
+    (credential) =>
+      credential.credential_json?.google_service_account_key &&
+      credential.admin_public &&
+      credential.source === connector
+  );
+
+  const liveGDriveCredential =
+    googleDrivePublicCredential || googleDriveServiceAccountCredential;
+
+  return {
+    liveGDriveCredential: liveGDriveCredential,
+  };
+};
+
+interface UseFederatedConnectorResult {
+  sourceType: ConfigurableSources | null;
+  connectorData: FederatedConnectorDetail | null;
+  credentialSchema: CredentialSchemaResponse | null;
+  isLoading: boolean;
+  error: string | null;
+}
+
+export function useFederatedConnector(
+  connectorId: string
+): UseFederatedConnectorResult {
+  const t = useTranslations("admin.federated");
+  const [sourceType, setSourceType] = useState<ConfigurableSources | null>(
+    null
+  );
+  const [connectorData, setConnectorData] =
+    useState<FederatedConnectorDetail | null>(null);
+  const [credentialSchema, setCredentialSchema] =
+    useState<CredentialSchemaResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        // First, fetch connector details to get the source type
+        const connectorResponse = await fetch(`/api/federated/${connectorId}`);
+
+        if (!connectorResponse.ok) {
+          throw new Error(
+            `Failed to fetch connector: ${connectorResponse.statusText}`
+          );
+        }
+
+        const connectorData: FederatedConnectorDetail =
+          await connectorResponse.json();
+
+        // Extract source type from the federated source string (remove 'federated_' prefix)
+        const extractedSourceType = connectorData.source.replace(
+          /^federated_/,
+          ""
+        ) as ConfigurableSources;
+
+        // Now fetch credential schema and set state in parallel
+        const schemaPromise = fetch(
+          `/api/federated/sources/federated_${extractedSourceType}/credentials/schema`
+        );
+
+        // Set the data we already have
+        setConnectorData(connectorData);
+        setSourceType(extractedSourceType);
+
+        // Wait for schema fetch to complete
+        const schemaResponse = await schemaPromise;
+
+        if (!schemaResponse.ok) {
+          throw new Error(
+            `Failed to fetch schema: ${schemaResponse.statusText}`
+          );
+        }
+
+        const schemaData: CredentialSchemaResponse =
+          await schemaResponse.json();
+        setCredentialSchema(schemaData);
+      } catch (error) {
+        console.error("Error fetching federated connector data:", error);
+        setError(t("error.loadFailed", { details: String(error) }));
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (connectorId) {
+      fetchData();
+    }
+  }, [connectorId, t]);
+
+  return {
+    sourceType,
+    connectorData,
+    credentialSchema,
+    isLoading,
+    error,
   };
 }

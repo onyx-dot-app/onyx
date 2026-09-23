@@ -35,7 +35,6 @@ from onyx.chat.prompt_utils import (
     get_default_base_system_prompt,
     process_prompt_template,
 )
-from onyx.chat.search_receipts import maybe_append_search_receipt
 from onyx.chat.token_budget import resolve_chat_token_budget
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
@@ -830,8 +829,6 @@ def run_llm_loop(
     include_citations: bool = True,
     all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
     inject_memories_in_prompt: bool = True,
-    # Append retrieval receipts to internal search responses (see onyx.chat.search_receipts).
-    enable_search_receipts: bool = False,
 ) -> None:
     with trace(
         "run_llm_loop",
@@ -841,10 +838,8 @@ def run_llm_loop(
             user_id=user_identity.user_id if user_identity else None,
         ).model_dump(),
     ):
-        # Fix some LiteLLM issues,
-        from onyx.llm.litellm_singleton.config import (
-            initialize_litellm,
-        )  # Here for lazy load LiteLLM
+        # Here for lazy load LiteLLM. initialize_litellm runs once per process.
+        from onyx.llm.litellm_singleton.config import initialize_litellm
 
         initialize_litellm()
 
@@ -911,9 +906,6 @@ def run_llm_loop(
         has_called_search_tool: bool = False
         code_interpreter_file_generated: bool = False
         fallback_extraction_attempted: bool = False
-        # Candidate document ids seen by earlier searches in this user turn; receipts
-        # report new vs repeated candidates against it. Never shared across turns.
-        seen_search_document_ids: set[str] = set()
         citation_mapping: dict[int, str] = {}  # Maps citation_num -> document_id/URL
 
         # Fetch this in a short-lived session so the long-running stream loop does
@@ -1213,7 +1205,6 @@ def run_llm_loop(
                 chat_files=chat_files,
                 url_snippet_map=extract_url_snippet_map(gathered_documents or []),
                 inject_memories_in_prompt=inject_memories_in_prompt,
-                include_search_retrieval_candidates=enable_search_receipts,
             )
             tool_responses = parallel_tool_call_results.tool_responses
             citation_mapping = parallel_tool_call_results.updated_citation_mapping
@@ -1259,15 +1250,6 @@ def run_llm_loop(
                 if not tool:
                     raise ValueError(
                         f"Tool '{tool_call.tool_name}' not found in tools list"
-                    )
-
-                # Responses are enriched in this sequential order, so an earlier
-                # sibling in the same batch counts as already seen. This runs before
-                # the response is persisted or added to history.
-                if enable_search_receipts and isinstance(tool, SearchTool):
-                    maybe_append_search_receipt(
-                        tool_response=tool_response,
-                        seen_document_ids=seen_search_document_ids,
                     )
 
                 # Extract search_docs if this is a search tool response

@@ -961,7 +961,16 @@ def mark_cc_pairs_deleting_if_still_wont_port__no_commit(
         .values(status=ConnectorCredentialPairStatus.DELETING)
         .returning(ConnectorCredentialPair.id)
     )
-    return list(db_session.execute(stmt).scalars().all())
+    transitioned_ids = list(db_session.execute(stmt).scalars().all())
+    # Notifications have no foreign key to the cc_pair, so deleting one cascades nothing.
+    # Without this the INVALID alert outlives the connector it points at, forever.
+    for cc_pair_id in transitioned_ids:
+        clear_connector_alerts__no_commit(
+            db_session=db_session,
+            cc_pair_id=cc_pair_id,
+            notif_type=NotificationType.CONNECTOR_INVALID,
+        )
+    return transitioned_ids
 
 
 def fetch_connector_credential_pair_for_connector(
