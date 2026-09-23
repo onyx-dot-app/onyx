@@ -4,15 +4,7 @@ import { useMemo, useState } from "react";
 import { Content } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { useFormatter, useTranslations } from "next-intl";
-import {
-  Button,
-  Card,
-  Divider,
-  IconLoader,
-  Tag,
-  Text,
-  Tooltip,
-} from "@opal/components";
+import { Button, Card, Divider, Tag, Text, Tooltip } from "@opal/components";
 import {
   SvgAlertCircle,
   SvgCheckCircle,
@@ -93,19 +85,14 @@ const DETAIL_COLORS: Record<CapabilityCheckStatus, TextColor> = {
 // ProgressRing — passed and failed shares of the total, as arcs
 // ---------------------------------------------------------------------------
 
-interface ProgressRingProps extends IconProps {
+interface ProgressRingProps extends Pick<IconProps, "className"> {
   passed: number;
   failed: number;
   total: number;
 }
 
-function ProgressRing({
-  passed,
-  failed,
-  total,
-  size = 24,
-  className,
-}: ProgressRingProps) {
+function ProgressRing({ passed, failed, total, className }: ProgressRingProps) {
+  const size = 20;
   const strokeWidth = 2.5;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -328,20 +315,17 @@ export function ConnectorsCheckCard({
   // while a run is in flight.
   const HeaderIcon = useMemo<IconFunctionComponent>(
     () =>
-      function HeaderIcon({ size, className }: IconProps) {
-        return isRunning ? (
-          <IconLoader size={size} color="text-03" />
-        ) : (
+      function HeaderIcon({ className }: IconProps) {
+        return (
           <ProgressRing
             passed={passed}
             failed={failed}
             total={total}
-            size={size}
             className={className}
           />
         );
       },
-    [isRunning, passed, failed, total]
+    [passed, failed, total]
   );
 
   return (
@@ -391,11 +375,7 @@ export function ConnectorsCheckCard({
         </div>
 
         {!collapsed &&
-          (loading ? (
-            <div className="flex justify-center p-4">
-              <IconLoader />
-            </div>
-          ) : hasReport ? (
+          (hasReport ? (
             <div className="flex flex-col gap-2">
               {groups.map((group) => (
                 <CheckGroup
