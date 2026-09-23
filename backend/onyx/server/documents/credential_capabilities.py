@@ -21,7 +21,13 @@ from onyx.configs.constants import (
     OnyxCeleryQueues,
     OnyxCeleryTask,
 )
-from onyx.connectors.capability_checks.models import CredentialCapabilityReport
+from onyx.connectors.capability_checks.models import (
+    CapabilityCheck,
+    CapabilityCheckResult,
+    CredentialCapability,
+    CredentialCapabilityReport,
+)
+from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.capability_checks.runner import (
     capability_check_run_ceiling_seconds,
     capability_check_run_stale_after,
@@ -58,8 +64,44 @@ logger = setup_logger()
 router = APIRouter(prefix="/manage", dependencies=[Depends(require_vector_db)])
 
 
+class CapabilityCheckSpec(BaseModel):
+    """One registered check: what a run for its source will report on.
+
+    The static half of a result row (``CapabilityCheckResult`` adds the outcome).
+    """
+
+    capability: CredentialCapability
+    check_id: str
+    display_name: str
+    required: bool
+    requires_connector_instance: bool
+    requires_connector_config: bool
+    is_fallback: bool
+    remediation: str | None
+    docs_link: str | None
+
+    @classmethod
+    def from_check(cls, check: CapabilityCheck) -> "CapabilityCheckSpec":
+        return cls(
+            capability=check.capability,
+            check_id=check.check_id,
+            display_name=check.display_name,
+            required=check.required,
+            requires_connector_instance=check.requires_connector_instance,
+            requires_connector_config=check.requires_connector_config,
+            is_fallback=check.is_fallback,
+            remediation=check.remediation,
+            docs_link=check.docs_link,
+        )
+
+
 class CapabilityReportSnapshot(BaseModel):
-    """One stored report row; ``report`` is the last completed run's content."""
+    """One stored report row; ``report`` is the last completed run's content.
+
+    ``in_progress_results`` is the running attempt's results so far, in run
+    order, or None when no attempt has recorded a result since the row was last
+    marked or completed.
+    """
 
     credential_id: int
     connector_id: int | None
@@ -69,6 +111,7 @@ class CapabilityReportSnapshot(BaseModel):
     run_started_at: datetime | None
     connector_config_hash: str | None
     report: CredentialCapabilityReport | None
+    in_progress_results: list[CapabilityCheckResult] | None
     time_updated: datetime
 
     @classmethod
@@ -84,6 +127,14 @@ class CapabilityReportSnapshot(BaseModel):
             report=(
                 CredentialCapabilityReport.model_validate(row.report)
                 if row.report is not None
+                else None
+            ),
+            in_progress_results=(
+                [
+                    CapabilityCheckResult.model_validate(result)
+                    for result in row.in_progress_results
+                ]
+                if row.in_progress_results is not None
                 else None
             ),
             time_updated=row.time_updated,
@@ -257,6 +308,26 @@ def trigger_capability_check(
             "Could not enqueue the capability check run; try again shortly.",
         )
     return snapshot
+
+
+@router.get("/admin/capability-checks")
+def list_capability_checks(
+    source: DocumentSource,
+    _user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+) -> list[CapabilityCheckSpec]:
+    """Returns the checks a run for ``source`` reports on, in run order.
+
+    Static per build: read from the registry, not from any stored row, so it
+    needs no credential and no report. A mirrored check (one check_id under
+    several capabilities) appears once per capability, matching the result rows
+    a run writes. Lets a client render every expected check before the first
+    run and while one is in flight.
+    """
+    return [
+        CapabilityCheckSpec.from_check(check) for check in get_capability_checks(source)
+    ]
 
 
 @router.get("/admin/credential/{credential_id}/capability-report")

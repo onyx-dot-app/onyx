@@ -96,10 +96,13 @@ def test_credential_scoped_run_completes_and_persists_a_report(
     assert accepted["trigger"] == CapabilityCheckTrigger.MANUAL.value
     assert accepted["run_started_at"] is not None
     assert accepted["report"] is None
+    assert accepted["in_progress_results"] is None
     completed = _poll_until_run_status(
         credential.id, None, admin_user.headers, CapabilityReportRunStatus.COMPLETED
     )
     assert completed["connector_config_hash"] is None
+    # Progress never outlives its run: the completion write clears it.
+    assert completed["in_progress_results"] is None
     report = completed["report"]
     assert report["connector_id"] is None
     assert report["trigger"] == CapabilityCheckTrigger.MANUAL.value

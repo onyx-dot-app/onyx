@@ -26,6 +26,7 @@ from onyx.db.credential_capability import (
     mark_capability_report_running,
     mark_capability_run_failed,
     mark_stale_capability_runs_failed,
+    record_capability_run_progress,
     upsert_completed_capability_report,
     upsert_completed_capability_report_unless_granular,
 )
@@ -929,6 +930,225 @@ def test_recorder_write_clears_the_attempt_id(db_session: Session) -> None:
     assert row is not None
     assert row.report is not None
     assert row.report["check_results"][0]["check_id"] == "fallback"
+
+
+def _result(check_id: str) -> CapabilityCheckResult:
+    return CapabilityCheckResult(
+        capability=CredentialCapability.INDEXING,
+        check_id=check_id,
+        display_name="Test check",
+        required=True,
+        status=CapabilityCheckStatus.PASSED,
+    )
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_progress_lands_for_the_owning_attempt_and_is_replaced_wholesale(
+    db_session: Session,
+) -> None:
+    """
+    Verifies the progress writer: each write replaces the list on the attempt's
+    row while the RUNNING mark and the previous report stay untouched.
+    """
+    # Precondition.
+    cc_pair = make_cc_pair(db_session, source=DocumentSource.SLACK, commit=False)
+    credential_id = cc_pair.credential_id
+    upsert_completed_capability_report(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        source=DocumentSource.SLACK,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        report=_report(credential_id, check_id="previous"),
+    )
+    marked = mark_capability_report_running(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        source=DocumentSource.SLACK,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        active_within=timedelta(hours=1),
+    )
+    assert marked is not None
+    assert marked.in_progress_results is None
+    run_id = marked.run_id
+    assert run_id is not None
+
+    # Under test.
+    first = record_capability_run_progress(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        run_id=run_id,
+        results=[_result("first")],
+    )
+    second = record_capability_run_progress(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        run_id=run_id,
+        results=[_result("first"), _result("second")],
+    )
+
+    # Postcondition.
+    assert first is True
+    assert second is True
+    db_session.expire_all()
+    row = get_capability_report_row(db_session, credential_id, None)
+    assert row is not None
+    assert row.run_status == CapabilityReportRunStatus.RUNNING
+    assert row.in_progress_results is not None
+    assert [result["check_id"] for result in row.in_progress_results] == [
+        "first",
+        "second",
+    ]
+    assert row.report is not None
+    assert row.report["check_results"][0]["check_id"] == "previous"
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_progress_is_fenced_to_the_owning_attempt(db_session: Session) -> None:
+    """
+    Verifies a superseded attempt's progress never lands on its successor's
+    row, and that a NULL stored ``run_id`` matches no attempt.
+    """
+    # Precondition.
+    # A stale attempt reclaimed by a fresh one.
+    cc_pair = make_cc_pair(db_session, source=DocumentSource.GITLAB, commit=False)
+    credential_id = cc_pair.credential_id
+    old = mark_capability_report_running(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        source=DocumentSource.GITLAB,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        active_within=timedelta(hours=1),
+    )
+    assert old is not None
+    old_run_id = old.run_id
+    assert old_run_id is not None
+    old.run_started_at = datetime.now(timezone.utc) - timedelta(hours=3)
+    db_session.flush()
+    successor = mark_capability_report_running(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        source=DocumentSource.GITLAB,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        active_within=timedelta(hours=1),
+    )
+    assert successor is not None
+
+    # Under test.
+    landed = record_capability_run_progress(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        run_id=old_run_id,
+        results=[_result("old")],
+    )
+
+    # Postcondition.
+    assert landed is False
+    db_session.expire_all()
+    row = get_capability_report_row(db_session, credential_id, None)
+    assert row is not None
+    assert row.in_progress_results is None
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_progress_is_cleared_by_completion_and_by_the_next_mark(
+    db_session: Session,
+) -> None:
+    """
+    Verifies progress never outlives its run: the completion write and a fresh
+    RUNNING mark both null the column.
+    """
+    # Precondition.
+    cc_pair = make_cc_pair(db_session, source=DocumentSource.SLACK, commit=False)
+    credential_id = cc_pair.credential_id
+    marked = mark_capability_report_running(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        source=DocumentSource.SLACK,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        active_within=timedelta(hours=1),
+    )
+    assert marked is not None
+    run_id = marked.run_id
+    assert run_id is not None
+    record_capability_run_progress(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        run_id=run_id,
+        results=[_result("partial")],
+    )
+
+    # Under test (completion).
+    completed = upsert_completed_capability_report(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        source=DocumentSource.SLACK,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        report=_report(credential_id, check_id="full"),
+        run_id=run_id,
+    )
+
+    # Postcondition.
+    assert completed is not None
+    assert completed.in_progress_results is None
+    assert completed.report is not None
+    assert completed.report["check_results"][0]["check_id"] == "full"
+
+    # Precondition (a retired attempt leaves its progress readable).
+    remarked = mark_capability_report_running(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        source=DocumentSource.SLACK,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        active_within=timedelta(hours=1),
+    )
+    assert remarked is not None
+    remarked_run_id = remarked.run_id
+    assert remarked_run_id is not None
+    record_capability_run_progress(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        run_id=remarked_run_id,
+        results=[_result("died_after_this")],
+    )
+    mark_capability_run_failed(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        run_id=remarked_run_id,
+    )
+    db_session.expire_all()
+    failed_row = get_capability_report_row(db_session, credential_id, None)
+    assert failed_row is not None
+    assert failed_row.run_status == CapabilityReportRunStatus.FAILED_TO_RUN
+    assert failed_row.in_progress_results is not None
+
+    # Under test (the next mark).
+    remarked.run_started_at = datetime.now(timezone.utc) - timedelta(hours=3)
+    db_session.flush()
+    fresh = mark_capability_report_running(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        source=DocumentSource.SLACK,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        active_within=timedelta(hours=1),
+    )
+
+    # Postcondition.
+    assert fresh is not None
+    assert fresh.in_progress_results is None
 
 
 @pytest.mark.usefixtures("tenant_context")
