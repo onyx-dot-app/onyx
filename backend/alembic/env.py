@@ -1,4 +1,5 @@
 from onyx.db.engine.iam_auth import make_provide_iam_token_async
+from onyx.db.engine.migration_lock import schema_migration_lock
 from onyx.db.engine.pg_ssl import create_pg_ssl_context
 from onyx.configs.app_configs import USE_IAM_AUTH
 from onyx.configs.app_configs import POSTGRES_HOST
@@ -317,13 +318,14 @@ async def _migrate_schemas(
             schema,
         )
         try:
-            async with engine.connect() as connection:
-                await connection.run_sync(
-                    do_run_migrations,
-                    schema_name=schema,
-                    create_schema=create_schema,
-                )
-                await connection.commit()
+            async with schema_migration_lock(engine, schema):
+                async with engine.connect() as connection:
+                    await connection.run_sync(
+                        do_run_migrations,
+                        schema_name=schema,
+                        create_schema=create_schema,
+                    )
+                    await connection.commit()
         except Exception as e:
             logger.error("Error migrating schema %s: %s", schema, e)
             if not continue_on_error:
