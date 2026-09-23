@@ -235,7 +235,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
         self,
         tool_id: int,
         emitter: Emitter,
-        chat_session_id: UUID | None = None,
+        chat_session_id: UUID,
     ) -> None:
         super().__init__(emitter=emitter)
         self._id = tool_id

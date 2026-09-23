@@ -63,10 +63,10 @@ class ImageGenerationTool(Tool[None]):
         image_generation_credentials: ImageGenerationProviderCredentials,
         tool_id: int,
         emitter: Emitter,
+        chat_session_id: UUID,
         model: str = IMAGE_MODEL_NAME,
         provider: str = IMAGE_MODEL_PROVIDER,
         num_imgs: int = 1,
-        chat_session_id: UUID | None = None,
     ) -> None:
         super().__init__(emitter=emitter)
         self.model = model

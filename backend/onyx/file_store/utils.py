@@ -239,20 +239,17 @@ def validate_user_files_ownership(
     return current_user_files
 
 
-def chat_image_gen_metadata(chat_session_id: UUID | None) -> dict[str, Any] | None:
+def chat_image_gen_metadata(chat_session_id: UUID) -> dict[str, Any]:
     """Stamp the owning chat session onto a generated file.
 
     `access.py:user_can_access_chat_file` scopes a `CHAT_IMAGE_GEN` file to the
-    users who may read this session. A file saved without the stamp stays
-    readable by any authenticated user, which is the pre-existing behaviour kept
-    for rows written before this was added.
+    users who may read this session. Only rows written before stamping existed
+    lack it; new writes must always carry it.
     """
-    if chat_session_id is None:
-        return None
     return {CHAT_SESSION_ID_FILE_METADATA_KEY: str(chat_session_id)}
 
 
-def save_file_from_url(url: str, chat_session_id: UUID | None = None) -> str:
+def save_file_from_url(url: str, chat_session_id: UUID) -> str:
     response = requests.get(url)
     response.raise_for_status()
 
@@ -268,9 +265,7 @@ def save_file_from_url(url: str, chat_session_id: UUID | None = None) -> str:
     return file_id
 
 
-def save_file_from_base64(
-    base64_string: str, chat_session_id: UUID | None = None
-) -> str:
+def save_file_from_base64(base64_string: str, chat_session_id: UUID) -> str:
     file_store = get_default_file_store()
     file_id = file_store.save_file(
         content=BytesIO(base64.b64decode(base64_string)),
@@ -283,9 +278,9 @@ def save_file_from_base64(
 
 
 def save_file(
-    url: str | None = None,
-    base64_data: str | None = None,
-    chat_session_id: UUID | None = None,
+    url: str | None,
+    base64_data: str | None,
+    chat_session_id: UUID,
 ) -> str:
     """Save a file from either a URL or base64 encoded string.
 
@@ -315,13 +310,13 @@ def save_file(
 def save_files(
     urls: list[str],
     base64_files: list[str],
-    chat_session_id: UUID | None = None,
+    chat_session_id: UUID,
 ) -> list[str]:
     # NOTE: be explicit about typing so that if we change things, we get notified
     funcs: list[
         tuple[
-            Callable[[str | None, str | None, UUID | None], str],
-            tuple[str | None, str | None, UUID | None],
+            Callable[[str | None, str | None, UUID], str],
+            tuple[str | None, str | None, UUID],
         ]
     ] = [(save_file, (url, None, chat_session_id)) for url in urls] + [
         (save_file, (None, base64_file, chat_session_id))
