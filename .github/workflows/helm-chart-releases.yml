@@ -94,7 +94,7 @@ jobs:
 
           for tag in $candidates; do
             published=true
-            for repo in onyx-backend onyx-web-server onyx-model-server; do
+            for repo in onyx-backend onyx-web-server onyx-model-server sandbox; do
               code="$(curl -sS -o /dev/null -w '%{http_code}' --retry 3 \
                 "https://hub.docker.com/v2/namespaces/onyxdotapp/repositories/${repo}/tags/${tag}")"
               case "$code" in

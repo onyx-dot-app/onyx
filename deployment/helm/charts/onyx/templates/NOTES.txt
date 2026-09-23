@@ -2,7 +2,7 @@ Onyx {{ include "onyx.imageTag" (list . dict) }} is deployed as release "{{ .Rel
 {{- $pg := .Values.auth.postgresql }}
 {{- $redis := .Values.auth.redis }}
 {{- $pgDefault := and (ne (toString $pg.enabled) "false") (empty $pg.existingSecret) (eq (toString $pg.values.password) "postgres") }}
-{{- $redisDefault := and (ne (toString $redis.enabled) "false") (empty $redis.existingSecret) (eq (toString $redis.values.redis_password) "password") }}
+{{- $redisDefault := and .Values.redis.enabled (ne (toString $redis.enabled) "false") (empty $redis.existingSecret) (eq (toString $redis.values.redis_password) "password") }}
 {{- if or $pgDefault $redisDefault }}
 
 WARNING: this release uses the chart's default credentials:
