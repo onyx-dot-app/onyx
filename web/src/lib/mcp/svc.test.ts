@@ -2,7 +2,7 @@ import {
   getMCPUserOAuthNavigationUrl,
   MCPUserOAuthStartResponse,
   startMCPUserOAuth,
-} from "@/lib/tools/svc";
+} from "@/lib/mcp/svc";
 
 describe("MCP OAuth start", () => {
   afterEach(() => {

@@ -35,14 +35,14 @@ import {
   MCPServer,
   MCPServersResponse,
   MCPAuthTemplate,
-} from "@/lib/tools/types";
+} from "@/lib/mcp/types";
 import { PerUserAuthConfig } from "@/sections/actions/PerUserAuthConfig";
 import {
   getMCPUserOAuthNavigationUrl,
   MCPUserOAuthStartResponse,
   updateMCPServerStatus,
   upsertMCPServer,
-} from "@/lib/tools/svc";
+} from "@/lib/mcp/svc";
 import { toast } from "@opal/layouts";
 import { SvgArrowExchange } from "@opal/icons";
 import { useOAuthPassThroughEnabled } from "@/lib/auth/hooks";
