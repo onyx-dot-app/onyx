@@ -41,7 +41,7 @@ SCALE_TEST_SITE_URL = "https://danswerai.sharepoint.com/sites/OnyxTesting2"
 PERMISSION_SYNC_SITE_URL = "https://danswerai.sharepoint.com/sites/Permisisonsync"
 # SharePoint strips "&" from the library URL, so this library lives at "RD Library".
 STRIPPED_URL_LIBRARY_NAME = "R&D Library"
-STRIPPED_URL_LIBRARY_FOLDER = "R&D folder"
+STRIPPED_URL_LIBRARY_FOLDER = "R&D Folder"
 STRIPPED_URL_LIBRARY_SUBFOLDER = "Q1 & Q2"
 
 

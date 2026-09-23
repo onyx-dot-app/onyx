@@ -32,6 +32,7 @@ from onyx.connectors.sharepoint.connector import (
     SharepointConnector,
     SharepointConnectorCheckpoint,
     SiteDescriptor,
+    SiteDrive,
 )
 
 SITE_URL = "https://example.sharepoint.com/sites/sample"
@@ -97,9 +98,9 @@ def _setup_connector(monkeypatch: pytest.MonkeyPatch) -> SharepointConnector:
     def fake_resolve_drive(
         self: SharepointConnector,  # noqa: ARG001
         site_descriptor: SiteDescriptor,  # noqa: ARG001
-        drive_name: str,  # noqa: ARG001
-    ) -> tuple[str, str | None]:
-        return (DRIVE_ID, DRIVE_WEB_URL)
+        drive_name: str,
+    ) -> SiteDrive:
+        return SiteDrive(drive_id=DRIVE_ID, name=drive_name, web_url=DRIVE_WEB_URL)
 
     def fake_get_access_token(self: SharepointConnector) -> str:  # noqa: ARG001
         return "fake-access-token"
