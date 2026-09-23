@@ -354,7 +354,19 @@ def handle_regular_answer(
                     remove=True,
                     client=client,
                 )
-        return True
+        # The budget reply is the answer, as with a persona access denial: no
+        # feedback reminder, and not a failure the listener apologizes for.
+        if feedback_reminder_id and message_info.sender_id:
+            try:
+                client.chat_deleteScheduledMessage(
+                    channel=message_info.sender_id,
+                    scheduled_message_id=feedback_reminder_id,
+                )
+            except Exception:
+                logger.exception(
+                    "Unable to delete scheduled feedback reminder after Slack budget reply"
+                )
+        return False
 
     try:
         filters = BaseFilters(
