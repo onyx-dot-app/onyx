@@ -219,10 +219,13 @@ messages such as `TAB_READING_ENABLED`.
    directly, and the extension's side panel is the web app in an iframe. A
    backend contract change to those two endpoints, or to the streaming
    packet shape, reaches all three simultaneously.
-7. **The panel iframe's `postMessage` channel is origin-locked in both
-   directions.** `panel.js` computes `getIframeOrigin()` from `iframe.src`
-   and never falls back to `"*"`; a `postMessage` failure here must fail
-   closed (reject the message), not silently widen to any origin.
+7. **The extension pages' `postMessage` channels are origin-locked in both
+   directions.** `panel.js` computes `getIframeOrigin()` from `iframe.src`,
+   and the new tab page (`onyx_home.js`) does the same with
+   `getOnyxOrigin(iframe)`. Neither falls back to `"*"`. A `postMessage`
+   failure here must fail closed (reject the message), not silently widen to
+   any origin. Some new tab handlers (`PREFERENCES_UPDATED`, `LOAD_NEW_PAGE`)
+   have no sender in the web app, so the origin check is their only guard.
 
 ---
 
@@ -379,7 +382,12 @@ repository. Verification below is manual.
   Web Store review flag and a bigger blast radius than the feature set
   implies; narrowing it would need per-origin activation (e.g.
   `activeTab`-only for selection, explicit opt-in for tab reading) rather
-  than a standing broad grant.
+  than a standing broad grant. Before you remove the host permission, check
+  that the embedded Onyx iframe still sends its `SameSite=Lax` auth cookie.
+  Chrome treats a request from an extension page to an origin the extension
+  has host permission for as same-site, and the Onyx domain is user-set, so
+  the likely replacement is `optional_host_permissions` plus a
+  `chrome.permissions.request` for that one origin when the user saves it.
 - **The widget's own README states the exposure explicitly**
   (`widget/README.md`'s "Security Note"): the API key is visible client-side
   by construction, so a full-access key embedded in a widget is a live
