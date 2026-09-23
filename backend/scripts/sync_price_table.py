@@ -144,6 +144,72 @@ def _normalize_model(entry: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+# Entry fields models.dev publishes that we deliberately do not vendor. New
+# upstream fields appear in the unmapped-field report instead of being
+# silently dropped — that report is how we learn the schema grew.
+_IGNORED_ENTRY_FIELDS = {
+    "id",
+    "description",
+    "last_updated",
+    "reasoning_options",
+    "knowledge",
+    "interleaved",
+    "provider",
+    "experimental",
+}
+
+# Minimum fraction of entries expected to carry each field, measured against
+# the real feed (~95% cost, ~100% limit). If models.dev renames or drops a
+# field the coverage collapses and the sync fails rather than vendoring a
+# gutted table.
+_MIN_FIELD_COVERAGE = {
+    ("cost", "input"): 0.80,
+    ("cost", "output"): 0.80,
+    ("limit", "context"): 0.90,
+}
+
+
+def _check_source_schema(api: dict[str, Any]) -> None:
+    """Fail loudly when the upstream payload's shape drifts from what the
+    transform expects; report fields we do not map so additions surface."""
+    coverage = {(section, field): 0 for section, field in _MIN_FIELD_COVERAGE}
+    unmapped: dict[str, int] = {}
+    total = 0
+    for slug, provider in api.items():
+        assert isinstance(provider.get("models"), dict), (
+            f"upstream entry {slug!r} has no 'models' dict — schema changed?"
+        )
+        for entry in provider["models"].values():
+            if not isinstance(entry, dict):
+                continue
+            total += 1
+            for section, field in _MIN_FIELD_COVERAGE:
+                value = entry.get(section)
+                if isinstance(value, dict) and value.get(field) is not None:
+                    coverage[(section, field)] += 1
+            for key in entry:
+                if (
+                    key not in _SCALAR_FIELDS
+                    and key not in _DICT_FIELDS
+                    and key not in _IGNORED_ENTRY_FIELDS
+                ):
+                    unmapped[key] = unmapped.get(key, 0) + 1
+
+    assert total > 0, "upstream catalog contained no model entries"
+    for (section, field), minimum in _MIN_FIELD_COVERAGE.items():
+        ratio = coverage[(section, field)] / total
+        assert ratio >= minimum, (
+            f"only {ratio:.0%} of entries carry {section}.{field} "
+            f"(expected ≥{minimum:.0%}) — upstream renamed or dropped the field"
+        )
+    if unmapped:
+        print(
+            "upstream fields not vendored: "
+            + ", ".join(f"{k} ({n} models)" for k, n in sorted(unmapped.items())),
+            file=sys.stderr,
+        )
+
+
 def _build_provider_section(
     api: dict[str, Any], slugs: list[str]
 ) -> dict[str, Any] | None:
@@ -175,6 +241,8 @@ def _build_provider_section(
 
 
 def build_price_table(api: dict[str, Any]) -> dict[str, Any]:
+    _check_source_schema(api)
+
     providers: dict[str, Any] = {}
     missing: list[str] = []
     for onyx_key, slugs in PROVIDER_MAP.items():
@@ -236,9 +304,11 @@ def main() -> int:
         assert args.source_url.startswith("https://"), (
             f"refusing non-https source: {args.source_url}"
         )
-        with urllib.request.urlopen(  # noqa: S310 — https enforced above
-            args.source_url, timeout=60
-        ) as resp:
+        # models.dev's edge blocks the default Python-urllib UA with a 403.
+        req = urllib.request.Request(  # noqa: S310
+            args.source_url, headers={"User-Agent": "onyx-price-sync"}
+        )
+        with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310
             api = json.loads(resp.read())
 
     outputs = _render_outputs(build_price_table(api))
