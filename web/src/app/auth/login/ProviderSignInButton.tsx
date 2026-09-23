@@ -14,6 +14,10 @@
  * Like SignInButton, this renders on the login page which is hit by headless
  * SSR requests, so browser globals stay out of the render path and live only in
  * startSignIn, reached from the effect and the click handler.
+ *
+ * IdPs refuse to render inside a frame, so when this page is embedded (the
+ * Chrome extension's new tab page) the IdP opens in a new tab, falling back to
+ * the top-level window if the popup is blocked.
  */
 
 "use client";
@@ -30,6 +34,17 @@ interface ProviderSignInButtonProps {
   nextUrl: string | null;
   /** Start the flow on mount as if the button had been clicked. */
   autoStart?: boolean;
+}
+
+/** Returns true when the IdP opened in a new tab and this page stays put. */
+function navigateToIdp(url: string): boolean {
+  if (window.top === window.self || !window.top) {
+    window.location.href = url;
+    return false;
+  }
+  if (window.open(url, "_blank")) return true;
+  window.top.location.href = url;
+  return false;
 }
 
 export default function ProviderSignInButton({
@@ -64,7 +79,7 @@ export default function ProviderSignInButton({
       if (!data.authorization_url) {
         throw new Error(t("login.ssoMissingAuthUrl.error"));
       }
-      window.location.href = data.authorization_url;
+      if (navigateToIdp(data.authorization_url)) setIsRedirecting(false);
     } catch (exc) {
       // Re-enable the button so the user can retry.
       setError(exc instanceof Error ? exc.message : String(exc));

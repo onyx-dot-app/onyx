@@ -66,7 +66,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   const searchParams = useSearchParams();
   // Shared with the tools popover in AppInputBar below. Mounted by the route.
-  const { user, authTypeMetadata } = useUser();
+  const { user, authTypeMetadata, refreshUser } = useUser();
 
   // Chat sessions
   const { refreshChatSessions } = useChatSessions();
@@ -219,6 +219,23 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const anchorSelector = anchorNodeId ? `#message-${anchorNodeId}` : undefined;
 
   useSendMessageToParent();
+
+  // Sign-in from this embedded page happens in another tab, so re-check the
+  // session whenever the user comes back to this one.
+  useEffect(() => {
+    if (user) return;
+
+    function handleVisible() {
+      if (document.visibilityState === "visible") void refreshUser();
+    }
+
+    document.addEventListener("visibilitychange", handleVisible);
+    window.addEventListener("focus", handleVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisible);
+      window.removeEventListener("focus", handleVisible);
+    };
+  }, [user, refreshUser]);
 
   // Listen for tab URL updates from the Chrome extension
   useEffect(() => {
