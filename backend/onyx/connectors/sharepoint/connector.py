@@ -1675,6 +1675,17 @@ class SharepointConnector(
         """
         return f"{site_url}/{drive_name}/{folder_path}"
 
+    def _build_folder_server_relative_path(
+        self, drive_web_url: str, folder_path: str
+    ) -> str:
+        """Build the decoded server-relative path SharePoint uses to find a folder.
+
+        Uses the library's web URL, not its display name: SharePoint strips
+        characters like "&" from the library URL, and renames keep the old URL.
+        """
+        library_path = unquote(urlsplit(drive_web_url).path).rstrip("/")
+        return f"{library_path}/{unquote(folder_path)}"
+
     def _yield_site_hierarchy_node(
         self,
         site_descriptor: SiteDescriptor,
@@ -1791,7 +1802,9 @@ class SharepointConnector(
                     self.graph_client,
                     checkpoint.permission_cache,
                     HierarchyNodeType.FOLDER,
-                    folder_url=folder_url,
+                    folder_server_relative_path=self._build_folder_server_relative_path(
+                        drive_web_url, current_path
+                    ),
                 )
 
             # Determine parent URL
