@@ -1717,6 +1717,12 @@ configMap:
   # toward the 6h crawl deadline if group syncs run long, so periodic
   # re-dispatches can't start concurrent duplicate syncs.
   CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT: ""
+  # Per-connector document permission sync lock TTL in seconds (default 3600);
+  # raise it if a sync loses its lock mid-run ("lock that's no longer owned").
+  CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT: ""
+  # Document-index sync beat lock TTL in seconds (default 120); raise it if the
+  # sync pass aborts with "no longer owned" or "Lock not owned on completion".
+  CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT: ""
   # OnyxBot SlackBot Configs
   ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER: ""
   ONYX_BOT_DISPLAY_ERROR_MSGS: ""
