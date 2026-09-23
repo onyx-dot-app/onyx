@@ -778,17 +778,20 @@ def test_sdk_auth_flow_contention_on_one_event_loop(
     Two concurrent flows on ONE loop must still single-flight the refresh."""
     config_data = _expired_grant_config()
     lock_held = False
+    lock_released = asyncio.Event()
+    lock_released.set()
 
     @asynccontextmanager
     async def _serializing_lock(*_args: Any, **_kwargs: Any) -> AsyncIterator[None]:
         nonlocal lock_held
-        while lock_held:
-            await asyncio.sleep(0.01)
+        await lock_released.wait()
         lock_held = True
+        lock_released.clear()
         try:
             yield
         finally:
             lock_held = False
+            lock_released.set()
 
     _install_mocks(monkeypatch, config_data, response=None)
     monkeypatch.setattr(mcp_oauth, "async_cache_shared_lock", _serializing_lock)
