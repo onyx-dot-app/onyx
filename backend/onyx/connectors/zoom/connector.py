@@ -286,7 +286,9 @@ class ZoomConnector(
     def build_dummy_checkpoint(self) -> ZoomConnectorCheckpoint:
         return ZoomConnectorCheckpoint(has_more=True)
 
-    def _resolve_access(self, recording: ZoomRecordingEntry) -> ExternalAccess:
+    def _resolve_access(
+        self, recording: ZoomRecordingEntry, *, add_prefix: bool = True
+    ) -> ExternalAccess:
         client = self.client
         if client is None:
             raise ConnectorMissingCredentialError("Zoom")
@@ -301,6 +303,7 @@ class ZoomConnector(
             treat_link_access_as_public=self._treat_link_access_as_public,
             rule_grant=partial(self._rule_grant, client),
             owner_email=self._owner_emails[host_id],
+            add_prefix=add_prefix,
         )
 
     def _rule_grant(self, client: ZoomClient, rule_id: str) -> RuleGrant | None:
@@ -319,9 +322,12 @@ class ZoomConnector(
         the documents reached before the error keep the access this attempt
         found and the rest keep what the last attempt wrote, until an attempt
         gets through. The client has already retried anything transient.
+
+        Group ids go out bare: the shared sync's writer adds the source prefix,
+        which indexing adds itself.
         """
         try:
-            return self._resolve_access(recording)
+            return self._resolve_access(recording, add_prefix=False)
         except ZoomAccessListUnavailable as e:
             logger.warning("%s", e)
         except Exception as e:
