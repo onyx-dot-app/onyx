@@ -8,6 +8,7 @@ document.addEventListener("DOMContentLoaded", async function () {
   const defaultNewTabToggle = document.getElementById("defaultNewTabToggle");
   const openSidePanelButton = document.getElementById("openSidePanel");
   const openOptionsButton = document.getElementById("openOptions");
+  const newTabManagedNotice = document.getElementById("newTabManagedNotice");
 
   async function loadSetting() {
     const [value, managed] = await Promise.all([
@@ -17,6 +18,9 @@ document.addEventListener("DOMContentLoaded", async function () {
     if (defaultNewTabToggle) {
       defaultNewTabToggle.checked = !!value;
       defaultNewTabToggle.disabled = managed;
+    }
+    if (newTabManagedNotice) {
+      newTabManagedNotice.style.display = managed ? "block" : "none";
     }
   }
 

@@ -4,6 +4,8 @@ import { getManagedSettings, normalizeOnyxDomain } from "../utils/storage.js";
 document.addEventListener("DOMContentLoaded", function () {
   const domainInput = document.getElementById("onyxDomain");
   const useOnyxAsDefaultToggle = document.getElementById("useOnyxAsDefault");
+  const domainManagedNotice = document.getElementById("domainManagedNotice");
+  const newTabManagedNotice = document.getElementById("newTabManagedNotice");
   const continueBtn = document.getElementById("continueBtn");
   const backBtn = document.getElementById("backBtn");
   const finishBtn = document.getElementById("finishBtn");
@@ -160,11 +162,13 @@ document.addEventListener("DOMContentLoaded", function () {
     newTabManaged = typeof managedNewTab === "boolean";
 
     domainInput.disabled = domainManaged;
+    domainManagedNotice.style.display = domainManaged ? "block" : "none";
     if (domainManaged) {
       domainInput.value = normalizeOnyxDomain(managedDomain);
     }
 
     useOnyxAsDefaultToggle.disabled = newTabManaged;
+    newTabManagedNotice.style.display = newTabManaged ? "block" : "none";
     if (newTabManaged) {
       useOnyxAsDefaultToggle.checked = managedNewTab;
     }
