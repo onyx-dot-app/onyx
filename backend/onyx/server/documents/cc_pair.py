@@ -22,6 +22,11 @@ from onyx.connectors.exceptions import ValidationError
 from onyx.connectors.factory import identify_connector_class, validate_ccpair_for_user
 from onyx.connectors.interfaces import Resolver
 from onyx.connectors.models import InputType
+from onyx.db.cc_pair_data_access import (
+    fetch_existing_user_group_ids,
+    replace_data_access_groups,
+)
+from onyx.db.connector import fetch_connector_by_id
 from onyx.db.connector_credential_pair import (
     add_credential_to_connector,
     get_cc_pair_groups_for_ids,
@@ -391,7 +396,7 @@ def get_cc_pair_full_info(
 
     # Get latest permission sync attempt for status
     latest_permission_sync_attempt = None
-    if cc_pair.access_type == AccessType.SYNC:
+    if cc_pair.access_type.is_perm_synced():
         latest_permission_sync_attempt = (
             get_latest_doc_permission_sync_attempt_for_cc_pair(
                 db_session=db_session,
@@ -792,6 +797,71 @@ def get_cc_pair_indexing_errors(
     )
 
 
+def _validate_data_access_request(
+    connector_id: int,
+    metadata: ConnectorCredentialPairMetadata,
+    user: User,
+    db_session: Session,
+) -> None:
+    """Checks for a SYNC_RESTRICTED pair. Repeats the perm-sync tier and source
+    checks explicitly so they hold regardless of which access types the generic
+    cc-pair validation recognizes as synced."""
+    if metadata.access_type != AccessType.SYNC_RESTRICTED:
+        if metadata.restriction_group_ids:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "Data-access groups apply only to restricted perm-synced connectors.",
+            )
+        return
+
+    if not get_security_settings().allow_connector_group_restrictions:
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+            "Group restrictions on permission-synced connectors are turned off "
+            "for this workspace.",
+        )
+    fetch_ee_implementation_or_noop(
+        "onyx.utils.tier",
+        "require_business_tier_for_sync_access",
+        noop_return_value=None,
+    )(metadata.access_type)
+
+    connector = fetch_connector_by_id(connector_id, db_session)
+    if connector is None:
+        raise OnyxError(OnyxErrorCode.CONNECTOR_NOT_FOUND)
+    if not fetch_ee_implementation_or_noop(
+        "onyx.external_permissions.sync_params",
+        "check_if_valid_sync_source",
+        noop_return_value=False,
+    )(connector.source):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"{connector.source.value} does not support permission sync.",
+        )
+
+    if not metadata.restriction_group_ids:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "A restricted connector needs at least one data-access group.",
+        )
+    requested = set(metadata.restriction_group_ids)
+    missing = requested - fetch_existing_user_group_ids(db_session, list(requested))
+    if missing:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Unknown user group ids: {sorted(missing)}",
+        )
+    # A scoped manager may only name groups they manage, same as for `groups`.
+    assert_within_scope(
+        user,
+        db_session,
+        permission=Permission.MANAGE_CONNECTORS,
+        current_group_ids=[],
+        requested_group_ids=list(requested),
+        is_non_public=True,
+    )
+
+
 @router.put(
     "/connector/{connector_id}/credential/{credential_id}", tags=PUBLIC_API_TAGS
 )
@@ -820,7 +890,7 @@ def associate_credential_to_connector(
     # Groups may still be supplied to scope who may *manage* it, and those are
     # checked normally below.
     is_groupless_perm_sync = (
-        metadata.access_type == AccessType.SYNC and not metadata.groups
+        metadata.access_type.is_perm_synced() and not metadata.groups
     )
     if not is_groupless_perm_sync:
         assert_within_scope(
@@ -851,6 +921,8 @@ def associate_credential_to_connector(
             f"Credential {credential_id} does not exist or does not belong to user",
         )
 
+    _validate_data_access_request(connector_id, metadata, user, db_session)
+
     try:
         validate_ccpair_for_user(
             connector_id, credential_id, metadata.access_type, db_session
@@ -867,6 +939,17 @@ def associate_credential_to_connector(
             groups=metadata.groups,
             processing_mode=metadata.processing_mode,
         )
+
+        if (
+            response.success
+            and response.data is not None
+            and metadata.access_type == AccessType.SYNC_RESTRICTED
+        ):
+            # Saved after the pair so a failure here leaves it restricted with
+            # no groups, which denies everyone rather than exposing anything.
+            replace_data_access_groups(
+                db_session, response.data, metadata.restriction_group_ids
+            )
 
         if not response.success:
             # The pair already exists. This used to answer 200 with success in

@@ -435,7 +435,9 @@ def fetch_user_groups_for_documents(
             and_(
                 ConnectorCredentialPair.id
                 == UserGroup__ConnectorCredentialPair.cc_pair_id,
-                ConnectorCredentialPair.access_type != AccessType.SYNC,
+                ConnectorCredentialPair.access_type.notin_(
+                    AccessType.perm_synced_types()
+                ),
             ),
         )
         .join(
