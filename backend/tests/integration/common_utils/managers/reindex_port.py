@@ -6,6 +6,7 @@ import httpx
 from onyx.configs.constants import DEFAULT_CC_PAIR_ID
 from onyx.db.enums import ConnectorCredentialPairStatus, SwitchoverType
 from onyx.db.port_attempt import ReindexErrorRow, ReindexProgressCounts
+from onyx.error_handling.error_codes import OnyxErrorCode
 from tests.integration.common_utils.constants import API_SERVER_URL, MAX_DELAY
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
@@ -147,6 +148,16 @@ class ReindexPortManager:
             if response.status_code != 409:
                 response.raise_for_status()
                 return int(response.json()["id"])
+
+            # The other 409s -- a reindex already running, a backfill still draining --
+            # never clear on their own, so waiting on them just burns the full timeout.
+            error_code = ""
+            try:
+                error_code = response.json().get("error_code", "")
+            except ValueError:
+                pass
+            if error_code != OnyxErrorCode.INDEX_NAME_RECLAIMING.code:
+                raise RuntimeError(f"Reindex was refused: {response.text}")
 
             elapsed = time.monotonic() - start
             if elapsed > timeout:
