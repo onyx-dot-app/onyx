@@ -32,6 +32,8 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+AccessResolver = Callable[[ZoomRecordingEntry], ExternalAccess]
+
 # Zoom's `authentication_option` for "Only people with access". It never appears
 # in the rule catalogue, and it arrives with `share_recording` still "publicly",
 # so it is checked before that field is read.
