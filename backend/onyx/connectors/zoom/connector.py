@@ -314,9 +314,11 @@ class ZoomConnector(
         Indexing can fail one document and carry on, but the doc sync cannot.
         So when nobody can be named to read the recording, or Zoom has deleted
         it since it was listed, this answers with an empty access list: nobody
-        may read it. Any other error is raised unchanged. That fails the sync
-        attempt and keeps the access lists the last attempt wrote, and the
-        client has already retried anything transient.
+        may read it. Any other error is raised unchanged, which fails the
+        attempt. The shared sync writes each access list as it is yielded, so
+        the documents reached before the error keep the access this attempt
+        found and the rest keep what the last attempt wrote, until an attempt
+        gets through. The client has already retried anything transient.
         """
         try:
             return self._resolve_access(recording)

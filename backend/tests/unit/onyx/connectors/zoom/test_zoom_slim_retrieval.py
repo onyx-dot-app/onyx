@@ -30,6 +30,7 @@ from onyx.connectors.zoom.models import (
     ZoomUser,
     ZoomUserPage,
 )
+from onyx.connectors.zoom.recordings import inventory
 from onyx.connectors.zoom.recordings.discovery import (
     EARLIEST_RECORDING_DATE,
     listing_windows,
@@ -634,6 +635,18 @@ class TestThePermSyncWalk:
 
         client.get_recording_settings.assert_called_once()
         client.get_user.assert_called_once()
+
+    def test_past_the_remembered_ids_cap_nothing_is_lost(self) -> None:
+        connector, client = _connector(host_emails=["jill@example.com"])
+        with_recording_access(client)
+        _listing(client, _recording("uuid-1"), _recording("uuid-2"))
+
+        with patch.object(inventory, "_MAX_REMEMBERED_IDS", 1):
+            synced = _synced(connector)
+
+        assert set(synced) == {"ZOOM_MEETING_uuid-1", "ZOOM_MEETING_uuid-2"}
+        # The second recording was not remembered, so each listing resolved it.
+        assert client.get_recording_settings.call_count > 2
 
     def test_a_recording_nobody_can_be_named_for_is_private(self) -> None:
         connector, client = _connector(host_emails=["jill@example.com"])
