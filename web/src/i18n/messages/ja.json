@@ -2588,6 +2588,9 @@
         "retryButton": {
           "label": "再試行"
         },
+        "rollbackFailed": {
+          "toast": "タイムアウト後にコネクタを削除できませんでした: {detail}。/admin/indexing/status を確認してください。管理者による削除が必要な場合があります。"
+        },
         "timeout": {
           "toast": "{seconds} 秒後に操作がタイムアウトしました。設定に誤りがないか確認してください。"
         },

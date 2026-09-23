@@ -1,10 +1,20 @@
 import { toast } from "@opal/layouts";
+import { ErrorResponseBody } from "@/lib/fetcher";
 import { DeletionAttemptSnapshot } from "./types";
+
+// Wire value of the backend code sent when the pair does not exist
+// (`backend/onyx/error_handling/error_codes.py`).
+export const CONNECTOR_NOT_FOUND_CODE = "CONNECTOR_NOT_FOUND";
+
+export interface DeletionScheduleError {
+  errorCode: string | undefined;
+  detail: string;
+}
 
 export async function scheduleDeletionJobForConnector(
   connectorId: number,
   credentialId: number
-): Promise<string | null> {
+): Promise<DeletionScheduleError | null> {
   // Will schedule a background job which will:
   // 1. Remove all documents indexed by the connector / credential pair
   // 2. Remove the connector (if this is the only pair using the connector)
@@ -21,7 +31,11 @@ export async function scheduleDeletionJobForConnector(
   if (response.ok) {
     return null;
   }
-  return (await response.json()).detail;
+  const body: ErrorResponseBody = await response.json();
+  return {
+    errorCode: body.error_code,
+    detail: body.detail ?? response.statusText,
+  };
 }
 
 export async function deleteCCPair(
@@ -34,7 +48,7 @@ export async function deleteCCPair(
     credentialId
   );
   if (deletionScheduleError) {
-    throw new Error(deletionScheduleError);
+    throw new Error(deletionScheduleError.detail);
   }
   toast.success("Scheduled deletion of connector!");
   onCompletion?.();
