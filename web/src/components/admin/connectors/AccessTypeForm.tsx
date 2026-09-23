@@ -11,7 +11,7 @@ import { AutoSyncOptions } from "./AutoSyncOptions";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { useEffect, useMemo } from "react";
-import { Credential } from "@/lib/connectors/credentials";
+import type { Credential } from "@/lib/connectors/types";
 import { credentialTemplates } from "@/lib/connectors/credentials";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";

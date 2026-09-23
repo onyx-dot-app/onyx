@@ -1,1 +1,1 @@
-export { default } from "@/views/admin/IndexingStatusPage";
+export { default } from "@/views/admin/connectors/IndexingStatusPage";

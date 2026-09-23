@@ -16,7 +16,7 @@ import { buildFilters } from "@/lib/searchFilters/utils";
 import { DocumentUpdatedAtBadge } from "@/components/search/DocumentUpdatedAtBadge";
 import { DocumentSetSummary } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
-import { Connector } from "@/lib/connectors/connectors";
+import type { Connector } from "@/lib/connectors/types";
 import { HorizontalFilters } from "@/components/filters/SourceSelector";
 import { InputTypeIn } from "@opal/components";
 import SvgSimpleLoader from "@opal/icons/simple-loader";

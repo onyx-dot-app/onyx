@@ -1,9 +1,9 @@
 import { Agent } from "@/lib/agents/types";
 import type { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import type { Locale } from "@/i18n/config";
-import { Credential } from "./connectors/credentials";
-import { Connector } from "./connectors/connectors";
-import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
+import type { Credential } from "@/lib/connectors/types";
+import type { Connector } from "@/lib/connectors/types";
+import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
 import type { PermissionsOf } from "@/lib/permissions/resource-actions";
 
 export enum ThemePreference {

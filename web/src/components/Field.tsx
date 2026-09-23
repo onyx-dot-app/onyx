@@ -38,14 +38,13 @@ import {
 import { Section } from "@/layouts/general-layouts";
 import { transformLinkUri } from "@/lib/utils";
 import { cn } from "@opal/utils";
-import FileInput from "@/app/admin/connectors/[connector]/pages/ConnectorInput/FileInput";
+import FileInput from "@/views/admin/connectors/AddConnectorPage/form/inputs/FileInput";
 import { RichTextSubtext } from "./RichTextSubtext";
+import { TypedFile, FILE_TYPE_DEFINITIONS } from "@/lib/connectors/fileTypes";
 import {
-  TypedFile,
   createTypedFile,
   getFileTypeDefinitionForField,
-  FILE_TYPE_DEFINITIONS,
-} from "@/lib/connectors/fileTypes";
+} from "@/lib/connectors/utils";
 import Text from "@/refresh-components/texts/Text";
 
 import { SvgEye, SvgEyeClosed, SvgPlusCircle } from "@opal/icons";

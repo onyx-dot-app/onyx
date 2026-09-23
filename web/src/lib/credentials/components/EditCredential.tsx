@@ -4,16 +4,14 @@ import { useTranslations } from "next-intl";
 import { TextFormField, TypedFileUploadFormField } from "@/components/Field";
 import { Form, Formik, FormikHelpers } from "formik";
 import { toast } from "@opal/layouts";
-import {
-  Credential,
-  getDisplayNameForCredentialKey,
-} from "@/lib/connectors/credentials";
+import { getDisplayNameForCredentialKey } from "@/lib/connectors/utils";
+import type { Credential } from "@/lib/connectors/types";
 import {
   createEditingValidationSchema,
   createInitialValues,
   getEditableCredentialFields,
 } from "@/lib/credentials/utils";
-import { isTypedFileField } from "@/lib/connectors/fileTypes";
+import { isTypedFileField } from "@/lib/connectors/utils";
 import { SvgCheckSquare, SvgTrash } from "@opal/icons";
 import type {
   CredentialFieldValues,
