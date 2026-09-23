@@ -120,6 +120,19 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
     )
 
 
+def _require_chat_session_id(
+    custom_tool_config: CustomToolConfig | None, tool_name: str
+) -> UUID:
+    """Generated files are scoped to the chat session that produced them, so
+    the tools that write them cannot be built without one."""
+    if custom_tool_config is None or custom_tool_config.chat_session_id is None:
+        raise ValueError(
+            f"{tool_name} requires CustomToolConfig.chat_session_id: generated "
+            "files are scoped to the chat session that produced them"
+        )
+    return custom_tool_config.chat_session_id
+
+
 def should_disable_open_url_web_fetch(
     persona_tools: Sequence[ToolDBModel],
     allowed_tool_ids: list[int] | None,
@@ -296,6 +309,9 @@ def _construct_tools_impl(
                         model=img_generation_llm_config.model_name,
                         tool_id=db_tool_model.id,
                         emitter=emitter,
+                        chat_session_id=_require_chat_session_id(
+                            custom_tool_config, ImageGenerationTool.__name__
+                        ),
                     )
                 ]
 
@@ -340,7 +356,13 @@ def _construct_tools_impl(
             # Handle Python/Code Interpreter Tool
             elif tool_cls.__name__ == PythonTool.__name__:
                 tool_dict[db_tool_model.id] = [
-                    PythonTool(tool_id=db_tool_model.id, emitter=emitter)
+                    PythonTool(
+                        tool_id=db_tool_model.id,
+                        emitter=emitter,
+                        chat_session_id=_require_chat_session_id(
+                            custom_tool_config, PythonTool.__name__
+                        ),
+                    )
                 ]
 
             # Handle Coding Agent Tool
