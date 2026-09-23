@@ -20,10 +20,6 @@ from onyx.connectors.outlook.source_operations import OutlookSourceOperations
 # mailbox the app may open.
 CONFIG_MAILBOXES = "mailboxes"
 
-# Statuses that describe the mailbox itself: out of the app's Exchange scope, or
-# no mailbox behind the user. Anything else is a failure of the call.
-MAILBOX_UNAVAILABLE_STATUSES = frozenset({403, 404})
-
 
 def configured_addresses(config: dict[str, Any] | None) -> list[str]:
     raw = (config or {}).get(CONFIG_MAILBOXES) or []
@@ -57,7 +53,7 @@ def describe_unavailable_mailboxes(
         try:
             gateway.probe_mailbox(mailbox_id=mailbox.id)
         except OutlookGraphError as e:
-            if e.status in MAILBOX_UNAVAILABLE_STATUSES:
+            if e.is_permanent_refusal:
                 problems.append(f"{address} ({e.code})")
                 continue
             raise_for_graph_error(e, f"The app cannot read `{address}`.")

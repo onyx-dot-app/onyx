@@ -42,7 +42,6 @@ from onyx.connectors.outlook.errors import (
     raise_for_graph_error,
 )
 from onyx.connectors.outlook.mailboxes import (
-    MAILBOX_UNAVAILABLE_STATUSES,
     configured_addresses,
     describe_unavailable_mailboxes,
     raise_if_unavailable,
@@ -151,7 +150,7 @@ def _first_mailbox_that(
             try:
                 opened = opens(mailbox)
             except OutlookGraphError as e:
-                if e.status not in MAILBOX_UNAVAILABLE_STATUSES:
+                if not e.is_permanent_refusal:
                     raise_for_graph_error(e, denied_one(mailbox), remediation)
                 if e.status == 403:
                     denied = e

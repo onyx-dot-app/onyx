@@ -602,8 +602,8 @@ class OutlookSourceOperations(SourceOperations):
         """Read the Inbox record.
 
         The cheapest call that proves the mailbox exists, is licensed and sits
-        inside the app's Exchange scope. 403 means out of scope, 404 means no
-        mailbox behind the user.
+        inside the app's Exchange scope. 403 means out of scope, 404 no mailbox
+        behind the user, 423 a locked or archived mailbox.
         """
         return _parse_folder(
             self._get(

@@ -9,6 +9,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
+from onyx.connectors.microsoft_utils.graph_client import is_permanent_refusal_status
+
 # The OutlookAuthError code for a blank credential field, raised before MSAL is
 # built so a half-filled form reads as a credential problem and not a KeyError.
 MISSING_CREDENTIAL_CODE = "missing_credential"
@@ -40,6 +42,13 @@ class OutlookGraphError(Exception):
         self.status = status
         self.code = code
         super().__init__(f"Graph {status} {code}: {message}")
+
+    @property
+    def is_permanent_refusal(self) -> bool:
+        """Graph refused the entity itself (no grant, gone, or locked), not the
+        call. The shared classifier decides, so Outlook agrees with SharePoint
+        and Teams."""
+        return is_permanent_refusal_status(self.status)
 
     @property
     def fails_the_attempt(self) -> bool:
