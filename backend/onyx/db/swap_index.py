@@ -242,21 +242,13 @@ def _ported_documents_present_in_new_index(
     cc_pair_scopes: Sequence[PortedScope],
     user_scopes: Sequence[PortedUserScope],
 ) -> bool:
-    """Spot-check that documents the ports reported copying are really in the new index.
+    """Spot-checks that documents the ports reported as copied exist in the new index.
 
-    Every other condition in the swap gate reads the port's own record of itself. A port
-    is marked SUCCESS once its copy loop drains, which says the task finished, not that
-    chunks landed, so this is the only check that reads the destination.
-
-    It samples a few documents per port unit, covering both kinds of unit the port
-    works in: connector cc_pairs and users with files. That catches a unit whose copy
-    never landed, a wrong index name, or an emptied index. It will not notice a few
-    individually missing documents, and a passing check is not proof that nothing was
-    lost.
-
-    After a failure it waits PORT_SWAP_VERIFY_RETRY_DELAY_S before checking again, and
-    keeps holding the swap meanwhile. The swap gate runs every 15 seconds, so without
-    that pause a cluster that stays unreachable would re-run this forever.
+    This is the only swap condition that reads the new index; the others read the
+    port's own records. It samples PORT_SWAP_VERIFY_DOCS_PER_UNIT documents per
+    cc_pair and per user, so it catches an empty or wrong index but not a few missing
+    documents. After a failure it holds the swap for PORT_SWAP_VERIFY_RETRY_DELAY_S
+    seconds before checking again.
     """
     if PORT_SWAP_VERIFY_DOCS_PER_UNIT == 0:
         return True
@@ -277,8 +269,7 @@ def _ported_documents_present_in_new_index(
         return True
 
     def hold_and_back_off() -> bool:
-        # Redis rejects an expiry of 0, and a delay of 0 means the operator wants the
-        # next tick to retry immediately, so there is no key to write.
+        # Redis rejects ex=0, and a delay of 0 means retry on the next tick anyway.
         if PORT_SWAP_VERIFY_RETRY_DELAY_S > 0:
             redis_client.set(backoff_key, "1", ex=PORT_SWAP_VERIFY_RETRY_DELAY_S)
         return False
@@ -294,10 +285,9 @@ def _ported_documents_present_in_new_index(
         )
         return hold_and_back_off()
 
-    # A document deleted between the sample and the lookup is gone from the new index
-    # for good reason, so ask Postgres again before counting it as loss. Each id has to
-    # go to its own table: a user file is never in `document`, so checking it there
-    # would report every user-file miss as a deletion and forgive it.
+    # Drop documents deleted since the sample, which are rightly missing. User files
+    # live in their own table; checking them in `document` would report all of them
+    # as deleted.
     if missing_document_ids:
         sampled_user_file_ids = set(user_file_ids)
         still_exist = filter_existing_document_ids(
@@ -313,9 +303,8 @@ def _ported_documents_present_in_new_index(
             if document_id in still_exist
         ]
 
-    # A document the source index does not hold either was never the port's to copy, so
-    # it is not loss. Without this, a row that was never indexed would hold the swap for
-    # good, because it can never appear.
+    # A document with no chunks in the source index was never copied by the port, so
+    # it is not a loss. Without this check it would hold the swap forever.
     if missing_document_ids:
         try:
             absent_from_source = set(
@@ -361,10 +350,9 @@ def _no_writer_left_in_flight(
 ) -> bool:
     cc_pair_ids = [cc_pair.id for cc_pair in required_cc_pairs]
 
-    # The port itself is covered by get_active_port_attempt in the caller. This is the
-    # separate writer: connector index attempts keep polling into FUTURE all reindex.
-    # A wedged attempt cannot stall the swap for good: the indexing watchdog fails any
-    # attempt that has not sent a heartbeat for thirty minutes.
+    # Connector index attempts write into FUTURE for the whole reindex. A wedged
+    # attempt cannot hold the swap forever, because the indexing watchdog fails any
+    # attempt with no heartbeat for 30 minutes.
     if any_running_index_attempt_for_cc_pairs(db_session, ss_id, cc_pair_ids):
         logger.info(
             "Port swap held: an index attempt is mid-run against search settings %s.",
@@ -372,9 +360,8 @@ def _no_writer_left_in_flight(
         )
         return False
 
-    # Safe to wait on only because new files dual-write to FUTURE and the reconciler
-    # supplies content on a 404, so every flag drains. An update()-only drain would pin
-    # a never-copied file forever.
+    # Waiting on this flag is safe because new files dual-write to FUTURE and the
+    # reconciler supplies the content on a 404, so every pending flag eventually clears.
     if any_user_file_reconcile_pending_for_users(db_session, required_user_ids):
         return False
 
@@ -392,13 +379,15 @@ def _port_swap_ready(
     required_cc_pairs: list[ConnectorCredentialPair],
     required_user_ids: list[UUID],
 ) -> bool:
-    """Port-flow swap gate: True once every required cc_pair's AND user's port is SUCCESS
-    (none active), nothing is still indexing into the new settings, the connector
-    deferred metadata-sync backlog has drained, and a sample of ported documents is
-    actually present in the new index. The port copy is the whole
-    bar — no post-port connector index attempt. The drain is scoped to
-    required_cc_pairs: a global count would deadlock on un-portable INVALID/DELETING docs
-    that never reach FUTURE."""
+    """Port-flow swap gate.
+
+    Returns True once every required cc_pair and user has a SUCCESS port and no active
+    one, nothing is still writing into the new settings, and a sample of ported
+    documents is present in the new index. There is no post-port connector index
+    attempt; the port copy is the whole bar. The pending-sync count is scoped to
+    required_cc_pairs because a global count never drains for INVALID/DELETING
+    documents, which never reach FUTURE.
+    """
     ss_id = new_search_settings.id
     cc_pair_scopes: list[PortedScope] = []
     for cc_pair in required_cc_pairs:
@@ -431,15 +420,15 @@ def _port_swap_ready(
         for user_id in required_user_ids
     ]
 
-    # Keep this after the Postgres conditions. It is the only one that makes a network
-    # call, so they stop it running while the port is still going.
+    # Keep this after the Postgres checks so the OpenSearch call only runs once every
+    # port has finished.
     if not _ported_documents_present_in_new_index(
         db_session, new_search_settings, cc_pair_scopes, user_scopes
     ):
         return False
 
-    # That sample took a network round trip, long enough for an index attempt to start
-    # or a file to finish. Ask again, so the swap acts on what is true now.
+    # The OpenSearch call above took long enough for an index attempt to start, so
+    # check the writers again.
     return _no_writer_left_in_flight(
         db_session, ss_id, required_cc_pairs, required_user_ids
     )

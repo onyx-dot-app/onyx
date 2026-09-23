@@ -247,8 +247,8 @@ def seed_cc_pair_documents(
 ) -> list[str]:
     """Create `count` documents linked to the cc_pair; returns their ids, sorted.
     `unique=True` adds a random suffix so a test seeding a real index across runs
-    never collides. `chunk_count` sets how many chunks each document claims to have,
-    which the pre-swap sample check reads to decide a document is worth looking up."""
+    never collides. `chunk_count` is stored on each document; the pre-swap sample
+    skips documents whose count is 0."""
     if unique:
         doc_ids = sorted(
             f"{prefix}{i:03d}-{uuid4().hex[:6]}" for i in range(1, count + 1)

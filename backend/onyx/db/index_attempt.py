@@ -233,12 +233,10 @@ def any_running_index_attempt_for_cc_pairs(
     search_settings_id: int,
     cc_pair_ids: Collection[int],
 ) -> bool:
-    """Whether any of these cc_pairs is mid-run indexing into these settings.
+    """Returns True if any cc_pair has an IN_PROGRESS index attempt on these settings.
 
-    A queued NOT_STARTED attempt deliberately does not count. The swap promotes these
-    settings rather than removing them, so the worker picks the attempt up afterwards
-    and indexes into the live index. Waiting for the queue to drain as well would rarely
-    find a quiet moment, because a port-flow FUTURE keeps polling for the whole reindex.
+    Queued NOT_STARTED attempts do not count. They still run after the swap against
+    the same settings, and the queue rarely empties during a port-flow reindex.
     """
     if not cc_pair_ids:
         return False

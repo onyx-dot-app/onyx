@@ -320,25 +320,15 @@ def sample_ported_document_ids(
     cc_pair_scopes: Sequence[PortedScope],
     per_scope_limit: int,
 ) -> list[str]:
-    """A few document ids per cc_pair that a finished port claims to have copied.
+    """Gets up to `per_scope_limit` document IDs per cc_pair that its port copied.
 
-    The LATERAL join keeps this to one query that seeks each cc_pair on its index and
-    stops at the limit. A loop would run one query per cc_pair, and ordering globally on
-    a hash would read and sort every document in the tenant to return a handful.
+    A scope with a None `up_to_doc_id` is skipped: that port found no documents when it
+    started, so it copied nothing. Documents with a NULL chunk_count are included; the
+    column was added without a backfill and the port copies them too.
 
-    `up_to_doc_id` is the port's snapshot bound. A document added after the port fixed
-    its range belongs to the FUTURE index attempt, so the bound keeps it out.
-
-    Only a recorded count of zero is skipped. chunk_count was added without a backfill,
-    so a document indexed before that reads NULL and the port still copies it. Skipping
-    those would leave nothing to verify on a deployment where every document reads NULL.
-
-    The same scopes always return the same ids. A caller that re-checks on a schedule
-    needs that, because a fresh random draw will eventually come up clean against a
-    partly-missing index and wave it through.
+    The result is the same for the same scopes on every call. A fresh random sample on
+    each retry would eventually miss the gap in a partly-missing index and pass.
     """
-    # A port with no snapshot bound found no documents when it started, so it never
-    # claimed to copy any and there is nothing to verify for that cc_pair.
     scope_rows = [
         (scope.connector_id, scope.credential_id, scope.up_to_doc_id)
         for scope in cc_pair_scopes

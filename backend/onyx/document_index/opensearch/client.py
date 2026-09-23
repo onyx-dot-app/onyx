@@ -166,7 +166,7 @@ _CLUSTER_BLOCK_ERROR_TYPE = "cluster_block_exception"
 # Chunks per PIT-scan page. A port doc-batch is small (INDEX_BATCH_SIZE docs), so
 # one page covers a batch; paging still protects against a pathological doc.
 _PIT_SCAN_PAGE_SIZE = 1000
-# Batched so one request cannot exceed the cluster's http.max_content_length.
+# Ids per mget request, so the body stays under the cluster's http.max_content_length.
 _MGET_BATCH_SIZE = 500
 
 
@@ -1951,8 +1951,8 @@ class OpenSearchIndexClient(OpenSearchClient):
             # matches everything; kept as a guard if that changes
             {"term": {MAX_CHUNK_SIZE_FIELD_NAME: DEFAULT_MAX_CHUNK_SIZE}},
         ]
-        # The document_id field holds the raw Onyx id. Only the OpenSearch _id gets a
-        # tenant prefix, so a query matching on the field crosses tenants without this.
+        # Only the _id carries a tenant prefix, so the document_id filter alone would
+        # match other tenants' chunks.
         if tenant_state.multitenant:
             filter_clauses.append(
                 {"term": {TENANT_ID_FIELD_NAME: {"value": tenant_state.tenant_id}}}
@@ -1984,14 +1984,11 @@ class OpenSearchIndexClient(OpenSearchClient):
         ) or _SEARCH_CONTEXT_MISSING_ERROR_TYPE in str(error)
 
     def get_existing_chunk_ids(self, chunk_ids: list[str]) -> set[str]:
-        """Which of these chunk ids exist in the index, looked up by _id.
+        """Returns the subset of `chunk_ids` that exist in the index.
 
-        Looking chunks up by their exact id sees a write that a search has not caught up
-        with yet, so a chunk written moments ago still counts as present. A search would
-        report it absent until the index refreshes.
-
-        Raises on transport errors instead of returning an empty set, so a caller
-        cannot mistake an unreachable cluster for an index with nothing in it.
+        Uses the OpenSearch mget API, which fetches documents by _id in one request
+        and, unlike a search, sees writes that have not been refreshed yet. Raises on
+        transport errors rather than returning an empty set.
         """
         if not chunk_ids:
             return set()

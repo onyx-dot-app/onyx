@@ -570,15 +570,11 @@ class OpenSearchDocumentIndex(DocumentIndex):
         return self._client.delete_by_query(query_body)
 
     def get_documents_with_any_chunk(self, document_ids: list[str]) -> set[str]:
-        """Which of these documents have at least one chunk here, whatever its position.
+        """Gets the IDs of the documents that have at least one chunk in this index.
 
-        Scans instead of probing chunk 0, so it can tell a document that is really
-        absent from one that only lost its first chunk. Excusing a document on the
-        cheaper answer would wave that second case through as never indexed.
-
-        Refreshes first, because the scan is a search and a search cannot see a write
-        that has not been refreshed yet. Reporting a just-written document as absent is
-        the one answer a caller must never get from this, since it excuses on absence.
+        Scans all chunks rather than probing chunk 0, so a document that lost only its
+        first chunk still counts as present. Refreshes the index first, because the
+        scan is a search and a search cannot see unrefreshed writes.
         """
         if not document_ids:
             return set()
@@ -591,12 +587,11 @@ class OpenSearchDocumentIndex(DocumentIndex):
         return found
 
     def get_documents_missing_chunks(self, document_ids: list[str]) -> list[str]:
-        """Which of these documents have no chunks in this index, in the order given.
+        """Gets the IDs of the documents whose chunk 0 is not in this index.
 
-        Only chunk 0 is checked, which answers whether the document is here at all.
-        Counting every chunk would be worse: chunk_count in Postgres tracks the live
-        index, so a document re-indexed mid-port disagrees with what the port copied and
-        the difference would look like loss.
+        The result keeps the input order. Only chunk 0 is checked: comparing full
+        chunk counts against Postgres would flag a document re-indexed mid-port as
+        missing, because its count changed after the port copied it.
         """
         unique_ids = list(dict.fromkeys(document_ids))
         if not unique_ids:

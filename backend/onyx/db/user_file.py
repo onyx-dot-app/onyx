@@ -204,21 +204,17 @@ def sample_ported_user_file_ids(
     user_scopes: Sequence[PortedUserScope],
     per_scope_limit: int,
 ) -> list[str]:
-    """A few user file ids per user that a finished port claims to have copied.
+    """Gets up to `per_scope_limit` user file IDs per user that its port copied.
 
-    Scoped the way the port scopes its own copy: COMPLETED, non-incognito, and inside
-    the snapshot bound.
+    Only COMPLETED, non-incognito files inside the port's snapshot bound count, which
+    is the scope the port itself copies. A user with a None `up_to_doc_id` is skipped:
+    that port found no files when it started, and files completed since belong to the
+    dual-write. Files with a NULL chunk_count are included; the column was added
+    without a backfill.
 
-    One query, not one per user. A tenant can have thousands of users with files and
-    this runs on the swap gate's schedule, so a loop here would be thousands of round
-    trips every few seconds.
-
-    Only a recorded count of zero is skipped, since an unknown count means the file
-    predates the column rather than having nothing in the index.
+    One LATERAL query serves every user. This runs on each 15-second swap-gate tick,
+    and a tenant can have thousands of users with files.
     """
-    # A port with no snapshot bound found no files when it started, so it never claimed
-    # to copy any. Sampling that user anyway would check files that completed during the
-    # port, whose FUTURE copy is the dual-write's job and may still be in flight.
     scope_rows = [
         (scope.user_id, UUID(scope.up_to_doc_id))
         for scope in user_scopes
@@ -309,10 +305,9 @@ def filter_existing_user_file_ids(
 def filter_existing_user_file_ids_any_owner(
     db_session: Session, ids: list[str]
 ) -> set[str]:
-    """The subset of `ids` still COMPLETED, whoever owns them.
+    """Returns the subset of `ids` that are COMPLETED user files, regardless of owner.
 
-    An id that is not a UUID is silently absent from the result, which is what a caller
-    that mixes in connector document ids should see.
+    IDs that are not UUIDs are ignored, so connector document IDs can be mixed in.
     """
     if not ids:
         return set()

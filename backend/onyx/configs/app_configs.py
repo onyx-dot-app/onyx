@@ -1105,14 +1105,13 @@ MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE = max(
     1, _non_negative_int_env("MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE", 5)
 )
 
-# Documents sampled per port unit (each cc_pair, each user) by the pre-swap check.
-# Set this to 0 to skip that sample. Every other swap condition still applies.
+# How many documents the pre-swap check samples per cc_pair and per user. 0 skips the
+# sample; the other swap conditions still apply.
 PORT_SWAP_VERIFY_DOCS_PER_UNIT = _non_negative_int_env(
     "PORT_SWAP_VERIFY_DOCS_PER_UNIT", 3
 )
-# How long to wait before repeating a pre-swap check that failed, with 0 meaning retry
-# on the next tick. Without a wait the 15-second beat re-runs the whole sample and
-# lookup until someone intervenes.
+# Seconds to hold the swap after a failed pre-swap check before checking again.
+# 0 retries on the next 15-second tick.
 PORT_SWAP_VERIFY_RETRY_DELAY_S = _non_negative_int_env(
     "PORT_SWAP_VERIFY_RETRY_DELAY_S", 300
 )

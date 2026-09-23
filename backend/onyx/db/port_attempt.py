@@ -441,8 +441,10 @@ def latest_port_bounds_by_user(
     search_settings_id: int,
     user_ids: Collection[UUID],
 ) -> dict[UUID, str | None]:
-    """Latest attempt's snapshot bound per user, in one pass rather than one query per
-    user. Users with no attempt are absent from the result."""
+    """Maps each user to the `up_to_doc_id` of their latest port attempt.
+
+    Users with no attempt on these settings are left out.
+    """
     if not user_ids:
         return {}
     return {
