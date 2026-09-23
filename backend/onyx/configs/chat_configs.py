@@ -109,3 +109,7 @@ COMPRESSION_TRIGGER_RATIO = float(os.environ.get("COMPRESSION_TRIGGER_RATIO", "0
 SKIP_DEEP_RESEARCH_CLARIFICATION = (
     os.environ.get("SKIP_DEEP_RESEARCH_CLARIFICATION", "false").lower() == "true"
 )
+
+# Tool/secondary-flow JSON payloads are machine-read; pretty-print
+# indentation costs input tokens on every later request that replays them.
+COMPACT_TOOL_OUTPUT = os.environ.get("COMPACT_TOOL_OUTPUT", "false").lower() == "true"
