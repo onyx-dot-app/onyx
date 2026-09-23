@@ -241,7 +241,6 @@ def test_slack_bot_replies_with_budget_message_instead_of_answering(
     mock_respond.assert_called_once()
     assert mock_respond.call_args.kwargs["text"] == _BUDGET_MESSAGE
     if not reply_fails:
-        # The budget reply is the answer: no listener apology, no reminder.
         assert result is False
         client.chat_deleteScheduledMessage.assert_called_once_with(
             channel="U123", scheduled_message_id="scheduled-reminder"

@@ -1,12 +1,3 @@
-"""Service accounts are held to global budgets only.
-
-A service account stands in for many callers: the Slack bot charges every
-Slack user who has no Onyx account to one, and API keys are service accounts
-too. A per-user budget on that single principal would throttle all of those
-callers as one user, so the Slack bot would stop answering all of them at
-once. Only API keys whose email matched the API-key pattern were exempt.
-"""
-
 from collections.abc import Generator
 from datetime import datetime, timezone
 
@@ -30,7 +21,6 @@ pytestmark = pytest.mark.usefixtures("tenant_context")
 
 
 def _token_limit(scope: TokenRateLimitScope) -> TokenRateLimit:
-    # token_budget is in thousands, so 1 means 1,000 tokens.
     return TokenRateLimit(
         enabled=True,
         token_budget=1,
@@ -62,9 +52,6 @@ def _record_over_budget_usage(db_session: Session, user: User) -> None:
 def users_over_a_per_user_budget(
     db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> Generator[tuple[User, User], None, None]:
-    """A standard user and a service account, each over a 1k-token per-user
-    budget. Limits are injected so no rows land in the shared DB, and group and
-    global limits are cleared so leftover rows from other suites cannot trip."""
     standard = create_test_user(db_session, "budget-scope-standard")
     service = create_test_user(
         db_session, "budget-scope-service", account_type=AccountType.SERVICE_ACCOUNT

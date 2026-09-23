@@ -354,8 +354,6 @@ def handle_regular_answer(
                     remove=True,
                     client=client,
                 )
-        # The budget reply is the answer, as with a persona access denial: no
-        # feedback reminder, and not a failure the listener apologizes for.
         if feedback_reminder_id and message_info.sender_id:
             try:
                 client.chat_deleteScheduledMessage(

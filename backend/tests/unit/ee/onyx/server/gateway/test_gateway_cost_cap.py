@@ -3,8 +3,7 @@
 The chat route runs `check_llm_cost_limit_for_provider` for every provider it
 calls. The gateway's generating routes did not, so a tenant over its weekly cap
 could keep spending Onyx's managed keys through `/v1/*`. The cap itself is
-real here, down to the `OnyxError` it raises; only the tenant's plan lookup
-and usage ledger are stubbed to report "over the cap".
+real here.
 """
 
 from __future__ import annotations

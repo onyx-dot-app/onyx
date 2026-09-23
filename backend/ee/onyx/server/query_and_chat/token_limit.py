@@ -41,8 +41,6 @@ def _check_token_rate_limits(user: User) -> None:
     elif user.account_type == AccountType.SERVICE_ACCOUNT or is_api_key_email_address(
         user.email
     ):
-        # Service accounts (API keys, the Slack bot) stand in for many callers,
-        # so a per-user or per-group budget would throttle all of them as one.
         _user_is_rate_limited_by_global()
 
     else:
