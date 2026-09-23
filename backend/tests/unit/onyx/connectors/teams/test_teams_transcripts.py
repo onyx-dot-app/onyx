@@ -499,6 +499,16 @@ def _slim_ids(teams_connector: TeamsConnector) -> list[str]:
     ]
 
 
+def test_a_permission_walk_that_leaves_threads_alone_still_lists_transcripts() -> None:
+    client = graph_client(_routes(_transcript(), window=LOOKBACK_WINDOW))
+    teams_connector = connector(client, include_meeting_transcripts=True)
+    teams_connector.skip_threads_in_perm_sync()
+
+    # The sync empties the access of what this walk leaves out, so skipping the
+    # channels must not skip the organizers.
+    assert _slim_ids(teams_connector) == [transcript_document_id("user-1", "t1")]
+
+
 def test_a_refused_organizer_lists_nothing_and_the_slim_walk_goes_on() -> None:
     routes: dict[str, Any] = {
         ALL_USERS_URL: {"value": [ADA, BOB]},

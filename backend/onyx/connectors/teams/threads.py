@@ -125,6 +125,23 @@ def _convert_thread_to_document(
     )
 
 
+def _deleted_since(root: Message, start: SecondsSinceUnixEpoch) -> bool:
+    """An earlier poll indexed this thread and it was deleted since. Its text
+    must leave the index now: the next prune can be days away, and the
+    permission sync no longer hides a thread it does not list."""
+    return (
+        root.deleted_date_time is not None
+        and root.created_date_time.timestamp() < start
+        and root.deleted_date_time.timestamp() >= start
+    )
+
+
+def is_thread_document_id(document_id: str, other_prefixes: tuple[str, ...]) -> bool:
+    """A thread's document id is its root message's bare Graph id. Every other
+    content type prefixes its ids, so an id under none of those is a thread."""
+    return not document_id.startswith(other_prefixes)
+
+
 class ThreadSource:
     def __init__(self, session: TeamsSession, include_inline_images: bool) -> None:
         self._session = session
@@ -161,12 +178,14 @@ class ThreadSource:
         )
 
     def documents(
-        self, channel: ChannelRef, roots: list[Message]
+        self, channel: ChannelRef, roots: list[Message], start: SecondsSinceUnixEpoch
     ) -> Iterator[Document | ConnectorFailure]:
         for root in roots:
             # A thread is its root message. A deleted or system root drops the
             # whole thread, which is what the slim walk lists for pruning too.
             if not root.is_indexable:
+                if _deleted_since(root, start):
+                    yield _convert_thread_to_document(channel, root, [], None)
                 continue
             try:
                 replies = list(

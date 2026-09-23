@@ -360,6 +360,80 @@ def test_the_slim_walk_lists_files_with_their_own_readers(
     assert library["listed"] == [(DRIVE, FOLDER_ID, None)]
 
 
+def test_a_permission_walk_that_leaves_threads_alone_still_lists_files(
+    library: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    library["files"] = [_item("item-1", "Plan.pdf")]
+    team, sdk_channel = _sdk_team_and_channel()
+    monkeypatch.setattr(listing_module, "collect_all_teams", lambda **_: [team])
+    monkeypatch.setattr(
+        listing_module, "collect_all_channels_from_team", lambda **_: [sdk_channel]
+    )
+    client = graph_client(
+        {**LIBRARY_ROUTES, DELTA_URL: {"value": [message("m1", "P")]}}
+    )
+    teams_connector = connector(client, include_attachments=True)
+    teams_connector.skip_threads_in_perm_sync()
+
+    slim = [
+        (doc.id, doc.external_access)
+        for batch in teams_connector.retrieve_all_slim_docs_perm_sync()
+        for doc in batch
+        if isinstance(doc, SlimDocument)
+    ]
+
+    # A file's readers can change in SharePoint at any time, a thread's cannot.
+    assert slim == [(file_document_id("item-1"), SHAREPOINT_READERS)]
+    requested = [call.args[0] for call in client.execute_request_direct.call_args_list]
+    assert DELTA_URL not in requested
+
+
+def test_the_group_sync_lists_the_channels_once_for_members_and_sites(
+    library: dict[str, Any],  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    team, sdk_channel = _sdk_team_and_channel()
+    list_teams = MagicMock(return_value=[team])
+    list_channels = MagicMock(return_value=[sdk_channel])
+    monkeypatch.setattr(listing_module, "collect_all_teams", list_teams)
+    monkeypatch.setattr(listing_module, "collect_all_channels_from_team", list_channels)
+    teams_connector = connector(
+        graph_client({**MEMBERS, **LIBRARY_ROUTES}), include_attachments=True
+    )
+
+    assert len(list(teams_connector.channel_member_groups())) == 1
+    assert list(teams_connector.channel_site_urls()) == [SITE_URL]
+    # Both listings walk the same channels, and a tenant can hold thousands.
+    assert list_teams.call_count == 1
+    assert list_channels.call_count == 1
+
+
+def test_the_groups_ahead_of_a_listing_outage_are_still_synced(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    team, sdk_channel = _sdk_team_and_channel()
+    other = MagicMock(spec=Team)
+    other.id = "team-2"
+    monkeypatch.setattr(listing_module, "collect_all_teams", lambda **_: [team, other])
+
+    def channels_of(team: MagicMock) -> list[MagicMock]:
+        if team.id == "team-2":
+            resp = response(503, {})
+            resp.content = b""
+            raise ClientRequestException(response=resp)
+        return [sdk_channel]
+
+    monkeypatch.setattr(listing_module, "collect_all_channels_from_team", channels_of)
+    groups = connector(graph_client(MEMBERS)).channel_member_groups()
+
+    # The sync deletes the groups a failed run did not reach. A listing read to
+    # its end before the first group would cost every team its group, not only
+    # the teams after the outage.
+    assert len(next(groups)[1]) == 1
+    with pytest.raises(ClientRequestException):
+        next(groups)
+
+
 def test_the_pruning_walk_lists_the_same_ids_without_reading_readers(
     library: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:

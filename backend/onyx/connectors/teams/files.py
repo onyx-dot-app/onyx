@@ -101,6 +101,8 @@ def _tenant_domain(site_url: str) -> str:
 
 
 class FileSource:
+    document_id_prefix = FILE_DOCUMENT_ID_PREFIX
+
     def __init__(
         self,
         session: TeamsSession,

@@ -3,7 +3,7 @@ from typing import Any, Final, TypeGuard, TypeVar
 
 from psycopg2 import OperationalError, errorcodes
 from psycopg2.errors import ForeignKeyViolation, UniqueViolation
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError
 
@@ -96,6 +96,7 @@ class DocumentRow(BaseModel):
     id: str
     doc_metadata: dict[str, Any]
     external_user_group_ids: list[str]
+    external_user_emails: list[str] = Field(default_factory=list)
 
 
 class SortOrder(str, Enum):
