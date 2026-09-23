@@ -6,6 +6,7 @@ replace it at the module boundary and drive the state machine against real Postg
 One end-to-end test still runs the real primitive.
 """
 
+from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -31,6 +32,7 @@ from onyx.db.port_attempt import (
 from onyx.db.search_settings import (
     create_search_settings,
     find_unreclaimed_past_by_index_name,
+    get_current_search_settings,
     get_search_settings_by_id,
 )
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
@@ -75,15 +77,29 @@ def _make_past_settings(
     return ss
 
 
-def _make_present_settings(db_session: Session) -> SearchSettings:
-    """Without a PRESENT row the driver records the resulting error as a reclaim
-    attempt bump, so these tests own one instead of trusting whatever the shared DB
-    holds. get_current_search_settings reads the highest id, so this row always wins."""
-    return create_search_settings(
+@pytest.fixture
+def present_search_settings(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> Generator[SearchSettings, None, None]:
+    """The PRESENT row the reclaim driver reads. Reuses the shared database's row,
+    since the model allows only one, and creates one only when none exists."""
+    try:
+        existing: SearchSettings | None = get_current_search_settings(db_session)
+    except RuntimeError:
+        existing = None
+    if existing is not None:
+        yield existing
+        return
+
+    created = create_search_settings(
         _saved_settings(f"test_reclaim_present_{uuid4().hex[:8]}"),
         db_session,
         status=IndexModelStatus.PRESENT,
     )
+    yield created
+    db_session.rollback()
+    _delete_settings(db_session, created)
 
 
 def _delete_settings(db_session: Session, ss: SearchSettings) -> None:
@@ -227,12 +243,12 @@ def test_soaking_waits_until_retention_elapses(
 
 def test_soaking_advances_to_deleting_when_elapsed_and_healthy(
     db_session: Session,
+    present_search_settings: SearchSettings,  # noqa: ARG001
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(reclaim_tasks, "OLD_INDEX_RETENTION_HOURS", 0)
     monkeypatch.setattr(reclaim_tasks, "_new_index_can_serve", lambda _name: True)
-    present = _make_present_settings(db_session)
     ss = _make_past_settings(
         db_session,
         IndexReclaimStatus.SOAKING,
@@ -245,11 +261,11 @@ def test_soaking_advances_to_deleting_when_elapsed_and_healthy(
         assert ss.reclaim_status == IndexReclaimStatus.DELETING
     finally:
         _delete_settings(db_session, ss)
-        _delete_settings(db_session, present)
 
 
 def test_soaking_holds_when_new_index_cannot_serve(
     db_session: Session,
+    present_search_settings: SearchSettings,  # noqa: ARG001
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -257,7 +273,6 @@ def test_soaking_holds_when_new_index_cannot_serve(
     counter — a benign wait counted as a failure would eventually BLOCK the row."""
     monkeypatch.setattr(reclaim_tasks, "OLD_INDEX_RETENTION_HOURS", 0)
     monkeypatch.setattr(reclaim_tasks, "_new_index_can_serve", lambda _name: False)
-    present = _make_present_settings(db_session)
     ss = _make_past_settings(
         db_session,
         IndexReclaimStatus.SOAKING,
@@ -271,18 +286,17 @@ def test_soaking_holds_when_new_index_cannot_serve(
         assert ss.reclaim_attempts == 0
     finally:
         _delete_settings(db_session, ss)
-        _delete_settings(db_session, present)
 
 
 def test_deleting_complete_marks_reclaimed_and_keeps_row(
     db_session: Session,
+    present_search_settings: SearchSettings,  # noqa: ARG001
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
         reclaim_tasks, "reclaim_index_data", lambda *_a, **_k: ReclaimOutcome.COMPLETE
     )
-    present = _make_present_settings(db_session)
     ss = _make_past_settings(db_session, IndexReclaimStatus.DELETING)
     ss_id = ss.id
     try:
@@ -293,11 +307,11 @@ def test_deleting_complete_marks_reclaimed_and_keeps_row(
         assert row.reclaim_status == IndexReclaimStatus.RECLAIMED
     finally:
         _delete_settings(db_session, ss)
-        _delete_settings(db_session, present)
 
 
 def test_deleting_refuses_to_delete_the_live_index(
     db_session: Session,
+    present_search_settings: SearchSettings,
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -309,7 +323,7 @@ def test_deleting_refuses_to_delete_the_live_index(
         "reclaim_index_data",
         lambda name, *_a, **_k: deleted.append(name) or ReclaimOutcome.COMPLETE,
     )
-    present = _make_present_settings(db_session)
+    present = present_search_settings
     ss = _make_past_settings(
         db_session, IndexReclaimStatus.DELETING, index_name=present.index_name
     )
@@ -322,11 +336,11 @@ def test_deleting_refuses_to_delete_the_live_index(
         assert ss.reclaim_attempts == 1  # recorded as a failure, not a silent skip
     finally:
         _delete_settings(db_session, ss)
-        _delete_settings(db_session, present)
 
 
 def test_deleting_incomplete_stays_deleting(
     db_session: Session,
+    present_search_settings: SearchSettings,  # noqa: ARG001
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -334,7 +348,6 @@ def test_deleting_incomplete_stays_deleting(
     monkeypatch.setattr(
         reclaim_tasks, "reclaim_index_data", lambda *_a, **_k: ReclaimOutcome.INCOMPLETE
     )
-    present = _make_present_settings(db_session)
     ss = _make_past_settings(db_session, IndexReclaimStatus.DELETING)
     try:
         reclaim_tasks.run_old_index_reclaim(db_session, MagicMock(), "tenant", ss)
@@ -342,11 +355,11 @@ def test_deleting_incomplete_stays_deleting(
         assert ss.reclaim_status == IndexReclaimStatus.DELETING
     finally:
         _delete_settings(db_session, ss)
-        _delete_settings(db_session, present)
 
 
 def test_deleting_single_tenant_end_to_end_drops_real_index(
     db_session: Session,
+    present_search_settings: SearchSettings,  # noqa: ARG001
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -355,7 +368,6 @@ def test_deleting_single_tenant_end_to_end_drops_real_index(
     client = OpenSearchIndexClient(index_name=index_name)
     # Single-tenant reclaim drops the whole index, so it needs no mappings or documents.
     client._client.indices.create(index=index_name)
-    present = _make_present_settings(db_session)
     ss = _make_past_settings(
         db_session, IndexReclaimStatus.DELETING, index_name=index_name
     )
@@ -374,11 +386,11 @@ def test_deleting_single_tenant_end_to_end_drops_real_index(
             pass
         client.close()
         _delete_settings(db_session, ss)
-        _delete_settings(db_session, present)
 
 
 def test_reverted_future_reclaim_gates_on_port_then_drops_index_and_unblocks_retry(
     db_session: Session,
+    present_search_settings: SearchSettings,  # noqa: ARG001
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -392,7 +404,6 @@ def test_reverted_future_reclaim_gates_on_port_then_drops_index_and_unblocks_ret
     index_name = f"test_revert_reclaim_{uuid4().hex[:8]}"
     client = OpenSearchIndexClient(index_name=index_name)
     client._client.indices.create(index=index_name)
-    present = _make_present_settings(db_session)
     ss = _make_past_settings(
         db_session, IndexReclaimStatus.DELETING, index_name=index_name
     )
@@ -428,12 +439,12 @@ def test_reverted_future_reclaim_gates_on_port_then_drops_index_and_unblocks_ret
         ).delete(synchronize_session="fetch")
         db_session.commit()
         _delete_settings(db_session, ss)
-        _delete_settings(db_session, present)
         cleanup_cc_pair(db_session, cc_pair)
 
 
 def test_step_failure_bumps_attempts_then_blocks_at_cap(
     db_session: Session,
+    present_search_settings: SearchSettings,  # noqa: ARG001
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -443,7 +454,6 @@ def test_step_failure_bumps_attempts_then_blocks_at_cap(
         raise RuntimeError("opensearch down")
 
     monkeypatch.setattr(reclaim_tasks, "reclaim_index_data", _boom)
-    present = _make_present_settings(db_session)
     ss = _make_past_settings(db_session, IndexReclaimStatus.DELETING)
     try:
         reclaim_tasks.run_old_index_reclaim(db_session, MagicMock(), "tenant", ss)
@@ -458,7 +468,6 @@ def test_step_failure_bumps_attempts_then_blocks_at_cap(
         assert ss.reclaim_status == IndexReclaimStatus.BLOCKED
     finally:
         _delete_settings(db_session, ss)
-        _delete_settings(db_session, present)
 
 
 def _enqueued_settings_ids(celery_app: MagicMock) -> list[int]:
