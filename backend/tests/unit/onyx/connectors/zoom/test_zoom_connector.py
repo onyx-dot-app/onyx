@@ -788,6 +788,7 @@ class TestZoomConnectorProbeRecordingAccessPermissions:
         client.list_users.return_value = ZoomUserPage(users=[user(id="u1")])
         client.list_user_recordings.return_value = ZoomRecordingPage(recordings=[])
         connector.validate_connector_settings()
+        sampled = client.list_user_recordings.call_count
 
         connector.probe_recording_access_permissions()
 
@@ -795,7 +796,7 @@ class TestZoomConnectorProbeRecordingAccessPermissions:
         client.list_recording_registrants.assert_not_called()
         client.get_recording_authentication_rules.assert_called_once_with("u1")
         # And it does not go looking for a sample a second time.
-        client.list_users.assert_called_once()
+        assert client.list_user_recordings.call_count == sampled
 
     def test_an_id_only_connector_with_no_recording_finds_a_user_for_the_rules(
         self,
@@ -808,6 +809,24 @@ class TestZoomConnectorProbeRecordingAccessPermissions:
         connector.probe_recording_access_permissions()
 
         client.get_recording_authentication_rules.assert_called_once_with("u9")
+
+    def test_the_users_listing_is_probed_even_when_a_group_gave_the_sample(
+        self,
+    ) -> None:
+        # The group sync lists every user, which a Zoom-Group-scoped connector
+        # never does on its own.
+        connector, client = _with_client(group_id="group-1")
+        client.list_group_members.return_value = ZoomUserPage(
+            users=[user(id="member-1")]
+        )
+        client.list_user_recordings.return_value = ZoomRecordingPage(recordings=[])
+        client.list_users.return_value = ZoomUserPage(users=[user(id="u9")])
+        connector.validate_connector_settings()
+
+        connector.probe_recording_access_permissions()
+
+        client.list_users.assert_called_once()
+        client.get_recording_authentication_rules.assert_called_once_with("member-1")
 
     def test_a_sampled_recording_zoom_has_since_deleted_does_not_pause(
         self,

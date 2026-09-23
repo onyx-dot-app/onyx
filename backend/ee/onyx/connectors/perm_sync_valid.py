@@ -72,9 +72,9 @@ def validate_zoom_perm_sync(connector: ZoomConnector) -> None:
     """
     Permission sync reads each recording's share settings, its registered
     viewers and the account's sign-in rules, three scopes the indexing path
-    never touches. Probe them here so an app missing one fails at connector
-    creation instead of indexing every transcript as readable by its owner
-    alone.
+    never touches, and its group sync lists the account's users. Probe them
+    here so an app missing one fails at connector creation instead of indexing
+    every transcript as readable by its owner alone.
     """
     connector.probe_recording_access_permissions()
 
