@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 import pytest_asyncio
 from sqlalchemy import pool, text
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
 
 from onyx.db.engine.migration_lock import (
     MIGRATION_LOCK_NAMESPACE,
@@ -107,11 +107,53 @@ async def test_different_schemas_do_not_block_each_other(engine: AsyncEngine) ->
                 pass
 
 
+async def _create_index_concurrently(engine: AsyncEngine, table: str) -> None:
+    async with engine.connect() as connection:
+        connection = await connection.execution_options(isolation_level="AUTOCOMMIT")
+        await connection.execute(text("SET statement_timeout = '10s'"))
+        await connection.execute(
+            text(f"CREATE INDEX CONCURRENTLY ix_{table} ON {table} (revision)")
+        )
+
+
+async def _lock_holder_backend_xmins(
+    connection: AsyncConnection, schema_name: str
+) -> list[object]:
+    return list(
+        (
+            await connection.execute(
+                text(
+                    "SELECT a.backend_xmin FROM pg_locks l "
+                    "JOIN pg_stat_activity a ON a.pid = l.pid "
+                    "WHERE l.locktype = 'advisory' AND l.granted "
+                    "AND l.classid = :namespace AND l.objid = :key AND l.objsubid = 2"
+                ),
+                {
+                    "namespace": MIGRATION_LOCK_NAMESPACE,
+                    "key": migration_lock_key(schema_name) & 0xFFFFFFFF,
+                },
+            )
+        ).scalars()
+    )
+
+
+@pytest.mark.asyncio
+async def test_lock_holder_does_not_block_its_own_create_index_concurrently(
+    engine: AsyncEngine, version_table: str
+) -> None:
+    """Migrations such as e0ea2ae62e51 build indexes CONCURRENTLY while holding the lock."""
+    schema_name = f"lock_test_{uuid4().hex}"
+
+    async with schema_migration_lock(engine, schema_name):
+        async with engine.connect() as observer:
+            assert await _lock_holder_backend_xmins(observer, schema_name) == [None]
+        await _create_index_concurrently(engine, version_table)
+
+
 @pytest.mark.asyncio
 async def test_waiting_run_does_not_block_create_index_concurrently(
     engine: AsyncEngine, version_table: str
 ) -> None:
-    """Migrations such as e0ea2ae62e51 build indexes CONCURRENTLY while holding the lock."""
     schema_name = f"lock_test_{uuid4().hex}"
     holder_has_lock = asyncio.Event()
 
@@ -126,15 +168,24 @@ async def test_waiting_run_does_not_block_create_index_concurrently(
         waiter = asyncio.create_task(waiting_run())
         holder_has_lock.set()
         await asyncio.sleep(0.2)
-        async with engine.connect() as connection:
-            connection = await connection.execution_options(
-                isolation_level="AUTOCOMMIT"
-            )
-            await connection.execute(text("SET statement_timeout = '10s'"))
-            await connection.execute(
-                text(
-                    f"CREATE INDEX CONCURRENTLY ix_{version_table} "
-                    f"ON {version_table} (revision)"
-                )
-            )
+        await _create_index_concurrently(engine, version_table)
     await asyncio.wait_for(waiter, timeout=5)
+
+
+@pytest.mark.asyncio
+async def test_idle_in_transaction_timeout_does_not_drop_the_lock() -> None:
+    engine = create_async_engine(
+        build_connection_string(),
+        poolclass=pool.NullPool,
+        connect_args={
+            "server_settings": {"idle_in_transaction_session_timeout": "200"}
+        },
+    )
+    schema_name = f"lock_test_{uuid4().hex}"
+    try:
+        async with schema_migration_lock(engine, schema_name):
+            await asyncio.sleep(0.6)
+            assert not await _lock_is_free(engine, schema_name)
+        assert await _lock_is_free(engine, schema_name)
+    finally:
+        await engine.dispose()
