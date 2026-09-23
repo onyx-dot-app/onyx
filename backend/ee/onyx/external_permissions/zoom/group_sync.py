@@ -71,8 +71,7 @@ def account_roster(client: ZoomClient) -> tuple[set[str], str | None]:
     """Every usable email in the account, and any user id, which the rule
     catalogue is read through. Raises rather than returning a listing Zoom cut
     short: a group filled from part of the roster would revoke access for
-    everyone left out, while a failed attempt keeps the membership the last
-    one wrote."""
+    everyone left out, and a failed attempt at least shows up as one."""
     emails: list[str] = []
     any_user_id: str | None = None
     expected: int | None = None
