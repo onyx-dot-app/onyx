@@ -14,11 +14,13 @@ import UsageReports from "@/views/admin/WorkspaceAnalyticsPage/UsageReports";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Divider } from "@opal/components";
 import { SettingsLayouts } from "@opal/layouts";
+import { useSettings } from "@/lib/settings/hooks";
 
 const route = ADMIN_ROUTES.WORKSPACE_ANALYTICS;
 
 export default function WorkspaceAnalyticsPage() {
   const t = useTranslations("admin.analytics");
+  const { appName } = useSettings();
   const adminRouteTitle = useAdminRouteTitle();
   const [timeRange, setTimeRange] = useTimeRange();
 
@@ -27,7 +29,7 @@ export default function WorkspaceAnalyticsPage() {
       <SettingsLayouts.Header
         icon={route.icon}
         title={adminRouteTitle(route)}
-        description={t("page.description")}
+        description={t("page.description", { appName })}
         divider
         actions={[
           <InputDateRangePicker

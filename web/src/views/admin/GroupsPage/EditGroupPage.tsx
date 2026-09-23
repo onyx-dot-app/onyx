@@ -628,7 +628,9 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 <MessageCard
                   variant="info"
                   title={t("edit.systemGroup.title")}
-                  description={t("edit.systemGroup.description")}
+                  description={t("edit.systemGroup.description", {
+                    appName: settings.appName,
+                  })}
                 />
               )}
 

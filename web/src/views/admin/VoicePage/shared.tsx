@@ -1,8 +1,9 @@
 "use client";
 
-import { markdown } from "@opal/utils";
+import { escapeMarkdown, markdown } from "@opal/utils";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { SvgOnyxLogo } from "@opal/logos";
@@ -66,6 +67,7 @@ export function VoiceProviderSetupModal({
   onSuccess,
 }: VoiceProviderSetupModalProps) {
   const t = useTranslations("admin.voice");
+  const { appName } = useSettings();
   const onClose = useModalClose();
   const detail = getVoiceProviderDetail(providerType);
   const initialSttModel =
@@ -327,6 +329,7 @@ export function VoiceProviderSetupModal({
                       subDescription={markdown(
                         t("setupModal.targetUri.description", {
                           portalUrl: AZURE_PORTAL_URL,
+                          appName: escapeMarkdown(appName),
                         })
                       )}
                       withLabel="target_uri"
@@ -441,7 +444,9 @@ export function VoiceProviderSetupModal({
                       {(detail.ttsModels?.length ?? 0) > 1 && (
                         <InputVertical
                           title={t("setupModal.ttsModel.label")}
-                          subDescription={t("setupModal.ttsModel.description")}
+                          subDescription={t("setupModal.ttsModel.description", {
+                            appName,
+                          })}
                           withLabel="tts_model"
                         >
                           <InputSelectField name="tts_model">

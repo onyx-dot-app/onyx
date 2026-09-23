@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import { FieldArray, useFormikContext, ErrorMessage } from "formik";
 import { DocumentSetSummary } from "@/lib/types";
 import { toast } from "@opal/layouts";
@@ -58,6 +59,7 @@ export function SlackChannelConfigFormFields({
   formikProps,
 }: SlackChannelConfigFormFieldsProps) {
   const t = useTranslations("admin.slackBots");
+  const { appName } = useSettings();
   const router = useRouter();
   const { values, setFieldValue } = useFormikContext<any>();
   const [viewUnselectableSets, setViewUnselectableSets] = useState(false);
@@ -477,7 +479,7 @@ export function SlackChannelConfigFormFields({
               <CheckboxField
                 name="show_continue_in_web_ui"
                 label={t("form.showContinueInWebUi.label")}
-                tooltip={t("form.showContinueInWebUi.tooltip")}
+                tooltip={t("form.showContinueInWebUi.tooltip", { appName })}
               />
 
               <CheckboxField

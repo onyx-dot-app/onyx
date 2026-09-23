@@ -580,7 +580,7 @@ export default function AgentEditorPage({
   const canUpdateFeaturedStatus = existingAgent
     ? can(existingAgent, "feature")
     : hasPermission(permissions, Permission.MANAGE_AGENTS);
-  const { vectorDbEnabled } = useSettings();
+  const { vectorDbEnabled, appName } = useSettings();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
 
   const agentDraftStorageKey = draftKey("agent-editor", "new");
@@ -1804,7 +1804,8 @@ export default function AgentEditorPage({
                                   withLabel="llm_model"
                                   title={t("modals.viewer.defaultModel.title")}
                                   description={t(
-                                    "modals.viewer.defaultModel.description"
+                                    "modals.viewer.defaultModel.description",
+                                    { appName }
                                   )}
                                 >
                                   <ModelSelector
