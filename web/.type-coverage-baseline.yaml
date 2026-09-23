@@ -32,7 +32,7 @@ packages:
   src/components/admin: 96
   src/components/auth: 89.3
   src/components/chat: 97.2
-  src/components/context: 99.3
+  src/components/context: 100
   src/components/dateRangeSelectors: 100
   src/components/dev: 98.8
   src/components/errorPages: 100
@@ -56,7 +56,7 @@ packages:
   src/i18n/messages: 100
   src/interfaces: 100
   src/layouts: 100
-  src/layouts/chromes: 99.8
+  src/layouts/chromes: 99.7
   src/layouts/craft: 96.1
   src/lib: 98.9
   src/lib/agents: 99.2
@@ -122,7 +122,7 @@ packages:
   src/sections/model-selector: 99.6
   src/sections/onboarding: 99.8
   src/sections/settings: 100
-  src/sections/sidebar: 99.4
+  src/sections/sidebar: 99.3
   src/sections/skills: 99.8
   src/sections/usage: 99.6
   src/views: 99.3

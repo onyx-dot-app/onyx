@@ -39,6 +39,16 @@ export class ConnectorSetupPage {
     return this.page.locator(`select[name="${fieldName}"]`);
   }
 
+  /** The row for a credential in the credential section, by its name. */
+  credentialRow(credentialName: string): Locator {
+    return this.page.getByRole("row", { name: credentialName });
+  }
+
+  /** Pick a credential in the credential section by its name. */
+  async selectCredential(credentialName: string) {
+    await this.credentialRow(credentialName).getByRole("radio").click();
+  }
+
   /**
    * Navigate to the setup page. Every section renders on one page; connectors
    * without a credential (e.g. web) skip the credential section.

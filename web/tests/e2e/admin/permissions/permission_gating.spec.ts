@@ -304,9 +304,9 @@ test.describe("Permission gating — MANAGE_CONNECTORS", () => {
         page.getByLabel("admin-page-title").getByText("Connectors")
       ).toBeVisible({ timeout: 10000 });
 
-      // Access type and groups live on the wizard's second step, so reaching
+      // Access type and groups live on the connector setup page, so reaching
       // /admin/connectors says nothing about them. `web` has no credential
-      // template, so the wizard skips straight there.
+      // template, so its page shows the configuration straight away.
       await page.goto("/admin/connectors/web");
       await page.waitForLoadState("networkidle");
       await expect(page.getByText("Document Access")).toBeVisible({
