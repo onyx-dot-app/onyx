@@ -2755,7 +2755,8 @@
       },
       "navigation": {
         "createButton": {
-          "label": "コネクターを作成"
+          "label": "コネクターを作成",
+          "pendingLabel": "作成中..."
         }
       },
       "oauth": {
@@ -2848,6 +2849,11 @@
         "submitError": {
           "description": "送信の処理中にエラーが発生しました。もう一度お試しください。",
           "title": "送信中にエラーが発生しました。"
+        }
+      },
+      "sections": {
+        "configuration": {
+          "title": "設定"
         }
       },
       "selectInput": {

@@ -1,25 +1,14 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import {
-  ConfigurableSources,
-  FederatedConnectorDetail,
-  federatedSourceToRegularSource,
-  ValidSources,
-} from "@/lib/types";
+import { ConfigurableSources } from "@/lib/types";
 import AddConnector from "./AddConnectorPage";
-import { HeaderTitle } from "@/components/header/HeaderTitle";
 import { Button } from "@opal/components";
+import { SettingsLayouts, useToastFromQuery } from "@opal/layouts";
+import { SvgAlertCircle } from "@opal/icons";
 import { isValidSource, getSourceMetadata } from "@/lib/sources";
 import { FederatedConnectorForm } from "@/components/admin/federated/FederatedConnectorForm";
-import { useSearchParams } from "next/navigation";
-import useSWR from "swr";
-import { errorHandlingFetcher } from "@/lib/fetcher";
-import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
-import { Credential } from "@/lib/connectors/credentials";
-import { useFederatedConnectors } from "@/lib/hooks";
-import Text from "@/refresh-components/texts/Text";
-import { useToastFromQuery } from "@opal/layouts";
+import { useRouter, useSearchParams } from "next/navigation";
 
 export default function ConnectorWrapper({
   connector,
@@ -27,6 +16,7 @@ export default function ConnectorWrapper({
   connector: ConfigurableSources;
 }) {
   const t = useTranslations("admin.connectorsList");
+  const router = useRouter();
   const searchParams = useSearchParams();
   const mode = searchParams?.get("mode"); // 'federated' or 'regular'
 
@@ -37,23 +27,21 @@ export default function ConnectorWrapper({
     },
   });
 
-  // Check if the connector is valid
   if (!isValidSource(connector)) {
     return (
-      <div className="mt-12 w-full max-w-3xl mx-auto">
-        <div className="mx-auto flex flex-col gap-y-2">
-          <HeaderTitle>
-            <p>{t("invalidConnector.title", { connector })}</p>
-          </HeaderTitle>
+      <SettingsLayouts.Root width="md">
+        <SettingsLayouts.Header
+          icon={SvgAlertCircle}
+          title={t("invalidConnector.title", { connector })}
+        />
+        <SettingsLayouts.Body>
           <div className="me-auto">
-            <Button
-              onClick={() => window.open("/admin/indexing-status", "_self")}
-            >
+            <Button onClick={() => router.push("/admin/indexing-status")}>
               {t("invalidConnector.homeButton.label")}
             </Button>
           </div>
-        </div>
-      </div>
+        </SettingsLayouts.Body>
+      </SettingsLayouts.Root>
     );
   }
 
@@ -73,9 +61,5 @@ export default function ConnectorWrapper({
     );
   }
 
-  return (
-    <div className="mt-12 w-full max-w-3xl mx-auto">
-      <AddConnector connector={connector} />
-    </div>
-  );
+  return <AddConnector connector={connector} />;
 }

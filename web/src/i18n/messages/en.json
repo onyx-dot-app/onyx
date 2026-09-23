@@ -2755,7 +2755,8 @@
       },
       "navigation": {
         "createButton": {
-          "label": "Create Connector"
+          "label": "Create Connector",
+          "pendingLabel": "Creating..."
         }
       },
       "oauth": {
@@ -2848,6 +2849,11 @@
         "submitError": {
           "description": "An error occurred during the submission process. Please try again.",
           "title": "Error during submission."
+        }
+      },
+      "sections": {
+        "configuration": {
+          "title": "Configuration"
         }
       },
       "selectInput": {

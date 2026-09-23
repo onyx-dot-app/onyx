@@ -2755,7 +2755,8 @@
       },
       "navigation": {
         "createButton": {
-          "label": "Konnektor erstellen"
+          "label": "Konnektor erstellen",
+          "pendingLabel": "Wird erstellt..."
         }
       },
       "oauth": {
@@ -2848,6 +2849,11 @@
         "submitError": {
           "description": "Beim Senden ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.",
           "title": "Fehler beim Senden."
+        }
+      },
+      "sections": {
+        "configuration": {
+          "title": "Konfiguration"
         }
       },
       "selectInput": {

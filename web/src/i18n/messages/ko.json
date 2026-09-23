@@ -2755,7 +2755,8 @@
       },
       "navigation": {
         "createButton": {
-          "label": "커넥터 만들기"
+          "label": "커넥터 만들기",
+          "pendingLabel": "생성 중..."
         }
       },
       "oauth": {
@@ -2848,6 +2849,11 @@
         "submitError": {
           "description": "제출 과정에서 오류가 발생했습니다. 다시 시도하세요.",
           "title": "제출 중 오류가 발생했습니다."
+        }
+      },
+      "sections": {
+        "configuration": {
+          "title": "구성"
         }
       },
       "selectInput": {

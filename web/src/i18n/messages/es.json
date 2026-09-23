@@ -2755,7 +2755,8 @@
       },
       "navigation": {
         "createButton": {
-          "label": "Crear el conector"
+          "label": "Crear el conector",
+          "pendingLabel": "Creando..."
         }
       },
       "oauth": {
@@ -2848,6 +2849,11 @@
         "submitError": {
           "description": "Ocurrió un error durante el envío. Inténtalo de nuevo.",
           "title": "Error durante el envío."
+        }
+      },
+      "sections": {
+        "configuration": {
+          "title": "Configuración"
         }
       },
       "selectInput": {

@@ -2755,7 +2755,8 @@
       },
       "navigation": {
         "createButton": {
-          "label": "إنشاء موصل"
+          "label": "إنشاء موصل",
+          "pendingLabel": "جارٍ الإنشاء..."
         }
       },
       "oauth": {
@@ -2848,6 +2849,11 @@
         "submitError": {
           "description": "حدث خطأ أثناء عملية الإرسال. يرجى المحاولة مرة أخرى.",
           "title": "خطأ أثناء الإرسال."
+        }
+      },
+      "sections": {
+        "configuration": {
+          "title": "الإعدادات"
         }
       },
       "selectInput": {

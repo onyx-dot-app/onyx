@@ -2755,7 +2755,8 @@
       },
       "navigation": {
         "createButton": {
-          "label": "创建连接器"
+          "label": "创建连接器",
+          "pendingLabel": "正在创建..."
         }
       },
       "oauth": {
@@ -2848,6 +2849,11 @@
         "submitError": {
           "description": "提交过程中发生错误。请重试。",
           "title": "提交时出错。"
+        }
+      },
+      "sections": {
+        "configuration": {
+          "title": "配置"
         }
       },
       "selectInput": {
