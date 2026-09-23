@@ -289,6 +289,49 @@ class TestRequireBusinessTierForMultiSSO:
         mock_get_tier.assert_not_called()
 
 
+class TestRequireBusinessTierForConnectorGroupRestrictions:
+    @patch("ee.onyx.utils.tier.LICENSE_ENFORCEMENT_ENABLED", True)
+    @patch("ee.onyx.utils.tier.get_tier")
+    def test_below_business_raises(self, mock_get_tier: MagicMock) -> None:
+        from ee.onyx.utils.tier import (
+            require_business_tier_for_connector_group_restrictions,
+        )
+
+        mock_get_tier.return_value = Tier.COMMUNITY
+        with pytest.raises(OnyxError) as exc_info:
+            require_business_tier_for_connector_group_restrictions()
+        assert exc_info.value.error_code == OnyxErrorCode.FEATURE_NOT_AVAILABLE
+
+    @pytest.mark.parametrize(
+        "tier",
+        [Tier.BUSINESS, Tier.ENTERPRISE],
+        ids=["business", "enterprise"],
+    )
+    @patch("ee.onyx.utils.tier.LICENSE_ENFORCEMENT_ENABLED", True)
+    @patch("ee.onyx.utils.tier.get_tier")
+    def test_business_or_above_passes(
+        self, mock_get_tier: MagicMock, tier: Tier
+    ) -> None:
+        from ee.onyx.utils.tier import (
+            require_business_tier_for_connector_group_restrictions,
+        )
+
+        mock_get_tier.return_value = tier
+        require_business_tier_for_connector_group_restrictions()
+
+    @patch("ee.onyx.utils.tier.LICENSE_ENFORCEMENT_ENABLED", False)
+    @patch("ee.onyx.utils.tier.get_tier")
+    def test_enforcement_disabled_passes_without_tier_read(
+        self, mock_get_tier: MagicMock
+    ) -> None:
+        from ee.onyx.utils.tier import (
+            require_business_tier_for_connector_group_restrictions,
+        )
+
+        require_business_tier_for_connector_group_restrictions()
+        mock_get_tier.assert_not_called()
+
+
 @patch("ee.onyx.utils.tier.MULTI_TENANT", True)
 def test_default_schema_does_not_lookup_cloud_tier() -> None:
     from ee.onyx.utils.tier import get_tier
