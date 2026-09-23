@@ -203,6 +203,25 @@ def test_openai_chat_tools_require_reasoning_none(
             None,
             ReasoningParamStyle.ANTHROPIC_BUDGET,
         ),
+        # Bedrock's GPT-5+ take reasoning.effort; gpt-oss keeps LiteLLM's mapping.
+        (
+            LlmProviderNames.BEDROCK,
+            "us.openai.gpt-6-sol",
+            None,
+            ReasoningParamStyle.OPENAI,
+        ),
+        (
+            LlmProviderNames.BEDROCK,
+            "global.openai.gpt-5.6-luna",
+            None,
+            ReasoningParamStyle.OPENAI,
+        ),
+        (
+            LlmProviderNames.BEDROCK,
+            "openai.gpt-oss-120b-1:0",
+            None,
+            ReasoningParamStyle.LITELLM_EFFORT,
+        ),
         # Everything else falls back to LiteLLM's own mapping.
         (
             LlmProviderNames.VERTEX_AI,
@@ -246,6 +265,7 @@ def test_resolve_reasoning_param_style(
         (LlmProviderNames.BIFROST, "anthropic/claude-opus-4-7", CHAT_COMPLETIONS, True),
         (LlmProviderNames.ANTHROPIC, "claude-opus-4-7", None, True),
         (LlmProviderNames.BEDROCK, "us.anthropic.claude-opus-4-8-v1:0", None, True),
+        (LlmProviderNames.BEDROCK, "us.openai.gpt-6-luna", None, True),
         # Legacy Anthropic budgets make xhigh indistinguishable from high.
         (LlmProviderNames.ANTHROPIC, "claude-3-7-sonnet", None, False),
         # LiteLLM's per-provider mappings reject or drop xhigh.
