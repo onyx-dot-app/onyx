@@ -246,7 +246,8 @@ export function useFederatedConnector(
   };
 }
 
-const CONNECTOR_GROUP_RESTRICTIONS_URL = "/api/manage/connector-group-restrictions";
+const CONNECTOR_GROUP_RESTRICTIONS_URL =
+  "/api/manage/connector-group-restrictions";
 
 interface ConnectorGroupRestrictionsStatus {
   enabled: boolean;
