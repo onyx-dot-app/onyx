@@ -194,3 +194,41 @@ def test_sync_lock_still_acquires_for_sync_callers(
         assert fake.owned()
 
     assert fake.release_calls == 1
+
+
+def test_async_lock_releases_late_acquire_after_cancellation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If the awaiting coroutine is cancelled while the worker is still
+    acquiring, whatever it eventually acquires must be released — a late
+    Postgres advisory lock would otherwise be stranded forever."""
+    fake = _FakeLock()
+    monkeypatch.setattr(
+        locks_module, "get_shared_cache_backend", lambda: _fake_backend(fake)
+    )
+
+    async def run() -> None:
+        assert fake.acquire(blocking=False)
+        task = asyncio.create_task(
+            locks_module.async_cache_shared_lock(
+                "test-lock", 60.0, 5.0, logger
+            ).__aenter__()
+        )
+        await asyncio.sleep(0.05)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        # Let the worker win the lock after the waiter is gone; the helper's
+        # done callback must release it from the worker thread.
+        # release_calls counts this test's release + the worker's; the
+        # worker's is the one that proves the late-acquired lock was freed.
+        releases_before = fake.release_calls
+        fake.release()
+        for _ in range(200):
+            await asyncio.sleep(0.01)
+            if fake.release_calls > releases_before + 1:
+                break
+        assert fake.release_calls == releases_before + 2
+        assert not fake.owned()
+
+    asyncio.run(run())
