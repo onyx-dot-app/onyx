@@ -227,12 +227,7 @@ inferenceCapability:
     limits:
       cpu: 4000m
       memory: 10Gi
-  # Optional health probes
-  # Example:
-  # readinessProbe:
-  #   httpGet:
-  #     path: /health
-  #     port: model-server
+  # readinessProbe: {} uses the chart default, set null to drop it.
   startupProbe: {}
   readinessProbe: {}
   livenessProbe: {}
@@ -258,6 +253,11 @@ inferenceCapability:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  topologySpreadConstraints: []
+  # Rendered only when the replica count (or autoscaling.minReplicas) is above 1.
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
   # Deployment strategy - use Recreate or RollingUpdate with maxSurge: 0 to terminate old pod first
   # This prevents pending pods when cluster resources are constrained
   strategy: {}
@@ -305,12 +305,8 @@ indexCapability:
     limits:
       cpu: 6000m
       memory: 6Gi
-  # Optional health probes
-  # Example:
-  # readinessProbe:
-  #   httpGet:
-  #     path: /health
-  #     port: model-server
+  # readinessProbe: {} uses the chart default, set null to drop it. The default is a
+  # TCP check: --limit-concurrency answers HTTP probes with 503 under load.
   startupProbe: {}
   readinessProbe: {}
   livenessProbe: {}
@@ -336,6 +332,11 @@ indexCapability:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  topologySpreadConstraints: []
+  # Rendered only when the replica count (or autoscaling.minReplicas) is above 1.
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
   # Deployment strategy - use Recreate or RollingUpdate with maxSurge: 0 to terminate old pod first
   # This prevents pending pods when cluster resources are constrained
   strategy: {}
@@ -480,15 +481,16 @@ webserver:
       cpu: 1000m
       memory: 1Gi
 
-  # Optional health probes
-  # Example:
-  # readinessProbe:
-  #   httpGet:
-  #     path: /api/health
-  #     port: http
+  # readinessProbe: {} uses the chart default (TCP check on the http port), set
+  # null to drop it. The web server has no health route: /api/* returns 404 here.
   startupProbe: {}
   readinessProbe: {}
   livenessProbe: {}
+
+  # preStop sleep lets endpoint removal reach the ingress before SIGTERM. It
+  # counts against the grace period and needs Kubernetes >= 1.30.
+  preStopSleepSeconds: 15
+  terminationGracePeriodSeconds: 30
 
   autoscaling:
     enabled: false
@@ -526,6 +528,11 @@ webserver:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  topologySpreadConstraints: []
+  # Rendered only when the replica count (or autoscaling.minReplicas) is above 1.
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
 
 api:
   extraEnv: []
@@ -593,13 +600,19 @@ api:
       cpu: 3000m
       memory: 3Gi
 
-  # Optional health probes.
+  # Health probes.
   #
-  # Match the path to the probe. /health/ready reports not-ready once the request
-  # threadpool is saturated, which is what should pull a pod out of the Service.
-  # /health only reports that the process is up. Do NOT put /health/ready on the
-  # liveness probe: saturation is load-induced and hits every replica at once,
-  # so restarting on it turns a slowdown into an outage.
+  # readinessProbe: {} uses the chart default, an httpGet on /health (process up
+  # and event loop answering). Set it to null to drop it. Readiness never
+  # restarts a pod, so it is safe while `alembic upgrade head` runs at startup.
+  #
+  # /health/ready also reports not-ready once the request threadpool is
+  # saturated. Use it for readiness only with several replicas: saturation hits
+  # every replica at once, and a lone not-ready pod leaves the Service empty.
+  # Do NOT put /health/ready on the liveness probe.
+  #
+  # Liveness and startup probes stay opt-in. Size a startupProbe for the longest
+  # migration you expect, or it kills the pod mid-migration.
   #
   # Example:
   # readinessProbe:
@@ -613,6 +626,12 @@ api:
   startupProbe: {}
   readinessProbe: {}
   livenessProbe: {}
+
+  # preStop sleep lets endpoint removal reach the ingress before SIGTERM, then
+  # uvicorn waits for in-flight chat streams until the grace period ends. The
+  # sleep counts against the grace period and needs Kubernetes >= 1.30.
+  preStopSleepSeconds: 15
+  terminationGracePeriodSeconds: 120
 
   autoscaling:
     enabled: false
@@ -650,6 +669,11 @@ api:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  topologySpreadConstraints: []
+  # Rendered only when the replica count (or autoscaling.minReplicas) is above 1.
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
 
   # Disable only when a separate deployment step runs migrations.
   runStartupMigrations: true
@@ -780,6 +804,9 @@ celery_worker_heavy:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
 
 celery_worker_docprocessing:
   extraEnv: []
@@ -819,6 +846,9 @@ celery_worker_docprocessing:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
 
 celery_worker_light:
   extraEnv: []
@@ -858,6 +888,9 @@ celery_worker_light:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
 
 celery_worker_monitoring:
   extraEnv: []
@@ -897,6 +930,9 @@ celery_worker_monitoring:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
 
 celery_worker_primary:
   extraEnv: []
@@ -936,6 +972,9 @@ celery_worker_primary:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
 
 celery_worker_user_file_processing:
   extraEnv: []
@@ -975,6 +1014,9 @@ celery_worker_user_file_processing:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
 
 # Dedicated worker for Craft scheduled-task headless executor fires.
 # Isolated from `heavy` because each fire is long-running (LLM + tool calls
@@ -1019,6 +1061,9 @@ celery_worker_scheduled_tasks:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
 
 # Discord bot for Onyx
 # The bot offloads message processing to scalable API pods via HTTP requests.
@@ -1175,6 +1220,9 @@ celery_worker_docfetching:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
 
 ######################################################################
 #
