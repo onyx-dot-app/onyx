@@ -41,6 +41,7 @@ SCALE_TEST_SITE_URL = "https://danswerai.sharepoint.com/sites/OnyxTesting2"
 PERMISSION_SYNC_SITE_URL = "https://danswerai.sharepoint.com/sites/Permisisonsync"
 # SharePoint strips "&" from the library URL, so this library lives at "RD Library".
 STRIPPED_URL_LIBRARY_NAME = "R&D Library"
+STRIPPED_URL_LIBRARY_URL_NAME = "RD Library"
 STRIPPED_URL_LIBRARY_FOLDER = "R&D Folder"
 STRIPPED_URL_LIBRARY_SUBFOLDER = "Q1 & Q2"
 
@@ -792,6 +793,40 @@ def test_permission_sync_folder_permissions_in_library_with_stripped_url(
 
     assert folder_node.external_access == EXPECTED_PERMISSION_SYNC_FOLDER_ACCESS
     assert subfolder_node.external_access == EXPECTED_PERMISSION_SYNC_FOLDER_ACCESS
+
+
+def test_permission_sync_site_url_scoped_to_library_with_stripped_url(
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
+    mock_store_image: MagicMock,
+    sharepoint_cert_credentials: dict[str, str],
+    enable_ee: None,  # noqa: ARG001
+) -> None:
+    """A site URL scoped to a library carries its URL segment, not its display name."""
+    connector = SharepointConnector(
+        sites=[f"{PERMISSION_SYNC_SITE_URL}/{STRIPPED_URL_LIBRARY_URL_NAME}"],
+        include_site_pages=False,
+        include_site_documents=True,
+    )
+    connector.load_credentials(sharepoint_cert_credentials)
+    with patch(
+        "onyx.connectors.microsoft_utils.drive_items.store_image_and_create_section",
+        mock_store_image,
+    ):
+        result = load_all_from_connector(
+            connector,
+            start=0,
+            end=time.time(),
+            include_permissions=True,
+        )
+
+    assert result.documents, "Should find documents in the library"
+    drive_nodes = [
+        node
+        for node in result.hierarchy_nodes
+        if node.node_type == HierarchyNodeType.DRIVE
+    ]
+    assert [node.display_name for node in drive_nodes] == [STRIPPED_URL_LIBRARY_NAME]
+    assert drive_nodes[0].external_access == EXPECTED_PERMISSION_SYNC_HIERARCHY_ACCESS
 
 
 def test_resolve_tenant_domain_from_site_urls(
