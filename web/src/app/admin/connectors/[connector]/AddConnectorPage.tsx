@@ -6,7 +6,8 @@ import { Permission } from "@/lib/types";
 import useSWR, { mutate } from "swr";
 import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
 import { getSourceDisplayName, getSourceMetadata } from "@/lib/sources";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { renderSidebarLogo } from "@/lib/sidebar/utils";
 import { deleteCredential, linkCredential } from "@/lib/credential";
 import { submitFiles } from "@/app/admin/connectors/[connector]/pages/utils/files";
 import { submitGoogleSite } from "@/app/admin/connectors/[connector]/pages/utils/google_site";
@@ -59,7 +60,7 @@ import { Button, Text as OpalText } from "@opal/components";
 import { Content, Section, SettingsLayouts, toast } from "@opal/layouts";
 import { deleteConnector } from "@/lib/connector";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
-import { SvgKey, SvgPlusCircle } from "@opal/icons";
+import { SvgArrowExchange, SvgKey } from "@opal/icons";
 import { useTranslations } from "next-intl";
 
 export interface AdvancedConfig {
@@ -154,6 +155,8 @@ export default function AddConnector({
 
   const router = useRouter();
   const settings = useSettings();
+  // The app icon honours white-labelling, like the sidebar's.
+  const AppIcon = useMemo(() => renderSidebarLogo(true), []);
   const defaultPruneFreqHours = settings.default_pruning_freq
     ? settings.default_pruning_freq / 3600
     : 600; // 25 days fallback until settings load
@@ -528,19 +531,32 @@ export default function AddConnector({
           <SettingsLayouts.Root width="md">
             <SettingsLayouts.Header
               icon={sourceMetadata.icon}
+              moreIcon1={SvgArrowExchange}
+              moreIcon2={AppIcon}
               title={displayName}
-              description={configuration.description}
-              backButton={() => router.push("/admin/connectors")}
+              description={t("header.description", {
+                source: displayName,
+                appName: settings.appName,
+              })}
+              divider
               rightChildren={
-                <Button
-                  disabled={!formikProps.isValid || !canCreate || busy}
-                  rightIcon={SvgPlusCircle}
-                  onClick={() => formikProps.handleSubmit()}
-                >
-                  {busy
-                    ? t("navigation.createButton.pendingLabel")
-                    : t("navigation.createButton.label")}
-                </Button>
+                <Section flexDirection="row" gap={1} width="fit">
+                  <Button
+                    prominence="secondary"
+                    disabled={busy}
+                    onClick={() => router.push("/admin/connectors")}
+                  >
+                    {t("header.cancelButton.label")}
+                  </Button>
+                  <Button
+                    disabled={!formikProps.isValid || !canCreate || busy}
+                    onClick={() => formikProps.handleSubmit()}
+                  >
+                    {busy
+                      ? t("header.connectButton.pendingLabel")
+                      : t("header.connectButton.label")}
+                  </Button>
+                </Section>
               }
             >
               {hasFederatedOption && (

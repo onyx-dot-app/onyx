@@ -2744,6 +2744,16 @@
           "placeholder": "서비스 계정 JSON 키를 업로드하거나 붙여 넣으세요"
         }
       },
+      "header": {
+        "cancelButton": {
+          "label": "취소"
+        },
+        "connectButton": {
+          "label": "연결",
+          "pendingLabel": "연결 중..."
+        },
+        "description": "{source}에 연결하고 {appName}용 커넥터를 설정합니다."
+      },
       "invalidConnector": {
         "homeButton": {
           "label": "홈으로 이동"
@@ -2752,12 +2762,6 @@
       },
       "listInput": {
         "placeholder": "{label} 입력"
-      },
-      "navigation": {
-        "createButton": {
-          "label": "커넥터 만들기",
-          "pendingLabel": "생성 중..."
-        }
       },
       "oauth": {
         "error": {

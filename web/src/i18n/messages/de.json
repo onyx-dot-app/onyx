@@ -2744,6 +2744,16 @@
           "placeholder": "Laden Sie den JSON-Schlüssel Ihres Dienstkontos hoch oder fügen Sie ihn ein"
         }
       },
+      "header": {
+        "cancelButton": {
+          "label": "Abbrechen"
+        },
+        "connectButton": {
+          "label": "Verbinden",
+          "pendingLabel": "Verbindung wird hergestellt..."
+        },
+        "description": "Verbinde dich mit {source} und richte den Connector für {appName} ein."
+      },
       "invalidConnector": {
         "homeButton": {
           "label": "Zur Startseite"
@@ -2752,12 +2762,6 @@
       },
       "listInput": {
         "placeholder": "{label} eingeben"
-      },
-      "navigation": {
-        "createButton": {
-          "label": "Konnektor erstellen",
-          "pendingLabel": "Wird erstellt..."
-        }
       },
       "oauth": {
         "error": {

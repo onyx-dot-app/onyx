@@ -2744,6 +2744,16 @@
           "placeholder": "サービスアカウントの JSON キーをアップロードまたは貼り付け"
         }
       },
+      "header": {
+        "cancelButton": {
+          "label": "キャンセル"
+        },
+        "connectButton": {
+          "label": "接続",
+          "pendingLabel": "接続中..."
+        },
+        "description": "{source} に接続し、{appName} 用のコネクタを設定します。"
+      },
       "invalidConnector": {
         "homeButton": {
           "label": "ホームに戻る"
@@ -2752,12 +2762,6 @@
       },
       "listInput": {
         "placeholder": "{label} を入力"
-      },
-      "navigation": {
-        "createButton": {
-          "label": "コネクターを作成",
-          "pendingLabel": "作成中..."
-        }
       },
       "oauth": {
         "error": {

@@ -2744,6 +2744,16 @@
           "placeholder": "Téléversez ou collez la clé JSON de votre compte de service"
         }
       },
+      "header": {
+        "cancelButton": {
+          "label": "Annuler"
+        },
+        "connectButton": {
+          "label": "Connecter",
+          "pendingLabel": "Connexion..."
+        },
+        "description": "Connectez-vous à {source} et configurez le connecteur pour {appName}."
+      },
       "invalidConnector": {
         "homeButton": {
           "label": "Retour à l'accueil"
@@ -2752,12 +2762,6 @@
       },
       "listInput": {
         "placeholder": "Saisissez {label}"
-      },
-      "navigation": {
-        "createButton": {
-          "label": "Créer le connecteur",
-          "pendingLabel": "Création..."
-        }
       },
       "oauth": {
         "error": {

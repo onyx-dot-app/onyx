@@ -2744,6 +2744,16 @@
           "placeholder": "上传或粘贴您的服务账号 JSON 密钥"
         }
       },
+      "header": {
+        "cancelButton": {
+          "label": "取消"
+        },
+        "connectButton": {
+          "label": "连接",
+          "pendingLabel": "正在连接..."
+        },
+        "description": "连接到 {source} 并为 {appName} 设置连接器。"
+      },
       "invalidConnector": {
         "homeButton": {
           "label": "返回首页"
@@ -2752,12 +2762,6 @@
       },
       "listInput": {
         "placeholder": "输入{label}"
-      },
-      "navigation": {
-        "createButton": {
-          "label": "创建连接器",
-          "pendingLabel": "正在创建..."
-        }
       },
       "oauth": {
         "error": {

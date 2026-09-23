@@ -2744,6 +2744,16 @@
           "placeholder": "Upload or paste your service account JSON key"
         }
       },
+      "header": {
+        "cancelButton": {
+          "label": "Cancel"
+        },
+        "connectButton": {
+          "label": "Connect",
+          "pendingLabel": "Connecting..."
+        },
+        "description": "Connect to {source} and set up the connector for {appName}."
+      },
       "invalidConnector": {
         "homeButton": {
           "label": "Go home"
@@ -2752,12 +2762,6 @@
       },
       "listInput": {
         "placeholder": "Enter {label}"
-      },
-      "navigation": {
-        "createButton": {
-          "label": "Create Connector",
-          "pendingLabel": "Creating..."
-        }
       },
       "oauth": {
         "error": {

@@ -27,12 +27,13 @@ Headers are only sticky when `rightChildren` is provided.
 | Prop            | Type                    | Default | Description                                               |
 | --------------- | ----------------------- | ------- | --------------------------------------------------------- |
 | `icon`          | `IconFunctionComponent` | —       | Page icon (required)                                      |
+| `moreIcon1`     | `IconFunctionComponent` | —       | Second icon in the title's icon row (see `Content`)       |
+| `moreIcon2`     | `IconFunctionComponent` | —       | Third icon in the title's icon row (see `Content`)        |
 | `title`         | `string`                | —       | Page title (required)                                     |
 | `description`   | `string`                | —       | Subtitle below the title                                  |
 | `rightChildren` | `ReactNode`             | —       | Action buttons on the right; also enables sticky behavior |
 | `children`      | `ReactNode`             | —       | Content below the title row (e.g. search bar, filters)    |
-| `backButton`    | `boolean`               | `false` | Show a "← Back" button above the title                    |
-| `onBack`        | `() => void`            | —       | Override the default `router.back()` for the back button  |
+| `backButton`    | `boolean \| () => void` | `false` | Show a "← Back" button above the title; a function overrides the default `router.back()` |
 | `divider`       | `boolean`               | `false` | Show a horizontal divider at the bottom of the header     |
 
 ### Body
@@ -63,7 +64,6 @@ import { SettingsLayouts } from "@opal/layouts";
 <SettingsLayouts.Header
   icon={SvgArrow}
   title="Edit Item"
-  backButton
-  onBack={() => router.push("/admin/items")}
+  backButton={() => router.push("/admin/items")}
 />
 ```

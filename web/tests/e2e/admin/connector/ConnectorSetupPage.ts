@@ -24,7 +24,8 @@ export class ConnectorSetupPage {
     this.pageTitle = page.locator('[aria-label="admin-page-title"]');
     this.connectorNameInput = page.getByTestId("name");
     this.createConnectorButton = page.getByRole("button", {
-      name: "Create Connector",
+      name: "Connect",
+      exact: true,
     });
   }
 

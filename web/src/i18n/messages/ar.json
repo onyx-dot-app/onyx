@@ -2744,6 +2744,16 @@
           "placeholder": "ارفع أو الصق مفتاح JSON لحساب الخدمة"
         }
       },
+      "header": {
+        "cancelButton": {
+          "label": "إلغاء"
+        },
+        "connectButton": {
+          "label": "اتصال",
+          "pendingLabel": "جارٍ الاتصال..."
+        },
+        "description": "اتصل بـ {source} وقم بإعداد الموصّل لـ {appName}."
+      },
       "invalidConnector": {
         "homeButton": {
           "label": "العودة إلى الرئيسية"
@@ -2752,12 +2762,6 @@
       },
       "listInput": {
         "placeholder": "أدخل {label}"
-      },
-      "navigation": {
-        "createButton": {
-          "label": "إنشاء موصل",
-          "pendingLabel": "جارٍ الإنشاء..."
-        }
       },
       "oauth": {
         "error": {
