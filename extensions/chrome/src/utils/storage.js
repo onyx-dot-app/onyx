@@ -31,11 +31,6 @@ export async function getManagedSettings() {
   ]);
 }
 
-export async function isDomainManaged() {
-  const managed = await getManaged(CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN);
-  return typeof managed[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN] === "string";
-}
-
 export async function isNewTabOverrideManaged() {
   const managed = await getManaged(
     CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB
