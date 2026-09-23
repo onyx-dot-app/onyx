@@ -24,7 +24,9 @@
 {{- $blocksEvictions := false }}
 {{- if hasKey $pdb "minAvailable" }}
 {{- $min := toString $pdb.minAvailable }}
-{{- $blocksEvictions = ternary (ge (int (trimSuffix "%" $min)) 100) (ge (int $min) $replicas) (hasSuffix "%" $min) }}
+{{- /* Kubernetes rounds a percentage minAvailable up. */}}
+{{- $minPods := ternary (ceil (divf (mulf (float64 (trimSuffix "%" $min)) $replicas) 100)) (float64 $min) (hasSuffix "%" $min) }}
+{{- $blocksEvictions = ge (int $minPods) $replicas }}
 {{- else if hasKey $pdb "maxUnavailable" }}
 {{- $blocksEvictions = le (int (trimSuffix "%" (toString $pdb.maxUnavailable))) 0 }}
 {{- end }}
