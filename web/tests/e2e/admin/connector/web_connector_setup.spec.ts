@@ -4,7 +4,7 @@ import { ConnectorSetupPage } from "@tests/e2e/admin/connector/ConnectorSetupPag
 import { IndexingStatusPage } from "@tests/e2e/admin/connector/IndexingStatusPage";
 
 /**
- * Full UI workflow for configuring a web connector: fill in the wizard,
+ * Full UI workflow for configuring a web connector: fill in the setup page,
  * create the connector, and verify it lands on the status page and its
  * detail page reflects the configuration.
  *
@@ -39,7 +39,9 @@ test.describe("Web connector setup", () => {
     }
   });
 
-  test("configures a web connector through the wizard", async ({ page }) => {
+  test("configures a web connector through the setup page", async ({
+    page,
+  }) => {
     const setupPage = new ConnectorSetupPage(page, "web");
     await setupPage.goto();
 

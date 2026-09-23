@@ -2617,6 +2617,9 @@
         "label": "连接器名称",
         "subtext": "用于描述该连接器的名称。"
       },
+      "credentialRequired": {
+        "tooltip": "请先选择一个凭据。"
+      },
       "credentialsLoadError": {
         "title": "加载凭据失败。"
       },
@@ -2744,6 +2747,15 @@
           "placeholder": "上传或粘贴您的服务账号 JSON 密钥"
         }
       },
+      "header": {
+        "cancelButton": {
+          "label": "取消"
+        },
+        "connectButton": {
+          "label": "连接"
+        },
+        "description": "连接到 {source} 并为 {appName} 设置连接器。"
+      },
       "invalidConnector": {
         "homeButton": {
           "label": "返回首页"
@@ -2752,20 +2764,6 @@
       },
       "listInput": {
         "placeholder": "输入{label}"
-      },
-      "navigation": {
-        "advancedButton": {
-          "label": "高级"
-        },
-        "continueButton": {
-          "label": "继续"
-        },
-        "createButton": {
-          "label": "创建连接器"
-        },
-        "previousButton": {
-          "label": "上一步"
-        }
       },
       "oauth": {
         "error": {
@@ -2857,6 +2855,11 @@
         "submitError": {
           "description": "提交过程中发生错误。请重试。",
           "title": "提交时出错。"
+        }
+      },
+      "sections": {
+        "configuration": {
+          "title": "配置"
         }
       },
       "selectInput": {
@@ -13830,20 +13833,6 @@
       },
       "sessionsFilter": {
         "label": "会话"
-      }
-    },
-    "createConnector": {
-      "advancedStep": {
-        "label": "高级（可选）"
-      },
-      "connectorStep": {
-        "label": "连接器"
-      },
-      "credentialStep": {
-        "label": "凭据"
-      },
-      "exitSetup": {
-        "label": "退出连接器设置"
       }
     },
     "notifications": {

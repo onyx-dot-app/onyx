@@ -2617,6 +2617,9 @@
         "label": "Nom du connecteur",
         "subtext": "Un nom descriptif pour le connecteur."
       },
+      "credentialRequired": {
+        "tooltip": "Sélectionnez d'abord un identifiant."
+      },
       "credentialsLoadError": {
         "title": "Échec du chargement des identifiants."
       },
@@ -2744,6 +2747,15 @@
           "placeholder": "Téléversez ou collez la clé JSON de votre compte de service"
         }
       },
+      "header": {
+        "cancelButton": {
+          "label": "Annuler"
+        },
+        "connectButton": {
+          "label": "Connecter"
+        },
+        "description": "Connectez-vous à {source} et configurez le connecteur pour {appName}."
+      },
       "invalidConnector": {
         "homeButton": {
           "label": "Retour à l'accueil"
@@ -2752,20 +2764,6 @@
       },
       "listInput": {
         "placeholder": "Saisissez {label}"
-      },
-      "navigation": {
-        "advancedButton": {
-          "label": "Avancé"
-        },
-        "continueButton": {
-          "label": "Continuer"
-        },
-        "createButton": {
-          "label": "Créer le connecteur"
-        },
-        "previousButton": {
-          "label": "Précédent"
-        }
       },
       "oauth": {
         "error": {
@@ -2857,6 +2855,11 @@
         "submitError": {
           "description": "Une erreur est survenue pendant l'envoi. Veuillez réessayer.",
           "title": "Erreur lors de l'envoi."
+        }
+      },
+      "sections": {
+        "configuration": {
+          "title": "Configuration"
         }
       },
       "selectInput": {
@@ -13830,20 +13833,6 @@
       },
       "sessionsFilter": {
         "label": "Sessions"
-      }
-    },
-    "createConnector": {
-      "advancedStep": {
-        "label": "Avancé (facultatif)"
-      },
-      "connectorStep": {
-        "label": "Connecteur"
-      },
-      "credentialStep": {
-        "label": "Identifiants"
-      },
-      "exitSetup": {
-        "label": "Quitter la configuration du connecteur"
       }
     },
     "notifications": {

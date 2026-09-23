@@ -2617,6 +2617,9 @@
         "label": "コネクター名",
         "subtext": "コネクターの内容がわかる名前です。"
       },
+      "credentialRequired": {
+        "tooltip": "最初に認証情報を選択してください。"
+      },
       "credentialsLoadError": {
         "title": "認証情報の読み込みに失敗しました。"
       },
@@ -2744,6 +2747,15 @@
           "placeholder": "サービスアカウントの JSON キーをアップロードまたは貼り付け"
         }
       },
+      "header": {
+        "cancelButton": {
+          "label": "キャンセル"
+        },
+        "connectButton": {
+          "label": "接続"
+        },
+        "description": "{source} に接続し、{appName} 用のコネクタを設定します。"
+      },
       "invalidConnector": {
         "homeButton": {
           "label": "ホームに戻る"
@@ -2752,20 +2764,6 @@
       },
       "listInput": {
         "placeholder": "{label} を入力"
-      },
-      "navigation": {
-        "advancedButton": {
-          "label": "詳細設定"
-        },
-        "continueButton": {
-          "label": "次へ"
-        },
-        "createButton": {
-          "label": "コネクターを作成"
-        },
-        "previousButton": {
-          "label": "戻る"
-        }
       },
       "oauth": {
         "error": {
@@ -2857,6 +2855,11 @@
         "submitError": {
           "description": "送信の処理中にエラーが発生しました。もう一度お試しください。",
           "title": "送信中にエラーが発生しました。"
+        }
+      },
+      "sections": {
+        "configuration": {
+          "title": "設定"
         }
       },
       "selectInput": {
@@ -13830,20 +13833,6 @@
       },
       "sessionsFilter": {
         "label": "セッション"
-      }
-    },
-    "createConnector": {
-      "advancedStep": {
-        "label": "詳細設定（任意）"
-      },
-      "connectorStep": {
-        "label": "コネクター"
-      },
-      "credentialStep": {
-        "label": "認証情報"
-      },
-      "exitSetup": {
-        "label": "コネクター設定を終了"
       }
     },
     "notifications": {

@@ -2617,6 +2617,9 @@
         "label": "Connector Name",
         "subtext": "A descriptive name for the connector."
       },
+      "credentialRequired": {
+        "tooltip": "Select a credential first."
+      },
       "credentialsLoadError": {
         "title": "Failed to load credentials."
       },
@@ -2744,6 +2747,15 @@
           "placeholder": "Upload or paste your service account JSON key"
         }
       },
+      "header": {
+        "cancelButton": {
+          "label": "Cancel"
+        },
+        "connectButton": {
+          "label": "Connect"
+        },
+        "description": "Connect to {source} and set up the connector for {appName}."
+      },
       "invalidConnector": {
         "homeButton": {
           "label": "Go home"
@@ -2752,20 +2764,6 @@
       },
       "listInput": {
         "placeholder": "Enter {label}"
-      },
-      "navigation": {
-        "advancedButton": {
-          "label": "Advanced"
-        },
-        "continueButton": {
-          "label": "Continue"
-        },
-        "createButton": {
-          "label": "Create Connector"
-        },
-        "previousButton": {
-          "label": "Previous"
-        }
       },
       "oauth": {
         "error": {
@@ -2857,6 +2855,11 @@
         "submitError": {
           "description": "An error occurred during the submission process. Please try again.",
           "title": "Error during submission."
+        }
+      },
+      "sections": {
+        "configuration": {
+          "title": "Configuration"
         }
       },
       "selectInput": {
@@ -13830,20 +13833,6 @@
       },
       "sessionsFilter": {
         "label": "Sessions"
-      }
-    },
-    "createConnector": {
-      "advancedStep": {
-        "label": "Advanced (optional)"
-      },
-      "connectorStep": {
-        "label": "Connector"
-      },
-      "credentialStep": {
-        "label": "Credential"
-      },
-      "exitSetup": {
-        "label": "Exit Connector Setup"
       }
     },
     "notifications": {

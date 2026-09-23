@@ -2617,6 +2617,9 @@
         "label": "اسم الموصل",
         "subtext": "اسم وصفي للموصل."
       },
+      "credentialRequired": {
+        "tooltip": "اختر بيانات اعتماد أولاً."
+      },
       "credentialsLoadError": {
         "title": "فشل تحميل بيانات الاعتماد."
       },
@@ -2744,6 +2747,15 @@
           "placeholder": "ارفع أو الصق مفتاح JSON لحساب الخدمة"
         }
       },
+      "header": {
+        "cancelButton": {
+          "label": "إلغاء"
+        },
+        "connectButton": {
+          "label": "اتصال"
+        },
+        "description": "اتصل بـ {source} وقم بإعداد الموصّل لـ {appName}."
+      },
       "invalidConnector": {
         "homeButton": {
           "label": "العودة إلى الرئيسية"
@@ -2752,20 +2764,6 @@
       },
       "listInput": {
         "placeholder": "أدخل {label}"
-      },
-      "navigation": {
-        "advancedButton": {
-          "label": "متقدم"
-        },
-        "continueButton": {
-          "label": "متابعة"
-        },
-        "createButton": {
-          "label": "إنشاء موصل"
-        },
-        "previousButton": {
-          "label": "السابق"
-        }
       },
       "oauth": {
         "error": {
@@ -2857,6 +2855,11 @@
         "submitError": {
           "description": "حدث خطأ أثناء عملية الإرسال. يرجى المحاولة مرة أخرى.",
           "title": "خطأ أثناء الإرسال."
+        }
+      },
+      "sections": {
+        "configuration": {
+          "title": "الإعدادات"
         }
       },
       "selectInput": {
@@ -13830,20 +13833,6 @@
       },
       "sessionsFilter": {
         "label": "الجلسات"
-      }
-    },
-    "createConnector": {
-      "advancedStep": {
-        "label": "متقدم (اختياري)"
-      },
-      "connectorStep": {
-        "label": "الموصل"
-      },
-      "credentialStep": {
-        "label": "بيانات الاعتماد"
-      },
-      "exitSetup": {
-        "label": "الخروج من إعداد الموصل"
       }
     },
     "notifications": {

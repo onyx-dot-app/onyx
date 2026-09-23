@@ -2617,6 +2617,9 @@
         "label": "커넥터 이름",
         "subtext": "커넥터를 설명하는 이름입니다."
       },
+      "credentialRequired": {
+        "tooltip": "먼저 자격 증명을 선택하세요."
+      },
       "credentialsLoadError": {
         "title": "자격 증명을 불러오지 못했습니다."
       },
@@ -2744,6 +2747,15 @@
           "placeholder": "서비스 계정 JSON 키를 업로드하거나 붙여 넣으세요"
         }
       },
+      "header": {
+        "cancelButton": {
+          "label": "취소"
+        },
+        "connectButton": {
+          "label": "연결"
+        },
+        "description": "{source}에 연결하고 {appName}용 커넥터를 설정합니다."
+      },
       "invalidConnector": {
         "homeButton": {
           "label": "홈으로 이동"
@@ -2752,20 +2764,6 @@
       },
       "listInput": {
         "placeholder": "{label} 입력"
-      },
-      "navigation": {
-        "advancedButton": {
-          "label": "고급"
-        },
-        "continueButton": {
-          "label": "계속"
-        },
-        "createButton": {
-          "label": "커넥터 만들기"
-        },
-        "previousButton": {
-          "label": "이전"
-        }
       },
       "oauth": {
         "error": {
@@ -2857,6 +2855,11 @@
         "submitError": {
           "description": "제출 과정에서 오류가 발생했습니다. 다시 시도하세요.",
           "title": "제출 중 오류가 발생했습니다."
+        }
+      },
+      "sections": {
+        "configuration": {
+          "title": "구성"
         }
       },
       "selectInput": {
@@ -13830,20 +13833,6 @@
       },
       "sessionsFilter": {
         "label": "세션"
-      }
-    },
-    "createConnector": {
-      "advancedStep": {
-        "label": "고급 (선택)"
-      },
-      "connectorStep": {
-        "label": "커넥터"
-      },
-      "credentialStep": {
-        "label": "자격 증명"
-      },
-      "exitSetup": {
-        "label": "커넥터 설정 나가기"
       }
     },
     "notifications": {

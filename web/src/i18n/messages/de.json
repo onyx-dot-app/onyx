@@ -2617,6 +2617,9 @@
         "label": "Konnektorname",
         "subtext": "Ein aussagekräftiger Name für den Konnektor."
       },
+      "credentialRequired": {
+        "tooltip": "Wähle zuerst einen Zugang aus."
+      },
       "credentialsLoadError": {
         "title": "Die Anmeldedaten konnten nicht geladen werden."
       },
@@ -2744,6 +2747,15 @@
           "placeholder": "Laden Sie den JSON-Schlüssel Ihres Dienstkontos hoch oder fügen Sie ihn ein"
         }
       },
+      "header": {
+        "cancelButton": {
+          "label": "Abbrechen"
+        },
+        "connectButton": {
+          "label": "Verbinden"
+        },
+        "description": "Verbinde dich mit {source} und richte den Connector für {appName} ein."
+      },
       "invalidConnector": {
         "homeButton": {
           "label": "Zur Startseite"
@@ -2752,20 +2764,6 @@
       },
       "listInput": {
         "placeholder": "{label} eingeben"
-      },
-      "navigation": {
-        "advancedButton": {
-          "label": "Erweitert"
-        },
-        "continueButton": {
-          "label": "Weiter"
-        },
-        "createButton": {
-          "label": "Konnektor erstellen"
-        },
-        "previousButton": {
-          "label": "Zurück"
-        }
       },
       "oauth": {
         "error": {
@@ -2857,6 +2855,11 @@
         "submitError": {
           "description": "Beim Senden ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.",
           "title": "Fehler beim Senden."
+        }
+      },
+      "sections": {
+        "configuration": {
+          "title": "Konfiguration"
         }
       },
       "selectInput": {
@@ -13830,20 +13833,6 @@
       },
       "sessionsFilter": {
         "label": "Sitzungen"
-      }
-    },
-    "createConnector": {
-      "advancedStep": {
-        "label": "Erweitert (optional)"
-      },
-      "connectorStep": {
-        "label": "Konnektor"
-      },
-      "credentialStep": {
-        "label": "Anmeldedaten"
-      },
-      "exitSetup": {
-        "label": "Konnektor-Einrichtung verlassen"
       }
     },
     "notifications": {

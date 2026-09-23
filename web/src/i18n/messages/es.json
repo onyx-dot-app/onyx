@@ -2617,6 +2617,9 @@
         "label": "Nombre del conector",
         "subtext": "Un nombre descriptivo para el conector."
       },
+      "credentialRequired": {
+        "tooltip": "Selecciona primero una credencial."
+      },
       "credentialsLoadError": {
         "title": "No se pudieron cargar las credenciales."
       },
@@ -2744,6 +2747,15 @@
           "placeholder": "Sube o pega la clave JSON de tu cuenta de servicio"
         }
       },
+      "header": {
+        "cancelButton": {
+          "label": "Cancelar"
+        },
+        "connectButton": {
+          "label": "Conectar"
+        },
+        "description": "Conéctate a {source} y configura el conector para {appName}."
+      },
       "invalidConnector": {
         "homeButton": {
           "label": "Ir al inicio"
@@ -2752,20 +2764,6 @@
       },
       "listInput": {
         "placeholder": "Introduce {label}"
-      },
-      "navigation": {
-        "advancedButton": {
-          "label": "Avanzado"
-        },
-        "continueButton": {
-          "label": "Continuar"
-        },
-        "createButton": {
-          "label": "Crear el conector"
-        },
-        "previousButton": {
-          "label": "Anterior"
-        }
       },
       "oauth": {
         "error": {
@@ -2857,6 +2855,11 @@
         "submitError": {
           "description": "Ocurrió un error durante el envío. Inténtalo de nuevo.",
           "title": "Error durante el envío."
+        }
+      },
+      "sections": {
+        "configuration": {
+          "title": "Configuración"
         }
       },
       "selectInput": {
@@ -13830,20 +13833,6 @@
       },
       "sessionsFilter": {
         "label": "Sesiones"
-      }
-    },
-    "createConnector": {
-      "advancedStep": {
-        "label": "Avanzado (opcional)"
-      },
-      "connectorStep": {
-        "label": "Conector"
-      },
-      "credentialStep": {
-        "label": "Credencial"
-      },
-      "exitSetup": {
-        "label": "Salir de la configuración del conector"
       }
     },
     "notifications": {

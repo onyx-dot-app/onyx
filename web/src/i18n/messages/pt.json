@@ -2617,6 +2617,9 @@
         "label": "Nome do conector",
         "subtext": "Um nome descritivo para o conector."
       },
+      "credentialRequired": {
+        "tooltip": "Selecione uma credencial primeiro."
+      },
       "credentialsLoadError": {
         "title": "Falha ao carregar as credenciais."
       },
@@ -2744,6 +2747,15 @@
           "placeholder": "Envie ou cole a chave JSON da sua conta de serviço"
         }
       },
+      "header": {
+        "cancelButton": {
+          "label": "Cancelar"
+        },
+        "connectButton": {
+          "label": "Conectar"
+        },
+        "description": "Conecte-se ao {source} e configure o conector para {appName}."
+      },
       "invalidConnector": {
         "homeButton": {
           "label": "Ir para o início"
@@ -2752,20 +2764,6 @@
       },
       "listInput": {
         "placeholder": "Digite {label}"
-      },
-      "navigation": {
-        "advancedButton": {
-          "label": "Avançado"
-        },
-        "continueButton": {
-          "label": "Continuar"
-        },
-        "createButton": {
-          "label": "Criar conector"
-        },
-        "previousButton": {
-          "label": "Anterior"
-        }
       },
       "oauth": {
         "error": {
@@ -2857,6 +2855,11 @@
         "submitError": {
           "description": "Ocorreu um erro durante o envio. Tente novamente.",
           "title": "Erro durante o envio."
+        }
+      },
+      "sections": {
+        "configuration": {
+          "title": "Configuração"
         }
       },
       "selectInput": {
@@ -13830,20 +13833,6 @@
       },
       "sessionsFilter": {
         "label": "Sessões"
-      }
-    },
-    "createConnector": {
-      "advancedStep": {
-        "label": "Avançado (opcional)"
-      },
-      "connectorStep": {
-        "label": "Conector"
-      },
-      "credentialStep": {
-        "label": "Credencial"
-      },
-      "exitSetup": {
-        "label": "Sair da configuração do conector"
       }
     },
     "notifications": {
