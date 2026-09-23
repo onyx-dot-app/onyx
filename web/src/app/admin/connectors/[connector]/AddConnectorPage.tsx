@@ -528,7 +528,7 @@ export default function AddConnector({
       {(formikProps) => {
         const busy = uploading || creatingConnector;
         return (
-          <SettingsLayouts.Root width="md">
+          <SettingsLayouts.Root width="sm">
             <SettingsLayouts.Header
               icon={sourceMetadata.icon}
               moreIcon1={SvgArrowExchange}

@@ -29,7 +29,7 @@ export default function ConnectorWrapper({
 
   if (!isValidSource(connector)) {
     return (
-      <SettingsLayouts.Root width="md">
+      <SettingsLayouts.Root width="sm">
         <SettingsLayouts.Header
           icon={SvgAlertCircle}
           title={t("invalidConnector.title", { connector })}
