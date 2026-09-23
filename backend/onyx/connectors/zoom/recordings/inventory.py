@@ -1,14 +1,11 @@
-"""Every Zoom document that still exists, for pruning.
-
-A document still exists if its recording still appears in its host's recordings
-listing, which leaves deleted and trashed recordings out and has no age limit.
-
-This is the mirror image of discovery.py. Discovery skips what it cannot read
-and reports a failure, but anything skipped here is deleted instead, so this
-raises rather than skipping, and it walks from Zoom's launch rather than the
-poll window. The one thing it does skip is a host Zoom says it has no record
-of, whose documents are then meant to go. The caller renews its lock only when
-it receives a batch, so batches go out even when they are empty.
+"""Every Zoom document that still exists, for pruning and the permission doc
+sync: one whose recording its host's listing still shows, however old, which
+leaves deleted and trashed recordings out. Anything left out here is deleted by
+pruning and made private by the doc sync, so unlike discovery this raises rather
+than skips, and it walks from Zoom's launch rather than the poll window. The one
+skip is a host Zoom says it has no record of, whose documents are meant to go.
+The caller renews its lock only when it receives a batch, so batches go out
+even when they are empty.
 """
 
 from collections.abc import Iterator
@@ -26,8 +23,9 @@ from onyx.connectors.zoom.recordings.discovery import (
     list_every_recording,
     listing_windows,
 )
-from onyx.connectors.zoom.recordings.models import Host, HostScope, OccurrenceWork
+from onyx.connectors.zoom.recordings.models import Host, HostScope, ZoomSessionType
 from onyx.connectors.zoom.recordings.processing import zoom_document_id
+from onyx.connectors.zoom.recordings.recording_access import AccessResolver
 from onyx.connectors.zoom.recordings.session_types import (
     is_portal_upload,
     session_type_for_recording,
@@ -37,6 +35,9 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 _MAX_DOCUMENTS_PER_BATCH = 500
+# Bounds the ids remembered to skip a recording listed twice, at about 30 MB.
+# Past it a repeat listing costs one more access call, and nothing is lost.
+_MAX_REMEMBERED_IDS = 250_000
 # listing_windows runs a day past the end it is given, so 28 is the widest
 # trailing pass that still fits in one Zoom call per host.
 _TRAILING_WINDOW_DAYS = 28
@@ -46,27 +47,38 @@ _SCOPES_PER_HEARTBEAT = 25
 
 
 def zoom_slim_documents(
-    client: ZoomClient, sources: list[DiscoverySource]
+    client: ZoomClient,
+    sources: list[DiscoverySource],
+    resolve_access: AccessResolver | None,
 ) -> GenerateSlimDocumentOutput:
     """Rebuilds each batch on the way out. Onyx types a slim batch as a list that
     may hold a HierarchyNode, and a list is invariant, so this copy is what lets
     everything below say what it really produces."""
-    for batch in _slim_batches(client, sources):
+    for batch in _slim_batches(client, sources, resolve_access):
         yield [*batch]
 
 
 def _slim_batches(
-    client: ZoomClient, sources: list[DiscoverySource]
+    client: ZoomClient,
+    sources: list[DiscoverySource],
+    resolve_access: AccessResolver | None,
 ) -> Iterator[list[SlimDocument]]:
     scopes: list[HostScope] = []
     proven: list[SlimDocument] = []
+    emitted: set[str] = set()
     unrecognised = 0
     anchors = 0
     resolved = 0
     for source in sources:
         for scope in source.inventory_scopes(client):
             scopes.extend(scope.hosts)
-            proven.extend(_slim_document(work) for work in scope.proven)
+            proven.extend(
+                document
+                for p in scope.proven
+                for document in _documents(
+                    {p.session_type}, p.recording, resolve_access, emitted
+                )
+            )
             unrecognised += len(scope.unrecognised)
             anchors += len(scope.proven)
             resolved += 1
@@ -100,7 +112,9 @@ def _slim_batches(
 
     unrecognised_types: set[str] = set()
     for scope in hosts:
-        yield from _host_documents(client, scope, windows, unrecognised_types)
+        yield from _host_documents(
+            client, scope, windows, unrecognised_types, resolve_access, emitted
+        )
 
     # A recording that finishes while this walk runs lands in the newest window,
     # so every host is asked for that window again once the walk is over. This
@@ -112,7 +126,9 @@ def _slim_batches(
     now = datetime.now(timezone.utc).date()
     trailing = listing_windows(now - timedelta(days=_TRAILING_WINDOW_DAYS), now)
     for scope in hosts:
-        yield from _host_documents(client, scope, trailing, unrecognised_types)
+        yield from _host_documents(
+            client, scope, trailing, unrecognised_types, resolve_access, emitted
+        )
 
 
 def _merged(scopes: list[HostScope]) -> list[HostScope]:
@@ -150,6 +166,8 @@ def _host_documents(
     scope: HostScope,
     windows: list[tuple[date, date]],
     unrecognised_types: set[str],
+    resolve_access: AccessResolver | None,
+    emitted: set[str],
 ) -> Iterator[list[SlimDocument]]:
     """Do not reach for `_UserRecordingsSource._recordings` instead. It trims to
     the poll window, so it would drop every meeting that ran while this walk was
@@ -158,7 +176,11 @@ def _host_documents(
 
     for from_date, to_date in windows:
         for recording in list_every_recording(client, scope.host, from_date, to_date):
-            batch.extend(_slim_documents_for(recording, scope, unrecognised_types))
+            batch.extend(
+                _slim_documents_for(
+                    recording, scope, unrecognised_types, resolve_access, emitted
+                )
+            )
             if len(batch) >= _MAX_DOCUMENTS_PER_BATCH:
                 yield batch
                 batch = []
@@ -167,7 +189,11 @@ def _host_documents(
 
 
 def _slim_documents_for(
-    recording: ZoomRecordingEntry, scope: HostScope, unrecognised_types: set[str]
+    recording: ZoomRecordingEntry,
+    scope: HostScope,
+    unrecognised_types: set[str],
+    resolve_access: AccessResolver | None,
+    emitted: set[str],
 ) -> list[SlimDocument]:
     if recording.type is not None and is_portal_upload(recording.type):
         return []
@@ -189,25 +215,35 @@ def _slim_documents_for(
             recording.uuid,
         )
 
-    return [
-        _slim_document(
-            OccurrenceWork(
-                session_type=session_type,
-                session_id=recording.session_id,
-                occurrence_uuid=recording.uuid,
-                start_time=recording.start_time,
-                topic=recording.topic,
-            )
-        )
-        for session_type in scope.emitted_types(recording.session_id, derived)
+    document_types = scope.emitted_types(recording.session_id, derived)
+    return _documents(document_types, recording, resolve_access, emitted)
+
+
+def _documents(
+    document_types: set[ZoomSessionType],
+    recording: ZoomRecordingEntry,
+    resolve_access: AccessResolver | None,
+    emitted: set[str],
+) -> list[SlimDocument]:
+    """One document per type indexing may have written this recording under,
+    normally one. A recording the trailing pass or a walked host lists again
+    is skipped, so it costs no second access call."""
+    new_ids = [
+        document_id
+        for document_type in document_types
+        if (document_id := zoom_document_id(document_type, recording.uuid))
+        not in emitted
     ]
-
-
-def _slim_document(work: OccurrenceWork) -> SlimDocument:
-    return SlimDocument(
-        id=zoom_document_id(work.session_type, work.occurrence_uuid),
-        doc_created_at=_created_at(work.start_time),
-    )
+    if not new_ids:
+        return []
+    if len(emitted) < _MAX_REMEMBERED_IDS:
+        emitted.update(new_ids)
+    access = resolve_access(recording) if resolve_access is not None else None
+    created_at = _created_at(recording.start_time)
+    return [
+        SlimDocument(id=document_id, doc_created_at=created_at, external_access=access)
+        for document_id in new_ids
+    ]
 
 
 def _created_at(start_time: str | None) -> datetime | None:

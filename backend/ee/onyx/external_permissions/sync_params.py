@@ -21,6 +21,7 @@ from ee.onyx.configs.app_configs import (
     SHAREPOINT_PERMISSION_GROUP_SYNC_FREQUENCY,
     SLACK_PERMISSION_DOC_SYNC_FREQUENCY,
     TEAMS_PERMISSION_DOC_SYNC_FREQUENCY,
+    ZOOM_PERMISSION_DOC_SYNC_FREQUENCY,
     ZOOM_PERMISSION_GROUP_SYNC_FREQUENCY,
 )
 from ee.onyx.external_permissions.perm_sync_types import (
@@ -187,6 +188,12 @@ def _load_teams_doc_sync() -> DocSyncFuncType:
     return teams_doc_sync
 
 
+def _load_zoom_doc_sync() -> DocSyncFuncType:
+    from ee.onyx.external_permissions.zoom.doc_sync import zoom_doc_sync
+
+    return zoom_doc_sync
+
+
 def _load_zoom_group_sync() -> GroupSyncFuncType:
     from ee.onyx.external_permissions.zoom.group_sync import zoom_group_sync
 
@@ -218,7 +225,7 @@ class SyncConfig(BaseModel):
     censoring_config: CensoringConfig | None = None
 
 
-# No-op doc sync: these sources set permissions while indexing instead.
+# No-op doc sync: the mock connector sets permissions while indexing instead.
 def mock_doc_sync(
     cc_pair: "ConnectorCredentialPair",  # noqa: ARG001
     fetch_all_docs_fn: FetchAllDocumentsFunction,  # noqa: ARG001
@@ -327,8 +334,8 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
     # Domain sign-in rules: groups filled from the account's user roster.
     DocumentSource.ZOOM: SyncConfig(
         doc_sync_config=DocSyncConfig(
-            doc_sync_frequency=DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY,
-            doc_sync_func=mock_doc_sync,
+            doc_sync_frequency=ZOOM_PERMISSION_DOC_SYNC_FREQUENCY,
+            doc_sync_func=_lazy_doc_sync(_load_zoom_doc_sync),
             initial_index_should_sync=True,
         ),
         group_sync_config=GroupSyncConfig(

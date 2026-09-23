@@ -3,9 +3,6 @@ Anything that differs between meetings and webinars belongs on the
 SessionTypeHandler, not in a branch here.
 """
 
-from collections.abc import Callable
-
-from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.models import (
@@ -15,14 +12,16 @@ from onyx.connectors.models import (
     TextSection,
 )
 from onyx.connectors.zoom.client import ZoomClient
-from onyx.connectors.zoom.models import ZoomRecordingEntry
 from onyx.connectors.zoom.recordings.models import (
     OccurrenceWork,
     ZoomSessionType,
     fails_the_whole_run,
     has_no_transcript,
 )
-from onyx.connectors.zoom.recordings.recording_access import ZoomAccessListUnavailable
+from onyx.connectors.zoom.recordings.recording_access import (
+    AccessResolver,
+    ZoomAccessListUnavailable,
+)
 from onyx.connectors.zoom.recordings.session_types import get_session_type_handler
 from onyx.connectors.zoom.recordings.vtt import parse_vtt_transcript
 from onyx.utils.logger import setup_logger
@@ -63,7 +62,7 @@ def process_occurrence(
     client: ZoomClient,
     work: OccurrenceWork,
     *,
-    resolve_access: Callable[[ZoomRecordingEntry], ExternalAccess] | None,
+    resolve_access: AccessResolver | None,
 ) -> Document | ConnectorFailure | None:
     """One occurrence is at most one transcript, so this answers with the
     document, the failure that replaces it, or nothing when the occurrence has

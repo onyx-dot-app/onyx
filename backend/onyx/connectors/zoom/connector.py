@@ -24,6 +24,7 @@ from onyx.connectors.interfaces import (
     Resolver,
     SecondsSinceUnixEpoch,
     SlimConnector,
+    SlimConnectorWithPermSync,
 )
 from onyx.connectors.models import (
     ConnectorCheckpoint,
@@ -52,6 +53,7 @@ from onyx.connectors.zoom.recordings.models import (
     OccurrenceWork,
     RecordingsState,
     ZoomSessionType,
+    definitely_absent,
     fails_the_whole_run,
 )
 from onyx.connectors.zoom.recordings.processing import (
@@ -59,7 +61,9 @@ from onyx.connectors.zoom.recordings.processing import (
     process_occurrence,
 )
 from onyx.connectors.zoom.recordings.recording_access import (
+    AccessResolver,
     RuleGrant,
+    ZoomAccessListUnavailable,
     load_rule_grants,
     look_up_owner_email,
     resolve_recording_access,
@@ -165,7 +169,10 @@ class ZoomConnectorCheckpoint(ConnectorCheckpoint):
 
 
 class ZoomConnector(
-    CheckpointedConnectorWithPermSync[ZoomConnectorCheckpoint], SlimConnector, Resolver
+    CheckpointedConnectorWithPermSync[ZoomConnectorCheckpoint],
+    SlimConnector,
+    SlimConnectorWithPermSync,
+    Resolver,
 ):
     def __init__(
         self,
@@ -285,7 +292,9 @@ class ZoomConnector(
             raise ConnectorMissingCredentialError("Zoom")
         host_id = recording.host_id
         if host_id not in self._owner_emails:
-            self._owner_emails[host_id] = look_up_owner_email(client, host_id)
+            self._owner_emails[host_id] = (
+                look_up_owner_email(client, host_id) if host_id else None
+            )
         return resolve_recording_access(
             client,
             recording,
@@ -298,6 +307,28 @@ class ZoomConnector(
         if self._rule_grants is None:
             self._rule_grants = load_rule_grants(client)
         return self._rule_grants.get(rule_id)
+
+    def _synced_access(self, recording: ZoomRecordingEntry) -> ExternalAccess:
+        """Resolve one recording's access for the periodic doc sync.
+
+        Indexing can fail one document and carry on, but the doc sync cannot.
+        So when nobody can be named to read the recording, or Zoom has deleted
+        it since it was listed, this answers with an empty access list: nobody
+        may read it. Any other error is raised unchanged, which fails the
+        attempt. The shared sync writes each access list as it is yielded, so
+        the documents reached before the error keep the access this attempt
+        found and the rest keep what the last attempt wrote, until an attempt
+        gets through. The client has already retried anything transient.
+        """
+        try:
+            return self._resolve_access(recording)
+        except ZoomAccessListUnavailable as e:
+            logger.warning("%s", e)
+        except Exception as e:
+            if not definitely_absent(e):
+                raise
+            logger.info("Zoom recording %s is gone since it was listed", recording.uuid)
+        return ExternalAccess.empty()
 
     def validate_checkpoint_json(self, checkpoint_json: str) -> ZoomConnectorCheckpoint:
         return ZoomConnectorCheckpoint.model_validate_json(checkpoint_json)
@@ -329,18 +360,29 @@ class ZoomConnector(
     ) -> GenerateSlimDocumentOutput:
         """Pruning deletes every indexed document this does not list, so the poll
         window is ignored and the callback is not needed: the caller drives its
-        own heartbeat off the batches.
+        own heartbeat off the batches."""
+        return self._slim_documents(resolve_access=None)
 
-        Not SlimConnectorWithPermSync. Zoom builds its access lists while
-        indexing, so pruning wants ids and nothing else.
-        """
+    def retrieve_all_slim_docs_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        callback: IndexingHeartbeatInterface | None = None,  # noqa: ARG002
+    ) -> GenerateSlimDocumentOutput:
+        """The doc sync makes every indexed document this does not list private,
+        so like pruning this ignores the poll window."""
+        return self._slim_documents(resolve_access=self._synced_access)
+
+    def _slim_documents(
+        self, resolve_access: AccessResolver | None
+    ) -> GenerateSlimDocumentOutput:
         if self.client is None:
             raise ConnectorMissingCredentialError("Zoom")
         # Checked again here because instantiate_connector skips
         # validate_connector_settings, so a connector saved with a blank form
         # would reach this, list nothing, and delete everything it indexed.
         self._raise_if_nothing_is_in_scope()
-        return zoom_slim_documents(self.client, self._sources)
+        return zoom_slim_documents(self.client, self._sources, resolve_access)
 
     def reindex(
         self,
