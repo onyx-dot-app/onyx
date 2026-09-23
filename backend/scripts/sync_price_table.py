@@ -172,7 +172,7 @@ _MIN_FIELD_COVERAGE = {
 def _check_source_schema(api: dict[str, Any]) -> None:
     """Fail loudly when the upstream payload's shape drifts from what the
     transform expects; report fields we do not map so additions surface."""
-    coverage = {(section, field): 0 for section, field in _MIN_FIELD_COVERAGE}
+    coverage = dict.fromkeys(_MIN_FIELD_COVERAGE, 0)
     unmapped: dict[str, int] = {}
     total = 0
     for slug, provider in api.items():
