@@ -851,6 +851,35 @@ def _select_recent_image_indices(
     return keep, max(0, total - cap)
 
 
+def _cache_split_stats(history: list[ChatMessageSimple]) -> dict[str, str]:
+    """Cache-layout stats for the generation span, so operators can see
+    per-request whether prompt caching is engaged and how large the
+    cacheable prefix is. Mirrors the contiguous-prefix rule used by
+    translate_history_to_llm_format."""
+    prefix_msgs = 0
+    prefix_tokens = 0
+    if PROMPT_CACHE_CHAT_HISTORY:
+        for msg in history:
+            if msg.message_type not in [
+                MessageType.SYSTEM,
+                MessageType.USER,
+                MessageType.USER_REMINDER,
+                MessageType.ASSISTANT,
+                MessageType.TOOL_CALL_RESPONSE,
+            ]:
+                break
+            if not msg.should_cache:
+                break
+            prefix_msgs += 1
+            prefix_tokens += msg.token_count
+    return {
+        "prompt_cache_chat_history": "on" if PROMPT_CACHE_CHAT_HISTORY else "off",
+        "cacheable_prefix_msgs": str(prefix_msgs),
+        "cacheable_prefix_tokens": str(prefix_tokens),
+        "history_msgs": str(len(history)),
+    }
+
+
 def translate_history_to_llm_format(
     history: list[ChatMessageSimple],
     llm_config: LLMConfig,
@@ -1190,6 +1219,10 @@ def run_llm_step_pkt_generator(
             "model_impl": "litellm",
         },
     ) as span_generation:
+        span_generation.span_data.model_config = {
+            **(span_generation.span_data.model_config or {}),
+            **_cache_split_stats(history),
+        }
         span_generation.span_data.input = cast(
             Sequence[Mapping[str, Any]], llm_msg_history
         )
