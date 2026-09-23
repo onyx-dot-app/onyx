@@ -67,7 +67,6 @@ from onyx.chat.models import (
 )
 from onyx.chat.prompt_utils import calculate_reserved_tokens
 from onyx.chat.save_chat import save_chat_turn
-from onyx.chat.search_receipts import search_receipts_enabled
 from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
 from onyx.chat.stop_signal_checker import reset_cancel_status
 from onyx.chat.stream_buffer import StreamBufferWriter
@@ -609,7 +608,6 @@ def build_chat_turn(
     litellm_additional_headers: dict[str, str] | None = None,
     custom_tool_additional_headers: dict[str, str] | None = None,
     mcp_headers: dict[str, str] | None = None,
-    bypass_acl: bool = False,
     # Slack context for federated Slack search
     slack_context: SlackContext | None = None,
     # Additional context to include in the chat history, e.g. Slack threads where the
@@ -1113,7 +1111,6 @@ def build_chat_turn(
         skip_clarification=skip_clarification,
         check_is_connected=check_is_connected,
         cache=cache,
-        bypass_acl=bypass_acl,
         slack_context=slack_context,
         custom_tool_additional_headers=custom_tool_additional_headers,
         mcp_headers=mcp_headers,
@@ -1203,10 +1200,6 @@ def _run_models(
 
     # Workspace toggle: infer source/time filters from the query (default on).
     auto_detect_search_filters = load_settings().auto_detect_search_filters is not False
-    deep_research = n_models == 1 and setup.new_msg_req.deep_research
-    # Evaluated once per message so every model in the turn sees the same answer.
-    # The deep research loop does not take receipts, so skip the flag lookup there.
-    search_receipts = False if deep_research else search_receipts_enabled(user)
 
     merged_queue: queue.Queue[tuple[int, Packet | Exception | object]] = queue.Queue()
 
@@ -1360,7 +1353,6 @@ def _run_models(
                     user_selected_filters=setup.new_msg_req.internal_search_filters,
                     project_id_filter=setup.search_params.project_id_filter,
                     persona_id_filter=setup.search_params.persona_id_filter,
-                    bypass_acl=setup.bypass_acl,
                     slack_context=setup.slack_context,
                     enable_slack_search=_should_enable_slack_search(
                         setup.persona, setup.new_msg_req.internal_search_filters
@@ -1392,7 +1384,7 @@ def _run_models(
                 )
 
             # Per-thread copy: run_llm_loop mutates simple_chat_history in-place.
-            if deep_research:
+            if n_models == 1 and setup.new_msg_req.deep_research:
                 if setup.chat_session_project_id:
                     raise RuntimeError("Deep research is not supported for projects")
                 run_deep_research_llm_loop(
@@ -1430,7 +1422,6 @@ def _run_models(
                     include_citations=setup.new_msg_req.include_citations,
                     all_injected_file_metadata=setup.all_injected_file_metadata,
                     inject_memories_in_prompt=user.use_memories,
-                    enable_search_receipts=search_receipts,
                 )
 
             model_succeeded[model_idx] = True
@@ -1665,7 +1656,6 @@ def _stream_chat_turn(
     litellm_additional_headers: dict[str, str] | None = None,
     custom_tool_additional_headers: dict[str, str] | None = None,
     mcp_headers: dict[str, str] | None = None,
-    bypass_acl: bool = False,
     additional_context: str | None = None,
     slack_context: SlackContext | None = None,
     external_state_container: ChatStateContainer | None = None,
@@ -1690,7 +1680,6 @@ def _stream_chat_turn(
         litellm_additional_headers: Extra headers forwarded to the LLM provider.
         custom_tool_additional_headers: Extra headers for custom tool HTTP calls.
         mcp_headers: Extra headers for MCP tool calls.
-        bypass_acl: If ``True``, document ACL checks are skipped (used by Slack bot).
         additional_context: Extra context prepended to the LLM's chat history, not
             stored in the DB (used for Slack thread hydration).
         slack_context: Federated Slack search context passed through to the search tool.
@@ -1717,8 +1706,7 @@ def _stream_chat_turn(
         with get_session_with_current_tenant() as setup_db_session:
             try:
                 if (
-                    not bypass_acl
-                    and not user.is_anonymous
+                    not user.is_anonymous
                     and new_msg_req.internal_search_filters is not None
                     and new_msg_req.internal_search_filters.document_set is not None
                 ):
@@ -1753,7 +1741,6 @@ def _stream_chat_turn(
                     litellm_additional_headers=litellm_additional_headers,
                     custom_tool_additional_headers=custom_tool_additional_headers,
                     mcp_headers=mcp_headers,
-                    bypass_acl=bypass_acl,
                     slack_context=slack_context,
                     additional_context=additional_context,
                 )
@@ -1910,7 +1897,6 @@ def handle_stream_message_objects(
     litellm_additional_headers: dict[str, str] | None = None,
     custom_tool_additional_headers: dict[str, str] | None = None,
     mcp_headers: dict[str, str] | None = None,
-    bypass_acl: bool = False,
     additional_context: str | None = None,
     slack_context: SlackContext | None = None,
     external_state_container: ChatStateContainer | None = None,
@@ -1928,7 +1914,6 @@ def handle_stream_message_objects(
         litellm_additional_headers=litellm_additional_headers,
         custom_tool_additional_headers=custom_tool_additional_headers,
         mcp_headers=mcp_headers,
-        bypass_acl=bypass_acl,
         additional_context=additional_context,
         slack_context=slack_context,
         external_state_container=external_state_container,

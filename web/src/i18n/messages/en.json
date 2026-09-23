@@ -779,40 +779,228 @@
     "addConnector": {
       "categories": {
         "codeRepository": {
-          "label": "Code Repository"
+          "label": "Code Repositories"
         },
         "messaging": {
           "label": "Messaging"
         },
-        "other": {
-          "label": "Others"
-        },
         "sales": {
-          "label": "Sales"
+          "label": "Sales & GTM"
         },
         "storage": {
           "label": "Cloud Storage"
         },
         "ticketingAndTaskManagement": {
-          "label": "Ticketing & Task Management"
+          "label": "Ticketing & Tasks"
         },
         "wiki": {
           "label": "Knowledge Base & Wikis"
+        },
+        "aiObservability": {
+          "label": "AI & Observability"
+        },
+        "other": {
+          "label": "Other"
         }
       },
       "popular": {
-        "title": "Popular"
+        "title": "Add Connector",
+        "description": "Connect {appName} to your data sources."
       },
       "search": {
-        "placeholder": "Search Connectors"
-      },
-      "seeConnectorsButton": {
-        "label": "See Connectors"
+        "placeholder": "Search connectors..."
       },
       "sourceTile": {
         "tooltip": {
           "federatedConfigured": "<strong>Federated connector already configured.</strong> Click to edit the existing connector.",
           "slackCredentialsFound": "<strong>Existing Slack credentials found.</strong> Click to manage your Slack connector."
+        }
+      },
+      "sourceCard": {
+        "connectButton": {
+          "ariaLabel": "Connect {source}"
+        }
+      },
+      "sources": {
+        "web": {
+          "description": "Link any public URL"
+        },
+        "github": {
+          "description": "Code & pull requests"
+        },
+        "gitlab": {
+          "description": "Code & CI/CD"
+        },
+        "slack": {
+          "description": "Team messaging"
+        },
+        "googleDrive": {
+          "description": "Shared files & folders"
+        },
+        "gmail": {
+          "description": "Google email"
+        },
+        "bookstack": {
+          "description": "Self-hosted wiki"
+        },
+        "outline": {
+          "description": "Open-source team wiki"
+        },
+        "confluence": {
+          "description": "Atlassian wiki"
+        },
+        "jira": {
+          "description": "Atlassian issue tracker"
+        },
+        "productboard": {
+          "description": "Product management"
+        },
+        "slab": {
+          "description": "Team wiki"
+        },
+        "coda": {
+          "description": "Docs & databases"
+        },
+        "notion": {
+          "description": "Docs & databases"
+        },
+        "guru": {
+          "description": "Verified knowledge base"
+        },
+        "gong": {
+          "description": "Sales call intelligence"
+        },
+        "zulip": {
+          "description": "Open-source messaging"
+        },
+        "linear": {
+          "description": "Engineering issue tracker"
+        },
+        "hubspot": {
+          "description": "Marketing & CRM"
+        },
+        "document360": {
+          "description": "Self-service docs"
+        },
+        "file": {
+          "description": "Upload from local files"
+        },
+        "userFile": {
+          "description": "Files uploaded in chat"
+        },
+        "googleSites": {
+          "description": "Google-hosted pages"
+        },
+        "loopio": {
+          "description": "RFP response"
+        },
+        "box": {
+          "description": "Files, folders, & notes"
+        },
+        "dropbox": {
+          "description": "Shared files and folders"
+        },
+        "discord": {
+          "description": "Community messaging"
+        },
+        "salesforce": {
+          "description": "Sales & CRM"
+        },
+        "sharepoint": {
+          "description": "Microsoft intranet"
+        },
+        "teams": {
+          "description": "Microsoft team chats"
+        },
+        "outlook": {
+          "description": "Emails & mail folders"
+        },
+        "zendesk": {
+          "description": "Customer support tickets"
+        },
+        "discourse": {
+          "description": "Community forum"
+        },
+        "axero": {
+          "description": "Social intranet"
+        },
+        "clickup": {
+          "description": "Project & task tracker"
+        },
+        "wikipedia": {
+          "description": "Public knowledge base"
+        },
+        "mediawiki": {
+          "description": "Wikipedia-style wiki"
+        },
+        "asana": {
+          "description": "Work management"
+        },
+        "s3": {
+          "description": "AWS storage buckets"
+        },
+        "r2": {
+          "description": "Cloud storage buckets"
+        },
+        "googleCloudStorage": {
+          "description": "Google cloud buckets"
+        },
+        "xenforo": {
+          "description": "Community forum"
+        },
+        "ociStorage": {
+          "description": "OCI object storage"
+        },
+        "notApplicable": {
+          "description": "No source"
+        },
+        "ingestionApi": {
+          "description": "Documents sent through the API"
+        },
+        "freshdesk": {
+          "description": "Customer helpdesk"
+        },
+        "fireflies": {
+          "description": "Meeting notes"
+        },
+        "egnyte": {
+          "description": "Managed file services"
+        },
+        "airtable": {
+          "description": "Database & tasks"
+        },
+        "gitbook": {
+          "description": "Developer docs"
+        },
+        "highspot": {
+          "description": "Sales enablement"
+        },
+        "drupalWiki": {
+          "description": "CMS-based wiki"
+        },
+        "imap": {
+          "description": "IMAP email source"
+        },
+        "bitbucket": {
+          "description": "Atlassian source control"
+        },
+        "testrail": {
+          "description": "Test case tracking"
+        },
+        "braintrust": {
+          "description": "Logs & evaluations"
+        },
+        "lumapps": {
+          "description": "Intranet pages & communities"
+        },
+        "canvas": {
+          "description": "Courses, pages, & announcements"
+        },
+        "craftFile": {
+          "description": "Files you uploaded"
+        },
+        "federatedSlack": {
+          "description": "Search Slack at query time"
         }
       }
     },
@@ -5026,14 +5214,11 @@
             "label": "Private"
           }
         },
-        "addConnectorButton": {
-          "label": "Add Connector"
-        },
         "connectorCreated": {
           "toast": "Connector created successfully"
         },
         "empty": {
-          "message": "It looks like you don't have any connectors setup yet. Visit the [Add Connector](/admin/add-connector) page to get started!"
+          "message": "It looks like you don't have any connectors setup yet. Visit the [Add Connector](/admin/connectors) page to get started!"
         },
         "federated": {
           "access": {
@@ -5116,7 +5301,7 @@
           "tooltip": "Manage Federated Connector"
         },
         "search": {
-          "placeholder": "Search Connectors"
+          "placeholder": "Search connectors..."
         },
         "summary": {
           "activeConnectors": {
@@ -5364,7 +5549,6 @@
             "title": "Models"
           },
           "providerField": {
-            "createPrefix": "Use",
             "description": "See full list of supported LLM providers at [LiteLLM](https://docs.litellm.ai/docs/providers).",
             "placeholder": "Provider ID string as shown on LiteLLM",
             "title": "Provider"
@@ -5542,6 +5726,12 @@
           "restoreDefaultButton": {
             "ariaLabel": "Restore default API base URL",
             "tooltip": "Restore Default"
+          }
+        },
+        "vercelAiGateway": {
+          "apiBaseField": {
+            "description": "Use the Vercel AI Gateway endpoint, or paste a custom base URL.",
+            "placeholder": "Your Vercel AI Gateway base URL"
           }
         },
         "setup": {
@@ -7961,6 +8151,9 @@
         "title": "Permissions have changed"
       },
       "resetPasswordModal": {
+        "copyButton": {
+          "label": "Copy password"
+        },
         "description": "This will generate a new random password for <strong>{email}</strong>. Their current password will stop working immediately.",
         "doneButton": {
           "label": "Done"
@@ -12876,6 +13069,10 @@
       "previousPage": "Previous page",
       "rangeOfTotal": "<range></range> of <total></total>"
     },
+    "select": {
+      "emptySet": "No items found",
+      "invalidOption": "Please select a valid option from the list"
+    },
     "table": {
       "alwaysShown": "Always Shown",
       "ascending": "Ascending",
@@ -13368,8 +13565,8 @@
         }
       },
       "items": {
-        "addConnector": {
-          "label": "Add Connector"
+        "connectors": {
+          "label": "Connectors"
         },
         "agents": {
           "label": "Agents"
@@ -13404,8 +13601,8 @@
         "documentSets": {
           "label": "Document Sets"
         },
-        "existingConnectors": {
-          "label": "Existing Connectors"
+        "indexingStatus": {
+          "label": "Indexing Status"
         },
         "exportLogs": {
           "label": "Export Logs"

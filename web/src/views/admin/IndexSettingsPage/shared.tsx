@@ -11,7 +11,7 @@ import { InputHorizontal, InputVertical } from "@opal/layouts";
 import type {
   EmbeddingProvider,
   IndexSettingsTranslator,
-} from "@/lib/indexing/types";
+} from "@/lib/searchSettings/types";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";

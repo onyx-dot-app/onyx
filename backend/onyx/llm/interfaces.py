@@ -98,7 +98,16 @@ class LLM(abc.ABC):
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
         total_timeout_override: float | None = None,
+        stream: bool = False,
     ) -> "ModelResponse":
+        """Return one complete response.
+
+        timeout_override bounds each socket read. total_timeout_override caps
+        the whole call in wall-clock time. stream=True lets the implementation
+        stream from the provider and reassemble the answer; use it for long or
+        unbounded answers, because a non-streamed request has no chunks and the
+        read timeout then bounds the whole response.
+        """
         raise NotImplementedError
 
     def stream(

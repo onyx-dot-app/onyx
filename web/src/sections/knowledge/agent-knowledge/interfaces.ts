@@ -1,6 +1,6 @@
 import type { ValidSources } from "@/lib/types";
 import type { HierarchyNodeSearchSummary } from "@/lib/hierarchy/interfaces";
-import type { SearchDocWithContent } from "@/lib/search/interfaces";
+import type { SearchDocWithContent } from "@/lib/search/types";
 
 export type KnowledgeView =
   | "main"

@@ -79,13 +79,6 @@ export {
   type KeyValueInputProps,
 } from "@opal/components/inputs/input-key-value/components";
 
-/* InputComboBox */
-export {
-  default as InputComboBox,
-  type InputComboBoxProps,
-  type ComboBoxOption,
-} from "@opal/components/inputs/selections/input-combo-box/index";
-
 /* InputImage */
 export {
   default as InputImage,
@@ -243,7 +236,14 @@ export {
 export {
   default as InputTypeIn,
   type InputTypeInProps,
-} from "@opal/components/inputs/input-type-in/components";
+} from "@opal/components/inputs/texts/input-type-in/components";
+
+/* InputTypeInTag */
+export {
+  InputTypeInTag,
+  type InputTypeInTagProps,
+  type TagItem,
+} from "@opal/components/inputs/texts/input-type-in-tag/components";
 
 /* InputDatePicker */
 export {
@@ -252,32 +252,30 @@ export {
 } from "@opal/components/inputs/chrono/input-date-picker/components";
 
 /* InputSingleSelect */
+export { InputSingleSelect } from "@opal/components/inputs/selects/input-single-select/components";
 export {
-  InputSingleSelect,
-  type InputSingleSelectRootProps,
-  type InputSingleSelectTriggerProps,
-  type InputSingleSelectItemProps,
-  type InputSingleSelectSearchProps,
-} from "@opal/components/inputs/selections/input-single-select/components";
+  type InputSingleSelectProps,
+  type SelectOption,
+  type SelectSection,
+} from "@opal/components/inputs/selects/types";
 
 /* InputMultiSelect */
 export {
   InputMultiSelect,
   type InputMultiSelectProps,
-  type TagItem,
-} from "@opal/components/inputs/selections/input-multi-select/components";
+} from "@opal/components/inputs/selects/input-multi-select/components";
 
 /* InputPasswordTypeIn */
 export {
   InputPasswordTypeIn,
   type InputPasswordTypeInProps,
-} from "@opal/components/inputs/input-password-type-in/components";
+} from "@opal/components/inputs/texts/input-password-type-in/components";
 
 /* InputTextArea */
 export {
   InputTextArea,
   type InputTextAreaProps,
-} from "@opal/components/inputs/input-text-area/components";
+} from "@opal/components/inputs/texts/input-text-area/components";
 
 /* InputTime */
 export {

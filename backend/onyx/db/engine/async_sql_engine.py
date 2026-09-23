@@ -18,6 +18,7 @@ from onyx.configs.app_configs import (
 from onyx.db.engine.iam_auth import make_provide_iam_token_async
 from onyx.db.engine.pg_ssl import create_pg_ssl_context
 from onyx.db.engine.shard_registry import (
+    EngineCreationHooks,
     ShardSpec,
     get_default_shard_name,
     get_shard_spec,
@@ -40,6 +41,18 @@ from shared_configs.contextvars import get_current_tenant_id
 # exactly one entry and behaves as the previous process-global singleton did.
 _ASYNC_ENGINES: dict[str, AsyncEngine] = {}
 _ASYNC_ENGINES_LOCK = threading.Lock()
+
+
+def _snapshot_async_engines() -> list[tuple[str, AsyncEngine]]:
+    # Under the engines lock: a consistent snapshot without relying on the
+    # GIL making dict iteration atomic.
+    with _ASYNC_ENGINES_LOCK:
+        return list(_ASYNC_ENGINES.items())
+
+
+async_engine_hooks: EngineCreationHooks[AsyncEngine] = EngineCreationHooks(
+    _snapshot_async_engines
+)
 
 
 def _build_async_engine(spec: ShardSpec) -> AsyncEngine:
@@ -112,7 +125,8 @@ def get_async_engine_for_shard(shard_name: str) -> AsyncEngine:
 
         engine = _build_async_engine(get_shard_spec(shard_name))
         _ASYNC_ENGINES[shard_name] = engine
-        return engine
+    async_engine_hooks.notify(shard_name, engine)
+    return engine
 
 
 async def get_async_engine_for_tenant(tenant_id: str) -> AsyncEngine:

@@ -39,12 +39,15 @@ from onyx.skills.push import (
     build_skills_fileset_for_user,
     push_skill_to_affected_sandboxes,
 )
+from onyx.utils.logger import setup_logger
 from tests.integration.common_utils.managers.external_app import ExternalAppManager
 from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser, DATestUserGroup
 from tests.integration.tests.craft.k8s.k8s_fixtures import SandboxHandle, WorkspaceProxy
+
+logger = setup_logger()
 
 pytestmark = [
     pytest.mark.skipif(
@@ -154,6 +157,14 @@ def user_group_factory(
         yield _create
     finally:
         for group in reversed(groups):
+            try:
+                UserGroupManager.wait_for_sync(k8s_admin_user, [group])
+            except (RuntimeError, TimeoutError) as e:
+                logger.warning(
+                    "Deleting user group %s without waiting for its sync: %s",
+                    group.id,
+                    e,
+                )
             try:
                 UserGroupManager.delete(group, k8s_admin_user)
             except httpx.HTTPStatusError as e:

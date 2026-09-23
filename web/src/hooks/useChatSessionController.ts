@@ -23,7 +23,7 @@ import {
   shouldSubmitOnLoad,
 } from "@/app/app/services/searchParams";
 
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/types";
 import {
   useChatSessionStore,
   useCurrentMessageHistory,

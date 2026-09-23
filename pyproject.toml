@@ -174,7 +174,7 @@ dev = [
 # One-tool groups, installed with `--only-group` by the pre-commit hooks: each
 # tool comes from hash-verified uv.lock artifacts without a full project sync,
 # and each pin below is the only one in the repo.
-ods = ["onyx-devtools[audit]==0.13.7"]
+ods = ["onyx-devtools[audit]==0.13.8"]
 ruff = ["ruff==0.16.1"]
 zizmor = ["zizmor==1.25.2"]
 

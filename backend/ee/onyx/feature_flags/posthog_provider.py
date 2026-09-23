@@ -2,8 +2,7 @@ from typing import Any
 from uuid import UUID
 
 from ee.onyx.utils.posthog_client import posthog
-from onyx.db.models import User
-from onyx.feature_flags.interface import ANONYMOUS_USER_FLAG_ID, FeatureFlagProvider
+from onyx.feature_flags.interface import FeatureFlagProvider
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -56,41 +55,6 @@ class PostHogFeatureFlagProvider(FeatureFlagProvider):
                 "Error checking feature flag %s for user %s: %s", flag_key, user_id, e
             )
             return False
-
-    def feature_enabled_for_user_tenant_or_default(
-        self,
-        flag_key: str,
-        user: User | None,
-        tenant_id: str,
-        default: bool,
-    ) -> bool:
-        if not posthog:
-            return default
-
-        distinct_id = user.id if user else ANONYMOUS_USER_FLAG_ID
-        properties = {
-            "tenant_id": tenant_id,
-            "email": user.email if user else "anonymous@onyx.app",
-        }
-        try:
-            posthog.set(distinct_id=str(distinct_id), properties=properties)
-            is_enabled = posthog.feature_enabled(
-                flag_key,
-                str(distinct_id),
-                person_properties=properties,
-            )
-        except Exception as e:
-            logger.error(
-                "Error checking feature flag %s for user %s: %s; using default %s",
-                flag_key,
-                distinct_id,
-                e,
-                default,
-            )
-            return default
-
-        # None means the flag is not defined in PostHog.
-        return default if is_enabled is None else bool(is_enabled)
 
     def feature_variant_for_tenant(
         self, flag_key: str, tenant_id: str

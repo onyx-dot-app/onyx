@@ -170,7 +170,6 @@ def search(
         user_selected_filters=base_filters,
         project_id_filter=None,
         persona_id_filter=None,
-        bypass_acl=False,
         slack_context=None,
         enable_slack_search=True,
         auto_detect_filters=load_settings().auto_detect_search_filters is not False,

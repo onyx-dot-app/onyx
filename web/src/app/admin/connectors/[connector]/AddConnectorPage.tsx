@@ -274,7 +274,7 @@ export default function AddConnector({
   };
 
   const onSuccess = () => {
-    router.push("/admin/indexing/status?message=connector-created");
+    router.push("/admin/indexing-status?message=connector-created");
   };
 
   const closeCredentialModal = () => setCredentialCreationMethod(null);
