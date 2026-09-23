@@ -19,6 +19,36 @@ Onyx connects with dozens of popular workplace apps like Google Drive, Jira, Con
 
 For Onyx Cloud Users, please visit the Chrome Plugin Store (pending approval still)
 
+## Enterprise configuration (managed policy)
+
+Admins can pre-set and lock settings with Chrome's extension policy
+(`ExtensionSettings` / "Managed storage" in Google Admin, or the
+`3rdparty.extensions.<id>` policy on Windows/macOS/Linux). Settings set by
+policy are read-only in the extension UI. Supported keys (see
+`managed_schema.json`):
+
+| Key                          | Type    | Description                                     |
+| ---------------------------- | ------- | ----------------------------------------------- |
+| `onyxExtensionDomain`        | string  | Root URL of your Onyx instance                  |
+| `onyxExtensionDefaultNewTab` | boolean | Force the "Use Onyx as new tab page" toggle     |
+
+Example (Linux, `/etc/opt/chrome/policies/managed/onyx.json`):
+
+```json
+{
+  "3rdparty": {
+    "extensions": {
+      "<extension-id>": {
+        "onyxExtensionDomain": "https://onyx.example.com",
+        "onyxExtensionDefaultNewTab": false
+      }
+    }
+  }
+}
+```
+
+Trailing slashes on `onyxExtensionDomain` are stripped automatically.
+
 ## Development
 
 - Load unpacked extension in your browser

@@ -8,7 +8,12 @@ import {
   hideErrorModal,
   initErrorModal,
 } from "../utils/error-modal.js";
-import { getOnyxDomain } from "../utils/storage.js";
+import {
+  getOnyxDomain,
+  getUseOnyxAsDefaultNewTab,
+  setUseOnyxAsDefaultNewTab,
+  isNewTabOverrideChange,
+} from "../utils/storage.js";
 
 (function () {
   let mainIframe = document.getElementById("onyx-iframe");
@@ -103,38 +108,26 @@ import { getOnyxDomain } from "../utils/storage.js";
     });
   }
 
-  function checkOnyxPreference() {
-    chrome.storage.local.get(
-      [
-        CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB,
-        CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN,
-      ],
-      (items) => {
-        let useOnyxAsDefaultNewTab =
-          items[CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB];
+  async function checkOnyxPreference() {
+    let useOnyxAsDefaultNewTab = await getUseOnyxAsDefaultNewTab();
 
-        if (useOnyxAsDefaultNewTab === undefined) {
-          useOnyxAsDefaultNewTab = !!(
-            localStorage.getItem(
-              CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB
-            ) === "1"
-          );
-          chrome.storage.local.set({
-            [CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB]:
-              useOnyxAsDefaultNewTab,
-          });
-        }
+    if (useOnyxAsDefaultNewTab === undefined) {
+      useOnyxAsDefaultNewTab =
+        localStorage.getItem(
+          CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB
+        ) === "1";
+      await setUseOnyxAsDefaultNewTab(useOnyxAsDefaultNewTab);
+    }
 
-        if (!useOnyxAsDefaultNewTab) {
-          chrome.tabs.update({
-            url: "chrome://new-tab-page",
-          });
-          return;
-        }
+    if (!useOnyxAsDefaultNewTab) {
+      chrome.tabs.update({
+        url: "chrome://new-tab-page",
+      });
+      return;
+    }
 
-        setIframeSrc(items[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN] + "/nrf");
-      }
-    );
+    const domain = await getOnyxDomain();
+    setIframeSrc(domain + "/nrf");
   }
 
   function loadThemeAndBackground() {
@@ -203,14 +196,14 @@ import { getOnyxDomain } from "../utils/storage.js";
   }
 
   chrome.storage.onChanged.addListener(function (changes, namespace) {
-    if (namespace === "local" && changes.useOnyxAsDefaultNewTab) {
+    if (isNewTabOverrideChange(changes, namespace)) {
       checkOnyxPreference();
     }
   });
 
   window.addEventListener("message", function (event) {
     if (event.data.type === CHROME_MESSAGE.SET_DEFAULT_NEW_TAB) {
-      chrome.storage.local.set({ useOnyxAsDefaultNewTab: event.data.value });
+      setUseOnyxAsDefaultNewTab(event.data.value);
     } else if (event.data.type === CHROME_MESSAGE.ONYX_APP_LOADED) {
       clearTimeout(iframeLoadTimeout);
       hideErrorModal();

@@ -1,7 +1,5 @@
-import {
-  CHROME_SPECIFIC_STORAGE_KEYS,
-  DEFAULT_ONYX_DOMAIN,
-} from "../utils/constants.js";
+import { CHROME_SPECIFIC_STORAGE_KEYS } from "../utils/constants.js";
+import { getManagedSettings, normalizeOnyxDomain } from "../utils/storage.js";
 
 document.addEventListener("DOMContentLoaded", function () {
   const domainInput = document.getElementById("onyxDomain");
@@ -18,6 +16,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
   let currentStep = 1;
   let currentTheme = "dark";
+  let domainManaged = false;
+  let newTabManaged = false;
 
   // Initialize theme based on system preference or stored value
   function initTheme() {
@@ -121,45 +121,62 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function handleFinish() {
-    const domain = domainInput.value.trim() || DEFAULT_ONYX_DOMAIN;
     const useOnyxAsDefault = useOnyxAsDefaultToggle.checked;
 
-    chrome.storage.local.set(
-      {
-        [CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN]: domain,
-        [CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB]:
-          useOnyxAsDefault,
-        [CHROME_SPECIFIC_STORAGE_KEYS.THEME]: currentTheme,
-        [CHROME_SPECIFIC_STORAGE_KEYS.ONBOARDING_COMPLETE]: true,
-      },
-      () => {
-        // Open a new tab if they enabled the new tab feature, otherwise just close
-        if (useOnyxAsDefault) {
-          chrome.tabs.create({}, () => {
-            window.close();
-          });
-        } else {
+    const values = {
+      [CHROME_SPECIFIC_STORAGE_KEYS.THEME]: currentTheme,
+      [CHROME_SPECIFIC_STORAGE_KEYS.ONBOARDING_COMPLETE]: true,
+    };
+    if (!domainManaged) {
+      values[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN] = normalizeOnyxDomain(
+        domainInput.value
+      );
+    }
+    if (!newTabManaged) {
+      values[CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB] =
+        useOnyxAsDefault;
+    }
+
+    chrome.storage.local.set(values, () => {
+      // Open a new tab if they enabled the new tab feature, otherwise just close
+      if (useOnyxAsDefault) {
+        chrome.tabs.create({}, () => {
           window.close();
-        }
+        });
+      } else {
+        window.close();
       }
-    );
+    });
   }
 
   // Load any existing values (in case user returns to this page)
-  function loadStoredValues() {
-    chrome.storage.local.get(
-      {
-        [CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN]: "",
-        [CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB]: true,
-      },
-      (result) => {
-        if (result[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN]) {
-          domainInput.value = result[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN];
-        }
-        useOnyxAsDefaultToggle.checked =
-          result[CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB];
-      }
-    );
+  async function loadStoredValues() {
+    const managed = await getManagedSettings();
+    const managedDomain = managed[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN];
+    const managedNewTab =
+      managed[CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB];
+    domainManaged = typeof managedDomain === "string";
+    newTabManaged = typeof managedNewTab === "boolean";
+
+    const result = await chrome.storage.local.get({
+      [CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN]: "",
+      [CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB]: true,
+    });
+
+    if (domainManaged) {
+      domainInput.value = normalizeOnyxDomain(managedDomain);
+      domainInput.disabled = true;
+    } else if (result[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN]) {
+      domainInput.value = result[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN];
+    }
+
+    if (newTabManaged) {
+      useOnyxAsDefaultToggle.checked = managedNewTab;
+      useOnyxAsDefaultToggle.disabled = true;
+    } else {
+      useOnyxAsDefaultToggle.checked =
+        result[CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB];
+    }
   }
 
   if (themeToggle) {
