@@ -2752,8 +2752,7 @@
           "label": "Cancelar"
         },
         "connectButton": {
-          "label": "Conectar",
-          "pendingLabel": "Conectando..."
+          "label": "Conectar"
         },
         "description": "Conéctate a {source} y configura el conector para {appName}."
       },

@@ -2752,8 +2752,7 @@
           "label": "취소"
         },
         "connectButton": {
-          "label": "연결",
-          "pendingLabel": "연결 중..."
+          "label": "연결"
         },
         "description": "{source}에 연결하고 {appName}용 커넥터를 설정합니다."
       },

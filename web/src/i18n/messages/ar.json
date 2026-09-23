@@ -2752,8 +2752,7 @@
           "label": "إلغاء"
         },
         "connectButton": {
-          "label": "اتصال",
-          "pendingLabel": "جارٍ الاتصال..."
+          "label": "اتصال"
         },
         "description": "اتصل بـ {source} وقم بإعداد الموصّل لـ {appName}."
       },

@@ -2752,8 +2752,7 @@
           "label": "キャンセル"
         },
         "connectButton": {
-          "label": "接続",
-          "pendingLabel": "接続中..."
+          "label": "接続"
         },
         "description": "{source} に接続し、{appName} 用のコネクタを設定します。"
       },

@@ -61,7 +61,7 @@ import { Button, Text as OpalText } from "@opal/components";
 import { Content, Section, SettingsLayouts, toast } from "@opal/layouts";
 import { deleteConnector } from "@/lib/connector";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
-import { SvgArrowExchange, SvgKey } from "@opal/icons";
+import { SvgArrowExchange, SvgKey, SvgSimpleLoader } from "@opal/icons";
 import { useTranslations } from "next-intl";
 
 export interface AdvancedConfig {
@@ -551,11 +551,10 @@ export default function AddConnector({
                   </Button>
                   <Button
                     disabled={!formikProps.isValid || !canCreate || busy}
+                    icon={busy ? SvgSimpleLoader : undefined}
                     onClick={() => formikProps.handleSubmit()}
                   >
-                    {busy
-                      ? t("header.connectButton.pendingLabel")
-                      : t("header.connectButton.label")}
+                    {t("header.connectButton.label")}
                   </Button>
                 </Section>
               }

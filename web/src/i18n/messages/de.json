@@ -2752,8 +2752,7 @@
           "label": "Abbrechen"
         },
         "connectButton": {
-          "label": "Verbinden",
-          "pendingLabel": "Verbindung wird hergestellt..."
+          "label": "Verbinden"
         },
         "description": "Verbinde dich mit {source} und richte den Connector für {appName} ein."
       },

@@ -2752,8 +2752,7 @@
           "label": "取消"
         },
         "connectButton": {
-          "label": "连接",
-          "pendingLabel": "正在连接..."
+          "label": "连接"
         },
         "description": "连接到 {source} 并为 {appName} 设置连接器。"
       },
