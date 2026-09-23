@@ -6339,6 +6339,10 @@
     },
     "security": {
       "adminControls": {
+        "connectorGroupRestrictions": {
+          "description": "コネクタで、ソースでのアクセス権に加えて特定グループへの所属を必須にできます。",
+          "title": "権限同期コネクタでのグループ制限を許可"
+        },
         "incognito": {
           "description": "シークレットチャットは所有者の履歴に表示されません。グループごとのアクセス権は「グループ」で設定します。",
           "everyone": {

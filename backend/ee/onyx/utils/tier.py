@@ -205,6 +205,21 @@ def require_business_tier_for_sync_access(access_type: AccessType) -> None:
         )
 
 
+def require_business_tier_for_connector_group_restrictions() -> None:
+    """Gate turning on data-access group restrictions for perm-synced
+    connectors. Groups and perm sync are Business+, so the setting would be
+    inert below that. LICENSE_ENFORCEMENT_ENABLED=False passes, matching the
+    sync-access guard."""
+    if not LICENSE_ENFORCEMENT_ENABLED:
+        return
+    if not tier_at_least(get_tier(), Tier.BUSINESS):
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+            "Group restrictions on permission-synced connectors require the "
+            "Business or Enterprise plan.",
+        )
+
+
 def require_business_tier_for_multi_sso() -> None:
     """Gate a second simultaneously enabled SSO provider to Business or
     above. A single enabled provider works at every tier.

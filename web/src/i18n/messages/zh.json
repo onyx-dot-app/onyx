@@ -6339,6 +6339,10 @@
     },
     "security": {
       "adminControls": {
+        "connectorGroupRestrictions": {
+          "description": "连接器可以要求用户属于特定群组，而不仅仅是在源系统中拥有访问权限。",
+          "title": "允许对权限同步连接器设置群组限制"
+        },
         "incognito": {
           "description": "无痕对话永远不会出现在其所有者的历史记录中。群组访问权限在“用户组”页面中按用户组配置。",
           "everyone": {

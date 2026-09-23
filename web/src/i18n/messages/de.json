@@ -6339,6 +6339,10 @@
     },
     "security": {
       "adminControls": {
+        "connectorGroupRestrictions": {
+          "description": "Connectors können die Mitgliedschaft in bestimmten Gruppen verlangen, nicht nur den Zugriff in der Quelle.",
+          "title": "Gruppenbeschränkungen für berechtigungssynchronisierte Connectors erlauben"
+        },
         "incognito": {
           "description": "Inkognito-Chats erscheinen nie im Verlauf ihres Eigentümers. Der Gruppenzugriff wird pro Gruppe unter Gruppen konfiguriert.",
           "everyone": {

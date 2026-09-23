@@ -6339,6 +6339,10 @@
     },
     "security": {
       "adminControls": {
+        "connectorGroupRestrictions": {
+          "description": "Os conectores podem exigir a participação em grupos específicos, não apenas o acesso na origem.",
+          "title": "Permitir restrições por grupo em conectores com permissões sincronizadas"
+        },
         "incognito": {
           "description": "Chats anônimos nunca aparecem no histórico do proprietário. O acesso é configurado por grupo em Grupos.",
           "everyone": {

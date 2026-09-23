@@ -6339,6 +6339,10 @@
     },
     "security": {
       "adminControls": {
+        "connectorGroupRestrictions": {
+          "description": "Connectors can require membership in specific groups, not just access in the source.",
+          "title": "Allow Group Restrictions on Permission-Synced Connectors"
+        },
         "incognito": {
           "description": "Incognito chats never appear in their owner's history. Group access is configured per group under Groups.",
           "everyone": {
