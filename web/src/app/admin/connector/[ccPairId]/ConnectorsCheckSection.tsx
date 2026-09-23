@@ -1,7 +1,7 @@
 "use client";
 
 import { useCapabilityReport } from "@/lib/connectors/checks/hooks";
-import { ConnectorsCheckCard } from "@/sections/cards/ConnectorsCheckCard";
+import { ConnectorsCheckCard } from "@/lib/connectors/checks/ConnectorsCheckCard";
 
 interface ConnectorsCheckSectionProps {
   credentialId: number;
