@@ -10,6 +10,7 @@ from onyx.db.user_file import calculate_user_files_token_count
 from onyx.file_store.models import FileDescriptor
 from onyx.prompts.chat_prompts import (
     ANSWER_COMPLETENESS_REMINDER,
+    ANSWER_COVERAGE_GUIDANCE,
     CITATION_REMINDER,
     DEFAULT_SYSTEM_PROMPT,
     FILE_REMINDER,
@@ -279,6 +280,7 @@ def build_system_prompt(
     # This maintains backward compatibility and ensures citations are always enforced when needed
     if should_append_citation_guidance:
         system_prompt += REQUIRE_CITATION_GUIDANCE
+        system_prompt += ANSWER_COVERAGE_GUIDANCE
 
     if include_all_guidance:
         tool_sections = [
