@@ -21,8 +21,15 @@
 {{- end }}
 {{- /* A PDB on a single replica either blocks node drains or permits nothing, so skip it. */}}
 {{- if and $pdb.enabled (gt $replicas 1) (or (not $c.needsVectorDB) $.Values.vectorDB.enabled) }}
-{{- if and (hasKey $pdb "minAvailable") (not (kindIs "string" $pdb.minAvailable)) (ge (int $pdb.minAvailable) $replicas) }}
-{{- fail (printf "%s.podDisruptionBudget.minAvailable (%d) must be below the replica count (%d), or the PDB blocks every eviction." $c.key (int $pdb.minAvailable) $replicas) }}
+{{- $blocksEvictions := false }}
+{{- if hasKey $pdb "minAvailable" }}
+{{- $min := toString $pdb.minAvailable }}
+{{- $blocksEvictions = ternary (ge (int (trimSuffix "%" $min)) 100) (ge (int $min) $replicas) (hasSuffix "%" $min) }}
+{{- else if hasKey $pdb "maxUnavailable" }}
+{{- $blocksEvictions = le (int (trimSuffix "%" (toString $pdb.maxUnavailable))) 0 }}
+{{- end }}
+{{- if $blocksEvictions }}
+{{- fail (printf "%s.podDisruptionBudget blocks every eviction with %d replicas; lower minAvailable or raise maxUnavailable." $c.key $replicas) }}
 {{- end }}
 ---
 apiVersion: policy/v1
@@ -35,7 +42,7 @@ spec:
   {{- if hasKey $pdb "minAvailable" }}
   minAvailable: {{ $pdb.minAvailable }}
   {{- else }}
-  maxUnavailable: {{ $pdb.maxUnavailable | default 1 }}
+  maxUnavailable: {{ hasKey $pdb "maxUnavailable" | ternary $pdb.maxUnavailable 1 }}
   {{- end }}
   selector:
     matchLabels:
