@@ -432,12 +432,11 @@ def test_cancel_keeps_reclaim_intent_a_newer_reindex_stamped(
     # The shared test database already holds a FUTURE row. Leave it in place and that
     # stray row spares the intent on its own, so this test passes without exercising
     # the race at all.
-    parked = [
-        ss
-        for ss in db_session.query(SearchSettings)
+    parked = (
+        db_session.query(SearchSettings)
         .filter(SearchSettings.status == IndexModelStatus.FUTURE)
         .all()
-    ]
+    )
     for ss in parked:
         ss.status = IndexModelStatus.PAST
     db_session.commit()
