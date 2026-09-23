@@ -5728,6 +5728,12 @@
             "tooltip": "恢复默认"
           }
         },
+        "vercelAiGateway": {
+          "apiBaseField": {
+            "description": "使用 Vercel AI Gateway 端点，或粘贴自定义基础 URL。",
+            "placeholder": "您的 Vercel AI Gateway 基础 URL"
+          }
+        },
         "setup": {
           "apiBaseField": {
             "containerizedNote": "当 Onyx 在容器中运行时，请使用 `host.docker.internal` 代替 `localhost` 来访问主机上的服务。",

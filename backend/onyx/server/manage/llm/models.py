@@ -807,6 +807,23 @@ class OpenAICompatibleFinalModelResponse(BaseModel):
     supports_reasoning: bool
 
 
+# Vercel AI Gateway dynamic models fetch
+class VercelAIGatewayModelsRequest(BaseModel):
+    # The catalog is public, so api_base alone is enough to list models.
+    api_base: str | None = None
+    api_key: str | None = None
+    # Existing provider id; syncs fetched models on edit
+    provider_id: int | None = None
+
+
+class VercelAIGatewayFinalModelResponse(BaseModel):
+    name: str  # Namespaced model id (e.g. "anthropic/claude-sonnet-4.5")
+    display_name: str
+    max_input_tokens: int | None
+    supports_image_input: bool
+    supports_reasoning: bool
+
+
 # Portkey dynamic models fetch
 class PortkeyModelsRequest(BaseModel):
     api_base: str

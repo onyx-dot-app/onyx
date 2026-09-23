@@ -5728,6 +5728,12 @@
             "tooltip": "استعادة الافتراضي"
           }
         },
+        "vercelAiGateway": {
+          "apiBaseField": {
+            "description": "استخدم نقطة نهاية Vercel AI Gateway أو الصق عنوان URL أساسيًا مخصصًا.",
+            "placeholder": "عنوان URL الأساسي لـ Vercel AI Gateway"
+          }
+        },
         "setup": {
           "apiBaseField": {
             "containerizedNote": "مع تشغيل Onyx في حاوية، استخدم `host.docker.internal` بدلًا من `localhost` للوصول إلى خدمة على مضيفك.",

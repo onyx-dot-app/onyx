@@ -5728,6 +5728,12 @@
             "tooltip": "Restaurer la valeur par défaut"
           }
         },
+        "vercelAiGateway": {
+          "apiBaseField": {
+            "description": "Utilisez le point de terminaison Vercel AI Gateway ou collez une URL de base personnalisée.",
+            "placeholder": "Votre URL de base Vercel AI Gateway"
+          }
+        },
         "setup": {
           "apiBaseField": {
             "containerizedNote": "Quand Onyx s'exécute dans un conteneur, utilisez `host.docker.internal` à la place de `localhost` pour atteindre un service sur votre hôte.",

@@ -5728,6 +5728,12 @@
             "tooltip": "기본값 복원"
           }
         },
+        "vercelAiGateway": {
+          "apiBaseField": {
+            "description": "Vercel AI Gateway 엔드포인트를 사용하거나 사용자 지정 기본 URL을 붙여넣으세요.",
+            "placeholder": "Vercel AI Gateway 기본 URL"
+          }
+        },
         "setup": {
           "apiBaseField": {
             "containerizedNote": "Onyx가 컨테이너에서 실행 중이면 호스트의 서비스에 연결할 때 `localhost` 대신 `host.docker.internal`을 사용하세요.",

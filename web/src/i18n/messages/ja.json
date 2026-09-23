@@ -5728,6 +5728,12 @@
             "tooltip": "デフォルトに戻す"
           }
         },
+        "vercelAiGateway": {
+          "apiBaseField": {
+            "description": "Vercel AI Gateway のエンドポイントを使用するか、カスタムのベース URL を貼り付けてください。",
+            "placeholder": "Vercel AI Gateway のベース URL"
+          }
+        },
         "setup": {
           "apiBaseField": {
             "containerizedNote": "Onyx をコンテナで実行している場合、ホスト上のサービスに接続するには `localhost` の代わりに `host.docker.internal` を使用してください。",
