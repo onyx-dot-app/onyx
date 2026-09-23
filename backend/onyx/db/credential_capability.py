@@ -19,6 +19,7 @@ sweep preserves ``run_id`` when retiring, so the same attempt's late completion
 still lands (the self-heal for a run that was merely slow).
 """
 
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 from typing import Any, TypedDict
 from uuid import UUID, uuid4
@@ -37,7 +38,10 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.capability_checks.models import CredentialCapabilityReport
+from onyx.connectors.capability_checks.models import (
+    CapabilityCheckResult,
+    CredentialCapabilityReport,
+)
 from onyx.db.enums import CapabilityCheckTrigger, CapabilityReportRunStatus
 from onyx.db.models import CredentialCapabilityReportRow
 
@@ -58,6 +62,7 @@ class _CapabilityReportValues(TypedDict, total=False):
     source: DocumentSource
     trigger: CapabilityCheckTrigger
     report: dict[str, Any]
+    in_progress_results: list[dict[str, Any]] | None
     connector_config_hash: str | None
     run_status: CapabilityReportRunStatus
     run_started_at: ColumnElement[datetime]
@@ -142,6 +147,8 @@ def _completed_values(
         "source": source,
         "trigger": trigger,
         "report": report.model_dump(mode="json"),
+        # The report supersedes whatever progress the run recorded.
+        "in_progress_results": None,
         "connector_config_hash": connector_config_hash,
         "run_status": CapabilityReportRunStatus.COMPLETED,
     }
@@ -281,6 +288,8 @@ def mark_capability_report_running(
             # caller's transaction began.
             "run_started_at": func.statement_timestamp(),
             "run_id": uuid4(),
+            # A fresh attempt starts with no progress of its own.
+            "in_progress_results": None,
         },
         update_where=or_(
             CredentialCapabilityReportRow.run_status
@@ -292,6 +301,40 @@ def mark_capability_report_running(
             < func.statement_timestamp() - active_within,
         ),
     )
+
+
+def record_capability_run_progress(
+    db_session: Session,
+    *,
+    credential_id: int,
+    connector_id: int | None,
+    run_id: UUID,
+    results: Sequence[CapabilityCheckResult],
+) -> bool:
+    """Writes the attempt's results-so-far onto its row; True when it landed.
+
+    Fenced on ``run_id`` exactly like the completion write, so a superseded
+    attempt cannot paint progress onto its successor's row. Deliberately not
+    guarded on RUNNING: a retired-but-alive attempt keeps recording, matching
+    the self-heal its completion gets. Every write replaces the whole list, so
+    the column always holds a prefix of the report the attempt will complete
+    with. The caller owns the transaction.
+    """
+    stmt = (
+        update(CredentialCapabilityReportRow)
+        .where(
+            CredentialCapabilityReportRow.credential_id == credential_id,
+            _connector_scope_clause(connector_id),
+            CredentialCapabilityReportRow.run_id == run_id,
+        )
+        .values(
+            in_progress_results=[result.model_dump(mode="json") for result in results],
+            # Model ``onupdate`` does not apply to bulk updates.
+            time_updated=func.statement_timestamp(),
+        )
+    )
+    result = db_session.execute(stmt)
+    return int(result.rowcount) > 0  # ty: ignore[unresolved-attribute]
 
 
 def mark_capability_run_failed(

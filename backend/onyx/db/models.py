@@ -2153,6 +2153,13 @@ class CredentialCapabilityReportRow(Base):
     report: Mapped[dict[str, Any] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
+    # Serialized ``CapabilityCheckResult`` rows of the attempt owning the
+    # RUNNING mark, written as each check completes. None until the attempt
+    # records a result; cleared by the next RUNNING mark and by every
+    # completion write, so it never outlives the run it describes.
+    in_progress_results: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
     run_status: Mapped[CapabilityReportRunStatus] = mapped_column(
         Enum(CapabilityReportRunStatus, native_enum=False), nullable=False
     )
