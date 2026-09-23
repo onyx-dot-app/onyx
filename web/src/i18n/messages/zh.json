@@ -2754,17 +2754,8 @@
         "placeholder": "输入{label}"
       },
       "navigation": {
-        "advancedButton": {
-          "label": "高级"
-        },
-        "continueButton": {
-          "label": "继续"
-        },
         "createButton": {
           "label": "创建连接器"
-        },
-        "previousButton": {
-          "label": "上一步"
         }
       },
       "oauth": {
@@ -13830,20 +13821,6 @@
       },
       "sessionsFilter": {
         "label": "会话"
-      }
-    },
-    "createConnector": {
-      "advancedStep": {
-        "label": "高级（可选）"
-      },
-      "connectorStep": {
-        "label": "连接器"
-      },
-      "credentialStep": {
-        "label": "凭据"
-      },
-      "exitSetup": {
-        "label": "退出连接器设置"
       }
     },
     "notifications": {

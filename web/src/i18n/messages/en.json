@@ -2754,17 +2754,8 @@
         "placeholder": "Enter {label}"
       },
       "navigation": {
-        "advancedButton": {
-          "label": "Advanced"
-        },
-        "continueButton": {
-          "label": "Continue"
-        },
         "createButton": {
           "label": "Create Connector"
-        },
-        "previousButton": {
-          "label": "Previous"
         }
       },
       "oauth": {
@@ -13830,20 +13821,6 @@
       },
       "sessionsFilter": {
         "label": "Sessions"
-      }
-    },
-    "createConnector": {
-      "advancedStep": {
-        "label": "Advanced (optional)"
-      },
-      "connectorStep": {
-        "label": "Connector"
-      },
-      "credentialStep": {
-        "label": "Credential"
-      },
-      "exitSetup": {
-        "label": "Exit Connector Setup"
       }
     },
     "notifications": {

@@ -6,7 +6,6 @@ import { Permission } from "@/lib/types";
 import useSWR, { mutate } from "swr";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
-import { useFormContext } from "@/components/context/FormContext";
 import { getSourceDisplayName, getSourceMetadata } from "@/lib/sources";
 import { SourceIcon } from "@/components/SourceIcon";
 import { useEffect, useRef, useState } from "react";
@@ -47,7 +46,6 @@ import {
   useGoogleDriveCredentials,
 } from "@/app/admin/connectors/[connector]/pages/utils/hooks";
 import { Formik } from "formik";
-import NavigationRow from "@/app/admin/connectors/[connector]/NavigationRow";
 import { useRouter } from "next/navigation";
 import CardSection from "@/components/admin/CardSection";
 import { prepareOAuthAuthorizationRequest } from "@/lib/oauth_utils";
@@ -66,7 +64,7 @@ import { Section, toast } from "@opal/layouts";
 import { deleteConnector } from "@/lib/connector";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
 import Text from "@/refresh-components/texts/Text";
-import { SvgKey, SvgAlertCircle } from "@opal/icons";
+import { SvgKey, SvgAlertCircle, SvgPlusCircle } from "@opal/icons";
 import { Tooltip } from "@opal/components";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
@@ -197,8 +195,6 @@ export default function AddConnector({
   const credentialTemplate = credentialTemplates[connector];
   const configuration: ConnectionConfiguration = connectorConfigs[connector];
 
-  // Form context and popup management
-  const { setFormStep, setAllowCreate, formStep } = useFormContext();
   const [uploading, setUploading] = useState(false);
   const [creatingConnector, setCreatingConnector] = useState(false);
 
@@ -224,18 +220,9 @@ export default function AddConnector({
     (connector === "gmail" && liveGmailCredential) ||
     currentCredential;
 
-  // Check if there are no credentials
+  // Sources without a credential template skip the credential section.
   const noCredentials = credentialTemplate == null;
-
-  useEffect(() => {
-    if (noCredentials && 1 != formStep) {
-      setFormStep(Math.max(1, formStep));
-    }
-
-    if (!noCredentials && !credentialActivated && formStep != 0) {
-      setFormStep(Math.min(formStep, 0));
-    }
-  }, [noCredentials, formStep, setFormStep]);
+  const canCreate = noCredentials || credentialActivated != null;
 
   const convertStringToDateTime = (indexingStart: string | null) => {
     return indexingStart ? new Date(indexingStart) : null;
@@ -268,7 +255,6 @@ export default function AddConnector({
 
   const onSwap = async (selectedCredential: Credential<any>) => {
     setCurrentCredential(selectedCredential);
-    setAllowCreate(true);
     toast.success(t("add.credentialSwapped.toast"));
     refresh();
   };
@@ -583,7 +569,7 @@ export default function AddConnector({
             farRightElement={undefined}
           />
 
-          {formStep == 0 && (
+          {!noCredentials && (
             <CardSection>
               <Text as="p" headingH3 className="pb-2">
                 {t("add.credentialStep.title")}
@@ -696,36 +682,36 @@ export default function AddConnector({
             </CardSection>
           )}
 
-          {formStep == 1 && (
-            <CardSection className="w-full py-8 flex gap-y-6 flex-col max-w-3xl px-12 mx-auto">
-              <DynamicConnectionForm
-                values={formikProps.values}
-                config={configuration}
-                connector={connector}
-                currentCredential={
-                  currentCredential ||
-                  liveGDriveCredential ||
-                  liveGmailCredential ||
-                  null
-                }
-              />
-              <ConnectorDocsLink sourceType={connector} />
-            </CardSection>
-          )}
+          <CardSection className="w-full py-8 flex gap-y-6 flex-col max-w-3xl px-12 mx-auto">
+            <DynamicConnectionForm
+              values={formikProps.values}
+              config={configuration}
+              connector={connector}
+              currentCredential={
+                currentCredential ||
+                liveGDriveCredential ||
+                liveGmailCredential ||
+                null
+              }
+            />
+            <ConnectorDocsLink sourceType={connector} />
+          </CardSection>
 
-          {formStep === 2 && (
+          {connector !== "file" && (
             <CardSection>
               <AdvancedFormPage defaultPruneFreqHours={defaultPruneFreqHours} />
             </CardSection>
           )}
 
-          <NavigationRow
-            activatedCredential={credentialActivated != null}
-            isValid={formikProps.isValid}
-            onSubmit={formikProps.handleSubmit}
-            noCredentials={noCredentials}
-            noAdvanced={connector == "file"}
-          />
+          <div className="py-4 flex w-full justify-end">
+            <Button
+              disabled={!formikProps.isValid || !canCreate}
+              rightIcon={SvgPlusCircle}
+              onClick={() => formikProps.handleSubmit()}
+            >
+              {t("navigation.createButton.label")}
+            </Button>
+          </div>
         </div>
       )}
     </Formik>

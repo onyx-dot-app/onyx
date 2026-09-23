@@ -2754,17 +2754,8 @@
         "placeholder": "{label} を入力"
       },
       "navigation": {
-        "advancedButton": {
-          "label": "詳細設定"
-        },
-        "continueButton": {
-          "label": "次へ"
-        },
         "createButton": {
           "label": "コネクターを作成"
-        },
-        "previousButton": {
-          "label": "戻る"
         }
       },
       "oauth": {
@@ -13830,20 +13821,6 @@
       },
       "sessionsFilter": {
         "label": "セッション"
-      }
-    },
-    "createConnector": {
-      "advancedStep": {
-        "label": "詳細設定（任意）"
-      },
-      "connectorStep": {
-        "label": "コネクター"
-      },
-      "credentialStep": {
-        "label": "認証情報"
-      },
-      "exitSetup": {
-        "label": "コネクター設定を終了"
       }
     },
     "notifications": {

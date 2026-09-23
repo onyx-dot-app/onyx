@@ -2754,17 +2754,8 @@
         "placeholder": "Introduce {label}"
       },
       "navigation": {
-        "advancedButton": {
-          "label": "Avanzado"
-        },
-        "continueButton": {
-          "label": "Continuar"
-        },
         "createButton": {
           "label": "Crear el conector"
-        },
-        "previousButton": {
-          "label": "Anterior"
         }
       },
       "oauth": {
@@ -13830,20 +13821,6 @@
       },
       "sessionsFilter": {
         "label": "Sesiones"
-      }
-    },
-    "createConnector": {
-      "advancedStep": {
-        "label": "Avanzado (opcional)"
-      },
-      "connectorStep": {
-        "label": "Conector"
-      },
-      "credentialStep": {
-        "label": "Credencial"
-      },
-      "exitSetup": {
-        "label": "Salir de la configuración del conector"
       }
     },
     "notifications": {

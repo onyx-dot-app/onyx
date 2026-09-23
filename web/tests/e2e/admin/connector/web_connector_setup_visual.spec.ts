@@ -26,6 +26,6 @@ for (const theme of THEMES) {
     await expect(setupPage.textField("base_url")).toBeVisible();
     await page.waitForLoadState("networkidle");
 
-    await setupPage.expectScreenshot(`admin-${theme}-connectors--web--step-1`);
+    await setupPage.expectScreenshot(`admin-${theme}-connectors--web`);
   });
 }

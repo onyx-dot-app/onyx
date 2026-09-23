@@ -2754,17 +2754,8 @@
         "placeholder": "{label} 입력"
       },
       "navigation": {
-        "advancedButton": {
-          "label": "고급"
-        },
-        "continueButton": {
-          "label": "계속"
-        },
         "createButton": {
           "label": "커넥터 만들기"
-        },
-        "previousButton": {
-          "label": "이전"
         }
       },
       "oauth": {
@@ -13830,20 +13821,6 @@
       },
       "sessionsFilter": {
         "label": "세션"
-      }
-    },
-    "createConnector": {
-      "advancedStep": {
-        "label": "고급 (선택)"
-      },
-      "connectorStep": {
-        "label": "커넥터"
-      },
-      "credentialStep": {
-        "label": "자격 증명"
-      },
-      "exitSetup": {
-        "label": "커넥터 설정 나가기"
       }
     },
     "notifications": {

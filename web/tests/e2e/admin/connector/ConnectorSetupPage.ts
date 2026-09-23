@@ -1,8 +1,8 @@
 /**
- * Page Object Model for the connector setup wizard
- * (`/admin/connectors/<source>?step=1`).
+ * Page Object Model for the connector setup page
+ * (`/admin/connectors/<source>`).
  *
- * The wizard renders every connector's configuration form through the shared
+ * The page renders every connector's configuration form through the shared
  * `RenderField`/`TextFormField` machinery, so text fields are addressable by
  * their config `name` (exposed as `data-testid`) and select fields by their
  * native `<select name=...>` element.
@@ -39,11 +39,11 @@ export class ConnectorSetupPage {
   }
 
   /**
-   * Navigate straight to the configuration step of the wizard. Connectors
-   * without a credential step (e.g. web) render their form here.
+   * Navigate to the setup page. Every section renders on one page; connectors
+   * without a credential (e.g. web) skip the credential section.
    */
   async goto() {
-    await this.page.goto(`/admin/connectors/${this.source}?step=1`);
+    await this.page.goto(`/admin/connectors/${this.source}`);
     await expect(this.pageTitle).toBeVisible({ timeout: 10_000 });
   }
 
@@ -59,7 +59,7 @@ export class ConnectorSetupPage {
     });
   }
 
-  /** Capture a full-page visual snapshot of the wizard. */
+  /** Capture a full-page visual snapshot of the setup page. */
   async expectScreenshot(name: string) {
     await expectScreenshot(this.page, { name });
   }

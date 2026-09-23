@@ -2754,17 +2754,8 @@
         "placeholder": "{label} eingeben"
       },
       "navigation": {
-        "advancedButton": {
-          "label": "Erweitert"
-        },
-        "continueButton": {
-          "label": "Weiter"
-        },
         "createButton": {
           "label": "Konnektor erstellen"
-        },
-        "previousButton": {
-          "label": "Zurück"
         }
       },
       "oauth": {
@@ -13830,20 +13821,6 @@
       },
       "sessionsFilter": {
         "label": "Sitzungen"
-      }
-    },
-    "createConnector": {
-      "advancedStep": {
-        "label": "Erweitert (optional)"
-      },
-      "connectorStep": {
-        "label": "Konnektor"
-      },
-      "credentialStep": {
-        "label": "Anmeldedaten"
-      },
-      "exitSetup": {
-        "label": "Konnektor-Einrichtung verlassen"
       }
     },
     "notifications": {

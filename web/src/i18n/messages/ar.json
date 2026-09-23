@@ -2754,17 +2754,8 @@
         "placeholder": "أدخل {label}"
       },
       "navigation": {
-        "advancedButton": {
-          "label": "متقدم"
-        },
-        "continueButton": {
-          "label": "متابعة"
-        },
         "createButton": {
           "label": "إنشاء موصل"
-        },
-        "previousButton": {
-          "label": "السابق"
         }
       },
       "oauth": {
@@ -13830,20 +13821,6 @@
       },
       "sessionsFilter": {
         "label": "الجلسات"
-      }
-    },
-    "createConnector": {
-      "advancedStep": {
-        "label": "متقدم (اختياري)"
-      },
-      "connectorStep": {
-        "label": "الموصل"
-      },
-      "credentialStep": {
-        "label": "بيانات الاعتماد"
-      },
-      "exitSetup": {
-        "label": "الخروج من إعداد الموصل"
       }
     },
     "notifications": {

@@ -2754,17 +2754,8 @@
         "placeholder": "Digite {label}"
       },
       "navigation": {
-        "advancedButton": {
-          "label": "Avançado"
-        },
-        "continueButton": {
-          "label": "Continuar"
-        },
         "createButton": {
           "label": "Criar conector"
-        },
-        "previousButton": {
-          "label": "Anterior"
         }
       },
       "oauth": {
@@ -13830,20 +13821,6 @@
       },
       "sessionsFilter": {
         "label": "Sessões"
-      }
-    },
-    "createConnector": {
-      "advancedStep": {
-        "label": "Avançado (opcional)"
-      },
-      "connectorStep": {
-        "label": "Conector"
-      },
-      "credentialStep": {
-        "label": "Credencial"
-      },
-      "exitSetup": {
-        "label": "Sair da configuração do conector"
       }
     },
     "notifications": {

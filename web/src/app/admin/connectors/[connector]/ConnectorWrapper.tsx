@@ -8,11 +8,6 @@ import {
   ValidSources,
 } from "@/lib/types";
 import AddConnector from "./AddConnectorPage";
-import { FormProvider } from "@/components/context/FormContext";
-import CreateConnectorSidebar, {
-  CreateConnectorSidebarShell,
-} from "@/sections/sidebar/CreateConnectorSidebar";
-import { AdminCustomSidebarPortal } from "@/layouts/chromes/AdminChrome";
 import { HeaderTitle } from "@/components/header/HeaderTitle";
 import { Button } from "@opal/components";
 import { isValidSource, getSourceMetadata } from "@/lib/sources";
@@ -45,25 +40,20 @@ export default function ConnectorWrapper({
   // Check if the connector is valid
   if (!isValidSource(connector)) {
     return (
-      <FormProvider connector={connector}>
-        <AdminCustomSidebarPortal>
-          <CreateConnectorSidebar />
-        </AdminCustomSidebarPortal>
-        <div className="mt-12 w-full max-w-3xl mx-auto">
-          <div className="mx-auto flex flex-col gap-y-2">
-            <HeaderTitle>
-              <p>{t("invalidConnector.title", { connector })}</p>
-            </HeaderTitle>
-            <div className="me-auto">
-              <Button
-                onClick={() => window.open("/admin/indexing-status", "_self")}
-              >
-                {t("invalidConnector.homeButton.label")}
-              </Button>
-            </div>
+      <div className="mt-12 w-full max-w-3xl mx-auto">
+        <div className="mx-auto flex flex-col gap-y-2">
+          <HeaderTitle>
+            <p>{t("invalidConnector.title", { connector })}</p>
+          </HeaderTitle>
+          <div className="me-auto">
+            <Button
+              onClick={() => window.open("/admin/indexing-status", "_self")}
+            >
+              {t("invalidConnector.homeButton.label")}
+            </Button>
           </div>
         </div>
-      </FormProvider>
+      </div>
     );
   }
 
@@ -73,32 +63,19 @@ export default function ConnectorWrapper({
   // Only show federated form if explicitly requested via URL parameter
   const showFederatedForm = mode === "federated" && supportsFederated;
 
-  // For federated form, use the specialized form without FormProvider.
-  // That form is a single page, so its sidebar shows no steps.
   if (showFederatedForm) {
     return (
-      <>
-        <AdminCustomSidebarPortal>
-          <CreateConnectorSidebarShell />
-        </AdminCustomSidebarPortal>
-        <div className="flex justify-center w-full h-full">
-          <div className="mt-12 w-full max-w-4xl mx-auto">
-            <FederatedConnectorForm connector={connector} />
-          </div>
+      <div className="flex justify-center w-full h-full">
+        <div className="mt-12 w-full max-w-4xl mx-auto">
+          <FederatedConnectorForm connector={connector} />
         </div>
-      </>
+      </div>
     );
   }
 
-  // For regular connectors, use the existing flow
   return (
-    <FormProvider connector={connector}>
-      <AdminCustomSidebarPortal>
-        <CreateConnectorSidebar />
-      </AdminCustomSidebarPortal>
-      <div className="mt-12 w-full max-w-3xl mx-auto">
-        <AddConnector connector={connector} />
-      </div>
-    </FormProvider>
+    <div className="mt-12 w-full max-w-3xl mx-auto">
+      <AddConnector connector={connector} />
+    </div>
   );
 }
