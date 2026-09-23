@@ -197,6 +197,7 @@ export default function ScheduledTasksListPage() {
   const headerActions = useMemo(
     () => (
       <Button
+        key="new"
         variant="default"
         prominence="primary"
         icon={SvgPlus}
