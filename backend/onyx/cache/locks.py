@@ -94,9 +94,44 @@ async def async_cache_shared_lock(
 
     executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="cache-lock")
     loop = asyncio.get_running_loop()
+    acquire_fut = loop.run_in_executor(executor, acquire_in_worker)
     start_time = time.monotonic()
+    cancelled = False
     try:
-        lock, acquired = await loop.run_in_executor(executor, acquire_in_worker)
+        try:
+            # Shield so cancellation unwinds us but the worker's future
+            # survives — its result is needed below to release any lock it
+            # goes on to acquire.
+            lock, acquired = await asyncio.shield(acquire_fut)
+        except asyncio.CancelledError:
+            cancelled = True
+
+            # The cancelled await abandons the future but the worker keeps
+            # running; if it acquires the lock after we unwind, nothing else
+            # would ever release it (a Postgres advisory lock has no lease).
+            # Queue a release on the same worker thread once acquire settles,
+            # then shut the executor down after it.
+            def release_late_acquire(
+                fut: asyncio.Future[tuple[CacheLock, bool]],
+            ) -> None:
+                try:
+                    late_lock, late_acquired = fut.result()
+                except Exception:
+                    executor.shutdown(wait=False)
+                    return
+                if late_acquired:
+                    executor.submit(
+                        _release_cache_lock,
+                        late_lock,
+                        lock_name,
+                        time.monotonic() - start_time,
+                        max_time_lock_held_s,
+                        logger,
+                    )
+                executor.shutdown(wait=False)
+
+            acquire_fut.add_done_callback(release_late_acquire)
+            raise
         if not acquired:
             raise CacheLockAcquisitionError(
                 f"Timed out waiting to acquire cache lock {lock_name} after "
@@ -116,4 +151,5 @@ async def async_cache_shared_lock(
                 logger,
             )
     finally:
-        executor.shutdown(wait=False)
+        if not cancelled:
+            executor.shutdown(wait=False)
