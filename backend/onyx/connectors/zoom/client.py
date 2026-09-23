@@ -25,15 +25,12 @@ from onyx.connectors.zoom.models import (
     ZOOM_NOT_ENTITLED_CODE,
     ZoomAccessToken,
     ZoomMeetingDetails,
-    ZoomPanelist,
-    ZoomParticipant,
     ZoomPastMeetingDetails,
     ZoomRecordingAuthenticationSettings,
     ZoomRecordingEntry,
     ZoomRecordingPage,
     ZoomRecordingRegistrant,
     ZoomRecordingSettings,
-    ZoomRegistrant,
     ZoomSessionOccurrence,
     ZoomUser,
     ZoomUserPage,
@@ -68,14 +65,7 @@ _MAX_PAGE_SIZE = 300
 # rather than truncating its access list.
 MAX_LISTING_PAGES = 200
 
-_AccessRecordT = TypeVar("_AccessRecordT")
-_RegistrantT = TypeVar("_RegistrantT")
-
-
-class ZoomNotEntitledError(InsufficientPermissionsError):
-    """The account's plan or licence does not cover an endpoint, which no retry
-    and no scope change can fix. Kept apart from a missing scope so a caller can
-    carry on without the data instead of failing the run."""
+_RecordT = TypeVar("_RecordT")
 
 
 def _next_page_token(body: dict[str, Any]) -> str | None:
@@ -364,7 +354,7 @@ class ZoomClient:
                 # Zoom's message names the user whose licence is missing, which
                 # the hint can't know.
                 hint = ENTITLEMENT_HINTS[endpoint.requires]
-                raise ZoomNotEntitledError(f"{hint} Zoom said: {denial}")
+                raise InsufficientPermissionsError(f"{hint} Zoom said: {denial}")
 
         _raise_for_zoom_error(response, description)
         return response
@@ -374,17 +364,17 @@ class ZoomClient:
         endpoint: ZoomEndpoint,
         identifier: str,
         response_key: str,
-        parse: Callable[[Any], _AccessRecordT],
+        parse: Callable[[Any], _RecordT],
         extra_params: dict[str, Any] | None = None,
         limit: int | None = None,
-    ) -> list[_AccessRecordT]:
+    ) -> list[_RecordT]:
         """Zoom's next_page_token expires 15 minutes after it is issued, so the
         whole list is drained here rather than resumed from the checkpoint. A
         limit stops after that many records, for a caller that only needs to
         see Zoom answer."""
         if limit is not None and limit < 1:
             raise ValueError(f"A listing limit must be at least 1, got {limit}")
-        records: list[_AccessRecordT] = []
+        records: list[_RecordT] = []
         page_token: str | None = None
         seen_tokens: set[str] = set()
         page_size = _MAX_PAGE_SIZE if limit is None else min(_MAX_PAGE_SIZE, limit)
@@ -595,37 +585,14 @@ class ZoomClient:
             total_records=body.get("total_records"),
         )
 
-    def list_past_meeting_participants(
-        self, occurrence_uuid: str
-    ) -> list[ZoomParticipant]:
-        """This is the only access source with an age limit: Zoom deletes
-        attendance after the retention window and then answers 400 with code
-        12702. Registrants and invitees still answer for the same old meeting."""
-        return self._paginate(
-            endpoints.PAST_MEETING_PARTICIPANTS,
-            occurrence_uuid,
-            "participants",
-            ZoomParticipant.model_validate,
-        )
-
-    def list_past_webinar_participants(
-        self, occurrence_uuid: str
-    ) -> list[ZoomParticipant]:
-        return self._paginate(
-            endpoints.PAST_WEBINAR_PARTICIPANTS,
-            occurrence_uuid,
-            "participants",
-            ZoomParticipant.model_validate,
-        )
-
     def _list_registrants(
         self,
         endpoint: ZoomEndpoint,
         identifier: str,
         status: str | None,
-        parse: Callable[[Any], _RegistrantT],
+        parse: Callable[[Any], _RecordT],
         limit: int | None = None,
-    ) -> list[_RegistrantT]:
+    ) -> list[_RecordT]:
         try:
             return self._paginate(
                 endpoint,
@@ -639,39 +606,6 @@ class ZoomClient:
             if _registration_not_enabled(e):
                 return []
             raise
-
-    def list_meeting_registrants(
-        self, meeting_id: str, status: str | None = None
-    ) -> list[ZoomRegistrant]:
-        """Registrants belong to the scheduled meeting, not to one occurrence, so
-        a recurring series returns the same list for every run."""
-        return self._list_registrants(
-            endpoints.MEETING_REGISTRANTS,
-            meeting_id,
-            status,
-            ZoomRegistrant.model_validate,
-        )
-
-    def list_webinar_registrants(
-        self, webinar_id: str, status: str | None = None
-    ) -> list[ZoomRegistrant]:
-        return self._list_registrants(
-            endpoints.WEBINAR_REGISTRANTS,
-            webinar_id,
-            status,
-            ZoomRegistrant.model_validate,
-        )
-
-    def list_webinar_panelists(self, webinar_id: str) -> list[ZoomPanelist]:
-        """A panelist does not have to register, so without this a presenter is
-        missing from the access list of a webinar they spoke at. Zoom takes no page
-        parameters here and sends no next_page_token back, unlike the registrant and
-        participant listings.
-        """
-        response = self._get(endpoints.WEBINAR_PANELISTS, webinar_id)
-        return [
-            ZoomPanelist.model_validate(p) for p in response.json().get("panelists", [])
-        ]
 
     def download_transcript_vtt(self, download_url: str) -> str:
         """The download redirects to a storage host, so every hop is checked

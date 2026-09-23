@@ -25,7 +25,7 @@ from onyx.connectors.models import (
     HierarchyNode,
     InputType,
 )
-from onyx.connectors.zoom.client import ZoomClient, ZoomNotEntitledError
+from onyx.connectors.zoom.client import ZoomClient
 from onyx.connectors.zoom.connector import (
     ZoomConnector,
     ZoomConnectorCheckpoint,
@@ -453,17 +453,6 @@ class TestZoomConnectorValidateSettings:
             connector.validate_connector_settings()
 
         assert "pastMeetings" in str(exc.value)
-
-    def test_a_missing_webinar_add_on_is_rejected_at_setup(self) -> None:
-        connector, client = _with_client(webinar_ids=["222"])
-        client.list_past_webinar_occurrences.side_effect = ZoomNotEntitledError(
-            "Webinars need the Webinar add-on"
-        )
-
-        with pytest.raises(ZoomNotEntitledError) as exc:
-            connector.validate_connector_settings()
-
-        assert "add-on" in str(exc.value)
 
     def test_an_id_pasted_with_spaces_is_probed_without_them(self) -> None:
         connector, client = _with_client(webinar_ids=["857 9609 3688"])
