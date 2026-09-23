@@ -3,21 +3,24 @@
 The chat route runs `check_llm_cost_limit_for_provider` for every provider it
 calls. The gateway's generating routes did not, so a tenant over its weekly cap
 could keep spending Onyx's managed keys through `/v1/*`. The cap itself is
-real here; only the usage lookup is stubbed to report "over the cap".
+real here.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fastapi import HTTPException, Request
+from fastapi import Request
 from sqlalchemy.orm import Session
 
 from ee.onyx.server.gateway import api as gateway_api
 from onyx.db.models import User
+from onyx.db.usage import UsageLimitExceededError, UsageType
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server import usage_limits
 from onyx.server.gateway.models import (
     AnthropicMessagesRequest,
@@ -72,7 +75,16 @@ def _provider(api_key: str) -> tuple[LLMProviderView, ModelConfigurationView]:
 
 
 def _over_cap(**_kwargs: object) -> None:
-    raise HTTPException(status_code=429, detail="LLM usage limit exceeded")
+    raise UsageLimitExceededError(usage_type=UsageType.LLM_COST, current=150, limit=100)
+
+
+@pytest.fixture(autouse=True)
+def _paid_tenant_with_cap() -> Generator[None, None, None]:
+    with (
+        patch.object(usage_limits, "is_tenant_on_trial_fn", return_value=False),
+        patch.object(usage_limits, "get_limit_for_usage_type", return_value=100),
+    ):
+        yield
 
 
 @pytest.mark.parametrize(
@@ -99,10 +111,10 @@ def test_managed_key_over_cap_never_reaches_the_provider(
         patch.object(usage_limits, "USAGE_LIMITS_ENABLED", True),
         patch.object(usage_limits, "_ONYX_MANAGED_API_KEYS", {_MANAGED_KEY}),
         patch.object(
-            usage_limits, "check_usage_and_raise", side_effect=_over_cap
+            usage_limits, "check_usage_limit", side_effect=_over_cap
         ) as usage_check,
         patch.multiple(gateway_api, **handlers),
-        pytest.raises(HTTPException) as exc_info,
+        pytest.raises(OnyxError) as exc_info,
     ):
         route(
             request=make_request(),
@@ -111,6 +123,7 @@ def test_managed_key_over_cap_never_reaches_the_provider(
             db_session=cast(Session, MagicMock(spec=Session)),
         )
 
+    assert exc_info.value.error_code is OnyxErrorCode.RATE_LIMITED
     assert exc_info.value.status_code == 429
     usage_check.assert_called_once()
     for handler in handlers.values():
@@ -133,7 +146,7 @@ def test_own_provider_key_is_not_subject_to_the_cap() -> None:
         patch.object(usage_limits, "USAGE_LIMITS_ENABLED", True),
         patch.object(usage_limits, "_ONYX_MANAGED_API_KEYS", {_MANAGED_KEY}),
         patch.object(
-            usage_limits, "check_usage_and_raise", side_effect=_over_cap
+            usage_limits, "check_usage_limit", side_effect=_over_cap
         ) as usage_check,
         patch.object(gateway_api, "handle_chat_completion") as handle,
     ):

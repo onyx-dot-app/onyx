@@ -198,6 +198,7 @@ def test_slack_bot_replies_with_budget_message_instead_of_answering(
         ),
     )
 
+    client = MagicMock()
     with (
         patch(
             f"{_HANDLE_REGULAR_ANSWER}.get_user_by_email",
@@ -227,11 +228,11 @@ def test_slack_bot_replies_with_budget_message_instead_of_answering(
             message_info=message_info,
             slack_channel_config=slack_channel_config,
             receiver_ids=None,
-            client=MagicMock(),
+            client=client,
             channel="C123",
             logger=MagicMock(),
             db_session=db_session,
-            feedback_reminder_id=None,
+            feedback_reminder_id="scheduled-reminder",
         )
 
     mock_update_react.assert_called_once()
@@ -239,5 +240,8 @@ def test_slack_bot_replies_with_budget_message_instead_of_answering(
     mock_stream.assert_not_called()
     mock_respond.assert_called_once()
     assert mock_respond.call_args.kwargs["text"] == _BUDGET_MESSAGE
+    client.chat_deleteScheduledMessage.assert_called_once_with(
+        channel="U123", scheduled_message_id="scheduled-reminder"
+    )
     if not reply_fails:
-        assert result is True
+        assert result is False
