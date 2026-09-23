@@ -7,7 +7,6 @@ rendered inline runs script on the app origin with the viewer's session.
 
 import mimetypes
 import re
-from pathlib import PurePath
 from urllib.parse import quote
 
 from onyx.file_processing.file_types import (
@@ -49,6 +48,8 @@ ATTACHMENT_MEDIA_TYPE: str = "application/octet-stream"
 
 _UNSAFE_FILENAME_CHARS = re.compile(r'[\x00-\x1f\x7f"\\/]')
 _NON_ASCII_CHARS = re.compile(r"[^\x20-\x7e]")
+# Matches the frontend check, so "Sales v1.2 data" still counts as extensionless.
+_FILENAME_EXTENSION = re.compile(r"\.[^./\\\s]+$")
 
 # Version of the policy `resolve_inline_disposition` applies. Endpoints that
 # cache their responses mix this into the ETag, so bump it whenever the headers
@@ -116,7 +117,7 @@ def build_content_disposition(disposition_type: str, filename: str) -> str:
 
 def ensure_filename_extension(filename: str, media_type: str) -> str:
     """Append the extension of `media_type` when `filename` has none."""
-    if PurePath(filename).suffix:
+    if _FILENAME_EXTENSION.search(filename):
         return filename
     bare_media_type = media_type.split(";")[0].strip().lower()
     if bare_media_type == ATTACHMENT_MEDIA_TYPE:

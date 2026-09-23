@@ -170,6 +170,7 @@ def test_content_disposition_names_an_empty_filename() -> None:
     [
         ("Q3 Deck", PPTX_MIME_TYPE, "Q3 Deck.pptx"),
         ("data", "text/csv", "data.csv"),
+        ("Sales v1.2 data", "text/csv", "Sales v1.2 data.csv"),
         ("chart", "image/png;base64", "chart.png"),
         ("Q3 Deck.pptx", PPTX_MIME_TYPE, "Q3 Deck.pptx"),
         ("notes.md", "text/plain", "notes.md"),
