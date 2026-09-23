@@ -2,14 +2,12 @@
 through the group of its channel's members."""
 
 from collections.abc import Iterator
-from datetime import datetime
 
 import requests
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import (
-    BasicExpertInfo,
     ConnectorFailure,
     Document,
     EntityFailure,
@@ -17,11 +15,19 @@ from onyx.connectors.models import (
     SlimDocument,
     TextSection,
 )
+from onyx.connectors.teams import images
 from onyx.connectors.teams.images import (
     IMAGES_NOT_INDEXED,
     ImageHarvest,
     MessageImages,
     harvest_message_images,
+)
+from onyx.connectors.teams.messages import (
+    message_authors,
+    message_header,
+    message_text,
+    modified_at,
+    sender_name,
 )
 from onyx.connectors.teams.models import ChannelRef, Message
 from onyx.connectors.teams.refusals import channel_failure, is_permanent
@@ -40,20 +46,9 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# Each pasted image costs a download now and a vision-model call at indexing,
-# so a thread stops well past what a working conversation holds.
-_MAX_IMAGES_PER_THREAD = 100
-
-
-def _sender_name(message: Message) -> str:
-    """Bots and apps post without a user, so the sender is not always known."""
-    if message.from_ and message.from_.user and message.from_.user.display_name:
-        return message.from_.user.display_name
-    return "Unknown User"
-
 
 def _construct_semantic_identifier(channel: ChannelRef, top_message: Message) -> str:
-    top_message_user_name = _sender_name(top_message)
+    top_message_user_name = sender_name(top_message)
     top_message_content = top_message.body.content or ""
     top_message_subject = top_message.subject or "Unknown Subject"
     channel_name = channel.display_name
@@ -79,40 +74,10 @@ def _construct_semantic_identifier(channel: ChannelRef, top_message: Message) ->
     return semantic_identifier
 
 
-def _message_header(message: Message) -> str:
-    return (
-        f"From: {_sender_name(message)}\nDate: {message.created_date_time.isoformat()}"
-    )
-
-
 def _message_section(message: Message) -> TextSection | None:
     """One section per message, so a hit cites the message that said it."""
-    body = parse_html_page_basic(message.body.content) if message.body.content else ""
-    body = body.strip()
-    if not body:
-        return None
-    return TextSection(
-        link=message.web_url, text=f"{_message_header(message)}\n\n{body}"
-    )
-
-
-def _modified_at(message: Message) -> datetime:
-    return message.last_modified_date_time or message.created_date_time
-
-
-def _thread_authors(messages: list[Message]) -> list[BasicExpertInfo]:
-    """The people who wrote in the thread, each once by user id: two people can
-    share a name, and one can change theirs. Graph names a sender and gives no
-    email, and a bot or an app posts with no sender at all."""
-    names = {
-        message.from_.user.id: message.from_.user.display_name
-        for message in messages
-        if message.is_indexable
-        and message.from_
-        and message.from_.user
-        and message.from_.user.display_name
-    }
-    return [BasicExpertInfo(display_name=name) for name in names.values()]
+    text = message_text(message)
+    return TextSection(link=message.web_url, text=text) if text else None
 
 
 def _convert_thread_to_document(
@@ -125,7 +90,7 @@ def _convert_thread_to_document(
     first, each message's text followed by the images pasted into it."""
     messages = sorted([root, *replies], key=lambda m: m.created_date_time)
     sections: list[TextSection | ImageSection] = []
-    images_left = _MAX_IMAGES_PER_THREAD
+    images_left = images.MAX_IMAGES_PER_DOCUMENT
     missed_images = 0
     for message in messages:
         if not message.is_indexable:
@@ -142,7 +107,7 @@ def _convert_thread_to_document(
     # and no image must still replace its document or the old text would
     # outlive it.
     if not sections:
-        sections = [TextSection(link=root.web_url, text=_message_header(root))]
+        sections = [TextSection(link=root.web_url, text=message_header(root))]
 
     return Document(
         id=root.id,
@@ -153,8 +118,8 @@ def _convert_thread_to_document(
         doc_created_at=root.created_date_time,
         # Indexing skips a document whose update time has not moved, and an
         # edit or a deleted reply moves a message's modified time, not its creation.
-        doc_updated_at=max(_modified_at(message) for message in messages),
-        primary_owners=_thread_authors(messages),
+        doc_updated_at=max(modified_at(message) for message in messages),
+        primary_owners=message_authors(messages),
         metadata=({IMAGES_NOT_INDEXED: str(missed_images)} if missed_images else {}),
         external_access=channel_access(channel, for_indexing=True),
     )

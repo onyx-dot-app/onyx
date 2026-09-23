@@ -16,7 +16,6 @@ from onyx.connectors.models import (
     TextSection,
 )
 from onyx.connectors.teams import images as images_module
-from onyx.connectors.teams import threads as threads_module
 from onyx.connectors.teams.utils import hosted_content_urls
 from tests.unit.onyx.connectors.teams.helpers import (
     CHANNEL_ID,
@@ -177,7 +176,7 @@ def test_images_follow_their_message_and_link_to_it(
 def test_the_thread_cap_counts_downloads_not_kept_images(
     downloads: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(threads_module, "_MAX_IMAGES_PER_THREAD", 2)
+    monkeypatch.setattr(images_module, "MAX_IMAGES_PER_DOCUMENT", 2)
     urls = [_hosted("m1", f"H{n}") for n in range(3)]
     reply_url = _hosted("r1", "H9", reply_of="m1")
     downloads["served"].update(
