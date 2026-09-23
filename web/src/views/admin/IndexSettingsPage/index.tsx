@@ -1250,7 +1250,9 @@ export default function IndexSettingsPage() {
                       >
                         <Content
                           title={t("embeddingModel.title")}
-                          description={t("embeddingModel.description")}
+                          description={t("embeddingModel.description", {
+                            appName: settings.appName,
+                          })}
                           sizePreset="main-content"
                           variant="section"
                         />

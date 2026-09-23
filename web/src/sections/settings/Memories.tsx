@@ -10,6 +10,7 @@ import LineItem from "@/refresh-components/buttons/LineItem";
 import { Button } from "@opal/components";
 import { useCreateModal } from "@opal/components";
 import { MemoryItem } from "@/lib/types";
+import { useSettings } from "@/lib/settings/hooks";
 
 interface MemoriesProps {
   memories: MemoryItem[];
@@ -18,6 +19,7 @@ interface MemoriesProps {
 
 export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
   const t = useTranslations("settings.memory");
+  const { appName } = useSettings();
   const memoriesModal = useCreateModal();
   const [targetMemoryId, setTargetMemoryId] = useState<number | null>(null);
 
@@ -26,7 +28,7 @@ export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
       {memories.length === 0 ? (
         <LineItem
           skeleton
-          description={t("empty.description")}
+          description={t("empty.description", { appName })}
           onClick={() => {
             setTargetMemoryId(null);
             memoriesModal.toggle(true);

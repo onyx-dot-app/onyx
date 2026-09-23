@@ -23,6 +23,7 @@ import { OAuthConfig } from "@/lib/tools/types";
 import { getOAuthConfig } from "@/lib/oauth/api";
 import { SvgArrowExchange } from "@opal/icons";
 import { useOAuthPassThroughEnabled } from "@/lib/auth/hooks";
+import { useSettings } from "@/lib/settings/hooks";
 
 export type AuthMethod = "oauth" | "custom-header" | "pt-oauth";
 
@@ -83,6 +84,7 @@ export default function OpenAPIAuthenticationModal({
   entityName = null,
 }: OpenAPIAuthenticationModalProps) {
   const t = useTranslations("actions");
+  const { appName } = useSettings();
   const isOAuthEnabled = useOAuthPassThroughEnabled();
   const [existingOAuthConfig, setExistingOAuthConfig] =
     useState<OAuthConfig | null>(null);
@@ -406,7 +408,8 @@ export default function OpenAPIAuthenticationModal({
                                 <InputSelect.Item
                                   value="pt-oauth"
                                   description={t(
-                                    "openApiAuthModal.authMethod.ptOauth.description"
+                                    "openApiAuthModal.authMethod.ptOauth.description",
+                                    { appName }
                                   )}
                                 >
                                   {t(
@@ -686,7 +689,8 @@ export default function OpenAPIAuthenticationModal({
                       <MessageCard
                         title={t("openApiAuthModal.passThroughNotice.title")}
                         description={t(
-                          "openApiAuthModal.passThroughNotice.description"
+                          "openApiAuthModal.passThroughNotice.description",
+                          { appName }
                         )}
                       />
                     )}

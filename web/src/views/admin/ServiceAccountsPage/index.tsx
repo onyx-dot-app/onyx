@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -62,6 +63,7 @@ const tc = createTableColumns<APIKey>();
 
 export default function ServiceAccountsPage() {
   const t = useTranslations("admin.serviceAccounts");
+  const { appName } = useSettings();
   const {
     data: apiKeys,
     isLoading,
@@ -246,7 +248,7 @@ export default function ServiceAccountsPage() {
         <SettingsLayouts.Header
           title={route.title}
           icon={route.icon}
-          description={t("page.description")}
+          description={t("page.description", { appName })}
           divider
         />
         <SettingsLayouts.Body>
@@ -266,7 +268,7 @@ export default function ServiceAccountsPage() {
         <SettingsLayouts.Header
           title={route.title}
           icon={route.icon}
-          description={t("page.description")}
+          description={t("page.description", { appName })}
           divider
         />
         <SettingsLayouts.Body>
@@ -283,7 +285,7 @@ export default function ServiceAccountsPage() {
       <SettingsLayouts.Header
         title={route.title}
         icon={route.icon}
-        description={t("page.description")}
+        description={t("page.description", { appName })}
         divider
       />
 
@@ -446,6 +448,7 @@ export default function ServiceAccountsPage() {
                 t("deleteModal.description", {
                   name: deleteTarget.api_key_name || t("table.name.unnamed"),
                   keyDisplay: deleteTarget.api_key_display,
+                  appName,
                 })
               )}
             </Text>

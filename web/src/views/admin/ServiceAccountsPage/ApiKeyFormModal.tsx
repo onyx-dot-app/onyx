@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import { Form, Formik } from "formik";
 import {
   createApiKey,
@@ -33,6 +34,7 @@ export default function ApiKeyFormModal({
   apiKey,
 }: ApiKeyFormModalProps) {
   const t = useTranslations("admin.serviceAccounts");
+  const { appName } = useSettings();
   const isUpdate = apiKey !== undefined;
   // A key's access is whatever groups it lands in, so Admin/Basic must be offered too.
   const { data: allGroups, isLoading: groupsLoading } = useGroups(true);
@@ -59,7 +61,9 @@ export default function ApiKeyFormModal({
           title={
             isUpdate ? t("formModal.title.update") : t("formModal.title.create")
           }
-          description={isUpdate ? undefined : t("formModal.description")}
+          description={
+            isUpdate ? undefined : t("formModal.description", { appName })
+          }
           onClose={onClose}
         />
         <Formik
