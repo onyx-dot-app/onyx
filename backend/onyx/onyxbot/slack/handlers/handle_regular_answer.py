@@ -346,6 +346,16 @@ def handle_regular_answer(
                 send_as_ephemeral=send_as_ephemeral,
             )
         finally:
+            if feedback_reminder_id and message_info.sender_id:
+                try:
+                    client.chat_deleteScheduledMessage(
+                        channel=message_info.sender_id,
+                        scheduled_message_id=feedback_reminder_id,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Unable to delete scheduled feedback reminder after Slack budget reply"
+                    )
             if not is_slash_command:
                 update_emote_react(
                     emoji=ONYX_BOT_REACT_EMOJI,
@@ -353,16 +363,6 @@ def handle_regular_answer(
                     message_ts=message_info.msg_to_respond,
                     remove=True,
                     client=client,
-                )
-        if feedback_reminder_id and message_info.sender_id:
-            try:
-                client.chat_deleteScheduledMessage(
-                    channel=message_info.sender_id,
-                    scheduled_message_id=feedback_reminder_id,
-                )
-            except Exception:
-                logger.exception(
-                    "Unable to delete scheduled feedback reminder after Slack budget reply"
                 )
         return False
 

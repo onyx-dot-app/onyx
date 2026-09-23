@@ -240,8 +240,8 @@ def test_slack_bot_replies_with_budget_message_instead_of_answering(
     mock_stream.assert_not_called()
     mock_respond.assert_called_once()
     assert mock_respond.call_args.kwargs["text"] == _BUDGET_MESSAGE
+    client.chat_deleteScheduledMessage.assert_called_once_with(
+        channel="U123", scheduled_message_id="scheduled-reminder"
+    )
     if not reply_fails:
         assert result is False
-        client.chat_deleteScheduledMessage.assert_called_once_with(
-            channel="U123", scheduled_message_id="scheduled-reminder"
-        )
