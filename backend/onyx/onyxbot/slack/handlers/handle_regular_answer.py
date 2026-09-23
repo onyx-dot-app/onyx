@@ -19,6 +19,8 @@ from onyx.context.search.models import BaseFilters, Tag
 from onyx.db.models import SlackChannelConfig, User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.users import get_or_create_slack_service_account, get_user_by_email
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.onyxbot.slack.blocks import build_slack_response_blocks
 from onyx.onyxbot.slack.constants import SLACK_CHANNEL_REF_PATTERN
 from onyx.onyxbot.slack.models import SlackMessageInfo, ThreadMessage
@@ -34,6 +36,7 @@ from onyx.server.query_and_chat.models import (
     MessageOrigin,
     SendMessageRequest,
 )
+from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.tools.constants import SEARCH_TOOL_ID
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.utils.logger import OnyxLoggingAdapter
@@ -324,6 +327,34 @@ def handle_regular_answer(
             raise RuntimeError(answer.error_msg)
 
         return answer
+
+    # Same budgets as the chat route, charged to the principal that records
+    # this answer's usage.
+    try:
+        check_token_rate_limits(usage_user)
+    except OnyxError as e:
+        if e.error_code != OnyxErrorCode.RATE_LIMITED:
+            raise
+        logger.info("Skipping Slack answer: usage budget reached")
+        try:
+            respond_in_thread_or_channel(
+                client=client,
+                channel=channel,
+                receiver_ids=target_receiver_ids,
+                text=e.detail,
+                thread_ts=target_thread_ts,
+                send_as_ephemeral=send_as_ephemeral,
+            )
+        finally:
+            if not is_slash_command:
+                update_emote_react(
+                    emoji=ONYX_BOT_REACT_EMOJI,
+                    channel=message_info.channel_to_respond,
+                    message_ts=message_info.msg_to_respond,
+                    remove=True,
+                    client=client,
+                )
+        return True
 
     try:
         filters = BaseFilters(
