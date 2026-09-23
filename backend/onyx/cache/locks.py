@@ -1,13 +1,12 @@
 import asyncio
 import time
 from collections.abc import AsyncGenerator, Generator
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager, contextmanager
 from logging import Logger, LoggerAdapter
 
 from onyx.cache.factory import get_shared_cache_backend
 from onyx.cache.interface import CacheLock, CacheLockAcquisitionError
-
-_ASYNC_LOCK_POLL_INTERVAL_S = 0.05
 
 
 @contextmanager
@@ -78,28 +77,43 @@ async def async_cache_shared_lock(
 ) -> AsyncGenerator[None, None]:
     """Async variant of ``cache_shared_lock`` for event-loop callers.
 
-    Polls ``acquire(blocking=False)`` with ``asyncio.sleep`` between attempts
-    so contention never blocks the loop: a waiter on the same event loop as
-    the holder still lets the holder's refresh make progress.
+    The backend lock operations are synchronous I/O (a Redis round trip, or
+    a Postgres session checkout + advisory-lock query). Worse, a Postgres
+    advisory lock binds to a SQLAlchemy session for its whole lifetime, so
+    acquire and release must run on the *same* thread. We therefore run both
+    on a dedicated single-worker executor: the event loop stays free while
+    the backend's own blocking acquire polls, and the session's thread
+    affinity is preserved.
 
     Raises ``CacheLockAcquisitionError`` if not acquired within ``wait_for_lock_s``.
     """
-    lock = get_shared_cache_backend().lock(lock_name, timeout=max_time_lock_held_s)
-    acquired = False
+
+    def acquire_in_worker() -> tuple[CacheLock, bool]:
+        lock = get_shared_cache_backend().lock(lock_name, timeout=max_time_lock_held_s)
+        return lock, lock.acquire(blocking=True, blocking_timeout=wait_for_lock_s)
+
+    executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="cache-lock")
+    loop = asyncio.get_running_loop()
     start_time = time.monotonic()
     try:
-        while not acquired:
-            acquired = lock.acquire(blocking=False)
-            if not acquired:
-                elapsed_s = time.monotonic() - start_time
-                if elapsed_s >= wait_for_lock_s:
-                    raise CacheLockAcquisitionError(
-                        f"Timed out waiting to acquire cache lock {lock_name} "
-                        f"after {elapsed_s:.3f} seconds."
-                    )
-                await asyncio.sleep(_ASYNC_LOCK_POLL_INTERVAL_S)
-        yield
-    finally:
-        if acquired:
+        lock, acquired = await loop.run_in_executor(executor, acquire_in_worker)
+        if not acquired:
+            raise CacheLockAcquisitionError(
+                f"Timed out waiting to acquire cache lock {lock_name} after "
+                f"{time.monotonic() - start_time:.3f} seconds."
+            )
+        try:
+            yield
+        finally:
             held_s = time.monotonic() - start_time
-            _release_cache_lock(lock, lock_name, held_s, max_time_lock_held_s, logger)
+            await loop.run_in_executor(
+                executor,
+                _release_cache_lock,
+                lock,
+                lock_name,
+                held_s,
+                max_time_lock_held_s,
+                logger,
+            )
+    finally:
+        executor.shutdown(wait=False)
