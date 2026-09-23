@@ -8546,6 +8546,49 @@
           "description": "Your Firecrawl API base URL."
         }
       }
+    },
+    "connectorChecks": {
+      "title": "Connector Checks",
+      "groups": {
+        "failed": "{count} Failed",
+        "indeterminate": "{count} Unverified",
+        "passed": "{count} Completed",
+        "skipped": "{count} Skipped"
+      },
+      "status": {
+        "passed": "Passed",
+        "failed": "Failed",
+        "indeterminate": "Could not be verified",
+        "skipped": "Skipped"
+      },
+      "required": {
+        "label": "Required"
+      },
+      "running": {
+        "label": "Running checks…"
+      },
+      "empty": {
+        "label": "No checks have run yet."
+      },
+      "docsLink": {
+        "label": "Documentation"
+      },
+      "rerunButton": {
+        "label": "Rerun Checks"
+      },
+      "foldButton": {
+        "fold": "Fold",
+        "expand": "Expand"
+      },
+      "titleWithCount": "Connector Checks ({passed}/{total})",
+      "summary": {
+        "failed": "{count} failed",
+        "unverified": "{count} unverified",
+        "inProgress": "{count} in progress",
+        "expected": "{count} more expected",
+        "skipped": "{count} skipped",
+        "successful": "{count} successful"
+      }
     }
   },
   "agents": {

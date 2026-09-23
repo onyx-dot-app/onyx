@@ -8546,6 +8546,49 @@
           "description": "Firecrawl API のベース URL。"
         }
       }
+    },
+    "connectorChecks": {
+      "title": "コネクターチェック",
+      "groups": {
+        "failed": "失敗 {count} 件",
+        "indeterminate": "未検証 {count} 件",
+        "passed": "完了 {count} 件",
+        "skipped": "スキップ {count} 件"
+      },
+      "status": {
+        "passed": "合格",
+        "failed": "失敗",
+        "indeterminate": "検証できませんでした",
+        "skipped": "スキップ"
+      },
+      "required": {
+        "label": "必須"
+      },
+      "running": {
+        "label": "チェックを実行中…"
+      },
+      "empty": {
+        "label": "まだチェックは実行されていません。"
+      },
+      "docsLink": {
+        "label": "ドキュメント"
+      },
+      "rerunButton": {
+        "label": "チェックを再実行"
+      },
+      "foldButton": {
+        "fold": "折りたたむ",
+        "expand": "展開"
+      },
+      "titleWithCount": "コネクターチェック ({passed}/{total})",
+      "summary": {
+        "failed": "失敗 {count} 件",
+        "unverified": "未検証 {count} 件",
+        "inProgress": "実行中 {count} 件",
+        "expected": "予定 {count} 件",
+        "skipped": "スキップ {count} 件",
+        "successful": "成功 {count} 件"
+      }
     }
   },
   "agents": {

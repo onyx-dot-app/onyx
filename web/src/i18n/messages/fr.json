@@ -8546,6 +8546,49 @@
           "description": "L'URL de base de votre API Firecrawl."
         }
       }
+    },
+    "connectorChecks": {
+      "title": "Vérifications du connecteur",
+      "groups": {
+        "failed": "{count} échouées",
+        "indeterminate": "{count} non vérifiées",
+        "passed": "{count} terminées",
+        "skipped": "{count} ignorées"
+      },
+      "status": {
+        "passed": "Réussie",
+        "failed": "Échouée",
+        "indeterminate": "Impossible à vérifier",
+        "skipped": "Ignorée"
+      },
+      "required": {
+        "label": "Obligatoire"
+      },
+      "running": {
+        "label": "Vérifications en cours…"
+      },
+      "empty": {
+        "label": "Aucune vérification n'a encore été exécutée."
+      },
+      "docsLink": {
+        "label": "Documentation"
+      },
+      "rerunButton": {
+        "label": "Relancer les vérifications"
+      },
+      "foldButton": {
+        "fold": "Réduire",
+        "expand": "Développer"
+      },
+      "titleWithCount": "Vérifications du connecteur ({passed}/{total})",
+      "summary": {
+        "failed": "{count} échouées",
+        "unverified": "{count} non vérifiées",
+        "inProgress": "{count} en cours",
+        "expected": "{count} autres attendues",
+        "skipped": "{count} ignorées",
+        "successful": "{count} réussies"
+      }
     }
   },
   "agents": {

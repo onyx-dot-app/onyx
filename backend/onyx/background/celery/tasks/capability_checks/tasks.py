@@ -8,6 +8,7 @@ hard kills and expired tasks leave their row RUNNING for the beat sweep to
 retire once the mark outlives its source's run ceiling.
 """
 
+from collections.abc import Sequence
 from typing import Any
 from uuid import UUID
 
@@ -15,8 +16,12 @@ from celery import Task, shared_task
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.configs.constants import OnyxCeleryTask
-from onyx.connectors.capability_checks.models import compute_connector_config_hash
+from onyx.connectors.capability_checks.models import (
+    CapabilityCheckResult,
+    compute_connector_config_hash,
+)
 from onyx.connectors.capability_checks.runner import (
+    CapabilityCheckProgressCallback,
     capability_check_run_stale_after,
     generate_capability_report,
 )
@@ -26,11 +31,52 @@ from onyx.db.credential_capability import (
     get_sources_with_running_capability_runs,
     mark_capability_run_failed,
     mark_stale_capability_runs_failed,
+    record_capability_run_progress,
     upsert_completed_capability_report,
 )
 from onyx.db.credentials import fetch_credential_by_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import CapabilityCheckTrigger
+
+
+def _progress_recorder(
+    *, credential_id: int, connector_id: int | None, run_id: UUID
+) -> CapabilityCheckProgressCallback:
+    """Builds the per-check progress writer for one run attempt.
+
+    Each write opens its own short-lived session: the run can last hours and
+    must not hold a connection between checks. Best-effort by design: a failed
+    progress write is logged and dropped, because the completion write is the
+    run's truth and a poller merely sees progress stall until then.
+    """
+
+    def record(results: Sequence[CapabilityCheckResult]) -> None:
+        try:
+            with get_session_with_current_tenant() as db_session:
+                landed = record_capability_run_progress(
+                    db_session,
+                    credential_id=credential_id,
+                    connector_id=connector_id,
+                    run_id=run_id,
+                    results=results,
+                )
+                # The accessors leave the transaction to the caller.
+                db_session.commit()
+        except Exception:
+            task_logger.warning(
+                f"Could not record capability check progress for credential "
+                f"{credential_id}, connector {connector_id} (run {run_id}).",
+                exc_info=True,
+            )
+            return
+        if not landed:
+            task_logger.info(
+                f"Discarded a superseded capability run's progress for "
+                f"credential {credential_id}, connector {connector_id} "
+                f"(run {run_id})."
+            )
+
+    return record
 
 
 @shared_task(  # ty: ignore[invalid-argument-type]
@@ -52,9 +98,19 @@ def run_capability_checks_task(
 
     Terminal writes are fenced on ``run_id``: if this attempt was retired and
     the scope re-triggered, both the completion and the failure write no-op
-    instead of mislabeling the successor's row.
+    instead of mislabeling the successor's row. Progress writes share the fence;
+    a legacy task with no ``run_id`` records no progress.
     """
     parsed_run_id = UUID(run_id) if run_id is not None else None
+    on_result: CapabilityCheckProgressCallback | None = (
+        _progress_recorder(
+            credential_id=credential_id,
+            connector_id=connector_id,
+            run_id=parsed_run_id,
+        )
+        if parsed_run_id is not None
+        else None
+    )
     try:
         # Setup reads use a short-lived session: the probes below can run for
         # hours, and an open transaction would hold its connection and read
@@ -90,6 +146,7 @@ def run_capability_checks_task(
             connector_id=connector_id,
             input_type=input_type,
             trigger=CapabilityCheckTrigger.MANUAL,
+            on_result=on_result,
         )
         with get_session_with_current_tenant() as db_session:
             completed_row = upsert_completed_capability_report(

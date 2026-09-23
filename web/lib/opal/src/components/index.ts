@@ -168,8 +168,6 @@ export {
 
 /* Loader */
 export {
-  IconLoader,
-  type IconLoaderProps,
   OnyxLoader,
   type OnyxLoaderProps,
   type LoaderColor,

@@ -60,6 +60,12 @@ export const GTM_ENABLED =
 export const NEXT_PUBLIC_CLOUD_ENABLED =
   process.env.NEXT_PUBLIC_CLOUD_ENABLED?.toLowerCase() === "true";
 
+// Shows the connector checks card on the connector detail page. Temporary
+// gate while the card settles; remove with the flag.
+export const NEXT_PUBLIC_CONNECTOR_CHECKS_CARD_ENABLED =
+  process.env.NEXT_PUBLIC_CONNECTOR_CHECKS_CARD_ENABLED?.toLowerCase() ===
+  "true";
+
 export const REGISTRATION_URL =
   process.env.INTERNAL_URL || "http://127.0.0.1:3001";
 

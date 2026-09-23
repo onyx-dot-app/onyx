@@ -8546,6 +8546,49 @@
           "description": "La URL base de tu API de Firecrawl."
         }
       }
+    },
+    "connectorChecks": {
+      "title": "Comprobaciones del conector",
+      "groups": {
+        "failed": "{count} fallidas",
+        "indeterminate": "{count} sin verificar",
+        "passed": "{count} completadas",
+        "skipped": "{count} omitidas"
+      },
+      "status": {
+        "passed": "Superada",
+        "failed": "Fallida",
+        "indeterminate": "No se pudo verificar",
+        "skipped": "Omitida"
+      },
+      "required": {
+        "label": "Obligatoria"
+      },
+      "running": {
+        "label": "Ejecutando comprobaciones…"
+      },
+      "empty": {
+        "label": "Aún no se han ejecutado comprobaciones."
+      },
+      "docsLink": {
+        "label": "Documentación"
+      },
+      "rerunButton": {
+        "label": "Volver a ejecutar las comprobaciones"
+      },
+      "foldButton": {
+        "fold": "Contraer",
+        "expand": "Expandir"
+      },
+      "titleWithCount": "Comprobaciones del conector ({passed}/{total})",
+      "summary": {
+        "failed": "{count} fallidas",
+        "unverified": "{count} sin verificar",
+        "inProgress": "{count} en curso",
+        "expected": "{count} más pendientes",
+        "skipped": "{count} omitidas",
+        "successful": "{count} correctas"
+      }
     }
   },
   "agents": {
