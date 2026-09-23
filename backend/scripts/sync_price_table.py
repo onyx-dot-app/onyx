@@ -531,6 +531,50 @@ def merge_openrouter(
     print(f"openrouter merge: filled {filled} missing rates, added {added} models")
 
 
+def _check_litellm_schema(litellm_map: dict[str, Any]) -> None:
+    """litellm entries must carry litellm_provider/mode and token-cost fields —
+    a schema change would silently degrade the merge."""
+    total = tagged = priced = 0
+    for entry in litellm_map.values():
+        if not isinstance(entry, dict):
+            continue
+        total += 1
+        if entry.get("litellm_provider") and entry.get("mode"):
+            tagged += 1
+        if entry.get("input_cost_per_token") is not None:
+            priced += 1
+    assert total > 1000, f"litellm map has only {total} entries — upstream regression?"
+    assert tagged / total >= 0.95, (
+        f"only {tagged / total:.0%} of litellm entries carry "
+        "litellm_provider+mode — upstream renamed or dropped the fields"
+    )
+    assert priced / total >= 0.70, (
+        f"only {priced / total:.0%} of litellm entries carry "
+        "input_cost_per_token — upstream renamed or dropped the field"
+    )
+
+
+def _check_openrouter_schema(models: list[Any]) -> None:
+    """OpenRouter items must carry id and pricing.prompt/completion."""
+    total = priced = 0
+    for raw in models:
+        if not isinstance(raw, dict) or not raw.get("id"):
+            continue
+        total += 1
+        pricing = raw.get("pricing")
+        if (
+            isinstance(pricing, dict)
+            and pricing.get("prompt") is not None
+            and pricing.get("completion") is not None
+        ):
+            priced += 1
+    assert total > 100, f"OpenRouter listed only {total} models — schema changed?"
+    assert priced / total >= 0.95, (
+        f"only {priced / total:.0%} of OpenRouter models carry "
+        "pricing.prompt+completion — upstream renamed or dropped the fields"
+    )
+
+
 def _fetch_json(url: str, timeout: int = 60) -> Any:
     assert url.startswith("https://"), f"refusing non-https source: {url}"
     # models.dev's edge blocks the default Python-urllib UA with a 403.
@@ -608,8 +652,10 @@ def main() -> int:
 
     providers = build_price_table(api)
     if litellm_map:
+        _check_litellm_schema(litellm_map)
         merge_litellm(providers, litellm_map)
     if openrouter_models:
+        _check_openrouter_schema(openrouter_models)
         merge_openrouter(providers, openrouter_models)
 
     table = {
