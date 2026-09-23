@@ -1105,6 +1105,17 @@ MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE = max(
     1, _non_negative_int_env("MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE", 5)
 )
 
+# How many documents the pre-swap check samples per cc_pair and per user. 0 skips the
+# sample; the other swap conditions still apply.
+PORT_SWAP_VERIFY_DOCS_PER_UNIT = _non_negative_int_env(
+    "PORT_SWAP_VERIFY_DOCS_PER_UNIT", 3
+)
+# Seconds to hold the swap after a failed pre-swap check before checking again.
+# 0 retries on the next 15-second tick.
+PORT_SWAP_VERIFY_RETRY_DELAY_S = _non_negative_int_env(
+    "PORT_SWAP_VERIFY_RETRY_DELAY_S", 300
+)
+
 # Old-index reclamation (post-reindex deletion of the now-PAST index).
 # Master switch: when False the reclaim beat task and every dispatched task no-op.
 # Set it to false to turn reclamation off; that takes effect once the workers restart.

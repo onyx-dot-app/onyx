@@ -2,13 +2,16 @@ import contextlib
 import time
 from collections.abc import Generator, Iterable, Sequence
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, NamedTuple
 from uuid import UUID
 
 from sqlalchemy import (
     CompoundSelect,
+    Integer,
     Select,
+    String,
     and_,
+    column,
     delete,
     distinct,
     exists,
@@ -16,8 +19,10 @@ from sqlalchemy import (
     literal,
     or_,
     select,
+    true,
     tuple_,
     update,
+    values,
 )
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine.util import TransactionalContext
@@ -301,6 +306,58 @@ def get_document_ids_for_cc_pair_batch(
         stmt = stmt.where(DocumentByConnectorCredentialPair.id > after_doc_id)
     if up_to_doc_id is not None:
         stmt = stmt.where(DocumentByConnectorCredentialPair.id <= up_to_doc_id)
+    return list(db_session.execute(stmt).scalars().all())
+
+
+class PortedScope(NamedTuple):
+    connector_id: int
+    credential_id: int
+    up_to_doc_id: str | None
+
+
+def sample_ported_document_ids(
+    db_session: Session,
+    cc_pair_scopes: Sequence[PortedScope],
+    per_scope_limit: int,
+) -> list[str]:
+    """Gets up to `per_scope_limit` document IDs per cc_pair that its port copied.
+
+    A scope with a None `up_to_doc_id` is skipped: that port found no documents when it
+    started, so it copied nothing. Documents with a NULL chunk_count are included; the
+    column was added without a backfill and the port copies them too.
+
+    The result is the same for the same scopes on every call. A fresh random sample on
+    each retry would eventually miss the gap in a partly-missing index and pass.
+    """
+    scope_rows = [
+        (scope.connector_id, scope.credential_id, scope.up_to_doc_id)
+        for scope in cc_pair_scopes
+        if scope.up_to_doc_id is not None
+    ]
+    if per_scope_limit <= 0 or not scope_rows:
+        return []
+
+    scopes = values(
+        column("connector_id", Integer),
+        column("credential_id", Integer),
+        column("up_to_id", String),
+        name="cc_pair_scope",
+    ).data(scope_rows)
+
+    per_cc_pair = (
+        select(DocumentByConnectorCredentialPair.id)
+        .join(DbDocument, DbDocument.id == DocumentByConnectorCredentialPair.id)
+        .where(
+            DocumentByConnectorCredentialPair.connector_id == scopes.c.connector_id,
+            DocumentByConnectorCredentialPair.credential_id == scopes.c.credential_id,
+            or_(DbDocument.chunk_count.is_(None), DbDocument.chunk_count > 0),
+            DocumentByConnectorCredentialPair.id <= scopes.c.up_to_id,
+        )
+        .order_by(DocumentByConnectorCredentialPair.id)
+        .limit(per_scope_limit)
+        .lateral("sampled_document")
+    )
+    stmt = select(per_cc_pair.c.id).select_from(scopes.join(per_cc_pair, true()))
     return list(db_session.execute(stmt).scalars().all())
 
 
