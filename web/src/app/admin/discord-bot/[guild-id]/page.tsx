@@ -346,11 +346,15 @@ export default function Page({ params }: Props) {
         title={guild?.guild_name || t("guilds.fallbackName", { id: guildId })}
         description={registeredText}
         backButton
-        rightChildren={
-          <Button disabled={isUpdateDisabled} onClick={handleSaveChanges}>
+        actions={[
+          <Button
+            key="primary"
+            disabled={isUpdateDisabled}
+            onClick={handleSaveChanges}
+          >
             {t("guildDetail.updateButton.label")}
-          </Button>
-        }
+          </Button>,
+        ]}
       />
       <SettingsLayouts.Body>
         {/* Default Agent Selector */}

@@ -215,7 +215,7 @@ export default function ScheduledTasksListPage() {
         icon={SvgClock}
         title={t("header.title")}
         description={t("header.description")}
-        rightChildren={headerActions}
+        actions={[headerActions]}
       />
       <SettingsLayouts.Body>
         {isLoading ? (

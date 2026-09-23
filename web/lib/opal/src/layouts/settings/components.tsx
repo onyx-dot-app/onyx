@@ -63,14 +63,19 @@ export interface SettingsHeaderProps {
   title: string | RichStr;
   description?: string | RichStr;
   children?: React.ReactNode;
-  rightChildren?: React.ReactNode;
+  /**
+   * Controls on the right of the title block, left to right. The header lays
+   * them out as a top-aligned row with a 0.5rem gap. Each element needs a
+   * `key`, as in any list.
+   */
+  actions?: React.ReactNode[];
   backButton?: boolean | (() => void);
   divider?: boolean;
 }
 
 /**
  * Sticky header for settings pages. Shows a scroll shadow when the page
- * has scrolled. Headers with `rightChildren` are always sticky; others are not.
+ * has scrolled. Headers with `actions` are always sticky; others are not.
  *
  * Back button: set `backButton` to show a "← Back" button. Supply a function
  * to override the default `router.back()` behavior.
@@ -82,7 +87,7 @@ function SettingsHeader({
   title,
   description,
   children,
-  rightChildren,
+  actions,
   backButton,
   divider,
 }: SettingsHeaderProps) {
@@ -90,7 +95,8 @@ function SettingsHeader({
   const [showShadow, setShowShadow] = useState(false);
   const headerRef = useRef<HTMLDivElement>(null);
 
-  const isSticky = !!rightChildren;
+  const hasActions = !!actions && actions.length > 0;
+  const isSticky = hasActions;
   const showBackButton = !!backButton;
   const onBack =
     typeof backButton === "function" ? backButton : () => router.back();
@@ -133,7 +139,7 @@ function SettingsHeader({
       <Spacer rem={3.25} />
 
       <div className="flex flex-col gap-6 px-4">
-        <div className="flex w-full items-center justify-between">
+        <div className="flex w-full items-start justify-between gap-4">
           <div aria-label="admin-page-title">
             <Content
               icon={Icon}
@@ -145,7 +151,11 @@ function SettingsHeader({
               variant="heading"
             />
           </div>
-          {rightChildren}
+          {hasActions && (
+            <div className="flex shrink-0 items-start justify-end gap-2">
+              {actions}
+            </div>
+          )}
         </div>
 
         {children}

@@ -277,8 +277,8 @@ export default function ScheduleTaskForm({
         description={description}
         backButton={onBack}
         divider
-        rightChildren={
-          <div className="flex gap-2 self-start">
+        actions={[
+          <div key="primary" className="flex gap-2 self-start">
             <Button
               variant="default"
               prominence="secondary"
@@ -322,8 +322,8 @@ export default function ScheduleTaskForm({
                 {isEdit ? t("saveChangesButton") : t("saveButton")}
               </Button>
             </Disabled>
-          </div>
-        }
+          </div>,
+        ]}
       />
 
       <SettingsLayouts.Body>

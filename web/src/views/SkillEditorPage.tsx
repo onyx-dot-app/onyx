@@ -517,25 +517,24 @@ export default function SkillEditorPage({
                 : t("editor.header.createDescription")
               : t("editor.header.editDescription")
           }
-          rightChildren={
-            <div className="flex items-center gap-2">
-              <Button
-                prominence="secondary"
-                type="button"
-                disabled={isSaving || isPreparingFiles || isUploadingFiles}
-                onClick={handleCancel}
-              >
-                {t("editor.header.cancel.label")}
+          actions={[
+            <Button
+              key="cancel"
+              prominence="secondary"
+              type="button"
+              disabled={isSaving || isPreparingFiles || isUploadingFiles}
+              onClick={handleCancel}
+            >
+              {t("editor.header.cancel.label")}
+            </Button>,
+            <Tooltip key="save" tooltip={saveTooltip} side="bottom">
+              <Button disabled={!canSave} type="submit">
+                {isSaving
+                  ? t("editor.header.save.pendingLabel")
+                  : t("editor.header.save.label")}
               </Button>
-              <Tooltip tooltip={saveTooltip} side="bottom">
-                <Button disabled={!canSave} type="submit">
-                  {isSaving
-                    ? t("editor.header.save.pendingLabel")
-                    : t("editor.header.save.label")}
-                </Button>
-              </Tooltip>
-            </div>
-          }
+            </Tooltip>,
+          ]}
           backButton={handleCancel}
           divider
         />

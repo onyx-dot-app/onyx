@@ -585,29 +585,29 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     );
   }
 
-  const headerActions = (
-    <Section flexDirection="row" gap={2} width="auto" height="auto">
-      <Button
-        prominence="secondary"
-        onClick={() => router.push("/admin/groups")}
-      >
-        {t("form.cancel.label")}
-      </Button>
-      <Button
-        onClick={handleSave}
-        disabled={
-          !groupName.trim() || isSubmitting || isSyncing || !canManageMembers
-        }
-        tooltip={isSyncing ? t("edit.syncing.tooltip") : undefined}
-      >
-        {isSubmitting
-          ? t("edit.saving.label")
-          : isSyncing
-            ? t("edit.syncing.label")
-            : t("edit.submit.label")}
-      </Button>
-    </Section>
-  );
+  const headerActions = [
+    <Button
+      key="cancel"
+      prominence="secondary"
+      onClick={() => router.push("/admin/groups")}
+    >
+      {t("form.cancel.label")}
+    </Button>,
+    <Button
+      key="submit"
+      onClick={handleSave}
+      disabled={
+        !groupName.trim() || isSubmitting || isSyncing || !canManageMembers
+      }
+      tooltip={isSyncing ? t("edit.syncing.tooltip") : undefined}
+    >
+      {isSubmitting
+        ? t("edit.saving.label")
+        : isSyncing
+          ? t("edit.syncing.label")
+          : t("edit.submit.label")}
+    </Button>,
+  ];
 
   return (
     <>
@@ -616,7 +616,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
           icon={SvgUsers}
           title={t("edit.header.title")}
           divider
-          rightChildren={headerActions}
+          actions={headerActions}
         />
 
         <SettingsLayouts.Body>

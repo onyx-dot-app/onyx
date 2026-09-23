@@ -543,24 +543,24 @@ export default function AddConnector({
                 appName: settings.appName,
               })}
               divider
-              rightChildren={
-                <Section flexDirection="row" gap={1} width="fit">
-                  <Button
-                    prominence="secondary"
-                    disabled={busy}
-                    onClick={() => router.push("/admin/connectors")}
-                  >
-                    {t("header.cancelButton.label")}
-                  </Button>
-                  <Button
-                    disabled={!formikProps.isValid || !canCreate || busy}
-                    icon={busy ? SvgSimpleLoader : undefined}
-                    onClick={() => formikProps.handleSubmit()}
-                  >
-                    {t("header.connectButton.label")}
-                  </Button>
-                </Section>
-              }
+              actions={[
+                <Button
+                  key="cancel"
+                  prominence="secondary"
+                  disabled={busy}
+                  onClick={() => router.push("/admin/connectors")}
+                >
+                  {t("header.cancelButton.label")}
+                </Button>,
+                <Button
+                  key="connect"
+                  disabled={!formikProps.isValid || !canCreate || busy}
+                  icon={busy ? SvgSimpleLoader : undefined}
+                  onClick={() => formikProps.handleSubmit()}
+                >
+                  {t("header.connectButton.label")}
+                </Button>,
+              ]}
             >
               {hasFederatedOption && (
                 <MessageCard

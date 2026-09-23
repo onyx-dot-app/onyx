@@ -66,16 +66,19 @@ export default function ExternalAppsPage() {
         icon={SvgPlug}
         title={t("header.title")}
         description={t("header.description")}
-        rightChildren={
-          isAdmin ? (
-            <Button
-              href="/admin/craft/apps"
-              prominence="secondary"
-              icon={SvgSettings}
-            >
-              {t("header.manageButton")}
-            </Button>
-          ) : undefined
+        actions={
+          isAdmin
+            ? [
+                <Button
+                  key="manage"
+                  href="/admin/craft/apps"
+                  prominence="secondary"
+                  icon={SvgSettings}
+                >
+                  {t("header.manageButton")}
+                </Button>,
+              ]
+            : []
         }
       >
         <InputTypeIn

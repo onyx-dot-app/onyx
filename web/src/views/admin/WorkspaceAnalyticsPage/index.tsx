@@ -29,8 +29,9 @@ export default function WorkspaceAnalyticsPage() {
         title={adminRouteTitle(route)}
         description={t("page.description")}
         divider
-        rightChildren={
+        actions={[
           <InputDateRangePicker
+            key="primary"
             value={timeRange}
             onValueChange={(range) =>
               setTimeRange((previous) =>
@@ -39,8 +40,8 @@ export default function WorkspaceAnalyticsPage() {
                   : previous
               )
             }
-          />
-        }
+          />,
+        ]}
       />
       <SettingsLayouts.Body>
         <UsageChart timeRange={timeRange} />
