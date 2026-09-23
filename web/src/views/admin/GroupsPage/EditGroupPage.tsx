@@ -587,13 +587,6 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
 
   const headerActions = [
     <Button
-      key="cancel"
-      prominence="secondary"
-      onClick={() => router.push("/admin/groups")}
-    >
-      {t("form.cancel.label")}
-    </Button>,
-    <Button
       key="submit"
       onClick={handleSave}
       disabled={
@@ -616,6 +609,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
           icon={SvgUsers}
           title={t("edit.header.title")}
           divider
+          cancel={() => router.push("/admin/groups")}
           actions={headerActions}
         />
 

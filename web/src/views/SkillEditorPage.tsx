@@ -517,16 +517,8 @@ export default function SkillEditorPage({
                 : t("editor.header.createDescription")
               : t("editor.header.editDescription")
           }
+          cancel={handleCancel}
           actions={[
-            <Button
-              key="cancel"
-              prominence="secondary"
-              type="button"
-              disabled={isSaving || isPreparingFiles || isUploadingFiles}
-              onClick={handleCancel}
-            >
-              {t("editor.header.cancel.label")}
-            </Button>,
             <Tooltip key="save" tooltip={saveTooltip} side="bottom">
               <Button disabled={!canSave} type="submit">
                 {isSaving
@@ -535,7 +527,6 @@ export default function SkillEditorPage({
               </Button>
             </Tooltip>,
           ]}
-          backButton={handleCancel}
           divider
         />
 

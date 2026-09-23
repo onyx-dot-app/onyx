@@ -95,13 +95,6 @@ function CreateGroupPage() {
 
   const headerActions = [
     <Button
-      key="cancel"
-      prominence="secondary"
-      onClick={() => router.push("/admin/groups")}
-    >
-      {t("form.cancel.label")}
-    </Button>,
-    <Button
       key="submit"
       onClick={handleCreate}
       disabled={!groupName.trim() || isSubmitting}
@@ -116,6 +109,7 @@ function CreateGroupPage() {
         icon={SvgUsers}
         title={t("create.header.title")}
         divider
+        cancel={() => router.push("/admin/groups")}
         actions={headerActions}
       />
 

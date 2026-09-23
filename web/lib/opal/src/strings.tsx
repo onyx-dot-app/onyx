@@ -9,6 +9,8 @@ export type OpalStrings = {
   close: string;
   loading: string;
   loadingPage: string;
+  /** The Cancel action `SettingsLayouts.Header` renders when `cancel` is set. */
+  settingsHeaderCancel: string;
   copy: string;
   copied: string;
   copyCode: string;
@@ -106,6 +108,7 @@ export const defaultOpalStrings: OpalStrings = {
   close: "Close",
   loading: "Loading",
   loadingPage: "Loading …",
+  settingsHeaderCancel: "Cancel",
   copy: "Copy",
   copied: "Copied!",
   copyCode: "Copy code",

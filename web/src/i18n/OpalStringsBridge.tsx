@@ -21,6 +21,7 @@ export default function OpalStringsBridge({
     return {
       close: t("common.close"),
       loading: t("common.loading"),
+      settingsHeaderCancel: t("settingsHeader.cancel"),
       loadingPage: t("common.loadingPage"),
       copy: t("common.copy"),
       copied: t("common.copied"),

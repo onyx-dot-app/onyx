@@ -33,7 +33,7 @@ Headers are only sticky when `actions` is non-empty.
 | `description`   | `string`                | —       | Subtitle below the title                                  |
 | `actions`       | `ReactNode[]`           | —       | Controls right of the title, left to right, each with a `key`; top-aligned row with a 0.5rem gap, 1rem from the title block. Also enables sticky behavior |
 | `children`      | `ReactNode`             | —       | Content below the title row (e.g. search bar, filters)    |
-| `backButton`    | `boolean \| () => void` | `false` | Show a "← Back" button above the title; a function overrides the default `router.back()` |
+| `cancel`        | `boolean \| () => void` | `false` | Render a secondary Cancel as the first action; `true` goes back in history, a function overrides the destination |
 | `divider`       | `boolean`               | `false` | Show a horizontal divider at the bottom of the header     |
 
 ### Body
@@ -64,10 +64,10 @@ import { SettingsLayouts } from "@opal/layouts";
   </SettingsLayouts.Body>
 </SettingsLayouts.Root>
 
-// With back button
+// With a Cancel action
 <SettingsLayouts.Header
   icon={SvgArrow}
   title="Edit Item"
-  backButton={() => router.push("/admin/items")}
+  cancel={() => router.push("/admin/items")}
 />
 ```

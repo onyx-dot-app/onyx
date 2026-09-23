@@ -119,7 +119,7 @@ export default function ScheduledTaskDetailPage() {
         <SettingsLayouts.Header
           icon={SvgClock}
           title={t("fallbackTitle")}
-          backButton={handleBack}
+          cancel={handleBack}
         />
         <SettingsLayouts.Body>
           <Text font="main-ui-body" color="text-03">
@@ -136,7 +136,7 @@ export default function ScheduledTaskDetailPage() {
         icon={SvgClock}
         title={data?.name ?? t("fallbackTitle")}
         description={scheduleDescription}
-        backButton={handleBack}
+        cancel={handleBack}
         actions={
           data
             ? [

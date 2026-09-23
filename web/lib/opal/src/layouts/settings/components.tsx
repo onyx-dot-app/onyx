@@ -11,7 +11,7 @@ import type {
 } from "@opal/types";
 import { HtmlHTMLAttributes, useEffect, useRef, useState } from "react";
 import { Content } from "@opal/layouts";
-import { SvgArrowLeft } from "@opal/icons";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Root
@@ -69,16 +69,18 @@ export interface SettingsHeaderProps {
    * `key`, as in any list.
    */
   actions?: React.ReactNode[];
-  backButton?: boolean | (() => void);
+  /**
+   * Renders a secondary Cancel as the first action. `true` goes back in
+   * history; a function overrides the destination.
+   */
+  cancel?: boolean | (() => void);
   divider?: boolean;
 }
 
 /**
  * Sticky header for settings pages. Shows a scroll shadow when the page
- * has scrolled. Headers with `actions` are always sticky; others are not.
- *
- * Back button: set `backButton` to show a "← Back" button. Supply a function
- * to override the default `router.back()` behavior.
+ * has scrolled. Headers with a Cancel or any `actions` are sticky; others
+ * are not.
  */
 function SettingsHeader({
   icon: Icon,
@@ -88,18 +90,22 @@ function SettingsHeader({
   description,
   children,
   actions,
-  backButton,
+  cancel,
   divider,
 }: SettingsHeaderProps) {
   const router = useRouter();
+  const strings = useOpalStrings();
   const [showShadow, setShowShadow] = useState(false);
   const headerRef = useRef<HTMLDivElement>(null);
 
-  const hasActions = !!actions && actions.length > 0;
+  const onCancel =
+    typeof cancel === "function"
+      ? cancel
+      : cancel
+        ? () => router.back()
+        : undefined;
+  const hasActions = !!onCancel || (!!actions && actions.length > 0);
   const isSticky = hasActions;
-  const showBackButton = !!backButton;
-  const onBack =
-    typeof backButton === "function" ? backButton : () => router.back();
 
   useEffect(() => {
     if (!isSticky) return;
@@ -124,18 +130,9 @@ function SettingsHeader({
       ref={headerRef}
       className={cn(
         "w-full",
-        isSticky && "sticky top-0 z-settings-header bg-background-tint-01",
-        showBackButton && "md:pt-4"
+        isSticky && "sticky top-0 z-settings-header bg-background-tint-01"
       )}
     >
-      {showBackButton && (
-        <div className="px-2">
-          <Button icon={SvgArrowLeft} prominence="tertiary" onClick={onBack}>
-            Back
-          </Button>
-        </div>
-      )}
-
       <Spacer rem={3.25} />
 
       <div className="flex flex-col gap-6 px-4">
@@ -153,6 +150,11 @@ function SettingsHeader({
           </div>
           {hasActions && (
             <div className="flex shrink-0 items-start justify-end gap-2">
+              {onCancel && (
+                <Button prominence="secondary" onClick={onCancel}>
+                  {strings.settingsHeaderCancel}
+                </Button>
+              )}
               {actions}
             </div>
           )}

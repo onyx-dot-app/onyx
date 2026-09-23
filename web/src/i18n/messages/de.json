@@ -4159,9 +4159,6 @@
         }
       },
       "form": {
-        "cancel": {
-          "label": "Abbrechen"
-        },
         "name": {
           "label": "Gruppenname",
           "placeholder": "Benennen Sie Ihre Gruppe"
@@ -8657,9 +8654,6 @@
         }
       },
       "header": {
-        "cancel": {
-          "label": "Abbrechen"
-        },
         "create": {
           "label": "Erstellen"
         },
@@ -12401,7 +12395,6 @@
         "title": "„{name}“ bearbeiten"
       },
       "form": {
-        "cancelButton": "Abbrechen",
         "errors": {
           "nameRequired": "Name ist erforderlich.",
           "promptRequired": "Prompt ist erforderlich."
@@ -13075,6 +13068,9 @@
     "select": {
       "emptySet": "Keine Einträge gefunden",
       "invalidOption": "Bitte eine gültige Option aus der Liste auswählen"
+    },
+    "settingsHeader": {
+      "cancel": "Abbrechen"
     },
     "table": {
       "alwaysShown": "Immer angezeigt",
@@ -13922,9 +13918,6 @@
       },
       "header": {
         "appFallbackName": "Externe App",
-        "cancel": {
-          "label": "Abbrechen"
-        },
         "createDescription": "Erstellen Sie einen persönlichen Skill",
         "createForAppDescription": "Fügen Sie der App „{appName}“ einen Organisations-Skill hinzu",
         "createTitle": "Skill erstellen",

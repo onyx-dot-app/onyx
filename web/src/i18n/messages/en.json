@@ -4159,9 +4159,6 @@
         }
       },
       "form": {
-        "cancel": {
-          "label": "Cancel"
-        },
         "name": {
           "label": "Group Name",
           "placeholder": "Name your group"
@@ -8657,9 +8654,6 @@
         }
       },
       "header": {
-        "cancel": {
-          "label": "Cancel"
-        },
         "create": {
           "label": "Create"
         },
@@ -12401,7 +12395,6 @@
         "title": "Edit \"{name}\""
       },
       "form": {
-        "cancelButton": "Cancel",
         "errors": {
           "nameRequired": "Name is required.",
           "promptRequired": "Prompt is required."
@@ -13075,6 +13068,9 @@
     "select": {
       "emptySet": "No items found",
       "invalidOption": "Please select a valid option from the list"
+    },
+    "settingsHeader": {
+      "cancel": "Cancel"
     },
     "table": {
       "alwaysShown": "Always Shown",
@@ -13922,9 +13918,6 @@
       },
       "header": {
         "appFallbackName": "External app",
-        "cancel": {
-          "label": "Cancel"
-        },
         "createDescription": "Build a personal skill",
         "createForAppDescription": "Add an organization skill to app “{appName}”",
         "createTitle": "Create skill",

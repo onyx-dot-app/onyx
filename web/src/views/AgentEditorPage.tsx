@@ -1370,15 +1370,8 @@ export default function AgentEditorPage({
                           ? t("editor.header.editTitle")
                           : t("editor.header.createTitle")
                       }
+                      cancel
                       actions={[
-                        <Button
-                          key="cancel"
-                          prominence="secondary"
-                          type="button"
-                          onClick={() => router.back()}
-                        >
-                          {t("editor.header.cancel.label")}
-                        </Button>,
                         <Tooltip
                           key="save"
                           tooltip={
@@ -1409,7 +1402,6 @@ export default function AgentEditorPage({
                           </Button>
                         </Tooltip>,
                       ]}
-                      backButton
                       divider
                     />
 

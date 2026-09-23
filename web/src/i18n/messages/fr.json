@@ -4159,9 +4159,6 @@
         }
       },
       "form": {
-        "cancel": {
-          "label": "Annuler"
-        },
         "name": {
           "label": "Nom du groupe",
           "placeholder": "Nommez votre groupe"
@@ -8657,9 +8654,6 @@
         }
       },
       "header": {
-        "cancel": {
-          "label": "Annuler"
-        },
         "create": {
           "label": "Créer"
         },
@@ -12401,7 +12395,6 @@
         "title": "Modifier « {name} »"
       },
       "form": {
-        "cancelButton": "Annuler",
         "errors": {
           "nameRequired": "Le nom est requis.",
           "promptRequired": "Le prompt est requis."
@@ -13075,6 +13068,9 @@
     "select": {
       "emptySet": "Aucun élément trouvé",
       "invalidOption": "Veuillez sélectionner une option valide dans la liste"
+    },
+    "settingsHeader": {
+      "cancel": "Annuler"
     },
     "table": {
       "alwaysShown": "Toujours affichée",
@@ -13922,9 +13918,6 @@
       },
       "header": {
         "appFallbackName": "Application externe",
-        "cancel": {
-          "label": "Annuler"
-        },
         "createDescription": "Créez une compétence personnelle",
         "createForAppDescription": "Ajouter une compétence d'organisation à l'application « {appName} »",
         "createTitle": "Créer une compétence",

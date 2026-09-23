@@ -345,7 +345,7 @@ export default function Page({ params }: Props) {
         icon={SvgServer}
         title={guild?.guild_name || t("guilds.fallbackName", { id: guildId })}
         description={registeredText}
-        backButton
+        cancel
         actions={[
           <Button
             key="primary"

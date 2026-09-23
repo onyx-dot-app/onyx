@@ -4159,9 +4159,6 @@
         }
       },
       "form": {
-        "cancel": {
-          "label": "取消"
-        },
         "name": {
           "label": "用户组名称",
           "placeholder": "为您的用户组命名"
@@ -8657,9 +8654,6 @@
         }
       },
       "header": {
-        "cancel": {
-          "label": "取消"
-        },
         "create": {
           "label": "创建"
         },
@@ -12401,7 +12395,6 @@
         "title": "编辑“{name}”"
       },
       "form": {
-        "cancelButton": "取消",
         "errors": {
           "nameRequired": "名称为必填项。",
           "promptRequired": "提示词为必填项。"
@@ -13075,6 +13068,9 @@
     "select": {
       "emptySet": "未找到任何项目",
       "invalidOption": "请从列表中选择有效选项"
+    },
+    "settingsHeader": {
+      "cancel": "取消"
     },
     "table": {
       "alwaysShown": "始终显示",
@@ -13922,9 +13918,6 @@
       },
       "header": {
         "appFallbackName": "外部应用",
-        "cancel": {
-          "label": "取消"
-        },
         "createDescription": "构建个人技能",
         "createForAppDescription": "为应用“{appName}”添加组织技能",
         "createTitle": "创建技能",
