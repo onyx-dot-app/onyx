@@ -202,6 +202,11 @@ document.addEventListener("DOMContentLoaded", function () {
         handleContinue();
       }
     });
+    domainInput.addEventListener("blur", () => {
+      if (domainInput.value.trim()) {
+        domainInput.value = normalizeOnyxDomain(domainInput.value);
+      }
+    });
   }
 
   initTheme();
