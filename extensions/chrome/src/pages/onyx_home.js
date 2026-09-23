@@ -23,6 +23,12 @@ import { getOnyxDomain } from "../utils/storage.js";
   let iframeLoadTimeout;
   let iframeLoaded = false;
 
+  // Both iframes load the configured Onyx domain. Messages are only accepted
+  // from, and sent to, that origin. Throws if src is not a valid URL.
+  function getOnyxOrigin(iframe) {
+    return new URL(iframe.src).origin;
+  }
+
   initErrorModal();
 
   async function preloadChatInterface() {
@@ -171,7 +177,7 @@ import { getOnyxDomain } from "../utils/storage.js";
     if (preloadedIframe && preloadedIframe.contentWindow) {
       preloadedIframe.contentWindow.postMessage(
         { type: WEB_MESSAGE.PAGE_CHANGE, href: newSrc },
-        "*"
+        getOnyxOrigin(preloadedIframe)
       );
     } else {
       console.error("Preloaded iframe not available");
@@ -209,6 +215,11 @@ import { getOnyxDomain } from "../utils/storage.js";
   });
 
   window.addEventListener("message", function (event) {
+    try {
+      if (event.origin !== getOnyxOrigin(mainIframe)) return;
+    } catch {
+      return;
+    }
     if (event.data.type === CHROME_MESSAGE.SET_DEFAULT_NEW_TAB) {
       chrome.storage.local.set({ useOnyxAsDefaultNewTab: event.data.value });
     } else if (event.data.type === CHROME_MESSAGE.ONYX_APP_LOADED) {
