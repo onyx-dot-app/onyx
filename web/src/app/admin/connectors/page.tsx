@@ -1,1 +1,1 @@
-export { default } from "@/views/admin/ConnectorsPage";
+export { default } from "@/views/admin/connectors/CatalogPage";

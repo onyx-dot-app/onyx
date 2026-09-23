@@ -62,7 +62,7 @@ import {
 import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
 import useCCPairs from "@/hooks/useCCPairs";
 import { ValidSources } from "@/lib/types";
-import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
+import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { BasicModalFooter, Modal } from "@opal/components";
 import { Code, CopyButton } from "@opal/components";

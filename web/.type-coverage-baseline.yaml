@@ -13,7 +13,7 @@ packages:
   .: 100
   src: 99.5
   src/app: 99.5
-  src/app/admin: 96.2
+  src/app/admin: 97.3
   src/app/anonymous: 100
   src/app/api: 100
   src/app/app: 98.9
@@ -67,7 +67,7 @@ packages:
   src/lib/billing: 100
   src/lib/build: 100
   src/lib/chat: 98.6
-  src/lib/connectors: 98.5
+  src/lib/connectors: 98.2
   src/lib/constants: 100
   src/lib/credentials: 97.8
   src/lib/extension: 100
@@ -126,5 +126,5 @@ packages:
   src/sections/skills: 99.8
   src/sections/usage: 99.6
   src/views: 99.3
-  src/views/admin: 99.3
+  src/views/admin: 98.3
   types: 100

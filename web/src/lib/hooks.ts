@@ -27,7 +27,7 @@ import {
   parseLlmDescriptor,
 } from "@/lib/languageModels/utils";
 import { ChatSession } from "@/app/app/interfaces";
-import { Credential } from "./connectors/credentials";
+import type { Credential } from "@/lib/connectors/types";
 import { useSettings } from "@/lib/settings/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import {
