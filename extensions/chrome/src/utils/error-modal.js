@@ -1,5 +1,9 @@
 import { ACTIONS } from "./constants.js";
-import { getOnyxDomain, setUseOnyxAsDefaultNewTab } from "./storage.js";
+import {
+  getOnyxDomain,
+  isNewTabOverrideManaged,
+  setUseOnyxAsDefaultNewTab,
+} from "./storage.js";
 
 const errorModalHTML = `
   <div id="error-modal">
@@ -274,8 +278,16 @@ export function initErrorModal() {
       chrome.runtime.openOptionsPage();
     });
 
+    isNewTabOverrideManaged().then((managed) => {
+      if (managed) disableOverrideButton.style.display = "none";
+    });
+
     disableOverrideButton.addEventListener("click", () => {
-      setUseOnyxAsDefaultNewTab(false).then(() => {
+      setUseOnyxAsDefaultNewTab(false).then((updated) => {
+        if (!updated) {
+          console.warn("New tab override is managed by policy; not disabled.");
+          return;
+        }
         chrome.tabs.update({ url: "chrome://new-tab-page" });
       });
     });

@@ -15,7 +15,11 @@ async function getManaged(keys) {
   if (!chrome.storage.managed) return {};
   try {
     return await chrome.storage.managed.get(keys);
-  } catch {
+  } catch (error) {
+    console.error(
+      "Failed to read managed storage; using local settings",
+      error
+    );
     return {};
   }
 }

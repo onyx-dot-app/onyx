@@ -163,21 +163,24 @@ document.addEventListener("DOMContentLoaded", function () {
       [CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB]: true,
     });
 
+    domainInput.disabled = domainManaged;
     if (domainManaged) {
       domainInput.value = normalizeOnyxDomain(managedDomain);
-      domainInput.disabled = true;
     } else if (result[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN]) {
       domainInput.value = result[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN];
     }
 
-    if (newTabManaged) {
-      useOnyxAsDefaultToggle.checked = managedNewTab;
-      useOnyxAsDefaultToggle.disabled = true;
-    } else {
-      useOnyxAsDefaultToggle.checked =
-        result[CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB];
-    }
+    useOnyxAsDefaultToggle.disabled = newTabManaged;
+    useOnyxAsDefaultToggle.checked = newTabManaged
+      ? managedNewTab
+      : result[CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB];
   }
+
+  chrome.storage.onChanged.addListener((changes, namespace) => {
+    if (namespace === "managed") {
+      loadStoredValues();
+    }
+  });
 
   if (themeToggle) {
     themeToggle.addEventListener("click", toggleTheme);

@@ -201,7 +201,22 @@ import {
     }
   });
 
+  // Only accept messages from one of our own Onyx iframes, and only when
+  // the sender origin matches that iframe's configured src (fails closed).
+  function isTrustedIframeMessage(event) {
+    const frame = [mainIframe, preloadedIframe].find(
+      (f) => f && f.contentWindow === event.source
+    );
+    if (!frame) return false;
+    try {
+      return new URL(frame.src).origin === event.origin;
+    } catch {
+      return false;
+    }
+  }
+
   window.addEventListener("message", function (event) {
+    if (!isTrustedIframeMessage(event)) return;
     if (event.data.type === CHROME_MESSAGE.SET_DEFAULT_NEW_TAB) {
       setUseOnyxAsDefaultNewTab(event.data.value);
     } else if (event.data.type === CHROME_MESSAGE.ONYX_APP_LOADED) {
