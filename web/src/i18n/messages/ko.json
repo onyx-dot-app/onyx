@@ -909,6 +909,9 @@
         "sharepoint": {
           "description": "Microsoft 인트라넷"
         },
+        "onedrive": {
+          "description": "Microsoft 클라우드 저장소"
+        },
         "teams": {
           "description": "Microsoft 팀 채팅"
         },

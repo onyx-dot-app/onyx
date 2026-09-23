@@ -909,6 +909,9 @@
         "sharepoint": {
           "description": "Microsoft 内网"
         },
+        "onedrive": {
+          "description": "Microsoft 云存储"
+        },
         "teams": {
           "description": "Microsoft 团队聊天"
         },
