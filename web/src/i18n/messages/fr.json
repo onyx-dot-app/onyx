@@ -5815,7 +5815,9 @@
           "label": "Résumés contextuels des documents RAG"
         },
         "imageSummarization": { "label": "Résumé des images" },
-        "kgDeepExtraction": { "label": "Extraction du graphe de connaissances" },
+        "kgDeepExtraction": {
+          "label": "Extraction du graphe de connaissances"
+        },
         "kgDocumentClassification": {
           "label": "Classification du graphe de connaissances"
         },
@@ -5829,7 +5831,9 @@
       "panel": {
         "description": "{start} – {end} · L’utilisation système correspond à l’activité LLM exécutée par Onyx en arrière-plan plutôt que pour un utilisateur spécifique. Cela inclut les résumés d’images, le traitement RAG contextuel et l’extraction du graphe de connaissances.",
         "emptyDescription": "L’utilisation système correspond à l’activité LLM exécutée par Onyx en arrière-plan plutôt que pour un utilisateur spécifique. Cela inclut les résumés d’images, le traitement RAG contextuel et l’extraction du graphe de connaissances.",
-        "error": { "title": "Échec du chargement de l'utilisation système pour cette période." },
+        "error": {
+          "title": "Échec du chargement de l'utilisation système pour cette période."
+        },
         "title": "Utilisation système"
       },
       "summary": {
@@ -8729,6 +8733,10 @@
         },
         "public": {
           "label": "Public dans votre organisation"
+        },
+        "uploads": {
+          "modelLoading": "Les paramètres du modèle sont encore en cours de chargement. Réessayez dans un instant.",
+          "visionUnsupported": "Le modèle actuel ne prend pas en charge les images. Sélectionnez un modèle avec prise en charge de la vision."
         }
       }
     },

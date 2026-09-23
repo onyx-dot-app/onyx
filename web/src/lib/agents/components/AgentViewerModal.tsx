@@ -129,16 +129,16 @@ interface AgentChatInputProps {
   agent: FullAgent;
   onSubmit: (message: string) => void;
 }
-function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
+export function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
+  const t = useTranslations("agents.modals.viewer.uploads");
   const llmManager = useLlmManager(undefined, agent);
   // Over the listing, so the URL says nothing about the chat this would
   // start; the agent is named here instead.
   const toolConfiguration = useToolConfiguration(agent.id);
   const { setCurrentMessageFiles, beginUpload } = useProjectsContext();
-  // Files uploaded in the viewer are staged in the app-wide provider so the
-  // chat this modal hands off to can pick them up. Track their ids so a close
-  // without sending can remove exactly those files again.
   const stagedFileIdsRef = useRef<Set<string>>(new Set());
+  const stagedTempIdsRef = useRef<Set<string>>(new Set());
+  const cleanupEnabledRef = useRef(true);
 
   // This send navigates in order to send, so the configuration is left where
   // that page will find it rather than travelling with the call. Releasing
@@ -146,7 +146,9 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
   // leaves the uploaded files in place for the chat that is about to open.
   const submit = useCallback(
     (message: string) => {
+      cleanupEnabledRef.current = false;
       stagedFileIdsRef.current.clear();
+      stagedTempIdsRef.current.clear();
       toolConfiguration.handOffToNewChatWith(agent.id);
       onSubmit(message);
     },
@@ -158,12 +160,19 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
   // no-op because submit already released the staged ids.
   useEffect(
     () => () => {
-      const staged = stagedFileIdsRef.current;
-      if (staged.size === 0) return;
+      if (!cleanupEnabledRef.current) return;
+      cleanupEnabledRef.current = false;
+      const stagedFileIds = stagedFileIdsRef.current;
+      const stagedTempIds = stagedTempIdsRef.current;
       setCurrentMessageFiles((prev) =>
-        prev.filter((file) => !staged.has(file.id))
+        prev.filter(
+          (file) =>
+            !stagedFileIds.has(file.id) &&
+            (file.temp_id == null || !stagedTempIds.has(file.temp_id))
+        )
       );
-      staged.clear();
+      stagedFileIds.clear();
+      stagedTempIds.clear();
     },
     [setCurrentMessageFiles]
   );
@@ -178,9 +187,7 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
       // against an empty selection and would report every image as
       // unsupported. Wait for the real model settings instead.
       if (llmManager.isLoadingProviders) {
-        toast.error(
-          "Model settings are still loading — please try again in a moment."
-        );
+        toast.error(t("modelLoading"));
         return;
       }
 
@@ -199,19 +206,47 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
       );
 
       if (imageFiles.length > 0 && !llmAcceptsImages) {
-        toast.error(
-          "The current model does not support image input. Please select a model with Vision support."
-        );
+        toast.error(t("visionUnsupported"));
         return;
       }
 
-      const uploadedMessageFiles = await beginUpload(acceptedFiles, null);
-      uploadedMessageFiles.forEach((file) =>
-        stagedFileIdsRef.current.add(file.id)
+      const uploadedMessageFiles = await beginUpload(
+        acceptedFiles,
+        null,
+        (result) => {
+          if (!cleanupEnabledRef.current) return;
+          for (const file of result.user_files ?? []) {
+            stagedFileIdsRef.current.add(file.id);
+            if (file.temp_id) {
+              stagedTempIdsRef.current.add(file.temp_id);
+            }
+          }
+        },
+        (failedTempIds) => {
+          const failedIds = new Set(failedTempIds);
+          setCurrentMessageFiles((prev) =>
+            prev.filter(
+              (file) =>
+                !failedIds.has(file.id) &&
+                (file.temp_id == null || !failedIds.has(file.temp_id))
+            )
+          );
+          for (const failedId of failedIds) {
+            stagedFileIdsRef.current.delete(failedId);
+            stagedTempIdsRef.current.delete(failedId);
+          }
+        }
       );
+      if (!cleanupEnabledRef.current) return;
+      for (const file of uploadedMessageFiles) {
+        stagedFileIdsRef.current.add(file.id);
+        if (file.temp_id) {
+          stagedTempIdsRef.current.add(file.temp_id);
+        }
+      }
       setCurrentMessageFiles((prev) => [...prev, ...uploadedMessageFiles]);
     },
-    [llmManager, agent, beginUpload, setCurrentMessageFiles]
+    [llmManager, agent, beginUpload, setCurrentMessageFiles, t]
   );
 
   return (

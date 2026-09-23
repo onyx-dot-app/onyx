@@ -5829,7 +5829,9 @@
       "panel": {
         "description": "{start} – {end} · El uso del sistema es actividad del LLM que Onyx ejecuta en segundo plano, no para un usuario específico. Algunos ejemplos son los resúmenes de imágenes, el procesamiento RAG contextual y la extracción del grafo de conocimiento.",
         "emptyDescription": "El uso del sistema es actividad del LLM que Onyx ejecuta en segundo plano, no para un usuario específico. Algunos ejemplos son los resúmenes de imágenes, el procesamiento RAG contextual y la extracción del grafo de conocimiento.",
-        "error": { "title": "No se pudo cargar el uso del sistema de este periodo." },
+        "error": {
+          "title": "No se pudo cargar el uso del sistema de este periodo."
+        },
         "title": "Uso del sistema"
       },
       "summary": {
@@ -8729,6 +8731,10 @@
         },
         "public": {
           "label": "Público para tu organización"
+        },
+        "uploads": {
+          "modelLoading": "La configuración del modelo aún se está cargando. Inténtalo de nuevo en un momento.",
+          "visionUnsupported": "El modelo actual no admite entrada de imágenes. Selecciona un modelo compatible con visión."
         }
       }
     },
