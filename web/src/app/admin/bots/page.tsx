@@ -1,6 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { PageLoader } from "@opal/layouts";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
@@ -16,6 +17,7 @@ const route = ADMIN_ROUTES.SLACK_BOTS;
 
 function Main() {
   const t = useTranslations("admin.slackBots");
+  const { appName } = useSettings();
   const {
     data: slackBots,
     isLoading: isSlackBotsLoading,
@@ -43,7 +45,7 @@ function Main() {
   return (
     <div className="mb-8">
       <p className="mb-2 text-sm text-muted-foreground">
-        {t("intro.description")}
+        {t("intro.description", { appName })}
       </p>
 
       <div className="mb-2">

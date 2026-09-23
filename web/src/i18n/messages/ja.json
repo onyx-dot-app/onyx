@@ -251,7 +251,7 @@
         },
         "placeholder": "方法を選択",
         "ptOauth": {
-          "description": "Onyx の認証に使用したユーザーの OAuth アクセストークンを転送します。",
+          "description": "{appName} の認証に使用したユーザーの OAuth アクセストークンを転送します。",
           "label": "OAuth パススルー"
         },
         "required": "認証タイプは必須です"
@@ -290,11 +290,11 @@
         "title": "この MCP サーバーでは認証を使用しません"
       },
       "oauthInfo": {
-        "discovery": "クライアント ID とシークレットは任意です。自動検出では、Onyx はサポートされている場合に Client ID Metadata Document (CIMD) を使用し、対応していない場合は Dynamic Client Registration (DCR) を使用します。",
-        "manualRegistration": "サーバーがどちらの方法にも対応していない場合は、先に Onyx インスタンスをサーバーの提供元に登録してください。アクションに必要なスコープを Onyx に付与してください。"
+        "discovery": "クライアント ID とシークレットは任意です。自動検出では、{appName} はサポートされている場合に Client ID Metadata Document (CIMD) を使用し、対応していない場合は Dynamic Client Registration (DCR) を使用します。",
+        "manualRegistration": "サーバーがどちらの方法にも対応していない場合は、先に {appName} インスタンスをサーバーの提供元に登録してください。アクションに必要なスコープを {appName} に付与してください。"
       },
       "passThroughNotice": {
-        "description": "Onyx はユーザーの OAuth アクセストークンを Authorization ヘッダーとしてサーバーに直接転送します。サーバーが同じプロバイダーでの認証に対応していることを確認してください。",
+        "description": "{appName} はユーザーの OAuth アクセストークンを Authorization ヘッダーとしてサーバーに直接転送します。サーバーが同じプロバイダーでの認証に対応していることを確認してください。",
         "title": "ID プロバイダーを共有するサービスにはパススルーを使用してください。"
       },
       "providerMode": {
@@ -401,7 +401,7 @@
         },
         "placeholder": "方法を選択",
         "ptOauth": {
-          "description": "Onyx の認証に使用したユーザーの OAuth アクセストークンを転送します。",
+          "description": "{appName} の認証に使用したユーザーの OAuth アクセストークンを転送します。",
           "label": "OAuth パススルー"
         },
         "required": "認証方法は必須です"
@@ -449,7 +449,7 @@
         "description": "OAuth パススルーには、OAuth に対応したログイン方法 (Google または OIDC) が必要です。"
       },
       "passThroughNotice": {
-        "description": "Onyx はユーザーの OAuth アクセストークンを Authorization ヘッダーとしてサーバーに直接転送します。サーバーが同じプロバイダーでの認証に対応していることを確認してください。",
+        "description": "{appName} はユーザーの OAuth アクセストークンを Authorization ヘッダーとしてサーバーに直接転送します。サーバーが同じプロバイダーでの認証に対応していることを確認してください。",
         "title": "ID プロバイダーを共有するサービスにはパススルーを使用してください。"
       },
       "redirectUri": {
@@ -811,7 +811,7 @@
         "title": "フィードバック"
       },
       "page": {
-        "description": "クエリ、フィードバック、エージェントの観点から、ワークスペースでの Onyx の利用状況を把握します。"
+        "description": "クエリ、フィードバック、エージェントの観点から、ワークスペースでの {appName} の利用状況を把握します。"
       },
       "reports": {
         "calendar": {
@@ -1030,7 +1030,7 @@
         "close": {
           "label": "閉じる"
         },
-        "description": "この Onyx インスタンスにライセンスを手動で追加して有効化します。",
+        "description": "この {appName} インスタンスにライセンスを手動で追加して有効化します。",
         "emptyKey": {
           "error": "ライセンスキーを入力してください"
         },
@@ -1337,7 +1337,7 @@
           "placeholder": "日数",
           "restoreTooltip": "既定値に戻す"
         },
-        "description": "組織のチャットを Onyx が保持する期間を指定します。",
+        "description": "組織のチャットを {appName} が保持する期間を指定します。",
         "enterprisePlanTag": {
           "label": "Enterprise プラン"
         },
@@ -1399,7 +1399,7 @@
       },
       "teamContext": {
         "description": "ユーザーは個人設定で、個別のコンテキストを追加することもできます。",
-        "placeholder": "チームの説明と、Onyx に期待する動作を入力してください。",
+        "placeholder": "チームの説明と、{appName} に期待する動作を入力してください。",
         "title": "チームのコンテキスト"
       },
       "teamName": {
@@ -2795,7 +2795,7 @@
       },
       "page": {
         "header": {
-          "description": "Onyx を Discord サーバーに接続します。ユーザーは Discord のチャンネルで直接質問できます。"
+          "description": "{appName} を Discord サーバーに接続します。ユーザーは Discord のチャンネルで直接質問できます。"
         }
       },
       "registrationKey": {
@@ -2832,7 +2832,7 @@
           "label": "API キーを削除"
         },
         "deleteHint": "更新する前に、現在の API キーを削除してください。",
-        "description": "Unstructured は .pdf、.docx、.png、.pptx などの形式から複雑なデータを抽出し、Onyx が取り込める整ったテキストに変換します。Unstructured によるドキュメント処理を有効にするには、API キーを入力してください。",
+        "description": "Unstructured は .pdf、.docx、.png、.pptx などの形式から複雑なデータを抽出し、{appName} が取り込める整ったテキストに変換します。Unstructured によるドキュメント処理を有効にするには、API キーを入力してください。",
         "learnMore": "Unstructured の詳細は<link>こちら</link>をご覧ください。",
         "note": "<label>注意:</label> ドキュメントは処理のため Unstructured のサーバーに送信されます。",
         "saveButton": {
@@ -2909,7 +2909,7 @@
         "deleteScheduled": {
           "toast": "ドキュメントセット「{name}」の削除をスケジュールしました"
         },
-        "description": "**ドキュメントセット**を使うと、関連するドキュメントを 1 つのまとまりにグループ化できます。作成したセットは検索時のフィルターとして使い、Onyx が検索する情報の範囲を制御できます。",
+        "description": "**ドキュメントセット**を使うと、関連するドキュメントを 1 つのまとまりにグループ化できます。作成したセットは検索時のフィルターとして使い、{appName} が検索する情報の範囲を制御できます。",
         "edit": {
           "header": {
             "title": "ドキュメントセットを編集"
@@ -3216,7 +3216,7 @@
           "tooltip": "このグループの最近の変更により、ドキュメントの embedding を更新しています。"
         },
         "systemGroup": {
-          "description": "このグループは Onyx が管理します。保持するのはメンバーのみで、変更できるのもメンバーだけです。",
+          "description": "このグループは {appName} が管理します。保持するのはメンバーのみで、変更できるのもメンバーだけです。",
           "title": "システムグループ"
         },
         "toasts": {
@@ -3329,7 +3329,7 @@
         }
       },
       "permissionsChanged": {
-        "description": "Onyx はグループ単位の権限を使用するようになりました。アクセス権はグループごとに設定するため、ユーザーの権限は所属するすべてのグループの組み合わせになります。",
+        "description": "{appName} はグループ単位の権限を使用するようになりました。アクセス権はグループごとに設定するため、ユーザーの権限は所属するすべてのグループの組み合わせになります。",
         "learnMore": {
           "label": "詳細を見る"
         },
@@ -3476,7 +3476,7 @@
           "message": "API キーの検証に失敗しました"
         },
         "authMethod": {
-          "idle": "Onyx が Google Vertex AI に認証する方法を選択してください。",
+          "idle": "{appName} が Google Vertex AI に認証する方法を選択してください。",
           "label": "認証方法",
           "required": "認証方法は必須です",
           "serviceAccount": {
@@ -3520,7 +3520,7 @@
           "required": "リージョンは必須です"
         },
         "projectId": {
-          "idle": "Vertex AI を有効にした GCP プロジェクトです。Onyx は Pod にバインドされたサービスアカウント (GKE Workload Identity) で認証します。",
+          "idle": "Vertex AI を有効にした GCP プロジェクトです。{appName} は Pod にバインドされたサービスアカウント (GKE Workload Identity) で認証します。",
           "label": "GCP プロジェクト ID",
           "required": "プロジェクト ID は必須です"
         },
@@ -3608,7 +3608,7 @@
           "title": "デプロイ名"
         },
         "modelName": {
-          "description": "Onyx 内でこのモデルを示すラベルです。Azure はデプロイ名でリクエストを振り分けるため、一意の識別子であれば十分です。"
+          "description": "{appName} 内でこのモデルを示すラベルです。Azure はデプロイ名でリクエストを振り分けるため、一意の識別子であれば十分です。"
         },
         "targetUrl": {
           "title": "ターゲット URL"
@@ -3659,7 +3659,7 @@
         "cloudManaged": {
           "title": "embedding モデルと関連設定は Onyx Cloud が管理します。"
         },
-        "description": "Onyx はこのモデルを使用して、検索と取得のためにドキュメントをエンコードします。",
+        "description": "{appName} はこのモデルを使用して、検索と取得のためにドキュメントをエンコードします。",
         "title": "Embedding モデル"
       },
       "errorsModal": {
@@ -3707,7 +3707,7 @@
         },
         "modelName": {
           "placeholder": "model-name",
-          "selfHostedDescription": "Onyx はセルフホストのエンドポイント上にあるこのモデルに接続します。",
+          "selfHostedDescription": "{appName} はセルフホストのエンドポイント上にあるこのモデルに接続します。",
           "title": "モデル名"
         },
         "normalize": {
@@ -3751,7 +3751,7 @@
           "title": "API ベース URL"
         },
         "modelName": {
-          "description": "Onyx は {provider} プロキシ上にあるこのモデルに接続します。"
+          "description": "{appName} は {provider} プロキシ上にあるこのモデルに接続します。"
         }
       },
       "maxImageSize": {
@@ -4123,7 +4123,7 @@
         "title": "新しい LLM の設定は一時的に利用できません。"
       },
       "defaultModel": {
-        "description": "このモデルは Onyx のチャットでデフォルトとして使用されます。",
+        "description": "このモデルは {appName} のチャットでデフォルトとして使用されます。",
         "title": "デフォルトモデル"
       },
       "deleteModal": {
@@ -4137,7 +4137,7 @@
       },
       "groups": {
         "addProvider": {
-          "description": "Onyx は主要なプロバイダーとセルフホストモデルの両方に対応しています。",
+          "description": "{appName} は主要なプロバイダーとセルフホストモデルの両方に対応しています。",
           "title": "プロバイダーを追加"
         },
         "gateways": {
@@ -4215,7 +4215,7 @@
               "description": "AWS 以外の環境向け",
               "label": "アクセスキー"
             },
-            "description": "Onyx が Bedrock で認証する方法を選択してください。",
+            "description": "{appName} が Bedrock で認証する方法を選択してください。",
             "iam": {
               "description": "AWS 環境で推奨",
               "label": "環境の IAM ロール"
@@ -4227,7 +4227,7 @@
             "title": "認証方法"
           },
           "iamNotice": {
-            "title": "Onyx は実行環境に割り当てられた IAM ロールを使用して認証します。"
+            "title": "{appName} は実行環境に割り当てられた IAM ロールを使用して認証します。"
           },
           "longTermApiKeyField": {
             "placeholder": "長期 API キー",
@@ -4495,7 +4495,7 @@
         },
         "setup": {
           "apiBaseField": {
-            "containerizedNote": "Onyx をコンテナで実行している場合、ホスト上のサービスに接続するには `localhost` の代わりに `host.docker.internal` を使用してください。",
+            "containerizedNote": "{appName} をコンテナで実行している場合、ホスト上のサービスに接続するには `localhost` の代わりに `host.docker.internal` を使用してください。",
             "title": "API ベース URL"
           },
           "apiKeyField": {
@@ -4548,7 +4548,7 @@
         },
         "vertexAi": {
           "authMethodField": {
-            "description": "Onyx が Google Vertex AI で認証する方法を選択してください。",
+            "description": "{appName} が Google Vertex AI で認証する方法を選択してください。",
             "serviceAccount": {
               "description": "GCP サービスアカウントキーの JSON ファイルをアップロード",
               "label": "サービスアカウント JSON"
@@ -4577,7 +4577,7 @@
             "projectRequired": "GCP プロジェクト ID は必須です"
           },
           "workloadIdentityNotice": {
-            "title": "Onyx は Pod の環境に設定された Google Cloud 認証情報を google.auth.default 経由で使用します。Kubernetes ServiceAccount が Vertex AI にアクセスできる GCP サービスアカウントにバインドされていることを確認してください。"
+            "title": "{appName} は Pod の環境に設定された Google Cloud 認証情報を google.auth.default 経由で使用します。Kubernetes ServiceAccount が Vertex AI にアクセスできる GCP サービスアカウントにバインドされていることを確認してください。"
           }
         }
       },
@@ -5028,7 +5028,7 @@
     },
     "serviceAccounts": {
       "deleteModal": {
-        "description": "アカウント *{name}*（`{keyDisplay}`）の API キーを使用しているアプリケーションは、Onyx にアクセスできなくなります。",
+        "description": "アカウント *{name}*（`{keyDisplay}`）の API キーを使用しているアプリケーションは、{appName} にアクセスできなくなります。",
         "submit": {
           "label": "削除"
         },
@@ -5075,7 +5075,7 @@
         "cancelButton": {
           "label": "キャンセル"
         },
-        "description": "サービスアカウントの API キーを使用すると、ユーザーレベルの権限で Onyx API にプログラムからアクセスできます。アカウントの詳細は後から変更できます。",
+        "description": "サービスアカウントの API キーを使用すると、ユーザーレベルの権限で {appName} API にプログラムからアクセスできます。アカウントの詳細は後から変更できます。",
         "groups": {
           "empty": {
             "description": "このサービスアカウントに割り当てられたグループはありません。",
@@ -5137,7 +5137,7 @@
         }
       },
       "page": {
-        "description": "サービスアカウントを使用して、Onyx API にプログラムからアクセスします。",
+        "description": "サービスアカウントを使用して、{appName} API にプログラムからアクセスします。",
         "error": {
           "description": "詳細はコンソールを確認してください。",
           "title": "サービスアカウントの読み込みに失敗しました。"
@@ -5461,7 +5461,7 @@
         },
         "showContinueInWebUi": {
           "label": "「Web UI で続ける」ボタンを表示",
-          "tooltip": "設定すると、応答の下部にボタンを表示し、ユーザーが Onyx の Web UI で会話を続けられるようにします"
+          "tooltip": "設定すると、応答の下部にボタンを表示し、ユーザーが {appName} の Web UI で会話を続けられるようにします"
         },
         "stillNeedHelp": {
           "label": "「Still need help?」ボタンを表示する",
@@ -5491,7 +5491,7 @@
         "autoAnswer": {
           "item": "特定のチャンネルで OnyxBot が自動的に質問に回答するように設定できます。"
         },
-        "description": "Onyx に接続する Slack ボットを設定します。設定が完了すると、Slack から直接 Onyx に質問できます。さらに、次のことができます:",
+        "description": "{appName} に接続する Slack ボットを設定します。設定が完了すると、Slack から直接 {appName} に質問できます。さらに、次のことができます:",
         "directMessage": {
           "item": "OnyxBot にダイレクトメッセージを送ると、Web UI と同じように検索できます。"
         },
@@ -5534,7 +5534,7 @@
           "badge": "無効"
         },
         "empty": {
-          "message": "Onyx とのチャットを始めるには、新しい Slack ボットを追加してください。"
+          "message": "{appName} とのチャットを始めるには、新しい Slack ボットを追加してください。"
         },
         "enabled": {
           "badge": "有効"
@@ -6073,7 +6073,7 @@
         }
       },
       "activateModal": {
-        "description": "<strong>{email}</strong> は Onyx へのアクセスを回復します。",
+        "description": "<strong>{email}</strong> は {appName} へのアクセスを回復します。",
         "submit": {
           "label": "有効化"
         },
@@ -6083,7 +6083,7 @@
         }
       },
       "cancelInviteModal": {
-        "description": "<strong>{email}</strong> は、この招待で Onyx に参加できなくなります。",
+        "description": "<strong>{email}</strong> は、この招待で {appName} に参加できなくなります。",
         "submit": {
           "label": "招待を取り消す"
         },
@@ -6093,7 +6093,7 @@
         }
       },
       "deactivateModal": {
-        "description": "<strong>{email}</strong> は Onyx へのアクセスを直ちに失います。セッションとエージェントは保持されます。ライセンスのシートは解放されます。このアカウントは後から再度有効化できます。",
+        "description": "<strong>{email}</strong> は {appName} へのアクセスを直ちに失います。セッションとエージェントは保持されます。ライセンスのシートは解放されます。このアカウントは後から再度有効化できます。",
         "submit": {
           "label": "無効化"
         },
@@ -6103,7 +6103,7 @@
         }
       },
       "deleteModal": {
-        "description": "<strong>{email}</strong> は Onyx から完全に削除されます。セッション履歴もすべて削除されます。削除は元に戻せません。",
+        "description": "<strong>{email}</strong> は {appName} から完全に削除されます。セッション履歴もすべて削除されます。削除は元に戻せません。",
         "submit": {
           "label": "削除"
         },
@@ -6228,7 +6228,7 @@
         "title": "ユーザーとリクエスト"
       },
       "permissionsNotice": {
-        "description": "Onyx はグループベースの権限を使用するようになりました。Curator と Global Curator のロールは、設定可能なグループ権限に置き換えられました。グループごとの管理者が、範囲を限定した管理を行います。",
+        "description": "{appName} はグループベースの権限を使用するようになりました。Curator と Global Curator のロールは、設定可能なグループ権限に置き換えられました。グループごとの管理者が、範囲を限定した管理を行います。",
         "learnMoreButton": {
           "label": "詳細を見る"
         },
@@ -6455,12 +6455,12 @@
           "label": "STT モデル"
         },
         "targetUri": {
-          "description": "[Azure Portal（キーとエンドポイント）]({portalUrl}) に表示されるエンドポイントを貼り付けてください。Onyx はこの URL から音声リージョンを抽出します。例：`https://westus.api.cognitive.microsoft.com/` または `https://westus.tts.speech.microsoft.com/`。",
+          "description": "[Azure Portal（キーとエンドポイント）]({portalUrl}) に表示されるエンドポイントを貼り付けてください。{appName} はこの URL から音声リージョンを抽出します。例：`https://westus.api.cognitive.microsoft.com/` または `https://westus.tts.speech.microsoft.com/`。",
           "label": "ターゲット URI",
           "required": "ターゲット URI は必須です"
         },
         "ttsModel": {
-          "description": "このモデルが、Onyx のテキスト読み上げでデフォルトとして使用されます。",
+          "description": "このモデルが、{appName} のテキスト読み上げでデフォルトとして使用されます。",
           "label": "デフォルトモデル"
         },
         "updateButton": {
@@ -6523,7 +6523,7 @@
           "message": "{label} の接続を解除しました"
         },
         "fallback": {
-          "description": "Onyx は組み込みの Web クローラーにフォールバックします。"
+          "description": "{appName} は組み込みの Web クローラーにフォールバックします。"
         },
         "header": {
           "description": "このプロバイダーに保存された認証情報を削除します。",
@@ -6749,7 +6749,7 @@
           "title": "会話のきっかけ"
         },
         "defaultModel": {
-          "description": "このモデルが、Onyx のチャットでデフォルトとして使用されます。",
+          "description": "このモデルが、{appName} のチャットでデフォルトとして使用されます。",
           "title": "デフォルトモデル"
         },
         "featured": {
@@ -7071,7 +7071,7 @@
         "label": "Onyx をどこでお知りになりましたか？"
       },
       "subtitle": {
-        "text": "Onyx を始めましょう"
+        "text": "{appName} を始めましょう"
       }
     },
     "verifyEmail": {
@@ -7241,7 +7241,7 @@
       },
       "healthBanner": {
         "backendUnavailable": {
-          "description": "初回セットアップ直後、または Onyx のデプロイを更新した直後の場合は、バックエンドがまだ起動中である可能性が高いです。1〜2 分ほど待ってから、ページを再読み込みしてください。それでも解決しない場合は、バックエンドが正しくセットアップされているか確認するか、管理者にお問い合わせください。",
+          "description": "初回セットアップ直後、または {appName} のデプロイを更新した直後の場合は、バックエンドがまだ起動中である可能性が高いです。1〜2 分ほど待ってから、ページを再読み込みしてください。それでも解決しない場合は、バックエンドが正しくセットアップされているか確認するか、管理者にお問い合わせください。",
           "title": "バックエンドは現在利用できません"
         }
       },
@@ -7346,7 +7346,7 @@
           "placeholder": "今日はどのようなご用件でしょうか？",
           "queuedPlaceholder": "上キーを押すとキュー内のメッセージを編集できます",
           "searchPlaceholder": "接続済みのソースを検索",
-          "speakingPlaceholder": "Onyx が話しています..."
+          "speakingPlaceholder": "{appName} が話しています..."
         },
         "sendButton": {
           "processingFilesTooltip": "添付ファイルの処理が完了するのを待っています"
@@ -7467,7 +7467,7 @@
       },
       "sharedAppInputBar": {
         "input": {
-          "placeholder": "Onyx がお手伝いできることはありますか"
+          "placeholder": "{appName} がお手伝いできることはありますか"
         },
         "startSessionButton": {
           "label": "新しいセッションを開始"
@@ -8394,7 +8394,7 @@
         "error": "アプリケーションを利用するには、規約に同意する必要があります。"
       },
       "header": {
-        "title": "Onyx へようこそ！"
+        "title": "{appName} へようこそ！"
       },
       "logoIcon": {
         "alt": "ロゴ"
@@ -8550,7 +8550,7 @@
         "placeholder": "ファイルを絞り込み..."
       },
       "processing": {
-        "description": "Onyx はアップロードされたファイルをまだ処理中です。今すぐエージェントを作成できますが、処理が完了するまで一部のファイルにはアクセスできません。"
+        "description": "{appName} はアップロードされたファイルをまだ処理中です。今すぐエージェントを作成できますが、処理が完了するまで一部のファイルにはアクセスできません。"
       }
     },
     "search": {
@@ -8629,7 +8629,7 @@
         "button": {
           "label": "ウェブ検索"
         },
-        "description": "Onyx がインターネットで情報を検索できるようにします。",
+        "description": "{appName} がインターネットで情報を検索できるようにします。",
         "title": "ウェブ検索プロバイダーを選択"
       }
     },
@@ -8649,7 +8649,7 @@
         "subtitle": "LiteLLM 互換 API",
         "title": "カスタム LLM プロバイダー"
       },
-      "description": "Onyx はセルフホストのモデルと主要なプロバイダーの両方に対応しています。",
+      "description": "{appName} はセルフホストのモデルと主要なプロバイダーの両方に対応しています。",
       "edit": {
         "ariaLabel": "LLM プロバイダーを編集"
       },
@@ -8669,7 +8669,7 @@
       "input": {
         "placeholder": "お名前"
       },
-      "title": "Onyx はあなたを何と呼べばよいですか？"
+      "title": "{appName} はあなたを何と呼べばよいですか？"
     },
     "nonAdminStep": {
       "confirmation": {
@@ -8787,7 +8787,7 @@
         "searchPlaceholder": "検索..."
       },
       "revokeModal": {
-        "description": "トークン {name}（{tokenDisplay}）を使用しているアプリケーションは、Onyx にアクセスできなくなります。この操作は取り消せません。",
+        "description": "トークン {name}（{tokenDisplay}）を使用しているアプリケーションは、{appName} にアクセスできなくなります。この操作は取り消せません。",
         "question": "このトークンを無効化しますか？",
         "submit": "無効化",
         "title": "アクセストークンを無効化"
@@ -8853,7 +8853,7 @@
         "title": "デフォルトのアプリモード"
       },
       "defaultModel": {
-        "description": "Onyx はチャットでこのモデルをデフォルトで使用します。",
+        "description": "{appName} はチャットでこのモデルをデフォルトで使用します。",
         "title": "デフォルトのモデル"
       },
       "defaultReasoningLevel": {
@@ -8878,7 +8878,7 @@
       "connectButton": "接続",
       "disconnectModal": {
         "continueNote": "{name} のコンテンツを参照している既存のセッションは、引き続き利用できます。",
-        "description": "Onyx はあなたの {name} アカウントのコンテンツにアクセスまたは検索できなくなります。",
+        "description": "{appName} はあなたの {name} アカウントのコンテンツにアクセスまたは検索できなくなります。",
         "disconnecting": "切断中...",
         "submit": "切断",
         "title": "*{name}* を切断"
@@ -8925,7 +8925,7 @@
         "copy": "コピー",
         "copyError": "値をコピーできませんでした。"
       },
-      "description": "Onyx で利用できるモデルに外部ツールを接続します。",
+      "description": "{appName} で利用できるモデルに外部ツールを接続します。",
       "guideButton": "ガイド",
       "models": {
         "description": "{count, plural, one {お使いのアカウントで # 個のモデルを利用できます。プロバイダーを開いて ID をコピーしてください。} other {お使いのアカウントで # 個のモデルを利用できます。プロバイダーを開いて ID をコピーしてください。}}",
@@ -8952,15 +8952,15 @@
     },
     "memory": {
       "empty": {
-        "description": "Onyx に覚えておいてほしい個人的なメモやメモリを追加します。"
+        "description": "{appName} に覚えておいてほしい個人的なメモやメモリを追加します。"
       },
       "referenceStoredMemories": {
-        "description": "チャットで保存済みのメモリを Onyx が参照できるようにします。",
+        "description": "チャットで保存済みのメモリを {appName} が参照できるようにします。",
         "title": "保存済みメモリを参照"
       },
       "title": "メモリ",
       "updateMemories": {
-        "description": "Onyx が保存済みのメモリを生成・更新できるようにします。",
+        "description": "{appName} が保存済みのメモリを生成・更新できるようにします。",
         "title": "メモリを更新"
       },
       "viewAll": {

@@ -251,7 +251,7 @@
         },
         "placeholder": "选择方式",
         "ptOauth": {
-          "description": "转发用户用于验证 Onyx 身份的 OAuth 访问 token。",
+          "description": "转发用户用于验证 {appName} 身份的 OAuth 访问 token。",
           "label": "OAuth 透传"
         },
         "required": "必须选择身份验证类型"
@@ -290,11 +290,11 @@
         "title": "此 MCP 服务器不使用身份验证"
       },
       "oauthInfo": {
-        "discovery": "客户端 ID 和密钥为可选项。在自动发现过程中，Onyx 会在服务器支持时使用客户端 ID 元数据文档（CIMD），否则回退到动态客户端注册（DCR）。",
-        "manualRegistration": "如果您的服务器两种方式都不支持，请先在服务器提供方处注册您的 Onyx 实例。为 Onyx 授予操作所需的权限范围。"
+        "discovery": "客户端 ID 和密钥为可选项。在自动发现过程中，{appName} 会在服务器支持时使用客户端 ID 元数据文档（CIMD），否则回退到动态客户端注册（DCR）。",
+        "manualRegistration": "如果您的服务器两种方式都不支持，请先在服务器提供方处注册您的 {appName} 实例。为 {appName} 授予操作所需的权限范围。"
       },
       "passThroughNotice": {
-        "description": "Onyx 会将用户的 OAuth 访问 token 作为 Authorization 请求头直接转发给服务器。请确保该服务器支持使用同一提供方进行身份验证。",
+        "description": "{appName} 会将用户的 OAuth 访问 token 作为 Authorization 请求头直接转发给服务器。请确保该服务器支持使用同一提供方进行身份验证。",
         "title": "对使用同一身份提供方的服务，请使用透传方式。"
       },
       "providerMode": {
@@ -401,7 +401,7 @@
         },
         "placeholder": "选择方式",
         "ptOauth": {
-          "description": "转发用户用于验证 Onyx 身份的 OAuth 访问 token。",
+          "description": "转发用户用于验证 {appName} 身份的 OAuth 访问 token。",
           "label": "OAuth 透传"
         },
         "required": "必须选择身份验证方式"
@@ -449,7 +449,7 @@
         "description": "OAuth 透传需要支持 OAuth 的登录方式（Google 或 OIDC）。"
       },
       "passThroughNotice": {
-        "description": "Onyx 会将用户的 OAuth 访问 token 作为 Authorization 请求头直接转发给服务器。请确保该服务器支持使用同一提供方进行身份验证。",
+        "description": "{appName} 会将用户的 OAuth 访问 token 作为 Authorization 请求头直接转发给服务器。请确保该服务器支持使用同一提供方进行身份验证。",
         "title": "对使用同一身份提供方的服务，请使用透传方式。"
       },
       "redirectUri": {
@@ -811,7 +811,7 @@
         "title": "反馈"
       },
       "page": {
-        "description": "了解您的工作区在查询、反馈和智能体方面如何使用 Onyx。"
+        "description": "了解您的工作区在查询、反馈和智能体方面如何使用 {appName}。"
       },
       "reports": {
         "calendar": {
@@ -1030,7 +1030,7 @@
         "close": {
           "label": "关闭"
         },
-        "description": "手动为此 Onyx 实例添加并激活许可证。",
+        "description": "手动为此 {appName} 实例添加并激活许可证。",
         "emptyKey": {
           "error": "请输入许可证密钥"
         },
@@ -1337,7 +1337,7 @@
           "placeholder": "以天为单位",
           "restoreTooltip": "恢复默认"
         },
-        "description": "指定 Onyx 在您的组织中保留对话的时长。",
+        "description": "指定 {appName} 在您的组织中保留对话的时长。",
         "enterprisePlanTag": {
           "label": "企业版套餐"
         },
@@ -1399,7 +1399,7 @@
       },
       "teamContext": {
         "description": "用户还可以在个人设置中提供额外的个人上下文。",
-        "placeholder": "描述您的团队以及 Onyx 应有的行为方式。",
+        "placeholder": "描述您的团队以及 {appName} 应有的行为方式。",
         "title": "团队上下文"
       },
       "teamName": {
@@ -2795,7 +2795,7 @@
       },
       "page": {
         "header": {
-          "description": "将 Onyx 连接到您的 Discord 服务器。用户可以直接在 Discord 频道中提问。"
+          "description": "将 {appName} 连接到您的 Discord 服务器。用户可以直接在 Discord 频道中提问。"
         }
       },
       "registrationKey": {
@@ -2832,7 +2832,7 @@
           "label": "删除 API 密钥"
         },
         "deleteHint": "更新前请先删除当前 API 密钥。",
-        "description": "Unstructured 可从 .pdf、.docx、.png、.pptx 等格式中提取并转换复杂数据，生成干净的文本供 Onyx 导入。提供 API 密钥即可启用 Unstructured 文档处理。",
+        "description": "Unstructured 可从 .pdf、.docx、.png、.pptx 等格式中提取并转换复杂数据，生成干净的文本供 {appName} 导入。提供 API 密钥即可启用 Unstructured 文档处理。",
         "learnMore": "在<link>这里</link>了解有关 Unstructured 的更多信息。",
         "note": "<label>注意：</label>此功能会将文档发送到 Unstructured 服务器进行处理。",
         "saveButton": {
@@ -2909,7 +2909,7 @@
         "deleteScheduled": {
           "toast": "已安排删除文档集“{name}”"
         },
-        "description": "**文档集**可以把逻辑相关的文档归入同一个集合。搜索时可以将它们用作筛选条件，控制 Onyx 检索的信息范围。",
+        "description": "**文档集**可以把逻辑相关的文档归入同一个集合。搜索时可以将它们用作筛选条件，控制 {appName} 检索的信息范围。",
         "edit": {
           "header": {
             "title": "编辑文档集"
@@ -3216,7 +3216,7 @@
           "tooltip": "由于此用户组最近发生更改，正在更新文档 embedding。"
         },
         "systemGroup": {
-          "description": "此用户组由 Onyx 管理。它只包含成员，您也只能更改成员。",
+          "description": "此用户组由 {appName} 管理。它只包含成员，您也只能更改成员。",
           "title": "系统用户组"
         },
         "toasts": {
@@ -3329,7 +3329,7 @@
         }
       },
       "permissionsChanged": {
-        "description": "Onyx 现在使用基于用户组的权限。访问权限按用户组配置，因此用户的权限是其所属全部用户组权限的合集。",
+        "description": "{appName} 现在使用基于用户组的权限。访问权限按用户组配置，因此用户的权限是其所属全部用户组权限的合集。",
         "learnMore": {
           "label": "了解更多"
         },
@@ -3476,7 +3476,7 @@
           "message": "API 密钥验证失败"
         },
         "authMethod": {
-          "idle": "选择 Onyx 与 Google Vertex AI 进行身份验证的方式。",
+          "idle": "选择 {appName} 与 Google Vertex AI 进行身份验证的方式。",
           "label": "身份验证方式",
           "required": "身份验证方式为必填项",
           "serviceAccount": {
@@ -3520,7 +3520,7 @@
           "required": "位置为必填项"
         },
         "projectId": {
-          "idle": "已启用 Vertex AI 的 GCP 项目。Onyx 使用 pod 绑定的服务账号进行身份验证（GKE Workload Identity）。",
+          "idle": "已启用 Vertex AI 的 GCP 项目。{appName} 使用 pod 绑定的服务账号进行身份验证（GKE Workload Identity）。",
           "label": "GCP 项目 ID",
           "required": "项目 ID 为必填项"
         },
@@ -3608,7 +3608,7 @@
           "title": "部署名称"
         },
         "modelName": {
-          "description": "此模型在 Onyx 中的标签。Azure 按部署名称路由请求，因此这里只需是一个唯一标识符。"
+          "description": "此模型在 {appName} 中的标签。Azure 按部署名称路由请求，因此这里只需是一个唯一标识符。"
         },
         "targetUrl": {
           "title": "目标 URL"
@@ -3659,7 +3659,7 @@
         "cloudManaged": {
           "title": "Embedding 模型和相关设置由 Onyx Cloud 管理。"
         },
-        "description": "Onyx 使用此模型对文档进行编码，以供搜索和检索。",
+        "description": "{appName} 使用此模型对文档进行编码，以供搜索和检索。",
         "title": "Embedding 模型"
       },
       "errorsModal": {
@@ -3707,7 +3707,7 @@
         },
         "modelName": {
           "placeholder": "model-name",
-          "selfHostedDescription": "Onyx 将在您的自托管端点上连接此模型。",
+          "selfHostedDescription": "{appName} 将在您的自托管端点上连接此模型。",
           "title": "模型名称"
         },
         "normalize": {
@@ -3751,7 +3751,7 @@
           "title": "API 基础 URL"
         },
         "modelName": {
-          "description": "Onyx 将在您的 {provider} 代理上连接此模型。"
+          "description": "{appName} 将在您的 {provider} 代理上连接此模型。"
         }
       },
       "maxImageSize": {
@@ -4123,7 +4123,7 @@
         "title": "暂时无法新增 LLM 配置。"
       },
       "defaultModel": {
-        "description": "Onyx 将在您的对话中默认使用此模型。",
+        "description": "{appName} 将在您的对话中默认使用此模型。",
         "title": "默认模型"
       },
       "deleteModal": {
@@ -4137,7 +4137,7 @@
       },
       "groups": {
         "addProvider": {
-          "description": "Onyx 同时支持主流提供商和自托管模型。",
+          "description": "{appName} 同时支持主流提供商和自托管模型。",
           "title": "添加提供商"
         },
         "gateways": {
@@ -4215,7 +4215,7 @@
               "description": "适用于非 AWS 环境",
               "label": "访问密钥"
             },
-            "description": "选择 Onyx 与 Bedrock 进行身份验证的方式。",
+            "description": "选择 {appName} 与 Bedrock 进行身份验证的方式。",
             "iam": {
               "description": "推荐用于 AWS 环境",
               "label": "环境 IAM 角色"
@@ -4227,7 +4227,7 @@
             "title": "身份验证方式"
           },
           "iamNotice": {
-            "title": "Onyx 将使用其运行环境所附加的 IAM 角色进行身份验证。"
+            "title": "{appName} 将使用其运行环境所附加的 IAM 角色进行身份验证。"
           },
           "longTermApiKeyField": {
             "placeholder": "您的长期 API 密钥",
@@ -4495,7 +4495,7 @@
         },
         "setup": {
           "apiBaseField": {
-            "containerizedNote": "当 Onyx 在容器中运行时，请使用 `host.docker.internal` 代替 `localhost` 来访问主机上的服务。",
+            "containerizedNote": "当 {appName} 在容器中运行时，请使用 `host.docker.internal` 代替 `localhost` 来访问主机上的服务。",
             "title": "API 基础 URL"
           },
           "apiKeyField": {
@@ -4548,7 +4548,7 @@
         },
         "vertexAi": {
           "authMethodField": {
-            "description": "选择 Onyx 与 Google Vertex AI 进行身份验证的方式。",
+            "description": "选择 {appName} 与 Google Vertex AI 进行身份验证的方式。",
             "serviceAccount": {
               "description": "上传 GCP 服务账号密钥 JSON 文件",
               "label": "服务账号 JSON"
@@ -4577,7 +4577,7 @@
             "projectRequired": "GCP 项目 ID 为必填项"
           },
           "workloadIdentityNotice": {
-            "title": "Onyx 将使用 Pod 的环境 Google Cloud 凭据（通过 google.auth.default）。请确保 Kubernetes ServiceAccount 已绑定到有权访问 Vertex AI 的 GCP 服务账号。"
+            "title": "{appName} 将使用 Pod 的环境 Google Cloud 凭据（通过 google.auth.default）。请确保 Kubernetes ServiceAccount 已绑定到有权访问 Vertex AI 的 GCP 服务账号。"
           }
         }
       },
@@ -5028,7 +5028,7 @@
     },
     "serviceAccounts": {
       "deleteModal": {
-        "description": "任何使用账户 *{name}*（`{keyDisplay}`）的 API 密钥的应用都将失去对 Onyx 的访问权限。",
+        "description": "任何使用账户 *{name}*（`{keyDisplay}`）的 API 密钥的应用都将失去对 {appName} 的访问权限。",
         "submit": {
           "label": "删除"
         },
@@ -5075,7 +5075,7 @@
         "cancelButton": {
           "label": "取消"
         },
-        "description": "使用服务账号 API 密钥，以用户级权限通过程序访问 Onyx API。您可以稍后修改账号详情。",
+        "description": "使用服务账号 API 密钥，以用户级权限通过程序访问 {appName} API。您可以稍后修改账号详情。",
         "groups": {
           "empty": {
             "description": "尚未向此服务账号分配任何用户组。",
@@ -5137,7 +5137,7 @@
         }
       },
       "page": {
-        "description": "使用服务账号通过程序访问 Onyx API。",
+        "description": "使用服务账号通过程序访问 {appName} API。",
         "error": {
           "description": "请查看控制台了解更多详情。",
           "title": "加载服务账号失败。"
@@ -5461,7 +5461,7 @@
         },
         "showContinueInWebUi": {
           "label": "显示“在 Web 界面中继续”按钮",
-          "tooltip": "启用后，将在回复底部显示一个按钮，让用户可以在 Onyx Web 界面中继续对话"
+          "tooltip": "启用后，将在回复底部显示一个按钮，让用户可以在 {appName} Web 界面中继续对话"
         },
         "stillNeedHelp": {
           "label": "提供“仍需帮助？”按钮",
@@ -5491,7 +5491,7 @@
         "autoAnswer": {
           "item": "设置 OnyxBot，让它在特定频道中自动回答问题。"
         },
-        "description": "设置连接到 Onyx 的 Slack 机器人。设置完成后，您可以直接在 Slack 中向 Onyx 提问。此外，您还可以：",
+        "description": "设置连接到 {appName} 的 Slack 机器人。设置完成后，您可以直接在 Slack 中向 {appName} 提问。此外，您还可以：",
         "directMessage": {
           "item": "像在 Web 界面中一样，直接给 OnyxBot 发消息进行搜索。"
         },
@@ -5534,7 +5534,7 @@
           "badge": "已禁用"
         },
         "empty": {
-          "message": "请添加新的 Slack 机器人，开始与 Onyx 对话！"
+          "message": "请添加新的 Slack 机器人，开始与 {appName} 对话！"
         },
         "enabled": {
           "badge": "已启用"
@@ -6073,7 +6073,7 @@
         }
       },
       "activateModal": {
-        "description": "<strong>{email}</strong> 将重新获得 Onyx 的访问权限。",
+        "description": "<strong>{email}</strong> 将重新获得 {appName} 的访问权限。",
         "submit": {
           "label": "激活"
         },
@@ -6083,7 +6083,7 @@
         }
       },
       "cancelInviteModal": {
-        "description": "<strong>{email}</strong> 将无法再使用此邀请加入 Onyx。",
+        "description": "<strong>{email}</strong> 将无法再使用此邀请加入 {appName}。",
         "submit": {
           "label": "取消邀请"
         },
@@ -6093,7 +6093,7 @@
         }
       },
       "deactivateModal": {
-        "description": "<strong>{email}</strong> 将立即失去 Onyx 的访问权限。其会话和智能体将被保留，占用的许可席位将被释放。您可以稍后重新激活此账号。",
+        "description": "<strong>{email}</strong> 将立即失去 {appName} 的访问权限。其会话和智能体将被保留，占用的许可席位将被释放。您可以稍后重新激活此账号。",
         "submit": {
           "label": "停用"
         },
@@ -6103,7 +6103,7 @@
         }
       },
       "deleteModal": {
-        "description": "<strong>{email}</strong> 将从 Onyx 中永久移除。其所有会话历史都将被删除。删除操作无法撤销。",
+        "description": "<strong>{email}</strong> 将从 {appName} 中永久移除。其所有会话历史都将被删除。删除操作无法撤销。",
         "submit": {
           "label": "删除"
         },
@@ -6228,7 +6228,7 @@
         "title": "用户与申请"
       },
       "permissionsNotice": {
-        "description": "Onyx 现在使用基于用户组的权限。策展人和全局策展人角色已由可配置的用户组权限取代，并可为每个用户组指定管理者，实现范围化管理。",
+        "description": "{appName} 现在使用基于用户组的权限。策展人和全局策展人角色已由可配置的用户组权限取代，并可为每个用户组指定管理者，实现范围化管理。",
         "learnMoreButton": {
           "label": "了解更多"
         },
@@ -6455,12 +6455,12 @@
           "label": "STT 模型"
         },
         "targetUri": {
-          "description": "粘贴 [Azure Portal（密钥和终结点）]({portalUrl}) 中显示的终结点。Onyx 会从该 URL 中提取语音区域。示例：`https://westus.api.cognitive.microsoft.com/` 或 `https://westus.tts.speech.microsoft.com/`。",
+          "description": "粘贴 [Azure Portal（密钥和终结点）]({portalUrl}) 中显示的终结点。{appName} 会从该 URL 中提取语音区域。示例：`https://westus.api.cognitive.microsoft.com/` 或 `https://westus.tts.speech.microsoft.com/`。",
           "label": "目标 URI",
           "required": "目标 URI 为必填项"
         },
         "ttsModel": {
-          "description": "Onyx 将默认使用此模型进行文字转语音。",
+          "description": "{appName} 将默认使用此模型进行文字转语音。",
           "label": "默认模型"
         },
         "updateButton": {
@@ -6523,7 +6523,7 @@
           "message": "{label} 已断开连接"
         },
         "fallback": {
-          "description": "Onyx 将回退到内置的网页爬虫。"
+          "description": "{appName} 将回退到内置的网页爬虫。"
         },
         "header": {
           "description": "这将删除为此提供方存储的凭据。",
@@ -6749,7 +6749,7 @@
           "title": "对话开场白"
         },
         "defaultModel": {
-          "description": "Onyx 将在您的聊天中默认使用此模型。",
+          "description": "{appName} 将在您的聊天中默认使用此模型。",
           "title": "默认模型"
         },
         "featured": {
@@ -7071,7 +7071,7 @@
         "label": "您是如何了解到我们的？"
       },
       "subtitle": {
-        "text": "开始使用 Onyx"
+        "text": "开始使用 {appName}"
       }
     },
     "verifyEmail": {
@@ -7241,7 +7241,7 @@
       },
       "healthBanner": {
         "backendUnavailable": {
-          "description": "如果这是您的首次设置，或者您刚更新了 Onyx 部署，这可能是因为后端仍在启动。请等待一两分钟，然后刷新页面。如果仍然无效，请确认后端已正确设置，或联系管理员。",
+          "description": "如果这是您的首次设置，或者您刚更新了 {appName} 部署，这可能是因为后端仍在启动。请等待一两分钟，然后刷新页面。如果仍然无效，请确认后端已正确设置，或联系管理员。",
           "title": "后端当前不可用"
         }
       },
@@ -7346,7 +7346,7 @@
           "placeholder": "今天我能帮您做些什么？",
           "queuedPlaceholder": "按上箭头键编辑排队的消息",
           "searchPlaceholder": "搜索已连接的来源",
-          "speakingPlaceholder": "Onyx 正在朗读..."
+          "speakingPlaceholder": "{appName} 正在朗读..."
         },
         "sendButton": {
           "processingFilesTooltip": "正在等待附件处理完成"
@@ -7467,7 +7467,7 @@
       },
       "sharedAppInputBar": {
         "input": {
-          "placeholder": "今天 Onyx 能为您做些什么"
+          "placeholder": "今天 {appName} 能为您做些什么"
         },
         "startSessionButton": {
           "label": "开始新会话"
@@ -8394,7 +8394,7 @@
         "error": "您需要同意条款才能使用本应用。"
       },
       "header": {
-        "title": "欢迎使用 Onyx！"
+        "title": "欢迎使用 {appName}！"
       },
       "logoIcon": {
         "alt": "徽标"
@@ -8550,7 +8550,7 @@
         "placeholder": "筛选文件..."
       },
       "processing": {
-        "description": "Onyx 仍在处理您上传的文件。您现在可以创建智能体，但在处理完成前，它无法访问所有文件。"
+        "description": "{appName} 仍在处理您上传的文件。您现在可以创建智能体，但在处理完成前，它无法访问所有文件。"
       }
     },
     "search": {
@@ -8629,7 +8629,7 @@
         "button": {
           "label": "网页搜索"
         },
-        "description": "让 Onyx 能够在互联网上搜索信息。",
+        "description": "让 {appName} 能够在互联网上搜索信息。",
         "title": "选择网页搜索提供商"
       }
     },
@@ -8649,7 +8649,7 @@
         "subtitle": "兼容 LiteLLM 的 API",
         "title": "自定义 LLM 提供商"
       },
-      "description": "Onyx 同时支持自托管模型和主流提供商。",
+      "description": "{appName} 同时支持自托管模型和主流提供商。",
       "edit": {
         "ariaLabel": "编辑 LLM 提供商"
       },
@@ -8669,7 +8669,7 @@
       "input": {
         "placeholder": "您的姓名"
       },
-      "title": "Onyx 该怎么称呼您？"
+      "title": "{appName} 该怎么称呼您？"
     },
     "nonAdminStep": {
       "confirmation": {
@@ -8787,7 +8787,7 @@
         "searchPlaceholder": "搜索…"
       },
       "revokeModal": {
-        "description": "任何使用 token {name}（{tokenDisplay}）的应用都将失去对 Onyx 的访问权限。此操作无法撤销。",
+        "description": "任何使用 token {name}（{tokenDisplay}）的应用都将失去对 {appName} 的访问权限。此操作无法撤销。",
         "question": "确定要吊销此 token 吗？",
         "submit": "吊销",
         "title": "吊销访问 token"
@@ -8853,7 +8853,7 @@
         "title": "默认应用模式"
       },
       "defaultModel": {
-        "description": "Onyx 会在您的对话中默认使用此模型。",
+        "description": "{appName} 会在您的对话中默认使用此模型。",
         "title": "默认模型"
       },
       "defaultReasoningLevel": {
@@ -8878,7 +8878,7 @@
       "connectButton": "连接",
       "disconnectModal": {
         "continueNote": "您仍然可以继续引用 {name} 内容的现有会话。",
-        "description": "Onyx 将无法再访问或搜索您 {name} 账户中的内容。",
+        "description": "{appName} 将无法再访问或搜索您 {name} 账户中的内容。",
         "disconnecting": "正在断开连接…",
         "submit": "断开连接",
         "title": "断开 *{name}* 连接"
@@ -8925,7 +8925,7 @@
         "copy": "复制",
         "copyError": "无法复制该值。"
       },
-      "description": "将外部工具连接到您在 Onyx 中可用的模型。",
+      "description": "将外部工具连接到您在 {appName} 中可用的模型。",
       "guideButton": "指南",
       "models": {
         "description": "{count, plural, one {您的账户可使用 # 个模型。打开某个提供商即可复制 ID。} other {您的账户可使用 # 个模型。打开某个提供商即可复制 ID。}}",
@@ -8952,15 +8952,15 @@
     },
     "memory": {
       "empty": {
-        "description": "添加希望 Onyx 记住的个人笔记或记忆。"
+        "description": "添加希望 {appName} 记住的个人笔记或记忆。"
       },
       "referenceStoredMemories": {
-        "description": "允许 Onyx 在对话中引用已存储的记忆。",
+        "description": "允许 {appName} 在对话中引用已存储的记忆。",
         "title": "引用已存储的记忆"
       },
       "title": "记忆",
       "updateMemories": {
-        "description": "允许 Onyx 生成并更新已存储的记忆。",
+        "description": "允许 {appName} 生成并更新已存储的记忆。",
         "title": "更新记忆"
       },
       "viewAll": {

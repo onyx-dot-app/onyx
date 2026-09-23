@@ -1114,7 +1114,9 @@ export default function ChatPreferencesPage() {
               withLabel
             >
               <InputTextArea
-                placeholder={t("teamContext.placeholder")}
+                placeholder={t("teamContext.placeholder", {
+                  appName: settings.appName,
+                })}
                 rows={4}
                 maxRows={10}
                 autoResize
@@ -1411,7 +1413,9 @@ export default function ChatPreferencesPage() {
                     >
                       <InputHorizontal
                         title={t("retention.title")}
-                        description={t("retention.description")}
+                        description={t("retention.description", {
+                          appName: settings.appName,
+                        })}
                         tag={
                           !enterpriseTier
                             ? {
