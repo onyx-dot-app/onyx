@@ -30,14 +30,17 @@ from onyx.llm.interfaces import (
 )
 from onyx.llm.model_response import Delta
 from onyx.llm.models import (
+    AnyThinkingBlock,
     AssistantMessage,
     ChatCompletionMessage,
     FunctionCall,
     ImageContentPart,
     ImageUrlDetail,
     ReasoningEffort,
+    RedactedThinkingBlock,
     SystemMessage,
     TextContentPart,
+    ThinkingBlock,
     ToolCall,
     ToolMessage,
     UserMessage,
@@ -719,6 +722,7 @@ def _build_structured_assistant_message(msg: ChatMessageSimple) -> AssistantMess
         role="assistant",
         content=msg.message or None,
         tool_calls=tool_calls_list,
+        thinking_blocks=msg.thinking_blocks,
     )
 
 
@@ -1203,6 +1207,13 @@ def run_llm_step_pkt_generator(
     accumulated_reasoning = ""
     accumulated_answer = ""
     accumulated_raw_answer = ""
+    # Signed thinking blocks arrive fragmented across deltas: thinking text
+    # streams piecewise and the signature lands on the last fragment of each
+    # block. Accumulate fragments and only seal a block once its signature
+    # arrives (unsigned thinking text can't be replayed, so it is dropped),
+    # matching LiteLLM's own chunk-assembly semantics.
+    accumulated_thinking_blocks: list[AnyThinkingBlock] = []
+    thinking_text_parts: list[str] = []
     stream_chunk_count = 0
     actionable_chunk_count = 0
     empty_chunk_count = 0
@@ -1372,6 +1383,7 @@ def run_llm_step_pkt_generator(
                 not delta.content
                 and delta.reasoning_content is None
                 and not delta.tool_calls
+                and not delta.thinking_blocks
             ):
                 empty_chunk_count += 1
                 logger.warning(
@@ -1389,6 +1401,23 @@ def run_llm_step_pkt_generator(
                 first_action_recorded = True
             if _delta_has_action(delta):
                 actionable_chunk_count += 1
+
+            if delta.thinking_blocks:
+                for thinking_block in delta.thinking_blocks:
+                    if isinstance(thinking_block, RedactedThinkingBlock):
+                        thinking_text_parts = []
+                        accumulated_thinking_blocks.append(thinking_block)
+                        continue
+                    if thinking_block.thinking:
+                        thinking_text_parts.append(thinking_block.thinking)
+                    if thinking_block.signature:
+                        accumulated_thinking_blocks.append(
+                            ThinkingBlock(
+                                thinking="".join(thinking_text_parts),
+                                signature=thinking_block.signature,
+                            )
+                        )
+                        thinking_text_parts = []
 
             if custom_token_processor:
                 # The custom token processor can modify the deltas for specific custom logic
@@ -1598,6 +1627,7 @@ def run_llm_step_pkt_generator(
             reasoning=accumulated_reasoning or None,
             answer=accumulated_answer or None,
             tool_calls=tool_calls or None,
+            thinking_blocks=accumulated_thinking_blocks or None,
             raw_answer=accumulated_raw_answer or None,
             finish_reason=terminal_finish_reason,
         ),

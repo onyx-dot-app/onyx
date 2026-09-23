@@ -772,6 +772,7 @@ def run_deep_research_llm_loop(
                         tool_calls=tool_calls_simple,
                         image_files=None,
                         should_cache=True,
+                        thinking_blocks=llm_step_result.thinking_blocks,
                     )
                     simple_chat_history.append(assistant_with_tools)
 

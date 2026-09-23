@@ -1239,7 +1239,9 @@ def run_llm_loop(
             # Failure case, give something reasonable to the LLM to try again
             if tool_calls and not tool_responses:
                 failure_messages = create_tool_call_failure_messages(
-                    tool_calls, token_counter
+                    tool_calls,
+                    token_counter,
+                    thinking_blocks=llm_step_result.thinking_blocks,
                 )
                 simple_chat_history.extend(failure_messages)
                 continue
@@ -1457,6 +1459,9 @@ def run_llm_loop(
                     # Append-only within the turn, so it extends the
                     # cacheable prefix on the next cycle.
                     should_cache=True,
+                    # Replay signed thinking blocks so thinking-capable
+                    # providers accept the tool-call turn.
+                    thinking_blocks=llm_step_result.thinking_blocks,
                 )
                 simple_chat_history.append(assistant_with_tools)
 
