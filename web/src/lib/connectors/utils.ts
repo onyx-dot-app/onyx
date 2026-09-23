@@ -6,6 +6,7 @@ import type {
   IndexAttemptStageMetric,
   ValidSources,
 } from "@/lib/types";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { connectorConfigs } from "@/lib/connectors/connectors";
 import { credentialDisplayNames } from "@/lib/connectors/credentials";
 import { FILE_TYPE_DEFINITIONS, TypedFile } from "@/lib/connectors/fileTypes";
@@ -180,16 +181,16 @@ export function getFileTypeDefinitionForField(
 // Connector-credential pairs
 // ---------------------------------------------------------------------------
 
+/** The cc-pair detail key; also the key `mutate` callers invalidate. */
 export function buildCCPairInfoUrl(ccPairId: string | number) {
-  return `/api/manage/admin/cc-pair/${ccPairId}`;
+  return SWR_KEYS.ccPair(ccPairId);
 }
 
 export function buildSimilarCredentialInfoURL(
   source_type: ValidSources,
   get_editable: boolean = false
 ) {
-  const base = `/api/manage/admin/similar-credentials/${source_type}`;
-  return get_editable ? `${base}?get_editable=True` : base;
+  return SWR_KEYS.similarCredentials(source_type, get_editable);
 }
 
 export function getTooltipMessage(

@@ -15,6 +15,7 @@ import type {
   OAuthDetails,
 } from "@/lib/connectors/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import type {
   ConfigurableSources,
   CredentialSchemaResponse,
@@ -25,7 +26,7 @@ import type {
 /** The OAuth capabilities of a source: whether it supports OAuth, manual credentials, and any extra fields. */
 export function useOAuthDetails(sourceType: ValidSources) {
   return useSWR<OAuthDetails>(
-    `/api/connector/oauth/details/${sourceType}`,
+    SWR_KEYS.connectorOAuthDetails(sourceType),
     errorHandlingFetcher,
     {
       shouldRetryOnError: false,
