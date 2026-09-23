@@ -14,6 +14,7 @@ import (
 	"github.com/onyx-dot-app/onyx/cli/internal/iostreams"
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
 	"github.com/onyx-dot-app/onyx/cli/internal/overflow"
+	"github.com/onyx-dot-app/onyx/cli/internal/sanitize"
 	"github.com/spf13/cobra"
 )
 
@@ -127,9 +128,9 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 					fmt.Fprintln(ios.Out, string(data))
 					if errEvt, ok := event.(models.ErrorEvent); ok {
 						if errEvt.StatusCode != 0 {
-							lastErr = exitcodes.Newf(exitcodes.ForHTTPStatus(errEvt.StatusCode), "%s", errEvt.Error)
+							lastErr = exitcodes.Newf(exitcodes.ForHTTPStatus(errEvt.StatusCode), "%s", sanitize.Terminal(errEvt.Error))
 						} else {
-							lastErr = exitcodes.New(exitcodes.General, errEvt.Error)
+							lastErr = exitcodes.New(exitcodes.General, sanitize.Terminal(errEvt.Error))
 						}
 					}
 					if _, ok := event.(models.StopEvent); ok {
@@ -140,7 +141,7 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 
 				switch e := event.(type) {
 				case models.MessageDeltaEvent:
-					ow.Write(e.Content)
+					ow.Write(sanitize.Terminal(e.Content))
 				case models.SearchStartEvent:
 					if isTTY && !askQuiet {
 						if e.IsInternetSearch {
@@ -152,7 +153,7 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 				case models.SearchQueriesEvent:
 					if isTTY && !askQuiet {
 						for _, q := range e.Queries {
-							fmt.Fprintf(ios.ErrOut, "\033[2m  → %s\033[0m\n", q)
+							fmt.Fprintf(ios.ErrOut, "\033[2m  → %s\033[0m\n", sanitize.Terminal(q))
 						}
 					}
 				case models.SearchDocumentsEvent:
@@ -165,14 +166,14 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 					}
 				case models.ToolStartEvent:
 					if isTTY && !askQuiet && e.ToolName != "" {
-						fmt.Fprintf(ios.ErrOut, "\033[2mUsing %s...\033[0m\n", e.ToolName)
+						fmt.Fprintf(ios.ErrOut, "\033[2mUsing %s...\033[0m\n", sanitize.Terminal(e.ToolName))
 					}
 				case models.ErrorEvent:
 					ow.Finish()
 					if e.StatusCode != 0 {
-						return exitcodes.Newf(exitcodes.ForHTTPStatus(e.StatusCode), "%s", e.Error)
+						return exitcodes.Newf(exitcodes.ForHTTPStatus(e.StatusCode), "%s", sanitize.Terminal(e.Error))
 					}
-					return exitcodes.New(exitcodes.General, e.Error)
+					return exitcodes.New(exitcodes.General, sanitize.Terminal(e.Error))
 				case models.StopEvent:
 					ow.Finish()
 					return nil
