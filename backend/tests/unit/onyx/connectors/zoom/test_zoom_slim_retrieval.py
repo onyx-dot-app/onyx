@@ -45,6 +45,7 @@ from tests.unit.onyx.connectors.zoom.helpers import (
     with_recording_access,
 )
 from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
+    domain_rule,
     meeting_details,
     past_meeting_details,
     recording_entry,
@@ -613,6 +614,25 @@ class TestThePermSyncWalk:
             "ZOOM_MEETING_uuid-2": _ACCOUNT_SHARE,
         }
         assert set(synced) == _ids(connector)
+
+    def test_a_domain_share_is_synced_with_the_bare_group_id(self) -> None:
+        # upsert_document_external_perms adds the source prefix itself; added
+        # here too, the id would match no group the group sync filled.
+        connector, client = _connector(host_emails=["jill@example.com"])
+        rule = domain_rule(domains="example.com")
+        with_recording_access(
+            client,
+            settings=recording_settings(authentication_option=rule.id),
+            rules=[rule],
+        )
+        _listing(client, _recording("uuid-1"))
+
+        synced = _synced(connector)
+
+        access = synced["ZOOM_MEETING_uuid-1"]
+        assert access is not None
+        assert access.external_user_group_ids == {"domain:example.com"}
+        assert access.is_public is False
 
     def test_pruning_asks_for_no_access(self) -> None:
         connector, client = _connector(host_emails=["jill@example.com"])
