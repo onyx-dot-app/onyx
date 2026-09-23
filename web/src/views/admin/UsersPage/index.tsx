@@ -79,11 +79,15 @@ export default function UsersPage() {
       <SettingsLayouts.Header
         title={t("page.title")}
         icon={SvgUser}
-        rightChildren={
-          <Button icon={SvgUserPlus} onClick={() => setInviteOpen(true)}>
+        actions={[
+          <Button
+            key="primary"
+            icon={SvgUserPlus}
+            onClick={() => setInviteOpen(true)}
+          >
             {t("page.inviteButton.label")}
-          </Button>
-        }
+          </Button>,
+        ]}
       >
         <MessageCard
           variant="info"

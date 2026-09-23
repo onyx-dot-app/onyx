@@ -275,55 +275,48 @@ export default function ScheduleTaskForm({
         icon={SvgClock}
         title={title}
         description={description}
-        backButton={onBack}
+        cancel={() => router.push(TASKS_PATH)}
         divider
-        rightChildren={
-          <div className="flex gap-2 self-start">
+        actions={[
+          ...(!isEdit
+            ? [
+                <Disabled
+                  key="run"
+                  disabled={!canSubmit}
+                  tooltip={disabledReason}
+                  tooltipSide="bottom"
+                >
+                  <Button
+                    variant="default"
+                    prominence="secondary"
+                    type="button"
+                    disabled={!canSubmit}
+                    onClick={() => void submit(true)}
+                    data-testid="save-and-run-now"
+                  >
+                    {t("saveAndRunNowButton")}
+                  </Button>
+                </Disabled>,
+              ]
+            : []),
+          <Disabled
+            key="save"
+            disabled={!canSubmit}
+            tooltip={disabledReason}
+            tooltipSide="bottom"
+          >
             <Button
               variant="default"
-              prominence="secondary"
+              prominence="primary"
               type="button"
-              onClick={() => router.push(TASKS_PATH)}
-              disabled={saving}
-            >
-              {t("cancelButton")}
-            </Button>
-            {!isEdit && (
-              <Disabled
-                disabled={!canSubmit}
-                tooltip={disabledReason}
-                tooltipSide="bottom"
-              >
-                <Button
-                  variant="default"
-                  prominence="secondary"
-                  type="button"
-                  disabled={!canSubmit}
-                  onClick={() => void submit(true)}
-                  data-testid="save-and-run-now"
-                >
-                  {t("saveAndRunNowButton")}
-                </Button>
-              </Disabled>
-            )}
-            <Disabled
               disabled={!canSubmit}
-              tooltip={disabledReason}
-              tooltipSide="bottom"
+              onClick={() => void submit(false)}
+              data-testid="save-task"
             >
-              <Button
-                variant="default"
-                prominence="primary"
-                type="button"
-                disabled={!canSubmit}
-                onClick={() => void submit(false)}
-                data-testid="save-task"
-              >
-                {isEdit ? t("saveChangesButton") : t("saveButton")}
-              </Button>
-            </Disabled>
-          </div>
-        }
+              {isEdit ? t("saveChangesButton") : t("saveButton")}
+            </Button>
+          </Disabled>,
+        ]}
       />
 
       <SettingsLayouts.Body>

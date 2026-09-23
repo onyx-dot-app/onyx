@@ -4159,9 +4159,6 @@
         }
       },
       "form": {
-        "cancel": {
-          "label": "إلغاء"
-        },
         "name": {
           "label": "اسم المجموعة",
           "placeholder": "سمِّ مجموعتك"
@@ -8657,9 +8654,6 @@
         }
       },
       "header": {
-        "cancel": {
-          "label": "إلغاء"
-        },
         "create": {
           "label": "إنشاء"
         },
@@ -12401,7 +12395,6 @@
         "title": "تعديل «{name}»"
       },
       "form": {
-        "cancelButton": "إلغاء",
         "errors": {
           "nameRequired": "الاسم مطلوب.",
           "promptRequired": "الموجّه مطلوب."
@@ -13075,6 +13068,9 @@
     "select": {
       "emptySet": "لم يتم العثور على عناصر",
       "invalidOption": "يرجى اختيار خيار صالح من القائمة"
+    },
+    "settingsHeader": {
+      "cancel": "إلغاء"
     },
     "table": {
       "alwaysShown": "معروض دائمًا",
@@ -13922,9 +13918,6 @@
       },
       "header": {
         "appFallbackName": "تطبيق خارجي",
-        "cancel": {
-          "label": "إلغاء"
-        },
         "createDescription": "أنشئ مهارة شخصية",
         "createForAppDescription": "أضف مهارة مؤسسة إلى التطبيق “{appName}”",
         "createTitle": "إنشاء مهارة",

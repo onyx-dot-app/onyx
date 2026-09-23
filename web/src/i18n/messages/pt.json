@@ -4159,9 +4159,6 @@
         }
       },
       "form": {
-        "cancel": {
-          "label": "Cancelar"
-        },
         "name": {
           "label": "Nome do grupo",
           "placeholder": "Nomeie seu grupo"
@@ -8657,9 +8654,6 @@
         }
       },
       "header": {
-        "cancel": {
-          "label": "Cancelar"
-        },
         "create": {
           "label": "Criar"
         },
@@ -12401,7 +12395,6 @@
         "title": "Editar \"{name}\""
       },
       "form": {
-        "cancelButton": "Cancelar",
         "errors": {
           "nameRequired": "O nome é obrigatório.",
           "promptRequired": "O prompt é obrigatório."
@@ -13075,6 +13068,9 @@
     "select": {
       "emptySet": "Nenhum item encontrado",
       "invalidOption": "Selecione uma opção válida da lista"
+    },
+    "settingsHeader": {
+      "cancel": "Cancelar"
     },
     "table": {
       "alwaysShown": "Sempre exibida",
@@ -13922,9 +13918,6 @@
       },
       "header": {
         "appFallbackName": "Aplicativo externo",
-        "cancel": {
-          "label": "Cancelar"
-        },
         "createDescription": "Crie uma habilidade pessoal",
         "createForAppDescription": "Adicione uma habilidade da organização ao aplicativo “{appName}”",
         "createTitle": "Criar habilidade",

@@ -86,7 +86,7 @@ export default function Page({
       <SettingsLayouts.Header
         icon={SvgSlack}
         title={t("edit.header.title")}
-        backButton
+        cancel
         divider
       />
       <SettingsLayouts.Body>

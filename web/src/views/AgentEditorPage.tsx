@@ -1370,46 +1370,38 @@ export default function AgentEditorPage({
                           ? t("editor.header.editTitle")
                           : t("editor.header.createTitle")
                       }
-                      rightChildren={
-                        <div className="flex gap-2">
+                      cancel
+                      actions={[
+                        <Tooltip
+                          key="save"
+                          tooltip={
+                            isSubmitting
+                              ? t("editor.saveTooltip.saving")
+                              : !isValid
+                                ? t("editor.saveTooltip.fixErrors")
+                                : !dirty
+                                  ? t("editor.saveTooltip.noChanges")
+                                  : hasUploadingFiles
+                                    ? t("editor.saveTooltip.uploading")
+                                    : undefined
+                          }
+                          side="bottom"
+                        >
                           <Button
-                            prominence="secondary"
-                            type="button"
-                            onClick={() => router.back()}
-                          >
-                            {t("editor.header.cancel.label")}
-                          </Button>
-                          <Tooltip
-                            tooltip={
-                              isSubmitting
-                                ? t("editor.saveTooltip.saving")
-                                : !isValid
-                                  ? t("editor.saveTooltip.fixErrors")
-                                  : !dirty
-                                    ? t("editor.saveTooltip.noChanges")
-                                    : hasUploadingFiles
-                                      ? t("editor.saveTooltip.uploading")
-                                      : undefined
+                            disabled={
+                              isSubmitting ||
+                              !isValid ||
+                              !dirty ||
+                              hasUploadingFiles
                             }
-                            side="bottom"
+                            type="submit"
                           >
-                            <Button
-                              disabled={
-                                isSubmitting ||
-                                !isValid ||
-                                !dirty ||
-                                hasUploadingFiles
-                              }
-                              type="submit"
-                            >
-                              {existingAgent
-                                ? t("editor.header.save.label")
-                                : t("editor.header.create.label")}
-                            </Button>
-                          </Tooltip>
-                        </div>
-                      }
-                      backButton
+                            {existingAgent
+                              ? t("editor.header.save.label")
+                              : t("editor.header.create.label")}
+                          </Button>
+                        </Tooltip>,
+                      ]}
                       divider
                     />
 

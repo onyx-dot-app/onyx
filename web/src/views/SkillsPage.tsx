@@ -289,8 +289,12 @@ export default function SkillsPage() {
         icon={SvgBlocks}
         title={t("page.header.title")}
         description={t("page.header.description")}
-        rightChildren={
-          <Popover open={createMenuOpen} onOpenChange={setCreateMenuOpen}>
+        actions={[
+          <Popover
+            key="primary"
+            open={createMenuOpen}
+            onOpenChange={setCreateMenuOpen}
+          >
             <Popover.Trigger asChild>
               <Button icon={SvgPlus}>
                 {t("page.createMenu.trigger.label")}
@@ -333,8 +337,8 @@ export default function SkillsPage() {
                 />
               </Popover.Menu>
             </Popover.Content>
-          </Popover>
-        }
+          </Popover>,
+        ]}
       >
         <InputTypeIn
           ref={searchInputRef}

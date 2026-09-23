@@ -4159,9 +4159,6 @@
         }
       },
       "form": {
-        "cancel": {
-          "label": "취소"
-        },
         "name": {
           "label": "그룹 이름",
           "placeholder": "그룹 이름을 입력하세요"
@@ -8657,9 +8654,6 @@
         }
       },
       "header": {
-        "cancel": {
-          "label": "취소"
-        },
         "create": {
           "label": "만들기"
         },
@@ -12401,7 +12395,6 @@
         "title": "\"{name}\" 편집"
       },
       "form": {
-        "cancelButton": "취소",
         "errors": {
           "nameRequired": "이름은 필수입니다.",
           "promptRequired": "프롬프트는 필수입니다."
@@ -13075,6 +13068,9 @@
     "select": {
       "emptySet": "항목을 찾을 수 없습니다",
       "invalidOption": "목록에서 유효한 옵션을 선택하세요"
+    },
+    "settingsHeader": {
+      "cancel": "취소"
     },
     "table": {
       "alwaysShown": "항상 표시",
@@ -13922,9 +13918,6 @@
       },
       "header": {
         "appFallbackName": "외부 앱",
-        "cancel": {
-          "label": "취소"
-        },
         "createDescription": "개인 스킬 만들기",
         "createForAppDescription": "앱 “{appName}”에 조직 스킬 추가",
         "createTitle": "스킬 만들기",

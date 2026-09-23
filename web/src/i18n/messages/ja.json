@@ -4159,9 +4159,6 @@
         }
       },
       "form": {
-        "cancel": {
-          "label": "キャンセル"
-        },
         "name": {
           "label": "グループ名",
           "placeholder": "グループ名を入力"
@@ -8657,9 +8654,6 @@
         }
       },
       "header": {
-        "cancel": {
-          "label": "キャンセル"
-        },
         "create": {
           "label": "作成"
         },
@@ -12401,7 +12395,6 @@
         "title": "「{name}」を編集"
       },
       "form": {
-        "cancelButton": "キャンセル",
         "errors": {
           "nameRequired": "名前は必須です。",
           "promptRequired": "プロンプトは必須です。"
@@ -13075,6 +13068,9 @@
     "select": {
       "emptySet": "項目が見つかりません",
       "invalidOption": "リストから有効なオプションを選択してください"
+    },
+    "settingsHeader": {
+      "cancel": "キャンセル"
     },
     "table": {
       "alwaysShown": "常に表示",
@@ -13922,9 +13918,6 @@
       },
       "header": {
         "appFallbackName": "外部アプリ",
-        "cancel": {
-          "label": "キャンセル"
-        },
         "createDescription": "個人スキルを作成",
         "createForAppDescription": "アプリ「{appName}」に組織スキルを追加",
         "createTitle": "スキルを作成",

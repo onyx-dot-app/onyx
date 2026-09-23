@@ -345,12 +345,16 @@ export default function Page({ params }: Props) {
         icon={SvgServer}
         title={guild?.guild_name || t("guilds.fallbackName", { id: guildId })}
         description={registeredText}
-        backButton
-        rightChildren={
-          <Button disabled={isUpdateDisabled} onClick={handleSaveChanges}>
+        cancel
+        actions={[
+          <Button
+            key="primary"
+            disabled={isUpdateDisabled}
+            onClick={handleSaveChanges}
+          >
             {t("guildDetail.updateButton.label")}
-          </Button>
-        }
+          </Button>,
+        ]}
       />
       <SettingsLayouts.Body>
         {/* Default Agent Selector */}
