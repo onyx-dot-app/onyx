@@ -52,7 +52,7 @@ def _normalize_csv_delimiter(csv_text: str) -> str:
     out = io.StringIO()
     try:
         csv.writer(out, lineterminator="\n").writerows(
-            csv.reader(io.StringIO(csv_text), delimiter=delimiter)
+            csv.reader(io.StringIO(csv_text, newline=""), delimiter=delimiter)
         )
     except csv.Error:
         logger.warning("Could not re-serialize CSV with delimiter %r", delimiter)

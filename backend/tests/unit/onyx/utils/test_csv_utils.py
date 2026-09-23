@@ -95,3 +95,23 @@ class TestDetectCsvDelimiter:
     def test_a_single_column_header_is_not_split(self) -> None:
         """csv.Sniffer splits `Note` on the `t` inside it; this must not."""
         assert detect_csv_delimiter("Note\nalpha\nbeta\n") == ","
+
+    def test_a_whitespace_only_line_is_not_a_row(self) -> None:
+        assert detect_csv_delimiter("Name;Region\nWidget;EU\n   \nGadget;US\n") == ";"
+
+    def test_a_comma_that_lines_up_is_kept(self) -> None:
+        """A `|` that occurs the same number of times in every row is data."""
+        assert detect_csv_delimiter("id,tags|x|y\n1,a|b|c\n2,d|e|f\n") == ","
+
+    def test_the_row_the_sample_cuts_is_left_out(self) -> None:
+        """Fewer than the sampled rows fit in the sample, so it ends inside a row."""
+        cell = "x" * 4000
+        text = "a;b;c\n" + "".join(f"{i};{cell};{cell}\n" for i in range(60))
+
+        assert detect_csv_delimiter(text) == ";"
+
+    def test_the_sample_can_end_inside_a_quoted_line_break(self) -> None:
+        cell = '"' + ("y" * 70 + "\n") * 60 + '"'
+        text = "a;b;c\n" + "".join(f"{i};{cell};end\n" for i in range(40))
+
+        assert detect_csv_delimiter(text) == ";"

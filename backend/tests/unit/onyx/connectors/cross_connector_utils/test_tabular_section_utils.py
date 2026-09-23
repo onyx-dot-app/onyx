@@ -168,6 +168,11 @@ class TestCsvDelimiterNormalization:
 
         assert self._stage(text) == self.EXPECTED
 
+    def test_bare_carriage_return_rows_are_staged_comma_separated(self) -> None:
+        text = "\r".join(self.ROWS) + "\r"
+
+        assert self._stage(text) == self.EXPECTED
+
     def test_a_single_column_csv_is_staged_unchanged(self) -> None:
         """Guard: a separator that does not line up across the rows is not one."""
         text = "Note\na; b\nc; d\n"
