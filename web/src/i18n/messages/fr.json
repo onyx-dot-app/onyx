@@ -909,6 +909,9 @@
         "sharepoint": {
           "description": "Intranet Microsoft"
         },
+        "onedrive": {
+          "description": "Stockage cloud Microsoft"
+        },
         "teams": {
           "description": "Discussions d'équipe Microsoft"
         },
