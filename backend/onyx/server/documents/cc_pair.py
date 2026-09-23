@@ -797,6 +797,11 @@ def get_cc_pair_indexing_errors(
     )
 
 
+# Off until query-time enforcement of data-access groups ships. While off, no
+# SYNC_RESTRICTED pair can be created, so none can exist without enforcement.
+DATA_ACCESS_RESTRICTION_ENFORCED = False
+
+
 def _validate_data_access_request(
     connector_id: int,
     metadata: ConnectorCredentialPairMetadata,
@@ -814,6 +819,11 @@ def _validate_data_access_request(
             )
         return
 
+    if not DATA_ACCESS_RESTRICTION_ENFORCED:
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+            "Restricted perm-synced connectors are not available yet.",
+        )
     if not get_security_settings().allow_connector_group_restrictions:
         raise OnyxError(
             OnyxErrorCode.FEATURE_NOT_AVAILABLE,

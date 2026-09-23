@@ -55,6 +55,7 @@ class _Env:
 def env() -> Iterator[_Env]:
     e = _Env()
     with (
+        patch(f"{MODULE}.DATA_ACCESS_RESTRICTION_ENFORCED", True),
         patch(
             f"{MODULE}.get_security_settings",
             side_effect=lambda: SimpleNamespace(
@@ -101,6 +102,15 @@ def test_other_access_types_without_groups_skip_the_gate(env: _Env) -> None:
     _validate_data_access_request(1, _metadata(AccessType.SYNC, []), USER, DB_SESSION)
     env.tier_check.assert_not_called()
     env.scope_check.assert_not_called()
+
+
+@pytest.mark.usefixtures("env")
+def test_rejects_until_enforcement_ships() -> None:
+    with patch(f"{MODULE}.DATA_ACCESS_RESTRICTION_ENFORCED", False):
+        _assert_rejected(
+            _metadata(AccessType.SYNC_RESTRICTED, [1]),
+            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+        )
 
 
 def test_rejects_when_workspace_toggle_is_off(env: _Env) -> None:
