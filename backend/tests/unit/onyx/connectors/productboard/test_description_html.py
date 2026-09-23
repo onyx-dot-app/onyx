@@ -9,15 +9,9 @@ def test_block_elements_do_not_run_together() -> None:
         "<ul><li>Item one</li><li>Item two</li></ul>"
     )
 
-    text = ProductboardConnector._parse_description_html(html)
-
-    assert "ReportRevenue" not in text
-    assert "Quarterly Report" in text
-    assert "Revenue rose." in text
-    assert "Item one" in text
-    assert "Item two" in text
-    # One line per block, the way the description reads.
-    assert len(text.splitlines()) == 5
+    assert ProductboardConnector._parse_description_html(html) == (
+        "Quarterly Report\nRevenue rose.\nCosts fell.\n- Item one\n- Item two"
+    )
 
 
 def test_an_empty_description_stays_empty() -> None:
