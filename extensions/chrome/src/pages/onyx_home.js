@@ -28,6 +28,12 @@ import {
   let iframeLoadTimeout;
   let iframeLoaded = false;
 
+  // Both iframes load the configured Onyx domain. Messages are only accepted
+  // from, and sent to, that origin. Throws if src is not a valid URL.
+  function getOnyxOrigin(iframe) {
+    return new URL(iframe.src).origin;
+  }
+
   initErrorModal();
 
   async function preloadChatInterface() {
@@ -164,7 +170,7 @@ import {
     if (preloadedIframe && preloadedIframe.contentWindow) {
       preloadedIframe.contentWindow.postMessage(
         { type: WEB_MESSAGE.PAGE_CHANGE, href: newSrc },
-        "*"
+        getOnyxOrigin(preloadedIframe)
       );
     } else {
       console.error("Preloaded iframe not available");
@@ -202,14 +208,14 @@ import {
   });
 
   // Only accept messages from one of our own Onyx iframes, and only when
-  // the sender origin matches that iframe's configured src (fails closed).
+  // the sender origin matches that iframe's src (fails closed).
   function isTrustedIframeMessage(event) {
     const frame = [mainIframe, preloadedIframe].find(
       (f) => f && f.contentWindow === event.source
     );
     if (!frame) return false;
     try {
-      return new URL(frame.src).origin === event.origin;
+      return getOnyxOrigin(frame) === event.origin;
     } catch {
       return false;
     }
