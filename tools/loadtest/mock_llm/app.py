@@ -167,8 +167,22 @@ def _last_user_text(messages: list[ChatMessage]) -> str:
 
 def _last_user_snippet(messages: list[ChatMessage]) -> str:
     """Text used to fill synthesized tool-call arguments (e.g. a search tool's
-    query), so a search tool call searches for what the user asked."""
-    return _question_from_message(_last_user_text(messages))[:200]
+    query), so a search tool call searches for what the user asked.
+
+    ONYX_MSG_CHARS pads a message with filler after the question, so cut at the
+    first sentence end or newline instead of taking a fixed-width slice. The
+    padding is identical for every user; searching it turns retrieval into a
+    cache hit."""
+    text = _last_user_text(messages)
+    question = _after_question_label(text)
+    if question is None:
+        head = text[:200].strip()
+        end = min(
+            (pos for pos in (head.find(mark) for mark in "?!.\n") if pos != -1),
+            default=-1,
+        )
+        question = head[: end + 1].strip() if end != -1 else head
+    return question[:200]
 
 
 # Stable phrases from Onyx's secondary-flow prompts whose LLM output feeds
@@ -196,30 +210,6 @@ def _after_question_label(text: str) -> str | None:
     return None
 
 
-def _question_from_prompt(text: str) -> str:
-    """The question inside a secondary-flow prompt. Templates put it last, so
-    an unlabelled prompt falls back to the tail."""
-    return _after_question_label(text) or text[-300:].strip()
-
-
-def _question_from_message(text: str) -> str:
-    """The question inside a chat message.
-
-    ONYX_MSG_CHARS pads messages with filler after the question, so cut at the
-    first sentence end rather than taking a fixed-width slice. Taking the tail,
-    or keeping the padding, would search text that is identical for every user
-    and turn retrieval into a cache hit."""
-    labelled = _after_question_label(text)
-    if labelled:
-        return labelled
-    head = text[:200].strip()
-    end = min(
-        (pos for pos in (head.find(mark) for mark in "?!.\n") if pos != -1),
-        default=-1,
-    )
-    return head[: end + 1].strip() if end != -1 else head
-
-
 def _is_echo_flow(messages: list[ChatMessage]) -> bool:
     for message in messages:
         if message.role != "system" or not isinstance(message.content, str):
@@ -230,7 +220,10 @@ def _is_echo_flow(messages: list[ChatMessage]) -> bool:
 
 
 def _echo_answer(messages: list[ChatMessage]) -> str:
-    return _question_from_prompt(_last_user_text(messages))
+    """Rephrase templates put the question last, so an unlabelled prompt falls
+    back to the tail."""
+    text = _last_user_text(messages)
+    return _after_question_label(text) or text[-300:].strip()
 
 
 def _synthesize_arguments(tool: ToolDefinition, snippet: str) -> str:
