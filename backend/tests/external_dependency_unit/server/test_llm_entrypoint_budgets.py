@@ -1,21 +1,26 @@
 """Admin token budgets apply to every entry point that spends LLM tokens.
 
-`POST /search` (used by the MCP server and the public API) and the Slack bot
-spent tokens without running `check_token_rate_limits`, so a caller over its
-budget in the web UI could keep spending through them. These tests put the
+`POST /search` (used by the MCP server and the public API), the Search UI and
+the Slack bot spent tokens without running `check_token_rate_limits`, so a
+caller over its budget in the web UI could keep spending through them. These
+tests put the
 tenant over a global budget in the real usage ledger and check that each entry
 point refuses before it resolves or calls an LLM.
 """
 
 from collections.abc import Callable, Generator
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fastapi.routing import APIRoute
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 import onyx.server.query_and_chat.token_limit as token_limit
+from ee.onyx.server.query_and_chat.models import SendSearchQueryRequest
+from ee.onyx.server.query_and_chat.search_backend import handle_send_search_message
 from onyx.configs.constants import TokenRateLimitScope
 from onyx.db.llm_usage import LLMUsageRecord
 from onyx.db.models import TokenRateLimit, User, UserUsage
@@ -29,14 +34,16 @@ from onyx.onyxbot.slack.models import (
     SlackMessageInfo,
     ThreadMessage,
 )
-from onyx.server.features.search.api import search
-from onyx.server.features.search.models import SearchRequest
+from onyx.server.api_key_usage import check_api_key_usage
+from onyx.server.features.search.api import router as search_router
+from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.tracing.flows import LLMFlow
 from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 
 pytestmark = pytest.mark.usefixtures("tenant_context")
 
 _HANDLE_REGULAR_ANSWER = "onyx.onyxbot.slack.handlers.handle_regular_answer"
+_SEARCH_BACKEND = "ee.onyx.server.query_and_chat.search_backend"
 _BUDGET_MESSAGE = "You've reached the usage budget for your organization."
 
 
@@ -98,29 +105,71 @@ def over_budget_user(
     db_session.commit()
 
 
-def test_search_refuses_over_budget_caller_before_llm(
-    db_session: Session, over_budget_user: User
+def _search_route_dependency_calls() -> list[Callable[..., object]]:
+    route = next(
+        r
+        for r in search_router.routes
+        if isinstance(r, APIRoute) and r.path == "/search"
+    )
+    return [dep.call for dep in route.dependant.dependencies if dep.call is not None]
+
+
+def test_search_checks_budget_before_counting_api_call(
+    over_budget_user: User,
 ) -> None:
-    with (
-        patch(
-            "onyx.server.features.search.api.get_default_llm",
-            side_effect=_fail_llm_resolution,
-        ),
-        pytest.raises(OnyxError) as exc_info,
-    ):
-        search(
-            request=SearchRequest(query="quarterly revenue"),
-            user=over_budget_user,
-            db_session=db_session,
-        )
+    calls = _search_route_dependency_calls()
+    assert calls.index(check_token_rate_limits) < calls.index(check_api_key_usage)
+
+    with pytest.raises(OnyxError) as exc_info:
+        check_token_rate_limits(over_budget_user)
 
     assert exc_info.value.error_code is OnyxErrorCode.RATE_LIMITED
     assert exc_info.value.extra is not None
     assert exc_info.value.extra["scope"] == TokenRateLimitScope.GLOBAL.value
 
 
-def test_slack_bot_replies_with_budget_message_instead_of_answering(
+def test_search_ui_refuses_over_budget_llm_search(
     db_session: Session, over_budget_user: User
+) -> None:
+    with (
+        patch(f"{_SEARCH_BACKEND}.get_default_llm", side_effect=_fail_llm_resolution),
+        patch(
+            f"{_SEARCH_BACKEND}.stream_search_query", side_effect=_fail_llm_resolution
+        ),
+        pytest.raises(OnyxError) as exc_info,
+    ):
+        handle_send_search_message(
+            request=SendSearchQueryRequest(
+                search_query="quarterly revenue", run_query_expansion=True
+            ),
+            user=over_budget_user,
+            db_session=db_session,
+        )
+
+    assert exc_info.value.error_code is OnyxErrorCode.RATE_LIMITED
+
+
+def test_search_ui_skips_budget_for_keyword_only_search(
+    db_session: Session, over_budget_user: User
+) -> None:
+    with (
+        patch(f"{_SEARCH_BACKEND}.get_default_llm", side_effect=_fail_llm_resolution),
+        patch(f"{_SEARCH_BACKEND}.stream_search_query") as mock_stream,
+        patch(f"{_SEARCH_BACKEND}.gather_search_stream") as mock_gather,
+    ):
+        response = handle_send_search_message(
+            request=SendSearchQueryRequest(search_query="quarterly revenue"),
+            user=over_budget_user,
+            db_session=db_session,
+        )
+
+    mock_stream.assert_called_once()
+    assert response is mock_gather.return_value
+
+
+@pytest.mark.parametrize("reply_fails", [False, True])
+def test_slack_bot_replies_with_budget_message_instead_of_answering(
+    db_session: Session, over_budget_user: User, reply_fails: bool
 ) -> None:
     persona = MagicMock()
     persona.id = 123
@@ -167,8 +216,12 @@ def test_slack_bot_replies_with_budget_message_instead_of_answering(
             f"{_HANDLE_REGULAR_ANSWER}.handle_stream_message_objects",
             side_effect=_fail_llm_resolution,
         ) as mock_stream,
-        patch(f"{_HANDLE_REGULAR_ANSWER}.respond_in_thread_or_channel") as mock_respond,
+        patch(
+            f"{_HANDLE_REGULAR_ANSWER}.respond_in_thread_or_channel",
+            side_effect=RuntimeError("slack down") if reply_fails else None,
+        ) as mock_respond,
         patch(f"{_HANDLE_REGULAR_ANSWER}.update_emote_react") as mock_update_react,
+        pytest.raises(RuntimeError) if reply_fails else nullcontext(),
     ):
         result = handle_regular_answer(
             message_info=message_info,
@@ -181,8 +234,10 @@ def test_slack_bot_replies_with_budget_message_instead_of_answering(
             feedback_reminder_id=None,
         )
 
-    assert result is True
+    mock_update_react.assert_called_once()
+    assert mock_update_react.call_args.kwargs["remove"] is True
     mock_stream.assert_not_called()
     mock_respond.assert_called_once()
     assert mock_respond.call_args.kwargs["text"] == _BUDGET_MESSAGE
-    assert mock_update_react.call_args.kwargs["remove"] is True
+    if not reply_fails:
+        assert result is True

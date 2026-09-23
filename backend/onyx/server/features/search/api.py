@@ -57,7 +57,12 @@ router = APIRouter(prefix="/search")
 
 @router.post(
     "",
-    dependencies=[Depends(require_vector_db), Depends(check_api_key_usage)],
+    # Budgets run before check_api_key_usage so rejected calls aren't counted.
+    dependencies=[
+        Depends(require_vector_db),
+        Depends(check_token_rate_limits),
+        Depends(check_api_key_usage),
+    ],
     tags=PUBLIC_API_TAGS,
 )
 def search(
@@ -74,10 +79,6 @@ def search(
     relevant first and are always filtered by the calling user's document
     permissions.
     """
-    # Query expansion and reranking spend LLM tokens, so the same budgets as
-    # chat apply.
-    check_token_rate_limits(user)
-
     # 1. Load persona
     persona = None
     if request.persona_id is not None:
