@@ -580,11 +580,7 @@ def test_form_encoded_refresh_error_is_logged_without_secrets(
 @pytest.mark.parametrize(
     ("expiry_offset_s", "expected_header"),
     [
-        # Winner already persisted a fresh token: hand its header back.
         (3600, "Bearer PERSISTED"),
-        # Winner still refreshing, so the stored token is expired and there is no
-        # fresh header yet: return None. The caller (MCPTool.run) then falls back
-        # to its existing header (which will 401 until the refresh lands).
         (-60, None),
     ],
 )
@@ -661,8 +657,6 @@ def test_sdk_auth_flow_single_flights_refresh_across_concurrent_calls(
 
     @asynccontextmanager
     async def _serializing_lock(*_args: Any, **_kwargs: Any) -> AsyncIterator[None]:
-        # Each flow runs on its own thread/event loop, so a blocking
-        # threading.Lock here mirrors the distributed lock's serialization.
         acquired = thread_lock.acquire(timeout=10)
         if not acquired:
             raise CacheLockAcquisitionError("held by a concurrent refresher")
@@ -681,7 +675,6 @@ def test_sdk_auth_flow_single_flights_refresh_across_concurrent_calls(
         body = parse_qs(request.content.decode()) if request.content else {}
         if body.get("grant_type") == ["refresh_token"]:
             refresh_posts.append(request)
-            # A refresh token is single-use: a second redemption must fail.
             if body["refresh_token"] != ["REFRESH_1"] or len(refresh_posts) > 1:
                 return httpx.Response(
                     400, json={"error": "invalid_grant"}, request=request

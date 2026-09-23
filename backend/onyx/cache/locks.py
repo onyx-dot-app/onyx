@@ -75,17 +75,12 @@ async def async_cache_shared_lock(
     wait_for_lock_s: float,
     logger: Logger | LoggerAdapter,
 ) -> AsyncGenerator[None, None]:
-    """Async variant of ``cache_shared_lock`` for event-loop callers.
+    """Async variant of ``cache_shared_lock``.
 
-    The backend lock operations are synchronous I/O (a Redis round trip, or
-    a Postgres session checkout + advisory-lock query). Worse, a Postgres
-    advisory lock binds to a SQLAlchemy session for its whole lifetime, so
-    acquire and release must run on the *same* thread. We therefore run both
-    on a dedicated single-worker executor: the event loop stays free while
-    the backend's own blocking acquire polls, and the session's thread
-    affinity is preserved.
-
-    Raises ``CacheLockAcquisitionError`` if not acquired within ``wait_for_lock_s``.
+    Backend lock ops are synchronous I/O, and a Postgres advisory lock binds
+    its session for the lock's lifetime, so acquire and release must run on
+    the same thread — hence a dedicated single-worker executor rather than
+    ``asyncio.to_thread``.
     """
 
     def acquire_in_worker() -> tuple[CacheLock, bool]:
@@ -99,18 +94,12 @@ async def async_cache_shared_lock(
     cancelled = False
     try:
         try:
-            # Shield so cancellation unwinds us but the worker's future
-            # survives — its result is needed below to release any lock it
-            # goes on to acquire.
             lock, acquired = await asyncio.shield(acquire_fut)
         except asyncio.CancelledError:
             cancelled = True
 
-            # The cancelled await abandons the future but the worker keeps
-            # running; if it acquires the lock after we unwind, nothing else
-            # would ever release it (a Postgres advisory lock has no lease).
-            # Queue a release on the same worker thread once acquire settles,
-            # then shut the executor down after it.
+            # Release any late-acquired lock on the worker thread — a
+            # Postgres advisory lock has no lease to free it otherwise.
             def release_late_acquire(
                 fut: asyncio.Future[tuple[CacheLock, bool]],
             ) -> None:

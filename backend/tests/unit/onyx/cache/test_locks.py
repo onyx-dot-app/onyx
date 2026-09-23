@@ -128,7 +128,6 @@ def test_async_lock_times_out_when_held(
     )
 
     async def run() -> None:
-        # Hold the lock via the fake directly so the helper must contend.
         assert fake.acquire(blocking=False)
         with pytest.raises(CacheLockAcquisitionError):
             async with locks_module.async_cache_shared_lock(
@@ -154,8 +153,6 @@ def test_async_lock_does_not_release_unowned_on_timeout(
                 "test-lock", 60.0, 0.1, logger
             ):
                 pass
-        # Still held by the original owner — the timed-out contender must
-        # not have released it.
         assert fake.owned()
 
     asyncio.run(run())
@@ -218,10 +215,7 @@ def test_async_lock_releases_late_acquire_after_cancellation(
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
-        # Let the worker win the lock after the waiter is gone; the helper's
-        # done callback must release it from the worker thread.
-        # release_calls counts this test's release + the worker's; the
-        # worker's is the one that proves the late-acquired lock was freed.
+        # release_calls also counts this test's own release of holder.
         releases_before = fake.release_calls
         fake.release()
         for _ in range(200):

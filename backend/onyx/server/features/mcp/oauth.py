@@ -718,9 +718,6 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
             await self._initialize()
             if not self.context.is_token_valid() and self.context.can_refresh_token():
                 try:
-                    # Async lock: this flow can run on a shared event loop
-                    # (e.g. the OAuth probe path), where a blocking acquire
-                    # would stall every coroutine — including the lock holder.
                     async with async_cache_shared_lock(
                         _refresh_lock_name(connection_config_id),
                         max_time_lock_held_s=_REFRESH_LOCK_LEASE_S,
