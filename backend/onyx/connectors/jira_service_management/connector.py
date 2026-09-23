@@ -83,10 +83,8 @@ class JiraServiceManagementConnector(JiraConnector):
         self.include_internal_comments = include_internal_comments
         self.include_attachments = include_attachments
         self._jsm_field_map: JsmFieldMap | None = None
-        # Ticket document IDs whose attachment listing failed this run. The
-        # slim pass admits nothing for these tickets, keeping the two ID
-        # sets in parity when no enumeration is available.
-        self._attachment_admission_failures: set[str] = set()
+        # Ticket document IDs whose attachment listing failed this run.
+        self._attachment_admission_failures: dict[str, Exception] = {}
         # Ticket document ID -> doc IDs of attachments that failed in the
         # main pass (download or content errors). The slim pass excludes
         # exactly these IDs so admitted IDs stay in exact parity with the
@@ -177,32 +175,10 @@ class JiraServiceManagementConnector(JiraConnector):
         try:
             attachments = self._fetch_issue_attachments(issue.key)
         except Exception as e:
-            # Listing failed entirely: record one failure for the issue's
-            # attachment set without losing the ticket itself.
+            # Preserve the ticket while making the unavailable attachment set
+            # fatal to the later slim enumeration.
             logger.exception("Failed to list attachments for %s", issue.key)
-            return [
-                ConnectorFailure(
-                    failed_document=DocumentFailure(
-                        document_id=f"{ticket_document_id}/attachments",
-                        document_link=build_jira_url(self.jira_base, issue.key),
-                    ),
-                    failure_message=(
-                        f"Failed to list attachments for JSM issue {issue.key}"
-                    ),
-                    exception=e,
-                )
-            ]
-
-        try:
-            attachments = self._fetch_issue_attachments(issue.key)
-        except Exception as e:
-            # Listing failed entirely: record one failure for the issue's
-            # attachment set without losing the ticket itself. The slim pass
-            # admits no attachment IDs when listing fails (it also records
-            # the failure and emits nothing), so the two ID sets stay in
-            # exact parity and pruning never acts on a partial enumeration.
-            logger.exception("Failed to list attachments for %s", issue.key)
-            self._attachment_admission_failures.add(ticket_document_id)
+            self._attachment_admission_failures[ticket_document_id] = e
             return [
                 ConnectorFailure(
                     failed_document=DocumentFailure(
@@ -221,7 +197,7 @@ class JiraServiceManagementConnector(JiraConnector):
         # produced a main-pass document (full/slim parity): extra slim docs
         # would become permanent ``chunk_count IS NULL`` rows, and excluding
         # only the failed IDs keeps healthy siblings unaffected.
-        self._attachment_admission_failures.discard(ticket_document_id)
+        self._attachment_admission_failures.pop(ticket_document_id, None)
         outputs: list[Document | ConnectorFailure] = []
         failed_doc_ids: set[str] = set()
         for attachment in attachments:
@@ -233,9 +209,7 @@ class JiraServiceManagementConnector(JiraConnector):
                 ticket_document_id=ticket_document_id,
             )
             if isinstance(output, ConnectorFailure):
-                failed_doc_ids.add(
-                    f"{ticket_document_id}/attachment/{attachment_id}"
-                )
+                failed_doc_ids.add(f"{ticket_document_id}/attachment/{attachment_id}")
             outputs.append(output)
         if failed_doc_ids:
             self._failed_attachment_doc_ids[ticket_document_id] = failed_doc_ids
@@ -325,7 +299,9 @@ class JiraServiceManagementConnector(JiraConnector):
             id=doc_id,
             source=self.document_source,
             semantic_identifier=(
-                f"{issue.key} attachment: {filename}" if filename else f"{issue.key} attachment {attachment_id}"
+                f"{issue.key} attachment: {filename}"
+                if filename
+                else f"{issue.key} attachment {attachment_id}"
             ),
             sections=sections,
             parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
@@ -347,36 +323,21 @@ class JiraServiceManagementConnector(JiraConnector):
         if not self.include_attachments:
             return []
 
-        # Full/slim parity guard, two layers:
-        # 1. When the listing failed in the main pass (ticket-level mark),
-        #    no enumeration is trustworthy this run — admit nothing.
-        # 2. Attachments that failed individually in the main pass (download
-        #    or content errors) are excluded by doc ID, so admitted IDs match
-        #    the documents the main pass actually produced. Healthy siblings
-        #    are unaffected.
-        if ticket_document_id in self._attachment_admission_failures:
-            logger.warning(
-                "Skipping slim admission for %s: attachment listing failed in "
-                "the main pass for this issue",
+        listing_error = self._attachment_admission_failures.get(ticket_document_id)
+        if listing_error is not None:
+            logger.error(
+                "Attachment enumeration failed in the main pass for %s",
                 issue.key,
             )
-            return []
-        failed_ids = self._failed_attachment_doc_ids.get(
-            ticket_document_id, set()
-        )
+            raise listing_error
+        failed_ids = self._failed_attachment_doc_ids.get(ticket_document_id, set())
 
         try:
             attachments = self._fetch_issue_attachments(issue.key)
-        except Exception:
-            # Mirrors the main pass: when listing fails, no attachment IDs
-            # are admitted there either (the whole set is recorded as a
-            # failure), so emitting nothing here keeps the ID sets aligned.
-            # The failure is logged loudly (and recorded for the main pass
-            # set as well) rather than silently treated as "no attachments",
-            # so pruning can never act on an unavailable enumeration.
+        except Exception as e:
             logger.exception("Failed to list attachment slim docs for %s", issue.key)
-            self._attachment_admission_failures.add(ticket_document_id)
-            return []
+            self._attachment_admission_failures[ticket_document_id] = e
+            raise
 
         external_access = (
             self._get_project_permissions(project_key)
