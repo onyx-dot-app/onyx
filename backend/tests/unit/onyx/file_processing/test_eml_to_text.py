@@ -144,3 +144,27 @@ def test_multipart_alternative_reads_the_plain_part() -> None:
 
     assert "Quarterly revenue rose to 12.4 million euros." in text
     assert "ignored" not in text
+
+
+def test_a_text_attachment_does_not_replace_an_html_body() -> None:
+    """The attachment is indexed as before, and the HTML body next to it."""
+    raw = (
+        _HEADERS
+        + 'Content-Type: multipart/mixed; boundary="b1"\r\n\r\n'
+        + "--b1\r\n"
+        + "Content-Type: text/html; charset=utf-8\r\n\r\n"
+        + "<p>The body of the mail.</p>\r\n"
+        + "--b1\r\n"
+        + "Content-Type: text/plain; charset=utf-8\r\n"
+        + 'Content-Disposition: attachment; filename="notes.txt"\r\n\r\n'
+        + "Notes from the attachment.\r\n"
+        + "--b1--\r\n"
+    ).encode()
+
+    text = eml_to_text(io.BytesIO(raw))
+
+    assert "The body of the mail." in text
+    assert "Notes from the attachment." in text
+    assert text.index("The body of the mail.") < text.index(
+        "Notes from the attachment."
+    )

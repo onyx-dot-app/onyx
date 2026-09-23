@@ -765,6 +765,7 @@ def eml_to_text(file: IO[Any]) -> str:
 
     text_content = []
     html_content = []
+    attachment_text = []
     for part in message.walk():
         content_type = part.get_content_type()
         if not content_type.startswith("text/"):
@@ -779,7 +780,12 @@ def eml_to_text(file: IO[Any]) -> str:
             logger.warning("Unexpected payload type: %s", type(payload))
             continue
 
-        if content_type.startswith("text/plain"):
+        # An attached text file is indexed with the mail, as before, but it is
+        # not the body, so it cannot stand in for a missing plain-text part.
+        if part.get_content_disposition() == "attachment":
+            if content_type.startswith("text/plain"):
+                attachment_text.append(decoded)
+        elif content_type.startswith("text/plain"):
             text_content.append(decoded)
         elif content_type == "text/html":
             html_content.append(decoded)
@@ -789,7 +795,7 @@ def eml_to_text(file: IO[Any]) -> str:
     if not any(part.strip() for part in text_content) and html_content:
         text_content = [parse_html_page_basic(part) for part in html_content]
 
-    return TEXT_SECTION_SEPARATOR.join(text_content)
+    return TEXT_SECTION_SEPARATOR.join(text_content + attachment_text)
 
 
 def epub_to_text(file: IO[Any]) -> str:
