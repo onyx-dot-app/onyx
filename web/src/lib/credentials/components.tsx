@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
 import { Button, Card, Modal, Text } from "@opal/components";
 import { ContentAction, Section, toast } from "@opal/layouts";
-import { SvgKey } from "@opal/icons";
+import { SvgChevronDown, SvgChevronUp, SvgKey } from "@opal/icons";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import {
   EE_ENABLED,
@@ -57,6 +57,7 @@ export function CredentialsConfigurer({
   const t = useTranslations("admin.connectorsList");
   const tCredentials = useTranslations("admin.credentials");
   const { appName } = useSettings();
+  const [open, setOpen] = useState(false);
   const [credentialCreationMethod, setCredentialCreationMethod] =
     useState<CredentialCreationMethod | null>(null);
   const [currentPageUrl, setCurrentPageUrl] = useState<string | null>(null);
@@ -176,15 +177,39 @@ export function CredentialsConfigurer({
     }
   };
 
+  const header = (
+    <ContentAction
+      title={tCredentials("configurer.title")}
+      description={tCredentials("configurer.description", { appName })}
+      sizePreset="main-content"
+      variant="section"
+      rightChildren={
+        <Button
+          icon={open ? SvgChevronUp : SvgChevronDown}
+          prominence="tertiary"
+          aria-label={
+            open
+              ? tCredentials("configurer.closeButton.ariaLabel")
+              : tCredentials("configurer.openButton.ariaLabel")
+          }
+          onClick={() => setOpen((current) => !current)}
+        />
+      }
+    />
+  );
+
+  if (!open) {
+    return (
+      <Card border="solid" rounding={4} padding={6}>
+        {header}
+      </Card>
+    );
+  }
+
   return (
     <Card border="solid" rounding={4} padding={6}>
       <Section gap={4} alignItems="start" width="full">
-        <ContentAction
-          title={tCredentials("configurer.title")}
-          description={tCredentials("configurer.description", { appName })}
-          sizePreset="main-content"
-          variant="section"
-        />
+        {header}
 
         <ModifyCredential
           showIfEmpty

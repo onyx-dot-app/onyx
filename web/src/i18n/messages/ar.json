@@ -3198,8 +3198,14 @@
         }
       },
       "configurer": {
-        "title": "حساب المصادقة",
-        "description": "استخدم حساب خدمة مشتركًا. يقوم {appName} بفهرسة المحتوى بصفة هذا الحساب."
+        "closeButton": {
+          "ariaLabel": "إخفاء بيانات الاعتماد"
+        },
+        "description": "استخدم حساب خدمة مشتركًا. يقوم {appName} بفهرسة المحتوى بصفة هذا الحساب.",
+        "openButton": {
+          "ariaLabel": "إظهار بيانات الاعتماد"
+        },
+        "title": "حساب المصادقة"
       },
       "create": {
         "createButton": {

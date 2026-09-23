@@ -3198,8 +3198,14 @@
         }
       },
       "configurer": {
-        "title": "Authentication Account",
-        "description": "Use a shared service account. {appName} indexes content as this account."
+        "closeButton": {
+          "ariaLabel": "Hide credentials"
+        },
+        "description": "Use a shared service account. {appName} indexes content as this account.",
+        "openButton": {
+          "ariaLabel": "Show credentials"
+        },
+        "title": "Authentication Account"
       },
       "create": {
         "createButton": {

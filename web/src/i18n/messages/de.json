@@ -3198,8 +3198,14 @@
         }
       },
       "configurer": {
-        "title": "Authentifizierungskonto",
-        "description": "Verwenden Sie ein gemeinsames Dienstkonto. {appName} indexiert Inhalte als dieses Konto."
+        "closeButton": {
+          "ariaLabel": "Anmeldedaten ausblenden"
+        },
+        "description": "Verwenden Sie ein gemeinsames Dienstkonto. {appName} indexiert Inhalte als dieses Konto.",
+        "openButton": {
+          "ariaLabel": "Anmeldedaten anzeigen"
+        },
+        "title": "Authentifizierungskonto"
       },
       "create": {
         "createButton": {

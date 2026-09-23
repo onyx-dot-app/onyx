@@ -3198,8 +3198,14 @@
         }
       },
       "configurer": {
-        "title": "Cuenta de autenticación",
-        "description": "Usa una cuenta de servicio compartida. {appName} indexa el contenido como esta cuenta."
+        "closeButton": {
+          "ariaLabel": "Ocultar credenciales"
+        },
+        "description": "Usa una cuenta de servicio compartida. {appName} indexa el contenido como esta cuenta.",
+        "openButton": {
+          "ariaLabel": "Mostrar credenciales"
+        },
+        "title": "Cuenta de autenticación"
       },
       "create": {
         "createButton": {

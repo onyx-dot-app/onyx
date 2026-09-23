@@ -3198,8 +3198,14 @@
         }
       },
       "configurer": {
-        "title": "인증 계정",
-        "description": "공유 서비스 계정을 사용합니다. {appName}은(는) 이 계정으로 콘텐츠를 색인합니다."
+        "closeButton": {
+          "ariaLabel": "자격 증명 숨기기"
+        },
+        "description": "공유 서비스 계정을 사용합니다. {appName}은(는) 이 계정으로 콘텐츠를 색인합니다.",
+        "openButton": {
+          "ariaLabel": "자격 증명 표시"
+        },
+        "title": "인증 계정"
       },
       "create": {
         "createButton": {

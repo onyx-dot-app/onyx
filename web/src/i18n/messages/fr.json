@@ -3198,8 +3198,14 @@
         }
       },
       "configurer": {
-        "title": "Compte d'authentification",
-        "description": "Utilisez un compte de service partagé. {appName} indexe le contenu en tant que ce compte."
+        "closeButton": {
+          "ariaLabel": "Masquer les identifiants"
+        },
+        "description": "Utilisez un compte de service partagé. {appName} indexe le contenu en tant que ce compte.",
+        "openButton": {
+          "ariaLabel": "Afficher les identifiants"
+        },
+        "title": "Compte d'authentification"
       },
       "create": {
         "createButton": {

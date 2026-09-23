@@ -3198,8 +3198,14 @@
         }
       },
       "configurer": {
-        "title": "認証アカウント",
-        "description": "共有サービスアカウントを使用します。{appName} はこのアカウントとしてコンテンツをインデックスします。"
+        "closeButton": {
+          "ariaLabel": "認証情報を非表示"
+        },
+        "description": "共有サービスアカウントを使用します。{appName} はこのアカウントとしてコンテンツをインデックスします。",
+        "openButton": {
+          "ariaLabel": "認証情報を表示"
+        },
+        "title": "認証アカウント"
       },
       "create": {
         "createButton": {

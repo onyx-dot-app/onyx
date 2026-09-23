@@ -3198,8 +3198,14 @@
         }
       },
       "configurer": {
-        "title": "认证账户",
-        "description": "使用共享服务账户。{appName} 将以此账户身份索引内容。"
+        "closeButton": {
+          "ariaLabel": "隐藏凭据"
+        },
+        "description": "使用共享服务账户。{appName} 将以此账户身份索引内容。",
+        "openButton": {
+          "ariaLabel": "显示凭据"
+        },
+        "title": "认证账户"
       },
       "create": {
         "createButton": {
