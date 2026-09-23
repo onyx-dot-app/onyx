@@ -324,17 +324,6 @@
       "temperature": true,
       "tool_call": true
     },
-    "embed-english-light-v2.0": {
-      "cost": {
-        "input": 0.09999999999999999,
-        "output": 0.0
-      },
-      "limit": {
-        "context": 1024
-      },
-      "mode": "embedding",
-      "name": "embed-english-light-v2.0"
-    },
     "embed-english-light-v3.0": {
       "cost": {
         "input": 0.09999999999999999,
@@ -345,17 +334,6 @@
       },
       "mode": "embedding",
       "name": "embed-english-light-v3.0"
-    },
-    "embed-english-v2.0": {
-      "cost": {
-        "input": 0.09999999999999999,
-        "output": 0.0
-      },
-      "limit": {
-        "context": 4096
-      },
-      "mode": "embedding",
-      "name": "embed-english-v2.0"
     },
     "embed-english-v3.0": {
       "cost": {
@@ -379,17 +357,6 @@
       },
       "mode": "embedding",
       "name": "embed-multilingual-light-v3.0"
-    },
-    "embed-multilingual-v2.0": {
-      "cost": {
-        "input": 0.09999999999999999,
-        "output": 0.0
-      },
-      "limit": {
-        "context": 768
-      },
-      "mode": "embedding",
-      "name": "embed-multilingual-v2.0"
     },
     "embed-multilingual-v3.0": {
       "cost": {
@@ -444,18 +411,6 @@
       "mode": "ocr",
       "name": "parse-v5.0"
     },
-    "rerank-english-v2.0": {
-      "cost": {
-        "input": 0.0,
-        "output": 0.0
-      },
-      "limit": {
-        "context": 4096,
-        "output": 4096
-      },
-      "mode": "rerank",
-      "name": "rerank-english-v2.0"
-    },
     "rerank-english-v3.0": {
       "cost": {
         "input": 0.0,
@@ -467,18 +422,6 @@
       },
       "mode": "rerank",
       "name": "rerank-english-v3.0"
-    },
-    "rerank-multilingual-v2.0": {
-      "cost": {
-        "input": 0.0,
-        "output": 0.0
-      },
-      "limit": {
-        "context": 4096,
-        "output": 4096
-      },
-      "mode": "rerank",
-      "name": "rerank-multilingual-v2.0"
     },
     "rerank-multilingual-v3.0": {
       "cost": {

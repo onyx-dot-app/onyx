@@ -106,7 +106,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "DeepSeek V4 Pro",
       "open_weights": true,
       "reasoning": true,
@@ -516,7 +515,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "MiniMax-M2.7",
       "open_weights": true,
       "reasoning": true,

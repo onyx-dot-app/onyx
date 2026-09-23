@@ -70,7 +70,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Devstral 2",
       "open_weights": true,
       "reasoning": false,
@@ -127,7 +126,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Devstral Medium",
       "open_weights": true,
       "reasoning": false,
@@ -184,7 +182,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Devstral Small 2505",
       "open_weights": true,
       "reasoning": false,
@@ -212,7 +209,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Devstral Small",
       "open_weights": true,
       "reasoning": false,
@@ -241,7 +237,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Devstral Small 2",
       "open_weights": true,
       "reasoning": false,
@@ -416,7 +411,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Mistral Large 2.1",
       "open_weights": true,
       "reasoning": false,
@@ -502,7 +496,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Mistral Medium 3",
       "open_weights": false,
       "reasoning": false,
@@ -530,7 +523,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Mistral Medium 3.1",
       "open_weights": false,
       "reasoning": false,
@@ -634,10 +626,6 @@
       "release_date": "2024-07-01",
       "temperature": true,
       "tool_call": true
-    },
-    "mistral-ocr-2505-completion": {
-      "mode": "ocr",
-      "name": "mistral-ocr-2505-completion"
     },
     "mistral-ocr-2512": {
       "mode": "ocr",
@@ -771,7 +759,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Mistral 7B",
       "open_weights": true,
       "reasoning": false,
@@ -827,7 +814,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Mixtral 8x22B",
       "open_weights": true,
       "reasoning": false,
@@ -854,7 +840,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Mixtral 8x7B",
       "open_weights": true,
       "reasoning": false,

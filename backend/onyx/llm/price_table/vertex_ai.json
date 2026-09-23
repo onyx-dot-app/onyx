@@ -735,6 +735,14 @@
       "temperature": true,
       "tool_call": true
     },
+    "gemini-2.5-flash-native-audio": {
+      "cost": {
+        "input": 0.5,
+        "output": 2.0
+      },
+      "mode": "realtime",
+      "name": "gemini-2.5-flash-native-audio"
+    },
     "gemini-2.5-flash-preview-tts": {
       "cost": {
         "input": 0.5,
@@ -1513,7 +1521,6 @@
     },
     "gemini-live-2.5-flash-preview-native-audio-09-2025": {
       "cost": {
-        "cache_read": 0.075,
         "input": 0.5,
         "output": 2.0
       },
@@ -1912,92 +1919,6 @@
       },
       "mode": "image_generation",
       "name": "vertex_ai/gemini-3.1-flash-lite-image"
-    },
-    "vertex_ai/imagegeneration@006": {
-      "cost": {
-        "image": 0.02
-      },
-      "mode": "image_generation",
-      "name": "vertex_ai/imagegeneration@006"
-    },
-    "vertex_ai/imagen-3.0-capability-001": {
-      "cost": {
-        "image": 0.04
-      },
-      "mode": "image_generation",
-      "name": "vertex_ai/imagen-3.0-capability-001"
-    },
-    "vertex_ai/imagen-3.0-fast-generate-001": {
-      "cost": {
-        "image": 0.02
-      },
-      "mode": "image_generation",
-      "name": "vertex_ai/imagen-3.0-fast-generate-001"
-    },
-    "vertex_ai/imagen-3.0-generate-001": {
-      "cost": {
-        "image": 0.04
-      },
-      "mode": "image_generation",
-      "name": "vertex_ai/imagen-3.0-generate-001"
-    },
-    "vertex_ai/imagen-3.0-generate-002": {
-      "cost": {
-        "image": 0.04
-      },
-      "mode": "image_generation",
-      "name": "vertex_ai/imagen-3.0-generate-002"
-    },
-    "vertex_ai/imagen-4.0-fast-generate-001": {
-      "cost": {
-        "image": 0.02
-      },
-      "mode": "image_generation",
-      "name": "vertex_ai/imagen-4.0-fast-generate-001"
-    },
-    "vertex_ai/imagen-4.0-generate-001": {
-      "cost": {
-        "image": 0.04
-      },
-      "mode": "image_generation",
-      "name": "vertex_ai/imagen-4.0-generate-001"
-    },
-    "vertex_ai/imagen-4.0-ultra-generate-001": {
-      "cost": {
-        "image": 0.06
-      },
-      "mode": "image_generation",
-      "name": "vertex_ai/imagen-4.0-ultra-generate-001"
-    },
-    "vertex_ai/veo-2.0-generate-001": {
-      "cost": {
-        "second": 0.35
-      },
-      "limit": {
-        "context": 1024
-      },
-      "mode": "video_generation",
-      "name": "vertex_ai/veo-2.0-generate-001"
-    },
-    "vertex_ai/veo-3.0-fast-generate-001": {
-      "cost": {
-        "second": 0.15
-      },
-      "limit": {
-        "context": 1024
-      },
-      "mode": "video_generation",
-      "name": "vertex_ai/veo-3.0-fast-generate-001"
-    },
-    "vertex_ai/veo-3.0-generate-001": {
-      "cost": {
-        "second": 0.4
-      },
-      "limit": {
-        "context": 1024
-      },
-      "mode": "video_generation",
-      "name": "vertex_ai/veo-3.0-generate-001"
     },
     "vertex_ai/veo-3.1-fast-generate-001": {
       "cost": {

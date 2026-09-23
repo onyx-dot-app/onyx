@@ -398,6 +398,35 @@
       "temperature": true,
       "tool_call": true
     },
+    "google/gemma-4-26B-A4B-it": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.05,
+        "input": 0.1,
+        "output": 0.3
+      },
+      "family": "gemma",
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Gemma 4 26B A4B",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-04-02",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "google/gemma-4-31B-it": {
       "attachment": true,
       "cost": {

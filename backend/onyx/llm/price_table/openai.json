@@ -1,10 +1,6 @@
 {
   "aliases": {},
   "models": {
-    "1024-x-1024/dall-e-2": {
-      "mode": "image_generation",
-      "name": "1024-x-1024/dall-e-2"
-    },
     "1024-x-1024/gpt-image-1.5": {
       "cost": {
         "image_input": 0.009
@@ -47,14 +43,6 @@
       "mode": "image_generation",
       "name": "1536-x-1024/gpt-image-1.5-2025-12-16"
     },
-    "256-x-256/dall-e-2": {
-      "mode": "image_generation",
-      "name": "256-x-256/dall-e-2"
-    },
-    "512-x-512/dall-e-2": {
-      "mode": "image_generation",
-      "name": "512-x-512/dall-e-2"
-    },
     "chatgpt-image-latest": {
       "attachment": true,
       "cost": {
@@ -85,20 +73,6 @@
       "release_date": "2025-12-16",
       "temperature": false,
       "tool_call": false
-    },
-    "dall-e-2": {
-      "cost": {
-        "image_input": 0.02
-      },
-      "mode": "image_generation",
-      "name": "dall-e-2"
-    },
-    "dall-e-3": {
-      "cost": {
-        "image_input": 0.04
-      },
-      "mode": "image_generation",
-      "name": "dall-e-3"
     },
     "gpt-3.5-turbo": {
       "attachment": false,
@@ -434,19 +408,6 @@
       "temperature": true,
       "tool_call": true
     },
-    "gpt-4o-mini-realtime-preview": {
-      "cost": {
-        "cache_read": 0.3,
-        "input": 0.6,
-        "output": 2.4
-      },
-      "limit": {
-        "context": 128000,
-        "output": 4096
-      },
-      "mode": "realtime",
-      "name": "gpt-4o-mini-realtime-preview"
-    },
     "gpt-4o-mini-realtime-preview-2024-12-17": {
       "cost": {
         "cache_read": 0.3,
@@ -508,15 +469,6 @@
       "mode": "audio_speech",
       "name": "gpt-4o-mini-tts"
     },
-    "gpt-4o-mini-tts-2025-03-20": {
-      "cost": {
-        "input": 0.6,
-        "output": 10.0,
-        "second": 0.00025
-      },
-      "mode": "audio_speech",
-      "name": "gpt-4o-mini-tts-2025-03-20"
-    },
     "gpt-4o-mini-tts-2025-12-15": {
       "cost": {
         "input": 0.6,
@@ -525,45 +477,6 @@
       },
       "mode": "audio_speech",
       "name": "gpt-4o-mini-tts-2025-12-15"
-    },
-    "gpt-4o-realtime-preview": {
-      "cost": {
-        "cache_read": 2.5,
-        "input": 5.0,
-        "output": 20.0
-      },
-      "limit": {
-        "context": 128000,
-        "output": 4096
-      },
-      "mode": "realtime",
-      "name": "gpt-4o-realtime-preview"
-    },
-    "gpt-4o-realtime-preview-2024-12-17": {
-      "cost": {
-        "cache_read": 2.5,
-        "input": 5.0,
-        "output": 20.0
-      },
-      "limit": {
-        "context": 128000,
-        "output": 4096
-      },
-      "mode": "realtime",
-      "name": "gpt-4o-realtime-preview-2024-12-17"
-    },
-    "gpt-4o-realtime-preview-2025-06-03": {
-      "cost": {
-        "cache_read": 2.5,
-        "input": 5.0,
-        "output": 20.0
-      },
-      "limit": {
-        "context": 128000,
-        "output": 4096
-      },
-      "mode": "realtime",
-      "name": "gpt-4o-realtime-preview-2025-06-03"
     },
     "gpt-4o-transcribe": {
       "cost": {
@@ -742,6 +655,7 @@
       "reasoning": true,
       "release_date": "2025-11-13",
       "structured_output": true,
+      "supports_none_reasoning_effort": true,
       "temperature": true,
       "tool_call": true
     },
@@ -773,6 +687,7 @@
       "reasoning": true,
       "release_date": "2025-12-11",
       "structured_output": true,
+      "supports_none_reasoning_effort": true,
       "temperature": true,
       "tool_call": true
     },
@@ -797,7 +712,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-5.2 Chat",
       "open_weights": false,
       "reasoning": true,
@@ -858,7 +772,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-5.3 Chat (latest)",
       "open_weights": false,
       "reasoning": false,
@@ -976,6 +889,7 @@
       "reasoning": true,
       "release_date": "2026-03-05",
       "structured_output": true,
+      "supports_none_reasoning_effort": true,
       "temperature": true,
       "tool_call": true
     },
@@ -1007,6 +921,7 @@
       "reasoning": true,
       "release_date": "2026-03-17",
       "structured_output": true,
+      "supports_none_reasoning_effort": true,
       "temperature": true,
       "tool_call": true
     },
@@ -1038,6 +953,7 @@
       "reasoning": true,
       "release_date": "2026-03-17",
       "structured_output": true,
+      "supports_none_reasoning_effort": true,
       "temperature": true,
       "tool_call": true
     },
@@ -1130,6 +1046,7 @@
       "reasoning": true,
       "release_date": "2026-04-23",
       "structured_output": true,
+      "supports_none_reasoning_effort": true,
       "temperature": false,
       "tool_call": true
     },
@@ -1226,6 +1143,7 @@
       "reasoning": true,
       "release_date": "2026-07-09",
       "structured_output": true,
+      "supports_none_reasoning_effort": true,
       "temperature": false,
       "tool_call": true
     },
@@ -1277,6 +1195,7 @@
       "reasoning": true,
       "release_date": "2026-07-09",
       "structured_output": true,
+      "supports_none_reasoning_effort": true,
       "temperature": false,
       "tool_call": true
     },
@@ -1328,6 +1247,7 @@
       "reasoning": true,
       "release_date": "2026-07-09",
       "structured_output": true,
+      "supports_none_reasoning_effort": true,
       "temperature": false,
       "tool_call": true
     },
@@ -1379,6 +1299,7 @@
       "reasoning": true,
       "release_date": "2026-07-09",
       "structured_output": true,
+      "supports_none_reasoning_effort": true,
       "temperature": false,
       "tool_call": true
     },
@@ -1481,6 +1402,7 @@
       "reasoning": true,
       "release_date": "2026-09-22",
       "structured_output": true,
+      "supports_none_reasoning_effort": true,
       "temperature": false,
       "tool_call": true
     },
@@ -1532,6 +1454,7 @@
       "reasoning": true,
       "release_date": "2026-09-22",
       "structured_output": true,
+      "supports_none_reasoning_effort": true,
       "temperature": false,
       "tool_call": true
     },
@@ -1832,19 +1755,6 @@
       "mode": "realtime",
       "name": "gpt-realtime-mini"
     },
-    "gpt-realtime-mini-2025-10-06": {
-      "cost": {
-        "cache_read": 0.06,
-        "input": 0.6,
-        "output": 2.4
-      },
-      "limit": {
-        "context": 128000,
-        "output": 4096
-      },
-      "mode": "realtime",
-      "name": "gpt-realtime-mini-2025-10-06"
-    },
     "gpt-realtime-mini-2025-12-15": {
       "cost": {
         "cache_read": 0.06,
@@ -1882,18 +1792,6 @@
       },
       "mode": "audio_transcription",
       "name": "gpt-transcribe"
-    },
-    "hd/1024-x-1024/dall-e-3": {
-      "mode": "image_generation",
-      "name": "hd/1024-x-1024/dall-e-3"
-    },
-    "hd/1024-x-1792/dall-e-3": {
-      "mode": "image_generation",
-      "name": "hd/1024-x-1792/dall-e-3"
-    },
-    "hd/1792-x-1024/dall-e-3": {
-      "mode": "image_generation",
-      "name": "hd/1792-x-1024/dall-e-3"
     },
     "high/1024-x-1024/gpt-image-1": {
       "cost": {
@@ -2345,10 +2243,6 @@
       "mode": "video_generation",
       "name": "sora-2-pro-high-res"
     },
-    "standard/1024-x-1024/dall-e-3": {
-      "mode": "image_generation",
-      "name": "standard/1024-x-1024/dall-e-3"
-    },
     "standard/1024-x-1024/gpt-image-1.5": {
       "cost": {
         "image_input": 0.009
@@ -2377,10 +2271,6 @@
       "mode": "image_generation",
       "name": "standard/1024-x-1536/gpt-image-1.5-2025-12-16"
     },
-    "standard/1024-x-1792/dall-e-3": {
-      "mode": "image_generation",
-      "name": "standard/1024-x-1792/dall-e-3"
-    },
     "standard/1536-x-1024/gpt-image-1.5": {
       "cost": {
         "image_input": 0.013
@@ -2394,10 +2284,6 @@
       },
       "mode": "image_generation",
       "name": "standard/1536-x-1024/gpt-image-1.5-2025-12-16"
-    },
-    "standard/1792-x-1024/dall-e-3": {
-      "mode": "image_generation",
-      "name": "standard/1792-x-1024/dall-e-3"
     },
     "text-embedding-3-large": {
       "attachment": false,
@@ -2490,42 +2376,6 @@
       },
       "mode": "embedding",
       "name": "text-embedding-ada-002-v2"
-    },
-    "text-moderation-007": {
-      "cost": {
-        "input": 0.0,
-        "output": 0.0
-      },
-      "limit": {
-        "context": 32768,
-        "output": 0
-      },
-      "mode": "moderation",
-      "name": "text-moderation-007"
-    },
-    "text-moderation-latest": {
-      "cost": {
-        "input": 0.0,
-        "output": 0.0
-      },
-      "limit": {
-        "context": 32768,
-        "output": 0
-      },
-      "mode": "moderation",
-      "name": "text-moderation-latest"
-    },
-    "text-moderation-stable": {
-      "cost": {
-        "input": 0.0,
-        "output": 0.0
-      },
-      "limit": {
-        "context": 32768,
-        "output": 0
-      },
-      "mode": "moderation",
-      "name": "text-moderation-stable"
     },
     "tts-1": {
       "mode": "audio_speech",

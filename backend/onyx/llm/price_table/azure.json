@@ -851,7 +851,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-3.5 Turbo 0125",
       "open_weights": false,
       "reasoning": false,
@@ -1385,6 +1384,7 @@
       "reasoning": true,
       "release_date": "2025-11-14",
       "structured_output": true,
+      "supports_none_reasoning_effort": true,
       "temperature": false,
       "tool_call": true
     },
@@ -1621,6 +1621,7 @@
       "reasoning": true,
       "release_date": "2026-03-05",
       "structured_output": true,
+      "supports_none_reasoning_effort": true,
       "temperature": true,
       "tool_call": true
     },
@@ -1653,6 +1654,7 @@
       "reasoning": true,
       "release_date": "2026-03-17",
       "structured_output": true,
+      "supports_none_reasoning_effort": true,
       "temperature": true,
       "tool_call": true
     },
@@ -1685,6 +1687,7 @@
       "reasoning": true,
       "release_date": "2026-03-17",
       "structured_output": true,
+      "supports_none_reasoning_effort": true,
       "temperature": true,
       "tool_call": true
     },
@@ -1778,6 +1781,7 @@
       "reasoning": true,
       "release_date": "2026-04-24",
       "structured_output": true,
+      "supports_none_reasoning_effort": true,
       "temperature": false,
       "tool_call": true
     },
@@ -1829,6 +1833,7 @@
       "reasoning": true,
       "release_date": "2026-07-09",
       "structured_output": true,
+      "supports_none_reasoning_effort": true,
       "temperature": false,
       "tool_call": true
     },
@@ -1880,6 +1885,7 @@
       "reasoning": true,
       "release_date": "2026-07-09",
       "structured_output": true,
+      "supports_none_reasoning_effort": true,
       "temperature": false,
       "tool_call": true
     },
@@ -1931,6 +1937,7 @@
       "reasoning": true,
       "release_date": "2026-07-09",
       "structured_output": true,
+      "supports_none_reasoning_effort": true,
       "temperature": false,
       "tool_call": true
     },
@@ -1982,6 +1989,7 @@
       "reasoning": true,
       "release_date": "2026-09-04",
       "structured_output": true,
+      "supports_none_reasoning_effort": true,
       "temperature": false,
       "tool_call": true
     },
@@ -2027,11 +2035,13 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GPT-6 Luna",
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-22",
       "structured_output": true,
+      "supports_none_reasoning_effort": true,
       "temperature": false,
       "tool_call": true
     },
@@ -2077,11 +2087,13 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GPT-6 Sol",
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-22",
       "structured_output": true,
+      "supports_none_reasoning_effort": true,
       "temperature": false,
       "tool_call": true
     },
@@ -2299,19 +2311,6 @@
       },
       "mode": "realtime",
       "name": "gpt-realtime-1.5-2026-02-23"
-    },
-    "gpt-realtime-2": {
-      "cost": {
-        "cache_read": 0.39999999999999997,
-        "input": 4.0,
-        "output": 24.0
-      },
-      "limit": {
-        "context": 32000,
-        "output": 4096
-      },
-      "mode": "realtime",
-      "name": "gpt-realtime-2"
     },
     "gpt-realtime-2.1": {
       "cost": {

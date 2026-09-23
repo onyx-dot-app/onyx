@@ -172,7 +172,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3 235B A22B Instruct 2507 FP8",
       "open_weights": true,
       "reasoning": false,
@@ -200,7 +199,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3 Coder 480B A35B Instruct",
       "open_weights": true,
       "reasoning": false,
@@ -228,7 +226,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3 Coder Next FP8",
       "open_weights": true,
       "reasoning": false,
@@ -258,7 +255,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3.5 397B A17B",
       "open_weights": true,
       "reasoning": true,
@@ -407,7 +403,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "DeepSeek-R1",
       "open_weights": true,
       "reasoning": true,
@@ -520,7 +515,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "DeepSeek V4 Pro",
       "open_weights": true,
       "reasoning": true,
@@ -634,7 +628,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Gemma 3N E4B Instruct",
       "open_weights": true,
       "reasoning": false,
@@ -663,7 +656,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Gemma 4 31B Instruct",
       "open_weights": true,
       "reasoning": true,
@@ -671,17 +663,6 @@
       "structured_output": true,
       "temperature": true,
       "tool_call": true
-    },
-    "intfloat/multilingual-e5-large-instruct": {
-      "cost": {
-        "input": 0.02,
-        "output": 0.02
-      },
-      "limit": {
-        "context": 514
-      },
-      "mode": "embedding",
-      "name": "intfloat/multilingual-e5-large-instruct"
     },
     "meta-llama/Llama-3.3-70B-Instruct-Turbo": {
       "attachment": false,
@@ -756,7 +737,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Kimi K2.5",
       "open_weights": true,
       "reasoning": true,
@@ -787,7 +767,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Kimi K2.6",
       "open_weights": true,
       "reasoning": true,
@@ -816,7 +795,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Kimi K2.7 Code",
       "open_weights": true,
       "reasoning": true,
@@ -876,7 +854,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Nemotron 3 Ultra 550B A55B",
       "open_weights": true,
       "reasoning": true,
@@ -931,7 +908,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT OSS 20B",
       "open_weights": true,
       "reasoning": true,
@@ -959,7 +935,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Pearl AI Gemma 4 31B Instruct",
       "open_weights": false,
       "reasoning": true,
@@ -1033,7 +1008,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GLM-5",
       "open_weights": true,
       "reasoning": true,
@@ -1063,7 +1037,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GLM-5.1",
       "open_weights": true,
       "reasoning": true,

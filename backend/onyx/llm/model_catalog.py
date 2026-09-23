@@ -248,6 +248,7 @@ def _compat_entry(provider: str, entry: dict[str, Any]) -> dict[str, Any]:
         "max_output_tokens": limit.get("output"),
         "supports_vision": "image" in inputs,
         "supports_reasoning": entry.get("reasoning"),
+        "supports_none_reasoning_effort": entry.get("supports_none_reasoning_effort"),
         "supports_function_calling": entry.get("tool_call"),
         "supports_response_schema": entry.get("structured_output"),
         "supports_pdf_input": "pdf" in inputs,

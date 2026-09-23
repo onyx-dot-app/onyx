@@ -111,17 +111,6 @@
       "mode": "image_generation",
       "name": "deep-research-pro-preview-12-2025"
     },
-    "gemini-1.5-flash": {
-      "cost": {
-        "input": 0.075,
-        "output": 0.0
-      },
-      "limit": {
-        "context": 8192
-      },
-      "mode": "embedding",
-      "name": "gemini-1.5-flash"
-    },
     "gemini-2.0-flash-exp-image-generation": {
       "cost": {
         "image": 0.039,
@@ -484,8 +473,6 @@
     "gemini-3-pro-image-preview": {
       "attachment": true,
       "cost": {
-        "image": 0.134,
-        "image_input": 0.0011,
         "input": 2,
         "output": 120
       },
@@ -504,7 +491,6 @@
           "image"
         ]
       },
-      "mode": "image_generation",
       "name": "Nano Banana Pro",
       "open_weights": false,
       "reasoning": true,
@@ -547,7 +533,6 @@
     "gemini-3.1-flash-image-preview": {
       "attachment": true,
       "cost": {
-        "image": 0.045,
         "input": 0.5,
         "output": 60
       },
@@ -567,7 +552,6 @@
           "image"
         ]
       },
-      "mode": "image_generation",
       "name": "Nano Banana 2",
       "open_weights": false,
       "reasoning": true,
@@ -666,7 +650,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Gemini 3.1 Flash Lite Preview",
       "open_weights": false,
       "reasoning": true,
@@ -1051,6 +1034,32 @@
       "temperature": true,
       "tool_call": true
     },
+    "gemini-3.8-flash-lite-tts": {
+      "cost": {
+        "cache_read": 0.125,
+        "input": 0.5,
+        "output": 6.0
+      },
+      "limit": {
+        "context": 8192,
+        "output": 16384
+      },
+      "mode": "audio_speech",
+      "name": "gemini-3.8-flash-lite-tts"
+    },
+    "gemini-3.8-flash-tts": {
+      "cost": {
+        "cache_read": 0.125,
+        "input": 0.5,
+        "output": 9.0
+      },
+      "limit": {
+        "context": 8192,
+        "output": 16384
+      },
+      "mode": "audio_speech",
+      "name": "gemini-3.8-flash-tts"
+    },
     "gemini-3.8-live": {
       "cost": {
         "input": 0.75,
@@ -1134,17 +1143,6 @@
       "temperature": false,
       "tool_call": false
     },
-    "gemini-embedding-2-preview": {
-      "cost": {
-        "input": 0.19999999999999998,
-        "output": 0.0
-      },
-      "limit": {
-        "context": 8192
-      },
-      "mode": "embedding",
-      "name": "gemini-embedding-2-preview"
-    },
     "gemini-flash-latest": {
       "attachment": true,
       "cost": {
@@ -1214,7 +1212,6 @@
     },
     "gemini-live-2.5-flash-preview-native-audio-09-2025": {
       "cost": {
-        "cache_read": 0.075,
         "input": 0.5,
         "output": 2.0
       },
@@ -1326,34 +1323,6 @@
       "mode": "image_generation",
       "name": "imagen-3.0-generate-001"
     },
-    "imagen-3.0-generate-002": {
-      "cost": {
-        "image": 0.04
-      },
-      "mode": "image_generation",
-      "name": "imagen-3.0-generate-002"
-    },
-    "imagen-4.0-fast-generate-001": {
-      "cost": {
-        "image": 0.02
-      },
-      "mode": "image_generation",
-      "name": "imagen-4.0-fast-generate-001"
-    },
-    "imagen-4.0-generate-001": {
-      "cost": {
-        "image": 0.04
-      },
-      "mode": "image_generation",
-      "name": "imagen-4.0-generate-001"
-    },
-    "imagen-4.0-ultra-generate-001": {
-      "cost": {
-        "image": 0.06
-      },
-      "mode": "image_generation",
-      "name": "imagen-4.0-ultra-generate-001"
-    },
     "lyria-3-clip-preview": {
       "attachment": true,
       "cost": {
@@ -1429,16 +1398,6 @@
       },
       "mode": "image_generation",
       "name": "nano-banana-pro-preview"
-    },
-    "veo-2.0-generate-001": {
-      "cost": {
-        "second": 0.35
-      },
-      "limit": {
-        "context": 1024
-      },
-      "mode": "video_generation",
-      "name": "veo-2.0-generate-001"
     },
     "veo-3.1-fast-generate-001": {
       "cost": {

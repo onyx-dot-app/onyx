@@ -420,13 +420,6 @@
       "mode": "image_generation",
       "name": "grok-imagine-image-2026-03-02"
     },
-    "grok-imagine-image-pro": {
-      "cost": {
-        "image_input": 0.05
-      },
-      "mode": "image_generation",
-      "name": "grok-imagine-image-pro"
-    },
     "grok-imagine-image-quality": {
       "attachment": true,
       "cost": {

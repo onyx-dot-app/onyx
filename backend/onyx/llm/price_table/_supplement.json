@@ -25,6 +25,11 @@
         "modalities": {"input": ["text", "image"], "output": ["text"]},
         "reasoning": true,
         "tool_call": true
+      },
+      "dall-e-3": {
+        "name": "DALL-E 3",
+        "mode": "image_generation",
+        "cost": {"image_input": 0.04}
       }
     }
   },

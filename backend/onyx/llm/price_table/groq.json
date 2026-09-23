@@ -137,7 +137,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Llama 3.1 8B",
       "open_weights": true,
       "reasoning": false,
@@ -164,7 +163,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Llama 3.3 70B",
       "open_weights": true,
       "reasoning": false,
@@ -316,14 +314,6 @@
       "temperature": true,
       "tool_call": true
     },
-    "playai-tts": {
-      "limit": {
-        "context": 10000,
-        "output": 10000
-      },
-      "mode": "audio_speech",
-      "name": "playai-tts"
-    },
     "qwen/qwen3.6-27b": {
       "attachment": true,
       "cost": {
@@ -345,7 +335,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3.6 27B",
       "open_weights": true,
       "reasoning": true,

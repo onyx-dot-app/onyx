@@ -379,6 +379,8 @@ def _litellm_new_entry(model_key: str, entry: dict[str, Any]) -> dict[str, Any]:
     cost = _litellm_cost(entry)
     if cost:
         out["cost"] = cost
+    if entry.get("supports_none_reasoning_effort"):
+        out["supports_none_reasoning_effort"] = True
     context = entry.get("max_input_tokens") or entry.get("max_tokens")
     output = entry.get("max_output_tokens")
     if context or output:
@@ -424,6 +426,8 @@ def merge_litellm(providers: dict[str, Any], litellm_map: dict[str, Any]) -> Non
             mode = entry.get("mode")
             if mode:
                 existing.setdefault("mode", mode)
+            if entry.get("supports_none_reasoning_effort"):
+                existing["supports_none_reasoning_effort"] = True
             litellm_cost = _litellm_cost(entry)
             if litellm_cost:
                 cost = existing.setdefault("cost", {})
