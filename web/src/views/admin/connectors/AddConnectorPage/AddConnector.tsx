@@ -6,8 +6,8 @@ import { Permission } from "@/lib/types";
 import useSWR, { mutate } from "swr";
 import { buildSimilarCredentialInfoURL } from "@/lib/connectors/utils";
 import { getSourceDisplayName, getSourceMetadata } from "@/lib/sources";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { renderSidebarLogo } from "@/lib/sidebar/utils";
+import { useEffect, useRef, useState } from "react";
+import { Logo } from "@/lib/app/components";
 import { deleteCredential, linkCredential } from "@/lib/credential";
 import { submitFiles } from "@/lib/connectors/svc";
 import { submitGoogleSite } from "@/lib/connectors/svc";
@@ -159,8 +159,6 @@ export default function AddConnector({
 
   const router = useRouter();
   const settings = useSettings();
-  // The app icon honours white-labelling, like the sidebar's.
-  const AppIcon = useMemo(() => renderSidebarLogo(true), []);
   const defaultPruneFreqHours = settings.default_pruning_freq
     ? settings.default_pruning_freq / 3600
     : 600; // 25 days fallback until settings load
@@ -536,7 +534,7 @@ export default function AddConnector({
             <SettingsLayouts.Header
               icon={sourceMetadata.icon}
               moreIcon1={SvgArrowExchange}
-              moreIcon2={AppIcon}
+              moreIcon2={Logo}
               title={displayName}
               description={t("header.description", {
                 source: displayName,

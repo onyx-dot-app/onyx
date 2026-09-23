@@ -1,6 +1,6 @@
 "use client";
 
-import { Logo } from "@/lib/app/components";
+import { FoldableLogo } from "@/lib/app/components";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Text from "@/refresh-components/texts/Text";
 import { MinimalAgent } from "@/lib/agents/types";
@@ -65,7 +65,7 @@ export default function WelcomeMessage({
         gap={2}
         width="fit"
       >
-        <Logo folded size={32} />
+        <FoldableLogo folded size={32} />
         <Text as="p" dir="auto" headingH2>
           {greeting}
         </Text>

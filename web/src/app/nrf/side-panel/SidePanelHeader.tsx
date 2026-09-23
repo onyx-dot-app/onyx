@@ -1,6 +1,6 @@
 "use client";
 
-import { Logo } from "@/lib/app/components";
+import { FoldableLogo } from "@/lib/app/components";
 import { Button } from "@opal/components";
 import { SvgEditBig, SvgExternalLink } from "@opal/icons";
 import { useTranslations } from "next-intl";
@@ -24,7 +24,7 @@ export default function SidePanelHeader({
 
   return (
     <header className="flex items-center justify-between px-4 py-3 border-b border-border-01 bg-background">
-      <Logo />
+      <FoldableLogo />
       <div className="flex items-center gap-1">
         <Button
           prominence="tertiary"
