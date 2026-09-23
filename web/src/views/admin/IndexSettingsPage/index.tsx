@@ -510,6 +510,7 @@ function EmbeddingModelCard({
   onSelect,
 }: EmbeddingModelCardProps) {
   const t = useTranslations("admin.indexSettings");
+  const { appName } = useSettings();
   const topRightButton = (() => {
     switch (modelState) {
       case "unconnected":
@@ -587,7 +588,7 @@ function EmbeddingModelCard({
           <Content
             icon={provider.icon}
             title={model.modelName}
-            description={embeddingModelDescription(model, t)}
+            description={embeddingModelDescription(model, t, appName)}
             sizePreset="main-ui"
             variant="section"
           />
@@ -1216,6 +1217,7 @@ export default function IndexSettingsPage() {
                         <Text font="main-ui-body" color="text-03" as="p">
                           {t("wontPortConsentModal.description", {
                             count: frozenWontPortRef.current.length,
+                            appName: settings.appName,
                           })}
                         </Text>
                         <div className="flex max-h-48 flex-col gap-1 overflow-y-auto rounded-08 border border-border-02 p-3">
@@ -1404,7 +1406,9 @@ export default function IndexSettingsPage() {
                       >
                         <Content
                           title={t("embeddingModel.title")}
-                          description={t("embeddingModel.description")}
+                          description={t("embeddingModel.description", {
+                            appName: settings.appName,
+                          })}
                           sizePreset="main-content"
                           variant="section"
                         />
@@ -1675,7 +1679,8 @@ export default function IndexSettingsPage() {
                                           findRegistryModel(
                                             currentEmbeddingModel.model_name
                                           ),
-                                          t
+                                          t,
+                                          settings.appName
                                         )}
                                         sizePreset="main-ui"
                                         variant="section"

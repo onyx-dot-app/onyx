@@ -274,7 +274,7 @@
         },
         "placeholder": "Sélectionner une méthode",
         "ptOauth": {
-          "description": "Transférez le jeton d'accès OAuth utilisé par l'utilisateur pour s'authentifier auprès de Onyx.",
+          "description": "Transférez le jeton d'accès OAuth utilisé par l'utilisateur pour s'authentifier auprès de {appName}.",
           "label": "Transfert OAuth"
         },
         "required": "Le type d'authentification est obligatoire"
@@ -313,11 +313,11 @@
         "title": "Aucune authentification pour ce serveur MCP"
       },
       "oauthInfo": {
-        "discovery": "L'ID client et le secret sont facultatifs. Pendant la découverte automatique, Onyx utilise un Client ID Metadata Document (CIMD) quand il est pris en charge, sinon il revient à l'enregistrement dynamique de client (DCR).",
-        "manualRegistration": "Si votre serveur ne prend en charge aucune des deux méthodes, enregistrez d'abord votre instance Onyx auprès du fournisseur du serveur. Accordez à Onyx les portées nécessaires à vos actions."
+        "discovery": "L'ID client et le secret sont facultatifs. Pendant la découverte automatique, {appName} utilise un Client ID Metadata Document (CIMD) quand il est pris en charge, sinon il revient à l'enregistrement dynamique de client (DCR).",
+        "manualRegistration": "Si votre serveur ne prend en charge aucune des deux méthodes, enregistrez d'abord votre instance {appName} auprès du fournisseur du serveur. Accordez à {appName} les portées nécessaires à vos actions."
       },
       "passThroughNotice": {
-        "description": "Onyx transférera le jeton d'accès OAuth de l'utilisateur directement au serveur, dans un en-tête Authorization. Assurez-vous que le serveur prend en charge l'authentification avec le même fournisseur.",
+        "description": "{appName} transférera le jeton d'accès OAuth de l'utilisateur directement au serveur, dans un en-tête Authorization. Assurez-vous que le serveur prend en charge l'authentification avec le même fournisseur.",
         "title": "Utilisez le transfert pour les services qui partagent le même fournisseur d'identité."
       },
       "providerMode": {
@@ -471,7 +471,7 @@
         },
         "placeholder": "Sélectionner une méthode",
         "ptOauth": {
-          "description": "Transférez le jeton d'accès OAuth utilisé par l'utilisateur pour s'authentifier auprès de Onyx.",
+          "description": "Transférez le jeton d'accès OAuth utilisé par l'utilisateur pour s'authentifier auprès de {appName}.",
           "label": "Transfert OAuth"
         },
         "required": "La méthode d'authentification est obligatoire"
@@ -519,7 +519,7 @@
         "description": "Le transfert OAuth exige une méthode de connexion compatible OAuth (Google ou OIDC)."
       },
       "passThroughNotice": {
-        "description": "Onyx transférera le jeton d'accès OAuth de l'utilisateur directement au serveur, dans un en-tête Authorization. Assurez-vous que le serveur prend en charge l'authentification avec le même fournisseur.",
+        "description": "{appName} transférera le jeton d'accès OAuth de l'utilisateur directement au serveur, dans un en-tête Authorization. Assurez-vous que le serveur prend en charge l'authentification avec le même fournisseur.",
         "title": "Utilisez le transfert pour les services qui partagent le même fournisseur d'identité."
       },
       "redirectUri": {
@@ -1025,7 +1025,7 @@
         "title": "Commentaires"
       },
       "page": {
-        "description": "Comprenez comment votre espace de travail utilise Onyx : requêtes, commentaires et agents."
+        "description": "Comprenez comment votre espace de travail utilise {appName} : requêtes, commentaires et agents."
       },
       "reports": {
         "calendar": {
@@ -1285,7 +1285,7 @@
         "close": {
           "label": "Fermer"
         },
-        "description": "Ajoutez et activez manuellement une licence pour cette instance Onyx.",
+        "description": "Ajoutez et activez manuellement une licence pour cette instance {appName}.",
         "emptyKey": {
           "error": "Saisissez une clé de licence"
         },
@@ -1592,7 +1592,7 @@
           "placeholder": "En jours",
           "restoreTooltip": "Rétablir la valeur par défaut"
         },
-        "description": "Indiquez combien de temps Onyx doit conserver les discussions de votre organisation.",
+        "description": "Indiquez combien de temps {appName} doit conserver les discussions de votre organisation.",
         "enterprisePlanTag": {
           "label": "Forfait Enterprise"
         },
@@ -1654,7 +1654,7 @@
       },
       "teamContext": {
         "description": "Les utilisateurs peuvent aussi ajouter un contexte individuel dans leurs paramètres personnels.",
-        "placeholder": "Décrivez votre équipe et la façon dont Onyx doit se comporter.",
+        "placeholder": "Décrivez votre équipe et la façon dont {appName} doit se comporter.",
         "title": "Contexte de l'équipe"
       },
       "teamName": {
@@ -1774,7 +1774,7 @@
     "connector": {
       "accessType": {
         "autoSyncOption": {
-          "description": "Nous synchroniserons automatiquement les permissions depuis la source. Un document ne sera consultable dans Onyx que si l'utilisateur effectuant la recherche est autorisé à y accéder dans la source.",
+          "description": "Nous synchroniserons automatiquement les permissions depuis la source. Un document ne sera consultable dans {appName} que si l'utilisateur effectuant la recherche est autorisé à y accéder dans la source.",
           "disabledReason": "La méthode d'authentification de l'identifiant actuel ne prend pas en charge la synchronisation automatique des permissions. Veuillez passer à une méthode d'authentification prise en charge.",
           "name": "Synchronisation automatique des permissions"
         },
@@ -1787,7 +1787,7 @@
           "name": "Privé"
         },
         "publicOption": {
-          "description": "Toute personne disposant d'un compte Onyx peut accéder aux documents importés par ce connecteur",
+          "description": "Toute personne disposant d'un compte {appName} peut accéder aux documents importés par ce connecteur",
           "name": "Public"
         }
       },
@@ -3074,10 +3074,10 @@
     },
     "customAnalytics": {
       "intro": {
-        "description": "Cela vous permet d'utiliser votre propre outil d'analytique avec Onyx ! Copiez l'extrait Web de votre fournisseur d'analytique dans le champ ci-dessous, et nous commencerons à envoyer des événements d'utilisation."
+        "description": "Cela vous permet d'utiliser votre propre outil d'analytique avec {appName} ! Copiez l'extrait Web de votre fournisseur d'analytique dans le champ ci-dessous, et nous commencerons à envoyer des événements d'utilisation."
       },
       "notEnabled": {
-        "description": "Pour configurer des scripts d'analytique personnalisés, adressez-vous à l'équipe qui a installé Onyx afin de définir la variable d'environnement <i>CUSTOM_ANALYTICS_SECRET_KEY</i>.",
+        "description": "Pour configurer des scripts d'analytique personnalisés, adressez-vous à l'équipe qui a installé {appName} afin de définir la variable d'environnement <i>CUSTOM_ANALYTICS_SECRET_KEY</i>.",
         "title": "L'analytique personnalisée n'est pas activée."
       },
       "script": {
@@ -3086,7 +3086,7 @@
         "label": "Script"
       },
       "secretKey": {
-        "description": "Pour des raisons de sécurité, vous devez fournir une clé secrète pour mettre à jour ce script. Il doit s'agir de la valeur de la variable d'environnement <i>CUSTOM_ANALYTICS_SECRET_KEY</i> définie lors de la configuration initiale d'Onyx.",
+        "description": "Pour des raisons de sécurité, vous devez fournir une clé secrète pour mettre à jour ce script. Il doit s'agir de la valeur de la variable d'environnement <i>CUSTOM_ANALYTICS_SECRET_KEY</i> définie lors de la configuration initiale de {appName}.",
         "label": "Clé secrète"
       },
       "updateButton": {
@@ -3315,7 +3315,7 @@
       },
       "page": {
         "header": {
-          "description": "Connectez Onyx à vos serveurs Discord. Les utilisateurs peuvent poser des questions directement dans les canaux Discord."
+          "description": "Connectez {appName} à vos serveurs Discord. Les utilisateurs peuvent poser des questions directement dans les canaux Discord."
         }
       },
       "registrationKey": {
@@ -3352,7 +3352,7 @@
           "label": "Supprimer la clé d'API"
         },
         "deleteHint": "Supprimez la clé d'API actuelle avant de la mettre à jour.",
-        "description": "Unstructured extrait et transforme les données complexes de formats comme .pdf, .docx, .png, .pptx, etc. en texte propre qu'Onyx peut ingérer. Fournissez une clé d'API pour activer le traitement des documents par Unstructured.",
+        "description": "Unstructured extrait et transforme les données complexes de formats comme .pdf, .docx, .png, .pptx, etc. en texte propre que {appName} peut ingérer. Fournissez une clé d'API pour activer le traitement des documents par Unstructured.",
         "learnMore": "En savoir plus sur Unstructured <link>ici</link>.",
         "note": "<label>Remarque :</label> les documents seront envoyés aux serveurs Unstructured pour traitement.",
         "saveButton": {
@@ -3429,7 +3429,7 @@
         "deleteScheduled": {
           "toast": "Ensemble de documents \"{name}\" planifié pour suppression"
         },
-        "description": "Les **ensembles de documents** vous permettent de regrouper des documents liés logiquement en un seul lot. Vous pouvez ensuite les utiliser comme filtre lors des recherches pour contrôler l'étendue des informations sur lesquelles Onyx effectue ses recherches.",
+        "description": "Les **ensembles de documents** vous permettent de regrouper des documents liés logiquement en un seul lot. Vous pouvez ensuite les utiliser comme filtre lors des recherches pour contrôler l'étendue des informations sur lesquelles {appName} effectue ses recherches.",
         "edit": {
           "header": {
             "title": "Modifier l'ensemble de documents"
@@ -3949,7 +3949,7 @@
           "tooltip": "Les embeddings des documents sont en cours de mise à jour à la suite de modifications récentes de ce groupe."
         },
         "systemGroup": {
-          "description": "Onyx gère ce groupe. Il ne contient que des membres, et c'est la seule chose que vous pouvez modifier.",
+          "description": "{appName} gère ce groupe. Il ne contient que des membres, et c'est la seule chose que vous pouvez modifier.",
           "title": "Groupe système"
         },
         "toasts": {
@@ -4062,7 +4062,7 @@
         }
       },
       "permissionsChanged": {
-        "description": "Onyx utilise désormais des autorisations basées sur les groupes. L'accès se configure par groupe : les autorisations d'un utilisateur sont donc la somme de celles de tous ses groupes.",
+        "description": "{appName} utilise désormais des autorisations basées sur les groupes. L'accès se configure par groupe : les autorisations d'un utilisateur sont donc la somme de celles de tous ses groupes.",
         "learnMore": {
           "label": "En savoir plus"
         },
@@ -4198,7 +4198,7 @@
       },
       "disconnectModal": {
         "body": {
-          "description": "Onyx cessera d'appeler ce point de terminaison pour le hook ***{name}***. Les requêtes en cours continueront de s'exécuter. Le point de terminaison externe peut conserver les données qui lui ont été envoyées. Vous pourrez reconnecter ce hook plus tard si nécessaire."
+          "description": "{appName} cessera d'appeler ce point de terminaison pour le hook ***{name}***. Les requêtes en cours continueront de s'exécuter. Le point de terminaison externe peut conserver les données qui lui ont été envoyées. Vous pourrez reconnecter ce hook plus tard si nécessaire."
         },
         "deleteNote": {
           "description": "Vous pouvez également supprimer ce hook. La suppression est irréversible."
@@ -4218,7 +4218,7 @@
       },
       "form": {
         "apiKey": {
-          "description": "Onyx utilisera cette clé pour s'authentifier auprès de votre point de terminaison d'API.",
+          "description": "{appName} utilisera cette clé pour s'authentifier auprès de votre point de terminaison d'API.",
           "keepCurrent": {
             "placeholder": "Laissez vide pour conserver la clé actuelle"
           },
@@ -4268,10 +4268,10 @@
           "label": "Enregistrer les modifications"
         },
         "softStrategy": {
-          "description": "Si le point de terminaison renvoie une erreur, Onyx la journalise et poursuit le pipeline normalement, en ignorant le résultat du hook."
+          "description": "Si le point de terminaison renvoie une erreur, {appName} la journalise et poursuit le pipeline normalement, en ignorant le résultat du hook."
         },
         "timeout": {
-          "description": "Durée maximale pendant laquelle Onyx attend la réponse du point de terminaison avant d'appliquer la stratégie d'échec. Doit être supérieure à 0 et au plus {max} secondes.",
+          "description": "Durée maximale pendant laquelle {appName} attend la réponse du point de terminaison avant d'appliquer la stratégie d'échec. Doit être supérieure à 0 et au plus {max} secondes.",
           "revert": {
             "tooltip": "Rétablir la valeur par défaut"
           },
@@ -4336,7 +4336,7 @@
         }
       },
       "page": {
-        "description": "Étendez les pipelines Onyx en enregistrant des points de terminaison d'API externes comme callbacks à des points d'ancrage prédéfinis.",
+        "description": "Étendez les pipelines {appName} en enregistrant des points de terminaison d'API externes comme callbacks à des points d'ancrage prédéfinis.",
         "empty": {
           "title": "Aucun point d'ancrage disponible"
         },
@@ -4492,7 +4492,7 @@
           "message": "Échec de la validation de la clé d'API"
         },
         "authMethod": {
-          "idle": "Choisissez comment Onyx doit s'authentifier auprès de Google Vertex AI.",
+          "idle": "Choisissez comment {appName} doit s'authentifier auprès de Google Vertex AI.",
           "label": "Méthode d'authentification",
           "required": "La méthode d'authentification est obligatoire",
           "serviceAccount": {
@@ -4536,7 +4536,7 @@
           "required": "L'emplacement est obligatoire"
         },
         "projectId": {
-          "idle": "Le projet GCP où Vertex AI est activé. Onyx s'authentifie avec le compte de service lié au pod (GKE Workload Identity).",
+          "idle": "Le projet GCP où Vertex AI est activé. {appName} s'authentifie avec le compte de service lié au pod (GKE Workload Identity).",
           "label": "ID du projet GCP",
           "required": "L'ID du projet est obligatoire"
         },
@@ -4626,7 +4626,7 @@
           "title": "Nom du déploiement"
         },
         "modelName": {
-          "description": "Un libellé pour ce modèle dans Onyx. Azure achemine les requêtes par nom de déploiement, ce libellé doit donc seulement être un identifiant unique."
+          "description": "Un libellé pour ce modèle dans {appName}. Azure achemine les requêtes par nom de déploiement, ce libellé doit donc seulement être un identifiant unique."
         },
         "targetUrl": {
           "title": "URL cible"
@@ -4677,7 +4677,7 @@
         "cloudManaged": {
           "title": "Le modèle d'embedding et ses paramètres sont gérés par Onyx Cloud."
         },
-        "description": "Onyx utilise ce modèle pour encoder les documents pour la recherche et la récupération.",
+        "description": "{appName} utilise ce modèle pour encoder les documents pour la recherche et la récupération.",
         "title": "Modèle d'embedding"
       },
       "errorsModal": {
@@ -4725,7 +4725,7 @@
         },
         "modelName": {
           "placeholder": "model-name",
-          "selfHostedDescription": "Onyx se connectera à ce modèle sur votre point de terminaison auto-hébergé.",
+          "selfHostedDescription": "{appName} se connectera à ce modèle sur votre point de terminaison auto-hébergé.",
           "title": "Nom du modèle"
         },
         "normalize": {
@@ -4769,7 +4769,7 @@
           "title": "URL de base de l'API"
         },
         "modelName": {
-          "description": "Onyx se connectera à ce modèle sur votre proxy {provider}."
+          "description": "{appName} se connectera à ce modèle sur votre proxy {provider}."
         }
       },
       "maxImageSize": {
@@ -4985,7 +4985,7 @@
       "wontPortConsentModal": {
         "title": "{count, plural, one {Ce connecteur sera supprimé} other {Ces # connecteurs seront supprimés}}",
         "submit": "Supprimer et réindexer",
-        "description": "{count, plural, one {La réindexation ignore les connecteurs en pause et non valides : celui-ci ne sera donc pas repris dans le nouvel index. Onyx le supprime, ainsi que les documents qu'il a indexés :} other {La réindexation ignore les connecteurs en pause et non valides : ces # ne seront donc pas repris dans le nouvel index. Onyx les supprime, ainsi que les documents qu'ils ont indexés :}}",
+        "description": "{count, plural, one {La réindexation ignore les connecteurs en pause et non valides : celui-ci ne sera donc pas repris dans le nouvel index. {appName} le supprime, ainsi que les documents qu'il a indexés :} other {La réindexation ignore les connecteurs en pause et non valides : ces # ne seront donc pas repris dans le nouvel index. {appName} les supprime, ainsi que les documents qu'ils ont indexés :}}",
         "connector": "{name} — {status}",
         "statusInvalid": "non valide",
         "statusPaused": "en pause",
@@ -5005,7 +5005,7 @@
         "voyageLight2Instruct": "Modèle d'embedding léger de Voyage. Bon équilibre entre performances et efficacité.",
         "nomicEmbedTextV1": "Modèle d'embedding de Nomic spécialisé dans la recherche, la similarité, le clustering et la classification.",
         "e5BaseV2": "Un modèle plus petit et plus rapide que celui par défaut. Environ 2 fois plus rapide que le modèle par défaut, au prix d'une qualité de recherche moindre.",
-        "e5SmallV2": "La version la plus petite et la plus rapide de la gamme E5. Un bon choix si Onyx tourne sur un système aux ressources limitées.",
+        "e5SmallV2": "La version la plus petite et la plus rapide de la gamme E5. Un bon choix si {appName} tourne sur un système aux ressources limitées.",
         "multilingualE5Base": "Pour les corpus dans d'autres langues que l'anglais, c'est le modèle à choisir.",
         "multilingualE5Small": "Pour les corpus dans d'autres langues que l'anglais sur un système aux ressources limitées, c'est le modèle à choisir."
       }
@@ -5168,7 +5168,7 @@
         "title": "La configuration de nouveaux LLM est temporairement indisponible."
       },
       "defaultModel": {
-        "description": "Ce modèle sera utilisé par défaut par Onyx dans vos discussions.",
+        "description": "Ce modèle sera utilisé par défaut par {appName} dans vos discussions.",
         "title": "Modèle par défaut"
       },
       "deleteModal": {
@@ -5182,7 +5182,7 @@
       },
       "groups": {
         "addProvider": {
-          "description": "Onyx prend en charge les fournisseurs populaires comme les modèles auto-hébergés.",
+          "description": "{appName} prend en charge les fournisseurs populaires comme les modèles auto-hébergés.",
           "title": "Ajouter un fournisseur"
         },
         "gateways": {
@@ -5260,7 +5260,7 @@
               "description": "Pour les environnements hors AWS",
               "label": "Clé d'accès"
             },
-            "description": "Choisissez comment Onyx doit s'authentifier auprès de Bedrock.",
+            "description": "Choisissez comment {appName} doit s'authentifier auprès de Bedrock.",
             "iam": {
               "description": "Recommandé pour les environnements AWS",
               "label": "Rôle IAM de l'environnement"
@@ -5272,7 +5272,7 @@
             "title": "Méthode d'authentification"
           },
           "iamNotice": {
-            "title": "Onyx utilisera le rôle IAM associé à l'environnement dans lequel il s'exécute pour s'authentifier."
+            "title": "{appName} utilisera le rôle IAM associé à l'environnement dans lequel il s'exécute pour s'authentifier."
           },
           "longTermApiKeyField": {
             "placeholder": "Votre clé d'API longue durée",
@@ -5543,7 +5543,7 @@
         },
         "setup": {
           "apiBaseField": {
-            "containerizedNote": "Quand Onyx s'exécute dans un conteneur, utilisez `host.docker.internal` à la place de `localhost` pour atteindre un service sur votre hôte.",
+            "containerizedNote": "Quand {appName} s'exécute dans un conteneur, utilisez `host.docker.internal` à la place de `localhost` pour atteindre un service sur votre hôte.",
             "title": "URL de base de l'API"
           },
           "apiKeyField": {
@@ -5596,7 +5596,7 @@
         },
         "vertexAi": {
           "authMethodField": {
-            "description": "Choisissez comment Onyx doit s'authentifier auprès de Google Vertex AI.",
+            "description": "Choisissez comment {appName} doit s'authentifier auprès de Google Vertex AI.",
             "serviceAccount": {
               "description": "Téléversez un fichier JSON de clé de compte de service GCP",
               "label": "JSON de compte de service"
@@ -5625,7 +5625,7 @@
             "projectRequired": "L'ID de projet GCP est obligatoire"
           },
           "workloadIdentityNotice": {
-            "title": "Onyx utilisera les identifiants Google Cloud ambiants du pod (via google.auth.default). Assurez-vous que le ServiceAccount Kubernetes est lié à un compte de service GCP qui a accès à Vertex AI."
+            "title": "{appName} utilisera les identifiants Google Cloud ambiants du pod (via google.auth.default). Assurez-vous que le ServiceAccount Kubernetes est lié à un compte de service GCP qui a accès à Vertex AI."
           }
         }
       },
@@ -5811,36 +5811,66 @@
         "contextualRagDocumentSummary": {
           "label": "Résumés contextuels des documents RAG"
         },
-        "imageSummarization": { "label": "Résumé des images" },
-        "kgDeepExtraction": { "label": "Extraction du graphe de connaissances" },
+        "imageSummarization": {
+          "label": "Résumé des images"
+        },
+        "kgDeepExtraction": {
+          "label": "Extraction du graphe de connaissances"
+        },
         "kgDocumentClassification": {
           "label": "Classification du graphe de connaissances"
         },
-        "other": { "label": "Autres" },
-        "unattributed": { "label": "Non attribué" }
+        "other": {
+          "label": "Autres"
+        },
+        "unattributed": {
+          "label": "Non attribué"
+        }
       },
       "filters": {
-        "allModels": { "label": "Tous les modèles" },
-        "allProviders": { "label": "Tous les fournisseurs" }
+        "allModels": {
+          "label": "Tous les modèles"
+        },
+        "allProviders": {
+          "label": "Tous les fournisseurs"
+        }
       },
       "panel": {
-        "description": "{start} – {end} · L’utilisation système correspond à l’activité LLM exécutée par Onyx en arrière-plan plutôt que pour un utilisateur spécifique. Cela inclut les résumés d’images, le traitement RAG contextuel et l’extraction du graphe de connaissances.",
-        "emptyDescription": "L’utilisation système correspond à l’activité LLM exécutée par Onyx en arrière-plan plutôt que pour un utilisateur spécifique. Cela inclut les résumés d’images, le traitement RAG contextuel et l’extraction du graphe de connaissances.",
-        "error": { "title": "Échec du chargement de l'utilisation système pour cette période." },
+        "description": "{start} – {end} · L’utilisation système correspond à l’activité LLM exécutée par {appName} en arrière-plan plutôt que pour un utilisateur spécifique. Cela inclut les résumés d’images, le traitement RAG contextuel et l’extraction du graphe de connaissances.",
+        "emptyDescription": "L’utilisation système correspond à l’activité LLM exécutée par {appName} en arrière-plan plutôt que pour un utilisateur spécifique. Cela inclut les résumés d’images, le traitement RAG contextuel et l’extraction du graphe de connaissances.",
+        "error": {
+          "title": "Échec du chargement de l'utilisation système pour cette période."
+        },
         "title": "Utilisation système"
       },
       "summary": {
-        "spend": { "label": "Dépenses système" },
-        "tokens": { "label": "Total des jetons" },
-        "unattributed": { "label": "Dépenses non attribuées" }
+        "spend": {
+          "label": "Dépenses système"
+        },
+        "tokens": {
+          "label": "Total des jetons"
+        },
+        "unattributed": {
+          "label": "Dépenses non attribuées"
+        }
       },
       "table": {
         "columns": {
-          "category": { "header": "Catégorie" },
-          "input": { "header": "Entrée" },
-          "output": { "header": "Sortie" },
-          "spend": { "header": "Dépenses" },
-          "tokens": { "header": "Jetons" }
+          "category": {
+            "header": "Catégorie"
+          },
+          "input": {
+            "header": "Entrée"
+          },
+          "output": {
+            "header": "Sortie"
+          },
+          "spend": {
+            "header": "Dépenses"
+          },
+          "tokens": {
+            "header": "Jetons"
+          }
         },
         "empty": {
           "description": "Aucune utilisation système ne correspond aux filtres actuels."
@@ -6296,7 +6326,7 @@
     },
     "serviceAccounts": {
       "deleteModal": {
-        "description": "Toute application utilisant la clé d'API du compte *{name}* (`{keyDisplay}`) perdra l'accès à Onyx.",
+        "description": "Toute application utilisant la clé d'API du compte *{name}* (`{keyDisplay}`) perdra l'accès à {appName}.",
         "submit": {
           "label": "Supprimer"
         },
@@ -6343,7 +6373,7 @@
         "cancelButton": {
           "label": "Annuler"
         },
-        "description": "Utilisez la clé d'API du compte de service pour accéder à l'API Onyx par programmation, avec des autorisations de niveau utilisateur. Vous pourrez modifier les détails du compte plus tard.",
+        "description": "Utilisez la clé d'API du compte de service pour accéder à l'API {appName} par programmation, avec des autorisations de niveau utilisateur. Vous pourrez modifier les détails du compte plus tard.",
         "groups": {
           "empty": {
             "description": "Aucun groupe attribué à ce compte de service.",
@@ -6406,7 +6436,7 @@
         }
       },
       "page": {
-        "description": "Utilisez des comptes de service pour accéder à l'API Onyx par programmation.",
+        "description": "Utilisez des comptes de service pour accéder à l'API {appName} par programmation.",
         "error": {
           "description": "Consultez la console pour plus de détails.",
           "title": "Échec du chargement des comptes de service."
@@ -6730,7 +6760,7 @@
         },
         "showContinueInWebUi": {
           "label": "Afficher le bouton Continuer dans l'interface web",
-          "tooltip": "Si activé, affiche en bas de la réponse un bouton qui permet à l'utilisateur de poursuivre la conversation dans l'interface web Onyx"
+          "tooltip": "Si activé, affiche en bas de la réponse un bouton qui permet à l'utilisateur de poursuivre la conversation dans l'interface web {appName}"
         },
         "stillNeedHelp": {
           "label": "Afficher un bouton \"Toujours besoin d'aide ?\"",
@@ -6760,7 +6790,7 @@
         "autoAnswer": {
           "item": "Configurer OnyxBot pour répondre automatiquement aux questions dans certains canaux."
         },
-        "description": "Configurez des bots Slack connectés à Onyx. Une fois la configuration terminée, vous pourrez poser des questions à Onyx directement depuis Slack. Vous pouvez aussi :",
+        "description": "Configurez des bots Slack connectés à {appName}. Une fois la configuration terminée, vous pourrez poser des questions à {appName} directement depuis Slack. Vous pouvez aussi :",
         "directMessage": {
           "item": "Envoyer un message direct à OnyxBot pour faire une recherche, comme dans l'interface web."
         },
@@ -6803,7 +6833,7 @@
           "badge": "Désactivé"
         },
         "empty": {
-          "message": "Ajoutez un nouveau bot Slack pour commencer à discuter avec Onyx !"
+          "message": "Ajoutez un nouveau bot Slack pour commencer à discuter avec {appName} !"
         },
         "enabled": {
           "badge": "Activé"
@@ -7766,7 +7796,7 @@
         }
       },
       "activateModal": {
-        "description": "<strong>{email}</strong> retrouvera l'accès à Onyx.",
+        "description": "<strong>{email}</strong> retrouvera l'accès à {appName}.",
         "submit": {
           "label": "Activer"
         },
@@ -7776,7 +7806,7 @@
         }
       },
       "cancelInviteModal": {
-        "description": "<strong>{email}</strong> ne pourra plus rejoindre Onyx avec cette invitation.",
+        "description": "<strong>{email}</strong> ne pourra plus rejoindre {appName} avec cette invitation.",
         "submit": {
           "label": "Annuler l'invitation"
         },
@@ -7786,7 +7816,7 @@
         }
       },
       "deactivateModal": {
-        "description": "<strong>{email}</strong> perdra immédiatement l'accès à Onyx. Ses sessions et ses agents seront conservés. Sa place de licence sera libérée. Vous pourrez réactiver ce compte plus tard.",
+        "description": "<strong>{email}</strong> perdra immédiatement l'accès à {appName}. Ses sessions et ses agents seront conservés. Sa place de licence sera libérée. Vous pourrez réactiver ce compte plus tard.",
         "submit": {
           "label": "Désactiver"
         },
@@ -7796,7 +7826,7 @@
         }
       },
       "deleteModal": {
-        "description": "<strong>{email}</strong> sera définitivement retiré de Onyx. Tout son historique de sessions sera supprimé. Cette suppression est irréversible.",
+        "description": "<strong>{email}</strong> sera définitivement retiré de {appName}. Tout son historique de sessions sera supprimé. Cette suppression est irréversible.",
         "submit": {
           "label": "Supprimer"
         },
@@ -7921,7 +7951,7 @@
         "title": "Utilisateurs et demandes"
       },
       "permissionsNotice": {
-        "description": "Onyx utilise désormais des autorisations basées sur les groupes. Les rôles Curator et Global Curator sont remplacés par des autorisations de groupe configurables, avec des gestionnaires par groupe pour une administration limitée à leur périmètre.",
+        "description": "{appName} utilise désormais des autorisations basées sur les groupes. Les rôles Curator et Global Curator sont remplacés par des autorisations de groupe configurables, avec des gestionnaires par groupe pour une administration limitée à leur périmètre.",
         "learnMoreButton": {
           "label": "En savoir plus"
         },
@@ -8163,12 +8193,12 @@
           "label": "Modèle de reconnaissance vocale"
         },
         "targetUri": {
-          "description": "Collez le point de terminaison affiché dans le [portail Azure (Keys and Endpoint)]({portalUrl}). Onyx en extrait la région de service vocal. Exemples : `https://westus.api.cognitive.microsoft.com/` ou `https://westus.tts.speech.microsoft.com/`.",
+          "description": "Collez le point de terminaison affiché dans le [portail Azure (Keys and Endpoint)]({portalUrl}). {appName} en extrait la région de service vocal. Exemples : `https://westus.api.cognitive.microsoft.com/` ou `https://westus.tts.speech.microsoft.com/`.",
           "label": "URI cible",
           "required": "L'URI cible est obligatoire"
         },
         "ttsModel": {
-          "description": "Ce modèle sera utilisé par défaut par Onyx pour la synthèse vocale.",
+          "description": "Ce modèle sera utilisé par défaut par {appName} pour la synthèse vocale.",
           "label": "Modèle par défaut"
         },
         "updateButton": {
@@ -8231,7 +8261,7 @@
           "message": "{label} déconnecté"
         },
         "fallback": {
-          "description": "Onyx utilisera le robot d'exploration web intégré."
+          "description": "{appName} utilisera le robot d'exploration web intégré."
         },
         "header": {
           "description": "Cette action supprimera les identifiants enregistrés de ce fournisseur.",
@@ -8684,7 +8714,7 @@
           "title": "Amorces de conversation"
         },
         "defaultModel": {
-          "description": "Ce modèle sera utilisé par défaut par Onyx dans vos discussions.",
+          "description": "Ce modèle sera utilisé par défaut par {appName} dans vos discussions.",
           "title": "Modèle par défaut"
         },
         "featured": {
@@ -9168,7 +9198,7 @@
         "label": "Comment avez-vous entendu parler de nous ?"
       },
       "subtitle": {
-        "text": "Commencez avec Onyx"
+        "text": "Commencez avec {appName}"
       }
     },
     "verifyEmail": {
@@ -9402,7 +9432,7 @@
       },
       "healthBanner": {
         "backendUnavailable": {
-          "description": "S'il s'agit de votre configuration initiale ou si vous venez de mettre à jour votre déploiement Onyx, le backend est probablement encore en cours de démarrage. Attendez une ou deux minutes, puis actualisez la page. Si cela ne fonctionne pas, vérifiez que le backend est configuré ou contactez un administrateur.",
+          "description": "S'il s'agit de votre configuration initiale ou si vous venez de mettre à jour votre déploiement {appName}, le backend est probablement encore en cours de démarrage. Attendez une ou deux minutes, puis actualisez la page. Si cela ne fonctionne pas, vérifiez que le backend est configuré ou contactez un administrateur.",
           "title": "Le backend est actuellement indisponible"
         }
       },
@@ -9507,7 +9537,7 @@
           "placeholder": "Comment puis-je vous aider aujourd'hui ?",
           "queuedPlaceholder": "Appuyez sur la flèche haut pour modifier les messages en attente",
           "searchPlaceholder": "Rechercher dans les sources connectées",
-          "speakingPlaceholder": "Onyx parle..."
+          "speakingPlaceholder": "{appName} parle..."
         },
         "sendButton": {
           "processingFilesTooltip": "En attente de la fin du traitement des fichiers joints"
@@ -9631,7 +9661,7 @@
       },
       "sharedAppInputBar": {
         "input": {
-          "placeholder": "Comment Onyx peut-il vous aider aujourd'hui ?"
+          "placeholder": "Comment {appName} peut-il vous aider aujourd'hui ?"
         },
         "startSessionButton": {
           "label": "Démarrer une nouvelle session"
@@ -10578,7 +10608,7 @@
           "loginButton": {
             "label": "Se connecter"
           },
-          "title": "Bienvenue sur Onyx"
+          "title": "Bienvenue sur {appName}"
         },
         "noResubmitMessage": {
           "toast": "Aucun message envoyé précédemment n'a été trouvé."
@@ -10596,8 +10626,8 @@
           "confirmButton": {
             "label": "Désactiver"
           },
-          "description": "Vous verrez la page de nouvel onglet par défaut de votre navigateur. Vous pouvez la réactiver à tout moment dans les paramètres d'Onyx.",
-          "title": "Désactiver Onyx comme page de nouvel onglet ?"
+          "description": "Vous verrez la page de nouvel onglet par défaut de votre navigateur. Vous pouvez la réactiver à tout moment dans les paramètres de {appName}.",
+          "title": "Désactiver {appName} comme page de nouvel onglet ?"
         }
       },
       "settingsPanel": {
@@ -10623,7 +10653,7 @@
           "title": "Paramètres"
         },
         "newTabToggle": {
-          "label": "Utiliser Onyx comme page de nouvel onglet"
+          "label": "Utiliser {appName} comme page de nouvel onglet"
         },
         "themeToggle": {
           "tooltip": "{mode, select, light {Passer au thème clair} other {Passer au thème sombre}}"
@@ -10634,7 +10664,7 @@
           "tooltip": "Nouveau chat"
         },
         "openInOnyxButton": {
-          "tooltip": "Ouvrir dans Onyx"
+          "tooltip": "Ouvrir dans {appName}"
         }
       }
     },
@@ -10646,7 +10676,7 @@
         "error": "Vous devez accepter les conditions pour accéder à l'application."
       },
       "header": {
-        "title": "Bienvenue sur Onyx !"
+        "title": "Bienvenue sur {appName} !"
       },
       "logoIcon": {
         "alt": "Logo"
@@ -10979,10 +11009,10 @@
           "title": "Accès restreint"
         },
         "licenseLapse": {
-          "description": "Votre accès à Onyx a été temporairement suspendu en raison d'une interruption de votre licence."
+          "description": "Votre accès à {appName} a été temporairement suspendu en raison d'une interruption de votre licence."
         },
         "licenseRequired": {
-          "description": "Une licence est requise pour utiliser Onyx. Vos données sont protégées et seront disponibles dès qu'une licence sera activée."
+          "description": "Une licence est requise pour utiliser {appName}. Vos données sont protégées et seront disponibles dès qu'une licence sera activée."
         },
         "logoutButton": {
           "label": "Se déconnecter"
@@ -10994,7 +11024,7 @@
           "description": "Pour commencer, veuillez contacter votre administrateur système afin d'obtenir une licence."
         },
         "renewLicense": {
-          "description": "Pour rétablir votre accès et continuer à utiliser Onyx, veuillez contacter votre administrateur système afin de renouveler votre licence."
+          "description": "Pour rétablir votre accès et continuer à utiliser {appName}, veuillez contacter votre administrateur système afin de renouveler votre licence."
         },
         "resubscribeButton": {
           "label": "Se réabonner",
@@ -11013,10 +11043,10 @@
           "description": "Votre organisation a dépassé le nombre de sièges sous licence ({used} utilisateurs / {seats} sièges). L'accès est restreint jusqu'à ce que le nombre d'utilisateurs soit réduit ou que votre licence soit mise à niveau."
         },
         "subscriptionLapse": {
-          "description": "Votre accès à Onyx a été temporairement suspendu en raison d'une interruption de votre abonnement."
+          "description": "Votre accès à {appName} a été temporairement suspendu en raison d'une interruption de votre abonnement."
         },
         "updatePayment": {
-          "description": "Pour rétablir votre accès et continuer à profiter des fonctionnalités puissantes d'Onyx, veuillez mettre à jour vos informations de paiement."
+          "description": "Pour rétablir votre accès et continuer à profiter des fonctionnalités puissantes de {appName}, veuillez mettre à jour vos informations de paiement."
         }
       },
       "configError": {
@@ -11024,7 +11054,7 @@
           "text": "Si vous êtes administrateur, consultez notre <docsLink>documentation</docsLink> pour connaître les étapes de configuration. Si vous êtes utilisateur, contactez votre administrateur pour obtenir de l'aide."
         },
         "heading": {
-          "description": "Un problème est survenu lors du chargement de vos paramètres Onyx. Cela peut être dû à un problème de configuration ou à une installation incomplète.",
+          "description": "Un problème est survenu lors du chargement de vos paramètres {appName}. Cela peut être dû à un problème de configuration ou à une installation incomplète.",
           "title": "Nous avons rencontré un problème"
         }
       },
@@ -11033,7 +11063,7 @@
           "description": "Nous nous excusons pour la gêne occasionnée et vous remercions de votre patience."
         },
         "checkBack": {
-          "description": "Onyx est actuellement en maintenance. Veuillez réessayer dans quelques minutes."
+          "description": "{appName} est actuellement en maintenance. Veuillez réessayer dans quelques minutes."
         },
         "heading": {
           "title": "Maintenance en cours"
@@ -12062,7 +12092,7 @@
         "ariaLabel": "Copier le lien"
       },
       "organization": {
-        "description": "Toute personne connectée à votre Onyx peut voir cette application.",
+        "description": "Toute personne connectée à {appName} peut voir cette application.",
         "label": "Organisation"
       },
       "private": {
@@ -12598,7 +12628,7 @@
         "placeholder": "Filtrer les fichiers..."
       },
       "processing": {
-        "description": "Onyx traite encore les fichiers que vous avez téléversés. Vous pouvez créer l'agent maintenant, mais il n'aura pas accès à tous les fichiers avant la fin du traitement."
+        "description": "{appName} traite encore les fichiers que vous avez téléversés. Vous pouvez créer l'agent maintenant, mais il n'aura pas accès à tous les fichiers avant la fin du traitement."
       }
     },
     "search": {
@@ -12677,7 +12707,7 @@
         "button": {
           "label": "Recherche web"
         },
-        "description": "Permettez à Onyx de rechercher des informations sur Internet.",
+        "description": "Permettez à {appName} de rechercher des informations sur Internet.",
         "title": "Sélectionnez un fournisseur de recherche web"
       }
     },
@@ -12697,7 +12727,7 @@
         "subtitle": "API compatibles LiteLLM",
         "title": "Fournisseur de LLM personnalisé"
       },
-      "description": "Onyx prend en charge les modèles auto-hébergés et les fournisseurs populaires.",
+      "description": "{appName} prend en charge les modèles auto-hébergés et les fournisseurs populaires.",
       "edit": {
         "ariaLabel": "Modifier les fournisseurs de LLM"
       },
@@ -12720,7 +12750,7 @@
       "input": {
         "placeholder": "Votre nom"
       },
-      "title": "Comment Onyx doit-il vous appeler ?"
+      "title": "Comment {appName} doit-il vous appeler ?"
     },
     "nonAdminStep": {
       "confirmation": {
@@ -12953,7 +12983,7 @@
         "searchPlaceholder": "Rechercher..."
       },
       "revokeModal": {
-        "description": "Toute application utilisant le jeton {name} ({tokenDisplay}) perdra l'accès à Onyx. Cette action est irréversible.",
+        "description": "Toute application utilisant le jeton {name} ({tokenDisplay}) perdra l'accès à {appName}. Cette action est irréversible.",
         "question": "Voulez-vous vraiment révoquer ce jeton ?",
         "submit": "Révoquer",
         "title": "Révoquer le jeton d'accès"
@@ -13019,7 +13049,7 @@
         "title": "Mode d'application par défaut"
       },
       "defaultModel": {
-        "description": "Ce modèle sera utilisé par défaut par Onyx dans vos chats.",
+        "description": "Ce modèle sera utilisé par défaut par {appName} dans vos chats.",
         "title": "Modèle par défaut"
       },
       "defaultReasoningLevel": {
@@ -13044,7 +13074,7 @@
       "connectButton": "Connecter",
       "disconnectModal": {
         "continueNote": "Vous pouvez toujours poursuivre les sessions existantes faisant référence au contenu {name}.",
-        "description": "Onyx ne pourra plus accéder au contenu de votre compte {name} ni le rechercher.",
+        "description": "{appName} ne pourra plus accéder au contenu de votre compte {name} ni le rechercher.",
         "disconnecting": "Déconnexion...",
         "submit": "Déconnecter",
         "title": "Déconnecter *{name}*"
@@ -13091,7 +13121,7 @@
         "copy": "Copier",
         "copyError": "Impossible de copier la valeur."
       },
-      "description": "Connectez des outils externes aux modèles disponibles pour vous dans Onyx.",
+      "description": "Connectez des outils externes aux modèles disponibles pour vous dans {appName}.",
       "guideButton": "Guide",
       "loadError": {
         "description": "Veuillez actualiser la page et réessayer.",
@@ -13157,7 +13187,7 @@
         "addButton": {
           "ariaLabel": "Ajouter un souvenir"
         },
-        "description": "Ajoutez une note personnelle ou un souvenir que Onyx doit retenir.",
+        "description": "Ajoutez une note personnelle ou un souvenir que {appName} doit retenir.",
         "getStarted": "Aucun souvenir pour le moment. Cliquez sur « Ajouter une ligne » pour commencer.",
         "noMatches": "Aucun souvenir ne correspond à votre recherche."
       },
@@ -13168,11 +13198,11 @@
         "label": "{count, plural, one {Ligne} other {Lignes}}"
       },
       "modal": {
-        "description": "Autorisez Onyx à faire référence à ces notes et souvenirs enregistrés dans les chats.",
+        "description": "Autorisez {appName} à faire référence à ces notes et souvenirs enregistrés dans les chats.",
         "searchPlaceholder": "Rechercher..."
       },
       "referenceStoredMemories": {
-        "description": "Autorisez Onyx à faire référence aux souvenirs enregistrés dans les chats.",
+        "description": "Autorisez {appName} à faire référence aux souvenirs enregistrés dans les chats.",
         "title": "Référencer les souvenirs enregistrés"
       },
       "removeLineButton": {
@@ -13184,7 +13214,7 @@
         "saved": "Préférences enregistrées"
       },
       "updateMemories": {
-        "description": "Autorisez Onyx à générer et mettre à jour les souvenirs enregistrés.",
+        "description": "Autorisez {appName} à générer et mettre à jour les souvenirs enregistrés.",
         "title": "Mettre à jour les souvenirs"
       },
       "viewAll": {
@@ -14008,7 +14038,7 @@
           "title": "Importer depuis GitHub"
         },
         "scratch": {
-          "description": "Rédigez les instructions et ajoutez des fichiers annexes dans Onyx.",
+          "description": "Rédigez les instructions et ajoutez des fichiers annexes dans {appName}.",
           "title": "Partir de zéro"
         },
         "trigger": {

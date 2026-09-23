@@ -295,9 +295,12 @@ export function findRegistryModel(modelName: string): EmbeddingModel | null {
 /** Translated registry description, undefined without a key. */
 export function embeddingModelDescription(
   model: EmbeddingModel | null | undefined,
-  t: IndexSettingsTranslator
+  t: IndexSettingsTranslator,
+  appName: string
 ): string | undefined {
-  return model?.descriptionKey ? t(model.descriptionKey) : undefined;
+  return model?.descriptionKey
+    ? t(model.descriptionKey, { appName })
+    : undefined;
 }
 
 /**

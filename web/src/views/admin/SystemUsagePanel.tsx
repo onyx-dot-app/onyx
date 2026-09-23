@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import {
   Card,
   type DateRange,
@@ -162,6 +163,7 @@ interface SystemUsagePanelProps {
 export default function SystemUsagePanel({ timeRange }: SystemUsagePanelProps) {
   const t = useTranslations("admin.systemUsage");
   const locale = useLocale();
+  const { appName } = useSettings();
   const { usage, isLoading, error } = useSystemUsage(timeRange);
   const [model, setModel] = useState(ALL_FILTER);
   const [provider, setProvider] = useState(ALL_FILTER);
@@ -212,8 +214,9 @@ export default function SystemUsagePanel({ timeRange }: SystemUsagePanelProps) {
           ? t("panel.description", {
               start: formatCalendarDay(usage.start, locale, { withYear: true }),
               end: formatCalendarDay(usage.end, locale, { withYear: true }),
+              appName,
             })
-          : t("panel.emptyDescription")}
+          : t("panel.emptyDescription", { appName })}
       </Text>
     </Section>
   );
