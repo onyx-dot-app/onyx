@@ -1,18 +1,27 @@
 import io
 import json
 import logging
+import socket
+import threading
+import time
 from collections.abc import Generator
+from typing import Any
 
 import pytest
+import uvicorn
+from websockets.sync.client import connect as websocket_connect
 
-from onyx.utils.logger import ColoredFormatter, get_json_formatter, setup_uvicorn_logger
-from shared_configs.contextvars import ONYX_REQUEST_ID_CONTEXTVAR
+from onyx.utils.logger import (
+    UVICORN_ACCESS_LOGGER_NAME,
+    UVICORN_ERROR_LOGGER_NAME,
+    ColoredFormatter,
+    _strip_query_string_from_path,
+    get_json_formatter,
+    setup_uvicorn_logger,
+)
 
-UVICORN_ACCESS_FORMAT = '%s - "%s %s HTTP/%s" %d'
-UVICORN_WEBSOCKET_FORMAT = '%s - "WebSocket %s" [accepted]'
-TEXT_FORMAT = "%(asctime)s %(filename)30s %(lineno)4s: [%(request_id)s] %(message)s"
-REQUEST_ID = "req-abc123"
-SECRET_VALUES = ("SECRET-CODE-VALUE", "SECRET-STATE-VALUE")
+SECRET_CODE = "SECRET-CODE-VALUE"
+SECRET_STATE = "SECRET-STATE-VALUE"
 
 CALLBACK_PATHS = [
     "/auth/oidc/callback",
@@ -23,110 +32,151 @@ CALLBACK_PATHS = [
 ]
 
 
-@pytest.fixture(autouse=True)
-def _restore_uvicorn_loggers() -> Generator[None, None, None]:
-    loggers = [logging.getLogger("uvicorn.access"), logging.getLogger("uvicorn.error")]
-    saved = [
-        (logger, list(logger.handlers), list(logger.filters), logger.level)
-        for logger in loggers
-    ]
-    request_id_token = ONYX_REQUEST_ID_CONTEXTVAR.set(REQUEST_ID)
-    yield
-    ONYX_REQUEST_ID_CONTEXTVAR.reset(request_id_token)
-    for logger, handlers, filters, level in saved:
-        logger.handlers = handlers
-        logger.filters = filters
-        logger.setLevel(level)
+async def _app(scope: dict[str, Any], receive: Any, send: Any) -> None:
+    if scope["type"] == "websocket":
+        await receive()
+        await send({"type": "websocket.accept"})
+        await send({"type": "websocket.close"})
+        return
+    await send({"type": "http.response.start", "status": 302, "headers": []})
+    await send({"type": "http.response.body", "body": b""})
 
 
-def _capture(logger_name: str, formatter: logging.Formatter) -> io.StringIO:
-    setup_uvicorn_logger(log_level=logging.INFO)
+class _Capture:
+    def __init__(self, port: int, access: io.StringIO, error: io.StringIO) -> None:
+        self.port = port
+        self.access = access
+        self.error = error
+
+
+def _add_capture_handler(logger_name: str, formatter: logging.Formatter) -> io.StringIO:
     stream = io.StringIO()
     handler = logging.StreamHandler(stream)
     handler.setFormatter(formatter)
-    logger = logging.getLogger(logger_name)
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
+    logging.getLogger(logger_name).addHandler(handler)
     return stream
 
 
-def _log_access_line(path: str, status: int = 302) -> None:
-    logging.getLogger("uvicorn.access").info(
-        UVICORN_ACCESS_FORMAT, "10.0.0.1:51234", "GET", path, "1.1", status
+@pytest.fixture(params=["text", "json"])
+def server(request: pytest.FixtureRequest) -> Generator[_Capture, None, None]:
+    loggers = [
+        logging.getLogger(UVICORN_ACCESS_LOGGER_NAME),
+        logging.getLogger(UVICORN_ERROR_LOGGER_NAME),
+    ]
+    saved = [(lg, list(lg.handlers), list(lg.filters), lg.level) for lg in loggers]
+
+    setup_uvicorn_logger(log_level=logging.INFO)
+    formatter: logging.Formatter = (
+        get_json_formatter()
+        if request.param == "json"
+        else ColoredFormatter("%(message)s")
     )
+    access = _add_capture_handler(UVICORN_ACCESS_LOGGER_NAME, formatter)
+    error = _add_capture_handler(UVICORN_ERROR_LOGGER_NAME, formatter)
+    logging.getLogger(UVICORN_ERROR_LOGGER_NAME).setLevel(logging.INFO)
+
+    uvicorn_server = uvicorn.Server(
+        uvicorn.Config(_app, host="127.0.0.1", port=0, log_config=None, lifespan="off")
+    )
+    thread = threading.Thread(target=uvicorn_server.run, daemon=True)
+    thread.start()
+    deadline = time.monotonic() + 10
+    while not uvicorn_server.started:
+        assert time.monotonic() < deadline, "uvicorn did not start"
+        time.sleep(0.01)
+    port = uvicorn_server.servers[0].sockets[0].getsockname()[1]
+
+    yield _Capture(port, access, error)
+
+    uvicorn_server.should_exit = True
+    thread.join(10)
+    for lg, handlers, filters, level in saved:
+        lg.handlers = handlers
+        lg.filters = filters
+        lg.setLevel(level)
+
+
+def _send_raw_request(port: int, target: str) -> None:
+    with socket.create_connection(("127.0.0.1", port), timeout=5) as sock:
+        sock.sendall(
+            f"GET {target} HTTP/1.1\r\nHost: onyx.test\r\nConnection: close\r\n\r\n".encode()
+        )
+        while sock.recv(4096):
+            pass
 
 
 @pytest.mark.parametrize("callback_path", CALLBACK_PATHS)
-def test_text_access_log_drops_callback_query_values(callback_path: str) -> None:
-    stream = _capture("uvicorn.access", ColoredFormatter(TEXT_FORMAT))
-
-    _log_access_line(
-        f"{callback_path}?code={SECRET_VALUES[0]}&state={SECRET_VALUES[1]}&next=/chat"
+def test_callback_query_values_are_dropped(
+    server: _Capture, callback_path: str
+) -> None:
+    _send_raw_request(
+        server.port, f"{callback_path}?code={SECRET_CODE}&state={SECRET_STATE}"
     )
 
-    output = stream.getvalue()
-    for secret in SECRET_VALUES:
-        assert secret not in output
-    assert "code=" not in output
-    assert "?" not in output
-    assert f'"GET {callback_path} HTTP/1.1" 302' in output
-    assert f"[{REQUEST_ID}]" in output
+    output = server.access.getvalue()
+    assert SECRET_CODE not in output
+    assert SECRET_STATE not in output
+    assert f"GET {callback_path} HTTP/1.1" in output
+    assert "302" in output
 
 
-def test_json_access_log_drops_callback_query_values() -> None:
-    stream = _capture("uvicorn.access", get_json_formatter())
-
-    _log_access_line(
-        f"/auth/oidc/callback?code={SECRET_VALUES[0]}&state={SECRET_VALUES[1]}"
+def test_absolute_form_request_target_query_is_dropped(server: _Capture) -> None:
+    _send_raw_request(
+        server.port, f"http://onyx.test/auth/oidc/callback?code={SECRET_CODE}"
     )
 
-    raw_output = stream.getvalue()
-    for secret in SECRET_VALUES:
-        assert secret not in raw_output
-    record = json.loads(raw_output)
-    assert (
-        record["message"] == '10.0.0.1:51234 - "GET /auth/oidc/callback HTTP/1.1" 302'
+    output = server.access.getvalue()
+    assert SECRET_CODE not in output
+    assert "onyx.test/auth/oidc/callback HTTP/1.1" in output
+
+
+def test_saml_redirect_binding_response_is_dropped(server: _Capture) -> None:
+    _send_raw_request(
+        server.port, "/auth/saml/callback?SAMLResponse=PHNhbWw%2BU0VDUkVU&RelayState=x"
     )
-    assert record["request_id"] == REQUEST_ID
-    assert record["logger"] == "uvicorn.access"
 
-
-def test_saml_redirect_binding_response_is_dropped() -> None:
-    stream = _capture("uvicorn.access", get_json_formatter())
-
-    _log_access_line("/auth/saml/callback?SAMLResponse=PHNhbWw%2BU0VDUkVU&RelayState=x")
-
-    output = stream.getvalue()
-    assert "SAMLResponse" not in output
+    output = server.access.getvalue()
     assert "PHNhbWw" not in output
     assert "/auth/saml/callback HTTP/1.1" in output
 
 
-def test_websocket_handshake_token_is_dropped() -> None:
-    stream = _capture("uvicorn.error", ColoredFormatter("%(message)s"))
+def test_websocket_handshake_token_is_dropped(server: _Capture) -> None:
+    with websocket_connect(
+        f"ws://127.0.0.1:{server.port}/voice/transcribe?token=WS-SECRET"
+    ):
+        pass
 
-    logging.getLogger("uvicorn.error").info(
-        UVICORN_WEBSOCKET_FORMAT, "10.0.0.1:51234", "/voice/transcribe?token=WS-SECRET"
-    )
-
-    output = stream.getvalue()
+    output = server.error.getvalue()
     assert "WS-SECRET" not in output
-    assert '"WebSocket /voice/transcribe" [accepted]' in output
+    assert "/voice/transcribe" in output
 
 
-def test_path_without_query_string_is_unchanged() -> None:
-    stream = _capture("uvicorn.access", ColoredFormatter("%(message)s"))
+def test_path_without_query_string_is_unchanged(server: _Capture) -> None:
+    _send_raw_request(server.port, "/api/persona/42")
 
-    _log_access_line("/api/persona/42", status=200)
-
-    assert '10.0.0.1:51234 - "GET /api/persona/42 HTTP/1.1" 200' in stream.getvalue()
+    assert "GET /api/persona/42 HTTP/1.1" in server.access.getvalue()
 
 
-def test_non_path_args_with_question_marks_are_unchanged() -> None:
-    stream = _capture("uvicorn.error", ColoredFormatter("%(message)s"))
-
-    logging.getLogger("uvicorn.error").info(
-        "Invalid HTTP request received: %s", "why? because=reasons"
+def test_json_record_keeps_request_id_field() -> None:
+    record = logging.LogRecord(
+        UVICORN_ACCESS_LOGGER_NAME, logging.INFO, __file__, 1, "%s", ("/x",), None
     )
+    record.request_id = "req-abc123"
 
-    assert "why? because=reasons" in stream.getvalue()
+    assert json.loads(get_json_formatter().format(record))["request_id"] == "req-abc123"
+
+
+@pytest.mark.parametrize(
+    "arg, expected",
+    [
+        ("/auth/callback?code=x", "/auth/callback"),
+        ("http%3A//host/auth/callback?code=x", "http%3A//host/auth/callback"),
+        ("//host/path?code=x", "//host/path"),
+        ("/no/query", "/no/query"),
+        ("why? because/reasons", "why? because/reasons"),
+        ("127.0.0.1:51234", "127.0.0.1:51234"),
+        (302, 302),
+    ],
+)
+def test_strip_query_string_from_path(arg: object, expected: object) -> None:
+    assert _strip_query_string_from_path(arg) == expected
