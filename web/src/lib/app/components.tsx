@@ -1,6 +1,5 @@
 "use client";
 
-import type { CSSProperties } from "react";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import {
@@ -11,11 +10,9 @@ import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { SvgOnyxLogo, SvgOnyxLogoTyped } from "@opal/logos";
+import { IconProps } from "@opal/types";
 
-export interface LogoProps {
-  size?: number;
-  className?: string;
-  style?: CSSProperties;
+export interface LogoProps extends IconProps {
   // Always render the real Onyx mark, ignoring the enterprise custom logo.
   // Used by Onyx-branded surfaces like Craft.
   onyxBranded?: boolean;
@@ -59,13 +56,8 @@ export function Logo({ size, className, style, onyxBranded }: LogoProps) {
   );
 }
 
-export interface FoldableLogoProps {
+export interface FoldableLogoProps extends LogoProps {
   folded?: boolean;
-  size?: number;
-  className?: string;
-  // Always render the real Onyx logo, ignoring enterprise white-label settings
-  // (custom logo / application name). Used by Onyx-branded surfaces like Craft.
-  onyxBranded?: boolean;
 }
 
 /**
