@@ -15,7 +15,7 @@ def test_model_is_reasoning_model() -> None:
         ("o4-mini", "openai"),
         ("deepseek-reasoner", "deepseek"),
         ("deepseek-r1", "openrouter/deepseek"),
-        ("claude-sonnet-4-20250514", "anthropic"),
+        ("claude-sonnet-4-5", "anthropic"),
     ]
 
     # Models that should NOT be identified as reasoning models
