@@ -99,8 +99,11 @@ _PAD = "Please consider the full context of the conversation so far in detail. "
 
 def sized_message(question: str, target_chars: int) -> str:
     """Pad a question with filler up to ~target_chars so histories grow fast
-    enough to cross the summarization threshold (compression testing)."""
+    enough to cross the summarization threshold (compression testing).
+
+    The newline keeps the question on its own line. The mock reads the first
+    line as the search query, so padding never reaches the index."""
     if target_chars <= len(question):
         return question
     filler = _PAD * (target_chars // len(_PAD) + 1)
-    return (question + " " + filler)[:target_chars]
+    return (question + "\n" + filler)[:target_chars]

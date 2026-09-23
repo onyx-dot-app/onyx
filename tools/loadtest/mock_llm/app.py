@@ -167,9 +167,8 @@ def _last_user_text(messages: list[ChatMessage]) -> str:
 
 def _last_user_snippet(messages: list[ChatMessage]) -> str:
     """Text used to fill synthesized tool-call arguments (e.g. a search tool's
-    query). Prefer the question over the head of the prompt, so a search tool
-    call searches for what the user asked."""
-    return _extract_question(_last_user_text(messages))[:200]
+    query), so a search tool call searches for what the user asked."""
+    return _question_from_message(_last_user_text(messages))[:200]
 
 
 # Stable phrases from Onyx's secondary-flow prompts whose LLM output feeds
@@ -188,15 +187,37 @@ _ECHO_PROMPT_MARKERS = ("reformulates the last user message",)
 _QUESTION_LABELS = ("Final user query:", "Final user message:")
 
 
-def _extract_question(text: str) -> str:
-    """The user's actual question, stripped of prompt scaffolding."""
+def _after_question_label(text: str) -> str | None:
+    """Text after the prompt's question label, or None when absent."""
     for label in _QUESTION_LABELS:
         _, sep, tail = text.rpartition(label)
-        if sep:
-            question = tail.strip()
-            if question:
-                return question
-    return text[-300:].strip()
+        if sep and tail.strip():
+            return tail.strip()
+    return None
+
+
+def _question_from_prompt(text: str) -> str:
+    """The question inside a secondary-flow prompt. Templates put it last, so
+    an unlabelled prompt falls back to the tail."""
+    return _after_question_label(text) or text[-300:].strip()
+
+
+def _question_from_message(text: str) -> str:
+    """The question inside a chat message.
+
+    ONYX_MSG_CHARS pads messages with filler after the question, so cut at the
+    first sentence end rather than taking a fixed-width slice. Taking the tail,
+    or keeping the padding, would search text that is identical for every user
+    and turn retrieval into a cache hit."""
+    labelled = _after_question_label(text)
+    if labelled:
+        return labelled
+    head = text[:200].strip()
+    end = min(
+        (pos for pos in (head.find(mark) for mark in "?!.\n") if pos != -1),
+        default=-1,
+    )
+    return head[: end + 1].strip() if end != -1 else head
 
 
 def _is_echo_flow(messages: list[ChatMessage]) -> bool:
@@ -209,7 +230,7 @@ def _is_echo_flow(messages: list[ChatMessage]) -> bool:
 
 
 def _echo_answer(messages: list[ChatMessage]) -> str:
-    return _extract_question(_last_user_text(messages))
+    return _question_from_prompt(_last_user_text(messages))
 
 
 def _synthesize_arguments(tool: ToolDefinition, snippet: str) -> str:

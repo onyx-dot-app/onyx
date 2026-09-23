@@ -248,6 +248,22 @@ def test_search_tool_argument_uses_the_question() -> None:
     assert "Context block" not in args
 
 
+def test_search_tool_argument_survives_message_padding() -> None:
+    # ONYX_MSG_CHARS pads a message with filler after the question, and a raw
+    # chat message carries no question label. Searching the padding would give
+    # every user the same query and restore the cache hits this avoids.
+    question = "which insurance plans are available to staff?"
+    padding = "Please consider the full context of the conversation so far. " * 40
+    choice = complete(
+        messages=[{"role": "user", "content": f"{question} {padding}"}],
+        tools=[INTERNAL_SEARCH_TOOL],
+        tool_choice="required",
+    )
+    args = choice["message"]["tool_calls"][0]["function"]["arguments"]
+    assert "insurance plans" in args
+    assert "consider the full context" not in args
+
+
 def test_normal_answer_is_filler_not_echo() -> None:
     chunks = stream_chunks(
         messages=[{"role": "user", "content": "what is the onboarding process?"}]
