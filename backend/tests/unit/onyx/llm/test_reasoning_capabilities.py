@@ -326,7 +326,7 @@ def test_models_rejecting_reasoning_effort_support_no_levels(model_name: str) ->
     assert supported_reasoning_efforts(LlmProviderNames.AZURE, [model_name], None) == []
 
 
-@pytest.mark.parametrize("model_name", ["gpt-5-chat-latest", "gpt-5.1-chat-latest"])
+@pytest.mark.parametrize("model_name", ["gpt-5-chat"])
 def test_chat_variants_support_no_levels(model_name: str) -> None:
     """The request builder drops every reasoning param for GPT-5 "-chat"
     registry variants, so the picker must offer no levels either."""

@@ -159,16 +159,16 @@ class TestComputeCostCents:
 
     def test_bedrock_model_priced_via_provider(self) -> None:
         # Bedrock names aren't self-identifying — without custom_llm_provider
-        # litellm raises and the cost silently collapses to $0. Haiku:
-        # $0.25/Mtok in, $1.25/Mtok out → 0.025c in, 0.125c out for 1000 tok.
+        # litellm raises and the cost silently collapses to $0. Haiku 4.5:
+        # $1/Mtok in, $5/Mtok out → 0.1c in, 0.5c out for 1000 tok.
         in_cents, out_cents = compute_cost_cents(
-            model="anthropic.claude-3-haiku-20240307-v1:0",
+            model="anthropic.claude-haiku-4-5-20251001-v1:0",
             provider="bedrock",
             prompt_tokens=1000,
             completion_tokens=1000,
         )
-        assert in_cents == pytest.approx(0.025)
-        assert out_cents == pytest.approx(0.125)
+        assert in_cents == pytest.approx(0.1)
+        assert out_cents == pytest.approx(0.5)
 
 
 class TestUnmappedGatewayModels:
