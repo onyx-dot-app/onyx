@@ -336,22 +336,24 @@ def handle_regular_answer(
         if e.error_code != OnyxErrorCode.RATE_LIMITED:
             raise
         logger.info("Skipping Slack answer: usage budget reached")
-        respond_in_thread_or_channel(
-            client=client,
-            channel=channel,
-            receiver_ids=target_receiver_ids,
-            text=e.detail,
-            thread_ts=target_thread_ts,
-            send_as_ephemeral=send_as_ephemeral,
-        )
-        if not is_slash_command:
-            update_emote_react(
-                emoji=ONYX_BOT_REACT_EMOJI,
-                channel=message_info.channel_to_respond,
-                message_ts=message_info.msg_to_respond,
-                remove=True,
+        try:
+            respond_in_thread_or_channel(
                 client=client,
+                channel=channel,
+                receiver_ids=target_receiver_ids,
+                text=e.detail,
+                thread_ts=target_thread_ts,
+                send_as_ephemeral=send_as_ephemeral,
             )
+        finally:
+            if not is_slash_command:
+                update_emote_react(
+                    emoji=ONYX_BOT_REACT_EMOJI,
+                    channel=message_info.channel_to_respond,
+                    message_ts=message_info.msg_to_respond,
+                    remove=True,
+                    client=client,
+                )
         return True
 
     try:
