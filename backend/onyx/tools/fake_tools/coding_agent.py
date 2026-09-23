@@ -436,6 +436,8 @@ def run_coding_agent_call(
                                 )
                             ],
                             image_files=None,
+                            should_cache=True,
+                            thinking_blocks=llm_step_result.thinking_blocks,
                         )
                         msg_history.append(think_assistant_msg)
                         msg_history.append(
@@ -445,6 +447,7 @@ def run_coding_agent_call(
                                 message_type=MessageType.TOOL_CALL_RESPONSE,
                                 tool_call_id=think_tool_call.tool_call_id,
                                 image_files=None,
+                                should_cache=True,
                             )
                         )
                         cycle_count += 1
@@ -485,6 +488,8 @@ def run_coding_agent_call(
                         message_type=MessageType.ASSISTANT,
                         tool_calls=tool_calls_simple,
                         image_files=None,
+                        should_cache=True,
+                        thinking_blocks=llm_step_result.thinking_blocks,
                     )
                     msg_history.append(assistant_with_tools)
 
@@ -497,6 +502,7 @@ def run_coding_agent_call(
                                 message_type=MessageType.TOOL_CALL_RESPONSE,
                                 tool_call_id=tc.tool_call_id,
                                 image_files=None,
+                                should_cache=True,
                             )
                         )
 

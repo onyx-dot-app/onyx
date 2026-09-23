@@ -519,7 +519,9 @@ def run_research_agent_call(
 
                     if tool_calls and not tool_responses:
                         failure_messages = create_tool_call_failure_messages(
-                            tool_calls, token_counter
+                            tool_calls,
+                            token_counter,
+                            thinking_blocks=llm_step_result.thinking_blocks,
                         )
                         msg_history.extend(failure_messages)
 
@@ -560,6 +562,7 @@ def run_research_agent_call(
                             tool_calls=tool_calls_simple,
                             image_files=None,
                             should_cache=True,
+                            thinking_blocks=llm_step_result.thinking_blocks,
                         )
                         msg_history.append(assistant_with_tools)
 
