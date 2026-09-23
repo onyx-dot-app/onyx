@@ -352,9 +352,8 @@ that point is not the message's original asker.
   *different* mechanism, see below.
 - [[chat-persistence]]: standard answers and regular answers both create real
   `ChatSession`/`ChatMessage` rows via the same tables `save_chat_turn` writes.
-- [[rate-and-usage-limits]]: does **not** depend on it for LLM turns. That
-  document's §9 states the Slack bot bypasses `check_token_rate_limits` and
-  `check_api_key_usage` entirely; this document's §9 restates why.
+- [[rate-and-usage-limits]]: `check_token_rate_limits(usage_user)` runs
+  before each answer; see §9 for why it must be called inline.
 
 **Depended on by**
 - [[chat-persistence]]: seeded web sessions from
@@ -447,20 +446,18 @@ See `backend/AGENTS.md` for required env and secrets.
 
 ## 9. Footguns
 
-- **The Slack bot bypasses the entire HTTP dependency chain on
-  `/chat/send-chat-message`, including token rate limits and API-key usage
-  caps.** Verified: `handle_regular_answer.py` imports and calls
-  `handle_stream_message_objects` and `gather_stream` from
-  `chat/process_message.py` directly, never through `chat_backend.py`. This
-  means `check_token_rate_limits` and `check_api_key_usage`
-  ([[rate-and-usage-limits]]) never run for a Slack-driven turn. The only
-  in-process throttle is `SlackRateLimiter` (`onyxbot/slack/utils.py`), an
-  in-memory queries-per-minute gate (`ONYX_BOT_MAX_QPM`, unset/uncapped by
-  default) with no relationship to `TokenRateLimit` rows or tenant usage
-  counters, and no cross-pod coordination. A busy Slack workspace can drive
-  unlimited LLM spend past a configured token or cost budget. See
-  [[rate-and-usage-limits]] §9 for the parallel statement from that document's
-  perspective.
+- **The Slack bot skips the HTTP dependency chain on
+  `/chat/send-chat-message`, so every metering check must be called inline.**
+  `handle_regular_answer.py` calls `handle_stream_message_objects` and
+  `gather_stream` from `chat/process_message.py` directly. It calls
+  `check_token_rate_limits(usage_user)` itself, before the retry wrapper, and
+  replies with the budget message on `RATE_LIMITED`. The cloud cost cap runs
+  inside `process_message`. `check_api_key_usage` does not apply, because no
+  API key is involved. `SlackRateLimiter` (`onyxbot/slack/utils.py`,
+  `ONYX_BOT_MAX_QPM`, uncapped by default) is a separate in-memory QPM gate
+  with no cross-pod coordination, not a budget. Tests that drive
+  `handle_regular_answer` against the shared DB must patch the budget check,
+  or leftover budgets from other suites fail them.
 - **The `bypass_acl` docstring in `chat/process_message.py` is stale.** It reads
   "If `True`, document ACL checks are skipped (used by Slack bot)"
   (`process_message.py:1693`). Independently verified here: the Slack bot's only

@@ -329,7 +329,7 @@ whatever those endpoints give back.
 | changes the retrieval pipeline (`SearchTool.run`, `_build_index_filters`, `_expand_queries_and_decide_scope`) | [[internal-search]] owns it; the change reaches this component automatically since `search_indexed_documents` calls the same `/search` endpoint chat's search tool ultimately reaches |
 | changes `bypass_acl` plumbing anywhere in the chain | [[access-control]] §5.3 flags this as a security review regardless of which caller touches it; re-verify `search/api.py:search` still passes `bypass_acl=False` explicitly |
 | changes `NullEmitter` | [[core-chat-loop]] also depends on it for the non-streaming save path; re-check both callers named in its docstring |
-| adds a way for `search_indexed_documents` (or a future tool) to make an LLM call | re-read §9's rate-limit note; that call is currently unmetered by any per-user/per-tenant token budget |
+| adds a way for `search_indexed_documents` (or a future tool) to make an LLM call | re-read §9's rate-limit note; the call must stay behind the budget checks in `search/api.py:search` or add its own |
 | changes `MCP_SERVER_ENABLED`/`MCP_SERVER_PORT`/`API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS` defaults | update the Helm chart's `mcp-server-deployment.yaml` env block and the commented docker-compose service to match |
 
 ---
@@ -395,31 +395,17 @@ to `[[mcp-and-custom-tools]]`, not this component.
   (`mcp_server_main.py`) is not started by most local dev flows unless
   `MCP_SERVER_ENABLED=true` is set. A regression here can go unnoticed unless
   `tests/integration/tests/mcp/` is run specifically.
-- **`search_indexed_documents` is not free of LLM spend, and nothing meters
-  it per user or per tenant the way chat is metered.** `SearchTool.run`
-  unconditionally calls `select_sections_for_expansion`
-  (`tools/tool_implementations/search/search_tool.py`, around line 1220), an
-  LLM call to pick which retrieved sections to return, on every call
-  regardless of `skip_query_expansion`. When `skip_query_expansion=False`
-  (the default), it also calls `keyword_query_expansion` and
-  `decide_time_filter` via `self.llm`
-  (`search_tool.py:_expand_queries_and_decide_scope`). `[[rate-and-usage-limits]]`
-  documents that the MCP surface "does not drive an LLM turn at all" and is
-  therefore not a gap for the per-user/per-group `TokenRateLimit` system,
-  reasoning that it never reaches `process_message.py`. That is true in the
-  narrow sense (it never enters the chat turn engine), but it is misleading
-  about spend: the `/search` endpoint it calls does invoke the LLM, at least
-  once and often twice per call, and the only limit that applies is
-  `check_llm_cost_limit_for_provider` (`search/api.py:search`), which is a
-  **tenant-level cost cap that only fires when the tenant is using an
-  Onyx-managed default API key** (`usage_limits.py`, per
-  `[[rate-and-usage-limits]]` §4.3). Neither `check_token_rate_limits` (the
-  per-user/per-group budget chat enforces) nor `check_api_key_usage` (the
-  tenant API-call cap) is called anywhere in `server/features/search/api.py`.
-  A tenant on its own provider key, or under its cost cap, can drive unlimited
-  LLM-backed searches through this surface with no rate limit at all. This is
-  worth treating as a real gap, not settled by the "never drives an LLM turn"
-  framing.
+- **`search_indexed_documents` spends LLM tokens, and `/search` meters it
+  like chat.** `SearchTool.run` calls `select_sections_for_expansion`
+  (`tools/tool_implementations/search/search_tool.py`) on every call, whatever
+  the value of `skip_query_expansion`. When `skip_query_expansion=False` (the
+  default), it also calls `keyword_query_expansion` and `decide_time_filter`
+  (`search_tool.py:_expand_queries_and_decide_scope`). `search/api.py:search`
+  runs `check_token_rate_limits` before it resolves an LLM,
+  `check_api_key_usage` as a route dependency, and
+  `check_llm_cost_limit_for_provider` (the cloud cost cap on Onyx-managed
+  keys). Do not remove these on the grounds that MCP "never drives a chat
+  turn"; see [[rate-and-usage-limits]] §9.
 - **The MCP server's own token check is a liveness check, not a scope
   check.** `auth.py:verify_token` only confirms the token is accepted by
   `/me`; it does not know or enforce `read:search` vs `read:chat` vs

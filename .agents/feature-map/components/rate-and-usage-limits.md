@@ -72,16 +72,19 @@ invisible in normal use.
 | (inline) | chat session auto-naming | `_generate_or_fallback_chat_session_name` | Calls `check_token_rate_limits` directly, not as a `Depends`. `chat_backend.py:_generate_or_fallback_chat_session_name` |
 | POST | `/build/sessions/{id}/send-message` | (Craft turn) | Called inline before creating the user message. `features/build/session/messages.py:send_message` (function name at line 128 call site) |
 | POST | `/build/sessions/{id}/subagents/{sub_id}/send-message` | `send_subagent_message` | `features/build/session/messages.py:send_subagent_message` |
-| POST | `/gateway/v1/chat/completions`, `/gateway/v1/responses`, `/gateway/v1/messages` | `gateway_chat_completions`, `gateway_responses`, `gateway_anthropic_messages` | The AI Gateway (OpenAI/Anthropic-compatible passthrough), EE-only. `ee/onyx/server/gateway/api.py` |
+| POST | `/gateway/v1/chat/completions`, `/gateway/v1/responses`, `/gateway/v1/messages` | `gateway_chat_completions`, `gateway_responses`, `gateway_anthropic_messages` | The AI Gateway (OpenAI/Anthropic-compatible passthrough), EE-only. `_resolve_metered_gateway_model` also runs `check_llm_cost_limit_for_provider` on the resolved provider's key. `ee/onyx/server/gateway/api.py` |
+| POST | `/search` | `search` | Called inline before the LLM is resolved. Also runs `check_api_key_usage`. Used by the MCP server. `features/search/api.py:search` |
+| (in process) | Slack bot answer | `handle_regular_answer` | Called inline, charged to `usage_user`. An over-budget request gets the budget message in the thread. `onyxbot/slack/handlers/handle_regular_answer.py` |
 
 ### HTTP endpoints that enforce `check_api_key_usage`
 
 | Method | Path | Handler |
 |---|---|---|
 | POST | `/chat/send-chat-message` | `chat_backend.py:handle_send_chat_message` |
+| POST | `/search` | `features/search/api.py:search` |
 
-No other endpoint in the repository declares `check_api_key_usage`. See §9 for
-what this means for the Gateway and Craft/Build surfaces.
+No other endpoint declares `check_api_key_usage`. See §9 for what this means
+for the Gateway and Craft/Build surfaces.
 
 ### Indexing-side global check
 
@@ -380,7 +383,8 @@ Invite limits (`server/manage/invite_rate_limit.py`), called from
 - [[onyx-api]]: any API-key/PAT caller of `/chat/send-chat-message` is subject
   to both `check_token_rate_limits` (GLOBAL scope only if it resolves to an
   API-key identity) and `check_api_key_usage`.
-- [[slack-bot]]: does **not** depend on this component for LLM turns; see §9.
+- [[slack-bot]]: calls `check_token_rate_limits` inline before each answer;
+  see §9.
 
 ---
 
@@ -388,7 +392,7 @@ Invite limits (`server/manage/invite_rate_limit.py`), called from
 
 | If your change... | Also check |
 |---|---|
-| adds a new chat entry point (a new endpoint or in-process call that drives `handle_stream_message_objects` or an equivalent LLM turn) | it must declare `check_token_rate_limits`, and, if it can be reached with an API key/PAT, `check_api_key_usage`; otherwise it is an unmetered, unlimited path (see §9's existing gaps before assuming yours is the first) |
+| adds a new chat entry point (a new endpoint or in-process call that drives `handle_stream_message_objects` or an equivalent LLM turn) | it must declare `check_token_rate_limits`, and, if it can be reached with an API key/PAT, `check_api_key_usage`; otherwise it is an unmetered, unlimited path. An in-process caller must call the check inline, as the Slack bot does (§9) |
 | changes the token-rate-limit scope model (adds a scope, changes CE/EE split) | the EE `_check_token_rate_limits` parallel-check list, the admin UI tabs (`TokenRateLimitsPanel.tsx:enterpriseTier`), and `get_token_rate_limit_scope_and_group_ids` |
 | changes the 429 error shape (`error_code`, `extra` keys, status code) | `web/src/app/app/services/lib.tsx` and `web/src/app/craft/components/BuildMessageList.tsx`, both of which pattern-match the exact fields; a mismatch degrades to an opaque thrown error instead of the usage banner |
 | changes counter storage (moves `user_usage` off the daily-rollup model, or `tenant_usage` off the fixed-window model) | the token-budget scan's cutoff-time math (`_get_cutoff_time`, `get_token_window_start`) and the tenant-usage window math (`get_current_window_start`); both assume the current bucket shape |
@@ -443,17 +447,17 @@ See `backend/AGENTS.md` for required env and secrets.
 
 ## 9. Footguns
 
-- **The Slack bot bypasses token rate limits and API key usage caps
-  entirely.** `onyx/onyxbot/slack/handlers/handle_regular_answer.py` imports
-  `gather_stream` and `handle_stream_message_objects` from
-  `chat/process_message.py` directly, in-process, never going through
-  `chat_backend.py`'s FastAPI `Depends`. Its only throttle is
-  `onyxbot/slack/utils.py:SlackRateLimiter`, a per-process in-memory QPM
-  gate (`ONYX_BOT_MAX_QPM`) with no relationship to `TokenRateLimit` or
-  tenant usage counters. A Slack workspace can drive unlimited LLM spend
-  past a configured token or cost budget.
+- **The Slack bot and `POST /search` call the chat engine or the LLM in
+  process, so no route dependency protects them.** Each one calls
+  `check_token_rate_limits` inline: the Slack bot charges it to `usage_user`
+  (the mapped Onyx user, else the Slack service account) before it builds the
+  answer (`handle_regular_answer.py`), and `search/api.py:search` checks the
+  caller before it resolves an LLM. A new in-process entry point gets no
+  budget check unless it adds one. `SlackRateLimiter` (`ONYX_BOT_MAX_QPM`) is
+  a separate, per-process QPM gate and is not a budget.
 - **The AI Gateway (`ee/onyx/server/gateway/api.py`) checks
-  `check_token_rate_limits` but never `check_api_key_usage`.** Gateway
+  `check_token_rate_limits` and the cloud cost cap, but never
+  `check_api_key_usage` (on purpose, see [[llm-gateway]] §4.8).** Gateway
   callers authenticate via `Permission.USE_LLM_GATEWAY`, not necessarily the
   API-key/PAT path `check_api_key_usage` inspects, but if a PAT is used here
   it is not counted toward the tenant API-call cap the way the same PAT
@@ -462,18 +466,14 @@ See `backend/AGENTS.md` for required env and secrets.
   `check_token_rate_limits` on both send-message endpoints but never
   `check_api_key_usage`.** A Craft turn driven by an API key/PAT does not
   count against the tenant's API-call cap.
-- **The MCP surface in `backend/onyx/mcp_server/` never reaches
-  `process_message.py`, but it still spends LLM tokens, and nothing here
-  meters it.** Its `search_indexed_documents` tool calls `POST /search` on the
-  API server, and `search/api.py:search` declares only
-  `check_llm_cost_limit_for_provider`, which applies solely when the tenant
-  uses an Onyx-managed default key. Neither `check_token_rate_limits` nor
-  `check_api_key_usage` is declared there. The retrieval pipeline itself then
-  makes LLM calls: `SearchTool.run` reaches `select_sections_for_expansion`
-  every time, and `keyword_query_expansion` and `decide_time_filter` unless
-  query expansion is skipped. The MCP server also exposes `search_web` and
-  `open_urls`, so it drives outbound egress as well. Treat "does not drive a
-  chat turn" as true but not sufficient. See [[mcp-server]] §9.
+- **The MCP surface spends LLM tokens through `POST /search`.** Its
+  `search_indexed_documents` tool calls that endpoint, and the retrieval
+  pipeline makes LLM calls: `select_sections_for_expansion` every time, and
+  `keyword_query_expansion` and `decide_time_filter` unless query expansion
+  is skipped. `/search` runs all three checks (token budgets, the cloud cost
+  cap, and `check_api_key_usage`). The MCP server's `search_web` and
+  `open_urls` tools spend web-search provider quota, which none of these
+  checks meter. See [[mcp-server]] §9.
 - **Community Edition cannot create or edit any `TokenRateLimit`, including
   GLOBAL scope, through the admin API.** `ee/onyx/server/token_rate_limits/api.py`
   says so directly: "Spending limits are an Enterprise feature, so every
