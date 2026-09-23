@@ -722,7 +722,8 @@ def test_parallel_internal_and_web_search_tool_calls(
 
     expected_internal_docs = []
     seen_internal_results = set()
-    for internal_results in INTERNAL_RESULTS_1.values():
+    # Only the first agent query is executed, so only its results come back.
+    for internal_results in [INTERNAL_RESULTS_1[INTERNAL_QUERIES_1[0]]]:
         for internal_result in internal_results:
             key = (internal_result.semantic_identifier, internal_result.document_id)
             if key in seen_internal_results:
@@ -808,7 +809,9 @@ def test_parallel_internal_and_web_search_tool_calls(
             Packet(
                 placement=create_placement(1, 0),
                 obj=SearchToolQueriesDelta(
-                    queries=INTERNAL_QUERIES_1 + [QUERY],
+                    # Only the first agent query runs; the rest are dropped in
+                    # favour of the automatic expansion appended after it.
+                    queries=INTERNAL_QUERIES_1[:1] + [QUERY],
                 ),
             )
         ).expect(
