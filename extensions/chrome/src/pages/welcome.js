@@ -149,8 +149,9 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  // Load any existing values (in case user returns to this page)
-  async function loadStoredValues() {
+  // Lock controls that are set by policy. Unmanaged controls keep whatever
+  // the user has entered so far.
+  async function applyManagedSettings() {
     const managed = await getManagedSettings();
     const managedDomain = managed[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN];
     const managedNewTab =
@@ -158,27 +159,36 @@ document.addEventListener("DOMContentLoaded", function () {
     domainManaged = typeof managedDomain === "string";
     newTabManaged = typeof managedNewTab === "boolean";
 
+    domainInput.disabled = domainManaged;
+    if (domainManaged) {
+      domainInput.value = normalizeOnyxDomain(managedDomain);
+    }
+
+    useOnyxAsDefaultToggle.disabled = newTabManaged;
+    if (newTabManaged) {
+      useOnyxAsDefaultToggle.checked = managedNewTab;
+    }
+  }
+
+  // Load any existing values (in case user returns to this page)
+  async function loadStoredValues() {
     const result = await chrome.storage.local.get({
       [CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN]: "",
       [CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB]: true,
     });
 
-    domainInput.disabled = domainManaged;
-    if (domainManaged) {
-      domainInput.value = normalizeOnyxDomain(managedDomain);
-    } else if (result[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN]) {
+    if (result[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN]) {
       domainInput.value = result[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN];
     }
+    useOnyxAsDefaultToggle.checked =
+      result[CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB];
 
-    useOnyxAsDefaultToggle.disabled = newTabManaged;
-    useOnyxAsDefaultToggle.checked = newTabManaged
-      ? managedNewTab
-      : result[CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB];
+    await applyManagedSettings();
   }
 
   chrome.storage.onChanged.addListener((changes, namespace) => {
     if (namespace === "managed") {
-      loadStoredValues();
+      applyManagedSettings();
     }
   });
 
