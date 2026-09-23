@@ -6339,6 +6339,10 @@
     },
     "security": {
       "adminControls": {
+        "connectorGroupRestrictions": {
+          "description": "Los conectores pueden exigir la pertenencia a grupos específicos, no solo el acceso en el origen.",
+          "title": "Permitir restricciones por grupo en conectores con permisos sincronizados"
+        },
         "incognito": {
           "description": "Los chats de incógnito nunca aparecen en el historial de su propietario. El acceso se configura en cada grupo, dentro de Grupos.",
           "everyone": {

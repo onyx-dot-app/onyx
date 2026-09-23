@@ -6339,6 +6339,10 @@
     },
     "security": {
       "adminControls": {
+        "connectorGroupRestrictions": {
+          "description": "커넥터가 소스의 접근 권한뿐 아니라 특정 그룹의 멤버십도 요구할 수 있습니다.",
+          "title": "권한 동기화 커넥터에서 그룹 제한 허용"
+        },
         "incognito": {
           "description": "시크릿 채팅은 소유자의 기록에 표시되지 않습니다. 그룹 액세스는 그룹 페이지에서 그룹별로 설정합니다.",
           "everyone": {

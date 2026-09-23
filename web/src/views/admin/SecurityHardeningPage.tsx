@@ -29,7 +29,8 @@ import {
 } from "@opal/components";
 import { markdown } from "@opal/utils";
 import { useSettings } from "@/lib/settings/hooks";
-import { Settings, toSettings } from "@/lib/settings/types";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Settings, Tier, toSettings } from "@/lib/settings/types";
 import { updateAdminSettings } from "@/lib/settings/svc";
 import type { RichStr } from "@opal/types";
 import type {
@@ -157,6 +158,8 @@ export default function SecurityHardeningPage() {
   const t = useTranslations("admin.security");
   const adminRouteTitle = useAdminRouteTitle();
   const isMultiTenant = NEXT_PUBLIC_CLOUD_ENABLED;
+  // Groups and perm sync are Business+, so the restriction is meaningless below.
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { authTypeMetadata, isLoading: authTypeLoading } =
     useAuthTypeMetadata();
   // Single-tenant at runtime, not just by build flag. The explicit === false
@@ -789,6 +792,21 @@ export default function SecurityHardeningPage() {
                     </InputSelect>
                   </div>
                 </InputHorizontal>
+              )}
+
+              {businessTier && (
+                <ToggleRow
+                  title={t("adminControls.connectorGroupRestrictions.title")}
+                  description={t(
+                    "adminControls.connectorGroupRestrictions.description"
+                  )}
+                  checked={draft.allow_connector_group_restrictions}
+                  onCheckedChange={(checked) =>
+                    void saveSettings({
+                      allow_connector_group_restrictions: checked,
+                    })
+                  }
+                />
               )}
             </Section>
           </Card>

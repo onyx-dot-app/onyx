@@ -6339,6 +6339,10 @@
     },
     "security": {
       "adminControls": {
+        "connectorGroupRestrictions": {
+          "description": "Les connecteurs peuvent exiger l'appartenance à des groupes précis, pas seulement l'accès dans la source.",
+          "title": "Autoriser les restrictions par groupe sur les connecteurs à permissions synchronisées"
+        },
         "incognito": {
           "description": "Les discussions en navigation privée n'apparaissent jamais dans l'historique de leur propriétaire. L'accès se configure groupe par groupe dans Groupes.",
           "everyone": {

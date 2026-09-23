@@ -580,6 +580,7 @@ export interface SecuritySettings {
   user_directory_admin_only: boolean;
   incognito_availability: IncognitoAvailability;
   incognito_record_mode: IncognitoRecordMode;
+  allow_connector_group_restrictions: boolean;
   track_external_idp_expiry: boolean;
   allow_same_provider_subject_relink: boolean;
   ssrf_protection_level: SSRFProtectionLevel;
