@@ -49,6 +49,8 @@ jobs:
         with:
           # chart-releaser needs full history to resolve the release commit.
           fetch-depth: 0
+          # Resolve app version reads the release tags.
+          fetch-tags: true
           # cr authenticates with CR_TOKEN, not the git credential helper.
           persist-credentials: false
 
@@ -77,15 +79,50 @@ jobs:
           helm repo add code-interpreter https://onyx-dot-app.github.io/python-sandbox/
           helm repo update
 
+      # The chart falls back to appVersion for every Onyx image tag, so stamp
+      # the highest bare vX.Y.Z tag (the same rule deployment.yml uses for
+      # "latest") whose core images are already on Docker Hub. A tag whose
+      # images are still building, or failed to publish, is skipped.
+      - name: Resolve app version
+        id: app-version
+        run: |
+          set -euo pipefail
+          candidates="$(git tag --list 'v*' \
+            | grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' \
+            | sort -rV | head -n 5 || true)"
+          [ -n "$candidates" ] || { echo "::error::No stable vX.Y.Z tag found" >&2; exit 1; }
+
+          for tag in $candidates; do
+            published=true
+            for repo in onyx-backend onyx-web-server onyx-model-server; do
+              code="$(curl -sS -o /dev/null -w '%{http_code}' --retry 3 \
+                "https://hub.docker.com/v2/namespaces/onyxdotapp/repositories/${repo}/tags/${tag}")"
+              case "$code" in
+                200) ;;
+                404) echo "onyxdotapp/${repo}:${tag} is not published"; published=false; break ;;
+                *) echo "::error::Docker Hub returned HTTP ${code} for onyxdotapp/${repo}:${tag}" >&2; exit 1 ;;
+              esac
+            done
+            if [ "$published" = true ]; then
+              echo "app-version=${tag}" >> "$GITHUB_OUTPUT"
+              echo "Stamping appVersion ${tag}"
+              exit 0
+            fi
+          done
+          echo "::error::None of the newest stable tags has all core images published: ${candidates//$'\n'/ }" >&2
+          exit 1
+
       # Packaged here rather than by chart-releaser so the release, the
       # index.yaml entry and the OCI artifact all ship the same bytes.
       - name: Package chart
         id: package
+        env:
+          APP_VERSION: ${{ steps.app-version.outputs.app-version }}
         run: |
           set -euo pipefail
           helm dependency build "${CHART_DIR}"
           mkdir -p "${PACKAGE_DIR}"
-          helm package "${CHART_DIR}" --destination "${PACKAGE_DIR}"
+          helm package "${CHART_DIR}" --app-version "${APP_VERSION}" --destination "${PACKAGE_DIR}"
 
           # Derive the version from the artifact helm just wrote rather than by
           # parsing Chart.yaml, so the release, the index entry and the OCI tag

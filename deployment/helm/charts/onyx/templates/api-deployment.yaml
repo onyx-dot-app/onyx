@@ -67,8 +67,8 @@ spec:
       containers:
         - name: api-server
           securityContext:
-            {{- toYaml .Values.api.securityContext | nindent 12 }}
-          image: "{{ .Values.api.image.repository }}:{{ .Values.api.image.tag | default .Values.global.version }}"
+            {{- include "onyx.containerSecurityContext" .Values.api.securityContext | nindent 12 }}
+          image: "{{ .Values.api.image.repository }}:{{ include "onyx.imageTag" (list . .Values.api.image) }}"
           imagePullPolicy: {{ .Values.global.pullPolicy }}
           command:
             - "/bin/sh"

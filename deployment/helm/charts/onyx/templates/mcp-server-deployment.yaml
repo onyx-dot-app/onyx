@@ -54,8 +54,8 @@ spec:
       containers:
         - name: mcp-server
           securityContext:
-            {{- toYaml .Values.mcpServer.securityContext | nindent 12 }}
-          image: "{{ .Values.mcpServer.image.repository }}:{{ .Values.mcpServer.image.tag | default .Values.global.version }}"
+            {{- include "onyx.containerSecurityContext" .Values.mcpServer.securityContext | nindent 12 }}
+          image: "{{ .Values.mcpServer.image.repository }}:{{ include "onyx.imageTag" (list . .Values.mcpServer.image) }}"
           imagePullPolicy: {{ .Values.global.pullPolicy }}
           command: [{{ include "onyx.customCACerts.commandPrefix" . }}"python", "onyx/mcp_server_main.py"]
           ports:

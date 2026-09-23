@@ -5,7 +5,9 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.8.36
+version: 0.8.39
+# Placeholder for source checkouts. helm-chart-releases.yml stamps the latest
+# stable release tag here when it packages the chart.
 appVersion: latest
 annotations:
   category: Productivity
@@ -20,9 +22,15 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: added
-      description: SHAREPOINT_CONNECTOR_SIZE_THRESHOLD in the config map values,
-        the SharePoint file size cap that Teams and Outlook already exposed.
+    - kind: security
+      description: Pin Onyx images to the chart appVersion (the latest stable release
+        at publish time) instead of the floating latest tag.
+    - kind: security
+      description: Default Onyx workloads to the RuntimeDefault seccomp profile and
+        allowPrivilegeEscalation false.
+    - kind: security
+      description: Warn after install when the default PostgreSQL or Redis passwords
+        are in use.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it
