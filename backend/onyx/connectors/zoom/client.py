@@ -62,8 +62,10 @@ _MAX_PAGE_SIZE = 300
 # Backstop for a cursor that keeps advancing forever; the cycle check in
 # _paginate catches one that repeats. A Celery task has no working time limit,
 # so nothing else would stop either loop. Tripping this drops the document
-# rather than truncating its access list.
-MAX_LISTING_PAGES = 200
+# rather than truncating its access list. Every listing ends on its own when
+# Zoom sends no next token, so at 300 a page this only has to sit above the
+# largest account's user count, which the group sync walks in full.
+MAX_LISTING_PAGES = 2000
 
 _RecordT = TypeVar("_RecordT")
 
