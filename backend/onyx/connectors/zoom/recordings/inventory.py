@@ -35,6 +35,9 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 _MAX_DOCUMENTS_PER_BATCH = 500
+# Bounds the ids remembered to skip a recording listed twice, at about 30 MB.
+# Past it a repeat listing costs one more access call, and nothing is lost.
+_MAX_REMEMBERED_IDS = 250_000
 # listing_windows runs a day past the end it is given, so 28 is the widest
 # trailing pass that still fits in one Zoom call per host.
 _TRAILING_WINDOW_DAYS = 28
@@ -233,7 +236,8 @@ def _documents(
     ]
     if not new_ids:
         return []
-    emitted.update(new_ids)
+    if len(emitted) < _MAX_REMEMBERED_IDS:
+        emitted.update(new_ids)
     access = resolve_access(recording) if resolve_access is not None else None
     created_at = _created_at(recording.start_time)
     return [
