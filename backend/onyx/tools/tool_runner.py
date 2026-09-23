@@ -53,8 +53,11 @@ GENERIC_TOOL_ERROR_MESSAGE = "Tool failed with error: {error}"
 TOOL_EXECUTION_TIMEOUT_SECONDS = 10 * 60
 
 # Mapping of tool name to the field that should be merged when multiple calls exist
+# internal_search is deliberately absent: when the model asks for several
+# searches in one turn we run them as parallel tool calls, each with its own
+# expansion and its own fused result set, rather than collapsing them into one
+# call where the queries compete inside a single ranking.
 MERGEABLE_TOOL_FIELDS: dict[str, str] = {
-    SearchTool.NAME: QUERIES_FIELD,
     WebSearchTool.NAME: QUERIES_FIELD,
     OpenURLTool.NAME: URLS_FIELD,
 }

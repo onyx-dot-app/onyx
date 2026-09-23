@@ -65,8 +65,8 @@ class TestMergeToolCalls:
         assert result[0].tool_name == "open_url"
         assert result[0].tool_args == {"urls": ["https://example.com"]}
 
-    def test_multiple_search_tool_calls_merged(self) -> None:
-        """Multiple SearchTool calls have their queries merged into one call."""
+    def test_multiple_search_tool_calls_not_merged(self) -> None:
+        """Multiple SearchTool calls stay separate so they run in parallel."""
         calls = [
             _make_tool_call(
                 tool_name="internal_search",
@@ -81,11 +81,16 @@ class TestMergeToolCalls:
         ]
         result = _merge_tool_calls(calls)
 
-        assert len(result) == 1
-        assert result[0].tool_name == "internal_search"
-        assert result[0].tool_args["queries"] == ["query1", "query2", "query3"]
-        # Uses first call's ID
-        assert result[0].tool_call_id == "call_1"
+        assert len(result) == 2
+        assert [call.tool_name for call in result] == [
+            "internal_search",
+            "internal_search",
+        ]
+        assert [call.tool_args["queries"] for call in result] == [
+            ["query1", "query2"],
+            ["query3"],
+        ]
+        assert [call.tool_call_id for call in result] == ["call_1", "call_2"]
 
     def test_multiple_web_search_tool_calls_merged(self) -> None:
         """Multiple WebSearchTool calls have their queries merged."""
@@ -155,7 +160,7 @@ class TestMergeToolCalls:
         """Mix of mergeable and non-mergeable tools handles correctly."""
         calls = [
             _make_tool_call(
-                tool_name="internal_search",
+                tool_name="web_search",
                 tool_args={"queries": ["q1"]},
                 tool_call_id="search_1",
             ),
@@ -165,7 +170,7 @@ class TestMergeToolCalls:
                 tool_call_id="python_1",
             ),
             _make_tool_call(
-                tool_name="internal_search",
+                tool_name="web_search",
                 tool_args={"queries": ["q2"]},
                 tool_call_id="search_2",
             ),
@@ -176,9 +181,9 @@ class TestMergeToolCalls:
         assert len(result) == 2
 
         tool_names = {r.tool_name for r in result}
-        assert tool_names == {"internal_search", "run_python"}
+        assert tool_names == {"web_search", "run_python"}
 
-        search_result = next(r for r in result if r.tool_name == "internal_search")
+        search_result = next(r for r in result if r.tool_name == "web_search")
         assert search_result.tool_args["queries"] == ["q1", "q2"]
 
         python_result = next(r for r in result if r.tool_name == "run_python")
@@ -188,20 +193,20 @@ class TestMergeToolCalls:
         """Multiple different mergeable tools each get merged separately."""
         calls = [
             _make_tool_call(
-                tool_name="internal_search",
-                tool_args={"queries": ["search1"]},
-            ),
-            _make_tool_call(
                 tool_name="web_search",
                 tool_args={"queries": ["web1"]},
             ),
             _make_tool_call(
-                tool_name="internal_search",
-                tool_args={"queries": ["search2"]},
+                tool_name="open_url",
+                tool_args={"urls": ["https://example.com/1"]},
             ),
             _make_tool_call(
                 tool_name="web_search",
                 tool_args={"queries": ["web2"]},
+            ),
+            _make_tool_call(
+                tool_name="open_url",
+                tool_args={"urls": ["https://example.com/2"]},
             ),
         ]
         result = _merge_tool_calls(calls)
@@ -209,23 +214,26 @@ class TestMergeToolCalls:
         # Should have 2 merged calls
         assert len(result) == 2
 
-        search_result = next(r for r in result if r.tool_name == "internal_search")
-        assert search_result.tool_args["queries"] == ["search1", "search2"]
-
         web_result = next(r for r in result if r.tool_name == "web_search")
         assert web_result.tool_args["queries"] == ["web1", "web2"]
+
+        url_result = next(r for r in result if r.tool_name == "open_url")
+        assert url_result.tool_args["urls"] == [
+            "https://example.com/1",
+            "https://example.com/2",
+        ]
 
     def test_preserves_first_call_placement(self) -> None:
         """Merged call uses the placement from the first call."""
         calls = [
             _make_tool_call(
-                tool_name="internal_search",
+                tool_name="web_search",
                 tool_args={"queries": ["q1"]},
                 turn_index=1,
                 tab_index=2,
             ),
             _make_tool_call(
-                tool_name="internal_search",
+                tool_name="web_search",
                 tool_args={"queries": ["q2"]},
                 turn_index=3,
                 tab_index=4,
@@ -241,11 +249,11 @@ class TestMergeToolCalls:
         """Merged call preserves non-merge-field args from the first call."""
         calls = [
             _make_tool_call(
-                tool_name="internal_search",
+                tool_name="web_search",
                 tool_args={"queries": ["q1"], "other_param": "value1"},
             ),
             _make_tool_call(
-                tool_name="internal_search",
+                tool_name="web_search",
                 tool_args={"queries": ["q2"], "other_param": "value2"},
             ),
         ]
@@ -260,11 +268,11 @@ class TestMergeToolCalls:
         """Handles calls with empty queries lists."""
         calls = [
             _make_tool_call(
-                tool_name="internal_search",
+                tool_name="web_search",
                 tool_args={"queries": []},
             ),
             _make_tool_call(
-                tool_name="internal_search",
+                tool_name="web_search",
                 tool_args={"queries": ["q1"]},
             ),
         ]
@@ -277,11 +285,11 @@ class TestMergeToolCalls:
         """Handles calls where the merge field is missing entirely."""
         calls = [
             _make_tool_call(
-                tool_name="internal_search",
+                tool_name="web_search",
                 tool_args={},  # No queries field
             ),
             _make_tool_call(
-                tool_name="internal_search",
+                tool_name="web_search",
                 tool_args={"queries": ["q1"]},
             ),
         ]
@@ -294,11 +302,11 @@ class TestMergeToolCalls:
         """Handles edge case where merge field is a string instead of list."""
         calls = [
             _make_tool_call(
-                tool_name="internal_search",
+                tool_name="web_search",
                 tool_args={"queries": "single_query"},  # String instead of list
             ),
             _make_tool_call(
-                tool_name="internal_search",
+                tool_name="web_search",
                 tool_args={"queries": ["q2"]},
             ),
         ]

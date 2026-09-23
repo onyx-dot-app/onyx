@@ -572,7 +572,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                             "type": "array",
                             "items": {"type": "string"},
                             "description": (
-                                "The search query to execute, as a single-element list. "
+                                "List of search queries to execute, typically a single query. "
                                 "Query expansion and filter extraction steps will be run "
                                 "automatically downstream, do not include time or source type "
                                 "scoping details in your query."
@@ -792,13 +792,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # Session is closed here — all parallel work uses plain Python objects only
 
         llm_queries = cast(list[str], llm_kwargs[QUERIES_FIELD])
-        # One agent-authored query per search. Extra queries are redundant with
-        # the automatic expansion below and only add vote mass to the fusion.
-        if len(llm_queries) > 1:
-            logger.info(
-                "Using the first of %d queries provided by the model", len(llm_queries)
-            )
-            llm_queries = llm_queries[:1]
 
         # Run semantic and keyword query expansion in parallel (unless skipped)
         # Use message history, memories, and user info from override_kwargs
