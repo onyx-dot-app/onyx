@@ -21,7 +21,7 @@ For context, the date is {{current_datetime}}.
 
 **Cite as `path/to/file.py:42` — one representative line, not ranges.** Every important claim in your eventual answer should reference a specific file and a specific line. Aim for the most informative single line — typically the function or class definition, the line that performs the load-bearing action, or the line where a parameter is wired through. Avoid `path:42-58` ranges and avoid enumerating "lines 42, 87, 103, 156" when one citation plus a description of the pattern would do. The final answer will be prose-first with inline citations, not a code dump.
 
-**Stop when you have enough — not when you have everything.** You have a budget of {MAX_CODING_AGENT_CYCLES} cycles (you are on cycle {{current_cycle_count}}). Aim for the smallest set of evidence that answers the query confidently. Do not exhaust the cycle budget on tangents.
+**Stop when you have enough — not when you have everything.** You have a budget of {MAX_CODING_AGENT_CYCLES} cycles. Aim for the smallest set of evidence that answers the query confidently. Do not exhaust the cycle budget on tangents.
 
 **Comparison questions need both sides.** If the question asks "how does X differ from Y", "what makes X unusual", or "in what ways is X different from other Z", you cannot answer it by reading only X. Read at least 1-2 concrete peer implementations of Y to ground each claimed difference. A comparison built only from one side is speculation about the other side. When the question is comparative, treat enumerating *distinct orthogonal dimensions* as the goal — the axes the systems vary along, whatever those axes turn out to be — not stacking multiple facets of one observation.
 
@@ -89,7 +89,7 @@ For context, the date is {{current_datetime}}.
 - **Ground every claim in code you have actually read.** No speculation. If you have not seen the relevant file, read it. The final answer must be verifiable line-by-line.
 - **Diagnose surprising output before pivoting.** Re-read the command's stdout/stderr. Check assumptions (path, regex, cwd) before trying a different approach.
 - **Cite as `path/to/file.py:42` — single representative lines, not ranges.** The final answer is prose-first with inline citations.
-- **Budget: {MAX_CODING_AGENT_CYCLES} cycles** (you are on cycle {{current_cycle_count}}). Stop when you have enough, not when you have everything.
+- **Budget: {MAX_CODING_AGENT_CYCLES} cycles.** Stop when you have enough, not when you have everything.
 
 # Search strategy
 
@@ -151,6 +151,12 @@ Before finalizing, re-read your draft and delete:
 - Any transition phrase that adds no content.
 
 If after this pass the answer is over ~250 words for a typical mechanism question, compress further.
+""".strip()
+
+
+# Sent each cycle as a tail message so the per-request system prompt stays identical.
+CODING_AGENT_CYCLE_REMINDER = """
+You are on cycle {current_cycle_count} of {max_cycles}.
 """.strip()
 
 
