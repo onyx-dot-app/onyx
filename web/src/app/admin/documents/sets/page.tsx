@@ -13,7 +13,7 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { Button, Divider, Text } from "@opal/components";
-import { markdown } from "@opal/utils";
+import { escapeMarkdown, markdown } from "@opal/utils";
 import { Spacer } from "@opal/components";
 import Title from "@/components/ui/title";
 import { DocumentSetSummary } from "@/lib/types";
@@ -371,7 +371,9 @@ function Main() {
 
   return (
     <div className="mb-8">
-      <Text as="p">{markdown(t("sets.description", { appName }))}</Text>
+      <Text as="p">
+        {markdown(t("sets.description", { appName: escapeMarkdown(appName) }))}
+      </Text>
       <Spacer rem={0.75} />
 
       <div className="mb-3"></div>

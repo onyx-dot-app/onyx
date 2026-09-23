@@ -1,6 +1,6 @@
 "use client";
 
-import { markdown } from "@opal/utils";
+import { escapeMarkdown, markdown } from "@opal/utils";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
@@ -329,7 +329,7 @@ export function VoiceProviderSetupModal({
                       subDescription={markdown(
                         t("setupModal.targetUri.description", {
                           portalUrl: AZURE_PORTAL_URL,
-                          appName,
+                          appName: escapeMarkdown(appName),
                         })
                       )}
                       withLabel="target_uri"

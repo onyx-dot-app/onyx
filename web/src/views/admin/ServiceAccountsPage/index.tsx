@@ -37,7 +37,7 @@ import {
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import AdminListHeader from "@/sections/admin/AdminListHeader";
 import { ConfirmationModalLayout } from "@opal/layouts";
-import { markdown } from "@opal/utils";
+import { escapeMarkdown, markdown } from "@opal/utils";
 
 import { useBillingInformation } from "@/hooks/useBillingInformation";
 import { BillingStatus, hasActiveSubscription } from "@/lib/billing/interfaces";
@@ -448,9 +448,11 @@ export default function ServiceAccountsPage() {
             <Text as="p" color="text-03">
               {markdown(
                 t("deleteModal.description", {
-                  name: deleteTarget.api_key_name || t("table.name.unnamed"),
+                  name: escapeMarkdown(
+                    deleteTarget.api_key_name || t("table.name.unnamed")
+                  ),
                   keyDisplay: deleteTarget.api_key_display,
-                  appName,
+                  appName: escapeMarkdown(appName),
                 })
               )}
             </Text>
