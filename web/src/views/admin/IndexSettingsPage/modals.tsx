@@ -2,6 +2,7 @@
 
 import { Formik, useFormikContext } from "formik";
 import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import * as Yup from "yup";
 import { Button } from "@opal/components";
 import { SvgArrowExchange, SvgSimpleLoader } from "@opal/icons";
@@ -295,6 +296,7 @@ function AzureProviderModal({
   onSubmit,
 }: ProviderModalProps) {
   const t = useTranslations("admin.indexSettings");
+  const { appName } = useSettings();
   const isEditing = !!existingCredentials;
   const maskedApiKey = existingCredentials?.api_key ?? "";
 
@@ -375,7 +377,9 @@ function AzureProviderModal({
         />
 
         <ModelSpecFields
-          modelNameSubDescription={t("azure.modelName.description")}
+          modelNameSubDescription={t("azure.modelName.description", {
+            appName,
+          })}
         />
       </ModalShell>
     </Formik>
@@ -402,6 +406,7 @@ function LiteLLMProviderModal({
   onSubmit,
 }: ProviderModalProps) {
   const t = useTranslations("admin.indexSettings");
+  const { appName } = useSettings();
   const isEditing = !!existingCredentials;
   const maskedApiKey = existingCredentials?.api_key ?? "";
 
@@ -467,6 +472,7 @@ function LiteLLMProviderModal({
         <ModelSpecFields
           modelNameSubDescription={t("litellm.modelName.description", {
             provider: provider.displayName,
+            appName,
           })}
         />
       </ModalShell>

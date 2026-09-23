@@ -50,6 +50,7 @@ import useMultiModelChat from "@/hooks/useMultiModelChat";
 import MultiModelSelector from "@/sections/model-selector/MultiModelSelector";
 import { Section } from "@/layouts/general-layouts";
 import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 
 const SearchUI = paidTierGated(EESearchUI);
 
@@ -62,6 +63,7 @@ const AVAILABLE_CONTEXT_TOKENS = Number(DEFAULT_CONTEXT_TOKENS) * 0.5;
 
 export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const t = useTranslations("chat");
+  const { appName } = useSettings();
   const { setUseOnyxAsNewTab } = useNRFPreferences();
 
   const searchParams = useSearchParams();
@@ -261,7 +263,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     setSettingsOpen((prev) => !prev);
   };
 
-  // If user toggles the "Use Onyx" switch to off, prompt a modal
+  // Turning the new-tab toggle off prompts a modal first
   const handleUseOnyxToggle = (checked: boolean) => {
     if (!checked) {
       setShowTurnOffModal(true);
@@ -647,8 +649,10 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
             <Modal.Content width="sm">
               <Modal.Header
                 icon={SvgAlertTriangle}
-                title={t("nrf.page.turnOffModal.title")}
-                description={t("nrf.page.turnOffModal.description")}
+                title={t("nrf.page.turnOffModal.title", { appName })}
+                description={t("nrf.page.turnOffModal.description", {
+                  appName,
+                })}
                 onClose={() => setShowTurnOffModal(false)}
               />
               <Modal.Footer>
@@ -672,7 +676,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           <Modal.Content width="sm" height="sm">
             <Modal.Header
               icon={SvgUser}
-              title={t("nrf.page.loginModal.title")}
+              title={t("nrf.page.loginModal.title", { appName })}
             />
             <Modal.Body>
               {/* Every new tab opens this page, so it never bounces to the IdP on its own. */}

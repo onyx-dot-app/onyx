@@ -39,6 +39,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@opal/components";
 import { SourceIcon } from "@/components/SourceIcon";
 import Link from "next/link";
+import { useSettings } from "@/lib/settings/hooks";
 
 const route = ADMIN_ROUTES.DOCUMENT_SETS;
 
@@ -344,6 +345,7 @@ const DocumentSetTable = ({
 
 function Main() {
   const t = useTranslations("admin.documents");
+  const { appName } = useSettings();
   const {
     data: documentSets,
     isLoading: isDocumentSetsLoading,
@@ -369,7 +371,7 @@ function Main() {
 
   return (
     <div className="mb-8">
-      <Text as="p">{markdown(t("sets.description"))}</Text>
+      <Text as="p">{markdown(t("sets.description", { appName }))}</Text>
       <Spacer rem={0.75} />
 
       <div className="mb-3"></div>

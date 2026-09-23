@@ -37,6 +37,7 @@ import DocumentSetCard from "@/sections/cards/DocumentSetCard";
 import { getDisplayName } from "@/lib/languageModels/utils";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
 import { Interactive } from "@opal/core";
+import { useSettings } from "@/lib/settings/hooks";
 
 /**
  * Read-only MCP Server card for the viewer modal.
@@ -193,6 +194,7 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
   const router = useRouter();
   const { allRecentFiles } = useProjectsContext();
   const { llmProviders } = useLLMProviders(agent.id);
+  const { appName } = useSettings();
 
   const handleStartChat = useCallback(
     (message: string) => {
@@ -377,7 +379,9 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
                 {defaultModel && (
                   <InputHorizontal
                     title={t("viewer.defaultModel.title")}
-                    description={t("viewer.defaultModel.description")}
+                    description={t("viewer.defaultModel.description", {
+                      appName,
+                    })}
                   >
                     <Text>{defaultModel}</Text>
                   </InputHorizontal>

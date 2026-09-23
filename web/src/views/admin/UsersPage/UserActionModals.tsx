@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import { Button, CopyButton, InputTypeIn } from "@opal/components";
 import { SvgUserPlus, SvgUserX, SvgXCircle, SvgKey } from "@opal/icons";
 import { ConfirmationModalLayout } from "@opal/layouts";
@@ -63,6 +64,7 @@ export function CancelInviteModal({
   onMutate,
 }: CancelInviteModalProps) {
   const t = useTranslations("admin.users");
+  const { appName } = useSettings();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   return (
@@ -94,7 +96,11 @@ export function CancelInviteModal({
       }
     >
       <Text as="p" text03>
-        {t.rich("cancelInviteModal.description", { email, strong: emailTag })}
+        {t.rich("cancelInviteModal.description", {
+          email,
+          strong: emailTag,
+          appName,
+        })}
       </Text>
     </ConfirmationModalLayout>
   );
@@ -116,6 +122,7 @@ export function DeactivateUserModal({
   onMutate,
 }: DeactivateUserModalProps) {
   const t = useTranslations("admin.users");
+  const { appName } = useSettings();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   return (
@@ -147,7 +154,11 @@ export function DeactivateUserModal({
       }
     >
       <Text as="p" text03>
-        {t.rich("deactivateModal.description", { email, strong: emailTag })}
+        {t.rich("deactivateModal.description", {
+          email,
+          strong: emailTag,
+          appName,
+        })}
       </Text>
     </ConfirmationModalLayout>
   );
@@ -169,6 +180,7 @@ export function ActivateUserModal({
   onMutate,
 }: ActivateUserModalProps) {
   const t = useTranslations("admin.users");
+  const { appName } = useSettings();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   return (
@@ -197,7 +209,11 @@ export function ActivateUserModal({
       }
     >
       <Text as="p" text03>
-        {t.rich("activateModal.description", { email, strong: emailTag })}
+        {t.rich("activateModal.description", {
+          email,
+          strong: emailTag,
+          appName,
+        })}
       </Text>
     </ConfirmationModalLayout>
   );
@@ -219,6 +235,7 @@ export function DeleteUserModal({
   onMutate,
 }: DeleteUserModalProps) {
   const t = useTranslations("admin.users");
+  const { appName } = useSettings();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   return (
@@ -250,7 +267,11 @@ export function DeleteUserModal({
       }
     >
       <Text as="p" text03>
-        {t.rich("deleteModal.description", { email, strong: emailTag })}
+        {t.rich("deleteModal.description", {
+          email,
+          strong: emailTag,
+          appName,
+        })}
       </Text>
     </ConfirmationModalLayout>
   );

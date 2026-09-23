@@ -150,7 +150,9 @@ export function useApiBaseSubDescription(
   const sentences = [
     description,
     settings.is_containerized
-      ? t("setup.apiBaseField.containerizedNote")
+      ? t("setup.apiBaseField.containerizedNote", {
+          appName: settings.appName,
+        })
       : undefined,
     suffix,
   ].filter((sentence) => sentence !== undefined);

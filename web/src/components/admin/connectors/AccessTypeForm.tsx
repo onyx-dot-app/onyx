@@ -15,6 +15,7 @@ import type { Credential } from "@/lib/connectors/types";
 import { credentialTemplates } from "@/lib/connectors/credentials";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
+import { useSettings } from "@/lib/settings/hooks";
 
 function isValidAutoSyncSource(
   value: ConfigurableSources
@@ -30,6 +31,7 @@ export function AccessTypeForm({
   currentCredential?: Credential<any> | null;
 }) {
   const t = useTranslations("admin.connector.accessType");
+  const { appName } = useSettings();
   const [access_type, meta, access_type_helpers] =
     useField<AccessType>("access_type");
   const { isScopedManager } = usePermissionAuthority(
@@ -91,7 +93,7 @@ export function AccessTypeForm({
       built.push({
         name: t("publicOption.name"),
         value: "public",
-        description: t("publicOption.description"),
+        description: t("publicOption.description", { appName }),
         disabled: false,
         disabledReason: "",
       });
@@ -101,14 +103,21 @@ export function AccessTypeForm({
       built.push({
         name: t("autoSyncOption.name"),
         value: "sync",
-        description: t("autoSyncOption.description"),
+        description: t("autoSyncOption.description", { appName }),
         disabled: isSyncDisabledByAuth,
         disabledReason: t("autoSyncOption.disabledReason"),
       });
     }
 
     return built;
-  }, [businessTier, isScopedManager, showAutoSync, isSyncDisabledByAuth, t]);
+  }, [
+    businessTier,
+    isScopedManager,
+    showAutoSync,
+    isSyncDisabledByAuth,
+    t,
+    appName,
+  ]);
 
   useEffect(() => {
     if (!businessTier || !options.length) return;
