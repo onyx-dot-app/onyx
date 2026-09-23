@@ -132,6 +132,7 @@ from onyx.server.documents.models import (
     ConnectorCredentialPairIdentifier,
     ConnectorFileInfo,
     ConnectorFilesResponse,
+    ConnectorGroupRestrictionsStatus,
     ConnectorIndexingStatusLite,
     ConnectorIndexingStatusLiteResponse,
     ConnectorRequestSubmission,
@@ -224,6 +225,19 @@ def upsert_gmail_service_account_credential(
         credential_data=credential_base, user=user, db_session=db_session
     )
     return ObjectCreationIdResponse(id=credential.id)
+
+
+@router.get("/connector-group-restrictions")
+def get_connector_group_restrictions_status(
+    _: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+) -> ConnectorGroupRestrictionsStatus:
+    """Whether connector forms offer the data-access group restriction. Scoped
+    managers read it here because the security settings API is admin-only."""
+    return ConnectorGroupRestrictionsStatus(
+        enabled=get_security_settings().allow_connector_group_restrictions
+    )
 
 
 @router.get("/admin/connector/google-drive/check-auth/{credential_id}")

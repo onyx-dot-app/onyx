@@ -2152,12 +2152,29 @@
           "title": "Fehler bei der Synchronisierung der Gruppenmitgliedschaften"
         }
       },
+      "groupRestriction": {
+        "empty": {
+          "description": "Alle behalten den aus der Quelle synchronisierten Zugriff.",
+          "title": "Keine Beschränkung, bis Gruppen hinzugefügt werden"
+        },
+        "memberCount": "{count, plural, one {# Mitglied} other {# Mitglieder}}",
+        "picker": {
+          "placeholder": "Gruppen hinzufügen, um den Zugriff auf diesen Connector zu beschränken"
+        },
+        "remove": {
+          "tooltip": "{name} entfernen"
+        },
+        "toggle": {
+          "description": "Zugriff auf Mitglieder der ausgewählten Gruppen beschränken. Synchronisierte Berechtigungen gelten weiterhin.",
+          "title": "Zugriff auf Gruppen beschränken"
+        }
+      },
       "groupSelector": {
         "assignGroupAccess": {
           "title": "Gruppenzugriff für diesen Konnektor zuweisen"
         },
         "assignToGroup": {
-          "title": "Diesen Konnektor einer Gruppe zuweisen"
+          "title": "Gruppen, die diesen Connector verwalten können"
         },
         "scopedManagerGroups": {
           "description": "Wähle eine oder mehrere der von dir verwalteten Gruppen aus, um Zugriff auf diesen Konnektor zu gewähren"

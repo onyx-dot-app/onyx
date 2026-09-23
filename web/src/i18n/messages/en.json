@@ -2152,12 +2152,29 @@
           "title": "Group Membership Sync Error"
         }
       },
+      "groupRestriction": {
+        "empty": {
+          "description": "Everyone keeps the access synced from the source.",
+          "title": "No restriction until groups are added"
+        },
+        "memberCount": "{count, plural, one {# member} other {# members}}",
+        "picker": {
+          "placeholder": "Add groups to restrict access to this connector"
+        },
+        "remove": {
+          "tooltip": "Remove {name}"
+        },
+        "toggle": {
+          "description": "Limit access to members of selected groups. Synced permissions still apply.",
+          "title": "Restrict Access to Groups"
+        }
+      },
       "groupSelector": {
         "assignGroupAccess": {
           "title": "Assign group access for this Connector"
         },
         "assignToGroup": {
-          "title": "Assign this Connector to a group"
+          "title": "Groups that can manage this Connector"
         },
         "scopedManagerGroups": {
           "description": "Select one or more of the groups you manage to give access to this Connector"

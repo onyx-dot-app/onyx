@@ -36,6 +36,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { CheckboxField } from "@/refresh-components/form/LabeledCheckboxField";
+import { isPermSynced } from "@/lib/connectors/accessType";
 
 export interface SlackChannelConfigFormFieldsProps {
   isUpdate: boolean;
@@ -67,8 +68,8 @@ export function SlackChannelConfigFormFields({
 
   // Helper function to check if a document set contains sync connectors
   const documentSetContainsSync = (documentSet: DocumentSetSummary) => {
-    return documentSet.cc_pair_summaries.some(
-      (summary) => summary.access_type === "sync"
+    return documentSet.cc_pair_summaries.some((summary) =>
+      isPermSynced(summary.access_type)
     );
   };
 

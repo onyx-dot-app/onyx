@@ -2152,12 +2152,29 @@
           "title": "用户组成员同步错误"
         }
       },
+      "groupRestriction": {
+        "empty": {
+          "description": "所有人保留从源系统同步的访问权限。",
+          "title": "添加群组前不设限制"
+        },
+        "memberCount": "{count, plural, other {# 名成员}}",
+        "picker": {
+          "placeholder": "添加群组以限制对此连接器的访问"
+        },
+        "remove": {
+          "tooltip": "移除 {name}"
+        },
+        "toggle": {
+          "description": "仅允许所选群组的成员访问。同步的权限仍然适用。",
+          "title": "限制为群组访问"
+        }
+      },
       "groupSelector": {
         "assignGroupAccess": {
           "title": "为此连接器分配组访问权限"
         },
         "assignToGroup": {
-          "title": "将此连接器分配给一个组"
+          "title": "可以管理此连接器的群组"
         },
         "scopedManagerGroups": {
           "description": "选择一个或多个您管理的组以授予对此连接器的访问权限"

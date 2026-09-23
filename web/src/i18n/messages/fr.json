@@ -2152,12 +2152,29 @@
           "title": "Erreur de synchronisation de l'appartenance aux groupes"
         }
       },
+      "groupRestriction": {
+        "empty": {
+          "description": "Tout le monde conserve l'accès synchronisé depuis la source.",
+          "title": "Aucune restriction tant qu'aucun groupe n'est ajouté"
+        },
+        "memberCount": "{count, plural, one {# membre} other {# membres}}",
+        "picker": {
+          "placeholder": "Ajouter des groupes pour restreindre l'accès à ce connecteur"
+        },
+        "remove": {
+          "tooltip": "Retirer {name}"
+        },
+        "toggle": {
+          "description": "Limite l'accès aux membres des groupes sélectionnés. Les permissions synchronisées s'appliquent toujours.",
+          "title": "Restreindre l'accès à des groupes"
+        }
+      },
       "groupSelector": {
         "assignGroupAccess": {
           "title": "Attribuer l'accès des groupes à ce connecteur"
         },
         "assignToGroup": {
-          "title": "Attribuer ce connecteur à un groupe"
+          "title": "Groupes pouvant gérer ce connecteur"
         },
         "scopedManagerGroups": {
           "description": "Sélectionnez un ou plusieurs des groupes que vous gérez pour donner accès à ce connecteur"
