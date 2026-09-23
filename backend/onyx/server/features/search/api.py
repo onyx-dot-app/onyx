@@ -35,6 +35,7 @@ from onyx.document_index.factory import get_default_document_index
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.factory import get_default_llm, get_llm_for_persona, llm_from_provider
+from onyx.server.api_key_usage import check_api_key_usage
 from onyx.server.features.search.models import (
     SearchRequest,
     SearchResponse,
@@ -42,6 +43,7 @@ from onyx.server.features.search.models import (
 )
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.query_and_chat.placement import Placement
+from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.server.settings.store import load_settings
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.utils_vector_db import require_vector_db
@@ -53,7 +55,11 @@ from shared_configs.contextvars import get_current_tenant_id
 router = APIRouter(prefix="/search")
 
 
-@router.post("", dependencies=[Depends(require_vector_db)], tags=PUBLIC_API_TAGS)
+@router.post(
+    "",
+    dependencies=[Depends(require_vector_db), Depends(check_api_key_usage)],
+    tags=PUBLIC_API_TAGS,
+)
 def search(
     request: SearchRequest,
     user: User = Depends(require_permission(Permission.READ_SEARCH)),
@@ -68,6 +74,10 @@ def search(
     relevant first and are always filtered by the calling user's document
     permissions.
     """
+    # Query expansion and reranking spend LLM tokens, so the same budgets as
+    # chat apply.
+    check_token_rate_limits(user)
+
     # 1. Load persona
     persona = None
     if request.persona_id is not None:
