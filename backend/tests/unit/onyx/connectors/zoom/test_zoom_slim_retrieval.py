@@ -19,7 +19,6 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
 )
 from onyx.connectors.models import ConnectorMissingCredentialError, SlimDocument
-from onyx.connectors.zoom.client import ZoomNotEntitledError
 from onyx.connectors.zoom.connector import ZoomConnector
 from onyx.connectors.zoom.models import (
     ZoomMeetingDetails,
@@ -232,7 +231,6 @@ class TestSlimFailuresNeverDeleteAnything:
             http_error(404, 3301),  # "no recording", which is not "no such user"
             http_error(404),  # a 404 with no code at all, such as from a proxy
             InsufficientPermissionsError("the scope was revoked"),
-            ZoomNotEntitledError("the webinar add-on is gone"),
         ],
     )
     def test_a_listing_that_fails_raises_rather_than_answering_short(

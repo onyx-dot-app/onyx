@@ -167,11 +167,8 @@ def zoom_error_code(error: requests.HTTPError) -> str | None:
 
 def definitely_absent(error: Exception) -> bool:
     """Zoom has no such session at all, which is the only answer pruning may
-    read as a deletion.
-
-    Do not reach for `session_is_gone` in access.py instead. That one also
-    covers code 12702, which means Zoom will not say rather than that there is
-    nothing to say, so it deletes transcripts whose recordings still exist."""
+    read as a deletion. Code 12702 is deliberately not in here: it means Zoom
+    will not say, not that there is nothing to say."""
     if not isinstance(error, requests.HTTPError) or error.response is None:
         return False
     if error.response.status_code == 404:
