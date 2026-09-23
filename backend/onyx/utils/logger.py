@@ -161,6 +161,24 @@ class OnyxRequestIDFilter(logging.Filter):
         return True
 
 
+class UvicornQueryStringRedactionFilter(logging.Filter):
+    """Drops the query string from path args on uvicorn request lines. OAuth,
+    OIDC and SAML callbacks and WebSocket auth carry credentials there."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.args, tuple):
+            record.args = tuple(
+                _strip_query_string_from_path(arg) for arg in record.args
+            )
+        return True
+
+
+def _strip_query_string_from_path(arg: object) -> object:
+    if isinstance(arg, str) and arg.startswith("/"):
+        return arg.partition("?")[0]
+    return arg
+
+
 class OnyxLoggingAdapter(logging.LoggerAdapter):
     def process(
         self, msg: str, kwargs: MutableMapping[str, Any]
@@ -467,6 +485,9 @@ def setup_uvicorn_logger(
     uvicorn_logger.addHandler(handler)
     uvicorn_logger.setLevel(log_level)
     uvicorn_logger.addFilter(OnyxRequestIDFilter())
+    uvicorn_logger.addFilter(UvicornQueryStringRedactionFilter())
+    # WebSocket handshake lines go to uvicorn.error, not uvicorn.access.
+    logging.getLogger("uvicorn.error").addFilter(UvicornQueryStringRedactionFilter())
 
     if shared_file_handlers:
         for fh in shared_file_handlers:
