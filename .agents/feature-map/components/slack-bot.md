@@ -310,9 +310,9 @@ that point is not the message's original asker.
    thread on failure; anyone touching error handling in `handle_regular_answer`
    must keep this gate.
 4. **A failed turn must degrade visibly, not silently.** `handle_message`
-   returns `True` ("failed") on genuine failures (persona access denial has its
-   own explicit message and returns `False`; document-search or LLM failure
-   returns `True`), and `process_message` in `listener.py` posts
+   returns `True` ("failed") on genuine failures (persona access denial and the
+   usage-budget reply post their own message, cancel the feedback reminder,
+   and return `False`; document-search or LLM failure returns `True`), and `process_message` in `listener.py` posts
    `apologize_for_fail` when `notify_no_answer` (`NOTIFY_SLACKBOT_NO_ANSWER`) is
    set. A change that swallows an exception without hitting one of these paths
    leaves the user staring at an eyes-emoji reaction forever.
@@ -451,7 +451,10 @@ See `backend/AGENTS.md` for required env and secrets.
   `handle_regular_answer.py` calls `handle_stream_message_objects` and
   `gather_stream` from `chat/process_message.py` directly. It calls
   `check_token_rate_limits(usage_user)` itself, before the retry wrapper, and
-  replies with the budget message on `RATE_LIMITED`. The cloud cost cap runs
+  replies with the budget message on `RATE_LIMITED`. When the sender has no
+  Onyx account, `usage_user` is the Slack service account, which the EE check
+  holds to GLOBAL budgets only, so a per-user budget cannot silence the bot
+  for every unmapped user at once ([[rate-and-usage-limits]] §4.1). The cloud cost cap runs
   inside `process_message`. `check_api_key_usage` does not apply, because no
   API key is involved. `SlackRateLimiter` (`onyxbot/slack/utils.py`,
   `ONYX_BOT_MAX_QPM`, uncapped by default) is a separate in-memory QPM gate

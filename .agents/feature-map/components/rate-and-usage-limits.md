@@ -207,9 +207,15 @@ For each applicable scope, the check:
 4. EE also runs USER, USER_GROUP, and GLOBAL checks **in parallel**
    (`run_functions_tuples_in_parallel`); a user who belongs to a group that
    is *not* over budget is not blocked by that group, only by ones that are.
-5. Anonymous users and API-key/PAT "users" (`is_api_key_email_address`) skip
-   USER/USER_GROUP checks entirely and are subject to GLOBAL only, even on EE
-   (`ee/.../token_limit.py:_check_token_rate_limits`).
+5. Anonymous users and service accounts (`AccountType.SERVICE_ACCOUNT`, or an
+   email that matches `is_api_key_email_address`) skip USER/USER_GROUP checks
+   and are subject to GLOBAL only, even on EE
+   (`ee/.../token_limit.py:_check_token_rate_limits`). A service account is a
+   shared principal: API keys, and the Slack service account that carries the
+   usage of every Slack user with no Onyx account. A per-user budget on it
+   would throttle all of those callers as one. A PAT resolves to its owner, a
+   normal user, so PAT traffic gets the full USER/USER_GROUP/GLOBAL check.
+   `BOT` accounts (one per Slack user) are normal users here.
 
 "Token" here means **LLM tokens accumulated in the `user_usage` rollup**, not
 an HTTP request count. The rollup is written asynchronously from tracing
@@ -365,8 +371,8 @@ Invite limits (`server/manage/invite_rate_limit.py`), called from
   only apply the cost cap when Onyx's own default provider key is in use.
 - [[auth-and-identity]]: signup and invite limits sit inline in
   `auth/users.py` and `server/manage/users.py`; anonymous/API-key user
-  detection (`is_api_key_email_address`) changes which token-limit scopes
-  apply.
+  detection (`AccountType.SERVICE_ACCOUNT`, `is_api_key_email_address`)
+  changes which token-limit scopes apply.
 
 **Depended on by**
 - [[core-chat-loop]]: `check_token_rate_limits` and `check_api_key_usage` gate

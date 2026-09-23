@@ -52,7 +52,8 @@ Some paths map to more than one component. Read all of them.
 | `backend/onyx/natural_language_processing/` | document-index, internal-search |
 | `backend/onyx/db/search_settings.py`, `db/swap_index.py`, `db/opensearch_migration.py`, `server/manage/opensearch_migration/` | document-index |
 | `backend/onyx/server/manage/search_settings.py`, `server/manage/embedding/` | document-index |
-| `backend/onyx/server/features/search/`, `server/query_and_chat/query_backend.py` | internal-search |
+| `backend/onyx/server/features/search/`, `server/query_and_chat/query_backend.py`, `backend/ee/onyx/server/query_and_chat/search_backend.py`, `backend/ee/onyx/search/` | internal-search |
+| `backend/ee/onyx/server/query_and_chat/token_limit.py` | rate-and-usage-limits |
 | `backend/onyx/access/`, `backend/ee/onyx/access/`, `backend/onyx/db/document_access.py`, `db/permissions.py`, `db/scoped_permissions.py` | access-control |
 | `backend/onyx/db/document_set.py`, `db/user_group.py`, `server/features/document_set/` | access-control |
 | `backend/ee/onyx/external_permissions/`, `backend/onyx/db/permission_sync_attempt.py` | permission-sync |
@@ -128,7 +129,7 @@ so verify the callers rather than a single component.
 | `backend/onyx/db/discord_bot.py`, `server/manage/discord_bot/` | discord-bot |
 | `backend/onyx/server/onyx_api/` | onyx-api |
 | `backend/onyx/mcp_server/`, `mcp_server_main.py` | mcp-server |
-| `backend/onyx/server/gateway/` | llm-gateway |
+| `backend/onyx/server/gateway/`, `backend/ee/onyx/server/gateway/` | llm-gateway |
 | `backend/onyx/voice/`, `server/manage/voice/`, `db/voice.py` | voice |
 | `backend/onyx/image_gen/`, `server/features/image_generation/`, `server/manage/image_generation/`, `db/image_generation.py` | image-generation |
 | `backend/onyx/db/code_interpreter.py`, `server/manage/code_interpreter/` | code-execution |
