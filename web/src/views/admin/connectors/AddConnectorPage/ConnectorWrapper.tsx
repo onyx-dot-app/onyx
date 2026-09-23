@@ -10,11 +10,11 @@ import { isValidSource, getSourceMetadata } from "@/lib/sources";
 import { FederatedConnectorForm } from "@/components/admin/federated/FederatedConnectorForm";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function ConnectorWrapper({
-  connector,
-}: {
+export interface ConnectorWrapperProps {
   connector: ConfigurableSources;
-}) {
+}
+
+export default function ConnectorWrapper({ connector }: ConnectorWrapperProps) {
   const t = useTranslations("admin.connectorsList");
   const router = useRouter();
   const searchParams = useSearchParams();
