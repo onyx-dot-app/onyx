@@ -117,8 +117,10 @@ postgresql:
     enableSuperuserAccess: true
     superuserSecret:
       name: onyx-postgresql  # keep in sync with auth.postgresql
-    # Keep the CNPG Cluster and its PVCs on `helm uninstall`. To delete them later, run
-    # `kubectl delete clusters.postgresql.cnpg.io <release>-pg -n <namespace>`.
+    # Keep the CNPG Cluster and its PVCs on `helm uninstall`. The bundled operator is still
+    # removed; reinstall with the same release name to adopt the Cluster again. To delete it
+    # without the operator, `kubectl delete` it, then clear its finalizers with
+    # `kubectl patch clusters.postgresql.cnpg.io <release>-pg -n <ns> --type merge -p '{"metadata":{"finalizers":null}}'`.
     retainOnUninstall: false
 
 # -- Master toggle for vector database support. When false:
