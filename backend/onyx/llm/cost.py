@@ -36,8 +36,8 @@ _LOCALLY_HOSTED_PROVIDERS = frozenset(
     }
 )
 # Ollama Cloud serves hosted, billable inference under the same provider names
-# as local Ollama, distinguished only by this suffix on the model.
-_OLLAMA_CLOUD_MODEL_SUFFIX = "-cloud"
+# as local Ollama, distinguished only by a "-cloud" or ":cloud" tag on the model.
+_OLLAMA_CLOUD_MODEL_SUFFIXES = ("-cloud", ":cloud")
 
 
 def _is_locally_hosted(model: str, provider: str | None) -> bool:
@@ -49,7 +49,7 @@ def _is_locally_hosted(model: str, provider: str | None) -> bool:
     """
     if provider not in _LOCALLY_HOSTED_PROVIDERS:
         return False
-    return not model.endswith(_OLLAMA_CLOUD_MODEL_SUFFIX)
+    return not model.endswith(_OLLAMA_CLOUD_MODEL_SUFFIXES)
 
 
 class ModelPrice(BaseModel):

@@ -272,7 +272,9 @@ class TestLocallyHostedProviders:
         assert price.input_per_mtok == 0.0
         assert price.output_per_mtok == 0.0
 
-    @pytest.mark.parametrize("model", ["gpt-oss:20b-cloud", "deepseek-v3.1:671b-cloud"])
+    @pytest.mark.parametrize(
+        "model", ["gpt-oss:20b-cloud", "deepseek-v3.1:671b-cloud", "glm-4.6:cloud"]
+    )
     def test_ollama_cloud_model_is_not_billed_as_local(
         self, model: str, monkeypatch: pytest.MonkeyPatch
     ) -> None:
