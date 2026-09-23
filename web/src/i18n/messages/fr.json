@@ -3197,6 +3197,10 @@
           "label": "Identifiant n° {id}"
         }
       },
+      "configurer": {
+        "title": "Compte d'authentification",
+        "description": "Utilisez un compte de service partagé. {appName} indexe le contenu en tant que ce compte."
+      },
       "create": {
         "createButton": {
           "label": "Créer"

@@ -3197,6 +3197,10 @@
           "label": "Anmeldedaten Nr. {id}"
         }
       },
+      "configurer": {
+        "title": "Authentifizierungskonto",
+        "description": "Verwenden Sie ein gemeinsames Dienstkonto. {appName} indexiert Inhalte als dieses Konto."
+      },
       "create": {
         "createButton": {
           "label": "Erstellen"

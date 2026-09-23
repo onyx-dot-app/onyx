@@ -3197,6 +3197,10 @@
           "label": "자격 증명 #{id}"
         }
       },
+      "configurer": {
+        "title": "인증 계정",
+        "description": "공유 서비스 계정을 사용합니다. {appName}은(는) 이 계정으로 콘텐츠를 색인합니다."
+      },
       "create": {
         "createButton": {
           "label": "생성"

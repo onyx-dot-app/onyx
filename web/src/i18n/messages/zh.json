@@ -3197,6 +3197,10 @@
           "label": "凭据 #{id}"
         }
       },
+      "configurer": {
+        "title": "认证账户",
+        "description": "使用共享服务账户。{appName} 将以此账户身份索引内容。"
+      },
       "create": {
         "createButton": {
           "label": "创建"

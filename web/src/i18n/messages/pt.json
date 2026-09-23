@@ -3197,6 +3197,10 @@
           "label": "Credencial nº {id}"
         }
       },
+      "configurer": {
+        "title": "Conta de autenticação",
+        "description": "Use uma conta de serviço compartilhada. O {appName} indexa o conteúdo como esta conta."
+      },
       "create": {
         "createButton": {
           "label": "Criar"

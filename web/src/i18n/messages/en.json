@@ -3197,6 +3197,10 @@
           "label": "Credential #{id}"
         }
       },
+      "configurer": {
+        "title": "Authentication Account",
+        "description": "Use a shared service account. {appName} indexes content as this account."
+      },
       "create": {
         "createButton": {
           "label": "Create"

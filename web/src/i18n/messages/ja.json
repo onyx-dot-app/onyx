@@ -3197,6 +3197,10 @@
           "label": "認証情報 #{id}"
         }
       },
+      "configurer": {
+        "title": "認証アカウント",
+        "description": "共有サービスアカウントを使用します。{appName} はこのアカウントとしてコンテンツをインデックスします。"
+      },
       "create": {
         "createButton": {
           "label": "作成"
