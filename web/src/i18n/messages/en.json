@@ -2617,6 +2617,9 @@
         "label": "Connector Name",
         "subtext": "A descriptive name for the connector."
       },
+      "credentialRequired": {
+        "tooltip": "Select a credential first."
+      },
       "credentialsLoadError": {
         "title": "Failed to load credentials."
       },

@@ -2617,6 +2617,9 @@
         "label": "Konnektorname",
         "subtext": "Ein aussagekräftiger Name für den Konnektor."
       },
+      "credentialRequired": {
+        "tooltip": "Wähle zuerst einen Zugang aus."
+      },
       "credentialsLoadError": {
         "title": "Die Anmeldedaten konnten nicht geladen werden."
       },

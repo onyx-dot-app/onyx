@@ -2617,6 +2617,9 @@
         "label": "コネクター名",
         "subtext": "コネクターの内容がわかる名前です。"
       },
+      "credentialRequired": {
+        "tooltip": "最初に認証情報を選択してください。"
+      },
       "credentialsLoadError": {
         "title": "認証情報の読み込みに失敗しました。"
       },

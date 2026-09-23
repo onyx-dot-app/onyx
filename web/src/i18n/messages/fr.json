@@ -2617,6 +2617,9 @@
         "label": "Nom du connecteur",
         "subtext": "Un nom descriptif pour le connecteur."
       },
+      "credentialRequired": {
+        "tooltip": "Sélectionnez d'abord un identifiant."
+      },
       "credentialsLoadError": {
         "title": "Échec du chargement des identifiants."
       },

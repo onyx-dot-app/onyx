@@ -2617,6 +2617,9 @@
         "label": "连接器名称",
         "subtext": "用于描述该连接器的名称。"
       },
+      "credentialRequired": {
+        "tooltip": "请先选择一个凭据。"
+      },
       "credentialsLoadError": {
         "title": "加载凭据失败。"
       },

@@ -2617,6 +2617,9 @@
         "label": "커넥터 이름",
         "subtext": "커넥터를 설명하는 이름입니다."
       },
+      "credentialRequired": {
+        "tooltip": "먼저 자격 증명을 선택하세요."
+      },
       "credentialsLoadError": {
         "title": "자격 증명을 불러오지 못했습니다."
       },

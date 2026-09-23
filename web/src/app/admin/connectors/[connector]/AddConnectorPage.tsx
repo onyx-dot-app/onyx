@@ -40,6 +40,7 @@ import {
 } from "@/lib/connectors/connectors";
 import { useSettings } from "@/lib/settings/hooks";
 import { Card, MessageCard, Modal } from "@opal/components";
+import { Disabled } from "@opal/core";
 import {
   useGmailCredentials,
   useGoogleDriveCredentials,
@@ -702,34 +703,63 @@ export default function AddConnector({
                   </Card>
                 )}
 
-                <Card border="solid" rounding={4} padding={6}>
-                  <Section gap={4} alignItems="start" width="full">
-                    <Content
-                      title={t("sections.configuration.title")}
-                      sizePreset="main-content"
-                      variant="section"
-                    />
-                    <DynamicConnectionForm
-                      values={formikProps.values}
-                      config={configuration}
-                      connector={connector}
-                      currentCredential={
-                        currentCredential ||
-                        liveGDriveCredential ||
-                        liveGmailCredential ||
-                        null
-                      }
-                    />
-                    <ConnectorDocsLink sourceType={connector} />
-                  </Section>
-                </Card>
+                {/* The wizard could not reach these sections without a
+                    credential; on one page they stay disabled until one is
+                    selected instead. */}
+                <Disabled
+                  disabled={!canCreate}
+                  tooltip={t("credentialRequired.tooltip")}
+                >
+                  <Card
+                    border="solid"
+                    rounding={4}
+                    padding={6}
+                    disabled={!canCreate}
+                  >
+                    {/* A disabled fieldset also takes the controls out of the
+                        tab order; the wrapper above only blocks the pointer. */}
+                    <fieldset disabled={!canCreate} className="contents">
+                      <Section gap={4} alignItems="start" width="full">
+                        <Content
+                          title={t("sections.configuration.title")}
+                          sizePreset="main-content"
+                          variant="section"
+                        />
+                        <DynamicConnectionForm
+                          values={formikProps.values}
+                          config={configuration}
+                          connector={connector}
+                          currentCredential={
+                            currentCredential ||
+                            liveGDriveCredential ||
+                            liveGmailCredential ||
+                            null
+                          }
+                        />
+                        <ConnectorDocsLink sourceType={connector} />
+                      </Section>
+                    </fieldset>
+                  </Card>
+                </Disabled>
 
                 {connector !== "file" && (
-                  <Card border="solid" rounding={4} padding={6}>
-                    <AdvancedFormPage
-                      defaultPruneFreqHours={defaultPruneFreqHours}
-                    />
-                  </Card>
+                  <Disabled
+                    disabled={!canCreate}
+                    tooltip={t("credentialRequired.tooltip")}
+                  >
+                    <Card
+                      border="solid"
+                      rounding={4}
+                      padding={6}
+                      disabled={!canCreate}
+                    >
+                      <fieldset disabled={!canCreate} className="contents">
+                        <AdvancedFormPage
+                          defaultPruneFreqHours={defaultPruneFreqHours}
+                        />
+                      </fieldset>
+                    </Card>
+                  </Disabled>
                 )}
               </Section>
             </SettingsLayouts.Body>

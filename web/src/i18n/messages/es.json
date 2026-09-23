@@ -2617,6 +2617,9 @@
         "label": "Nombre del conector",
         "subtext": "Un nombre descriptivo para el conector."
       },
+      "credentialRequired": {
+        "tooltip": "Selecciona primero una credencial."
+      },
       "credentialsLoadError": {
         "title": "No se pudieron cargar las credenciales."
       },
