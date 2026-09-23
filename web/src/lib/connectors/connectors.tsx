@@ -1043,9 +1043,62 @@ export const connectorConfigs: Record<
         false,
         "Index the files in each channel's Files tab as their own documents, " +
           "with the readers SharePoint grants them. Needs a certificate " +
-          "credential and read access to the channel sites, through " +
-          "Sites.Read.All or a Sites.Selected grant on each channel site."
+          "credential, Files.Read.All or Sites.Read.All on Graph, and " +
+          "Sites.FullControl.All on the SharePoint API to read each file's " +
+          "readers. With Sites.Selected, grant the app full control on each " +
+          "channel site."
       ),
+      {
+        type: "checkbox",
+        query: "Include inline images?",
+        label: "Include Inline Images",
+        name: "include_inline_images",
+        description:
+          "Index the images pasted into channel messages with their thread. " +
+          "Needs no extra permission. Nothing is downloaded while image " +
+          "extraction and analysis is off in the search settings.",
+        default: false,
+      },
+      {
+        type: "checkbox",
+        query: "Include meeting transcripts?",
+        label: "Include Meeting Transcripts",
+        name: "include_meeting_transcripts",
+        description:
+          "Index the transcripts of scheduled meetings as their own documents, " +
+          "readable by the organizer and the attendees. Needs the " +
+          "OnlineMeetingTranscript.Read.All, OnlineMeetings.Read.All and " +
+          "User.Read.All application permissions, the tenant setting that " +
+          "allows Graph API access to transcripts, and an application access " +
+          "policy granted to the organizers. Channel meetings are not covered. " +
+          "Transcripts from the last six months are indexed, and a transcript " +
+          "leaves the index once it is older than that.",
+        default: false,
+      },
+      {
+        type: "checkbox",
+        query: "Include meeting chats?",
+        label: "Include Meeting Chats",
+        name: "include_meeting_chats",
+        description:
+          "Index what people write in the chat of a scheduled meeting, a " +
+          "document per day, readable by the members of the chat. Needs the " +
+          "Chat.Read.All and User.Read.All application permissions. Covers " +
+          "meetings organized in this tenant: Microsoft does not serve the " +
+          "chat of a meeting another organization set up.",
+        default: false,
+      },
+      {
+        type: "list",
+        query: "Enter meeting organizers to include:",
+        label: "Meeting Organizers",
+        name: "meeting_organizers",
+        optional: true,
+        description:
+          "User principal names of the organizers whose meeting transcripts " +
+          "and chats to index. Leave empty to include every enabled user with " +
+          "a Teams license.",
+      },
     ],
     advanced_values: [
       {
@@ -2309,6 +2362,10 @@ export interface SharepointConfig {
 export interface TeamsConfig {
   teams?: string[];
   include_attachments?: boolean;
+  include_inline_images?: boolean;
+  include_meeting_transcripts?: boolean;
+  include_meeting_chats?: boolean;
+  meeting_organizers?: string[];
   authority_host?: string;
   graph_api_host?: string;
 }

@@ -1,5 +1,5 @@
 import type { Tag } from "@/lib/types";
-import type { SourceMetadata } from "@/lib/search/interfaces";
+import type { SourceMetadata } from "@/lib/search/types";
 import type { InputDateRangePickerValue } from "@opal/components";
 
 /** What is selected, without the means to change it. */

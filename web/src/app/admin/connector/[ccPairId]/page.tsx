@@ -169,7 +169,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   }, [ccPairId]);
 
   const finishConnectorDeletion = useCallback(() => {
-    router.push("/admin/indexing/status");
+    router.push("/admin/indexing-status");
   }, [router]);
 
   const scheduleConnectorDeletion = useCallback(() => {

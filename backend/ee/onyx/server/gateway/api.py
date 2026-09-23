@@ -404,6 +404,7 @@ def handle_chat_completion(
         try:
             response = llm.invoke(
                 prompt=messages,
+                stream=True,
                 tools=request.tools,
                 tool_choice=tool_choice,
                 structured_response_format=request.response_format,
@@ -783,6 +784,7 @@ def handle_responses_request(
         try:
             response = llm.invoke(
                 prompt=messages,
+                stream=True,
                 tools=tools,
                 tool_choice=tool_choice,
                 max_tokens=max_tokens,
@@ -1332,6 +1334,7 @@ def handle_anthropic_messages(
         try:
             response = llm.invoke(
                 prompt=messages,
+                stream=True,
                 tools=tools,
                 tool_choice=tool_choice,
                 max_tokens=max_tokens,

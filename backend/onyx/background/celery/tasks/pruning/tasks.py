@@ -566,6 +566,7 @@ def connector_pruning_generator_task(
         connector_type: str = ""
         is_connector_public: bool = False
         runnable_connector: BaseConnector | None = None
+        all_indexed_document_ids: set[str] = set()
 
         with get_session_with_current_tenant() as db_session:
             cc_pair = get_connector_credential_pair(
@@ -607,6 +608,20 @@ def connector_pruning_generator_task(
                 cc_pair.connector.connector_specific_config,
                 cc_pair.credential,
             )
+
+            # Read the indexed ids before the crawl, not after it. Indexing runs
+            # alongside pruning, so a document the source created during the
+            # crawl is missing from the crawl's answer, and a read taken after
+            # the crawl would name it for deletion as soon as indexing commits
+            # it. Anything indexed from here on is left for the next prune.
+            all_indexed_document_ids = {
+                doc.id
+                for doc in get_documents_for_connector_credential_pair(
+                    db_session=db_session,
+                    connector_id=connector_id,
+                    credential_id=credential_id,
+                )
+            }
         # Session 1 closed here — connection released before enumeration.
 
         callback = PruneCallback(
@@ -676,16 +691,6 @@ def connector_pruning_generator_task(
 
             diff_start = time.monotonic()
             try:
-                # a list of docs in our local index
-                all_indexed_document_ids = {
-                    doc.id
-                    for doc in get_documents_for_connector_credential_pair(
-                        db_session=db_session,
-                        connector_id=connector_id,
-                        credential_id=credential_id,
-                    )
-                }
-
                 # generate list of docs to remove (no longer in the source)
                 doc_ids_to_remove = list(
                     all_indexed_document_ids - all_connector_doc_ids.keys()

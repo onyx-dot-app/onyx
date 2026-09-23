@@ -21,7 +21,7 @@ import {
   useState,
 } from "react";
 import { InputDateRangePickerValue } from "@opal/components";
-import { SourceMetadata } from "./search/interfaces";
+import { SourceMetadata } from "@/lib/search/types";
 import {
   getProviderOverrideForAgent,
   parseLlmDescriptor,

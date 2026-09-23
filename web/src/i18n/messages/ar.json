@@ -779,40 +779,228 @@
     "addConnector": {
       "categories": {
         "codeRepository": {
-          "label": "مستودع أكواد"
+          "label": "مستودعات الأكواد"
         },
         "messaging": {
           "label": "المراسلة"
         },
-        "other": {
-          "label": "أخرى"
-        },
         "sales": {
-          "label": "المبيعات"
+          "label": "المبيعات والتسويق"
         },
         "storage": {
           "label": "التخزين السحابي"
         },
         "ticketingAndTaskManagement": {
-          "label": "التذاكر وإدارة المهام"
+          "label": "التذاكر والمهام"
         },
         "wiki": {
           "label": "قواعد المعرفة والويكي"
+        },
+        "aiObservability": {
+          "label": "الذكاء الاصطناعي والمراقبة"
+        },
+        "other": {
+          "label": "أخرى"
         }
       },
       "popular": {
-        "title": "الشائعة"
+        "title": "إضافة موصّل",
+        "description": "اربط {appName} بمصادر بياناتك."
       },
       "search": {
-        "placeholder": "البحث في الموصلات"
-      },
-      "seeConnectorsButton": {
-        "label": "عرض الموصلات"
+        "placeholder": "البحث في الموصلات..."
       },
       "sourceTile": {
         "tooltip": {
           "federatedConfigured": "<strong>موصل موحّد مهيأ بالفعل.</strong> انقر لتعديل الموصل الحالي.",
           "slackCredentialsFound": "<strong>تم العثور على بيانات اعتماد Slack موجودة.</strong> انقر لإدارة موصل Slack الخاص بك."
+        }
+      },
+      "sourceCard": {
+        "connectButton": {
+          "ariaLabel": "ربط {source}"
+        }
+      },
+      "sources": {
+        "web": {
+          "description": "ربط أي عنوان URL عام"
+        },
+        "github": {
+          "description": "الكود وطلبات السحب"
+        },
+        "gitlab": {
+          "description": "الكود و CI/CD"
+        },
+        "slack": {
+          "description": "مراسلة الفريق"
+        },
+        "googleDrive": {
+          "description": "الملفات والمجلدات المشتركة"
+        },
+        "gmail": {
+          "description": "بريد Google"
+        },
+        "bookstack": {
+          "description": "ويكي مستضاف ذاتيًا"
+        },
+        "outline": {
+          "description": "ويكي فريق مفتوح المصدر"
+        },
+        "confluence": {
+          "description": "ويكي Atlassian"
+        },
+        "jira": {
+          "description": "متتبع مشكلات Atlassian"
+        },
+        "productboard": {
+          "description": "إدارة المنتجات"
+        },
+        "slab": {
+          "description": "ويكي الفريق"
+        },
+        "coda": {
+          "description": "المستندات وقواعد البيانات"
+        },
+        "notion": {
+          "description": "المستندات وقواعد البيانات"
+        },
+        "guru": {
+          "description": "قاعدة معرفة موثّقة"
+        },
+        "gong": {
+          "description": "تحليل مكالمات المبيعات"
+        },
+        "zulip": {
+          "description": "مراسلة مفتوحة المصدر"
+        },
+        "linear": {
+          "description": "متتبع مشكلات الهندسة"
+        },
+        "hubspot": {
+          "description": "التسويق وإدارة علاقات العملاء"
+        },
+        "document360": {
+          "description": "وثائق الخدمة الذاتية"
+        },
+        "file": {
+          "description": "رفع من الملفات المحلية"
+        },
+        "userFile": {
+          "description": "الملفات المرفوعة في الدردشة"
+        },
+        "googleSites": {
+          "description": "صفحات مستضافة على Google"
+        },
+        "loopio": {
+          "description": "الرد على طلبات العروض"
+        },
+        "box": {
+          "description": "الملفات والمجلدات والملاحظات"
+        },
+        "dropbox": {
+          "description": "الملفات والمجلدات المشتركة"
+        },
+        "discord": {
+          "description": "مراسلة المجتمع"
+        },
+        "salesforce": {
+          "description": "المبيعات وإدارة علاقات العملاء"
+        },
+        "sharepoint": {
+          "description": "شبكة Microsoft الداخلية"
+        },
+        "teams": {
+          "description": "دردشات فرق Microsoft"
+        },
+        "outlook": {
+          "description": "رسائل البريد ومجلداته"
+        },
+        "zendesk": {
+          "description": "تذاكر دعم العملاء"
+        },
+        "discourse": {
+          "description": "منتدى المجتمع"
+        },
+        "axero": {
+          "description": "شبكة داخلية اجتماعية"
+        },
+        "clickup": {
+          "description": "متتبع المشاريع والمهام"
+        },
+        "wikipedia": {
+          "description": "قاعدة معرفة عامة"
+        },
+        "mediawiki": {
+          "description": "ويكي بنمط ويكيبيديا"
+        },
+        "asana": {
+          "description": "إدارة العمل"
+        },
+        "s3": {
+          "description": "حاويات تخزين AWS"
+        },
+        "r2": {
+          "description": "حاويات التخزين السحابي"
+        },
+        "googleCloudStorage": {
+          "description": "حاويات Google Cloud"
+        },
+        "xenforo": {
+          "description": "منتدى المجتمع"
+        },
+        "ociStorage": {
+          "description": "تخزين كائنات OCI"
+        },
+        "notApplicable": {
+          "description": "لا يوجد مصدر"
+        },
+        "ingestionApi": {
+          "description": "المستندات المرسلة عبر واجهة البرمجة"
+        },
+        "freshdesk": {
+          "description": "مكتب مساعدة العملاء"
+        },
+        "fireflies": {
+          "description": "ملاحظات الاجتماعات"
+        },
+        "egnyte": {
+          "description": "خدمات ملفات مُدارة"
+        },
+        "airtable": {
+          "description": "قاعدة بيانات ومهام"
+        },
+        "gitbook": {
+          "description": "وثائق المطورين"
+        },
+        "highspot": {
+          "description": "تمكين المبيعات"
+        },
+        "drupalWiki": {
+          "description": "ويكي قائم على نظام إدارة محتوى"
+        },
+        "imap": {
+          "description": "مصدر بريد IMAP"
+        },
+        "bitbucket": {
+          "description": "إدارة الشيفرة من Atlassian"
+        },
+        "testrail": {
+          "description": "تتبع حالات الاختبار"
+        },
+        "braintrust": {
+          "description": "السجلات والتقييمات"
+        },
+        "lumapps": {
+          "description": "صفحات الشبكة الداخلية والمجتمعات"
+        },
+        "canvas": {
+          "description": "الدورات والصفحات والإعلانات"
+        },
+        "craftFile": {
+          "description": "الملفات التي رفعتها"
+        },
+        "federatedSlack": {
+          "description": "البحث في Slack عند الاستعلام"
         }
       }
     },
@@ -5026,14 +5214,11 @@
             "label": "خاص"
           }
         },
-        "addConnectorButton": {
-          "label": "إضافة موصل"
-        },
         "connectorCreated": {
           "toast": "تم إنشاء الموصل بنجاح"
         },
         "empty": {
-          "message": "يبدو أنه ليس لديك أي موصلات معدّة بعد. زر صفحة [إضافة موصل](/admin/add-connector) للبدء!"
+          "message": "يبدو أنه ليس لديك أي موصلات معدّة بعد. زر صفحة [إضافة موصل](/admin/connectors) للبدء!"
         },
         "federated": {
           "access": {
@@ -5116,7 +5301,7 @@
           "tooltip": "إدارة الموصل الموحّد"
         },
         "search": {
-          "placeholder": "البحث في الموصلات"
+          "placeholder": "البحث في الموصلات..."
         },
         "summary": {
           "activeConnectors": {
@@ -5364,7 +5549,6 @@
             "title": "النماذج"
           },
           "providerField": {
-            "createPrefix": "استخدم",
             "description": "راجع القائمة الكاملة لموفري LLM المدعومين في [LiteLLM](https://docs.litellm.ai/docs/providers).",
             "placeholder": "معرّف الموفر كما يظهر في LiteLLM",
             "title": "الموفر"
@@ -5542,6 +5726,12 @@
           "restoreDefaultButton": {
             "ariaLabel": "استعادة عنوان URL الأساسي الافتراضي لـ API",
             "tooltip": "استعادة الافتراضي"
+          }
+        },
+        "vercelAiGateway": {
+          "apiBaseField": {
+            "description": "استخدم نقطة نهاية Vercel AI Gateway أو الصق عنوان URL أساسيًا مخصصًا.",
+            "placeholder": "عنوان URL الأساسي لـ Vercel AI Gateway"
           }
         },
         "setup": {
@@ -5814,36 +6004,66 @@
         "contextualRagDocumentSummary": {
           "label": "ملخصات مستندات RAG السياقية"
         },
-        "imageSummarization": { "label": "تلخيص الصور" },
-        "kgDeepExtraction": { "label": "استخراج الرسم البياني المعرفي" },
+        "imageSummarization": {
+          "label": "تلخيص الصور"
+        },
+        "kgDeepExtraction": {
+          "label": "استخراج الرسم البياني المعرفي"
+        },
         "kgDocumentClassification": {
           "label": "تصنيف الرسم البياني المعرفي"
         },
-        "other": { "label": "أخرى" },
-        "unattributed": { "label": "غير منسوب" }
+        "other": {
+          "label": "أخرى"
+        },
+        "unattributed": {
+          "label": "غير منسوب"
+        }
       },
       "filters": {
-        "allModels": { "label": "كل النماذج" },
-        "allProviders": { "label": "كل المزوّدين" }
+        "allModels": {
+          "label": "كل النماذج"
+        },
+        "allProviders": {
+          "label": "كل المزوّدين"
+        }
       },
       "panel": {
         "description": "{start} – {end} · استخدام النظام هو نشاط نماذج اللغة الكبيرة الذي يشغّله Onyx في الخلفية بدلًا من تشغيله لمستخدم محدد. تشمل الأمثلة تلخيص الصور ومعالجة RAG السياقية واستخراج الرسم البياني المعرفي.",
         "emptyDescription": "استخدام النظام هو نشاط نماذج اللغة الكبيرة الذي يشغّله Onyx في الخلفية بدلًا من تشغيله لمستخدم محدد. تشمل الأمثلة تلخيص الصور ومعالجة RAG السياقية واستخراج الرسم البياني المعرفي.",
-        "error": { "title": "تعذر تحميل استخدام النظام لهذه الفترة." },
+        "error": {
+          "title": "تعذر تحميل استخدام النظام لهذه الفترة."
+        },
         "title": "استخدام النظام"
       },
       "summary": {
-        "spend": { "label": "إنفاق النظام" },
-        "tokens": { "label": "إجمالي الرموز" },
-        "unattributed": { "label": "إنفاق غير منسوب" }
+        "spend": {
+          "label": "إنفاق النظام"
+        },
+        "tokens": {
+          "label": "إجمالي الرموز"
+        },
+        "unattributed": {
+          "label": "إنفاق غير منسوب"
+        }
       },
       "table": {
         "columns": {
-          "category": { "header": "الفئة" },
-          "input": { "header": "الإدخال" },
-          "output": { "header": "الإخراج" },
-          "spend": { "header": "الإنفاق" },
-          "tokens": { "header": "الرموز" }
+          "category": {
+            "header": "الفئة"
+          },
+          "input": {
+            "header": "الإدخال"
+          },
+          "output": {
+            "header": "الإخراج"
+          },
+          "spend": {
+            "header": "الإنفاق"
+          },
+          "tokens": {
+            "header": "الرموز"
+          }
         },
         "empty": {
           "description": "لا يوجد استخدام للنظام يطابق عوامل التصفية الحالية."
@@ -7931,6 +8151,9 @@
         "title": "تغيّرت الأذونات"
       },
       "resetPasswordModal": {
+        "copyButton": {
+          "label": "نسخ كلمة المرور"
+        },
         "description": "سيولّد هذا كلمة مرور عشوائية جديدة لـ <strong>{email}</strong>. ستتوقف كلمة مروره الحالية عن العمل فورًا.",
         "doneButton": {
           "label": "تم"
@@ -12846,6 +13069,10 @@
       "previousPage": "الصفحة السابقة",
       "rangeOfTotal": "<range></range> من <total></total>"
     },
+    "select": {
+      "emptySet": "لم يتم العثور على عناصر",
+      "invalidOption": "يرجى اختيار خيار صالح من القائمة"
+    },
     "table": {
       "alwaysShown": "معروض دائمًا",
       "ascending": "تصاعدي",
@@ -13338,8 +13565,8 @@
         }
       },
       "items": {
-        "addConnector": {
-          "label": "إضافة موصل"
+        "connectors": {
+          "label": "الموصلات"
         },
         "agents": {
           "label": "الوكلاء"
@@ -13374,8 +13601,8 @@
         "documentSets": {
           "label": "مجموعات المستندات"
         },
-        "existingConnectors": {
-          "label": "الموصلات الحالية"
+        "indexingStatus": {
+          "label": "حالة الفهرسة"
         },
         "exportLogs": {
           "label": "تصدير السجلات"

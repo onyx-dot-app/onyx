@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, ReactNode } from "react";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useTranslations } from "next-intl";
 import { useFormContext } from "@/components/context/FormContext";
 import { credentialTemplates } from "@/lib/connectors/credentials";
@@ -72,7 +73,7 @@ export function CreateConnectorSidebarShell({
         {!folded && <Divider paddingPerpendicular={2} />}
         <SidebarTab
           icon={SvgX}
-          href="/admin/add-connector"
+          href={ADMIN_ROUTES.CONNECTORS.path}
           variant="sidebar-light"
           folded={folded}
         >

@@ -1,4 +1,4 @@
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/types";
 import { SubQuestionDetail } from "@/app/app/interfaces";
 import { StreamingCitation } from "@/app/app/services/streamingModels";
 import { ValidSources } from "@/lib/types";

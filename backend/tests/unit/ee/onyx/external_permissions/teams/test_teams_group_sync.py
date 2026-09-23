@@ -1,5 +1,5 @@
-"""The Teams group sync expands the SharePoint groups of the channel sites,
-and has nothing to do for a connector without attachments."""
+"""The Teams group sync names the members of every group a thread carries, and
+with attachments on it also expands the SharePoint groups of the channel sites."""
 
 from unittest.mock import MagicMock, patch
 
@@ -8,6 +8,14 @@ from ee.onyx.external_permissions.teams.group_sync import teams_group_sync
 
 MODULE = "ee.onyx.external_permissions.teams.group_sync"
 SITES = ["https://t.sharepoint.example/sites/a", "https://t.sharepoint.example/sites/b"]
+CHANNEL_GROUPS = [
+    ("team-members:team-1", ["ada@example.com", "bob@example.com"]),
+    ("channel-members:19:leads", ["ada@example.com"]),
+]
+THREAD_GROUPS = [
+    ExternalUserGroup(id=group_id, user_emails=emails)
+    for group_id, emails in CHANNEL_GROUPS
+]
 
 
 def _cc_pair(include_attachments: bool) -> MagicMock:
@@ -24,11 +32,12 @@ def _connector(include_attachments: bool) -> MagicMock:
     connector = MagicMock()
     connector.include_attachments = include_attachments
     connector.channel_site_urls.return_value = iter(SITES)
+    connector.channel_member_groups.return_value = iter(CHANNEL_GROUPS)
     connector.rest_context.side_effect = lambda url: f"ctx:{url}"
     return connector
 
 
-def test_without_attachments_no_site_is_opened() -> None:
+def test_without_attachments_the_thread_groups_sync_and_no_site_is_opened() -> None:
     connector = _connector(include_attachments=False)
 
     with (
@@ -37,7 +46,9 @@ def test_without_attachments_no_site_is_opened() -> None:
     ):
         groups = list(teams_group_sync("tenant", _cc_pair(include_attachments=False)))
 
-    assert groups == []
+    # Threads name these groups with or without attachments, and an unsynced
+    # group would leave its threads readable by no one.
+    assert groups == THREAD_GROUPS
     connector.load_credentials.assert_called_once_with({"teams_client_id": "x"})
     connector.channel_site_urls.assert_not_called()
     expand.assert_not_called()
@@ -61,7 +72,7 @@ def test_each_channel_site_is_expanded_once() -> None:
     ):
         groups = list(teams_group_sync("tenant", _cc_pair(include_attachments=True)))
 
-    assert groups == [members, owners]
+    assert groups == [*THREAD_GROUPS, members, owners]
     assert [call.args[0] for call in expand.call_args_list] == [
         f"ctx:{SITES[0]}",
         f"ctx:{SITES[1]}",

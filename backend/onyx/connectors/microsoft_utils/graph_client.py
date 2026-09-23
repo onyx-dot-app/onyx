@@ -93,6 +93,7 @@ def sleep_and_retry(
     method_name: str,
     max_retries: int = 3,
     retryable_statuses: frozenset[int] = RETRYABLE_HTTP_STATUSES,
+    rebuild: Callable[[], ClientQuery] | None = None,
 ) -> Any:
     """
     Execute an office365 SDK query with retry logic for rate limiting and
@@ -100,8 +101,13 @@ def sleep_and_retry(
     the server or an upstream gateway closes the connection mid-response).
 
     ``retryable_statuses`` is the HTTP status set worth another attempt.
+    ``rebuild`` makes the query again for each retry. The SDK drops a query and
+    its one-time hooks once it is sent, so running the same object again sends
+    nothing and answers with an empty result.
     """
     for attempt in range(max_retries + 1):
+        if attempt and rebuild is not None:
+            query_obj = rebuild()
         try:
             return query_obj.execute_query()
         except TRANSIENT_TRANSPORT_EXCEPTIONS as e:

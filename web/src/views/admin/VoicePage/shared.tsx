@@ -478,7 +478,7 @@ export function VoiceProviderSetupModal({
                               : t("setupModal.voice.placeholder")
                           }
                           disabled={isLoadingVoices}
-                          strict={false}
+                          mode="open"
                         />
                       </InputVertical>
                     </>

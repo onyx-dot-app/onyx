@@ -1055,7 +1055,7 @@ class GithubConnector(
                         logger.exception(error_msg)
                         yield ConnectorFailure(
                             failed_document=DocumentFailure(
-                                document_id=str(pr.id), document_link=pr.html_url
+                                document_id=pr.html_url, document_link=pr.html_url
                             ),
                             failure_message=error_msg,
                             exception=e,
@@ -1148,7 +1148,7 @@ class GithubConnector(
                         logger.exception(error_msg)
                         yield ConnectorFailure(
                             failed_document=DocumentFailure(
-                                document_id=str(issue.id),
+                                document_id=issue.html_url,
                                 document_link=issue.html_url,
                             ),
                             failure_message=error_msg,
