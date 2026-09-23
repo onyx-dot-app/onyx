@@ -974,7 +974,7 @@ def add_document_summaries(
             prompt_msg,
             max_tokens=MAX_CONTEXT_TOKENS,
             reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
-            total_timeout_override=CONTEXTUAL_RAG_LLM_TIMEOUT,
+            total_timeout_s=CONTEXTUAL_RAG_LLM_TIMEOUT,
         )
         record_llm_response(span_generation, response)
     doc_summary = llm_response_to_string(response)
@@ -1029,7 +1029,7 @@ def add_chunk_summaries(
                 fallback_prompt,
                 max_tokens=MAX_CONTEXT_TOKENS,
                 reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
-                total_timeout_override=CONTEXTUAL_RAG_LLM_TIMEOUT,
+                total_timeout_s=CONTEXTUAL_RAG_LLM_TIMEOUT,
             )
             record_llm_response(span_generation, response)
         doc_info = llm_response_to_string(response)
@@ -1060,7 +1060,7 @@ def add_chunk_summaries(
                     processed_prompt,
                     max_tokens=MAX_CONTEXT_TOKENS,
                     reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
-                    total_timeout_override=CONTEXTUAL_RAG_LLM_TIMEOUT,
+                    total_timeout_s=CONTEXTUAL_RAG_LLM_TIMEOUT,
                 )
                 record_llm_response(span_generation, response)
             chunk.chunk_context = llm_response_to_string(response)
