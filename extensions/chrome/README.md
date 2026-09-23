@@ -56,6 +56,27 @@ Trailing slashes on `onyxExtensionDomain` are stripped automatically.
 - Modify files in `src` directory
 - Refresh extension in Chrome
 
+### Testing managed policy locally
+
+Use the ID shown on the unpacked extension's card in `chrome://extensions`
+(it differs from the Web Store ID).
+
+Linux: write the JSON above to `/etc/opt/chrome/policies/managed/onyx.json`.
+
+macOS: Chrome only reads extension policy from managed preferences, so
+`defaults write` is not enough. Write the plist with `plutil`:
+
+```sh
+P="/Library/Managed Preferences/$USER/com.google.Chrome.extensions.<id>.plist"
+sudo plutil -create xml1 "$P"
+sudo plutil -insert onyxExtensionDomain -string "https://onyx.example.com" "$P"
+sudo plutil -insert onyxExtensionDefaultNewTab -bool false "$P"
+sudo killall cfprefsd
+```
+
+Then quit and relaunch Chrome, click "Reload policies" on `chrome://policy`,
+and reload the extension. Remove the file and restart Chrome to undo.
+
 ## Contributing
 
 Submit issues or pull requests for improvements
