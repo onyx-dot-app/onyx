@@ -10,7 +10,7 @@ the same for every recording in a run, so the caller memoises both, and the
 catalogue is only asked for when a recording names a rule.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import NamedTuple
 
 from pydantic import ValidationError
@@ -23,13 +23,9 @@ from onyx.connectors.zoom.models import (
     APPROVED_REGISTRANT_STATUS,
     ZoomRecordingAuthenticationRule,
     ZoomRecordingEntry,
+    ZoomRecordingRegistrant,
     ZoomRecordingSettings,
     ZoomShareRecording,
-)
-from onyx.connectors.zoom.recordings.access import (
-    ZoomAccessListUnavailable,
-    approved_registrant_emails,
-    usable_emails,
 )
 from onyx.connectors.zoom.recordings.models import user_does_not_exist
 from onyx.utils.logger import setup_logger
@@ -91,6 +87,37 @@ def _grant_of(rule: ZoomRecordingAuthenticationRule) -> RuleGrant:
         rule.type,
     )
     return _OWNER_ONLY
+
+
+class ZoomAccessListUnavailable(Exception):
+    """Nobody could be named to read a recording. It must stay something
+    `fails_the_whole_run` does not recognise, or one such recording would end
+    the whole attempt."""
+
+
+def approved_registrant_emails(
+    registrants: Sequence[ZoomRecordingRegistrant],
+) -> list[str]:
+    """The caller already asks Zoom for approved registrants only. This checks
+    again so access never depends on Zoom honouring a query parameter."""
+    return [
+        registrant.email
+        for registrant in registrants
+        if registrant.status == APPROVED_REGISTRANT_STATUS
+    ]
+
+
+def usable_emails(description: str, emails: list[str]) -> set[str]:
+    usable = [email.strip() for email in emails if email.strip()]
+    dropped = len(emails) - len(usable)
+    if dropped:
+        logger.info(
+            "Dropped %s of %s people from %s: Zoom returned no email for them",
+            dropped,
+            len(emails),
+            description,
+        )
+    return {email.lower() for email in usable}
 
 
 def look_up_owner_email(client: ZoomClient, user_id: str) -> str | None:

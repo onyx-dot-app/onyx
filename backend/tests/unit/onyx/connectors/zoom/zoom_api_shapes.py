@@ -137,8 +137,8 @@ ACCOUNT_RULE_ID = "internally_GB7nutLVSz-Aoi3nrsxZrw"
 
 
 def recording_settings(**overrides: Any) -> ZoomRecordingSettings:
-    """What Zoom answered for a recording on "Anyone in Signed-in users in my
-    account", read live on 2026-09-22."""
+    """What Zoom answered for a live recording on "Anyone in Signed-in users in
+    my account"."""
     fields: dict[str, Any] = {
         "share_recording": "publicly",
         "recording_authentication": True,

@@ -30,12 +30,5 @@ export const autoSyncConfigBySource: Record<
   teams: {},
   outlook: {},
   canvas: {},
-  zoom: {
-    notice:
-      "Zoom keeps a session's participant list for about 15 months. After " +
-      "that, Onyx cannot tell who attended. Rather than give the transcript " +
-      "wider access than the session had, Onyx reports the session as an " +
-      "indexing error. So while Auto Sync is on, sessions older than that " +
-      "window stay out of search.",
-  },
+  zoom: {},
 };
