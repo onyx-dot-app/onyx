@@ -457,6 +457,10 @@ def construct_message_history(
 
     # If no history, build minimal context
     if not simple_chat_history:
+        if custom_agent_prompt:
+            custom_agent_prompt.should_cache = True
+        for msg in project_messages:
+            msg.should_cache = True
         result = [system_prompt] if system_prompt else []
         if custom_agent_prompt:
             result.append(custom_agent_prompt)
@@ -596,6 +600,22 @@ def construct_message_history(
                     forgotten_files_message = _create_file_tool_metadata_message(
                         forgotten_meta, token_counter, available_tool_names
                     )
+
+    # Everything below is stable within a turn (append-only history, fixed
+    # setup messages), so it belongs to the cacheable prefix. The reminder
+    # stays unmarked: its content changes between cycles and it must remain
+    # in the uncached suffix.
+    stable_tail: list[ChatMessageSimple] = [
+        *project_messages,
+        last_user_message,
+        *messages_after_last_user,
+    ]
+    if forgotten_files_message:
+        stable_tail.append(forgotten_files_message)
+    if custom_agent_prompt:
+        stable_tail.append(custom_agent_prompt)
+    for msg in stable_tail:
+        msg.should_cache = True
 
     # Build the final message list according to README ordering:
     # [system], [history_before_last_user], [custom_agent], [context_files],
@@ -1427,6 +1447,9 @@ def run_llm_loop(
                     message_type=MessageType.ASSISTANT,
                     tool_calls=tool_calls_simple,
                     image_files=None,
+                    # Append-only within the turn, so it extends the
+                    # cacheable prefix on the next cycle.
+                    should_cache=True,
                 )
                 simple_chat_history.append(assistant_with_tools)
 
@@ -1444,6 +1467,7 @@ def run_llm_loop(
                         message_type=MessageType.TOOL_CALL_RESPONSE,
                         tool_call_id=tc.tool_call_id,
                         image_files=None,
+                        should_cache=True,
                     )
                     simple_chat_history.append(tool_response_msg)
 

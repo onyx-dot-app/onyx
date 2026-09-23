@@ -1015,6 +1015,7 @@ def create_tool_call_failure_messages(
         message_type=MessageType.ASSISTANT,
         tool_calls=tool_calls_simple,
         image_files=None,
+        should_cache=True,
     )
 
     messages: list[ChatMessageSimple] = [assistant_msg]
@@ -1027,6 +1028,7 @@ def create_tool_call_failure_messages(
             message_type=MessageType.TOOL_CALL_RESPONSE,
             tool_call_id=tool_call.tool_call_id,
             image_files=None,
+            should_cache=True,
         )
         messages.append(failure_response_msg)
 

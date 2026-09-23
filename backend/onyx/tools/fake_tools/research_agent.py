@@ -456,6 +456,7 @@ def run_research_agent_call(
                             message_type=MessageType.ASSISTANT,
                             tool_calls=[think_tool_simple],
                             image_files=None,
+                            should_cache=True,
                         )
                         msg_history.append(think_assistant_msg)
 
@@ -465,6 +466,7 @@ def run_research_agent_call(
                             message_type=MessageType.TOOL_CALL_RESPONSE,
                             tool_call_id=think_tool_call.tool_call_id,
                             image_files=None,
+                            should_cache=True,
                         )
                         msg_history.append(think_tool_response_msg)
                         think_span.span_data.output = THINK_TOOL_RESPONSE_MESSAGE
@@ -541,6 +543,7 @@ def run_research_agent_call(
                             message_type=MessageType.ASSISTANT,
                             tool_calls=tool_calls_simple,
                             image_files=None,
+                            should_cache=True,
                         )
                         msg_history.append(assistant_with_tools)
 
@@ -608,6 +611,7 @@ def run_research_agent_call(
                             message_type=MessageType.TOOL_CALL_RESPONSE,
                             tool_call_id=tc.tool_call_id,
                             image_files=None,
+                            should_cache=True,
                         )
                         msg_history.append(tool_response_msg)
 

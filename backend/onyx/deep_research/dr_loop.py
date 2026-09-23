@@ -652,6 +652,7 @@ def run_deep_research_llm_loop(
                             message_type=MessageType.ASSISTANT,
                             tool_calls=[think_tool_simple],
                             image_files=None,
+                            should_cache=True,
                         )
                         simple_chat_history.append(think_assistant_msg)
 
@@ -661,6 +662,7 @@ def run_deep_research_llm_loop(
                             message_type=MessageType.TOOL_CALL_RESPONSE,
                             tool_call_id=think_tool_call.tool_call_id,
                             image_files=None,
+                            should_cache=True,
                         )
                         simple_chat_history.append(think_tool_response_msg)
                         span.span_data.output = THINK_TOOL_RESPONSE_MESSAGE
@@ -765,6 +767,7 @@ def run_deep_research_llm_loop(
                         message_type=MessageType.ASSISTANT,
                         tool_calls=tool_calls_simple,
                         image_files=None,
+                        should_cache=True,
                     )
                     simple_chat_history.append(assistant_with_tools)
 
@@ -793,6 +796,7 @@ def run_deep_research_llm_loop(
                                     message_type=MessageType.TOOL_CALL_RESPONSE,
                                     tool_call_id=failed_tool_call.tool_call_id,
                                     image_files=None,
+                                    should_cache=True,
                                 )
                             )
                             continue
@@ -822,6 +826,7 @@ def run_deep_research_llm_loop(
                             message_type=MessageType.TOOL_CALL_RESPONSE,
                             tool_call_id=current_tool_call.tool_call_id,
                             image_files=None,
+                            should_cache=True,
                         )
                         simple_chat_history.append(tool_call_response_msg)
 
