@@ -986,7 +986,14 @@ def run_llm_loop(
             # The section below calculates the available tokens for history a bit more accurately
             # now that project files are loaded in.
             persona_datetime_aware = persona.datetime_aware if persona else True
-            cite_documents = should_cite_documents or always_cite_documents
+            # Prompt construction must be byte-stable across the turn: when
+            # should_cite_documents flips on mid-turn after a citeable tool
+            # call, injecting citation guidance into the system prompt would
+            # invalidate the cached prefix for every later request. The
+            # citation instruction rides in the tail reminder instead (see
+            # include_citation_reminder below); the system prompt only
+            # carries it when it holds for the whole turn.
+            cite_documents_in_system_prompt = always_cite_documents
             if persona and persona.replace_base_system_prompt:
                 # Handles the case where user has checked off the "Replace base system prompt" checkbox
                 processed_system_prompt = (
@@ -994,7 +1001,7 @@ def run_llm_loop(
                         persona_system_prompt,
                         datetime_aware=persona_datetime_aware,
                         append_datetime_if_aware=True,
-                        should_cite_documents=cite_documents,
+                        should_cite_documents=cite_documents_in_system_prompt,
                     )
                     if persona_system_prompt
                     else None
@@ -1026,7 +1033,7 @@ def run_llm_loop(
                         datetime_aware=persona_datetime_aware,
                         user_memory_context=prompt_memory_context,
                         tools=tools,
-                        should_cite_documents=cite_documents,
+                        should_cite_documents=cite_documents_in_system_prompt,
                     )
                     system_prompt = ChatMessageSimple(
                         message=system_prompt_str,
@@ -1038,7 +1045,7 @@ def run_llm_loop(
                             custom_agent_prompt,
                             datetime_aware=persona_datetime_aware,
                             append_datetime_if_aware=False,
-                            should_cite_documents=cite_documents,
+                            should_cite_documents=cite_documents_in_system_prompt,
                         )
                         if custom_agent_prompt
                         else None
@@ -1059,7 +1066,7 @@ def run_llm_loop(
                             custom_agent_prompt,
                             datetime_aware=persona_datetime_aware,
                             append_datetime_if_aware=True,
-                            should_cite_documents=cite_documents,
+                            should_cite_documents=cite_documents_in_system_prompt,
                         )
                         if custom_agent_prompt
                         else None
@@ -1080,7 +1087,7 @@ def run_llm_loop(
                     persona_task_prompt,
                     datetime_aware=persona_datetime_aware,
                     append_datetime_if_aware=False,
-                    should_cite_documents=cite_documents,
+                    should_cite_documents=cite_documents_in_system_prompt,
                 )
                 if persona_task_prompt
                 else None
