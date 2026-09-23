@@ -1327,7 +1327,9 @@ function ChatPreferencesSettings() {
           <Section alignItems="start" height="fit">
             <InputHorizontal
               title={t("chats.defaultModel.title")}
-              description={t("chats.defaultModel.description")}
+              description={t("chats.defaultModel.description", {
+                appName: settings.appName,
+              })}
               withLabel
             >
               <ModelSelector
@@ -1550,7 +1552,9 @@ function ChatPreferencesSettings() {
           <Section alignItems="start" height="fit">
             <InputHorizontal
               title={t("memory.referenceStoredMemories.title")}
-              description={t("memory.referenceStoredMemories.description")}
+              description={t("memory.referenceStoredMemories.description", {
+                appName: settings.appName,
+              })}
               withLabel
             >
               <InputSwitch
@@ -1563,7 +1567,9 @@ function ChatPreferencesSettings() {
             </InputHorizontal>
             <InputHorizontal
               title={t("memory.updateMemories.title")}
-              description={t("memory.updateMemories.description")}
+              description={t("memory.updateMemories.description", {
+                appName: settings.appName,
+              })}
               withLabel
             >
               <InputSwitch
@@ -1730,6 +1736,7 @@ function GatewayAccessSection({
   onCreateToken,
 }: GatewayAccessSectionProps) {
   const t = useTranslations("settings");
+  const { appName } = useSettings();
   const gatewayTier = useTierAtLeast(LLM_GATEWAY_MIN_TIER);
   const { llmProviders } = useLLMProviders();
   const [gatewayUrl, setGatewayUrl] = useState("");
@@ -1782,7 +1789,7 @@ function GatewayAccessSection({
     <Section gap={3}>
       <ContentAction
         title={t("gateway.title")}
-        description={t("gateway.description")}
+        description={t("gateway.description", { appName })}
         sizePreset="main-content"
         variant="section"
         width="full"
@@ -2003,7 +2010,7 @@ function AccountsAccessSettings() {
     errorHandlingFetcher,
     { fallbackData: [] }
   );
-  const currentTier = useSettings().tier;
+  const { tier: currentTier, appName } = useSettings();
   const scopeOptions = useMemo(
     () =>
       // Undefined tier (settings loading/failed) must not hide Community scopes.
@@ -2148,6 +2155,7 @@ function AccountsAccessSettings() {
               {t("apiKeys.revokeModal.description", {
                 name: tokenToDelete.name,
                 tokenDisplay: tokenToDelete.token_display,
+                appName,
               })}
             </Text>
             <Text color="text-05">{t("apiKeys.revokeModal.question")}</Text>
@@ -2491,6 +2499,7 @@ function FederatedConnectorCard({
   onDisconnectSuccess,
 }: FederatedConnectorCardProps) {
   const t = useTranslations("settings");
+  const { appName } = useSettings();
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [showDisconnectConfirmation, setShowDisconnectConfirmation] =
     useState(false);
@@ -2545,6 +2554,7 @@ function FederatedConnectorCard({
             <Text color="text-05">
               {t("connectors.disconnectModal.description", {
                 name: sourceMetadata.displayName,
+                appName,
               })}
             </Text>
             <Text color="text-05">

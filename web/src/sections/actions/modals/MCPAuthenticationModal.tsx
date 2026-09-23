@@ -25,6 +25,7 @@ import { markdown } from "@opal/utils";
 import { Formik, Form, useFormikContext } from "formik";
 import * as Yup from "yup";
 import { useModal } from "@opal/components";
+import { useSettings } from "@/lib/settings/hooks";
 import {
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
@@ -100,6 +101,7 @@ export default function MCPAuthenticationModal({
   mutateMcpServers,
 }: MCPAuthenticationModalProps) {
   const t = useTranslations("actions");
+  const { appName } = useSettings();
   const { isOpen, toggle } = useModal();
   const [activeAuthTab, setActiveAuthTab] = useState<"per-user" | "admin">(
     "per-user"
@@ -617,7 +619,8 @@ export default function MCPAuthenticationModal({
                               <InputSelect.Item
                                 value={MCPAuthenticationType.PT_OAUTH}
                                 description={t(
-                                  "mcpAuthModal.authType.ptOauth.description"
+                                  "mcpAuthModal.authType.ptOauth.description",
+                                  { appName }
                                 )}
                               >
                                 {t("mcpAuthModal.authType.ptOauth.label")}
@@ -715,10 +718,12 @@ export default function MCPAuthenticationModal({
                       {/* Info Text */}
                       <div className="flex flex-col gap-2">
                         <Text as="p" font="secondary-body" color="text-03">
-                          {t("mcpAuthModal.oauthInfo.discovery")}
+                          {t("mcpAuthModal.oauthInfo.discovery", { appName })}
                         </Text>
                         <Text as="p" font="secondary-body" color="text-03">
-                          {t("mcpAuthModal.oauthInfo.manualRegistration")}
+                          {t("mcpAuthModal.oauthInfo.manualRegistration", {
+                            appName,
+                          })}
                         </Text>
                         {/* Redirect URI */}
                         <div className="flex items-center gap-1 w-full">
@@ -1026,7 +1031,8 @@ export default function MCPAuthenticationModal({
                     <MessageCard
                       title={t("mcpAuthModal.passThroughNotice.title")}
                       description={t(
-                        "mcpAuthModal.passThroughNotice.description"
+                        "mcpAuthModal.passThroughNotice.description",
+                        { appName }
                       )}
                     />
                   )}
