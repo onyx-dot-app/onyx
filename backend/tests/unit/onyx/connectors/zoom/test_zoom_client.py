@@ -1311,7 +1311,7 @@ class TestDownloadRedirects:
         assert safe_get.call_args.args[0] == "https://zoom.us/rec/other.vtt"
 
 
-# Read live on 2026-09-22 from a recording on "Only people with access". Note
+# Read from a live recording on "Only people with access". Note
 # share_recording still says "publicly"; the passcode is what the model drops.
 _SHARED_WITH_NAMED_PEOPLE = {
     "topic": "test channel meeting",
@@ -1324,7 +1324,7 @@ _SHARED_WITH_NAMED_PEOPLE = {
     "password": "hunter22",
 }
 
-# The whole answer for a recording on "Private to me", read the same day.
+# The whole answer for a live recording on "Private to me".
 _PRIVATE_TO_OWNER = {"topic": "test channel meeting", "share_recording": "none"}
 
 
@@ -1530,7 +1530,7 @@ class TestGetUser:
 
 
 class TestGetRecordingAuthenticationRules:
-    # Read live on 2026-09-22: the built-in rule and one the admin added.
+    # Read from a live account: the built-in rule and one the admin added.
     _CATALOGUE = {
         "recording_authentication": True,
         "authentication_options": [

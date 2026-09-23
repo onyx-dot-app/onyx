@@ -1,6 +1,6 @@
 """One test per row of the Link access table, with the checkbox on and off,
 plus the traps the order of checks exists for. The shapes are what Zoom sent
-on 2026-09-22, read live after setting each choice."""
+for a live recording after each choice was set."""
 
 from collections.abc import Callable, Iterable
 from unittest.mock import MagicMock
