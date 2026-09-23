@@ -43,6 +43,9 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "onyx.serviceAccountName" . }}
+      {{- with .Values.api.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ . }}
+      {{- end }}
       securityContext:
         {{- toYaml .Values.api.podSecurityContext | nindent 8 }}
       {{- with .Values.api.nodeSelector }}
@@ -51,6 +54,10 @@ spec:
       {{- end }}
       {{- with .Values.api.affinity }}
       affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.topologySpreadConstraints }}
+      topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- with .Values.api.tolerations }}
@@ -74,7 +81,7 @@ spec:
               alembic upgrade head &&
               {{- end }}
               echo "Starting Onyx Api Server" &&
-              uvicorn onyx.main:app --host {{ .Values.global.host }} --port {{ .Values.api.containerPorts.server }}{{ if gt (int (.Values.api.workers | default 1)) 1 }} --workers {{ .Values.api.workers }}{{ end }}{{ if .Values.api.limitConcurrency }} --limit-concurrency {{ .Values.api.limitConcurrency }}{{ end }}
+              exec uvicorn onyx.main:app --host {{ .Values.global.host }} --port {{ .Values.api.containerPorts.server }}{{ if gt (int (.Values.api.workers | default 1)) 1 }} --workers {{ .Values.api.workers }}{{ end }}{{ if .Values.api.limitConcurrency }} --limit-concurrency {{ .Values.api.limitConcurrency }}{{ end }}
           ports:
             - name: api-server-port
               containerPort: {{ .Values.api.containerPorts.server }}
@@ -85,9 +92,11 @@ spec:
           startupProbe:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.api.readinessProbe }}
-          readinessProbe:
-            {{- toYaml . | nindent 12 }}
+          {{- with include "onyx.preStopSleep" (dict "ctx" . "values" .Values.api) | trim }}
+          {{- . | nindent 10 }}
+          {{- end }}
+          {{- with include "onyx.readinessProbe" (dict "values" .Values.api "handler" (dict "httpGet" (dict "path" "/health" "port" "api-server-port"))) | trim }}
+          {{- . | nindent 10 }}
           {{- end }}
           {{- with .Values.api.livenessProbe }}
           livenessProbe:
