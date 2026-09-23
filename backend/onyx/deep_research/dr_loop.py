@@ -45,9 +45,9 @@ from onyx.prompts.deep_research.orchestration_layer import (
     CLARIFICATION_PROMPT,
     FINAL_REPORT_PROMPT,
     FIRST_CYCLE_REMINDER,
-    FIRST_CYCLE_REMINDER_TOKENS,
     INTERNAL_SEARCH_CLARIFICATION_GUIDANCE,
     INTERNAL_SEARCH_RESEARCH_TASK_GUIDANCE,
+    ORCHESTRATOR_CYCLE_REMINDER,
     ORCHESTRATOR_PROMPT,
     ORCHESTRATOR_PROMPT_REASONING,
     RESEARCH_PLAN_PROMPT,
@@ -447,7 +447,6 @@ def run_deep_research_llm_loop(
             )
             token_count_prompt = orchestrator_prompt_template.format(
                 current_datetime=get_current_llm_day_time(full_sentence=False),
-                current_cycle_count=1,
                 max_cycles=max_orchestrator_cycles,
                 research_plan=research_plan,
                 internal_search_research_task_guidance=internal_search_research_task_guidance,
@@ -493,20 +492,25 @@ def run_deep_research_llm_loop(
                     final_turn_index = report_turn_index + (1 if report_reasoned else 0)
                     break
 
+                # The cycle counter changes each cycle, so it travels in the
+                # tail reminder; the system prompt stays identical so the
+                # provider prefix cache keeps matching.
+                reminder_text = ORCHESTRATOR_CYCLE_REMINDER.format(
+                    current_cycle_count=cycle,
+                    max_cycles=max_orchestrator_cycles,
+                )
                 if cycle == 1:
-                    first_cycle_reminder_message = ChatMessageSimple(
-                        message=FIRST_CYCLE_REMINDER,
-                        token_count=FIRST_CYCLE_REMINDER_TOKENS,
-                        message_type=MessageType.USER_REMINDER,
-                    )
-                else:
-                    first_cycle_reminder_message = None
+                    reminder_text = f"{reminder_text}\n\n{FIRST_CYCLE_REMINDER}"
+                first_cycle_reminder_message = ChatMessageSimple(
+                    message=reminder_text,
+                    token_count=token_counter(reminder_text),
+                    message_type=MessageType.USER_REMINDER,
+                )
 
                 research_agent_calls: list[ToolCallKickoff] = []
 
                 orchestrator_prompt = orchestrator_prompt_template.format(
                     current_datetime=get_current_llm_day_time(full_sentence=False),
-                    current_cycle_count=cycle,
                     max_cycles=max_orchestrator_cycles,
                     research_plan=research_plan,
                     internal_search_research_task_guidance=internal_search_research_task_guidance,

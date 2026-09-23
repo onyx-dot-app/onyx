@@ -15,7 +15,7 @@ NEVER output normal response tokens, you must only call tools.
 For context, the date is {{current_datetime}}.
 
 # Tools
-You have a limited number of cycles to complete your research and you do not have to use all cycles. You are on cycle {{current_cycle_count}} of {MAX_RESEARCH_CYCLES}.\
+You have a maximum of {MAX_RESEARCH_CYCLES} cycles to complete your research and you do not have to use all cycles.\
 {{optional_internal_search_tool_description}}\
 {{optional_web_search_tool_description}}\
 {{optional_open_url_tool_description}}
@@ -82,12 +82,18 @@ NEVER output normal response tokens, you must only call tools.
 For context, the date is {{current_datetime}}.
 
 # Tools
-You have a limited number of cycles to complete your research and you do not have to use all cycles. You are on cycle {{current_cycle_count}} of {MAX_RESEARCH_CYCLES}.\
+You have a maximum of {MAX_RESEARCH_CYCLES} cycles to complete your research and you do not have to use all cycles.\
 {{optional_internal_search_tool_description}}\
 {{optional_web_search_tool_description}}\
 {{optional_open_url_tool_description}}
 ## {GENERATE_REPORT_TOOL_NAME}
 Once you have completed your research, call the `{GENERATE_REPORT_TOOL_NAME}` tool. You should only call this tool after you have fully researched the topic.
+""".strip()
+
+
+# Sent each cycle as a tail message so the per-request system prompt stays identical.
+RESEARCH_AGENT_CYCLE_REMINDER = """
+You are on cycle {current_cycle_count} of {max_cycles}.
 """.strip()
 
 
