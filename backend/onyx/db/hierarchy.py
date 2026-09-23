@@ -32,6 +32,9 @@ logger = setup_logger()
 SOURCES_WITH_HIERARCHY_NODE_DOCUMENTS: set[DocumentSource] = {
     DocumentSource.NOTION,
     DocumentSource.CONFLUENCE,
+    # Jira Service Management emits a hierarchy node per issue whose
+    # raw_node_id is the issue document's id.
+    DocumentSource.JIRA_SERVICE_MANAGEMENT,
 }
 
 

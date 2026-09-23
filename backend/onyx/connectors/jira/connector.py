@@ -3,7 +3,7 @@ import json
 import os
 from collections.abc import Callable, Generator, Iterable, Iterator
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, ClassVar, NoReturn
 
 import requests
 from jira import JIRA
@@ -395,6 +395,8 @@ def process_jira_issue(
     comment_email_blacklist: tuple[str, ...] = (),
     labels_to_skip: set[str] | None = None,
     parent_hierarchy_raw_node_id: str | None = None,
+    source: DocumentSource = DocumentSource.JIRA,
+    comment_extractor: Callable[[Issue], list[str]] | None = None,
 ) -> Document | None:
     if labels_to_skip:
         if any(label in issue.fields.labels for label in labels_to_skip):
@@ -411,9 +413,13 @@ def process_jira_issue(
     else:
         description = extract_text_from_adf(issue.raw["fields"]["description"])
 
-    comments = get_comment_strs(
-        issue=issue,
-        comment_email_blacklist=comment_email_blacklist,
+    comments = (
+        comment_extractor(issue)
+        if comment_extractor is not None
+        else get_comment_strs(
+            issue=issue,
+            comment_email_blacklist=comment_email_blacklist,
+        )
     )
     ticket_content = f"{description}\n" + "\n".join(
         [f"Comment: {comment}" for comment in comments if comment]
@@ -487,7 +493,7 @@ def process_jira_issue(
     return Document(
         id=page_url,
         sections=[TextSection(link=page_url, text=ticket_content)],
-        source=DocumentSource.JIRA,
+        source=source,
         semantic_identifier=f"{issue.key}: {issue.fields.summary}",
         title=f"{issue.key} {issue.fields.summary}",
         doc_updated_at=time_str_to_utc(issue.fields.updated),
@@ -516,6 +522,10 @@ class JiraConnector(
     SlimConnector,
     SlimConnectorWithPermSync,
 ):
+    # DocumentSource stamped onto every emitted document. Overridden by
+    # source-specific subclasses.
+    document_source: ClassVar[DocumentSource] = DocumentSource.JIRA
+
     def __init__(
         self,
         jira_base_url: str,
@@ -583,6 +593,9 @@ class JiraConnector(
                 jira_client=self.jira_client,
                 jira_project=project_key,
                 add_prefix=add_prefix,
+                # Group ids must carry this connector's source prefix so they
+                # match the groups written by the source's group sync.
+                source=self.document_source,
             )
         return self._project_permissions_cache[cache_key]
 
@@ -827,11 +840,8 @@ class JiraConnector(
                     else None
                 )
 
-                if document := process_jira_issue(
-                    jira_base_url=self.jira_base,
+                if document := self._process_issue(
                     issue=issue,
-                    comment_email_blacklist=self.comment_email_blacklist,
-                    labels_to_skip=self.labels_to_skip,
                     parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
                 ):
                     # Add permission information to the document if requested
@@ -841,6 +851,7 @@ class JiraConnector(
                             add_prefix=True,  # Indexing path - prefix here
                         )
                     yield document
+                    yield from self._iter_issue_attachment_docs(issue, document)
 
             except Exception as e:
                 yield ConnectorFailure(
@@ -863,6 +874,47 @@ class JiraConnector(
         )
 
         return new_checkpoint
+
+    def _process_issue(
+        self, issue: Issue, parent_hierarchy_raw_node_id: str | None
+    ) -> Document | None:
+        """Build a Document for an issue. Subclasses override this to stamp a
+        different DocumentSource or add source-specific fields."""
+        return process_jira_issue(
+            jira_base_url=self.jira_base,
+            issue=issue,
+            comment_email_blacklist=self.comment_email_blacklist,
+            labels_to_skip=self.labels_to_skip,
+            parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+            source=self.document_source,
+        )
+
+    def _iter_issue_attachment_docs(
+        self,
+        issue: Issue,  # noqa: ARG002
+        document: Document,  # noqa: ARG002
+    ) -> Iterable[Document | HierarchyNode | ConnectorFailure]:
+        """Documents derived from an issue's attachments, emitted in the
+        full-index pass right after the issue document. Only subclasses that
+        index attachments produce anything here."""
+        return ()
+
+    def _issue_is_skipped(self, issue: Issue) -> bool:  # noqa: ARG002
+        """Whether the slim-doc pass skips the issue. The full pass applies
+        labels_to_skip; subclasses that index attachments override this so the
+        slim pass enumerates exactly the documents the full pass indexes."""
+        return False
+
+    def _iter_issue_slim_attachments(
+        self,
+        issue: Issue,  # noqa: ARG002
+        issue_doc_id: str,  # noqa: ARG002
+        project_key: str,  # noqa: ARG002
+        include_permissions: bool,  # noqa: ARG002
+    ) -> Iterable[SlimDocument | HierarchyNode]:
+        """Slim docs for an issue's attachments. Must enumerate exactly the
+        attachments _iter_issue_attachment_docs indexes."""
+        return ()
 
     def update_checkpoint_for_next_run(
         self,
@@ -944,7 +996,8 @@ class JiraConnector(
                 project_key = project.key if project else None
                 project_name = project.name if project else None
 
-                if not project_key:
+                if not project_key or self._issue_is_skipped(issue):
+                    current_offset += 1
                     continue
 
                 # Yield hierarchy nodes BEFORE the slim document (parent-before-child)
@@ -994,6 +1047,11 @@ class JiraConnector(
                         ),
                         # NOTE: doc_created_at population not yet verified against live data
                         doc_created_at=time_str_to_utc(created) if created else None,
+                    )
+                )
+                slim_doc_batch.extend(
+                    self._iter_issue_slim_attachments(
+                        issue, doc_id, project_key, include_permissions
                     )
                 )
                 current_offset += 1
@@ -1047,7 +1105,7 @@ class JiraConnector(
             except Exception as e:
                 self._handle_jira_connector_settings_error(e)
 
-    def _handle_jira_connector_settings_error(self, e: Exception) -> None:
+    def _handle_jira_connector_settings_error(self, e: Exception) -> NoReturn:
         """Helper method to handle Jira API errors consistently.
 
         Extracts error messages from the Jira API response for all status codes when possible,

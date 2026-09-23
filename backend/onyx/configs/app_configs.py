@@ -1418,6 +1418,13 @@ JIRA_CONNECTOR_MAX_TICKET_SIZE = int(
 )
 JIRA_SLIM_PAGE_SIZE = int(os.environ.get("JIRA_SLIM_PAGE_SIZE", 500))
 
+# Maximum size for Jira Service Management issue attachments in bytes
+JIRA_SERVICE_MANAGEMENT_ATTACHMENT_SIZE_THRESHOLD = int(
+    os.environ.get(
+        "JIRA_SERVICE_MANAGEMENT_ATTACHMENT_SIZE_THRESHOLD", 10 * 1024 * 1024
+    )
+)
+
 GONG_CONNECTOR_START_TIME = os.environ.get("GONG_CONNECTOR_START_TIME")
 
 # An occurrence is picked up by when the meeting ran, but its transcript

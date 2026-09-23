@@ -862,6 +862,70 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  jira_service_management: {
+    description: "Configure Jira Service Management connector",
+    subtext: `Configure which Jira Service Management content to index. A service desk project key is required.`,
+    values: [
+      {
+        type: "text",
+        query: "Enter the Jira base URL:",
+        label: "Jira Base URL",
+        name: "jira_base_url",
+        optional: false,
+        description:
+          "The base URL of your Jira instance (e.g., https://your-domain.atlassian.net)",
+      },
+      {
+        type: "text",
+        query: "Enter the service desk project key:",
+        label: "Project Key",
+        name: "project_key",
+        optional: false,
+        description:
+          "The key of the Jira Service Management project to index (e.g., 'IT').",
+      },
+      {
+        type: "text",
+        query: "Optionally enter a JQL filter:",
+        label: "JQL Filter",
+        name: "jql_query",
+        optional: true,
+        description:
+          "A JQL filter applied on top of the project scope." +
+          "\n\nIMPORTANT: Do not include any time-based filters in the JQL query as that will conflict with the connector's logic. Additionally, do not include ORDER BY clauses." +
+          "\n\nSee Atlassian's [JQL documentation](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) for more details on syntax.",
+      },
+      {
+        type: "checkbox",
+        query: "Include internal comments?",
+        label: "Include Internal Comments",
+        name: "include_internal_comments",
+        optional: true,
+        default: false,
+        description:
+          "Index internal agent notes (comments not visible to customers). Off by default.",
+      },
+      buildIncludeAttachmentsOption(false),
+      {
+        type: "checkbox",
+        query: "Using scoped token?",
+        label: "Using scoped token",
+        name: "scoped_token",
+        optional: true,
+        default: false,
+      },
+      {
+        type: "list",
+        query: "Enter email addresses to blacklist from comments:",
+        label: "Comment Email Blacklist",
+        name: "comment_email_blacklist",
+        description:
+          "This is generally useful to ignore certain bots. Add user emails which comments should NOT be indexed.",
+        optional: true,
+      },
+    ],
+    advanced_values: [],
+  },
   salesforce: {
     description: "Configure Salesforce connector",
     values: [
@@ -2343,6 +2407,16 @@ export interface JiraConfig {
   project_key?: string;
   comment_email_blacklist?: string[];
   jql_query?: string;
+}
+
+export interface JiraServiceManagementConfig {
+  jira_base_url: string;
+  project_key: string;
+  jql_query?: string;
+  comment_email_blacklist?: string[];
+  scoped_token?: boolean;
+  include_attachments?: boolean;
+  include_internal_comments?: boolean;
 }
 
 export interface SalesforceConfig {

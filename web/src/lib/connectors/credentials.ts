@@ -95,6 +95,11 @@ export interface JiraServerCredentialJson {
   jira_api_token: string;
 }
 
+export interface JiraServiceManagementCredentialJson {
+  jira_user_email: string | null;
+  jira_api_token: string;
+}
+
 export interface ProductboardCredentialJson {
   productboard_access_token: string;
 }
@@ -339,6 +344,7 @@ type CredentialTemplateMap = Record<ValidSources, object | null> & {
   outline: OutlineCredentialJson;
   confluence: ConfluenceCredentialJson;
   jira: JiraCredentialJson;
+  jira_service_management: JiraServiceManagementCredentialJson;
   productboard: ProductboardCredentialJson;
   slab: SlabCredentialJson;
   coda: CodaCredentialJson;
@@ -414,6 +420,10 @@ export const credentialTemplates: Record<ValidSources, any> = {
     confluence_access_token: "",
   },
   jira: {
+    jira_user_email: null,
+    jira_api_token: "",
+  },
+  jira_service_management: {
     jira_user_email: null,
     jira_api_token: "",
   },

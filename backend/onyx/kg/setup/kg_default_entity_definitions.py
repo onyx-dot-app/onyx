@@ -91,6 +91,58 @@ def get_default_entity_types(vendor_name: str) -> dict[str, KGEntityTypeDefiniti
             grounding=KGGroundingType.GROUNDED,
             grounded_source_name=DocumentSource.JIRA,
         ),
+        "JIRA_SERVICE_MANAGEMENT": KGEntityTypeDefinition(
+            description=(
+                "A Jira Service Management request or incident raised through a "
+                "service desk project."
+            ),
+            # JSM documents carry the same metadata keys as Jira tickets
+            attributes=KGEntityTypeAttributes(
+                metadata_attribute_conversion={
+                    "issuetype": KGAttributeProperty(name="subtype", keep=True),
+                    "status": KGAttributeProperty(name="status", keep=True),
+                    "priority": KGAttributeProperty(name="priority", keep=True),
+                    "project_name": KGAttributeProperty(name="project", keep=True),
+                    "created": KGAttributeProperty(name="created_at", keep=True),
+                    "updated": KGAttributeProperty(name="updated_at", keep=True),
+                    "resolution_date": KGAttributeProperty(
+                        name="completed_at", keep=True
+                    ),
+                    "duedate": KGAttributeProperty(name="due_date", keep=True),
+                    "customer_request_type": KGAttributeProperty(
+                        name="request_type", keep=True
+                    ),
+                    "organizations": KGAttributeProperty(
+                        name="organizations", keep=True
+                    ),
+                    "request_participants": KGAttributeProperty(
+                        name="request_participants", keep=True
+                    ),
+                    "sla_status": KGAttributeProperty(name="sla", keep=True),
+                    "reporter_email": KGAttributeProperty(
+                        name="creator",
+                        keep=False,
+                        implication_property=KGAttributeImplicationProperty(
+                            implied_entity_type=KGAttributeEntityOption.FROM_EMAIL,
+                            implied_relationship_name="is_creator_of",
+                        ),
+                    ),
+                    "assignee_email": KGAttributeProperty(
+                        name="assignee",
+                        keep=False,
+                        implication_property=KGAttributeImplicationProperty(
+                            implied_entity_type=KGAttributeEntityOption.FROM_EMAIL,
+                            implied_relationship_name="is_assignee_of",
+                        ),
+                    ),
+                    # not using implication property as that only captures 1 depth
+                    "key": KGAttributeProperty(name="key", keep=True),
+                    "parent": KGAttributeProperty(name="parent", keep=True),
+                },
+            ),
+            grounding=KGGroundingType.GROUNDED,
+            grounded_source_name=DocumentSource.JIRA_SERVICE_MANAGEMENT,
+        ),
         "GITHUB_PR": KGEntityTypeDefinition(
             description="A formal engineering request to merge proposed changes into the codebase.",
             attributes=KGEntityTypeAttributes(
