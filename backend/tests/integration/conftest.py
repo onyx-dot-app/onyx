@@ -5,6 +5,7 @@ from collections.abc import Callable, Generator
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
 
@@ -76,6 +77,10 @@ from tests.integration.common_utils.managers.image_generation import (  # noqa: 
 from tests.integration.common_utils.managers.llm_provider import (  # noqa: E402
     LLMProviderManager,
 )
+from tests.integration.common_utils.managers.mock_llm import (  # noqa: E402
+    MockLLMManager,
+    MockLLMScript,
+)
 from tests.integration.common_utils.managers.user import (  # noqa: E402
     DEFAULT_PASSWORD,
     UserManager,
@@ -97,6 +102,9 @@ from tests.integration.common_utils.test_models import (  # noqa: E402
     SimpleTestDocument,
 )
 from tests.integration.common_utils.vespa import vespa_fixture  # noqa: E402
+from tests.integration.mock_services.mock_llm_server.server import (  # noqa: E402
+    run_in_thread,
+)
 
 BASIC_USER_NAME = "basic_user"
 
@@ -449,6 +457,36 @@ def reset_multitenant() -> None:
 @pytest.fixture
 def llm_provider(admin_user: DATestUser) -> DATestLLMProvider:
     return LLMProviderManager.create(user_performing_action=admin_user)
+
+
+@pytest.fixture(scope="session")
+def mock_llm_server() -> Generator[str, None, None]:
+    with run_in_thread() as base_url:
+        yield base_url
+
+
+@pytest.fixture
+def mock_llm(
+    mock_llm_server: str, admin_user: DATestUser
+) -> Generator[MockLLMScript, None, None]:
+    """Make a new script on the mock LLM server the default LLM for one test.
+    Teardown restores the previous default provider and fails on unmatched
+    requests or unused required replies."""
+    handle = MockLLMScript(mock_llm_server, uuid4().hex)
+    try:
+        previous_default = LLMProviderManager.get_default_model(admin_user)
+        provider = MockLLMManager.create(handle.api_base, admin_user)
+    except Exception:
+        handle.close()
+        raise
+
+    yield handle
+
+    try:
+        MockLLMManager.delete(provider, previous_default, admin_user)
+        handle.verify()
+    finally:
+        handle.close()
 
 
 @pytest.fixture
