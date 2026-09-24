@@ -83,7 +83,7 @@ from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
-from onyx.tools.tool_runner import run_tool_calls
+from onyx.tools.tool_runner import run_tool_calls, select_tool_calls_to_run
 from onyx.tools.utils import compute_all_tool_tokens
 from onyx.tracing.framework.create import ChatTraceMetadata, trace
 from onyx.utils.logger import setup_logger
@@ -1175,13 +1175,18 @@ def run_llm_loop(
                         )
                     )
 
-            if len(tool_calls) > 1:
+            tool_calls_to_run = select_tool_calls_to_run(
+                tool_calls=tool_calls, tools=final_tools
+            )
+            if len(tool_calls_to_run) > 1:
                 emitter.emit(
                     Packet(
                         placement=Placement(
-                            turn_index=tool_calls[0].placement.turn_index
+                            turn_index=tool_calls_to_run[0].placement.turn_index
                         ),
-                        obj=TopLevelBranching(num_parallel_branches=len(tool_calls)),
+                        obj=TopLevelBranching(
+                            num_parallel_branches=len(tool_calls_to_run)
+                        ),
                     )
                 )
 
@@ -1193,7 +1198,7 @@ def run_llm_loop(
             # It can be cleaned up but not super trivial or worthwhile right now
             just_ran_web_search = False
             parallel_tool_call_results = run_tool_calls(
-                tool_calls=tool_calls,
+                tool_calls=tool_calls_to_run,
                 tools=final_tools,
                 message_history=truncated_message_history,
                 user_memory_context=user_memory_context,
