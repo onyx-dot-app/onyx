@@ -247,7 +247,7 @@ provisioning entirely, since nothing will view them live.
 ### Tests
 
 No dedicated unit or integration test file for `webapp_proxy.py` was found
-in `backend/tests/` as of this writing. `docs/craft/lazy-webapp-provisioning.md`
+in `backend/tests/`. `docs/craft/lazy-webapp-provisioning.md`
 describes a planned kind-cluster integration test (webapp tool scaffolds,
 installs, and serves through the proxy; restore auto-start behavior) that
 adapts `test_webapp_preview.py`, `test_snapshot_restore.py`, and

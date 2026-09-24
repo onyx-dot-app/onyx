@@ -271,8 +271,7 @@ fetch_ee_implementation_or_noop("onyx.external_permissions.post_query_censoring"
 
 `build_access_filters_for_user` is called exactly once per `SearchTool.run()`
 invocation, inside the single DB session opened at the top of `run()`
-(`search_tool.py`), before any parallel retrieval lane starts, unless
-`bypass_acl=True` (§5.3). Anonymous users route through
+(`search_tool.py`), before any parallel retrieval lane starts (§5.3). Anonymous users route through
 `current_chat_accessible_user`, never `current_user`, and get only
 `{PUBLIC_DOC_PAT}` from either the CE or the EE `_get_acl_for_user`.
 
@@ -361,60 +360,21 @@ These are the rules whose violation is silent: nothing crashes, a user just sees
    `access_control_list=None` is a security review, not a refactor**: it must
    justify, in the same way as one of these, why the caller already enforced
    access some other way.
-3. **`bypass_acl=True` is fully plumbed but, as of this writing, has no
-   production caller.** The flag threads through
-   `SearchToolConfig.bypass_acl` → `SearchTool.bypass_acl` →
-   `ChunkSearchRequest.bypass_acl` → `search_pipeline` →
-   `_build_index_filters(bypass_acl=True)`, where it sets
-   `user_acl_filters = None` (unrestricted, same effect as item 2, but for
-   an entire search rather than one document-ID lookup) and also skips the
-   document-set-name access check (§5.4). Every production call site that
-   reaches `handle_stream_message_objects`/`handle_multi_model_stream`
-   (`chat/process_message.py`) with a `bypass_acl` argument, including the
-   Slack bot (`onyxbot/slack/handlers/handle_regular_answer.py`) and the
-   `/api/search` endpoint (`server/features/search/api.py`), passes
-   `bypass_acl=False` explicitly. The only places `bypass_acl=True` appears in
-   the repository are two unit tests
-   (`tests/unit/onyx/tools/test_search_tool_receipt_diagnostics.py`,
-   `tests/unit/onyx/context/search/test_forced_document_set.py`). **This
-   contradicts a docstring** in `process_message.py`
-   (`"bypass_acl: If True, document ACL checks are skipped (used by Slack
-   bot)"`): the Slack bot does not use it. Treat that docstring as stale.
-   Adding the first production caller of `bypass_acl=True` is a security
-   review, not a refactor: it grants that caller unrestricted read access to
-   every indexed document, public or not.
-
-   **The dead flag is still a latent hazard, for three reasons.**
-   First, `bypass_acl` is a `bool = False` **Pydantic field** on
-   `ChunkSearchRequest` (`context/search/models.py`), not a plain function
-   argument. It is safe today only because no FastAPI endpoint binds that model
-   (or any model embedding it) to a request body. The moment one does, a client
-   sending `{"bypass_acl": true}` gets a full index read, and Pydantic populates
-   it silently. Verify this still holds with:
-   `grep -rn "ChunkSearchRequest" backend/onyx/server/ backend/ee/onyx/server/`
-   (it must stay empty).
-   Second, nothing enforces the flag's unreachability. The only tests that set
-   it `True` *depend on* the bypass working, so the suite stays green if it ever
-   becomes reachable.
-   Third, the stale docstring points a future reader at a legitimate-sounding
-   caller that does not exist, which invites someone to "restore" it.
-
-   **Severity is bounded to one tenant.** The tenant clause is applied
-   independently of the ACL clause in `_get_search_filters`
-   (`document_index/opensearch/search.py`, the `TENANT_ID_FIELD_NAME` term), so
-   `bypass_acl` cannot cross tenants. It is a full within-tenant read, not a
-   cross-customer leak.
-
-   **Preferred fix: delete the flag.** It has no production caller and, per
-   `git log -S "bypass_acl=True" -- backend/onyx/onyxbot/`, never had one. If it
-   must stay, correct the docstring and move it off the Pydantic model into a
-   keyword argument so it cannot be deserialized.
+3. **There is no ACL bypass flag.** `bypass_acl` does not exist anywhere in
+   the codebase (`grep -rn "bypass_acl" backend/` is empty). Every search
+   path builds its filters through `_build_index_filters`
+   (`context/search/pipeline.py`) and `_get_search_filters`
+   (`document_index/opensearch/search.py`, item 1), with no parameter that
+   disables ACL enforcement for an entire search. A change that reintroduces
+   a bypass parameter on `ChunkSearchRequest`, `SearchToolConfig`, or
+   `SearchTool` is a security review, not a refactor.
 4. **User-supplied document-set names are always re-checked server side**, in
    two independent places that must both stay in place:
    `filter_document_set_names_by_user_access` inside `_build_index_filters`,
    and the equivalent check in `SearchTool.run` before that. Unauthorized names
    raise `OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)`. Both checks are
-   skipped when `bypass_acl` is set (item 3) or the user is anonymous.
+   skipped when the user is anonymous or (for `_build_index_filters`) no
+   `db_session` is available.
 5. **The Slack federated lane carries no ACL and is a deliberate exception.**
    `_run_slack_search` builds its request with
    `IndexFilters(access_control_list=None)`; access is enforced entirely by the
@@ -521,7 +481,7 @@ These are the rules whose violation is silent: nothing crashes, a user just sees
 | touches `fetch_versioned_implementation` dispatch or `global_version` | every CE/EE pair in this document; verify the CE fallback still narrows rather than widens (§5.9) |
 | changes group membership resolution (`fetch_user_groups_for_user`, `fetch_external_groups_for_user`) | re-run the two-user integration test (§8); a stale cache or a membership write that doesn't invalidate it is a data-exposure bug, not a performance bug |
 | changes curator/group-manager scoping (`is_group_manager`, `within_managed_scope_clause`, `allow_scope`) | every route using `require_permission(..., allow_scope=True)` has a real GATE 2 check; this governs admin capability, not document ACL, but a bug here can let a curator manage a document set outside their scope, which does affect who a persona can search |
-| touches `bypass_acl` anywhere in the chain | re-verify §5.3 still holds: no production caller sets it `True`. Adding one is a security review |
+| adds an ACL bypass parameter anywhere in the search chain | re-verify §5.3 still holds: there is no such flag today. Adding one is a security review |
 
 ---
 
@@ -626,11 +586,6 @@ verified by "it still returns documents"; it is verified by a second user
   categories by prefixing, but `PUBLIC_DOC_PAT` itself is unprefixed by
   design (§4.1) precisely so it can be split into its own index field; treat
   it as reserved.
-- **`bypass_acl=True` looks, from the plumbing alone, like a feature in active
-  use. It is not (§5.3).** Do not infer from the presence of the parameter
-  throughout `process_message.py`, `search_tool.py`, and `pipeline.py` that
-  some caller relies on it; verify against the actual call sites before
-  reasoning about its blast radius.
 - **A curator's `is_group_manager` scope is about admin capability
   (managing connectors, document sets, groups), not about which documents
   they personally can search.** A curator's own document-level ACL is

@@ -43,6 +43,17 @@ The feature requires at least the Business tier. On a lower tier, every
 `/gateway/*` request is rejected with a 402 naming the required plan, before
 any gateway code runs.
 
+An admin can also turn the gateway off for the whole workspace, from
+**Admin > LLM Gateway** (`web/src/app/admin/llm-gateway`) or `PATCH
+/admin/settings` (`Settings.llm_gateway_enabled`, default on). While off,
+every `/gateway/*` request from a third-party PAT is rejected with
+`FEATURE_DISABLED`, minting a new `use:llm_gateway` PAT is rejected, and the
+scope is hidden from `GET /user/pats/scopes`. A user who already has the
+gateway settings page open sees a disabled notice instead of the settings
+form. This switch does not affect Craft: a sandbox's `CRAFT_SANDBOX`-scoped
+PAT keeps working, because admins control Craft's own gateway use through
+the Craft-specific setting (§4.2).
+
 ---
 
 ## 2. Surfaces
@@ -59,9 +70,10 @@ any gateway code runs.
 
 Every endpoint depends on `require_permission(Permission.USE_LLM_GATEWAY)`
 (`api.py:1395` etc.) as GATE 1, then calls
-`_authorize_gateway_request` (`api.py:144`), which delegates to
+`_authorize_gateway_request` (`api.py:144`), which checks the workspace
+`llm_gateway_enabled` setting for non-Craft traffic before delegating to
 `craft_gateway.py:gateway_request_flow` as GATE 2. See §4.2 for why both
-gates exist.
+gates, plus the workspace setting, exist.
 
 ### PAT scope
 
@@ -85,6 +97,12 @@ means mechanically.
 | `OPENAI_GATEWAY_PASSTHROUGH_ENABLED` | on (`!= "false"`) | Same kill switch for true-OpenAI models on `/v1/responses`. |
 | `ANTHROPIC_PASSTHROUGH_CONNECT_TIMEOUT_SECONDS` / `_READ_TIMEOUT_SECONDS` | 10 / 600 | httpx timeouts for the Anthropic passthrough. |
 | `OPENAI_PASSTHROUGH_CONNECT_TIMEOUT_SECONDS` / `_READ_TIMEOUT_SECONDS` | 10 / 600 | Same, OpenAI passthrough. |
+
+**Not env, admin-configured:** `Settings.llm_gateway_enabled`
+(`server/settings/models.py`, default `True`) is the workspace on/off switch
+described in §1 and §4.2. Changing it requires the Business tier or higher
+and writes an `LLM_GATEWAY_ENABLED_CHANGE` audit event
+(`server/settings/api.py:admin_patch_settings`).
 
 ---
 
@@ -139,7 +157,21 @@ is the entry that ties `/gateway` to Business. On tier-resolution failure the
 middleware fails closed to `Tier.COMMUNITY` (`tier_gate.py:92-94`), which
 denies the gateway rather than allowing it.
 
-### 4.2 Authentication and scope: two gates, on purpose
+### 4.2 Authentication and scope: two gates and a workspace switch
+
+Before GATE 2 runs, `_authorize_gateway_request` checks the workspace
+`llm_gateway_enabled` setting (`server/settings/models.py:Settings`,
+default on) whenever the resolved flow is `LLMFlow.LLM_GATEWAY` (a
+directly-scoped caller, not a Craft sandbox); if it is off, the request is
+rejected with `OnyxErrorCode.FEATURE_DISABLED` before any provider or model
+resolution happens. The check reads settings with `raise_on_error=True`, so
+a settings-store read failure fails closed (rejects the request) rather than
+silently treating the gateway as enabled. `_validate_assignable_scopes`
+(`server/pat/api.py`) applies the same setting when a PAT is minted, and
+`list_selectable_scopes` hides `use:llm_gateway` from the option list while
+it is off (see [[auth-and-identity]]). This switch is orthogonal to the
+per-Craft-sandbox enablement GATE 2 already checks; a Craft sandbox's
+`CRAFT_SANDBOX`-scoped PAT is never subject to it.
 
 **GATE 1** (`require_permission(Permission.USE_LLM_GATEWAY)`, every endpoint
 in `api.py`) is the ordinary PAT-scope cap described in
@@ -455,6 +487,7 @@ records the span before signalling `_STREAM_END`.
 |---|---|
 | adds an endpoint or a new dialect | wire it through both GATE 1 (`require_permission(Permission.USE_LLM_GATEWAY)`) and GATE 2 (`_authorize_gateway_request`); add `check_token_rate_limits` and resolve through `_resolve_metered_gateway_model` unless the endpoint generates nothing; open a `_gateway_trace`/`llm_generation_span` or call `_track_llm_cost` manually if it bypasses `LLM.invoke`/`.stream` |
 | changes scope checks (`gateway_request_flow`, `IMPLIED_PERMISSIONS`) | re-verify the asymmetry in §4.2 still holds: a bare `USE_LLM_GATEWAY` grant must not require Craft enablement, and a `CRAFT_SANDBOX` token must still require it; re-run `backend/tests/unit/onyx/server/features/craft/test_craft_gateway.py` |
+| changes the `llm_gateway_enabled` check (`_authorize_gateway_request`, `_validate_assignable_scopes`, `list_selectable_scopes`) | re-verify it still fails closed on a settings-read error, still exempts Craft sandbox traffic, and still blocks both new PAT minting and existing-PAT gateway calls; re-run `backend/tests/unit/ee/onyx/server/gateway/test_llm_gateway_api.py` and `backend/tests/unit/onyx/server/pat/test_pat_api.py` |
 | changes model resolution (`resolve_gateway_model`, the `<provider_id>/<model_name>` wire format) | `model_catalog.py:build_gateway_model_catalog` (the id format `GET /v1/models` returns must still round-trip), and `onyx/server/features/build/session/llm_config.py` which parses the same id format for Craft's stored selection |
 | changes metering (`_gateway_trace`, `_track_llm_cost`, the `LLMFlow` tags) | [[observability]]'s dashboard grouping, and `backend/tests/integration/tests/streaming_endpoints/test_gateway_usage_tracking.py`, which asserts `user_usage` actually increases after a gateway call |
 | changes streaming (`stream_bridge.py`, either stream worker) | the contextvars-copy-then-open-span-in-thread pattern (§4.9) must be preserved for any new streaming branch; a naive `async def` generator that opens a span before yielding will silently produce untagged or cross-request-contaminated spans |

@@ -62,7 +62,8 @@ in a browser tab; the extension carries no credentials of its own.
 | Desktop | `server_url` | `~/Library/Application Support/app.onyx.desktop/config.json` (macOS path; see `desktop/README.md` for Linux/Windows), read by `desktop/src-tauri/src/config.rs:load_config` | The only server this instance talks to. Defaults to `https://cloud.onyx.app` (`config.rs:DEFAULT_SERVER_URL`). Self-hosted use is a config edit, not a rebuild. |
 | Desktop | `summon_shortcut` | Same config file, `config.rs:default_summon_shortcut` | Global OS shortcut (`Super+Shift+Space` macOS / `Ctrl+Alt+Space` elsewhere) that raises the app from anywhere; can be set to `null` |
 | Widget | `backend-url`, `api-key` | HTML attributes on `<onyx-chat-widget>`, or `VITE_WIDGET_BACKEND_URL`/`VITE_WIDGET_API_KEY` baked in at build time for self-hosted builds (`widget/vite.config.ts`, `widget/src/config/config.ts:resolveConfig`) | Which backend the widget calls and the credential it authenticates with. Attributes always win over the baked-in env values. |
-| Chrome extension | `onyxExtensionDomain` | `chrome.storage.local`, default `http://localhost:3000` (`extensions/chrome/src/utils/constants.js:DEFAULT_ONYX_DOMAIN`), set via the options page (`extensions/chrome/src/pages/options.js`) | Which Onyx deployment the side panel, new-tab override, and omnibox all point at |
+| Chrome extension | `onyxExtensionDomain` | `chrome.storage.local`, default `http://localhost:3000` (`extensions/chrome/src/utils/constants.js:DEFAULT_ONYX_DOMAIN`), set via the options page (`extensions/chrome/src/pages/options.js`); `getOnyxDomain` (`storage.js`) trims the value and strips trailing slashes | Which Onyx deployment the side panel, new-tab override, and omnibox all point at |
+| Chrome extension | `onyxExtensionDomain`, `onyxExtensionDefaultNewTab` (enterprise policy) | `chrome.storage.managed`, populated by Chrome's extension policy (`extensions/chrome/managed_schema.json`, `extensions/chrome/README.md`'s "Enterprise configuration") | Admin-set values in managed storage take precedence over `chrome.storage.local` and are read-only in the options page; `setUseOnyxAsDefaultNewTab` (`storage.js`) is a no-op when the toggle is managed |
 
 ---
 
@@ -97,6 +98,10 @@ background image URLs, and an onboarding-complete flag
 plus target URL, 5-second TTL, cleared after use,
 `extensions/chrome/service_worker.js:sendToOnyx`) and a `tabReadingEnabled`
 flag. No credential is stored; auth is the cookie session inside the iframe.
+`chrome.storage.managed` (enterprise policy, `managed_schema.json`) can set
+`onyxExtensionDomain` and `onyxExtensionDefaultNewTab`; `getOnyxDomain` and
+`getUseOnyxAsDefaultNewTab` (`storage.js`) read managed storage first and
+fall back to `chrome.storage.local` only when policy has not set the key.
 
 ---
 
@@ -172,6 +177,18 @@ would, including cookie-based auth. `panel.js:handleMessage` only accepts
 `contentWindow` and whose `event.origin` matches `getIframeOrigin()`, so a
 page that later navigates the iframe cross-origin cannot send it privileged
 messages such as `TAB_READING_ENABLED`.
+
+**SSO inside the embedded panel and new-tab page.** An identity provider
+refuses to render its own login page inside a frame, so
+`ProviderSignInButton` (`web/src/app/auth/login/ProviderSignInButton.tsx`)
+detects that it is framed (`isFramed`, `window.top !== window.self`) and
+opens the IdP in a new browser tab instead of navigating the iframe
+(`openIdpTab`/`navigateToIdp`), falling back to the top-level window if the
+popup is blocked. `NRFPage` (`web/src/app/nrf/NRFPage.tsx`) re-checks the
+session (`refreshUser`) on `visibilitychange`/`focus` while unauthenticated,
+so the panel or new-tab page picks up the completed sign-in when the user
+returns to it, since the IdP redirect landed in the other tab, not this
+frame.
 
 ---
 
@@ -294,7 +311,7 @@ config serde defaults in `config.rs`, and alt-menu/shortcut logic in
 `expect_used`/`panic`, so most failure paths are required to return
 `Result` rather than panic.
 
-**Widget** has no test files under `widget/` as of this writing (`find
+**Widget** has no test files under `widget/` (`find
 widget/src -iname '*.test.*' -o -iname '*spec*'` returns nothing). The
 closest to a check is `bun run type-check` (`tsc --noEmit`,
 `widget/package.json`).

@@ -371,7 +371,7 @@ cd backend && uv run pytest tests/unit -k "federated or slack_search"
 ```
 
 `backend/tests/external_dependency_unit` has no dedicated federated-connector
-suite as of this writing; check for one before assuming the above two commands
+suite; check for one before assuming the above two commands
 are exhaustive. See `backend/AGENTS.md` for authoritative commands and required
 env (a real Slack app's `client_id`/`client_secret` is a `TestSecret` resolved
 per `backend/tests/utils/aws_secrets.py`, needed for any test that exercises the

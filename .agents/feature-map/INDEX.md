@@ -2,7 +2,7 @@
 
 The sitemap. Every product surface in Onyx, grouped by domain.
 
-`✅` document written · `🚧` planned, not yet written
+`✅` document written
 
 Onyx is two products sharing one platform:
 
@@ -163,7 +163,7 @@ Two traps when auditing this yourself:
 - A directory under `ee/admin/` that is **not** in `EE_ROUTES` is unreachable.
   `ee/admin/billing/` is dead code; the live page is `web/src/app/admin/billing/`.
 
-## Coverage gaps
+## Unmapped code
 
 Anything not listed above is unmapped. If you touch unmapped code, say so in the
 PR rather than assuming it is low risk, and add the component here.

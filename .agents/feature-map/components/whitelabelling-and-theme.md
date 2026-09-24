@@ -307,7 +307,7 @@ in as admin, navigates to `/admin/theme`, and exercises application name,
 greeting message, header/footer content, first-visit notice, consent screen,
 and custom help link fields end to end; it is gated on an active EE license
 via the `eeFeatures` fixture and skips otherwise. No playwright coverage
-exists for logo upload specifically as of this writing.
+exists for logo upload specifically.
 
 ### Manual reproduction
 

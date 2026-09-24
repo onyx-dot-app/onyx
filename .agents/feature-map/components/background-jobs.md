@@ -188,7 +188,7 @@ seconds, `beat_schedule.py:BEAT_EXPIRES_DEFAULT`), matching the
   optional `cc_pair_id`. Written through
   `onyx/background/error_logging.py:emit_background_error`, which swallows
   `IntegrityError` (e.g. the `cc_pair_id` was deleted concurrently) by retrying
-  the insert with `cc_pair_id=None`. As of this writing, `emit_background_error`
+  the insert with `cc_pair_id=None`. `emit_background_error`
   is called from exactly two places: `ee/onyx/background/celery/tasks/external_group_syncing/tasks.py`
   and `ee/onyx/external_permissions/confluence/group_sync.py`. No admin API or
   frontend route reads `BackgroundError` back out (unverified further; a search
@@ -498,7 +498,7 @@ shared machinery, not feature correctness.
 - **`BackgroundError` is not a general failure-surfacing mechanism.** It is
   written from exactly two call sites (both under `ee/onyx`, both in
   external-group/permission-sync code), and nothing reads it back through an
-  API or the frontend as of this writing. A new task that calls
+  API or the frontend. A new task that calls
   `emit_background_error` expecting an admin to see it should verify there is
   in fact a consumer, rather than assuming one exists because the table does.
 - **Time limits are decorative.** `soft_time_limit`/`time_limit` kwargs on

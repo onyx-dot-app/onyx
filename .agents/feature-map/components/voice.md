@@ -262,7 +262,7 @@ cd web && npx playwright test tests/e2e/admin/voice/stt-only.spec.ts
 cd web && npx playwright test tests/e2e/admin/voice/zoom-provider.spec.ts
 ```
 
-No integration test targets this component specifically as of this writing.
+No integration test targets this component specifically.
 
 ### Manual reproduction
 

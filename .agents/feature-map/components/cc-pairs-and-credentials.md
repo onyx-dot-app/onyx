@@ -355,9 +355,12 @@ used only when a pairing has no indexed documents; see §2). The real flow:
    before finishing.
 
 `db/deletion_attempt.py:check_deletion_attempt_is_allowed` (requires the pair
-be paused with no in-progress index attempt) exists but its only call site in
-`administrative.py` is **commented out** ("background locking improvements"
-made it redundant). Treat it as dead code, not an active gate; see §9.
+be paused with no in-progress index attempt) is commented out as a delete
+gate in `administrative.py` ("background locking improvements" made it
+redundant there). It still has a live call site in
+`server/documents/connector.py:get_currently_failed_indexing_status`, which uses it
+to compute the `is_deletable` field the admin UI shows per connector. It no
+longer blocks the delete call itself; see §9.
 
 ---
 
@@ -522,11 +525,14 @@ Existing coverage worth reading before adding more:
   named `EncryptedJson` and despite `ENCRYPTION_KEY_SECRET` existing as a
   config knob in CE. Setting `ENCRYPTION_KEY_SECRET` in CE only produces a
   warning log; it does nothing.
-- **`check_deletion_attempt_is_allowed` (`db/deletion_attempt.py`) is dead
-  code.** Its only caller is commented out in
-  `server/manage/administrative.py`. Do not assume it still gates anything;
-  the actual guard against deleting an actively-indexing cc-pair is the
-  Redis-fenced `TaskDependencyError` retry loop in the Celery task.
+- **`check_deletion_attempt_is_allowed` (`db/deletion_attempt.py`) no longer
+  gates deletion.** Its call in `server/manage/administrative.py` is
+  commented out. It still runs from
+  `server/documents/connector.py:get_currently_failed_indexing_status`, but
+  only to compute the `is_deletable` display field; it does not block the
+  delete call. The actual guard against deleting an actively-indexing
+  cc-pair is the Redis-fenced `TaskDependencyError` retry loop in the Celery
+  task.
 - **`DELETE /connector/{id}/credential/{id}` and
   `POST /admin/deletion-attempt` are two different delete paths** with very
   different behavior: the former is an immediate hard delete of the pairing

@@ -70,9 +70,8 @@ The README (`backend/onyx/mcp_server/README.md`) also documents `search_web`
 and `open_urls`, and both are registered in the same file
 (`search.py:search_web`, `search.py:open_urls`). They proxy to
 `/web-search/search-lite` and `/web-search/open-urls` on the API server and do
-not touch the internal document index or `SearchTool`. The task brief for this
-document said "one tool"; the code and the README both show three. This
-document covers all three, since they share one auth path and one process, but
+not touch the internal document index or `SearchTool`. This document covers
+all three tools, since they share one auth path and one process, but
 `search_indexed_documents` is the one that reaches the shared retrieval
 pipeline described in §4 and is the tool `[[access-control]]` and
 `[[internal-search]]` care about.
@@ -207,7 +206,7 @@ Claude Desktop -> POST /  (MCP tool call, bearer token)      mcp_server/api.py (
        -> _resolve_filters (agent / source_types / document_set_names)
        -> POST /search  (bearer token, SearchRequest)         API server, port 8080
             -> require_permission(Permission.READ_SEARCH)     onyx/server/features/search/api.py:search
-            -> SearchTool(user=<resolved user>, emitter=NullEmitter(), bypass_acl=False, ...)
+            -> SearchTool(user=<resolved user>, emitter=NullEmitter(), ...)
             -> search_tool.run(...)                            tools/tool_implementations/search/search_tool.py
 ```
 
@@ -217,8 +216,8 @@ endpoint `[[internal-search]]` documents as the programmatic entry point for
 bearer token through the normal FastAPI-Users dependency chain
 (`auth/users.py:current_user`), the same path a session cookie or any other
 PAT/API-key caller goes through, then constructs a `SearchTool` with
-`user=user` and **`bypass_acl=False`** hard-coded at the call site
-(`search/api.py:search`, the `SearchTool(...)` construction). It passes
+`user=user` (`search/api.py:search`, the `SearchTool(...)` construction), so
+the caller's own document ACLs apply. It passes
 `emitter=NullEmitter()` because there is no chat stream to write packets to;
 `chat/emitter.py:NullEmitter`'s own docstring names both the Search API and the
 MCP server as its callers ("Used by callers that run tools outside the chat
@@ -243,13 +242,10 @@ whatever those endpoints give back.
 
 1. **The acting user's document ACLs apply.** The MCP server never searches
    the index itself; it delegates to `/search`, which builds `SearchTool` with
-   `bypass_acl=False` (`search/api.py:search`). `[[access-control]]` §5.3
-   states that no production code path currently sets `bypass_acl=True`
-   (verified by `git log -S "bypass_acl=True" -- backend/onyx/onyxbot/`
-   turning up no results, per that document); the only caller that could is
-   the Slack bot's own flow, threaded through `process_message.py`, not
-   anything MCP touches. **Verified: yes, MCP search is fully ACL-scoped to
-   the acting user, by the same mechanism as chat search.** The integration
+   the resolved user (`search/api.py:search`). `SearchTool.run` always builds
+   ACL filters for that user, and there is no flag that skips them
+   ([[access-control]] §5.3). MCP search is ACL-scoped to the acting user by
+   the same mechanism as chat search. The integration
    test `backend/tests/integration/tests/mcp/test_mcp_server_search.py:test_mcp_search_respects_acl_filters`
    exercises this directly.
 2. **A scoped token must not grant more than its scope.** The MCP server's own
@@ -286,8 +282,8 @@ whatever those endpoints give back.
 7. **The MCP server must not become a way to bypass what the web path
    enforces.** It reuses the exact same `/search` endpoint and the same
    `Permission.READ_SEARCH` gate as any other programmatic caller
-   (`[[onyx-api]]`); it adds no bypass of its own. See §9 for the one place
-   this is not fully true today (rate limits).
+   (`[[onyx-api]]`); it adds no bypass of its own, including the budget
+   checks (see §9).
 
 ---
 
@@ -327,7 +323,7 @@ whatever those endpoints give back.
 | adds a tool or resource | update `backend/onyx/mcp_server/README.md`'s Capabilities section; add the tool/resource name to `MCPServerToolName` in `server/metrics/mcp_server.py` if it should be observable; consider whether it needs its own `Permission` scope |
 | changes auth (`auth.py`, the `/me` delegation, or `Permission.READ_SEARCH`/`READ_CHAT`/`WRITE_CHAT`) | [[auth-and-identity]] for PAT/API-key issuance; re-run `backend/tests/integration/tests/mcp/test_mcp_server_auth.py`; re-verify invariant 2 in §5 |
 | changes the retrieval pipeline (`SearchTool.run`, `_build_index_filters`, `_expand_queries_and_decide_scope`) | [[internal-search]] owns it; the change reaches this component automatically since `search_indexed_documents` calls the same `/search` endpoint chat's search tool ultimately reaches |
-| changes `bypass_acl` plumbing anywhere in the chain | [[access-control]] §5.3 flags this as a security review regardless of which caller touches it; re-verify `search/api.py:search` still passes `bypass_acl=False` explicitly |
+| changes which `user` `search/api.py:search` passes to `SearchTool`, or adds any way to skip ACL filters | [[access-control]] §5.3 treats this as a security review regardless of caller |
 | changes `NullEmitter` | [[core-chat-loop]] also depends on it for the non-streaming save path; re-check both callers named in its docstring |
 | adds a way for `search_indexed_documents` (or a future tool) to make an LLM call | re-read §9's rate-limit note; the call must stay behind the budget checks in `search/api.py:search` or add its own |
 | changes `MCP_SERVER_ENABLED`/`MCP_SERVER_PORT`/`API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS` defaults | update the Helm chart's `mcp-server-deployment.yaml` env block and the commented docker-compose service to match |
@@ -411,8 +407,7 @@ to `[[mcp-and-custom-tools]]`, not this component.
   `/me`; it does not know or enforce `read:search` vs `read:chat` vs
   `write:chat`. All real scope enforcement is downstream, per endpoint. A
   change that assumes the MCP layer itself gates by scope will be wrong.
-- **Three tools exist, the task-defining brief for this document said one.**
-  `search_web` and `open_urls` are real, registered tools
+- **The server has three tools, not one.** `search_web` and `open_urls` are real, registered tools
   (`mcp_server/tools/search.py`) alongside `search_indexed_documents`. They
   proxy to the web-search endpoints, not `SearchTool`, and carry no document
   ACL concerns of their own, but they are part of this server's contract and

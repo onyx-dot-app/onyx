@@ -249,11 +249,12 @@ the LLM, assigning one citation number per unique `document_id` starting at
 ## 5. Contracts and invariants
 
 1. **ACL prefetch happens once per `run()`, before any parallel work, and is not
-   optional.** `build_access_filters_for_user` runs inside the single DB session
-   opened at the top of `run()`, unless `bypass_acl=True`. The only path to
-   `bypass_acl=True` is the Slack bot flow (`chat/process_message.py`, comment at
-   line 1693), threaded through `SearchToolConfig.bypass_acl` in
-   `tool_constructor.py`. A new caller must not introduce another way to set it.
+   optional.** `build_access_filters_for_user(self.user, db_session)` runs inside
+   the single DB session opened at the top of `run()`. There is no flag that skips
+   it: the only input that decides document access is the `user` the caller passes
+   to `SearchTool`. A caller that wants a narrower scope passes a narrower user (the
+   Slack bot passes the anonymous user in shared channels). Do not add a skip flag;
+   see [[access-control]] §5.3.
 2. **Document-set names supplied by a user are access-checked twice**: once in
    `SearchTool.run` and again in `_build_index_filters` via
    `filter_document_set_names_by_user_access`. Both must stay in place; removing
@@ -334,7 +335,7 @@ the LLM, assigning one citation number per unique `document_id` starting at
 | changes the LLM-facing string format in `convert_inference_sections_to_llm_string` | [[citations]]; this breaks citation parsing everywhere the string is consumed, not just here |
 | changes `SearchDocsResponse` fields | the UI renderer for `SearchToolDocumentsDelta`/search cards, and [[chat-persistence]]'s `SearchDoc` persistence, both of which read this shape |
 | touches query expansion prompts (`query_expansion.py`, `source_filter.py`, `time_filter.py`, `document_filter.py`) | needs an eval; see `backend/onyx/evals/` |
-| changes `bypass_acl` plumbing anywhere in the call chain | re-verify the Slack bot is still the only caller that sets it `True`; an accidental default flip is a data-exposure bug |
+| changes which `user` a caller passes to `SearchTool`, or adds any way to skip `build_access_filters_for_user` | [[access-control]] §5.3 and the Slack bot's identity choice ([[slack-bot]] §5.1); a wrong user is a data-exposure bug |
 | changes Slack lane token pre-fetch or scoping | [[federated-search]] and the Slack bot's own ACL model, since this lane does not use `access_control_list` |
 
 ---

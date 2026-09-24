@@ -244,7 +244,7 @@ never issues an HTTP request to `POST /chat/send-chat-message`
 (`chat_backend.py:handle_send_chat_message`), so it never goes through that
 endpoint's FastAPI `Depends` chain. See §5 and §9 for what that skips.
 
-It passes `bypass_acl=False` explicitly (`handle_regular_answer.py:316`) and
+It passes
 `slack_context=message_info.slack_context` (drives federated Slack search,
 [[internal-search]], `_should_enable_slack_search`,
 `context/search/federated/slack_search.py`) and
@@ -293,9 +293,9 @@ that point is not the message's original asker.
    turn run as the resolved (or newly provisioned) Onyx user; in every ordinary
    channel post, it runs as `get_anonymous_user()` regardless of whether the
    sender mapped to a real Onyx account, restricting the search to public
-   documents. `bypass_acl=False` is passed explicitly in all cases (verified at
-   `handle_regular_answer.py:316`; see §9 for the stale docstring this
-   contradicts). Cross-link [[access-control]].
+   documents. `handle_stream_message_objects` (`process_message.py`) takes no
+   ACL-bypass flag; the only lever is which `user` gets passed in
+   (`handle_regular_answer.py:316`). Cross-link [[access-control]].
 2. **An unmapped Slack user (no resolvable email) never gets elevated access.**
    With `message_info.email is None`, `resolved_user` is `None`, the effective
    user is `get_anonymous_user()`, and the account-provisioning block in
@@ -461,16 +461,6 @@ See `backend/AGENTS.md` for required env and secrets.
   with no cross-pod coordination, not a budget. Tests that drive
   `handle_regular_answer` against the shared DB must patch the budget check,
   or leftover budgets from other suites fail them.
-- **The `bypass_acl` docstring in `chat/process_message.py` is stale.** It reads
-  "If `True`, document ACL checks are skipped (used by Slack bot)"
-  (`process_message.py:1693`). Independently verified here: the Slack bot's only
-  call site (`handle_regular_answer.py:316`) passes `bypass_acl=False`
-  explicitly, and a repo-wide search finds no production caller anywhere that
-  passes `bypass_acl=True` (only two unit tests do, to exercise the flag itself:
-  `tests/unit/onyx/tools/test_search_tool_receipt_diagnostics.py`,
-  `tests/unit/onyx/context/search/test_forced_document_set.py`). The docstring
-  should be corrected or the flag removed; do not trust it as documentation of
-  current behavior.
 - **Public-channel answers use the anonymous user regardless of who is asking.**
   `can_search_over_private_docs = message_info.is_bot_dm or send_as_ephemeral`
   is the only gate; a resolved, fully-permissioned Onyx user asking in an

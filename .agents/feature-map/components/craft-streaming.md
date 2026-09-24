@@ -288,13 +288,11 @@ marker: it never reaches the browser as JSON, only as the literal SSE comment
    `GET /sessions/{id}/messages`, which is a different, coarser shape (no
    `ToolCallStart`, no `CurrentModeUpdate`, no live deltas), not a replay of
    the wire format. See §9.
-10. **The terminal channel described in some briefs does not exist in this
-    codebase.** There is no `/build/sessions/{id}/terminal` websocket, no PTY
+10. **There is no terminal channel.** There is no `/build/sessions/{id}/terminal` websocket, no PTY
     bridge, and no `xterm.js` integration anywhere under `web/src/app/craft/`
     (verified by grep; the only websocket route in `webapp_proxy.py` is the
     Next.js dev-server HMR proxy, `websocket_webapp_hmr`, which is unrelated
-    and belongs to [[craft-webapp-proxy]]). Do not build against this
-    assumption without re-verifying against current code.
+    and belongs to [[craft-webapp-proxy]]).
 
 ---
 
@@ -410,9 +408,8 @@ work against the default Kubernetes backend, follow
   `IfNotPresent`. None of these are bugs in the translator; they surface as
   streaming symptoms (`ProviderModelNotFoundError`, connection refused on
   `/session`) that look like transport bugs but aren't.
-- **No terminal/PTY channel exists.** Do not assume one when reading a brief
-  or an old design note that mentions it; verify against `webapp_proxy.py`
-  and `web/src/app/craft/` first (see §5.10).
+- **No terminal/PTY channel exists.** An old design note that mentions one
+  describes an unbuilt branch; see §5.10.
 - **Sub-agent live view is designed but not built.** `subagentRouting.ts`
   already classifies "child" vs "parent task" events, but there is no
   dedicated sub-agent event-stream endpoint or `SubagentPanel`

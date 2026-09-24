@@ -260,7 +260,7 @@ cd backend && uv run pytest tests/external_dependency_unit/ee/onyx/background/ce
 cd backend && uv run pytest tests/unit/ee/onyx/background/celery/tasks/license_notifications
 ```
 
-No release-notes-specific test file exists as of this writing; the parsing and
+No release-notes-specific test file exists; the parsing and
 GitHub-fetch logic in `release_notes/utils.py` is unverified by an automated test. No
 playwright coverage was found for the bell popover or banner queue.
 

@@ -103,8 +103,8 @@ the coding-agent sandbox).
 | Method | Path | Handler | Permission |
 |---|---|---|---|
 | CRUD | `/admin/api-key*` | `server/api_key/api.py` | `Permission.MANAGE_SERVICE_ACCOUNT_API_KEYS`. Creating or updating a key is **admin-equivalent by design**: `group_ids` is uncapped, so a holder can add a key to the Admin group (`api.py:create_api_key` comment). |
-| GET | `/user/pats/scopes` | `server/pat/api.py:list_selectable_scopes` | `Permission.BASIC_ACCESS`. |
-| GET/POST/DELETE | `/user/pats` | `server/pat/api.py` | List/create needs `CREATE_USER_API_KEYS` (create) or `BASIC_ACCESS` (list/delete); a user only ever sees/revokes their own. |
+| GET | `/user/pats/scopes` | `server/pat/api.py:list_selectable_scopes` | `Permission.BASIC_ACCESS`. Drops `use:llm_gateway` from the list while the workspace `llm_gateway_enabled` setting is off. |
+| GET/POST/DELETE | `/user/pats` | `server/pat/api.py` | List/create needs `CREATE_USER_API_KEYS` (create) or `BASIC_ACCESS` (list/delete); a user only ever sees/revokes their own. Minting a PAT with `use:llm_gateway` while the setting is off is rejected with `INVALID_INPUT` (`server/pat/api.py:_validate_assignable_scopes`). |
 | CRUD | `/admin/user-group*` | `ee/onyx/server/user_group/api.py` | See [[access-control]] §2; this is where group membership, and thus `PermissionGrant`-derived capability, is actually assigned. |
 | GET/POST/PATCH | `/admin/sso-providers*`, `/admin/sso-providers/{id}/domains` | `server/manage/sso/api.py` | `FULL_ADMIN_PANEL_ACCESS` (exact gating per route). Domain-routing SSO providers beyond the first require business tier (`_require_business_tier_for_additional_enabled_provider`). |
 | POST | `/admin/sso-providers/{id}/domains/{domain}/verify` | same file | Triggers `ee/onyx/auth/sso_domain_verification.py:verify_domain_via_dns`. |
@@ -474,7 +474,9 @@ is marked as such.
 - [[llm-gateway]]: the `use:llm_gateway` PAT scope (`Permission.
   USE_LLM_GATEWAY`, `db/enums.py:672`) is a `SELECTABLE_PAT_SCOPES` entry
   (`server/pat/models.py`) minted and checked entirely by this component's
-  PAT machinery.
+  PAT machinery. The workspace `llm_gateway_enabled` setting hides the scope
+  in `list_selectable_scopes` and blocks minting it, but only for third-party
+  PATs; a Craft sandbox's `craft_sandbox`-scoped PAT is unaffected.
 - [[cc-pairs-and-credentials]]: connector credentials are a separate
   encrypted-secret concept from user auth; both use the same
   `EncryptedString`/`EncryptedJson` column types but are unrelated tables.

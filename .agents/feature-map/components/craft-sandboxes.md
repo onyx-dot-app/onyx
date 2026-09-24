@@ -275,8 +275,7 @@ volumes is a Helm change, not a Python change.** `docs/craft/sandbox/sandbox-pod
 reads as a forward-looking design proposal ("Goal: move the static shape of the
 sandbox Pod into a Helm-rendered PodTemplate...") but **this has already
 shipped**: the template file and the `read_namespaced_pod_template` call both
-exist in the current tree. Treat that doc as historical rationale, not an
-open TODO.
+exist in the current tree. Treat that doc as historical rationale.
 
 **The exec sidecar** (`_SIDECAR_CONTAINER_NAME = "sidecar"`) is a K8s
 "restartable init container" (`restartPolicy: Always` on an `initContainers`
@@ -418,9 +417,7 @@ tick, roughly every 15 minutes of active use at defaults), and best-effort
 recovery. **There is no per-turn capture.** Work that lives only in opencode's
 history (not in a session's `outputs/`) since the last successful capture is
 lost if the pod dies ungracefully (node eviction, OOM-kill, spot reclaim,
-crash) between captures. This confirms the risk the brief for this document
-named; it is real and current, not fixed by a per-turn hook anywhere in this
-tree.
+crash) between captures.
 
 ### 4.6 Reaping
 

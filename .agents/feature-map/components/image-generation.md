@@ -245,7 +245,7 @@ the returned base64 data.
 | changes the packet schema (`ImageGenerationToolStart`, `Heartbeat`, `Final`, `GeneratedImage`) | `web/src/app/app/services/streamingModels.ts`'s `PacketType` string values (they must match `StreamingType` in `streaming_models.py` exactly) and `ImageToolRenderer.tsx` |
 | changes what counts as a "stopping tool" or removes `ImageGenerationTool` from `STOPPING_TOOLS_NAMES` | `llm_loop.py`'s cycle-forcing logic and `IMAGE_GEN_REMINDER` text; a tool leaving this list can now chain further tool calls in the same turn |
 | changes how a config becomes "default" | `db/image_generation.py:set_default_image_generation_config`'s atomic clear-then-set; a race here would let two configs claim default simultaneously |
-| touches `FileOrigin.CHAT_IMAGE_GEN` access rules | [[file-store-and-user-files]] and [[access-control]]; this is the known-gap origin, so any access-check change here should either fix or explicitly preserve the current behavior |
+| touches `FileOrigin.CHAT_IMAGE_GEN` access rules | [[file-store-and-user-files]] and [[access-control]]; `access.py:_user_can_access_chat_image_gen_file` grants the session owner, or anyone when the session is public and not deleted, so any change must preserve that scoping |
 
 ---
 

@@ -87,8 +87,8 @@ There is no env var for bash-specific timeouts or output caps; `BashTool` reuses
   (`fake_tools/coding_agent.py:_setup_session`).
 - Generated files from `run_python` are persisted through the ordinary file store as
   `FileOrigin.CHAT_IMAGE_GEN` records (`python_tool.py:run`, `file_store/utils.py`). See §5 and
-  §9; the access-control gap on that origin is documented in `[[file-store-and-user-files]]`
-  and is not re-derived here.
+  §9; the access rule for that origin is documented in `[[file-store-and-user-files]]` and is
+  not re-derived here.
 
 ---
 
@@ -224,11 +224,11 @@ best-effort `delete_session` call itself fails, the pod's own TTL is the backsto
 is downloaded from the Code Interpreter (`client.download_file`), saved into Onyx's own file
 store under `FileOrigin.CHAT_IMAGE_GEN` (`python_tool.py:run`), and only then is the
 Code-Interpreter-side copy deleted (`client.delete_file`). Once saved, the file is served
-through the ordinary chat-file path and is subject to the access-control gap
-`[[file-store-and-user-files]]` documents for that origin: any authenticated user who knows or
-guesses the `file_id` can read it, because `user_can_access_chat_file` grants access to every
-`CHAT_IMAGE_GEN` file unconditionally (`[[file-store-and-user-files]]` §5, §9). This document
-does not re-derive that gap; it only surfaces that code-interpreter output files inherit it.
+through the ordinary chat-file path and follows the access rule
+`[[file-store-and-user-files]]` documents for that origin: `access.py:_user_can_access_chat_image_gen_file`
+grants the chat session's owner, or anyone when the session is public and not deleted
+(`[[file-store-and-user-files]]` §5, §9). This document does not re-derive that rule; it only
+surfaces that code-interpreter output files follow it.
 Input files staged for execution are *not* cleaned up server-side by `PythonTool` (the code
 comment notes they are "orphaned when the session ends"; the Code Interpreter's own TTL is
 relied on to reap them, `python_tool.py:run`).

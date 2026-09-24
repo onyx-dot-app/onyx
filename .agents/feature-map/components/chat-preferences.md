@@ -339,9 +339,9 @@ cd backend && uv run --env-file .vscode/.env pytest tests/external_dependency_un
 cd backend && uv run pytest tests/unit -k "prompt or memory or personalization"
 ```
 
-No integration test was found for `auto_detect_search_filters` or for the
-`input_prompt` API surface at the time of writing; treat a change to either as
-needing new integration coverage, not just the existing unit tests.
+There is no integration test for `auto_detect_search_filters` or for the
+`input_prompt` API surface. A change to either needs new integration coverage,
+not just the existing unit tests.
 
 ### Manual reproduction
 

@@ -85,7 +85,7 @@ an `APIRouter` (marks every route in the router) or on an individual
 | `ee/onyx/server/analytics/api.py` | Analytics router (router-level tag). |
 | `ee/onyx/server/token_rate_limits/api.py` | Token rate-limit admin router (router-level tag); see [[rate-and-usage-limits]]. |
 
-This list is exhaustive as of this writing; re-run the grep above before
+This list is exhaustive; re-run the grep above before
 trusting a specific count, since new endpoints can add or drop the tag.
 
 ### The ingestion router (`onyx-api/ingestion.py`, prefix `/onyx-api`)

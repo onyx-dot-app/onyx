@@ -373,35 +373,36 @@ preserve-opencode-sessions.md` and confirmed against
 - **Sandbox-global opencode history** (`.opencode-data/`, shared by every
   `BuildSession` in one sandbox): captured by
   `sandbox_manager.create_opencode_history_snapshot`, which is called from
-  exactly two places:
+  three places (owned in depth by `[[craft-sandboxes]]` §4.5):
   1. `sleep_sandbox` (`sandbox_lifecycle.py:810`, comment: "Chat
      history lives outside session workspaces; capture it before the
      [terminate]"), before putting an idle sandbox to sleep. If the snapshot
      fails but the pod still passes a health check, the reap is skipped
      rather than sleeping a healthy sandbox without fresh history.
-  2. `snapshot_opencode_history_before_recovery`
+  2. `cleanup_idle_sandboxes_task` (`background/celery/tasks/build/tasks.py`),
+     a periodic background sweep: any sandbox with a session whose latest
+     snapshot is older than `idle_timeout / SNAPSHOT_INTERVAL_DIVISOR` (15
+     minutes at the default 1-hour idle timeout) gets re-snapshotted,
+     including its opencode history, while still `RUNNING`.
+  3. `snapshot_opencode_history_before_recovery`
      (`sandbox_lifecycle.py:151`), best-effort, before terminating an
      **unhealthy** sandbox during recovery.
 
-**There is no per-turn capture.** The manual endpoint that exists for this,
-`POST /sessions/{id}/opencode-history-snapshot`
-(`session/api.py:471`), has **no caller anywhere in this codebase** (grepped
+**There is no per-turn capture**, but the background sweep bounds the gap:
+opencode history is at most `idle_timeout / SNAPSHOT_INTERVAL_DIVISOR` stale
+for an active sandbox, not stale back to the last idle-reap or recovery. The
+manual endpoint `POST /sessions/{id}/opencode-history-snapshot`
+(`session/api.py:471`) has **no caller anywhere in this codebase** (grepped
 both `backend/onyx` and `web/src`); it exists but nothing invokes it today.
-So a turn's opencode-side conversation state is protected only by whichever
-of the two automatic capture points fires next: **normal idle-reap sleep, or
-a best-effort snapshot attempt during recovery of an already-unhealthy
-sandbox.** A sandbox that crashes hard between turns, or is forcibly killed
-outside the reaper's control, can lose opencode history for turns since the
+A sandbox that crashes hard within that bound, or is forcibly killed outside
+the reaper's control, can still lose opencode history for turns since the
 last successful capture. `BuildMessage` rows in Postgres are unaffected;
 what's at risk is opencode's own resumable session state, meaning a restored
-session mints a **replacement** opencode session with no prior context
-(`send_message` flow in `preserve-opencode-sessions.md`, "Known Follow-Up":
-replaying `BuildMessage` history into the replacement session is explicitly
-future work, not implemented). State this precisely: `BuildMessage` history
-(what the user sees on reload) is never lost; opencode's own
-resumable-agent-state can be, between the last capture and an unclean sandbox
-loss. See `[[craft-sandboxes]]` for the reaper and recovery mechanics this
-depends on.
+session mints a **replacement** opencode session with no prior context.
+State this precisely: `BuildMessage` history (what the user sees on reload)
+is never lost; opencode's own resumable-agent-state can be, within the
+background-sweep bound. See `[[craft-sandboxes]]` for the reaper, sweep, and
+recovery mechanics this depends on.
 
 ### 4.6 Approvals
 
@@ -621,7 +622,7 @@ auto-named by a different one.
 | changes session state (`BuildSession` columns, `session_ready.py`) | `session_runtime_intact`'s fast-path check; `reconcile_session_llm_config`'s short-circuit comparison; any snapshot/restore path in `[[craft-sandboxes]]` that reads these columns |
 | changes artifact upsert or hashing | the FE artifact list/version display; `export_docx`/`download_artifact`, which read the live workspace, not the DB row's cached bytes |
 | changes user library sync | both trigger sets (upload/delete/toggle synchronous sync via `sync_user_library_to_active_sandboxes`, and session-provisioning sync via `build_managed_content_payload`/`push_managed_content`); the shared `Document`/cc-pair machinery other ingestion consumers also read |
-| changes opencode history capture points | `[[craft-sandboxes]]`'s reaper and recovery paths that are the only two callers; the unused `/opencode-history-snapshot` endpoint, if you're wiring up a per-turn caller for the first time |
+| changes opencode history capture points | `[[craft-sandboxes]]`'s reaper, background-sweep, and recovery paths that are the three callers; the unused `/opencode-history-snapshot` endpoint, if you're wiring up a per-turn caller for the first time |
 
 ---
 
@@ -708,8 +709,8 @@ general Craft work.
 - **`/build/sessions/{id}/opencode-history-snapshot` exists but nothing
   calls it.** It is a manual-capture endpoint with no wired caller anywhere
   in the codebase today. Do not assume a per-turn or per-send history
-  capture happens; the only automatic capture points are idle-reap sleep and
-  best-effort pre-recovery (§4.5).
+  capture happens; the automatic capture points are idle-reap sleep, the
+  periodic background sweep, and best-effort pre-recovery (§4.5).
 - **Subagent messages skip the interactive-turn queue entirely.**
   `send_subagent_message` (`session/messages.py:221`) streams synchronously
   through `SessionManager.send_subagent_message` →

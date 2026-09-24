@@ -346,7 +346,7 @@ developer has to remember to add.
 | adds a new table | Does it belong once per tenant (`Base`, `alembic/`) or once globally (`PublicBase`, `alembic_tenants/`)? Getting this backwards means the table is either duplicated into every schema or never created at all (§5.4). |
 | adds a new thread or thread pool anywhere reachable from a request or task | Does it copy `contextvars.Context`, or set/reset the tenant contextvar explicitly? An uncopied thread silently resolves to the default tenant or raises, depending on `MULTI_TENANT` (§4.2, §9). |
 | adds a new Celery task | Does it take `tenant_id` and route through `TenantAwareTask` (or an equivalent explicit `.set()`/`.reset()`)? Does the beat schedule need a per-tenant entry (`beat.py:generate_schedule`) or a single cloud-wide one? |
-| adds a new global cache (in-process `lru_cache`/`functools.cache`, a module-level dict) that stores anything derived from tenant data | It needs the tenant in its key, or it must genuinely be tenant-independent (see §9 for what was checked and found safe as of this writing). |
+| adds a new global cache (in-process `lru_cache`/`functools.cache`, a module-level dict) that stores anything derived from tenant data | It needs the tenant in its key, or it must genuinely be tenant-independent (see §9 for what was checked and found safe). |
 | changes session creation (`get_session`, `get_async_session`, or their EE equivalents) | Every one of the call sites in §5.1; confirm `schema_translate_map` still gets built from `get_current_tenant_id()`, never a value the caller could substitute. |
 | adds a new retrieval entry point that queries the document index | [[access-control]]'s and this document's §5.5: it must go through `_get_search_filters`, which appends both the ACL clause and, under `MULTI_TENANT`, the tenant term clause. |
 | changes shard routing, the catalog table, or `ONYX_DB_SHARDS`/`ONYX_DB_SHARD_OVERRIDES` | `shard_version.py`'s invalidation contract (§5.7); a routing change during an in-flight tenant migration is the failure mode this whole subsystem exists to prevent. |
@@ -473,7 +473,7 @@ PGPASSWORD="${POSTGRES_PASSWORD:-password}" psql -h "${POSTGRES_HOST:-localhost}
   sharding layer, and the tracing-admin-API rejection (§ table below) are all
   invisible in that default configuration. A change that only ran self-hosted
   tests has not exercised any of them.
-- **Caches checked for missing tenant keys, none found as of this writing.** Redis
+- **Caches checked for missing tenant keys, none found.** Redis
   access is uniformly tenant-prefixed through `TenantRedisClient`
   (`onyx/redis/tenant_redis_client.py:_prefix_key`), which the module's own
   docstring calls out as security-relevant specifically to prevent this class of

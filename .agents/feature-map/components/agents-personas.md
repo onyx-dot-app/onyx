@@ -49,10 +49,11 @@ shows that agent's daily message and unique-user counts (EE only).
 The **Assistant** is the seeded, ownerless, `builtin_persona=True` agent at
 `Persona.id == DEFAULT_PERSONA_ID` (0). Every chat session that specifies no
 agent uses it. An admin can edit its system prompt and its tool list from
-`/admin/default-assistant`, but the UI never offers to delete it
-(`AgentRowActions.tsx`, `!agent.builtin_persona && can(agent, "delete")`
-hides the delete action). See §5 for what actually stops a delete at the API
-layer, which is less than the UI implies.
+`/admin/default-assistant`, but cannot delete it: the UI never offers the
+delete action (`AgentRowActions.tsx`,
+`!agent.builtin_persona && can(agent, "delete")`), and
+`db/persona.py:mark_persona_as_deleted` also refuses any built-in persona for
+every caller, admin included. See §5.
 
 ---
 
@@ -176,10 +177,8 @@ migration `alembic/versions/505c488f6662_merge_default_assistants_into_unified.p
 but the current model has no such column; retrieval breadth is not a
 persona-level knob today. `temperature_default` / `temperature_override_enabled`
 exist on `LLMProvider` and per-user override, not on `Persona`
-(`onyx/db/models.py`, unrelated tables). If your brief or a design doc claims
-a persona-level temperature or chunk-count field, verify against
-`onyx/db/models.py:Persona` before trusting it; it does not exist as of this
-writing.
+(`onyx/db/models.py`, unrelated tables). `onyx/db/models.py:Persona` has no
+temperature or chunk-count field.
 
 ### Join and support tables
 
@@ -278,9 +277,8 @@ logic); the seed data and its historical reworks live in Alembic migrations,
 for example `alembic/versions/505c488f6662_merge_default_assistants_into_unified.py`,
 which inserts the unified "Assistant" row, and
 `alembic/versions/2cdeff6d8c93_set_built_in_to_default.py`. There is no
-separate `onyx/seeding/` YAML-driven persona seed as of this writing; if a
-brief or an older doc says otherwise, verify against the migration history,
-not the (empty) seeding package.
+separate `onyx/seeding/` YAML-driven persona seed; the seeding package is
+empty, and the migration history is the source of truth.
 
 `default_assistant/api.py:update_default_assistant` lets an admin edit only
 its `tool_ids` and `system_prompt` (`db/persona.py:update_default_assistant_configuration`),
@@ -303,7 +301,8 @@ signups.
 `api.py:delete_persona` requires `ADD_AGENTS` (with `allow_scope=True`) and
 calls `db/persona.py:mark_persona_as_deleted`, a soft delete
 (`persona.deleted = True`) that also flags any attached user files for
-persona-scope resync. `db/persona.py:_transfer_persona_ownership` refuses to
+persona-scope resync. `mark_persona_as_deleted` refuses any `builtin_persona`
+for every caller, admins included. `db/persona.py:_transfer_persona_ownership` refuses to
 transfer a `builtin_persona` or a Slack-bot-prefixed persona
 (`SLACK_BOT_PERSONA_PREFIX`), and only the current owner (or an admin, for a
 vacant persona) may transfer.
@@ -347,14 +346,14 @@ underlying counts at finer grain for the admin panel.
    `SearchTool` and the search pipeline never lazy-load ORM relationships
    after the DB session that loaded them may have closed. [[internal-search]]
    states why this matters at the retrieval layer.
-5. **The default assistant is a UI-level invariant, not a fully backend-enforced
-   one.** The admin frontend hides the delete action for `builtin_persona`
-   rows (`AgentRowActions.tsx`), but `db/persona.py:mark_persona_as_deleted`
-   itself carries no `builtin_persona` guard: `DELETE /persona/0` called
-   directly by an admin with `ADD_AGENTS` would soft-delete the default
-   assistant. Anything that depends on the default assistant always existing
-   (chat sessions with no persona set, `get_llm_for_persona` fallbacks) should
-   not assume the backend refuses this; verify before relying on it.
+5. **Built-in agents cannot be deleted, by anyone.** The admin frontend
+   hides the delete action for `builtin_persona` rows (`AgentRowActions.tsx`),
+   and `db/persona.py:mark_persona_as_deleted` also raises for any
+   `builtin_persona`, for every caller including admins. `api.py:delete_persona`
+   surfaces this as a 400 (`OnyxErrorCode.BAD_REQUEST`, "Built-in agents
+   cannot be deleted."). Anything that depends on the default assistant
+   always existing (chat sessions with no persona set, `get_llm_for_persona`
+   fallbacks) can rely on the backend refusing deletion.
 6. **A persona's owner fields are mutually exclusive.** `ck_persona_single_owner`
    enforces `user_id IS NULL OR owner_group_id IS NULL` at the DB level. Any
    code path that sets both is a bug the constraint will catch, but only at
@@ -462,8 +461,10 @@ Relevant existing e2e coverage: `web/tests/e2e/agents/create_and_edit_agent.spec
   router (`/agents`, `/admin/agents`), and every user-facing string say
   Agent. Grepping for "agent" in the backend misses most of the logic;
   grepping for "persona" in the frontend misses the newer surfaces.
-- **The default assistant's protection from deletion is UI-only.** See §5.
-  The backend delete path has no `builtin_persona` check of its own.
+- **The default assistant's protection from deletion is enforced twice.**
+  The UI hides the delete action, and the backend delete path
+  (`mark_persona_as_deleted`) independently refuses any `builtin_persona`.
+  See §5.
 - **`onyx/seeding/` does not seed personas.** The package exists and is
   empty of persona logic; the default assistant and any historical seeded
   personas come from Alembic migrations, not a seeding module. Do not assume

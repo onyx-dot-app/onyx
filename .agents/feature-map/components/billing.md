@@ -115,8 +115,7 @@ throw if `NEXT_PUBLIC_CLOUD_ENABLED` is true.
   state (Stripe subscription id, status, period dates, seats) lives entirely
   on the control plane and is fetched, never stored locally beyond the Redis
   caches in §5. `backend/onyx/db/tenant_shard.py` is unrelated to seats or
-  billing; it is not part of this component's data model (a brief pointer to
-  it here would be wrong).
+  billing; it is not part of this component's data model.
 - Redis keys: `billing:info:{tenant_id}` (`billing_cache.py:BILLING_CACHE_KEY`),
   the admin-page cache `billing-information:v1`
   (`ee/onyx/server/billing/api.py:BILLING_INFO_CACHE_KEY`), the self-hosted
@@ -333,7 +332,7 @@ cd web && bun test src/lib/billing/svc.test.ts
 cd web && bun test src/app/admin/billing/page.test.tsx
 ```
 
-No playwright e2e target exists for billing as of this writing; theming has
+No playwright e2e target exists for billing; theming has
 one (see [[whitelabelling-and-theme]] §8) but the billing/checkout flow does
 not.
 
@@ -356,7 +355,6 @@ not.
 ## 9. Footguns
 
 - **`web/src/app/ee/admin/billing/` is not the live billing page.** The
-  original brief for this document pointed here, but it is wrong: the
   route `/admin/billing` (`ADMIN_ROUTES.BILLING`,
   `web/src/lib/admin-routes.ts:391`) is not in `web/src/proxy.ts:EE_ROUTES`,
   so it is never rewritten to `/ee/admin/billing`. The real page is
@@ -382,9 +380,8 @@ not.
   which defaults unknown to BUSINESS). The two "unknown" defaults are
   different tiers on purpose; do not assume they match.
 - **`backend/onyx/db/tenant_shard.py`** has no billing-, seat-, or
-  tier-related content; a brief or prior note pointing here for "seat or
-  subscription tables" is wrong. There is no local subscription table at
-  all; cloud billing state lives only on the control plane.
+  tier-related content. There is no local subscription table at all; cloud
+  billing state lives only on the control plane.
 - **Checking used seats twice, cheaply and expensively.** `get_used_seats`
   hits the DB live on every checkout/seat-update call; `license_enforcement.py`'s
   402 check reads a cached `used_seats` from `LicenseMetadata` instead. These

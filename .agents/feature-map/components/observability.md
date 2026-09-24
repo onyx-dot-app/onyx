@@ -333,6 +333,10 @@ back to default behavior). Execution is logged only on failure
 best-effort in its own session so a concurrent hook deletion cannot block the
 failure log write. At most one non-deleted hook exists per `HookPoint`.
 Hooks are unavailable under `MULTI_TENANT` (`ee/onyx/hooks/executor.py:_lookup_hook`).
+`QUERY_PROCESSING` fires only for chat queries submitted through the Onyx
+app; it never fires for `/gateway/*` requests, so a hook cannot inspect or
+reject content an external tool sends to a model provider through
+[[llm-gateway]] (`hooks/points/query_processing.py`).
 
 ---
 

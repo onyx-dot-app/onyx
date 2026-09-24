@@ -209,7 +209,7 @@ cd backend && uv run pytest tests/external_dependency_unit/ee/db/test_standard_a
 This is the only test file found under this name in the repository. No unit test
 targets `find_matching_standard_answers`' match logic directly, and no
 integration or playwright test exercises the Slack short-circuit path or the
-`/admin/standard-answer` UI as of this writing.
+`/admin/standard-answer` UI.
 
 ### Manual reproduction
 
