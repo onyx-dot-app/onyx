@@ -13,7 +13,6 @@ type CredentialUpsert struct {
 	CredentialJSON map[string]any `json:"credential_json"`
 	Name           *string        `json:"name"`
 	AdminPublic    bool           `json:"admin_public"`
-	CuratorPublic  bool           `json:"curator_public"`
 }
 
 // Credential mirrors CredentialSnapshot. CredentialJSON always comes back
@@ -25,7 +24,6 @@ type Credential struct {
 	Name           *string        `json:"name"`
 	UserID         *string        `json:"user_id"`
 	AdminPublic    bool           `json:"admin_public"`
-	CuratorPublic  bool           `json:"curator_public"`
 }
 
 // credentialNameUpdate mirrors CredentialDataUpdateRequest.

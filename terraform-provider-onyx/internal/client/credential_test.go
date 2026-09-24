@@ -12,7 +12,6 @@ const credentialJSON = `{
 	"admin_public": true,
 	"source": "confluence",
 	"name": "terraform",
-	"curator_public": false,
 	"user_id": "9b9284a6-16b5-4a3c-bfa4-lol"
 }`
 

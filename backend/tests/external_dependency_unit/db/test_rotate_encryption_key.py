@@ -155,8 +155,8 @@ class TestRotateCredential:
         result = db_session.execute(
             text(
                 "INSERT INTO credential "
-                "(source, credential_json, admin_public, curator_public) "
-                "VALUES (:source, :cred_json, true, false) "
+                "(source, credential_json, admin_public) "
+                "VALUES (:source, :cred_json, true) "
                 "RETURNING id"
             ),
             {"source": DocumentSource.INGESTION_API.value, "cred_json": encrypted},

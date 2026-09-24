@@ -142,7 +142,6 @@ def test_scoped_manager_sees_only_their_groups_pairings(
         # The admin-side assertions read the same credential; the scoped path
         # only needs ownership.
         admin_public=True,
-        curator_public=False,
         groups=[],
         user_performing_action=manager,
     )
@@ -260,7 +259,6 @@ def test_managed_pairing_is_readable_without_credential_visibility(
     credential = CredentialManager.create(
         source=DocumentSource.SLACK,
         admin_public=True,
-        curator_public=False,
         groups=[],
         user_performing_action=admin_user,
     )
@@ -328,7 +326,6 @@ def test_scoped_manager_cannot_trigger_foreign_pairings(
     credential = CredentialManager.create(
         source=DocumentSource.MOCK_CONNECTOR,
         admin_public=True,
-        curator_public=False,
         groups=[],
         user_performing_action=manager,
     )
@@ -407,7 +404,6 @@ def test_managed_pairing_is_triggerable_without_credential_visibility(
     credential = CredentialManager.create(
         source=DocumentSource.MOCK_CONNECTOR,
         admin_public=True,
-        curator_public=False,
         groups=[],
         user_performing_action=admin_user,
     )

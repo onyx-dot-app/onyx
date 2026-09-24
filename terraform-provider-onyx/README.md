@@ -174,7 +174,7 @@ released Onyx yet, so the provider keeps its workaround and the limitation still
 ### Credentials and connectors
 
 - **`onyx_credential` payloads are never read back.** The API always masks the payload, so it
-  is never refreshed or diffed. `admin_public`, `curator_public` and `groups` have no update
+  is never refreshed or diffed. `admin_public` and `groups` have no update
   endpoint and force replacement.
 - **A private credential can look deleted.** Onyx hides a credential with
   `admin_public = false` from every admin but its creator, which is indistinguishable from

@@ -114,7 +114,6 @@ def create_credential(
             "credential_json": {},
             "admin_public": True,
             "source": "file",
-            "curator_public": True,
             "groups": [],
             "name": name,
         },

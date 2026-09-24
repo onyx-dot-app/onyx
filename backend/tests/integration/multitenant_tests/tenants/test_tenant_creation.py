@@ -39,7 +39,6 @@ def test_admin_can_create_credential(
     test_credential = CredentialManager.create(
         name="admin_test_credential",
         source=DocumentSource.FILE,
-        curator_public=False,
         user_performing_action=test_user,
     )
     assert test_credential is not None
@@ -81,7 +80,6 @@ def test_admin_can_create_and_verify_cc_pair(
     test_credential = CredentialManager.create(
         name="admin_test_credential",
         source=DocumentSource.FILE,
-        curator_public=False,
         user_performing_action=test_user,
     )
 

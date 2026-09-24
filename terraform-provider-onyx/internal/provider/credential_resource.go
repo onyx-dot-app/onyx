@@ -43,7 +43,6 @@ type credentialResourceModel struct {
 	CredentialJSONWO        jsontypes.Normalized `tfsdk:"credential_json_wo"`
 	CredentialJSONWOVersion types.Int64          `tfsdk:"credential_json_wo_version"`
 	AdminPublic             types.Bool           `tfsdk:"admin_public"`
-	CuratorPublic           types.Bool           `tfsdk:"curator_public"`
 	Groups                  types.List           `tfsdk:"groups"`
 }
 
@@ -114,15 +113,6 @@ func (r *credentialResource) Schema(_ context.Context, _ resource.SchemaRequest,
 					boolplanmodifier.RequiresReplace(),
 				},
 			},
-			"curator_public": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				Default:             booldefault.StaticBool(false),
-				MarkdownDescription: "Whether curators of the assigned groups can use this credential. Create-only.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.RequiresReplace(),
-				},
-			},
 			"groups": schema.ListAttribute{
 				Optional:    true,
 				ElementType: types.Int64Type,
@@ -166,7 +156,6 @@ func (r *credentialResource) upsertFromModel(ctx context.Context, model credenti
 		AdminPublic:    model.AdminPublic.ValueBool(),
 		Source:         model.Source.ValueString(),
 		Name:           stringPointer(model.Name),
-		CuratorPublic:  model.CuratorPublic.ValueBool(),
 		Groups:         groups,
 	}, true
 }
@@ -227,7 +216,6 @@ func (r *credentialResource) Read(ctx context.Context, req resource.ReadRequest,
 	state.Source = types.StringValue(remote.Source)
 	state.Name = types.StringPointerValue(remote.Name)
 	state.AdminPublic = types.BoolValue(remote.AdminPublic)
-	state.CuratorPublic = types.BoolValue(remote.CuratorPublic)
 	// credential_json and groups are carried forward: the API masks the
 	// payload and never returns group assignments.
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)

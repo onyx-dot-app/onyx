@@ -139,7 +139,6 @@ class CredentialBase(BaseModel):
     admin_public: bool
     source: DocumentSource
     name: str | None = None
-    curator_public: bool = False
     groups: list[int] = Field(default_factory=list)
 
 
@@ -175,7 +174,6 @@ class CredentialSnapshot(CredentialBase):
             time_updated=credential.time_updated,
             source=credential.source or DocumentSource.NOT_APPLICABLE,
             name=credential.name,
-            curator_public=credential.curator_public,
         )
 
 

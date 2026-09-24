@@ -23,9 +23,9 @@ import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import {
-  IsPublicGroupSelectorFormType,
-  IsPublicGroupSelector,
-} from "@/components/IsPublicGroupSelector";
+  GroupsMultiSelect,
+  GroupsMultiSelectFormType,
+} from "@/components/GroupsMultiSelect";
 import { useUser } from "@/providers/UserProvider";
 import CardSection from "@/components/admin/CardSection";
 import { CredentialFieldsRenderer } from "@/lib/credentials/components/CredentialFieldsRenderer";
@@ -59,7 +59,7 @@ const CreateButton = ({
   );
 };
 
-type CreateCredentialFormValues = IsPublicGroupSelectorFormType & {
+type CreateCredentialFormValues = GroupsMultiSelectFormType & {
   name: string;
   [key: string]: unknown;
 };
@@ -125,7 +125,7 @@ export default function CreateCredential({
     setSubmitting(true);
     formikHelpers.setSubmitting(true);
 
-    const { name, is_public, groups, ...credentialValues } = values;
+    const { name, groups, ...credentialValues } = values;
 
     let privateKey: TypedFile | null = null;
     const filteredCredentialValues = Object.fromEntries(
@@ -142,7 +142,6 @@ export default function CreateCredential({
       const response = await submitCredential({
         credential_json: filteredCredentialValues,
         admin_public: true,
-        curator_public: is_public,
         groups: groups,
         name: name,
         source: sourceType,
@@ -208,7 +207,6 @@ export default function CreateCredential({
     <Formik<CreateCredentialFormValues>
       initialValues={{
         name: "",
-        is_public: isGlobalHolder || !businessTier,
         groups: [],
         ...(initialAuthMethod && {
           authentication_method: initialAuthMethod,
@@ -253,11 +251,7 @@ export default function CreateCredential({
                         />
                       )}
                       {(showAdvancedOptions || !isGlobalHolder) && (
-                        <IsPublicGroupSelector
-                          formikProps={formikProps}
-                          objectName="credential"
-                          isGlobalHolder={isGlobalHolder}
-                        />
+                        <GroupsMultiSelect formikProps={formikProps} />
                       )}
                     </div>
                   )}
