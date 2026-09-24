@@ -201,18 +201,19 @@ def _as_onyx_llm_error(error: Exception) -> Exception:
 
     litellm raises a failure during a stream as ``MidStreamFallbackError`` (a
     ``ServiceUnavailableError``), including 429s. It keeps the real cause in
-    ``original_exception`` but not in ``__cause__``. Unwrap it, or a streamed
-    rate limit looks like a generic provider failure.
+    ``original_exception``, but leaves ``__cause__`` empty and puts only a
+    message in ``args``. Chat's error classifier follows ``__cause__``, so we
+    set it on the wrapper, whether or not the cause maps to an Onyx error.
 
-    A mapped error has its ``__cause__`` set to the real cause, so raise it
-    without ``from``: chat's error classifier follows ``__cause__``. Any other
-    error comes back unchanged.
+    A mapped error also has its ``__cause__`` set to the real cause, so raise
+    the result without ``from``.
     """
     from litellm.exceptions import MidStreamFallbackError, RateLimitError, Timeout
 
     cause = error
     if isinstance(error, MidStreamFallbackError) and error.original_exception:
         cause = error.original_exception
+        error.__cause__ = cause
     mapped: Exception
     if isinstance(cause, Timeout):
         mapped = LLMTimeoutError(cause)

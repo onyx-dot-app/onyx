@@ -3557,6 +3557,29 @@ def test_consume_stream_maps_a_mid_drain_rate_limit() -> None:
     assert raised.value.__cause__ is rate_limit
 
 
+def test_consume_stream_keeps_the_real_cause_of_an_unmapped_error() -> None:
+    """litellm puts only a message in the wrapper's args and leaves __cause__
+    empty. Set __cause__, so chat's classifier sees the real 500, not the
+    wrapper."""
+    server_error = litellm.exceptions.InternalServerError(
+        message="upstream exploded", model="gpt-4", llm_provider="openai"
+    )
+
+    def _failing() -> Iterator[object]:
+        yield object()
+        raise litellm.exceptions.MidStreamFallbackError(
+            message="upstream exploded",
+            model="gpt-4",
+            llm_provider="openai",
+            original_exception=server_error,
+        )
+
+    with pytest.raises(litellm.exceptions.MidStreamFallbackError) as raised:
+        _consume_stream_with_timeout(_failing(), total_timeout=None)
+
+    assert raised.value.__cause__ is server_error
+
+
 def test_consume_stream_leaves_an_unmapped_error_unchanged() -> None:
     """An error with no Onyx equivalent is re-raised as-is, and never becomes
     its own cause."""
