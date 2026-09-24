@@ -85,7 +85,7 @@ export function ConnectorGroupRestrictionPicker() {
               description={t("empty.description")}
             />
           ) : (
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="grid max-h-80 grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
               {selectedGroups.map((group) => (
                 <Card key={group.id} color="background-tint-01" padding={2}>
                   <ContentAction
