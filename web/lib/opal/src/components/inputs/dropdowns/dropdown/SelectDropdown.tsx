@@ -1,6 +1,6 @@
 import React, { useEffect, forwardRef } from "react";
 import { createPortal } from "react-dom";
-import "@opal/components/inputs/selects/dropdown/styles.css";
+import "@opal/components/inputs/dropdowns/dropdown/styles.css";
 import { cn } from "@opal/utils";
 import { ShadowDiv } from "@opal/components/shadow-div/components";
 import { OptionsList } from "./OptionsList";
