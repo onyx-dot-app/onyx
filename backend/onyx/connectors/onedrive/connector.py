@@ -671,6 +671,7 @@ class OneDriveConnector(
             parent_hierarchy_raw_node_id=item_parent_id(drive.id, item),
             doc_created_at=item.created_datetime,
         )
+
     def retrieve_all_slim_docs(
         self,
         start: SecondsSinceUnixEpoch | None = None,
