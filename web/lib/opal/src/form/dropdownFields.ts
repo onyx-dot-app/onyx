@@ -24,8 +24,11 @@ export function useSingleDropdownField(
   const [field, meta, helpers] = useField<string>(name);
   const handleValueChange = useCallback(
     (value: string) => {
+      // setValue validates with the new value. setTouched must not
+      // validate too: Formik would run it with the pre-change values and
+      // that later result would win.
       void helpers.setValue(value);
-      void helpers.setTouched(true);
+      void helpers.setTouched(true, false);
       onValueChange?.(value);
     },
     [helpers, onValueChange]
@@ -74,8 +77,9 @@ export function useMultiDropdownField(
 
   const commit = useCallback(
     (next: string[]) => {
+      // See useSingleDropdownField: touch without a second validation.
       void helpers.setValue(next);
-      void helpers.setTouched(true);
+      void helpers.setTouched(true, false);
     },
     [helpers]
   );
