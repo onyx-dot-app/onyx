@@ -149,7 +149,7 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 				}
 				if change != nil {
 					if !askQuiet {
-						ow.Write(change.TextDelta())
+						ow.Write(sanitize.Terminal(change.TextDelta()))
 					}
 					if isTTY && !askQuiet {
 						activity, err := change.Activity()
@@ -157,32 +157,25 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 							return err
 						}
 						for _, line := range activity {
-							fmt.Fprintf(ios.ErrOut, "\033[2m%s\033[0m\n", line)
+							fmt.Fprintf(ios.ErrOut, "\033[2m%s\033[0m\n", sanitize.Terminal(line))
 						}
 					}
 				}
-				switch e := event.(type) {
-				case models.ErrorEvent:
+				if e, ok := event.(models.ErrorEvent); ok {
 					if askQuiet {
-						ow.Write(responseState.Text())
+						ow.Write(sanitize.Terminal(responseState.Text()))
 					}
 					ow.Finish()
 					if e.StatusCode != 0 {
 						return exitcodes.Newf(exitcodes.ForHTTPStatus(e.StatusCode), "%s", sanitize.Terminal(e.Error))
 					}
 					return exitcodes.New(exitcodes.General, sanitize.Terminal(e.Error))
-				case models.StopEvent:
-					if askQuiet {
-						ow.Write(sanitize.Terminal(responseState.Text()))
-					}
-					ow.Finish()
-					return nil
 				}
 			}
 
 			if !askJSON {
 				if askQuiet {
-					ow.Write(responseState.Text())
+					ow.Write(sanitize.Terminal(responseState.Text()))
 				}
 				ow.Finish()
 			}

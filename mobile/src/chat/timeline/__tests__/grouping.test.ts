@@ -33,7 +33,7 @@ function packet(obj: Packet["obj"], id = identity): Packet {
   return { identity: id, obj };
 }
 
-it("moves intermediate text into the timeline when the completed message calls tools", () => {
+it("keeps intermediate text outside the tool timeline", () => {
   const packets = [packet({ type: "item_update", item: text })];
   let state = processPackets(createInitialState(1), packets);
   expect(state.potentialDisplayGroups).toHaveLength(1);
@@ -50,7 +50,8 @@ it("moves intermediate text into the timeline when the completed message calls t
   );
   state = processPackets(state, packets);
   expect(state.potentialDisplayGroups).toHaveLength(0);
-  expect(state.toolGroups[0]?.items[0]?.content).toMatchObject({
+  expect(state.toolGroups).toHaveLength(0);
+  expect(state.narrationGroups[0]?.items[0]?.content).toMatchObject({
     text: "Searching",
     purpose: "commentary",
   });
@@ -155,7 +156,7 @@ it("retains local parent placement when a resumed stream adds child output", () 
     packet({ type: "item_update", item: tool }, parent),
   ];
   let state = processPackets(createInitialState(1), packets);
-  const parentPlacement = state.toolGroups[1]?.items[0]?.placement;
+  const parentPlacement = state.toolGroups[0]?.items[0]?.placement;
   packets.push(
     packet(
       {
@@ -173,7 +174,7 @@ it("retains local parent placement when a resumed stream adds child output", () 
     ),
   );
   state = processPackets(state, packets);
-  const group = state.toolGroups[1];
+  const group = state.toolGroups[0];
   expect(group?.items[0]?.placement).toEqual(parentPlacement);
   expect(group?.items[1]?.placement).toEqual({
     ...parentPlacement,

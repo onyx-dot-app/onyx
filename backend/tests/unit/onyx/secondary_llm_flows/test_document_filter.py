@@ -16,7 +16,7 @@ from onyx.secondary_llm_flows.document_filter import (
 )
 
 
-def _make_section() -> InferenceSection:
+def _make_section(index: int = 1) -> InferenceSection:
     chunk = InferenceChunk(
         document_id=f"doc-{index}",
         chunk_id=0,

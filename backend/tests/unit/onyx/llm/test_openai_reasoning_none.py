@@ -1,5 +1,5 @@
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import litellm
 import pytest
@@ -8,9 +8,10 @@ from litellm.types.utils import Delta
 
 from onyx.configs.constants import MessageType
 from onyx.llm.constants import LlmProviderNames
+from onyx.llm.litellm_models import UserMessage
 from onyx.llm.model_capabilities import openai_model_supports_reasoning_none
-from onyx.llm.models import ReasoningEffort, UserMessage
-from onyx.llm.multi_llm import LitellmLLM
+from onyx.llm.models import ReasoningEffort
+from onyx.llm.multi_llm import LitellmLLM, LitellmTransport
 from onyx.llm.well_known_providers.constants import (
     BIFROST_API_MODE_CHAT_COMPLETIONS,
     BIFROST_API_MODE_CONFIG_KEY,
@@ -40,8 +41,8 @@ def _llm(
     model_name: str,
     model_provider: str = LlmProviderNames.OPENAI,
     **kwargs: Any,
-) -> LitellmLLM:
-    return LitellmLLM(
+) -> LitellmTransport:
+    return LitellmTransport(
         api_key="test-key",
         model_provider=model_provider,
         model_name=model_name,
@@ -51,7 +52,7 @@ def _llm(
 
 
 def _sent_kwargs(
-    llm: LitellmLLM,
+    llm: LitellmTransport,
     effort: ReasoningEffort,
     tools: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
@@ -301,29 +302,37 @@ _HISTORY: list[ChatMinimalTextMessage] = [
 ]
 
 
-def _search_llm() -> LitellmLLM:
+def _search_llm() -> LitellmTransport:
     return _llm("gpt-5.6-sol", reasoning_effort_user_default=ReasoningEffort.HIGH)
 
 
+def _completion_stream(text: str) -> MagicMock:
+    stream = MagicMock(spec=litellm.CustomStreamWrapper)
+    chunks = iter(_text_stream_chunks(text))
+    stream.__iter__.return_value = stream
+    stream.__next__.side_effect = chunks.__next__
+    return stream
+
+
 def test_semantic_query_rephrase_sends_none() -> None:
-    with patch(_COMPLETION, return_value=_text_stream_chunks("onyx")) as completion:
-        semantic_query_rephrase(_HISTORY, _search_llm())
+    with patch(_COMPLETION, return_value=_completion_stream("onyx")) as completion:
+        semantic_query_rephrase(_HISTORY, LitellmLLM(_search_llm()))
     assert completion.call_args.kwargs["reasoning"] == {"effort": "none"}
 
 
 def test_keyword_query_expansion_sends_none() -> None:
-    with patch(_COMPLETION, return_value=_text_stream_chunks("onyx")) as completion:
-        keyword_query_expansion(_HISTORY, _search_llm())
+    with patch(_COMPLETION, return_value=_completion_stream("onyx")) as completion:
+        keyword_query_expansion(_HISTORY, LitellmLLM(_search_llm()))
     assert completion.call_args.kwargs["reasoning"] == {"effort": "none"}
 
 
 def test_classify_section_relevance_sends_none() -> None:
-    with patch(_COMPLETION, return_value=_text_stream_chunks("1")) as completion:
+    with patch(_COMPLETION, return_value=_completion_stream("1")) as completion:
         classify_section_relevance(
             document_title="doc",
             section_text="body",
             user_query="what is onyx",
-            llm=_search_llm(),
+            llm=LitellmLLM(_search_llm()),
             section_above_text=None,
             section_below_text=None,
         )

@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Generator, Iterator, Sequence
+from contextlib import closing
 from typing import TYPE_CHECKING, Protocol, overload, runtime_checkable
 from uuid import uuid4
 
@@ -54,6 +55,7 @@ from onyx.llm.models import (
 )
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.llm.tool_parsing import (
+    XmlToolCallContentFilter,
     _looks_like_xml_tool_call_payload,
     extract_tool_calls_from_response_text,
 )
@@ -153,6 +155,38 @@ def from_litellm_model_response(
     if not data.choices:
         raise ValueError("LiteLLM response must include at least one choice.")
     choice = data.choices[0]
+    if len(data.choices) > 1:
+        messages = [item.message for item in data.choices]
+        finish_reasons = [
+            item.finish_reason for item in data.choices if item.finish_reason
+        ]
+        choice = _ProviderChoice(
+            index=0,
+            finish_reason=finish_reasons[-1] if finish_reasons else None,
+            message=ResponseMessage(
+                role=messages[0].role,
+                content="".join(
+                    message.content for message in messages if message.content
+                )
+                or None,
+                reasoning_content="\n\n".join(
+                    message.reasoning_content
+                    for message in messages
+                    if message.reasoning_content
+                )
+                or None,
+                tool_calls=[
+                    call for message in messages for call in message.tool_calls or []
+                ]
+                or None,
+                thinking_blocks=[
+                    block
+                    for message in messages
+                    for block in message.thinking_blocks or []
+                ]
+                or None,
+            ),
+        )
     return ModelResponse(
         id=str(data.id),
         created=str(data.created),
@@ -540,17 +574,24 @@ def recover_tool_calls(
     tools = {tool.name: tool for tool in request.tools}
     for call in calls:
         call.arguments = _normalize_arguments(call.arguments, tools.get(call.name))
-    return message.model_copy(update={"content": [*calls]})
+    content: list[TextContent | ToolCall] = []
+    if _looks_like_xml_tool_call_payload(message.text):
+        content_filter = XmlToolCallContentFilter()
+        visible_text = content_filter.process(message.text) + content_filter.flush()
+        if visible_text:
+            content.append(TextContent(text=visible_text))
+    content.extend(calls)
+    return message.model_copy(update={"content": content})
 
 
-def normalized_stream(
+def _normalized_stream(
     stream: Iterator[ModelResponseStream],
     request: GenerationRequest,
+    accumulator: MessageAccumulator,
 ) -> Generator[ModelResponseStream, None, None]:
     """Normalize IDs and resolve text compatibility before events or rendering."""
     ids: dict[int, str] = {}
     buffered: list[ModelResponseStream] = []
-    accumulator = MessageAccumulator(request.tools)
     buffering = (
         bool(request.tools) and request.options.tool_choice != ToolChoiceOptions.NONE
     )
@@ -559,11 +600,11 @@ def normalized_stream(
             chunk = chunk.model_copy(deep=True)
             for call in chunk.choice.delta.tool_calls:
                 call.id = ids.setdefault(call.index, call.id or str(uuid4()))
+            accumulator.add(chunk)
             if not buffering:
                 yield chunk
                 continue
             buffered.append(chunk)
-            accumulator.add(chunk)
             # Native calls and ordinary prose can stream immediately. Ambiguous payloads wait for parsing.
             text = accumulator.message.text.lstrip()
             native = bool(accumulator.calls)
@@ -587,6 +628,7 @@ def normalized_stream(
                     choice=StreamingChoice(
                         finish_reason=message.stop_reason,
                         delta=Delta(
+                            content=message.text or None,
                             tool_calls=[
                                 ChatCompletionDeltaToolCall(
                                     index=index,
@@ -597,7 +639,7 @@ def normalized_stream(
                                     ),
                                 )
                                 for index, call in enumerate(message.tool_calls)
-                            ]
+                            ],
                         ),
                     ),
                 )
@@ -606,3 +648,65 @@ def normalized_stream(
     finally:
         if isinstance(stream, Closable):
             stream.close()
+
+
+def normalized_stream(
+    stream: Iterator[ModelResponseStream], request: GenerationRequest
+) -> Generator[ModelResponseStream, None, None]:
+    """Keep tool payload markup out of visible prose while preserving recovery input."""
+    raw = MessageAccumulator(request.tools)
+    content_filter = XmlToolCallContentFilter()
+    last: ModelResponseStream | None = None
+    emitted_calls = False
+
+    def record() -> Generator[ModelResponseStream, None, None]:
+        nonlocal last
+        try:
+            for chunk in stream:
+                last = chunk
+                yield chunk
+        finally:
+            if isinstance(stream, Closable):
+                stream.close()
+
+    with closing(_normalized_stream(record(), request, raw)) as normalized:
+        for chunk in normalized:
+            chunk = chunk.model_copy(deep=True)
+            emitted_calls = emitted_calls or bool(chunk.choice.delta.tool_calls)
+            if chunk.choice.delta.content:
+                chunk.choice.delta.content = content_filter.process(
+                    chunk.choice.delta.content
+                )
+            yield chunk
+    if last is None:
+        return
+    tail = content_filter.flush()
+    if tail:
+        yield ModelResponseStream(
+            id=last.id,
+            created=last.created,
+            choice=StreamingChoice(delta=Delta(content=tail)),
+        )
+    if emitted_calls or not request.tools:
+        return
+    recovered = recover_tool_calls(raw.finish(), request)
+    if recovered.tool_calls:
+        yield ModelResponseStream(
+            id=last.id,
+            created=last.created,
+            choice=StreamingChoice(
+                finish_reason=last.choice.finish_reason,
+                delta=Delta(
+                    tool_calls=[
+                        ChatCompletionDeltaToolCall(
+                            index=index,
+                            id=call.id,
+                            function=DeltaFunctionCall(
+                                name=call.name, arguments=json.dumps(call.arguments)
+                            ),
+                        )
+                        for index, call in enumerate(recovered.tool_calls)
+                    ]
+                ),
+            ),
+        )

@@ -48,9 +48,6 @@ jest.mock("@/lib/projects/svc", () => ({
   getSessionProjectTokenCount: async () => 0,
   getProjectFilesForSession: async () => [],
 }));
-jest.mock("@/lib/searchFilters/providers", () => ({
-  useSharedSearchFilters: () => ({}),
-}));
 
 const savedPackets: Packet[] = [
   {

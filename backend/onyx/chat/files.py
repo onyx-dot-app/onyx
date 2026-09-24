@@ -309,12 +309,15 @@ def extract_context_files(
 
 def _build_tool_metadata(user_file: UserFileMetadata) -> FileToolMetadata:
     """Use the user-file ID that FileReaderTool accepts."""
+    file_type = mime_type_to_chat_file_type(user_file.file_type)
     return build_file_context(
         tool_file_id=str(user_file.id),
         filename=user_file.name,
-        file_type=mime_type_to_chat_file_type(user_file.file_type),
+        file_type=file_type,
         approx_char_count=(user_file.token_count or 0) * APPROX_CHARS_PER_TOKEN,
-    ).tool_metadata
+    ).tool_metadata.model_copy(
+        update={"staged_for_tools": file_type.use_metadata_only()}
+    )
 
 
 def determine_search_params(
@@ -367,6 +370,7 @@ def summarize_file_metadata(messages: list[ChatMessage]) -> dict[str, FileToolMe
             file_id=descriptor["id"],
             filename=descriptor.get("name") or "unknown",
             approx_char_count=0,
+            staged_for_tools=False,
         )
         for message in messages
         for descriptor in message.files or []
@@ -407,10 +411,14 @@ def build_file_context(
 ) -> FileContextResult:
     """Build file content and tool metadata with the same file ID."""
     if file_type.use_metadata_only():
-        message_text = (
+        message_text: str = (
             f"File: {filename} (id={tool_file_id})\n"
-            "Use the file_reader or python tools to access "
-            "this file's contents."
+            "Use the read_file or python tools to access this file's contents."
+            if DISABLE_VECTOR_DB
+            else f"File: {filename}\n"
+            "This file's contents are not included here. Use your available "
+            "tools to read it. Do not guess the contents and do not search "
+            "the web for this file."
         )
         message = UserMessage(
             content=message_text,

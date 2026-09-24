@@ -451,7 +451,6 @@ def get_llm(
             api_key=api_key,
             api_base=api_base,
             api_version=api_version,
-            timeout=timeout,
             temperature=temperature,
             custom_config=custom_config,
             extra_headers=extra_headers,

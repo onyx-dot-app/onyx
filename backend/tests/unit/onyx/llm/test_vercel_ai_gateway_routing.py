@@ -1,4 +1,4 @@
-"""Unit tests for Vercel AI Gateway routing in LitellmLLM.
+"""Unit tests for Vercel AI Gateway routing in LitellmTransport.
 
 Unlike Portkey and Bifrost, this provider is reached through LiteLLM's own
 integration rather than an OpenAI-compatible surface, so it has no
@@ -12,15 +12,15 @@ from unittest.mock import patch
 
 from onyx.llm.api_surfaces import resolve_api_surface
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.models import LanguageModelInput, UserMessage
-from onyx.llm.multi_llm import LitellmLLM
+from onyx.llm.litellm_models import LanguageModelInput, UserMessage
+from onyx.llm.multi_llm import LitellmTransport
 
 
 def _make_llm(
     model_name: str = "anthropic/claude-sonnet-4.5",
     api_base: str | None = None,
-) -> LitellmLLM:
-    return LitellmLLM(
+) -> LitellmTransport:
+    return LitellmTransport(
         api_key="vck-test-key",
         model_provider=LlmProviderNames.VERCEL_AI_GATEWAY,
         model_name=model_name,
@@ -29,7 +29,7 @@ def _make_llm(
     )
 
 
-def _completion_kwargs(llm: LitellmLLM) -> dict:
+def _completion_kwargs(llm: LitellmTransport) -> dict:
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
         messages: LanguageModelInput = [UserMessage(content="Hi")]

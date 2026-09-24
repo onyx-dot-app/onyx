@@ -16,8 +16,8 @@ import httpx
 import pytest
 
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.models import ChatCompletionMessage, UserMessage
-from onyx.llm.multi_llm import LitellmLLM
+from onyx.llm.litellm_models import ChatCompletionMessage, UserMessage
+from onyx.llm.multi_llm import LitellmTransport
 from onyx.llm.well_known_providers.constants import VERCEL_AI_GATEWAY_DEFAULT_API_BASE
 from tests.utils.secret_names import TestSecret
 
@@ -105,7 +105,7 @@ def test_streaming_completion_through_the_gateway(
     LiteLLM's own convention is `provider/model` and the gateway's is
     `vendor/model`, so this sends `vercel_ai_gateway/meta/llama-3.1-8b`.
     """
-    llm = LitellmLLM(
+    llm = LitellmTransport(
         api_key=test_secrets[TestSecret.VERCEL_AI_GATEWAY_API_KEY],
         model_provider=LlmProviderNames.VERCEL_AI_GATEWAY,
         model_name=_TEST_MODEL,
@@ -113,7 +113,7 @@ def test_streaming_completion_through_the_gateway(
     )
 
     prompt: list[ChatCompletionMessage] = [
-        UserMessage(role="user", content="Reply with exactly the word: pong")
+        UserMessage(content="Reply with exactly the word: pong")
     ]
 
     content = "".join(

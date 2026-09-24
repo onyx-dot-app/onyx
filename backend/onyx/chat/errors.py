@@ -2,6 +2,7 @@ import traceback
 
 from onyx.agents.runtime import RunFailed
 from onyx.chat.models import StreamingError
+from onyx.configs.app_configs import DEV_MODE
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.exceptions import ClassifiedLLMError, litellm_exception_to_safe_error
@@ -155,11 +156,11 @@ def chat_error(
     if llm is None:
         return StreamingError(
             error="Failed to initialize the chat. Please check your configuration and try again.",
-            stack_trace=stack,
+            stack_trace=stack if DEV_MODE else None,
             error_code="INIT_FAILED",
             is_retryable=True,
         )
-    info = litellm_exception_to_safe_error(error, llm, fallback_to_error_msg=True)
+    info = litellm_exception_to_safe_error(error, llm, fallback_to_error_msg=False)
     details: dict[str, str | int | None] = {
         "model": llm.info.model_name,
         "provider": llm.info.model_provider,
@@ -172,7 +173,7 @@ def chat_error(
         )
     return StreamingError(
         error=info.message,
-        stack_trace=llm.redact_error(stack),
+        stack_trace=llm.redact_error(stack) if DEV_MODE else None,
         error_code=info.error_code,
         is_retryable=info.is_retryable,
         details=details,

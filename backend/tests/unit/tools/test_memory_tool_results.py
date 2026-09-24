@@ -52,7 +52,7 @@ def tool_context() -> ToolContext:
         user_memory_context=UserMemoryContext(
             user_id=uuid4(),
             user_info=UserInfo(name="Test User", email="test@example.com", role=None),
-            memories=tuple(["User likes dark mode"]),
+            memories=("User likes dark mode",),
         )
     )
 

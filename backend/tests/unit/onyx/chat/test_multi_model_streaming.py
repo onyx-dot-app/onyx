@@ -564,10 +564,9 @@ class TestRunModels:
 
         errors = [p for p in packets if isinstance(p, StreamingError)]
         assert len(errors) == 1
-        # A generic (non-litellm) worker exception surfaces as UNKNOWN_ERROR
-        # with the original message preserved.
+        # Internal exception details must not reach clients.
         assert errors[0].error_code == "UNKNOWN_ERROR"
-        assert "intentional test failure" in errors[0].error
+        assert "intentional test failure" not in errors[0].error
 
     def test_context_window_overflow_surfaces_as_context_too_long(self) -> None:
         """A provider context-window rejection in a worker surfaces as
@@ -845,7 +844,9 @@ class TestRunModels:
             _collect_chat_turn(_make_setup(n_models=1))
 
         mock_handle.assert_called_once()
-        assert mock_handle.call_args.kwargs["response"].error == "fail"
+        assert mock_handle.call_args.kwargs["response"].error == (
+            "An unexpected error occurred while processing your request. Please try again later."
+        )
         assert mock_handle.call_args.kwargs["message_id"] == 1000
         assert mock_handle.call_args.kwargs["response"].answer is None
 

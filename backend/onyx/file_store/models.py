@@ -200,6 +200,8 @@ class FileToolMetadata(BaseModel):
     filename: str
     approx_char_count: int
 
+    staged_for_tools: bool = True
+
 
 class ExtractedContextFiles(BaseModel):
     """Result of attempting to load user files (from a project or persona) into context."""

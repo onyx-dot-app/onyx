@@ -218,7 +218,7 @@ def test_signed_thinking_survives_onyx_projection_and_details_serialize() -> Non
     message = AssistantMessage(
         content=[ThinkingContent(text="reasoning", blocks=[block])]
     )
-    history = list([message])
+    history = [message]
     from onyx.llm.litellm_models import AssistantMessage as WireAssistantMessage
 
     wire_message = serialize_request(

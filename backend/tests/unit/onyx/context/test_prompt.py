@@ -64,6 +64,7 @@ def test_instructions_files_and_reminder_surround_current_task() -> None:
         ),
         context_files=context,
         token_counter=len,
+        available_tool_names={"read_file"},
     )
     assert [message.text for message in result[:4]] == [
         "System instructions",
@@ -115,6 +116,7 @@ def test_project_image_already_in_history_is_not_duplicated() -> None:
             file_metadata=[],
         ),
         token_counter=len,
+        available_tool_names={"read_file"},
     )
     images = [
         image
@@ -149,6 +151,7 @@ def test_file_reader_metadata_covers_only_missing_file_contents(
         reminder_message=None,
         context_files=None,
         token_counter=len,
+        available_tool_names={"read_file"},
         all_injected_file_metadata={"first": first, "second": second},
     )
     metadata = next(message.text for message in result if "read_file" in message.text)
@@ -168,6 +171,7 @@ def test_prompt_can_be_rebuilt_without_a_user_message(history: list[Message]) ->
         reminder_message=None,
         context_files=None,
         token_counter=len,
+        available_tool_names={"read_file"},
     )
     assert [message.text for message in result] == [
         "System",
@@ -214,6 +218,7 @@ def test_historical_tool_filter_preserves_checkpoint_and_current_evidence() -> N
         reminder_message=None,
         context_files=None,
         token_counter=len,
+        available_tool_names={"read_file"},
     )
     results = [message for message in request if isinstance(message, ToolResultMessage)]
     assert [message.text for message in results] == [
@@ -227,3 +232,42 @@ def test_historical_tool_filter_preserves_checkpoint_and_current_evidence() -> N
     assert prior_result.text == "Old evidence"
     assert history_digest(history) == original_digest
     assert checkpoint_matches(history, checkpoint)
+
+
+@pytest.mark.parametrize(
+    "tools, staged, expected",
+    [
+        ({"read_file", "internal_search"}, True, "read_file"),
+        ({"internal_search", "run_python"}, True, "internal search"),
+        ({"run_python"}, True, "python tool"),
+        ({"run_python"}, False, "no tool here can read them"),
+        ({"web_search"}, True, "no tool here can read them"),
+        (set(), True, "no tool here can read them"),
+    ],
+)
+def test_omitted_file_notice_uses_only_available_readers(
+    tools: set[str], staged: bool, expected: str
+) -> None:
+    metadata = FileToolMetadata(
+        file_id="file-id",
+        filename="report.pdf",
+        approx_char_count=2000,
+        staged_for_tools=staged,
+    )
+    messages = prepare_prompt(
+        [UserMessage(content="Summarize the report")],
+        system_prompt=None,
+        custom_agent_prompt=None,
+        reminder_message=None,
+        context_files=None,
+        token_counter=len,
+        all_injected_file_metadata={metadata.file_id: metadata},
+        available_tool_names=tools,
+    )
+    notice = next(message.text for message in messages if "report.pdf" in message.text)
+    assert expected in notice
+    if "read_file" not in tools:
+        assert "read_file" not in notice
+        assert metadata.file_id not in notice
+        assert "Do not guess" in notice
+        assert "search the web" in notice

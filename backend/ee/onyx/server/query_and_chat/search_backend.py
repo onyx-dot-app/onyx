@@ -145,7 +145,7 @@ def handle_send_search_message(
         check_llm_cost_limit_for_provider(
             db_session=db_session,
             tenant_id=get_current_tenant_id(),
-            llm_provider_api_key=get_default_llm().config.api_key,
+            llm_provider_api_key=get_default_llm().transport.config.api_key,
         )
 
     # Non-streaming path

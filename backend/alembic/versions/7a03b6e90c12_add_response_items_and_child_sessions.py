@@ -1,7 +1,7 @@
 """Store agent responses, child conversations, and resumable checkpoints.
 
 Revision ID: 7a03b6e90c12
-Revises: ad99acb9be41
+Revises: ac05f4a21dbd
 """
 
 from alembic import op
@@ -9,7 +9,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 revision = "7a03b6e90c12"
-down_revision = "ad99acb9be41"
+down_revision = "ac05f4a21dbd"
 branch_labels = None
 depends_on = None
 

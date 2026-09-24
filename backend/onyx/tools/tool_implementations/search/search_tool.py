@@ -321,7 +321,6 @@ class SearchTool(Tool):
             user_selected_filters=self.user_selected_filters,
             project_id_filter=self.project_id_filter,
             persona_id_filter=self.persona_id_filter,
-            bypass_acl=self.bypass_acl,
             slack_context=self.slack_context,
             enable_slack_search=self.enable_slack_search,
             auto_detect_filters=self.auto_detect_filters,
@@ -703,6 +702,18 @@ class SearchTool(Tool):
         update: ToolUpdate | None = None,
     ) -> ToolResult:
         """Retrieve documents using the original question and optional query variants."""
+        if (
+            self.user_selected_filters is not None
+            and self.project_id_filter is None
+            and self.user_selected_filters.source_type == []
+        ):
+            content, _ = convert_inference_sections_to_llm_string(
+                top_sections=[], note=None
+            )
+            return ToolResult(
+                content=content,
+                details=SearchDocsResponse(search_docs=[], citation_mapping={}),
+            )
         memory = context.user_memory_context
         if memory is not None and not context.inject_memories_in_prompt:
             memory = memory.without_memories()

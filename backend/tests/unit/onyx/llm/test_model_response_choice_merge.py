@@ -11,10 +11,11 @@ from openai.types.responses.response_function_tool_call import ResponseFunctionT
 from openai.types.responses.response_output_message import ResponseOutputMessage
 from openai.types.responses.response_output_text import ResponseOutputText
 
+from onyx.llm.litellm_conversion import from_litellm_model_response
+
 # Via the singleton, so importing this module applies Onyx's litellm config and
 # monkey patches rather than leaving a bare litellm for the rest of the session.
 from onyx.llm.litellm_singleton import litellm
-from onyx.llm.model_response import from_litellm_model_response
 
 
 def _bridge_response(

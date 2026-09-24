@@ -88,6 +88,7 @@ from onyx.llm.model_capabilities import (
     anthropic_supports_thinking,
     anthropic_uses_adaptive_thinking,
     find_model_obj,
+    gemini_lowest_thinking_level_is_low,
     get_llm_max_output_tokens,
     get_model_map,
     is_true_openai_model,
@@ -338,25 +339,45 @@ def _provider_scope(
         ) from error
 
 
-def _consume_stream_with_timeout[T](
-    stream: Iterable[T], total_timeout: float | None
-) -> list[T]:
-    """Drain a litellm stream, capping total wall-clock time when set.
+def _as_onyx_llm_error(error: Exception) -> Exception:
+    """Translate a litellm exception into the Onyx one callers catch.
 
-    Raw gateway calls check the budget between chunks. Shared client calls use
-    a cancellation deadline that also interrupts connection setup and blocked reads.
+    litellm raises a failure during a stream as ``MidStreamFallbackError`` (a
+    ``ServiceUnavailableError``), including 429s. It keeps the real cause in
+    ``original_exception``, but leaves ``__cause__`` empty and puts only a
+    message in ``args``. Chat's error classifier follows ``__cause__``, so we
+    set it on the wrapper, whether or not the cause maps to an Onyx error.
+
+    A mapped error also has its ``__cause__`` set to the real cause, so raise
+    the result without ``from``.
     """
-    if total_timeout is None:
-        return list(stream)
+    from litellm.exceptions import MidStreamFallbackError, RateLimitError, Timeout
 
-    deadline = time.monotonic() + total_timeout
+    cause = error
+    if isinstance(error, MidStreamFallbackError) and error.original_exception:
+        cause = error.original_exception
+        error.__cause__ = cause
+    mapped: Exception
+    if isinstance(cause, Timeout):
+        mapped = LLMTimeoutError(cause)
+    elif isinstance(cause, RateLimitError):
+        mapped = LLMRateLimitError(cause)
+    else:
+        return error
+    mapped.__cause__ = cause
+    return mapped
+
+
+def _consume_stream_until_deadline[T](stream: Iterable[T], deadline: float) -> list[T]:
+    """Drain provider output within the invocation's remaining budget."""
     chunks: list[T] = []
-    for chunk in stream:
-        chunks.append(chunk)
-        if time.monotonic() > deadline:
-            raise LLMTimeoutError(
-                f"LLM streaming call exceeded total timeout of {total_timeout}s"
-            )
+    try:
+        for chunk in stream:
+            chunks.append(chunk)
+            if time.monotonic() > deadline:
+                raise LLMTimeoutError("LLM streaming call exceeded its total timeout")
+    except Exception as error:
+        raise _as_onyx_llm_error(error)
     return chunks
 
 
@@ -618,7 +639,7 @@ class LitellmTransport:
         supports_images: bool | None = None,
     ) -> None:
         # Bound idle socket reads. Active generation may continue while chunks arrive.
-        self._timeout = timeout if timeout is not None else LLM_SOCKET_READ_TIMEOUT
+        self._timeout = LLM_SOCKET_READ_TIMEOUT
         if self._timeout <= 0:
             raise ValueError("Provider socket timeout must be positive")
 
@@ -790,16 +811,21 @@ class LitellmTransport:
         parallel_tool_calls: bool,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         structured_response_format: dict[str, JsonValue] | None = None,
-        timeout_override: int | None = None,
+        read_timeout_s: float = LLM_SOCKET_READ_TIMEOUT,
         max_tokens: int | None = None,
         user_identity: LLMUserIdentity | None = None,
         client: "HTTPHandler | None" = None,
         operation: ProviderOperation | None = None,
+        env_injection_enabled: bool | None = None,
+        deadline: float | None = None,
     ) -> "LiteLLMModelResponse | CustomStreamWrapper | CancellableStream":
         # Lazy loading to avoid memory bloat for non-inference flows
         from litellm.exceptions import BadRequestError
 
         from onyx.llm.litellm_singleton import litellm
+
+        if env_injection_enabled is None:
+            env_injection_enabled = _env_injection_enabled()
 
         model_identity_names = resolve_model_identity_names(
             self.config.model_name, self.config.deployment_name
@@ -1208,7 +1234,7 @@ class LitellmTransport:
                 else:
                     optional_kwargs["tool_choice"] = tool_choice
 
-            if not _env_injection_enabled() and self._env_only_custom_config:
+            if not env_injection_enabled and self._env_only_custom_config:
                 _warn_dropped_env_only_keys(
                     self._model_provider,
                     tuple(sorted(self._env_only_custom_config)),
@@ -1217,6 +1243,12 @@ class LitellmTransport:
             def _call_litellm(
                 opts: dict[str, JsonValue],
             ) -> "LiteLLMModelResponse | CustomStreamWrapper | CancellableStream":
+                timeout = read_timeout_s
+                if deadline is not None:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise LLMTimeoutError("LLM call exceeded its total timeout")
+                    timeout = min(timeout, remaining)
                 kwargs = dict(
                     mock_response=get_llm_mock_response() or MOCK_LLM_RESPONSE,
                     model=model,
@@ -1226,7 +1258,7 @@ class LitellmTransport:
                     messages=messages,
                     tools=tools or None,
                     stream=stream,
-                    timeout=timeout_override or self._timeout,
+                    timeout=timeout,
                     max_tokens=max_tokens,
                     **opts,
                     **passthrough_kwargs,
@@ -1236,7 +1268,7 @@ class LitellmTransport:
                 # because the context manager is single-use.
                 env_ctx: AbstractContextManager[None] = (
                     temporary_env_and_lock(self._env_only_custom_config)
-                    if _env_injection_enabled()
+                    if env_injection_enabled
                     else nullcontext()
                 )
                 with env_ctx:
@@ -1245,7 +1277,7 @@ class LitellmTransport:
                         return CancellableStream(
                             kwargs,
                             signal,
-                            timeout=timeout_override or self._timeout,
+                            timeout=timeout,
                         )
                     # LiteLLM's overloads do not express the stream flag's return type.
                     return cast(
@@ -1308,13 +1340,7 @@ class LitellmTransport:
                     )
             raise RuntimeError("Provider retry attempts exhausted")
         except Exception as e:
-            if isinstance(e, Timeout):
-                raise LLMTimeoutError(str(e)) from e
-
-            elif isinstance(e, RateLimitError):
-                raise LLMRateLimitError(str(e)) from e
-
-            raise
+            raise _as_onyx_llm_error(e)
 
     @property
     def info(self) -> LLMInfo:
@@ -1362,35 +1388,28 @@ class LitellmTransport:
         tools: list[dict[str, JsonValue]] | None = None,
         tool_choice: ToolChoice | None = None,
         structured_response_format: dict[str, JsonValue] | None = None,
-        timeout_override: int | None = None,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
-        total_timeout_override: float | None = None,
+        total_timeout_s: float = LLM_INVOKE_TIMEOUT_S,
         operation: ProviderOperation | None = None,
     ) -> ModelResponse:
-        """One complete response within ``total_timeout_s``. See ``LLM.invoke``.
+        """Return a complete response within one deadline, including retries.
 
-        Sends one plain request, so the socket read timeout is the whole budget.
-        The only exception is env injection of custom_config (self-hosted
-        default): the process-wide env lock must cover connection setup only,
-        not a whole inference, so we stream and reassemble. The deadline then
-        applies between chunks.
+        Cancellation uses a request-owned streaming connection. Environment
+        injection also uses streaming to release the environment lock after
+        connection setup. Other calls send one plain request.
         """
         from litellm import HTTPHandler
         from litellm import ModelResponse as LiteLLMModelResponse
 
         from onyx.llm.litellm_conversion import from_litellm_model_response
 
-        # Synchronous gateway calls isolate clients for providers that accept HTTPHandler.
-        # Shared SDK calls interrupt request-owned synchronous connections on cancellation.
-        # Cap the per-read timeout at the total budget. The deadline is only
-        # checked between chunks, so without this a single blocking read could
-        # overshoot a total shorter than the socket read timeout. No-op when the
-        # total exceeds it (our defaults do).
-        read_timeout = timeout_override or self._timeout
-        if total_timeout_override is not None:
-            read_timeout = min(read_timeout, max(1, int(total_timeout_override)))
+        deadline = time.monotonic() + total_timeout_s
+        env_injection_enabled = _env_injection_enabled()
+        # SDK cancellation interrupts a request-owned streaming connection.
+        use_stream = env_injection_enabled or current_cancellation() is not None
+        read_timeout = max(1, math.ceil(total_timeout_s))
 
         stream_response = None
         client = None
@@ -1398,41 +1417,38 @@ class LitellmTransport:
             client = HTTPHandler(timeout=read_timeout)
 
         try:
-            # When env-only custom_config keys are injected (self-hosted
-            # deployments only), they are set under a global lock. Using
-            # stream=True here means the lock is only held during connection
-            # setup (not the full inference). The chunks are then collected
-            # outside the lock and reassembled into a single ModelResponse
-            # via stream_chunk_builder.
-            from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
-            from litellm import stream_chunk_builder
+            raw_response = self._completion(
+                prompt=prompt,
+                tools=tools,
+                tool_choice=tool_choice,
+                stream=use_stream,
+                structured_response_format=structured_response_format,
+                read_timeout_s=read_timeout,
+                max_tokens=max_tokens,
+                parallel_tool_calls=True,
+                reasoning_effort=reasoning_effort,
+                user_identity=user_identity,
+                client=client,
+                operation=operation,
+                env_injection_enabled=env_injection_enabled,
+                deadline=deadline,
+            )
+            if use_stream:
+                from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
+                from litellm import stream_chunk_builder
 
-            # stream=True fixes the third-party return union to an iterator.
-            stream_response = cast(
-                "LiteLLMCustomStreamWrapper | CancellableStream",
-                self._completion(
-                    prompt=prompt,
-                    tools=tools,
-                    tool_choice=tool_choice,
-                    stream=True,
-                    structured_response_format=structured_response_format,
-                    timeout_override=read_timeout,
-                    max_tokens=max_tokens,
-                    parallel_tool_calls=True,
-                    reasoning_effort=reasoning_effort,
-                    user_identity=user_identity,
-                    client=client,
-                    operation=operation,
-                ),
-            )
-            chunks = _consume_stream_with_timeout(
-                stream_response, total_timeout_override
-            )
-            # A nonempty completed chunk stream builds a LiteLLM response.
-            response = cast(
-                LiteLLMModelResponse,
-                stream_chunk_builder(chunks),
-            )
+                stream_response = cast(
+                    "LiteLLMCustomStreamWrapper | CancellableStream", raw_response
+                )
+                chunks = _consume_stream_until_deadline(stream_response, deadline)
+                built = stream_chunk_builder(chunks)
+                if built is None:
+                    raise ValueError(
+                        f"LLM {self.config.model_name} returned an empty stream"
+                    )
+                response = cast(LiteLLMModelResponse, built)
+            else:
+                response = cast(LiteLLMModelResponse, raw_response)
 
             model_response = from_litellm_model_response(response)
 
@@ -1453,7 +1469,7 @@ class LitellmTransport:
         tools: list[dict[str, JsonValue]] | None = None,
         tool_choice: ToolChoice | None = None,
         structured_response_format: dict[str, JsonValue] | None = None,
-        timeout_override: int | None = None,
+        stall_timeout_s: int = LLM_SOCKET_READ_TIMEOUT,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
@@ -1485,7 +1501,7 @@ class LitellmTransport:
             response = None
             client = None
             if current_cancellation() is None and self._uses_isolated_client():
-                client = HTTPHandler(timeout=timeout_override or self._timeout)
+                client = HTTPHandler(timeout=stall_timeout_s)
 
             try:
                 # stream=True fixes the third-party return union to an iterator.
@@ -1562,6 +1578,10 @@ class LitellmLLM(LLM):
     ) -> AssistantMessage:
         """Return one completed assistant message."""
         context = context or GenerationContext()
+        if context.total_timeout is None:
+            context = context.model_copy(
+                update={"total_timeout": context.timeout or LLM_INVOKE_TIMEOUT_S}
+            )
         messages = serialize_request(request, self.transport.config)
         definitions = serialize_tools(request.tools)
         with (
@@ -1580,7 +1600,7 @@ class LitellmLLM(LLM):
                 tools=definitions,
                 tool_choice=request.options.tool_choice,
                 structured_response_format=request.options.structured_response_format,
-                timeout_override=context.timeout,
+                total_timeout_s=context.total_timeout or LLM_INVOKE_TIMEOUT_S,
                 max_tokens=request.options.max_tokens,
                 reasoning_effort=request.options.reasoning_effort,
                 user_identity=context.user_identity,
@@ -1658,7 +1678,7 @@ class LitellmLLM(LLM):
                         reasoning_effort=request.options.reasoning_effort,
                         user_identity=context.user_identity,
                         operation=operation,
-                        timeout_override=context.timeout,
+                        stall_timeout_s=context.timeout or LLM_SOCKET_READ_TIMEOUT,
                         structured_response_format=request.options.structured_response_format,
                     )
                 ),

@@ -292,9 +292,7 @@ def save_chat_turn(
         tool_calls, tool_records, db_session, tool_call_to_search_doc_ids
     )
 
-    assistant_message.citations = (
-        citation_number_to_search_doc_id if citation_number_to_search_doc_id else None
-    )
+    assistant_message.citations = citation_number_to_search_doc_id or None
 
     # Preserve referenced generated files for subsequent turns. Unreferenced
     # files remain intermediate artifacts.
