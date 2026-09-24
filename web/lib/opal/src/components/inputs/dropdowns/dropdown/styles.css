@@ -9,11 +9,13 @@
    ============================================================================ */
 
 .opal-select-dropdown {
-  @apply z-10000 overflow-hidden border bg-background-neutral-00 p-1 rounded-12 shadow-box-01 pointer-events-auto touch-auto;
+  @apply z-10000 overflow-hidden border bg-background-neutral-00 rounded-12 shadow-box-01 pointer-events-auto touch-auto;
 }
 
+/* The inner padding sits inside the ShadowDiv, so its scroll gradients span
+   the bordered box edge to edge instead of stopping at the padding. */
 .opal-select-dropdown-scroll {
-  @apply flex flex-col gap-1 overflow-x-hidden;
+  @apply flex flex-col gap-1 overflow-x-hidden p-1;
 }
 
 .opal-select-empty-set {
