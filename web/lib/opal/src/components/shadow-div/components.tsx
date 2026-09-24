@@ -44,9 +44,9 @@ interface ShadowDivProps extends React.HTMLAttributes<HTMLDivElement> {
   containerClassName?: string;
 }
 
-// A translucent shadow token, so the gradients read as a shadow on any
-// surface instead of matching one.
-const SHADOW_COLOR = "var(--shadow-01)";
+// A translucent black in both themes, so the gradients read as a shadow on
+// any surface instead of matching one or lifting in dark mode.
+const SHADOW_COLOR = "var(--shadow-dark-01)";
 
 /**
  * ShadowDiv - A scrollable container with automatic top/bottom shadow indicators

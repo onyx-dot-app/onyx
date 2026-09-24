@@ -4,7 +4,7 @@
 
 A scrollable container with automatic top/bottom shadow indicators. Gradients fade in when the
 content scrolls past the visible region, signaling that more content exists in that direction.
-The gradients use the translucent `shadow-01` token, so they read as a shadow on any surface.
+The gradients use the translucent `shadow-dark-01` token, black in both themes, so they read as a shadow on any surface.
 
 ## Props
 
