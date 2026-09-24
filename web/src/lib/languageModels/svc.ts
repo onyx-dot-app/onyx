@@ -33,7 +33,8 @@ import {
   type NebiusTokenfactoryFetchParams,
   type NebiusTokenfactoryModelResponse,
   type PortkeyFetchParams,
-  type PortkeyModelResponse,
+  type CheaperInferenceFetchParams,
+  type GatewayModelResponse,
   type VercelAIGatewayFetchParams,
   type VercelAIGatewayModelResponse,
 } from "@/lib/languageModels/types";
@@ -664,6 +665,13 @@ export const fetchModels = async (
         provider_id: formValues.id,
         signal,
       });
+    case LLMProviderName.CHEAPERINFERENCE:
+      return fetchCheaperInferenceModels({
+        api_base: formValues.api_base,
+        api_key: formValues.api_key,
+        provider_id: formValues.id,
+        signal,
+      });
     default:
       return { models: [], error: `Unknown provider: ${providerName}` };
   }
@@ -793,17 +801,33 @@ export const fetchVercelAIGatewayModels = async (
   }
 };
 
-/** Fetches models from a Portkey gateway; same endpoint for every API surface. */
-export const fetchPortkeyModels = async (
-  params: PortkeyFetchParams
-): Promise<{ models: ModelConfiguration[]; error?: string }> => {
+/**
+ * Shared fetch for the gateways whose `available-models` endpoint takes
+ * `{ api_base, api_key, provider_id }` and answers with the same model shape
+ * (Portkey, Cheaper Inference). Errors are returned as data, and also logged,
+ * so a caller that only wants the models still leaves a trace in the console.
+ */
+const fetchGatewayModels = async ({
+  endpoint,
+  label,
+  params,
+}: {
+  endpoint: string;
+  label: string;
+  params: {
+    api_base?: string;
+    api_key?: string;
+    provider_id?: number;
+    signal?: AbortSignal;
+  };
+}): Promise<{ models: ModelConfiguration[]; error?: string }> => {
   const apiBase = params.api_base;
   if (!apiBase) {
     return { models: [], error: "API Base is required" };
   }
 
   try {
-    const response = await fetch("/api/admin/llm/portkey/available-models", {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -823,14 +847,14 @@ export const fetchPortkeyModels = async (
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch (jsonError) {
         console.warn(
-          "Failed to parse Portkey model fetch error response",
+          `Failed to parse ${label} model fetch error response`,
           jsonError
         );
       }
       return { models: [], error: errorMessage };
     }
 
-    const data: PortkeyModelResponse[] = await response.json();
+    const data: GatewayModelResponse[] = await response.json();
     const models: ModelConfiguration[] = data.map((modelData) => ({
       name: modelData.name,
       display_name: modelData.display_name,
@@ -843,8 +867,29 @@ export const fetchPortkeyModels = async (
 
     return { models };
   } catch (error) {
+    console.warn(`Failed to fetch ${label} models`, error);
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
     return { models: [], error: errorMessage };
   }
 };
+
+/** Fetches models from a Portkey gateway; same endpoint for every API surface. */
+export const fetchPortkeyModels = async (
+  params: PortkeyFetchParams
+): Promise<{ models: ModelConfiguration[]; error?: string }> =>
+  fetchGatewayModels({
+    endpoint: "/api/admin/llm/portkey/available-models",
+    label: "Portkey",
+    params,
+  });
+
+/** Fetches models from the Cheaper Inference gateway (/v1/models). */
+export const fetchCheaperInferenceModels = async (
+  params: CheaperInferenceFetchParams
+): Promise<{ models: ModelConfiguration[]; error?: string }> =>
+  fetchGatewayModels({
+    endpoint: "/api/admin/llm/cheaperinference/available-models",
+    label: "Cheaper Inference",
+    params,
+  });

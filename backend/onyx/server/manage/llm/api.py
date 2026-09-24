@@ -85,6 +85,8 @@ from onyx.server.manage.llm.models import (
     BedrockModelsRequest,
     BifrostFinalModelResponse,
     BifrostModelsRequest,
+    CheaperInferenceFinalModelResponse,
+    CheaperInferenceModelsRequest,
     CustomProviderOption,
     DefaultModel,
     LitellmFinalModelResponse,
@@ -2466,6 +2468,118 @@ def get_portkey_available_models(
                 for r in sorted_results
             ],
             source_label="Portkey",
+        )
+
+    return sorted_results
+
+
+def _get_cheaperinference_models_response(
+    api_base: str, api_key: str | None = None
+) -> dict:
+    """Fetch models from the Cheaper Inference gateway's /v1/models endpoint.
+
+    The gateway is OpenAI-compatible, so the base may arrive as either
+    `https://api.cheaperinference.com/v1` or `https://api.cheaperinference.com`.
+    """
+    cleaned_api_base = api_base.strip().rstrip("/")
+    if cleaned_api_base.endswith("/v1"):
+        url = f"{cleaned_api_base}/models"
+    else:
+        url = f"{cleaned_api_base}/v1/models"
+
+    return _get_openai_compatible_models_response(
+        url=url,
+        source_name="Cheaper Inference",
+        api_key=api_key,
+    )
+
+
+@admin_router.post("/cheaperinference/available-models")
+def get_cheaperinference_available_models(
+    request: CheaperInferenceModelsRequest,
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+    db_session: Session = Depends(get_session),
+) -> list[CheaperInferenceFinalModelResponse]:
+    """Fetch available models from the Cheaper Inference gateway."""
+    api_key = _resolve_api_key(
+        request.api_key, request.provider_id, request.api_base, db_session
+    )
+
+    response_json = _get_cheaperinference_models_response(
+        api_base=request.api_base, api_key=api_key
+    )
+
+    models = response_json.get("data", [])
+    if not isinstance(models, list) or len(models) == 0:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No models found from your Cheaper Inference endpoint",
+        )
+
+    results: list[CheaperInferenceFinalModelResponse] = []
+    for model in models:
+        try:
+            model_id = model.get("id", "")
+            model_name = model.get("name", model_id)
+
+            if not model_id:
+                continue
+
+            # Skip embedding models
+            if is_embedding_model(model_id):
+                continue
+
+            results.append(
+                CheaperInferenceFinalModelResponse(
+                    name=model_id,
+                    display_name=model_name,
+                    max_input_tokens=model.get("context_length"),
+                    supports_image_input=litellm_thinks_model_supports_image_input(
+                        model_id, LlmProviderNames.CHEAPERINFERENCE
+                    ),
+                    # Reasoning support from the LiteLLM cost map, with the
+                    # substring heuristic covering models LiteLLM doesn't know
+                    supports_reasoning=model_is_reasoning_model(
+                        model_id, LlmProviderNames.CHEAPERINFERENCE
+                    )
+                    or is_reasoning_model(model_id, model_name),
+                )
+            )
+        except (AttributeError, TypeError, ValueError) as e:
+            # Only a malformed entry is skipped: a non-dict item, a field of the
+            # wrong type, or a value the response model rejects (pydantic's
+            # ValidationError is a ValueError). Anything else - a capability
+            # lookup or LiteLLM failure - propagates rather than silently
+            # shrinking the catalog.
+            logger.warning(
+                "Failed to parse Cheaper Inference model entry",
+                extra={"error": str(e), "item": str(model)[:1000]},
+            )
+
+    if not results:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No compatible models found from your Cheaper Inference endpoint",
+        )
+
+    sorted_results = sorted(results, key=lambda m: m.name.lower())
+
+    # Sync new models to DB if provider_id is specified
+    if request.provider_id is not None:
+        _sync_fetched_models(
+            db_session=db_session,
+            provider_id=request.provider_id,
+            models=[
+                SyncModelEntry(
+                    name=r.name,
+                    display_name=r.display_name,
+                    max_input_tokens=r.max_input_tokens,
+                    supports_image_input=r.supports_image_input,
+                    supports_reasoning=r.supports_reasoning,
+                )
+                for r in sorted_results
+            ],
+            source_label="Cheaper Inference",
         )
 
     return sorted_results

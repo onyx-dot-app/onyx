@@ -5494,6 +5494,14 @@
             }
           }
         },
+        "cheaperInference": {
+          "apiBaseField": {
+            "description": "عنوان URL لنقطة نهاية Cheaper Inference (بما في ذلك إصدار API)."
+          },
+          "apiKeyField": {
+            "description": "الصق مفتاح API من [Cheaper Inference](https://cheaperinference.com/docs) لتحميل النماذج المتاحة."
+          }
+        },
         "custom": {
           "addModelButton": {
             "label": "إضافة نموذج"

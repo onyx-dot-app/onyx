@@ -69,6 +69,7 @@ export enum LLMProviderName {
   NEBIUS_TOKENFACTORY = "nebius_tokenfactory",
   PORTKEY = "portkey",
   VERCEL_AI_GATEWAY = "vercel_ai_gateway",
+  CHEAPERINFERENCE = "cheaperinference",
   CUSTOM = "custom",
 }
 
@@ -264,6 +265,18 @@ export interface NebiusTokenfactoryModelResponse {
   supported_features: string[];
 }
 
+/**
+ * The model shape shared by the gateway `available-models` endpoints whose
+ * responses are identical (Portkey, Cheaper Inference).
+ */
+export interface GatewayModelResponse {
+  name: string;
+  display_name: string;
+  max_input_tokens: number | null;
+  supports_image_input: boolean;
+  supports_reasoning: boolean;
+}
+
 export interface PortkeyFetchParams {
   api_base?: string;
   api_key?: string;
@@ -271,13 +284,16 @@ export interface PortkeyFetchParams {
   signal?: AbortSignal;
 }
 
-export interface PortkeyModelResponse {
-  name: string;
-  display_name: string;
-  max_input_tokens: number | null;
-  supports_image_input: boolean;
-  supports_reasoning: boolean;
+export type PortkeyModelResponse = GatewayModelResponse;
+
+export interface CheaperInferenceFetchParams {
+  api_base?: string;
+  api_key?: string;
+  provider_id?: number;
+  signal?: AbortSignal;
 }
+
+export type CheaperInferenceModelResponse = GatewayModelResponse;
 
 export interface VercelAIGatewayFetchParams {
   api_base?: string;

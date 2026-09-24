@@ -770,6 +770,22 @@ class BifrostFinalModelResponse(BaseModel):
     supports_reasoning: bool
 
 
+# Cheaper Inference dynamic models fetch
+class CheaperInferenceModelsRequest(BaseModel):
+    api_base: str
+    api_key: str | None = None
+    # Existing provider id; resolves the stored key and syncs fetched models on edit
+    provider_id: int | None = None
+
+
+class CheaperInferenceFinalModelResponse(BaseModel):
+    name: str  # Model ID (e.g. "gpt-5-mini", "claude-sonnet-5")
+    display_name: str  # Human-readable name from the gateway
+    max_input_tokens: int | None
+    supports_image_input: bool
+    supports_reasoning: bool
+
+
 # Nebius Token Factory dynamic models fetch
 class NebiusTokenfactoryModelsRequest(BaseModel):
     api_base: str

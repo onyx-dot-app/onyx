@@ -5494,6 +5494,14 @@
             }
           }
         },
+        "cheaperInference": {
+          "apiBaseField": {
+            "description": "Cheaper Inference 엔드포인트 URL입니다(API 버전 포함)."
+          },
+          "apiKeyField": {
+            "description": "사용 가능한 모델을 불러오려면 [Cheaper Inference](https://cheaperinference.com/docs)에서 발급한 API 키를 붙여넣으세요."
+          }
+        },
         "custom": {
           "addModelButton": {
             "label": "모델 추가"

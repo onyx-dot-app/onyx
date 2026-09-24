@@ -5494,6 +5494,14 @@
             }
           }
         },
+        "cheaperInference": {
+          "apiBaseField": {
+            "description": "Cheaper Inference のエンドポイント URL です（API バージョンを含む）。"
+          },
+          "apiKeyField": {
+            "description": "利用可能なモデルを読み込むには、[Cheaper Inference](https://cheaperinference.com/docs) の API キーを貼り付けてください。"
+          }
+        },
         "custom": {
           "addModelButton": {
             "label": "モデルを追加"

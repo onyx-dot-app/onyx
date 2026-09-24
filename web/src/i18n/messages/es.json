@@ -5494,6 +5494,14 @@
             }
           }
         },
+        "cheaperInference": {
+          "apiBaseField": {
+            "description": "URL del endpoint de Cheaper Inference (incluida la versión de la API)."
+          },
+          "apiKeyField": {
+            "description": "Pega tu clave de API de [Cheaper Inference](https://cheaperinference.com/docs) para cargar los modelos disponibles."
+          }
+        },
         "custom": {
           "addModelButton": {
             "label": "Añadir un modelo"

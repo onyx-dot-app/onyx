@@ -5494,6 +5494,14 @@
             }
           }
         },
+        "cheaperInference": {
+          "apiBaseField": {
+            "description": "Cheaper Inference 端点 URL（包括 API 版本）。"
+          },
+          "apiKeyField": {
+            "description": "粘贴来自 [Cheaper Inference](https://cheaperinference.com/docs) 的 API 密钥以加载可用模型。"
+          }
+        },
         "custom": {
           "addModelButton": {
             "label": "添加模型"

@@ -389,6 +389,7 @@ export default function LanguageModelsPage() {
           LLMProviderName.VERCEL_AI_GATEWAY,
           LLMProviderName.NEBIUS_TOKENFACTORY,
           LLMProviderName.BIFROST,
+          LLMProviderName.CHEAPERINFERENCE,
         ],
       },
       {
