@@ -275,11 +275,11 @@ def test_onedrive_trusts_timestamp_delta_for_lower_bound() -> None:
     gateway.download_item.return_value = DriveItemContent(
         sections=[TextSection(text="body")]
     )
-    checkpoint = connector.build_dummy_checkpoint()
-    _, checkpoint = _run_step(connector, checkpoint, start=1_800_000_000)
-    _, checkpoint = _run_step(connector, checkpoint, start=1_800_000_000)
-
-    output, _ = _run_step(connector, checkpoint, start=1_800_000_000)
+    output, _ = _run_step(
+        connector,
+        connector.build_dummy_checkpoint(),
+        start=1_800_000_000,
+    )
 
     assert any(isinstance(item, Document) for item in output)
 
