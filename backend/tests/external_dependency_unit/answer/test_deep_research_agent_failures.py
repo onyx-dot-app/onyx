@@ -1,13 +1,16 @@
+import json
 import threading
 from collections.abc import Iterator
 from typing import Any
 from unittest.mock import patch
 
 import pytest
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.chat.models import AnswerStreamPart, StreamingError
 from onyx.chat.process_message import handle_stream_message_objects
+from onyx.configs.chat_configs import LLM_SOCKET_READ_TIMEOUT
 from onyx.db.chat import get_chat_messages_by_session
 from onyx.db.tools import get_tool_by_name
 from onyx.deep_research.dr_mock_tools import (
@@ -16,10 +19,22 @@ from onyx.deep_research.dr_mock_tools import (
     RESEARCH_AGENT_TOOL_NAME,
 )
 from onyx.deep_research.models import ResearchAgentCallResult
-from onyx.llm import mock_llm_script
-from onyx.llm.interfaces import LanguageModelInput
-from onyx.llm.mock_llm_script import MockLLMStep, MockToolCall
-from onyx.llm.models import ToolMessage
+from onyx.llm.interfaces import (
+    LLM,
+    LanguageModelInput,
+    LLMConfig,
+    LLMUserIdentity,
+    ReasoningEffort,
+    ToolChoice,
+)
+from onyx.llm.model_response import (
+    ChatCompletionDeltaToolCall,
+    Delta,
+    FunctionCall,
+    ModelResponseStream,
+    StreamingChoice,
+)
+from onyx.llm.models import ChatCompletionMessage, ToolMessage
 from onyx.server.query_and_chat.models import MessageResponseIDInfo, SendMessageRequest
 from onyx.tools.fake_tools import research_agent
 from onyx.tools.fake_tools.research_agent import RESEARCH_AGENT_TIMEOUT_MESSAGE
@@ -34,38 +49,137 @@ FAST_TASK = "Research the alpha market"
 SLOW_TASK = "Research the beta market"
 FAST_CALL_ID = "call_research_fast"
 SLOW_CALL_ID = "call_research_slow"
+RESEARCH_PLAN = "1. Research alpha\n2. Research beta"
 FAST_REPORT = "Alpha market findings."
 FINAL_REPORT = "Final report on alpha."
 TEST_TIMEOUT_SECONDS = 5
 SLOW_CHILD_MAX_BLOCK_SECONDS = 120
 
-SCRIPT = [
-    MockLLMStep(text="1. Research alpha\n2. Research beta"),
-    MockLLMStep(
-        tool_calls=[
-            MockToolCall(
-                id=FAST_CALL_ID,
-                name=RESEARCH_AGENT_TOOL_NAME,
-                arguments={RESEARCH_AGENT_TASK_KEY: FAST_TASK},
-            ),
-            MockToolCall(
-                id=SLOW_CALL_ID,
-                name=RESEARCH_AGENT_TOOL_NAME,
-                arguments={RESEARCH_AGENT_TASK_KEY: SLOW_TASK},
-            ),
-        ]
-    ),
-    MockLLMStep(
-        tool_calls=[MockToolCall(name=GENERATE_REPORT_TOOL_NAME)],
-        match_prompt_contains=FAST_TASK,
-    ),
-    MockLLMStep(text=FAST_REPORT, match_prompt_contains=FAST_TASK),
-    MockLLMStep(
-        tool_calls=[MockToolCall(name=GENERATE_REPORT_TOOL_NAME)],
-        match_prompt_contains=RESEARCH_AGENT_TIMEOUT_MESSAGE,
-    ),
-    MockLLMStep(text=FINAL_REPORT),
-]
+
+class ScriptedToolCall(BaseModel):
+    call_id: str
+    name: str
+    arguments: dict[str, str] = {}
+
+
+class RecordedRequest:
+    def __init__(
+        self, messages: list[ChatCompletionMessage], tools: list[dict]
+    ) -> None:
+        self.messages = messages
+        self.tool_names = {tool["function"]["name"] for tool in tools}
+
+    def tool_responses(self) -> dict[str, str]:
+        return {
+            message.tool_call_id: message.content
+            for message in self.messages
+            if isinstance(message, ToolMessage)
+        }
+
+    def mentions(self, text: str) -> bool:
+        return any(
+            isinstance(message.content, str) and text in message.content
+            for message in self.messages
+        )
+
+
+class DeepResearchScriptLLM(LLM):
+    """Answers each Deep Research step by the shape of its request.
+
+    Safe to call from the parallel research-agent threads.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self.requests: list[RecordedRequest] = []
+
+    @property
+    def config(self) -> LLMConfig:
+        return LLMConfig(
+            model_provider="mock",
+            model_name="mock",
+            temperature=1.0,
+            max_input_tokens=1_000_000_000,
+        )
+
+    def stream(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoice | None = None,  # noqa: ARG002
+        structured_response_format: dict | None = None,  # noqa: ARG002
+        max_tokens: int | None = None,  # noqa: ARG002
+        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,  # noqa: ARG002
+        user_identity: LLMUserIdentity | None = None,  # noqa: ARG002
+        stall_timeout_s: int = LLM_SOCKET_READ_TIMEOUT,  # noqa: ARG002
+    ) -> Iterator[ModelResponseStream]:
+        request = RecordedRequest(
+            messages=list(prompt) if isinstance(prompt, list) else [prompt],
+            tools=tools or [],
+        )
+        with self._lock:
+            self.requests.append(request)
+
+        reply = self._reply(request)
+        if isinstance(reply, str):
+            yield _chunk(Delta(content=reply))
+            return
+        yield _chunk(
+            Delta(
+                tool_calls=[
+                    ChatCompletionDeltaToolCall(
+                        id=call.call_id,
+                        index=index,
+                        function=FunctionCall(
+                            name=call.name, arguments=json.dumps(call.arguments)
+                        ),
+                    )
+                    for index, call in enumerate(reply)
+                ]
+            )
+        )
+
+    @staticmethod
+    def _reply(request: RecordedRequest) -> str | list[ScriptedToolCall]:
+        if RESEARCH_AGENT_TOOL_NAME in request.tool_names:
+            if request.tool_responses():
+                return [
+                    ScriptedToolCall(
+                        call_id="call_orchestrator_report",
+                        name=GENERATE_REPORT_TOOL_NAME,
+                    )
+                ]
+            return [
+                ScriptedToolCall(
+                    call_id=FAST_CALL_ID,
+                    name=RESEARCH_AGENT_TOOL_NAME,
+                    arguments={RESEARCH_AGENT_TASK_KEY: FAST_TASK},
+                ),
+                ScriptedToolCall(
+                    call_id=SLOW_CALL_ID,
+                    name=RESEARCH_AGENT_TOOL_NAME,
+                    arguments={RESEARCH_AGENT_TASK_KEY: SLOW_TASK},
+                ),
+            ]
+        if GENERATE_REPORT_TOOL_NAME in request.tool_names:
+            return [
+                ScriptedToolCall(
+                    call_id="call_child_report", name=GENERATE_REPORT_TOOL_NAME
+                )
+            ]
+        if request.tool_responses():
+            return FINAL_REPORT
+        if request.mentions(FAST_TASK):
+            return FAST_REPORT
+        return RESEARCH_PLAN
+
+
+def _chunk(delta: Delta) -> ModelResponseStream:
+    return ModelResponseStream(
+        id="chatcmpl-deep-research",
+        created="1",
+        choice=StreamingChoice(index=0, delta=delta),
+    )
 
 
 @pytest.fixture
@@ -75,15 +189,6 @@ def release_slow_child() -> Iterator[threading.Event]:
         yield release
     finally:
         release.set()
-
-
-def _tool_messages(prompt: LanguageModelInput) -> dict[str, str]:
-    messages = prompt if isinstance(prompt, list) else [prompt]
-    return {
-        message.tool_call_id: message.content
-        for message in messages
-        if isinstance(message, ToolMessage)
-    }
 
 
 def test_timed_out_research_agent_is_a_failed_call(
@@ -96,9 +201,8 @@ def test_timed_out_research_agent_is_a_failed_call(
     user = create_test_user(db_session, email_prefix="dr_research_agent_timeout")
     chat_session = create_chat_session(db_session=db_session, user=user)
 
+    llm = DeepResearchScriptLLM()
     real_research_agent_call = research_agent.run_research_agent_call
-    real_prompt_text = mock_llm_script.prompt_text_for_matching
-    prompts: list[LanguageModelInput] = []
 
     def _research_agent_call(
         research_agent_call: ToolCallKickoff, *args: Any
@@ -108,25 +212,19 @@ def test_timed_out_research_agent_is_a_failed_call(
             return None
         return real_research_agent_call(research_agent_call, *args)
 
-    def _record_prompt(prompt: LanguageModelInput) -> str:
-        prompts.append(prompt)
-        return real_prompt_text(prompt)
-
     request = SendMessageRequest(
         message="Compare the alpha and beta markets",
         chat_session_id=chat_session.id,
         deep_research=True,
-        mock_llm_script=SCRIPT,
     )
 
     with (
-        patch("onyx.chat.process_message.INTEGRATION_TESTS_MODE", True),
+        patch("onyx.chat.process_message.get_llm_for_persona", return_value=llm),
         patch("onyx.deep_research.dr_loop.SKIP_DEEP_RESEARCH_CLARIFICATION", True),
         patch.object(
             research_agent, "RESEARCH_AGENT_TIMEOUT_SECONDS", TEST_TIMEOUT_SECONDS
         ),
         patch.object(research_agent, "run_research_agent_call", _research_agent_call),
-        patch("onyx.llm.multi_llm.prompt_text_for_matching", _record_prompt),
     ):
         parts: list[AnswerStreamPart] = list(
             handle_stream_message_objects(new_msg_req=request, user=user)
@@ -136,13 +234,16 @@ def test_timed_out_research_agent_is_a_failed_call(
     assert not errors, errors
 
     # The orchestrator's next request answers the timed-out call with the failure message.
-    tool_responses = [
-        responses
-        for responses in map(_tool_messages, prompts)
-        if SLOW_CALL_ID in responses
+    orchestrator_follow_ups = [
+        recorded.tool_responses()
+        for recorded in llm.requests
+        if RESEARCH_AGENT_TOOL_NAME in recorded.tool_names
+        and SLOW_CALL_ID in recorded.tool_responses()
     ]
-    assert tool_responses, "No LLM request carried a response for the timed-out call"
-    assert tool_responses[0] == {
+    assert orchestrator_follow_ups, (
+        "No orchestrator request answered the timed-out call"
+    )
+    assert orchestrator_follow_ups[0] == {
         FAST_CALL_ID: FAST_REPORT,
         SLOW_CALL_ID: RESEARCH_AGENT_TIMEOUT_MESSAGE,
     }
