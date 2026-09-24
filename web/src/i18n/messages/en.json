@@ -2583,6 +2583,10 @@
           "label": "Excluded Paths",
           "description": "Glob patterns matched against each file path and filename, such as '*.tmp' or 'Archive/*'."
         },
+        "organizationLinks": {
+          "label": "Treat organization links as public",
+          "description": "Treat files shared through an organization-wide link as visible to all Onyx users."
+        },
         "authorityHost": {
           "label": "Authority Host",
           "description": "Microsoft identity authority host. Use https://login.microsoftonline.us for GCC High or DoD."

@@ -41,6 +41,7 @@ class OneDriveConnectorConfig(BaseModel):
 
 class OneDriveSettings(OneDriveConnectorConfig):
     excluded_paths: list[str] = Field(default_factory=list)
+    treat_organization_link_as_public: bool = False
 
 
 class OneDriveUser(BaseModel):

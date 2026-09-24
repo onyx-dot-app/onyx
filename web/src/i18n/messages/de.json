@@ -2583,6 +2583,10 @@
           "label": "Ausgeschlossene Pfade",
           "description": "Glob-Muster für Dateipfade und Dateinamen, zum Beispiel '*.tmp' oder 'Archive/*'."
         },
+        "organizationLinks": {
+          "label": "Organisationslinks als öffentlich behandeln",
+          "description": "Dateien mit einem organisationsweiten Link für alle Onyx-Benutzer sichtbar machen."
+        },
         "authorityHost": {
           "label": "Autoritätshost",
           "description": "Microsoft-Identitätsautoritätshost. Verwenden Sie für GCC High oder DoD https://login.microsoftonline.us."

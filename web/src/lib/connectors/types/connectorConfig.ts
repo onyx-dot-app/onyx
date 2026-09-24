@@ -57,6 +57,7 @@ export enum OneDriveScope {
 export interface OneDriveConfig {
   users: string[];
   excluded_paths: string[];
+  treat_organization_link_as_public: boolean;
   authority_host: string;
   graph_api_host: string;
 }
