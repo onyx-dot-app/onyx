@@ -4,6 +4,8 @@
     "MiniMax-M2": {
       "attachment": false,
       "cost": {
+        "cache_read": 0.03,
+        "cache_write": 0.375,
         "input": 0.3,
         "output": 1.2
       },
@@ -20,6 +22,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "MiniMax-M2",
       "open_weights": true,
       "reasoning": true,
@@ -48,6 +51,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "MiniMax-M2.1",
       "open_weights": true,
       "reasoning": true,
@@ -76,6 +80,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "MiniMax-M2.5",
       "open_weights": true,
       "reasoning": true,
@@ -205,12 +210,29 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "MiniMax-M3",
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-06-01",
       "temperature": true,
       "tool_call": true
+    },
+    "speech-02-hd": {
+      "mode": "audio_speech",
+      "name": "speech-02-hd"
+    },
+    "speech-02-turbo": {
+      "mode": "audio_speech",
+      "name": "speech-02-turbo"
+    },
+    "speech-2.6-hd": {
+      "mode": "audio_speech",
+      "name": "speech-2.6-hd"
+    },
+    "speech-2.6-turbo": {
+      "mode": "audio_speech",
+      "name": "speech-2.6-turbo"
     }
   },
   "models_dev_providers": [

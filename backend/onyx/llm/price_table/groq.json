@@ -41,6 +41,7 @@
           "audio"
         ]
       },
+      "mode": "audio_speech",
       "name": "Canopy Labs Orpheus Arabic Saudi",
       "open_weights": false,
       "reasoning": false,
@@ -64,6 +65,7 @@
           "audio"
         ]
       },
+      "mode": "audio_speech",
       "name": "Canopy Labs Orpheus V1 English",
       "open_weights": false,
       "reasoning": false,
@@ -187,6 +189,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Llama Prompt Guard 2 22M",
       "open_weights": true,
       "reasoning": false,
@@ -214,6 +217,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Prompt Guard 2 86M",
       "open_weights": true,
       "reasoning": false,
@@ -242,6 +246,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GPT OSS 120B",
       "open_weights": true,
       "reasoning": true,
@@ -270,6 +275,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GPT OSS 20B",
       "open_weights": true,
       "reasoning": true,
@@ -281,6 +287,7 @@
     "openai/gpt-oss-safeguard-20b": {
       "attachment": false,
       "cost": {
+        "cache_read": 0.037,
         "input": 0.075,
         "output": 0.3
       },
@@ -297,6 +304,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Safety GPT OSS 20B",
       "open_weights": true,
       "reasoning": true,
@@ -355,6 +363,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Qwen3.8 27B",
       "open_weights": true,
       "reasoning": true,
@@ -365,6 +374,10 @@
     },
     "whisper-large-v3": {
       "attachment": false,
+      "cost": {
+        "second": 0.0,
+        "second_input": 3.083e-05
+      },
       "family": "whisper",
       "limit": {
         "context": 0,
@@ -378,6 +391,7 @@
           "text"
         ]
       },
+      "mode": "audio_transcription",
       "name": "Whisper",
       "open_weights": true,
       "reasoning": false,
@@ -387,6 +401,10 @@
     },
     "whisper-large-v3-turbo": {
       "attachment": false,
+      "cost": {
+        "second": 0.0,
+        "second_input": 1.111e-05
+      },
       "family": "whisper",
       "limit": {
         "context": 0,
@@ -400,6 +418,7 @@
           "text"
         ]
       },
+      "mode": "audio_transcription",
       "name": "Whisper Large V3 Turbo",
       "open_weights": true,
       "reasoning": false,

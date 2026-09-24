@@ -85,6 +85,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Haiku 4.5 (latest)",
       "open_weights": false,
       "reasoning": true,
@@ -183,6 +184,36 @@
       "reasoning": true,
       "release_date": "2026-07-24",
       "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "claude-opus-5.5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "cache_write": 5,
+        "input": 4,
+        "output": 20
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 5.5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-22",
       "temperature": false,
       "tool_call": true
     },
@@ -394,6 +425,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GPT-5 Mini",
       "open_weights": false,
       "reasoning": true,
@@ -425,6 +457,7 @@
           "text"
         ]
       },
+      "mode": "responses",
       "name": "GPT-5.3 Codex",
       "open_weights": false,
       "reasoning": true,
@@ -787,6 +820,106 @@
       "temperature": false,
       "tool_call": true
     },
+    "gpt-6-luna": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.01,
+        "cache_write": 0.125,
+        "context_over_200k": {
+          "cache_read": 0.02,
+          "cache_write": 0.25,
+          "input": 0.2,
+          "output": 0.75
+        },
+        "input": 0.1,
+        "output": 0.5,
+        "tiers": [
+          {
+            "cache_read": 0.02,
+            "cache_write": 0.25,
+            "input": 0.2,
+            "output": 0.75,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-luna",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6 Luna",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "gpt-6-sol": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "cache_write": 2.5,
+        "context_over_200k": {
+          "cache_read": 0.4,
+          "cache_write": 5,
+          "input": 4,
+          "output": 15
+        },
+        "input": 2,
+        "output": 10,
+        "tiers": [
+          {
+            "cache_read": 0.4,
+            "cache_write": 5,
+            "input": 4,
+            "output": 15,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-sol",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6 Sol",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
     "grok-4.5": {
       "attachment": true,
       "cost": {
@@ -1043,6 +1176,27 @@
       "release_date": "2026-08-11",
       "structured_output": true,
       "tool_call": true
+    },
+    "text-embedding-3-small": {
+      "limit": {
+        "context": 8191
+      },
+      "mode": "embedding",
+      "name": "text-embedding-3-small"
+    },
+    "text-embedding-3-small-inference": {
+      "limit": {
+        "context": 8191
+      },
+      "mode": "embedding",
+      "name": "text-embedding-3-small-inference"
+    },
+    "text-embedding-ada-002": {
+      "limit": {
+        "context": 8191
+      },
+      "mode": "embedding",
+      "name": "text-embedding-ada-002"
     }
   },
   "models_dev_providers": [

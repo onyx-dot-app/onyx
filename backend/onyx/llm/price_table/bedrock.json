@@ -9,6 +9,56 @@
     "qwen.qwen3-coder-480b-a35b": "qwen.qwen3-coder-480b-a35b-v1:0"
   },
   "models": {
+    "1024-x-1024/50-steps/bedrock/amazon.nova-canvas-v1:0": {
+      "cost": {
+        "image": 0.06
+      },
+      "limit": {
+        "context": 2600
+      },
+      "mode": "image_generation",
+      "name": "1024-x-1024/50-steps/bedrock/amazon.nova-canvas-v1:0"
+    },
+    "1024-x-1024/50-steps/stability.stable-diffusion-xl-v1": {
+      "cost": {
+        "image": 0.04
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_generation",
+      "name": "1024-x-1024/50-steps/stability.stable-diffusion-xl-v1"
+    },
+    "1024-x-1024/max-steps/stability.stable-diffusion-xl-v1": {
+      "cost": {
+        "image": 0.08
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_generation",
+      "name": "1024-x-1024/max-steps/stability.stable-diffusion-xl-v1"
+    },
+    "512-x-512/50-steps/stability.stable-diffusion-xl-v0": {
+      "cost": {
+        "image": 0.018
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_generation",
+      "name": "512-x-512/50-steps/stability.stable-diffusion-xl-v0"
+    },
+    "512-x-512/max-steps/stability.stable-diffusion-xl-v0": {
+      "cost": {
+        "image": 0.036
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_generation",
+      "name": "512-x-512/max-steps/stability.stable-diffusion-xl-v0"
+    },
     "amazon.nova-2-lite-v1:0": {
       "attachment": true,
       "cost": {
@@ -39,6 +89,36 @@
       "release_date": "2025-12-02",
       "temperature": true,
       "tool_call": true
+    },
+    "amazon.nova-2-multimodal-embeddings-v1:0": {
+      "cost": {
+        "image_input": 6e-05,
+        "input": 0.135,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 8172
+      },
+      "mode": "embedding",
+      "name": "amazon.nova-2-multimodal-embeddings-v1:0"
+    },
+    "amazon.nova-2-sonic-v1:0": {
+      "cost": {
+        "input": 0.33,
+        "output": 2.75
+      },
+      "mode": "realtime",
+      "name": "amazon.nova-2-sonic-v1:0"
+    },
+    "amazon.nova-canvas-v1:0": {
+      "cost": {
+        "image": 0.06
+      },
+      "limit": {
+        "context": 2600
+      },
+      "mode": "image_generation",
+      "name": "amazon.nova-canvas-v1:0"
     },
     "amazon.nova-lite-v1:0": {
       "attachment": true,
@@ -129,6 +209,87 @@
       "release_date": "2024-12-03",
       "temperature": true,
       "tool_call": true
+    },
+    "amazon.rerank-v1:0": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 32000,
+        "output": 32000
+      },
+      "mode": "rerank",
+      "name": "amazon.rerank-v1:0"
+    },
+    "amazon.titan-embed-g1-text-02": {
+      "cost": {
+        "input": 0.09999999999999999,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 8192
+      },
+      "mode": "embedding",
+      "name": "amazon.titan-embed-g1-text-02"
+    },
+    "amazon.titan-embed-image-v1": {
+      "cost": {
+        "image_input": 6e-05,
+        "input": 0.7999999999999999,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 128
+      },
+      "mode": "embedding",
+      "name": "amazon.titan-embed-image-v1"
+    },
+    "amazon.titan-embed-text-v1": {
+      "cost": {
+        "input": 0.09999999999999999,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 8192
+      },
+      "mode": "embedding",
+      "name": "amazon.titan-embed-text-v1"
+    },
+    "amazon.titan-embed-text-v2:0": {
+      "cost": {
+        "input": 0.02,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 8192
+      },
+      "mode": "embedding",
+      "name": "amazon.titan-embed-text-v2:0"
+    },
+    "amazon.titan-image-generator-v1": {
+      "cost": {
+        "image": 0.008,
+        "image_input": 0.0
+      },
+      "mode": "image_generation",
+      "name": "amazon.titan-image-generator-v1"
+    },
+    "amazon.titan-image-generator-v2": {
+      "cost": {
+        "image": 0.008,
+        "image_input": 0.0
+      },
+      "mode": "image_generation",
+      "name": "amazon.titan-image-generator-v2"
+    },
+    "amazon.titan-image-generator-v2:0": {
+      "cost": {
+        "image": 0.008,
+        "image_input": 0.0
+      },
+      "mode": "image_generation",
+      "name": "amazon.titan-image-generator-v2:0"
     },
     "anthropic.claude-fable-5": {
       "attachment": true,
@@ -954,6 +1115,51 @@
       "temperature": true,
       "tool_call": true
     },
+    "cohere.embed-english-v3": {
+      "cost": {
+        "input": 0.09999999999999999,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 512
+      },
+      "mode": "embedding",
+      "name": "cohere.embed-english-v3"
+    },
+    "cohere.embed-multilingual-v3": {
+      "cost": {
+        "input": 0.09999999999999999,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 512
+      },
+      "mode": "embedding",
+      "name": "cohere.embed-multilingual-v3"
+    },
+    "cohere.embed-v4:0": {
+      "cost": {
+        "input": 0.12,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 128000
+      },
+      "mode": "embedding",
+      "name": "cohere.embed-v4:0"
+    },
+    "cohere.rerank-v3-5:0": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 32000,
+        "output": 32000
+      },
+      "mode": "rerank",
+      "name": "cohere.rerank-v3-5:0"
+    },
     "deepseek.r1-v1:0": {
       "attachment": false,
       "cost": {
@@ -1549,6 +1755,28 @@
       "temperature": true,
       "tool_call": true
     },
+    "eu.twelvelabs.marengo-embed-2-7-v1:0": {
+      "cost": {
+        "image_input": 0.0001,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "embedding",
+      "name": "eu.twelvelabs.marengo-embed-2-7-v1:0"
+    },
+    "eu.twelvelabs.marengo-embed-3-0-v1:0": {
+      "cost": {
+        "image_input": 0.0001,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 500
+      },
+      "mode": "embedding",
+      "name": "eu.twelvelabs.marengo-embed-3-0-v1:0"
+    },
     "global.amazon.nova-2-lite-v1:0": {
       "attachment": true,
       "cost": {
@@ -1977,6 +2205,47 @@
       "temperature": false,
       "tool_call": true
     },
+    "global.cohere.embed-v4:0": {
+      "cost": {
+        "input": 0.12,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 128000
+      },
+      "mode": "embedding",
+      "name": "global.cohere.embed-v4:0"
+    },
+    "global.moonshotai.kimi-k3": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.3,
+        "cache_write": 3.75,
+        "input": 3,
+        "output": 15
+      },
+      "family": "kimi-k3",
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Kimi K3 (Global)",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-07-16",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
     "global.openai.gpt-5.6-luna": {
       "attachment": true,
       "cost": {
@@ -2169,6 +2438,104 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-04",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "global.openai.gpt-6-luna": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.01,
+        "cache_write": 0.125,
+        "context_over_200k": {
+          "cache_read": 0.02,
+          "cache_write": 0.25,
+          "input": 0.2,
+          "output": 0.75
+        },
+        "input": 0.1,
+        "output": 0.5,
+        "tiers": [
+          {
+            "cache_read": 0.02,
+            "cache_write": 0.25,
+            "input": 0.2,
+            "output": 0.75,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-luna",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6 Luna (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "global.openai.gpt-6-sol": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "cache_write": 2.5,
+        "context_over_200k": {
+          "cache_read": 0.4,
+          "cache_write": 5,
+          "input": 4,
+          "output": 15
+        },
+        "input": 2,
+        "output": 10,
+        "tiers": [
+          {
+            "cache_read": 0.4,
+            "cache_write": 5,
+            "input": 4,
+            "output": 15,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-sol",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6 Sol (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-22",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -2372,6 +2739,10 @@
       "structured_output": true,
       "temperature": true,
       "tool_call": true
+    },
+    "guardrails": {
+      "mode": "guardrail",
+      "name": "guardrails"
     },
     "in.openai.gpt-5.6-luna": {
       "attachment": true,
@@ -2748,6 +3119,26 @@
       "temperature": false,
       "tool_call": true
     },
+    "max-x-max/50-steps/stability.stable-diffusion-xl-v0": {
+      "cost": {
+        "image": 0.036
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_generation",
+      "name": "max-x-max/50-steps/stability.stable-diffusion-xl-v0"
+    },
+    "max-x-max/max-steps/stability.stable-diffusion-xl-v0": {
+      "cost": {
+        "image": 0.072
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_generation",
+      "name": "max-x-max/max-steps/stability.stable-diffusion-xl-v0"
+    },
     "meta.llama3-1-70b-instruct-v1:0": {
       "attachment": false,
       "cost": {
@@ -2767,6 +3158,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Llama 3.1 70B Instruct",
       "open_weights": true,
       "reasoning": false,
@@ -2793,6 +3185,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Llama 3.1 8B Instruct",
       "open_weights": true,
       "reasoning": false,
@@ -3258,6 +3651,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Kimi K2.5",
       "open_weights": true,
       "reasoning": true,
@@ -3987,6 +4381,274 @@
       "temperature": true,
       "tool_call": true
     },
+    "stability.sd3-5-large-v1:0": {
+      "cost": {
+        "image": 0.08
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_generation",
+      "name": "stability.sd3-5-large-v1:0"
+    },
+    "stability.sd3-large-v1:0": {
+      "cost": {
+        "image": 0.08
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_generation",
+      "name": "stability.sd3-large-v1:0"
+    },
+    "stability.stable-conservative-upscale-v1:0": {
+      "cost": {
+        "image": 0.4
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "stability.stable-conservative-upscale-v1:0"
+    },
+    "stability.stable-creative-upscale-v1:0": {
+      "cost": {
+        "image": 0.6
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "stability.stable-creative-upscale-v1:0"
+    },
+    "stability.stable-fast-upscale-v1:0": {
+      "cost": {
+        "image": 0.03
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "stability.stable-fast-upscale-v1:0"
+    },
+    "stability.stable-image-control-sketch-v1:0": {
+      "cost": {
+        "image": 0.07
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "stability.stable-image-control-sketch-v1:0"
+    },
+    "stability.stable-image-control-structure-v1:0": {
+      "cost": {
+        "image": 0.07
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "stability.stable-image-control-structure-v1:0"
+    },
+    "stability.stable-image-core-v1:0": {
+      "cost": {
+        "image": 0.04
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_generation",
+      "name": "stability.stable-image-core-v1:0"
+    },
+    "stability.stable-image-core-v1:1": {
+      "cost": {
+        "image": 0.04
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_generation",
+      "name": "stability.stable-image-core-v1:1"
+    },
+    "stability.stable-image-erase-object-v1:0": {
+      "cost": {
+        "image": 0.07
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "stability.stable-image-erase-object-v1:0"
+    },
+    "stability.stable-image-inpaint-v1:0": {
+      "cost": {
+        "image": 0.07
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "stability.stable-image-inpaint-v1:0"
+    },
+    "stability.stable-image-remove-background-v1:0": {
+      "cost": {
+        "image": 0.07
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "stability.stable-image-remove-background-v1:0"
+    },
+    "stability.stable-image-search-recolor-v1:0": {
+      "cost": {
+        "image": 0.07
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "stability.stable-image-search-recolor-v1:0"
+    },
+    "stability.stable-image-search-replace-v1:0": {
+      "cost": {
+        "image": 0.07
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "stability.stable-image-search-replace-v1:0"
+    },
+    "stability.stable-image-style-guide-v1:0": {
+      "cost": {
+        "image": 0.07
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "stability.stable-image-style-guide-v1:0"
+    },
+    "stability.stable-image-ultra-v1:0": {
+      "cost": {
+        "image": 0.14
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_generation",
+      "name": "stability.stable-image-ultra-v1:0"
+    },
+    "stability.stable-image-ultra-v1:1": {
+      "cost": {
+        "image": 0.14
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_generation",
+      "name": "stability.stable-image-ultra-v1:1"
+    },
+    "stability.stable-outpaint-v1:0": {
+      "cost": {
+        "image": 0.06
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "stability.stable-outpaint-v1:0"
+    },
+    "stability.stable-style-transfer-v1:0": {
+      "cost": {
+        "image": 0.08
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "stability.stable-style-transfer-v1:0"
+    },
+    "twelvelabs.marengo-embed-2-7-v1:0": {
+      "cost": {
+        "image_input": 0.0001,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "embedding",
+      "name": "twelvelabs.marengo-embed-2-7-v1:0"
+    },
+    "twelvelabs.marengo-embed-3-0-v1:0": {
+      "cost": {
+        "image_input": 0.0001,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 500
+      },
+      "mode": "embedding",
+      "name": "twelvelabs.marengo-embed-3-0-v1:0"
+    },
+    "us-gov-east-1/amazon.titan-embed-text-v1": {
+      "cost": {
+        "input": 0.09999999999999999,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 8192
+      },
+      "mode": "embedding",
+      "name": "us-gov-east-1/amazon.titan-embed-text-v1"
+    },
+    "us-gov-east-1/amazon.titan-embed-text-v2:0": {
+      "cost": {
+        "input": 0.19999999999999998,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 8192
+      },
+      "mode": "embedding",
+      "name": "us-gov-east-1/amazon.titan-embed-text-v2:0"
+    },
+    "us-gov-west-1/amazon.nova-2-multimodal-embeddings-v1:0": {
+      "cost": {
+        "image_input": 7.2e-05,
+        "input": 0.162,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 8172
+      },
+      "mode": "embedding",
+      "name": "us-gov-west-1/amazon.nova-2-multimodal-embeddings-v1:0"
+    },
+    "us-gov-west-1/amazon.titan-embed-text-v1": {
+      "cost": {
+        "input": 0.09999999999999999,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 8192
+      },
+      "mode": "embedding",
+      "name": "us-gov-west-1/amazon.titan-embed-text-v1"
+    },
+    "us-gov-west-1/amazon.titan-embed-text-v2:0": {
+      "cost": {
+        "input": 0.19999999999999998,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 8192
+      },
+      "mode": "embedding",
+      "name": "us-gov-west-1/amazon.titan-embed-text-v2:0"
+    },
     "us-gov.openai.gpt-oss-120b-1:0": {
       "attachment": false,
       "cost": {
@@ -4071,6 +4733,16 @@
       "release_date": "2025-12-02",
       "temperature": true,
       "tool_call": true
+    },
+    "us.amazon.nova-canvas-v1:0": {
+      "cost": {
+        "image": 0.06
+      },
+      "limit": {
+        "context": 2600
+      },
+      "mode": "image_generation",
+      "name": "us.amazon.nova-canvas-v1:0"
     },
     "us.amazon.nova-lite-v1:0": {
       "attachment": true,
@@ -4623,6 +5295,17 @@
       "temperature": false,
       "tool_call": true
     },
+    "us.cohere.embed-v4:0": {
+      "cost": {
+        "input": 0.12,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 128000
+      },
+      "mode": "embedding",
+      "name": "us.cohere.embed-v4:0"
+    },
     "us.deepseek.r1-v1:0": {
       "attachment": false,
       "cost": {
@@ -4668,6 +5351,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Llama 3.1 70B Instruct (US)",
       "open_weights": true,
       "reasoning": false,
@@ -4694,6 +5378,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Llama 3.1 8B Instruct (US)",
       "open_weights": true,
       "reasoning": false,
@@ -4806,6 +5491,36 @@
       "reasoning": false,
       "release_date": "2025-04-08",
       "temperature": true,
+      "tool_call": true
+    },
+    "us.moonshotai.kimi-k3": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.33,
+        "cache_write": 4.125,
+        "input": 3.3,
+        "output": 16.5
+      },
+      "family": "kimi-k3",
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Kimi K3 (US)",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-07-16",
+      "structured_output": true,
+      "temperature": false,
       "tool_call": true
     },
     "us.openai.gpt-5.6-luna": {
@@ -5003,6 +5718,126 @@
       "structured_output": true,
       "temperature": false,
       "tool_call": true
+    },
+    "us.openai.gpt-6-luna": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.011,
+        "cache_write": 0.1375,
+        "context_over_200k": {
+          "cache_read": 0.022,
+          "cache_write": 0.275,
+          "input": 0.22,
+          "output": 0.825
+        },
+        "input": 0.11,
+        "output": 0.55,
+        "tiers": [
+          {
+            "cache_read": 0.022,
+            "cache_write": 0.275,
+            "input": 0.22,
+            "output": 0.825,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-luna",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6 Luna (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "us.openai.gpt-6-sol": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.22,
+        "cache_write": 2.75,
+        "context_over_200k": {
+          "cache_read": 0.44,
+          "cache_write": 5.5,
+          "input": 4.4,
+          "output": 16.5
+        },
+        "input": 2.2,
+        "output": 11,
+        "tiers": [
+          {
+            "cache_read": 0.44,
+            "cache_write": 5.5,
+            "input": 4.4,
+            "output": 16.5,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-sol",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6 Sol (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "us.twelvelabs.marengo-embed-2-7-v1:0": {
+      "cost": {
+        "image_input": 0.0001,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "embedding",
+      "name": "us.twelvelabs.marengo-embed-2-7-v1:0"
+    },
+    "us.twelvelabs.marengo-embed-3-0-v1:0": {
+      "cost": {
+        "image_input": 0.0001,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 500
+      },
+      "mode": "embedding",
+      "name": "us.twelvelabs.marengo-embed-3-0-v1:0"
     },
     "us.writer.palmyra-x4-v1:0": {
       "attachment": false,

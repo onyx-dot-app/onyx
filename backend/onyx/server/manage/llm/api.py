@@ -55,8 +55,8 @@ from onyx.llm.factory import (
     get_max_input_tokens_from_llm_provider,
 )
 from onyx.llm.model_capabilities import (
+    catalog_model_supports_image_input,
     get_bedrock_token_limit,
-    litellm_thinks_model_supports_image_input,
     model_is_reasoning_model,
 )
 from onyx.llm.utils import (
@@ -409,6 +409,8 @@ def fetch_custom_provider_names(
     covered by a well-known provider modal)."""
     import litellm
 
+    # models_by_provider is the litellm *call-path* provider registry — which
+    # providers litellm can route a completion to — not the model price table.
     well_known = {p.value for p in WELL_KNOWN_PROVIDER_NAMES}
     return sorted(
         (
@@ -1338,7 +1340,7 @@ def get_bedrock_available_models(
                                 else generate_bedrock_display_name(profile_id)
                             ),
                             "supports_image_input": (
-                                litellm_thinks_model_supports_image_input(
+                                catalog_model_supports_image_input(
                                     profile_id, LlmProviderNames.BEDROCK
                                 )
                             ),
@@ -1960,11 +1962,11 @@ def get_bifrost_available_models(
                     name=model_id,
                     display_name=model_name,
                     max_input_tokens=model.get("context_length"),
-                    # Vision support from the LiteLLM cost map, not a hardcoded list
-                    supports_image_input=litellm_thinks_model_supports_image_input(
+                    # Vision support from the model catalog, not a hardcoded list
+                    supports_image_input=catalog_model_supports_image_input(
                         model_id, LlmProviderNames.BIFROST
                     ),
-                    # Reasoning support from the LiteLLM cost map, with the
+                    # Reasoning support from the model catalog, with the
                     # substring heuristic covering models LiteLLM doesn't know
                     supports_reasoning=model_is_reasoning_model(
                         model_id, LlmProviderNames.BIFROST
@@ -2210,10 +2212,10 @@ def get_openai_compatible_server_available_models(
                     name=model_id,
                     display_name=model_name,
                     max_input_tokens=model.get("context_length"),
-                    supports_image_input=litellm_thinks_model_supports_image_input(
+                    supports_image_input=catalog_model_supports_image_input(
                         model_id, LlmProviderNames.OPENAI_COMPATIBLE
                     ),
-                    # Reasoning support from the LiteLLM cost map, with the
+                    # Reasoning support from the model catalog, with the
                     # substring heuristic covering models LiteLLM doesn't know
                     supports_reasoning=model_is_reasoning_model(
                         model_id, LlmProviderNames.OPENAI_COMPATIBLE
@@ -2423,10 +2425,10 @@ def get_portkey_available_models(
                     name=model_id,
                     display_name=model_name,
                     max_input_tokens=model.get("context_length"),
-                    supports_image_input=litellm_thinks_model_supports_image_input(
+                    supports_image_input=catalog_model_supports_image_input(
                         model_id, LlmProviderNames.PORTKEY
                     ),
-                    # Reasoning support from the LiteLLM cost map, with the
+                    # Reasoning support from the model catalog, with the
                     # substring heuristic covering models LiteLLM doesn't know
                     supports_reasoning=model_is_reasoning_model(
                         model_id, LlmProviderNames.PORTKEY

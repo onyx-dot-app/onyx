@@ -17,6 +17,17 @@
     "claude-sonnet-5": "claude-sonnet-5@default"
   },
   "models": {
+    "chirp": {
+      "mode": "audio_speech",
+      "name": "chirp"
+    },
+    "chirp_3": {
+      "cost": {
+        "second_input": 0.00026667
+      },
+      "mode": "audio_transcription",
+      "name": "chirp_3"
+    },
     "claude-fable-5-1@default": {
       "attachment": true,
       "cost": {
@@ -544,6 +555,29 @@
       "temperature": false,
       "tool_call": true
     },
+    "deep-research-pro-preview-12-2025": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "image": 0.134,
+        "image_input": 0.0011,
+        "input": 2.0,
+        "output": 12.0
+      },
+      "limit": {
+        "context": 65536,
+        "output": 32768
+      },
+      "mode": "image_generation",
+      "name": "deep-research-pro-preview-12-2025"
+    },
+    "deepseek-ai/deepseek-ocr-maas": {
+      "cost": {
+        "input": 0.3,
+        "output": 1.2
+      },
+      "mode": "ocr",
+      "name": "deepseek-ai/deepseek-ocr-maas"
+    },
     "deepseek-ai/deepseek-v3.1-maas": {
       "attachment": false,
       "cost": {
@@ -629,6 +663,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 2.5 Flash",
       "open_weights": false,
       "reasoning": true,
@@ -639,6 +674,8 @@
     "gemini-2.5-flash-image": {
       "attachment": true,
       "cost": {
+        "cache_read": 0.03,
+        "image": 0.039,
         "input": 0.3,
         "output": 30
       },
@@ -657,6 +694,7 @@
           "image"
         ]
       },
+      "mode": "image_generation",
       "name": "Nano Banana",
       "open_weights": false,
       "reasoning": false,
@@ -689,12 +727,29 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 2.5 Flash-Lite",
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-06-17",
       "temperature": true,
       "tool_call": true
+    },
+    "gemini-2.5-flash-native-audio": {
+      "cost": {
+        "input": 0.5,
+        "output": 2.0
+      },
+      "mode": "realtime",
+      "name": "gemini-2.5-flash-native-audio"
+    },
+    "gemini-2.5-flash-preview-tts": {
+      "cost": {
+        "input": 0.5,
+        "output": 10.0
+      },
+      "mode": "audio_speech",
+      "name": "gemini-2.5-flash-preview-tts"
     },
     "gemini-2.5-flash-tts": {
       "attachment": false,
@@ -762,6 +817,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 2.5 Pro",
       "open_weights": false,
       "reasoning": true,
@@ -820,6 +876,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 3 Flash Preview",
       "open_weights": false,
       "reasoning": true,
@@ -832,6 +889,8 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.2,
+        "image": 0.134,
+        "image_input": 0.0011,
         "input": 2,
         "output": 120
       },
@@ -850,6 +909,7 @@
           "image"
         ]
       },
+      "mode": "image_generation",
       "name": "Nano Banana Pro",
       "open_weights": false,
       "reasoning": true,
@@ -857,10 +917,26 @@
       "temperature": true,
       "tool_call": false
     },
+    "gemini-3-pro-image-preview": {
+      "cost": {
+        "image": 0.134,
+        "image_input": 0.0011,
+        "input": 2.0,
+        "output": 12.0
+      },
+      "limit": {
+        "context": 65536,
+        "output": 32768
+      },
+      "mode": "image_generation",
+      "name": "gemini-3-pro-image-preview"
+    },
     "gemini-3.1-flash-image": {
       "attachment": true,
       "cost": {
         "cache_read": 0.05,
+        "image": 0.0672,
+        "image_input": 0.00056,
         "input": 0.5,
         "output": 60
       },
@@ -881,12 +957,27 @@
           "image"
         ]
       },
+      "mode": "image_generation",
       "name": "Nano Banana 2",
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-05-28",
       "temperature": true,
       "tool_call": false
+    },
+    "gemini-3.1-flash-image-preview": {
+      "cost": {
+        "image": 0.0672,
+        "image_input": 0.00056,
+        "input": 0.5,
+        "output": 3.0
+      },
+      "limit": {
+        "context": 65536,
+        "output": 32768
+      },
+      "mode": "image_generation",
+      "name": "gemini-3.1-flash-image-preview"
     },
     "gemini-3.1-flash-lite": {
       "attachment": true,
@@ -913,6 +1004,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 3.1 Flash Lite",
       "open_weights": false,
       "reasoning": true,
@@ -920,6 +1012,21 @@
       "structured_output": true,
       "temperature": true,
       "tool_call": true
+    },
+    "gemini-3.1-flash-lite-image": {
+      "cost": {
+        "cache_read": 0.024999999999999998,
+        "image": 0.0336,
+        "image_input": 0.00028,
+        "input": 0.25,
+        "output": 1.5
+      },
+      "limit": {
+        "context": 65536,
+        "output": 4096
+      },
+      "mode": "image_generation",
+      "name": "gemini-3.1-flash-lite-image"
     },
     "gemini-3.1-flash-lite-preview": {
       "attachment": true,
@@ -946,6 +1053,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 3.1 Flash Lite Preview",
       "open_weights": false,
       "reasoning": true,
@@ -954,6 +1062,14 @@
       "structured_output": true,
       "temperature": true,
       "tool_call": true
+    },
+    "gemini-3.1-flash-tts-preview": {
+      "cost": {
+        "input": 1.0,
+        "output": 20.0
+      },
+      "mode": "audio_speech",
+      "name": "gemini-3.1-flash-tts-preview"
     },
     "gemini-3.1-pro-preview": {
       "attachment": true,
@@ -964,6 +1080,7 @@
           "input": 4,
           "output": 18
         },
+        "image": 0.00012,
         "input": 2,
         "output": 12,
         "tiers": [
@@ -995,6 +1112,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 3.1 Pro Preview",
       "open_weights": false,
       "reasoning": true,
@@ -1012,6 +1130,7 @@
           "input": 4,
           "output": 18
         },
+        "image": 0.00012,
         "input": 2,
         "output": 12,
         "tiers": [
@@ -1043,6 +1162,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 3.1 Pro Preview Custom Tools",
       "open_weights": false,
       "reasoning": true,
@@ -1076,6 +1196,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 3.5 Flash",
       "open_weights": false,
       "reasoning": true,
@@ -1108,6 +1229,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 3.5 Flash Lite",
       "open_weights": false,
       "reasoning": true,
@@ -1115,6 +1237,47 @@
       "structured_output": true,
       "temperature": true,
       "tool_call": true
+    },
+    "gemini-3.5-live-translate-preview": {
+      "cost": {
+        "input": 3.5,
+        "output": 21.0,
+        "second_input": 8.83333333333e-05
+      },
+      "mode": "realtime",
+      "name": "gemini-3.5-live-translate-preview"
+    },
+    "gemini-3.5-transcribe": {
+      "cost": {
+        "output": 12.0,
+        "second_input": 5e-05
+      },
+      "mode": "audio_transcription",
+      "name": "gemini-3.5-transcribe"
+    },
+    "gemini-3.5-transcribe-live": {
+      "cost": {
+        "output": 21.0,
+        "second_input": 8.33333333333e-05
+      },
+      "mode": "audio_transcription",
+      "name": "gemini-3.5-transcribe-live"
+    },
+    "gemini-3.5-transcribe-live-preview": {
+      "cost": {
+        "input": 3.5,
+        "output": 21.0
+      },
+      "mode": "audio_transcription",
+      "name": "gemini-3.5-transcribe-live-preview"
+    },
+    "gemini-3.5-transcribe-preview": {
+      "cost": {
+        "input": 2.0,
+        "output": 12.0
+      },
+      "mode": "audio_transcription",
+      "name": "gemini-3.5-transcribe-preview"
     },
     "gemini-3.6-flash": {
       "attachment": true,
@@ -1141,6 +1304,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 3.6 Flash",
       "open_weights": false,
       "reasoning": true,
@@ -1174,6 +1338,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 3.7 Flash",
       "open_weights": false,
       "reasoning": true,
@@ -1207,6 +1372,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 3.8 Flash",
       "open_weights": false,
       "reasoning": true,
@@ -1234,12 +1400,47 @@
           "text"
         ]
       },
+      "mode": "embedding",
       "name": "Gemini Embedding 001",
       "open_weights": false,
       "reasoning": false,
       "release_date": "2025-05-20",
       "temperature": false,
       "tool_call": false
+    },
+    "gemini-embedding-2": {
+      "cost": {
+        "input": 0.19999999999999998,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 8192
+      },
+      "mode": "embedding",
+      "name": "gemini-embedding-2"
+    },
+    "gemini-embedding-2-preview": {
+      "cost": {
+        "input": 0.19999999999999998,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 8192
+      },
+      "mode": "embedding",
+      "name": "gemini-embedding-2-preview"
+    },
+    "gemini-flash-experimental": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 8192
+      },
+      "mode": "embedding",
+      "name": "gemini-flash-experimental"
     },
     "gemini-flash-latest": {
       "attachment": true,
@@ -1306,6 +1507,63 @@
       "temperature": true,
       "tool_call": true
     },
+    "gemini-live-2.5-flash-native-audio": {
+      "cost": {
+        "input": 0.5,
+        "output": 2.0
+      },
+      "limit": {
+        "context": 131072,
+        "output": 65536
+      },
+      "mode": "realtime",
+      "name": "gemini-live-2.5-flash-native-audio"
+    },
+    "gemini-live-2.5-flash-preview-native-audio-09-2025": {
+      "cost": {
+        "input": 0.5,
+        "output": 2.0
+      },
+      "limit": {
+        "context": 1048576,
+        "output": 65535
+      },
+      "mode": "realtime",
+      "name": "gemini-live-2.5-flash-preview-native-audio-09-2025"
+    },
+    "lyria-002": {
+      "cost": {
+        "image": 0.06
+      },
+      "mode": "audio_speech",
+      "name": "lyria-002"
+    },
+    "lyria-3-clip-preview": {
+      "cost": {
+        "image": 0.04,
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 131072,
+        "output": 8192
+      },
+      "mode": "audio_speech",
+      "name": "lyria-3-clip-preview"
+    },
+    "lyria-3-pro-preview": {
+      "cost": {
+        "image": 0.08,
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 131072,
+        "output": 8192
+      },
+      "mode": "audio_speech",
+      "name": "lyria-3-pro-preview"
+    },
     "meta/llama-3.3-70b-instruct-maas": {
       "attachment": false,
       "cost": {
@@ -1362,6 +1620,10 @@
       "temperature": true,
       "tool_call": true
     },
+    "mistral-ocr-2505": {
+      "mode": "ocr",
+      "name": "mistral-ocr-2505"
+    },
     "moonshotai/kimi-k2-thinking-maas": {
       "attachment": false,
       "cost": {
@@ -1390,6 +1652,30 @@
       "structured_output": true,
       "temperature": true,
       "tool_call": true
+    },
+    "multimodalembedding": {
+      "cost": {
+        "image_input": 0.0001,
+        "input": 0.7999999999999999,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 2048
+      },
+      "mode": "embedding",
+      "name": "multimodalembedding"
+    },
+    "multimodalembedding@001": {
+      "cost": {
+        "image_input": 0.0001,
+        "input": 0.7999999999999999,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 2048
+      },
+      "mode": "embedding",
+      "name": "multimodalembedding@001"
     },
     "openai/gpt-oss-120b-maas": {
       "attachment": false,
@@ -1473,6 +1759,217 @@
       "temperature": true,
       "tool_call": true
     },
+    "search_api": {
+      "mode": "vector_store",
+      "name": "search_api"
+    },
+    "text-embedding-004": {
+      "cost": {
+        "input": 0.09999999999999999,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 2048
+      },
+      "mode": "embedding",
+      "name": "text-embedding-004"
+    },
+    "text-embedding-005": {
+      "cost": {
+        "input": 0.09999999999999999,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 2048
+      },
+      "mode": "embedding",
+      "name": "text-embedding-005"
+    },
+    "text-embedding-large-exp-03-07": {
+      "cost": {
+        "input": 0.09999999999999999,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 8192
+      },
+      "mode": "embedding",
+      "name": "text-embedding-large-exp-03-07"
+    },
+    "text-embedding-preview-0409": {
+      "cost": {
+        "input": 0.0062499999999999995,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 3072
+      },
+      "mode": "embedding",
+      "name": "text-embedding-preview-0409"
+    },
+    "text-multilingual-embedding-002": {
+      "cost": {
+        "input": 0.09999999999999999,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 2048
+      },
+      "mode": "embedding",
+      "name": "text-multilingual-embedding-002"
+    },
+    "vertex_ai/deep-research-pro-preview-12-2025": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "image": 0.134,
+        "image_input": 0.0011,
+        "input": 2.0,
+        "output": 12.0
+      },
+      "limit": {
+        "context": 65536,
+        "output": 32768
+      },
+      "mode": "image_generation",
+      "name": "vertex_ai/deep-research-pro-preview-12-2025"
+    },
+    "vertex_ai/gemini-2.5-flash-image": {
+      "cost": {
+        "cache_read": 0.03,
+        "image": 0.039,
+        "input": 0.3,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 32768,
+        "output": 32768
+      },
+      "mode": "image_generation",
+      "name": "vertex_ai/gemini-2.5-flash-image"
+    },
+    "vertex_ai/gemini-3-pro-image": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "image": 0.134,
+        "image_input": 0.0011,
+        "input": 2.0,
+        "output": 12.0
+      },
+      "limit": {
+        "context": 65536,
+        "output": 32768
+      },
+      "mode": "image_generation",
+      "name": "vertex_ai/gemini-3-pro-image"
+    },
+    "vertex_ai/gemini-3-pro-image-preview": {
+      "cost": {
+        "image": 0.134,
+        "image_input": 0.0011,
+        "input": 2.0,
+        "output": 12.0
+      },
+      "limit": {
+        "context": 65536,
+        "output": 32768
+      },
+      "mode": "image_generation",
+      "name": "vertex_ai/gemini-3-pro-image-preview"
+    },
+    "vertex_ai/gemini-3.1-flash-image": {
+      "cost": {
+        "cache_read": 0.049999999999999996,
+        "image": 0.0672,
+        "image_input": 0.00056,
+        "input": 0.5,
+        "output": 3.0
+      },
+      "limit": {
+        "context": 65536,
+        "output": 32768
+      },
+      "mode": "image_generation",
+      "name": "vertex_ai/gemini-3.1-flash-image"
+    },
+    "vertex_ai/gemini-3.1-flash-image-preview": {
+      "cost": {
+        "image": 0.0672,
+        "image_input": 0.00056,
+        "input": 0.5,
+        "output": 3.0
+      },
+      "limit": {
+        "context": 65536,
+        "output": 32768
+      },
+      "mode": "image_generation",
+      "name": "vertex_ai/gemini-3.1-flash-image-preview"
+    },
+    "vertex_ai/gemini-3.1-flash-lite-image": {
+      "cost": {
+        "cache_read": 0.024999999999999998,
+        "image": 0.0336,
+        "image_input": 0.00028,
+        "input": 0.25,
+        "output": 1.5
+      },
+      "limit": {
+        "context": 65536,
+        "output": 4096
+      },
+      "mode": "image_generation",
+      "name": "vertex_ai/gemini-3.1-flash-lite-image"
+    },
+    "vertex_ai/veo-3.1-fast-generate-001": {
+      "cost": {
+        "second": 0.1
+      },
+      "limit": {
+        "context": 1024
+      },
+      "mode": "video_generation",
+      "name": "vertex_ai/veo-3.1-fast-generate-001"
+    },
+    "vertex_ai/veo-3.1-fast-generate-preview": {
+      "cost": {
+        "second": 0.1
+      },
+      "limit": {
+        "context": 1024
+      },
+      "mode": "video_generation",
+      "name": "vertex_ai/veo-3.1-fast-generate-preview"
+    },
+    "vertex_ai/veo-3.1-generate-001": {
+      "cost": {
+        "second": 0.4
+      },
+      "limit": {
+        "context": 1024
+      },
+      "mode": "video_generation",
+      "name": "vertex_ai/veo-3.1-generate-001"
+    },
+    "vertex_ai/veo-3.1-generate-preview": {
+      "cost": {
+        "second": 0.4
+      },
+      "limit": {
+        "context": 1024
+      },
+      "mode": "video_generation",
+      "name": "vertex_ai/veo-3.1-generate-preview"
+    },
+    "vertex_ai/veo-3.1-lite-generate-001": {
+      "cost": {
+        "second": 0.05
+      },
+      "limit": {
+        "context": 1024
+      },
+      "mode": "video_generation",
+      "name": "vertex_ai/veo-3.1-lite-generate-001"
+    },
     "xai/grok-4.1-fast-non-reasoning": {
       "attachment": true,
       "cost": {
@@ -1494,6 +1991,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Grok 4.1 Fast",
       "open_weights": false,
       "reasoning": false,
@@ -1524,6 +2022,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Grok 4.1 Fast (Reasoning)",
       "open_weights": false,
       "reasoning": true,
@@ -1570,6 +2069,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Grok 4.20 (Non-Reasoning)",
       "open_weights": false,
       "reasoning": false,
@@ -1615,6 +2115,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Grok 4.20 (Reasoning)",
       "open_weights": false,
       "reasoning": true,
@@ -1660,6 +2161,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Grok 4.3",
       "open_weights": false,
       "reasoning": true,
@@ -1706,6 +2208,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Grok 4.6",
       "open_weights": false,
       "reasoning": true,

@@ -20,6 +20,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GPT OSS 120B",
       "open_weights": true,
       "reasoning": true,
@@ -48,6 +49,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Qwen3.8 27B",
       "open_weights": true,
       "reasoning": true,

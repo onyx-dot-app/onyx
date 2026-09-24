@@ -324,6 +324,62 @@
       "temperature": true,
       "tool_call": true
     },
+    "embed-english-light-v3.0": {
+      "cost": {
+        "input": 0.09999999999999999,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 512
+      },
+      "mode": "embedding",
+      "name": "embed-english-light-v3.0"
+    },
+    "embed-english-v3.0": {
+      "cost": {
+        "image_input": 0.0001,
+        "input": 0.09999999999999999,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 512
+      },
+      "mode": "embedding",
+      "name": "embed-english-v3.0"
+    },
+    "embed-multilingual-light-v3.0": {
+      "cost": {
+        "input": 100.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 512
+      },
+      "mode": "embedding",
+      "name": "embed-multilingual-light-v3.0"
+    },
+    "embed-multilingual-v3.0": {
+      "cost": {
+        "input": 0.09999999999999999,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 512
+      },
+      "mode": "embedding",
+      "name": "embed-multilingual-v3.0"
+    },
+    "embed-v4.0": {
+      "cost": {
+        "input": 0.12,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 128000
+      },
+      "mode": "embedding",
+      "name": "embed-v4.0"
+    },
     "north-mini-code-1-0": {
       "attachment": false,
       "cost": {
@@ -350,6 +406,70 @@
       "structured_output": true,
       "temperature": true,
       "tool_call": true
+    },
+    "parse-v5.0": {
+      "mode": "ocr",
+      "name": "parse-v5.0"
+    },
+    "rerank-english-v3.0": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 4096,
+        "output": 4096
+      },
+      "mode": "rerank",
+      "name": "rerank-english-v3.0"
+    },
+    "rerank-multilingual-v3.0": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 4096,
+        "output": 4096
+      },
+      "mode": "rerank",
+      "name": "rerank-multilingual-v3.0"
+    },
+    "rerank-v3.5": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 4096,
+        "output": 4096
+      },
+      "mode": "rerank",
+      "name": "rerank-v3.5"
+    },
+    "rerank-v4.0-fast": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 32768,
+        "output": 32768
+      },
+      "mode": "rerank",
+      "name": "rerank-v4.0-fast"
+    },
+    "rerank-v4.0-pro": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 32768,
+        "output": 32768
+      },
+      "mode": "rerank",
+      "name": "rerank-v4.0-pro"
     }
   },
   "models_dev_providers": [

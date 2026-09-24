@@ -97,6 +97,33 @@
       "temperature": true,
       "tool_call": true
     },
+    "deep-research-pro-preview-12-2025": {
+      "cost": {
+        "image": 0.134,
+        "image_input": 0.0011,
+        "input": 2.0,
+        "output": 12.0
+      },
+      "limit": {
+        "context": 65536,
+        "output": 32768
+      },
+      "mode": "image_generation",
+      "name": "deep-research-pro-preview-12-2025"
+    },
+    "gemini-2.0-flash-exp-image-generation": {
+      "cost": {
+        "image": 0.039,
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 32768,
+        "output": 32768
+      },
+      "mode": "image_generation",
+      "name": "gemini-2.0-flash-exp-image-generation"
+    },
     "gemini-2.5-computer-use-preview-10-2025": {
       "attachment": true,
       "cost": {
@@ -131,6 +158,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 2.5 Computer Use Preview 10-2025",
       "open_weights": false,
       "reasoning": true,
@@ -163,6 +191,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 2.5 Flash",
       "open_weights": false,
       "reasoning": true,
@@ -175,6 +204,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.075,
+        "image": 0.039,
         "input": 0.3,
         "output": 30
       },
@@ -193,6 +223,7 @@
           "image"
         ]
       },
+      "mode": "image_generation",
       "name": "Nano Banana",
       "open_weights": false,
       "reasoning": true,
@@ -225,6 +256,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 2.5 Flash-Lite",
       "open_weights": false,
       "reasoning": true,
@@ -232,6 +264,42 @@
       "structured_output": true,
       "temperature": true,
       "tool_call": true
+    },
+    "gemini-2.5-flash-native-audio-latest": {
+      "cost": {
+        "input": 0.5,
+        "output": 2.0
+      },
+      "limit": {
+        "context": 1048576,
+        "output": 8192
+      },
+      "mode": "realtime",
+      "name": "gemini-2.5-flash-native-audio-latest"
+    },
+    "gemini-2.5-flash-native-audio-preview-09-2025": {
+      "cost": {
+        "input": 0.5,
+        "output": 2.0
+      },
+      "limit": {
+        "context": 1048576,
+        "output": 8192
+      },
+      "mode": "realtime",
+      "name": "gemini-2.5-flash-native-audio-preview-09-2025"
+    },
+    "gemini-2.5-flash-native-audio-preview-12-2025": {
+      "cost": {
+        "input": 0.5,
+        "output": 2.0
+      },
+      "limit": {
+        "context": 131072,
+        "output": 8192
+      },
+      "mode": "realtime",
+      "name": "gemini-2.5-flash-native-audio-preview-12-2025"
     },
     "gemini-2.5-flash-preview-tts": {
       "attachment": false,
@@ -252,6 +320,7 @@
           "audio"
         ]
       },
+      "mode": "audio_speech",
       "name": "Gemini 2.5 Flash Preview TTS",
       "open_weights": false,
       "reasoning": false,
@@ -299,6 +368,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 2.5 Pro",
       "open_weights": false,
       "reasoning": true,
@@ -310,6 +380,7 @@
     "gemini-2.5-pro-preview-tts": {
       "attachment": false,
       "cost": {
+        "cache_read": 0.125,
         "input": 1,
         "output": 20
       },
@@ -326,6 +397,7 @@
           "audio"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 2.5 Pro Preview TTS",
       "open_weights": false,
       "reasoning": false,
@@ -358,6 +430,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 3 Flash Preview",
       "open_weights": false,
       "reasoning": true,
@@ -369,6 +442,8 @@
     "gemini-3-pro-image": {
       "attachment": true,
       "cost": {
+        "image": 0.134,
+        "image_input": 0.0011,
         "input": 2,
         "output": 120
       },
@@ -387,6 +462,7 @@
           "image"
         ]
       },
+      "mode": "image_generation",
       "name": "Nano Banana Pro",
       "open_weights": false,
       "reasoning": true,
@@ -425,6 +501,7 @@
     "gemini-3.1-flash-image": {
       "attachment": true,
       "cost": {
+        "image": 0.045,
         "input": 0.5,
         "output": 60
       },
@@ -445,6 +522,7 @@
           "image"
         ]
       },
+      "mode": "image_generation",
       "name": "Nano Banana 2",
       "open_weights": false,
       "reasoning": true,
@@ -506,6 +584,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 3.1 Flash Lite",
       "open_weights": false,
       "reasoning": true,
@@ -517,6 +596,8 @@
     "gemini-3.1-flash-lite-image": {
       "attachment": true,
       "cost": {
+        "image": 0.0336,
+        "image_input": 0.00028,
         "input": 0.25,
         "output": 30
       },
@@ -535,6 +616,7 @@
           "image"
         ]
       },
+      "mode": "image_generation",
       "name": "Nano Banana 2 Lite",
       "open_weights": false,
       "reasoning": true,
@@ -583,7 +665,8 @@
         "input": 0.75,
         "input_audio": 3,
         "output": 4.5,
-        "output_audio": 12
+        "output_audio": 12,
+        "second_input": 8.33333333333e-05
       },
       "family": "gemini-flash",
       "limit": {
@@ -602,6 +685,7 @@
           "audio"
         ]
       },
+      "mode": "realtime",
       "name": "Gemini 3.1 Flash Live Preview",
       "open_weights": false,
       "reasoning": true,
@@ -629,6 +713,7 @@
           "audio"
         ]
       },
+      "mode": "audio_speech",
       "name": "Gemini 3.1 Flash TTS Preview",
       "open_weights": false,
       "reasoning": true,
@@ -676,6 +761,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 3.1 Pro Preview",
       "open_weights": false,
       "reasoning": true,
@@ -724,6 +810,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 3.1 Pro Preview Custom Tools",
       "open_weights": false,
       "reasoning": true,
@@ -757,6 +844,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 3.5 Flash",
       "open_weights": false,
       "reasoning": true,
@@ -789,6 +877,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 3.5 Flash Lite",
       "open_weights": false,
       "reasoning": true,
@@ -819,12 +908,29 @@
           "text"
         ]
       },
+      "mode": "realtime",
       "name": "Gemini 3.5 Live Translate Preview",
       "open_weights": false,
       "reasoning": false,
       "release_date": "2026-06-09",
       "temperature": true,
       "tool_call": false
+    },
+    "gemini-3.5-transcribe": {
+      "cost": {
+        "input": 2.0,
+        "output": 12.0
+      },
+      "mode": "audio_transcription",
+      "name": "gemini-3.5-transcribe"
+    },
+    "gemini-3.5-transcribe-live": {
+      "cost": {
+        "input": 3.5,
+        "output": 21.0
+      },
+      "mode": "audio_transcription",
+      "name": "gemini-3.5-transcribe-live"
     },
     "gemini-3.6-flash": {
       "attachment": true,
@@ -851,6 +957,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 3.6 Flash",
       "open_weights": false,
       "reasoning": true,
@@ -884,6 +991,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 3.7 Flash",
       "open_weights": false,
       "reasoning": true,
@@ -917,6 +1025,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 3.8 Flash",
       "open_weights": false,
       "reasoning": true,
@@ -924,6 +1033,56 @@
       "structured_output": true,
       "temperature": true,
       "tool_call": true
+    },
+    "gemini-3.8-flash-lite-tts": {
+      "cost": {
+        "cache_read": 0.125,
+        "input": 0.5,
+        "output": 6.0
+      },
+      "limit": {
+        "context": 8192,
+        "output": 16384
+      },
+      "mode": "audio_speech",
+      "name": "gemini-3.8-flash-lite-tts"
+    },
+    "gemini-3.8-flash-tts": {
+      "cost": {
+        "cache_read": 0.125,
+        "input": 0.5,
+        "output": 9.0
+      },
+      "limit": {
+        "context": 8192,
+        "output": 16384
+      },
+      "mode": "audio_speech",
+      "name": "gemini-3.8-flash-tts"
+    },
+    "gemini-3.8-live": {
+      "cost": {
+        "input": 0.75,
+        "output": 4.5
+      },
+      "limit": {
+        "context": 131072,
+        "output": 65536
+      },
+      "mode": "realtime",
+      "name": "gemini-3.8-live"
+    },
+    "gemini-3.8-live-extended-thinking": {
+      "cost": {
+        "input": 0.75,
+        "output": 4.5
+      },
+      "limit": {
+        "context": 131072,
+        "output": 65536
+      },
+      "mode": "realtime",
+      "name": "gemini-3.8-live-extended-thinking"
     },
     "gemini-embedding-001": {
       "attachment": false,
@@ -944,6 +1103,7 @@
           "text"
         ]
       },
+      "mode": "embedding",
       "name": "Gemini Embedding 001",
       "open_weights": false,
       "reasoning": false,
@@ -975,6 +1135,7 @@
           "text"
         ]
       },
+      "mode": "embedding",
       "name": "Gemini Embedding 2",
       "open_weights": false,
       "reasoning": false,
@@ -1007,6 +1168,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini Flash Latest",
       "open_weights": false,
       "reasoning": true,
@@ -1039,6 +1201,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini Flash-Lite Latest",
       "open_weights": false,
       "reasoning": true,
@@ -1046,6 +1209,18 @@
       "structured_output": true,
       "temperature": true,
       "tool_call": true
+    },
+    "gemini-live-2.5-flash-preview-native-audio-09-2025": {
+      "cost": {
+        "input": 0.5,
+        "output": 2.0
+      },
+      "limit": {
+        "context": 1048576,
+        "output": 65535
+      },
+      "mode": "realtime",
+      "name": "gemini-live-2.5-flash-preview-native-audio-09-2025"
     },
     "gemini-omni-flash-preview": {
       "attachment": true,
@@ -1068,6 +1243,7 @@
           "video"
         ]
       },
+      "mode": "chat",
       "name": "Gemini Omni Flash Preview",
       "open_weights": false,
       "reasoning": true,
@@ -1077,6 +1253,10 @@
     },
     "gemma-4-26b-a4b-it": {
       "attachment": true,
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
       "family": "gemma",
       "limit": {
         "context": 262144,
@@ -1091,6 +1271,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemma 4 26B A4B IT",
       "open_weights": true,
       "reasoning": true,
@@ -1101,6 +1282,10 @@
     },
     "gemma-4-31b-it": {
       "attachment": true,
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
       "family": "gemma",
       "limit": {
         "context": 262144,
@@ -1115,6 +1300,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemma 4 31B IT",
       "open_weights": true,
       "reasoning": true,
@@ -1123,9 +1309,24 @@
       "temperature": true,
       "tool_call": true
     },
+    "imagen-3.0-fast-generate-001": {
+      "cost": {
+        "image": 0.02
+      },
+      "mode": "image_generation",
+      "name": "imagen-3.0-fast-generate-001"
+    },
+    "imagen-3.0-generate-001": {
+      "cost": {
+        "image": 0.04
+      },
+      "mode": "image_generation",
+      "name": "imagen-3.0-generate-001"
+    },
     "lyria-3-clip-preview": {
       "attachment": true,
       "cost": {
+        "image": 0.04,
         "input": 0,
         "output": 0
       },
@@ -1144,6 +1345,7 @@
           "audio"
         ]
       },
+      "mode": "chat",
       "name": "Lyria 3 Clip Preview",
       "open_weights": false,
       "reasoning": false,
@@ -1155,6 +1357,7 @@
     "lyria-3-pro-preview": {
       "attachment": true,
       "cost": {
+        "image": 0.08,
         "input": 0,
         "output": 0
       },
@@ -1173,6 +1376,7 @@
           "audio"
         ]
       },
+      "mode": "chat",
       "name": "Lyria 3 Pro Preview",
       "open_weights": false,
       "reasoning": false,
@@ -1181,8 +1385,35 @@
       "temperature": true,
       "tool_call": false
     },
+    "nano-banana-pro-preview": {
+      "cost": {
+        "image": 0.134,
+        "image_input": 0.0011,
+        "input": 2.0,
+        "output": 12.0
+      },
+      "limit": {
+        "context": 131072,
+        "output": 32768
+      },
+      "mode": "image_generation",
+      "name": "nano-banana-pro-preview"
+    },
+    "veo-3.1-fast-generate-001": {
+      "cost": {
+        "second": 0.1
+      },
+      "limit": {
+        "context": 1024
+      },
+      "mode": "video_generation",
+      "name": "veo-3.1-fast-generate-001"
+    },
     "veo-3.1-fast-generate-preview": {
       "attachment": true,
+      "cost": {
+        "second": 0.1
+      },
       "family": "veo",
       "limit": {
         "context": 480,
@@ -1198,6 +1429,7 @@
           "video"
         ]
       },
+      "mode": "video_generation",
       "name": "Veo 3.1 fast",
       "open_weights": false,
       "reasoning": false,
@@ -1205,8 +1437,21 @@
       "temperature": false,
       "tool_call": false
     },
+    "veo-3.1-generate-001": {
+      "cost": {
+        "second": 0.4
+      },
+      "limit": {
+        "context": 1024
+      },
+      "mode": "video_generation",
+      "name": "veo-3.1-generate-001"
+    },
     "veo-3.1-generate-preview": {
       "attachment": true,
+      "cost": {
+        "second": 0.4
+      },
       "family": "veo",
       "limit": {
         "context": 480,
@@ -1221,6 +1466,7 @@
           "video"
         ]
       },
+      "mode": "video_generation",
       "name": "Veo 3.1",
       "open_weights": false,
       "reasoning": false,
@@ -1231,6 +1477,9 @@
     },
     "veo-3.1-lite-generate-preview": {
       "attachment": true,
+      "cost": {
+        "second": 0.05
+      },
       "family": "veo",
       "limit": {
         "context": 480,
@@ -1245,6 +1494,7 @@
           "video"
         ]
       },
+      "mode": "video_generation",
       "name": "Veo 3.1 lite",
       "open_weights": false,
       "reasoning": false,

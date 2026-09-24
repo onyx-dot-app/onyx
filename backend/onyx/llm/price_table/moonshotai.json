@@ -23,6 +23,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Kimi K2.6",
       "open_weights": true,
       "reasoning": true,
@@ -53,6 +54,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Kimi K2.7 Code",
       "open_weights": true,
       "reasoning": true,
@@ -113,6 +115,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Kimi K3",
       "open_weights": true,
       "reasoning": true,

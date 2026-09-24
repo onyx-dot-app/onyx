@@ -1,9 +1,32 @@
 {
   "aliases": {},
   "models": {
+    "codestral-embed": {
+      "cost": {
+        "cache_read": 0.015,
+        "input": 0.15
+      },
+      "limit": {
+        "context": 8192
+      },
+      "mode": "embedding",
+      "name": "codestral-embed"
+    },
+    "codestral-embed-2505": {
+      "cost": {
+        "cache_read": 0.015,
+        "input": 0.15
+      },
+      "limit": {
+        "context": 8192
+      },
+      "mode": "embedding",
+      "name": "codestral-embed-2505"
+    },
     "codestral-latest": {
       "attachment": false,
       "cost": {
+        "cache_read": 0.03,
         "input": 0.3,
         "output": 0.9
       },
@@ -20,6 +43,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Codestral (latest)",
       "open_weights": true,
       "reasoning": false,
@@ -57,6 +81,7 @@
     "devstral-latest": {
       "attachment": false,
       "cost": {
+        "cache_read": 0.04,
         "input": 0.4,
         "output": 2
       },
@@ -73,6 +98,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Devstral 2",
       "open_weights": true,
       "reasoning": false,
@@ -111,6 +137,7 @@
     "devstral-medium-latest": {
       "attachment": false,
       "cost": {
+        "cache_read": 0.04,
         "input": 0.4,
         "output": 2
       },
@@ -127,6 +154,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Devstral 2 (latest)",
       "open_weights": true,
       "reasoning": false,
@@ -220,6 +248,7 @@
     "magistral-medium-latest": {
       "attachment": false,
       "cost": {
+        "cache_read": 0.15,
         "input": 2,
         "output": 5
       },
@@ -236,6 +265,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Magistral Medium (latest)",
       "open_weights": true,
       "reasoning": true,
@@ -272,6 +302,7 @@
     "ministral-3b-latest": {
       "attachment": false,
       "cost": {
+        "cache_read": 0.01,
         "input": 0.04,
         "output": 0.04
       },
@@ -288,6 +319,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Ministral 3B (latest)",
       "open_weights": true,
       "reasoning": false,
@@ -298,6 +330,7 @@
     "ministral-8b-latest": {
       "attachment": false,
       "cost": {
+        "cache_read": 0.015,
         "input": 0.1,
         "output": 0.1
       },
@@ -314,6 +347,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Ministral 8B (latest)",
       "open_weights": true,
       "reasoning": false,
@@ -340,12 +374,23 @@
           "text"
         ]
       },
+      "mode": "embedding",
       "name": "Mistral Embed",
       "open_weights": false,
       "reasoning": false,
       "release_date": "2023-12-11",
       "temperature": false,
       "tool_call": false
+    },
+    "mistral-embed-2312": {
+      "cost": {
+        "input": 0.09999999999999999
+      },
+      "limit": {
+        "context": 8192
+      },
+      "mode": "embedding",
+      "name": "mistral-embed-2312"
     },
     "mistral-large-2411": {
       "attachment": false,
@@ -376,6 +421,7 @@
     "mistral-large-2512": {
       "attachment": true,
       "cost": {
+        "cache_read": 0.049999999999999996,
         "input": 0.5,
         "output": 1.5
       },
@@ -393,6 +439,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Mistral Large 3",
       "open_weights": true,
       "reasoning": false,
@@ -403,6 +450,7 @@
     "mistral-large-latest": {
       "attachment": true,
       "cost": {
+        "cache_read": 0.049999999999999996,
         "input": 0.5,
         "output": 1.5
       },
@@ -420,6 +468,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Mistral Large (latest)",
       "open_weights": true,
       "reasoning": false,
@@ -484,6 +533,7 @@
     "mistral-medium-2604": {
       "attachment": true,
       "cost": {
+        "cache_read": 0.15,
         "input": 1.5,
         "output": 7.5
       },
@@ -501,6 +551,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Mistral Medium 3.5",
       "open_weights": true,
       "reasoning": true,
@@ -512,6 +563,7 @@
     "mistral-medium-latest": {
       "attachment": true,
       "cost": {
+        "cache_read": 0.15,
         "input": 1.5,
         "output": 7.5
       },
@@ -529,6 +581,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Mistral Medium (latest)",
       "open_weights": true,
       "reasoning": true,
@@ -536,6 +589,17 @@
       "structured_output": true,
       "temperature": true,
       "tool_call": true
+    },
+    "mistral-moderation-2603": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 131072
+      },
+      "mode": "moderation",
+      "name": "mistral-moderation-2603"
     },
     "mistral-nemo": {
       "attachment": false,
@@ -562,6 +626,34 @@
       "release_date": "2024-07-01",
       "temperature": true,
       "tool_call": true
+    },
+    "mistral-ocr-2512": {
+      "mode": "ocr",
+      "name": "mistral-ocr-2512"
+    },
+    "mistral-ocr-3": {
+      "mode": "ocr",
+      "name": "mistral-ocr-3"
+    },
+    "mistral-ocr-3-0": {
+      "mode": "ocr",
+      "name": "mistral-ocr-3-0"
+    },
+    "mistral-ocr-4": {
+      "mode": "ocr",
+      "name": "mistral-ocr-4"
+    },
+    "mistral-ocr-4-0": {
+      "mode": "ocr",
+      "name": "mistral-ocr-4-0"
+    },
+    "mistral-ocr-4-1": {
+      "mode": "ocr",
+      "name": "mistral-ocr-4-1"
+    },
+    "mistral-ocr-latest": {
+      "mode": "ocr",
+      "name": "mistral-ocr-latest"
     },
     "mistral-small-2506": {
       "attachment": false,
@@ -593,6 +685,7 @@
     "mistral-small-2603": {
       "attachment": true,
       "cost": {
+        "cache_read": 0.015,
         "input": 0.15,
         "output": 0.6
       },
@@ -610,6 +703,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Mistral Small 4",
       "open_weights": true,
       "reasoning": true,
@@ -620,6 +714,7 @@
     "mistral-small-latest": {
       "attachment": true,
       "cost": {
+        "cache_read": 0.015,
         "input": 0.15,
         "output": 0.6
       },
@@ -637,6 +732,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Mistral Small (latest)",
       "open_weights": true,
       "reasoning": true,
@@ -673,6 +769,7 @@
     "open-mistral-nemo": {
       "attachment": false,
       "cost": {
+        "cache_read": 0.03,
         "input": 0.15,
         "output": 0.15
       },
@@ -689,6 +786,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Open Mistral Nemo",
       "open_weights": true,
       "reasoning": false,
@@ -779,6 +877,7 @@
     "pixtral-large-latest": {
       "attachment": true,
       "cost": {
+        "cache_read": 0.19999999999999998,
         "input": 2,
         "output": 6
       },
@@ -796,6 +895,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Pixtral Large (latest)",
       "open_weights": true,
       "reasoning": false,
@@ -803,8 +903,18 @@
       "temperature": true,
       "tool_call": true
     },
+    "voxtral-mini-2602": {
+      "cost": {
+        "second_input": 5e-05
+      },
+      "mode": "audio_transcription",
+      "name": "voxtral-mini-2602"
+    },
     "voxtral-mini-latest": {
       "attachment": false,
+      "cost": {
+        "second_input": 5e-05
+      },
       "family": "voxtral",
       "limit": {
         "context": 0,
@@ -818,12 +928,45 @@
           "text"
         ]
       },
+      "mode": "audio_transcription",
       "name": "Voxtral Mini (latest)",
       "open_weights": false,
       "reasoning": false,
       "release_date": "2026-02-01",
       "temperature": false,
       "tool_call": false
+    },
+    "voxtral-mini-realtime-2602": {
+      "cost": {
+        "second_input": 0.0001
+      },
+      "mode": "audio_transcription",
+      "name": "voxtral-mini-realtime-2602"
+    },
+    "voxtral-mini-realtime-latest": {
+      "cost": {
+        "second_input": 0.0001
+      },
+      "mode": "audio_transcription",
+      "name": "voxtral-mini-realtime-latest"
+    },
+    "voxtral-mini-transcribe-realtime-2602": {
+      "cost": {
+        "second_input": 0.0001
+      },
+      "mode": "audio_transcription",
+      "name": "voxtral-mini-transcribe-realtime-2602"
+    },
+    "voxtral-mini-transcribe-realtime-latest": {
+      "cost": {
+        "second_input": 0.0001
+      },
+      "mode": "audio_transcription",
+      "name": "voxtral-mini-transcribe-realtime-latest"
+    },
+    "voxtral-mini-tts-2603": {
+      "mode": "audio_speech",
+      "name": "voxtral-mini-tts-2603"
     },
     "voxtral-mini-tts-latest": {
       "attachment": false,
@@ -840,6 +983,7 @@
           "audio"
         ]
       },
+      "mode": "audio_speech",
       "name": "Voxtral Mini TTS (latest)",
       "open_weights": false,
       "reasoning": false,
@@ -850,8 +994,10 @@
     "voxtral-small-latest": {
       "attachment": true,
       "cost": {
+        "cache_read": 0.01,
         "input": 0.1,
-        "output": 0.3
+        "output": 0.3,
+        "second_input": 6.666666666666667e-05
       },
       "family": "voxtral",
       "limit": {
@@ -867,6 +1013,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Voxtral Small (latest)",
       "open_weights": true,
       "reasoning": false,
@@ -894,6 +1041,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GLM-5.2",
       "open_weights": true,
       "reasoning": true,
@@ -923,6 +1071,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GLM-5.3",
       "open_weights": true,
       "reasoning": true,

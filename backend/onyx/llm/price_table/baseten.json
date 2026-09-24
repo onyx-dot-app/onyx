@@ -20,6 +20,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "MiniMax-M2.5",
       "open_weights": true,
       "reasoning": true,
@@ -47,6 +48,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "DeepSeek V3.1",
       "open_weights": true,
       "reasoning": true,
@@ -75,6 +77,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "DeepSeek V4 Flash 0731",
       "open_weights": true,
       "reasoning": true,
@@ -103,6 +106,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "DeepSeek V4 Pro",
       "open_weights": true,
       "reasoning": true,
@@ -114,6 +118,7 @@
     "deepseek-ai/DeepSeek-V4-Pro-0813": {
       "attachment": false,
       "cost": {
+        "cache_read": 0.13199999999999998,
         "input": 1.32,
         "output": 3.96
       },
@@ -130,6 +135,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "DeepSeek V4 Pro 0813",
       "open_weights": true,
       "reasoning": true,
@@ -159,6 +165,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "DeepSeek V4.1 Flash",
       "open_weights": true,
       "reasoning": true,
@@ -188,6 +195,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Kimi K2.5",
       "open_weights": true,
       "reasoning": true,
@@ -217,6 +225,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Kimi K2.6",
       "open_weights": true,
       "reasoning": true,
@@ -246,6 +255,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Kimi K2.7 Code",
       "open_weights": true,
       "reasoning": true,
@@ -257,6 +267,7 @@
     "moonshotai/Kimi-K3": {
       "attachment": true,
       "cost": {
+        "cache_read": 0.3,
         "input": 3,
         "output": 15
       },
@@ -274,6 +285,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Kimi K3",
       "open_weights": true,
       "reasoning": true,
@@ -302,6 +314,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Nemotron Ultra",
       "open_weights": true,
       "reasoning": true,
@@ -330,6 +343,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Nemotron Super",
       "open_weights": true,
       "reasoning": true,
@@ -341,6 +355,7 @@
     "openai/gpt-oss-120b": {
       "attachment": false,
       "cost": {
+        "cache_read": 0.09999999999999999,
         "input": 0.1,
         "output": 0.5
       },
@@ -357,6 +372,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "OpenAI GPT 120B",
       "open_weights": true,
       "reasoning": true,
@@ -368,6 +384,7 @@
     "thinkingmachines/inkling": {
       "attachment": true,
       "cost": {
+        "cache_read": 0.16999999999999998,
         "input": 1,
         "output": 4.05
       },
@@ -385,6 +402,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Inkling",
       "open_weights": true,
       "reasoning": true,
@@ -414,6 +432,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Inkling Small",
       "open_weights": true,
       "reasoning": true,
@@ -442,6 +461,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GLM 4.7",
       "open_weights": true,
       "reasoning": true,
@@ -470,6 +490,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GLM 5",
       "open_weights": true,
       "reasoning": true,
@@ -527,6 +548,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GLM 5.2",
       "open_weights": true,
       "reasoning": true,
@@ -556,6 +578,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GLM 5.2 Fast",
       "open_weights": true,
       "reasoning": true,
@@ -585,6 +608,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GLM 5.3",
       "open_weights": true,
       "reasoning": true,
@@ -596,6 +620,7 @@
     "zai-org/GLM-5.3-Fast": {
       "attachment": true,
       "cost": {
+        "cache_read": 0.21,
         "input": 2.1,
         "output": 6.6
       },
@@ -613,6 +638,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GLM 5.3 Fast",
       "open_weights": true,
       "reasoning": true,
@@ -624,6 +650,7 @@
     "zai-org/GLM-5.3-Flash": {
       "attachment": true,
       "cost": {
+        "cache_read": 0.03,
         "input": 0.15,
         "output": 0.5
       },
@@ -641,6 +668,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GLM 5.3 Flash",
       "open_weights": true,
       "reasoning": true,

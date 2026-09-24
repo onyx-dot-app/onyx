@@ -1,6 +1,30 @@
 {
   "aliases": {},
   "models": {
+    "accounts/fireworks/models/": {
+      "cost": {
+        "input": 0.09999999999999999,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 40960,
+        "output": 40960
+      },
+      "mode": "embedding",
+      "name": "accounts/fireworks/models/"
+    },
+    "accounts/fireworks/models/SSD-1B": {
+      "cost": {
+        "input": 0.00013,
+        "output": 0.00013
+      },
+      "limit": {
+        "context": 4096,
+        "output": 4096
+      },
+      "mode": "image_generation",
+      "name": "accounts/fireworks/models/SSD-1B"
+    },
     "accounts/fireworks/models/deepseek-v4-flash-0731": {
       "attachment": false,
       "cost": {
@@ -21,6 +45,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "DeepSeek V4 Flash 0731",
       "open_weights": true,
       "reasoning": true,
@@ -51,6 +76,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "DeepSeek V4 Flash Vision Exp",
       "open_weights": true,
       "reasoning": true,
@@ -109,6 +135,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "DeepSeek V4 Pro 0813",
       "open_weights": true,
       "reasoning": true,
@@ -139,6 +166,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "DeepSeek V4.1 Flash",
       "open_weights": true,
       "reasoning": true,
@@ -146,6 +174,78 @@
       "structured_output": true,
       "temperature": true,
       "tool_call": true
+    },
+    "accounts/fireworks/models/fireworks-asr-large": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 4096,
+        "output": 4096
+      },
+      "mode": "audio_transcription",
+      "name": "accounts/fireworks/models/fireworks-asr-large"
+    },
+    "accounts/fireworks/models/fireworks-asr-v2": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 4096,
+        "output": 4096
+      },
+      "mode": "audio_transcription",
+      "name": "accounts/fireworks/models/fireworks-asr-v2"
+    },
+    "accounts/fireworks/models/flux-1-dev-fp8": {
+      "cost": {
+        "input": 0.0005,
+        "output": 0.0005
+      },
+      "limit": {
+        "context": 4096,
+        "output": 4096
+      },
+      "mode": "image_generation",
+      "name": "accounts/fireworks/models/flux-1-dev-fp8"
+    },
+    "accounts/fireworks/models/flux-1-schnell-fp8": {
+      "cost": {
+        "input": 0.00035,
+        "output": 0.00035
+      },
+      "limit": {
+        "context": 4096,
+        "output": 4096
+      },
+      "mode": "image_generation",
+      "name": "accounts/fireworks/models/flux-1-schnell-fp8"
+    },
+    "accounts/fireworks/models/flux-kontext-max": {
+      "cost": {
+        "input": 0.08,
+        "output": 0.08
+      },
+      "limit": {
+        "context": 4096,
+        "output": 4096
+      },
+      "mode": "image_generation",
+      "name": "accounts/fireworks/models/flux-kontext-max"
+    },
+    "accounts/fireworks/models/flux-kontext-pro": {
+      "cost": {
+        "input": 0.04,
+        "output": 0.04
+      },
+      "limit": {
+        "context": 4096,
+        "output": 4096
+      },
+      "mode": "image_generation",
+      "name": "accounts/fireworks/models/flux-kontext-pro"
     },
     "accounts/fireworks/models/glm-5p2": {
       "attachment": false,
@@ -167,6 +267,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GLM 5.2",
       "open_weights": true,
       "reasoning": true,
@@ -195,6 +296,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GLM 5.3",
       "open_weights": true,
       "reasoning": true,
@@ -224,6 +326,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GLM 5.3 Flash",
       "open_weights": true,
       "reasoning": true,
@@ -252,6 +355,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GPT OSS 120B",
       "open_weights": true,
       "reasoning": true,
@@ -281,12 +385,25 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Inkling",
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-07-15",
       "temperature": true,
       "tool_call": true
+    },
+    "accounts/fireworks/models/japanese-stable-diffusion-xl": {
+      "cost": {
+        "input": 0.00013,
+        "output": 0.00013
+      },
+      "limit": {
+        "context": 4096,
+        "output": 4096
+      },
+      "mode": "image_generation",
+      "name": "accounts/fireworks/models/japanese-stable-diffusion-xl"
     },
     "accounts/fireworks/models/kimi-k2p6": {
       "attachment": true,
@@ -309,6 +426,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Kimi K2.6",
       "open_weights": true,
       "reasoning": true,
@@ -338,6 +456,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Kimi K2.7 Code",
       "open_weights": true,
       "reasoning": true,
@@ -367,6 +486,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Kimi K3",
       "open_weights": true,
       "reasoning": true,
@@ -423,6 +543,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "MiniMax-M3",
       "open_weights": true,
       "reasoning": true,
@@ -451,6 +572,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Muse Glimmer 30B",
       "open_weights": true,
       "reasoning": true,
@@ -480,6 +602,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Nemotron 3 Ultra 550B A55B",
       "open_weights": true,
       "reasoning": true,
@@ -507,6 +630,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Nemotron 3.5 Lightning 30B A3B",
       "open_weights": true,
       "reasoning": true,
@@ -514,6 +638,102 @@
       "structured_output": true,
       "temperature": true,
       "tool_call": true
+    },
+    "accounts/fireworks/models/playground-v2-1024px-aesthetic": {
+      "cost": {
+        "input": 0.00013,
+        "output": 0.00013
+      },
+      "limit": {
+        "context": 4096,
+        "output": 4096
+      },
+      "mode": "image_generation",
+      "name": "accounts/fireworks/models/playground-v2-1024px-aesthetic"
+    },
+    "accounts/fireworks/models/playground-v2-5-1024px-aesthetic": {
+      "cost": {
+        "input": 0.00013,
+        "output": 0.00013
+      },
+      "limit": {
+        "context": 4096,
+        "output": 4096
+      },
+      "mode": "image_generation",
+      "name": "accounts/fireworks/models/playground-v2-5-1024px-aesthetic"
+    },
+    "accounts/fireworks/models/qwen3-embedding-0p6b": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 32768,
+        "output": 32768
+      },
+      "mode": "embedding",
+      "name": "accounts/fireworks/models/qwen3-embedding-0p6b"
+    },
+    "accounts/fireworks/models/qwen3-embedding-4b": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 40960,
+        "output": 40960
+      },
+      "mode": "embedding",
+      "name": "accounts/fireworks/models/qwen3-embedding-4b"
+    },
+    "accounts/fireworks/models/qwen3-embedding-8b": {
+      "cost": {
+        "input": 0.09999999999999999,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 40960,
+        "output": 40960
+      },
+      "mode": "embedding",
+      "name": "accounts/fireworks/models/qwen3-embedding-8b"
+    },
+    "accounts/fireworks/models/qwen3-reranker-0p6b": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 40960,
+        "output": 40960
+      },
+      "mode": "rerank",
+      "name": "accounts/fireworks/models/qwen3-reranker-0p6b"
+    },
+    "accounts/fireworks/models/qwen3-reranker-4b": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 40960,
+        "output": 40960
+      },
+      "mode": "rerank",
+      "name": "accounts/fireworks/models/qwen3-reranker-4b"
+    },
+    "accounts/fireworks/models/qwen3-reranker-8b": {
+      "cost": {
+        "input": 0.19999999999999998,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 40960,
+        "output": 40960
+      },
+      "mode": "rerank",
+      "name": "accounts/fireworks/models/qwen3-reranker-8b"
     },
     "accounts/fireworks/models/qwen3p7-plus": {
       "attachment": true,
@@ -536,6 +756,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Qwen 3.7 Plus",
       "open_weights": false,
       "reasoning": true,
@@ -592,12 +813,25 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Qwen3.8 Max",
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-08-03",
       "temperature": true,
       "tool_call": true
+    },
+    "accounts/fireworks/models/stable-diffusion-xl-1024-v1-0": {
+      "cost": {
+        "input": 0.00013,
+        "output": 0.00013
+      },
+      "limit": {
+        "context": 4096,
+        "output": 4096
+      },
+      "mode": "image_generation",
+      "name": "accounts/fireworks/models/stable-diffusion-xl-1024-v1-0"
     },
     "accounts/fireworks/routers/deepseek-flash-latest": {
       "attachment": true,
@@ -676,6 +910,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GLM 5.2 Fast",
       "open_weights": true,
       "reasoning": true,
@@ -703,6 +938,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GLM 5.3 Fast",
       "open_weights": true,
       "reasoning": true,
@@ -846,6 +1082,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Kimi K3 Fast",
       "open_weights": true,
       "reasoning": true,

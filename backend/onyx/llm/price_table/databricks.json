@@ -1,6 +1,19 @@
 {
   "aliases": {},
   "models": {
+    "databricks-bge-large-en": {
+      "cost": {
+        "cache_read": 0.10003000000000001,
+        "cache_write": 0.10003000000000001,
+        "input": 0.10003000000000001,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 512
+      },
+      "mode": "embedding",
+      "name": "databricks-bge-large-en"
+    },
     "databricks-claude-haiku-4-5": {
       "attachment": true,
       "cost": {
@@ -24,6 +37,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Haiku 4.5 (latest)",
       "open_weights": false,
       "reasoning": true,
@@ -54,6 +68,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Opus 4.1 (latest)",
       "open_weights": false,
       "reasoning": true,
@@ -84,6 +99,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Opus 4.5 (latest)",
       "open_weights": false,
       "reasoning": true,
@@ -114,6 +130,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Opus 4.6",
       "open_weights": false,
       "reasoning": true,
@@ -144,6 +161,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Opus 4.7",
       "open_weights": false,
       "reasoning": true,
@@ -174,6 +192,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Sonnet 4.5",
       "open_weights": false,
       "reasoning": true,
@@ -204,6 +223,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Sonnet 4.5 (latest)",
       "open_weights": false,
       "reasoning": true,
@@ -234,6 +254,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Sonnet 4.6",
       "open_weights": false,
       "reasoning": true,
@@ -245,6 +266,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.03,
+        "cache_write": 0.30002,
         "input": 0.3,
         "input_audio": 1,
         "output": 2.5
@@ -266,6 +288,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 2.5 Flash",
       "open_weights": false,
       "reasoning": true,
@@ -278,6 +301,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.125,
+        "cache_write": 1.24999,
         "context_over_200k": {
           "cache_read": 0.25,
           "input": 2.5,
@@ -314,6 +338,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 2.5 Pro",
       "open_weights": false,
       "reasoning": true,
@@ -326,6 +351,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.025,
+        "cache_write": 0.31248,
         "input": 0.25,
         "input_audio": 0.5,
         "output": 1.5
@@ -347,6 +373,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 3.1 Flash Lite Preview",
       "open_weights": false,
       "reasoning": true,
@@ -359,6 +386,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.2,
+        "cache_write": 2.49998,
         "context_over_200k": {
           "cache_read": 0.4,
           "input": 4,
@@ -395,6 +423,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 3.1 Pro Preview Custom Tools",
       "open_weights": false,
       "reasoning": true,
@@ -407,6 +436,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.05,
+        "cache_write": 0.6250300000000001,
         "input": 0.5,
         "input_audio": 1,
         "output": 3
@@ -428,6 +458,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 3 Flash Preview",
       "open_weights": false,
       "reasoning": true,
@@ -440,6 +471,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.2,
+        "cache_write": 2.49998,
         "context_over_200k": {
           "cache_read": 0.4,
           "input": 4,
@@ -476,6 +508,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 3 Pro Preview",
       "open_weights": false,
       "reasoning": true,
@@ -488,6 +521,7 @@
       "attachment": false,
       "cost": {
         "cache_read": 0.26,
+        "cache_write": 1.4,
         "input": 1.4,
         "output": 4.4
       },
@@ -504,6 +538,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GLM-5.2",
       "open_weights": true,
       "reasoning": true,
@@ -516,6 +551,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.125,
+        "cache_write": 1.24999,
         "input": 1.25,
         "output": 10
       },
@@ -534,6 +570,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GPT-5",
       "open_weights": false,
       "reasoning": true,
@@ -546,6 +583,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.125,
+        "cache_write": 1.24999,
         "input": 1.25,
         "output": 10
       },
@@ -564,6 +602,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GPT-5.1",
       "open_weights": false,
       "reasoning": true,
@@ -576,6 +615,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.175,
+        "cache_write": 1.75,
         "input": 1.75,
         "output": 14
       },
@@ -594,6 +634,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GPT-5.2",
       "open_weights": false,
       "reasoning": true,
@@ -606,6 +647,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.25,
+        "cache_write": 2.49998,
         "context_over_200k": {
           "cache_read": 0.5,
           "input": 5,
@@ -641,6 +683,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GPT-5.4",
       "open_weights": false,
       "reasoning": true,
@@ -653,6 +696,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.075,
+        "cache_write": 0.74998,
         "input": 0.75,
         "output": 4.5
       },
@@ -671,6 +715,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GPT-5.4 mini",
       "open_weights": false,
       "reasoning": true,
@@ -683,6 +728,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.02,
+        "cache_write": 0.19999,
         "input": 0.2,
         "output": 1.25
       },
@@ -701,6 +747,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GPT-5.4 nano",
       "open_weights": false,
       "reasoning": true,
@@ -713,6 +760,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.5,
+        "cache_write": 5.00003,
         "context_over_200k": {
           "cache_read": 1,
           "input": 10,
@@ -748,6 +796,7 @@
           "text"
         ]
       },
+      "mode": "responses",
       "name": "GPT-5.5",
       "open_weights": false,
       "reasoning": true,
@@ -760,6 +809,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.1,
+        "cache_write": 1.24999,
         "context_over_200k": {
           "cache_read": 0.2,
           "input": 2,
@@ -795,6 +845,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GPT-5.6 Luna",
       "open_weights": false,
       "reasoning": true,
@@ -807,6 +858,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.5,
+        "cache_write": 5.00003,
         "context_over_200k": {
           "cache_read": 1,
           "input": 10,
@@ -842,6 +894,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GPT-5.6 Sol",
       "open_weights": false,
       "reasoning": true,
@@ -854,6 +907,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.25,
+        "cache_write": 3.12501,
         "context_over_200k": {
           "cache_read": 0.5,
           "input": 5,
@@ -889,6 +943,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GPT-5.6 Terra",
       "open_weights": false,
       "reasoning": true,
@@ -901,6 +956,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.025,
+        "cache_write": 0.24997,
         "input": 0.25,
         "output": 2
       },
@@ -919,6 +975,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GPT-5 Mini",
       "open_weights": false,
       "reasoning": true,
@@ -931,6 +988,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.005,
+        "cache_write": 0.049980000000000004,
         "input": 0.05,
         "output": 0.4
       },
@@ -949,6 +1007,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GPT-5 Nano",
       "open_weights": false,
       "reasoning": true,
@@ -960,6 +1019,8 @@
     "databricks-gpt-oss-120b": {
       "attachment": false,
       "cost": {
+        "cache_read": 0.15001,
+        "cache_write": 0.15001,
         "input": 0.072,
         "output": 0.28
       },
@@ -976,6 +1037,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GPT OSS 120B",
       "open_weights": true,
       "reasoning": true,
@@ -987,6 +1049,8 @@
     "databricks-gpt-oss-20b": {
       "attachment": false,
       "cost": {
+        "cache_read": 0.07,
+        "cache_write": 0.07,
         "input": 0.05,
         "output": 0.2
       },
@@ -1003,6 +1067,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GPT OSS 20B",
       "open_weights": true,
       "reasoning": true,
@@ -1010,6 +1075,19 @@
       "structured_output": true,
       "temperature": true,
       "tool_call": true
+    },
+    "databricks-gte-large-en": {
+      "cost": {
+        "cache_read": 0.12999,
+        "cache_write": 0.12999,
+        "input": 0.12999000000000002,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 8192
+      },
+      "mode": "embedding",
+      "name": "databricks-gte-large-en"
     },
     "databricks-kimi-k2-7-code": {
       "attachment": true,
@@ -1040,6 +1118,19 @@
       "structured_output": true,
       "temperature": false,
       "tool_call": true
+    },
+    "databricks-qwen3-embedding-0-6b": {
+      "cost": {
+        "cache_read": 0.02002,
+        "cache_write": 0.02002,
+        "input": 0.02002,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 32768
+      },
+      "mode": "embedding",
+      "name": "databricks-qwen3-embedding-0-6b"
     }
   },
   "models_dev_providers": [

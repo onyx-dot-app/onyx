@@ -6,6 +6,7 @@
       "cost": {
         "cache_read": 1,
         "cache_write": 12.5,
+        "cache_write_above_1hr": 20.0,
         "input": 10,
         "output": 50
       },
@@ -24,6 +25,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Fable 5",
       "open_weights": false,
       "reasoning": true,
@@ -37,6 +39,7 @@
       "cost": {
         "cache_read": 0.25,
         "cache_write": 12.5,
+        "cache_write_above_1hr": 20.0,
         "input": 10,
         "output": 50
       },
@@ -55,6 +58,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Fable 5.1",
       "open_weights": false,
       "reasoning": true,
@@ -68,6 +72,7 @@
       "cost": {
         "cache_read": 0.1,
         "cache_write": 1.25,
+        "cache_write_above_1hr": 2.0,
         "input": 1,
         "output": 5
       },
@@ -86,6 +91,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Haiku 4.5 (latest)",
       "open_weights": false,
       "reasoning": true,
@@ -99,6 +105,7 @@
       "cost": {
         "cache_read": 0.1,
         "cache_write": 1.25,
+        "cache_write_above_1hr": 2.0,
         "input": 1,
         "output": 5
       },
@@ -117,6 +124,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Haiku 4.5",
       "open_weights": false,
       "reasoning": true,
@@ -130,6 +138,7 @@
       "cost": {
         "cache_read": 0.5,
         "cache_write": 6.25,
+        "cache_write_above_1hr": 10.0,
         "input": 5,
         "output": 25
       },
@@ -148,6 +157,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Opus 4.5 (latest)",
       "open_weights": false,
       "reasoning": true,
@@ -161,6 +171,7 @@
       "cost": {
         "cache_read": 0.5,
         "cache_write": 6.25,
+        "cache_write_above_1hr": 10.0,
         "input": 5,
         "output": 25
       },
@@ -179,6 +190,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Opus 4.5",
       "open_weights": false,
       "reasoning": true,
@@ -192,6 +204,7 @@
       "cost": {
         "cache_read": 0.5,
         "cache_write": 6.25,
+        "cache_write_above_1hr": 10.0,
         "input": 5,
         "output": 25
       },
@@ -210,6 +223,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Opus 4.6",
       "open_weights": false,
       "reasoning": true,
@@ -223,6 +237,7 @@
       "cost": {
         "cache_read": 0.5,
         "cache_write": 6.25,
+        "cache_write_above_1hr": 10.0,
         "input": 5,
         "output": 25
       },
@@ -241,6 +256,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Opus 4.7",
       "open_weights": false,
       "reasoning": true,
@@ -254,6 +270,7 @@
       "cost": {
         "cache_read": 0.5,
         "cache_write": 6.25,
+        "cache_write_above_1hr": 10.0,
         "input": 5,
         "output": 25
       },
@@ -272,6 +289,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Opus 4.8",
       "open_weights": false,
       "reasoning": true,
@@ -285,6 +303,7 @@
       "cost": {
         "cache_read": 0.5,
         "cache_write": 6.25,
+        "cache_write_above_1hr": 10.0,
         "input": 5,
         "output": 25
       },
@@ -303,6 +322,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Opus 5",
       "open_weights": false,
       "reasoning": true,
@@ -316,6 +336,7 @@
       "cost": {
         "cache_read": 0.2,
         "cache_write": 5,
+        "cache_write_above_1hr": 8.0,
         "input": 4,
         "output": 20
       },
@@ -334,6 +355,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Opus 5.5",
       "open_weights": false,
       "reasoning": true,
@@ -347,6 +369,7 @@
       "cost": {
         "cache_read": 0.3,
         "cache_write": 3.75,
+        "cache_write_above_1hr": 6.0,
         "input": 3,
         "output": 15
       },
@@ -365,6 +388,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Sonnet 4.5 (latest)",
       "open_weights": false,
       "reasoning": true,
@@ -378,6 +402,7 @@
       "cost": {
         "cache_read": 0.3,
         "cache_write": 3.75,
+        "cache_write_above_1hr": 6.0,
         "input": 3,
         "output": 15
       },
@@ -396,6 +421,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Sonnet 4.5",
       "open_weights": false,
       "reasoning": true,
@@ -409,6 +435,7 @@
       "cost": {
         "cache_read": 0.3,
         "cache_write": 3.75,
+        "cache_write_above_1hr": 6.0,
         "input": 3,
         "output": 15
       },
@@ -427,6 +454,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Sonnet 4.6",
       "open_weights": false,
       "reasoning": true,
@@ -440,6 +468,7 @@
       "cost": {
         "cache_read": 0.2,
         "cache_write": 2.5,
+        "cache_write_above_1hr": 4.0,
         "input": 2,
         "output": 10
       },
@@ -458,6 +487,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Sonnet 5",
       "open_weights": false,
       "reasoning": true,

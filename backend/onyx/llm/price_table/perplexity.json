@@ -1,6 +1,54 @@
 {
   "aliases": {},
   "models": {
+    "pplx-embed-context-v1-0.6b": {
+      "cost": {
+        "input": 0.008,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 32768
+      },
+      "mode": "embedding",
+      "name": "pplx-embed-context-v1-0.6b"
+    },
+    "pplx-embed-context-v1-4b": {
+      "cost": {
+        "input": 0.049999999999999996,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 32768
+      },
+      "mode": "embedding",
+      "name": "pplx-embed-context-v1-4b"
+    },
+    "pplx-embed-v1-0.6b": {
+      "cost": {
+        "input": 0.004,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 32768
+      },
+      "mode": "embedding",
+      "name": "pplx-embed-v1-0.6b"
+    },
+    "pplx-embed-v1-4b": {
+      "cost": {
+        "input": 0.03,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 32768
+      },
+      "mode": "embedding",
+      "name": "pplx-embed-v1-4b"
+    },
+    "search": {
+      "mode": "search",
+      "name": "search"
+    },
     "sonar": {
       "attachment": false,
       "cost": {
@@ -20,6 +68,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Sonar",
       "open_weights": false,
       "reasoning": false,
@@ -46,6 +95,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Perplexity Sonar Deep Research",
       "open_weights": false,
       "reasoning": true,
@@ -73,6 +123,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Sonar Pro",
       "open_weights": false,
       "reasoning": false,
@@ -100,6 +151,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Sonar Reasoning Pro",
       "open_weights": false,
       "reasoning": true,

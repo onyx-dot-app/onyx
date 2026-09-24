@@ -12,8 +12,8 @@ from onyx.llm.api_surfaces import resolve_api_surface
 from onyx.llm.constants import DYNAMIC_LLM_PROVIDERS
 from onyx.llm.model_capabilities import (
     anthropic_supports_thinking,
+    catalog_model_supports_image_input,
     get_max_input_tokens,
-    litellm_thinks_model_supports_image_input,
     model_is_reasoning_model,
     supported_reasoning_efforts,
 )
@@ -376,17 +376,17 @@ class ModelConfigurationView(BaseModel):
                 max_input_tokens=model_configuration_model.max_input_tokens,
                 configured_max_input_tokens=model_configuration_model.max_input_tokens,
                 # Dynamic/custom-config providers under-report vision; fall back
-                # to the LiteLLM cost map when no VISION flow is stored.
+                # to the model catalog when no VISION flow is stored.
                 supports_image_input=(
                     LLMModelFlowType.VISION
                     in model_configuration_model.llm_model_flow_types
                     or any(
-                        litellm_thinks_model_supports_image_input(name, provider_name)
+                        catalog_model_supports_image_input(name, provider_name)
                         for name in model_identity_names
                     )
                 ),
                 # Prefer the stored flow, then the Claude version parse, then
-                # the LiteLLM cost map, then a name/display-name substring
+                # the model catalog, then a name/display-name substring
                 # heuristic. Mirrors multi_llm.py's is_reasoning.
                 supports_reasoning=(
                     LLMModelFlowType.REASONING
@@ -452,7 +452,7 @@ class ModelConfigurationView(BaseModel):
                 if LLMModelFlowType.VISION
                 in model_configuration_model.llm_model_flow_types
                 else any(
-                    litellm_thinks_model_supports_image_input(name, provider_name)
+                    catalog_model_supports_image_input(name, provider_name)
                     for name in model_identity_names
                 )
             ),

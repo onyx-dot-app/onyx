@@ -1612,7 +1612,7 @@
       "family": "claude-opus",
       "limit": {
         "context": 200000,
-        "output": 8192
+        "output": 32000
       },
       "modalities": {
         "input": [
@@ -1841,6 +1841,66 @@
       "temperature": false,
       "tool_call": true
     },
+    "anthropic/claude-opus-5.5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "cache_write": 5,
+        "input": 4,
+        "output": 20
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 5.5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "temperature": false,
+      "tool_call": true
+    },
+    "anthropic/claude-opus-5.5-fast": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.4,
+        "cache_write": 10,
+        "input": 8,
+        "output": 40
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 5.5 (Fast)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "temperature": false,
+      "tool_call": true
+    },
     "anthropic/claude-sonnet-4": {
       "attachment": true,
       "cost": {
@@ -1870,7 +1930,7 @@
       "family": "claude-sonnet",
       "limit": {
         "context": 1000000,
-        "output": 8192
+        "output": 64000
       },
       "modalities": {
         "input": [
@@ -3150,7 +3210,7 @@
       "family": "gemini-flash",
       "limit": {
         "context": 32768,
-        "output": 65536
+        "output": 65535
       },
       "modalities": {
         "input": [
@@ -3179,7 +3239,7 @@
       "family": "gemini-flash-lite",
       "limit": {
         "context": 1048576,
-        "output": 65536
+        "output": 65535
       },
       "modalities": {
         "input": [
@@ -3615,7 +3675,7 @@
       "family": "gemini-flash",
       "limit": {
         "context": 1000000,
-        "output": 65536
+        "output": 65535
       },
       "modalities": {
         "input": [
@@ -3645,7 +3705,7 @@
       "family": "gemini-flash",
       "limit": {
         "context": 1000000,
-        "output": 65536
+        "output": 65535
       },
       "modalities": {
         "input": [
@@ -3664,6 +3724,58 @@
       "structured_output": true,
       "temperature": true,
       "tool_call": true
+    },
+    "google/gemini-3.8-flash-lite-tts": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.125,
+        "input": 0.5,
+        "output": 6
+      },
+      "family": "gemini",
+      "limit": {
+        "context": 0,
+        "output": 0
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "audio"
+        ]
+      },
+      "name": "Gemini 3.8 Flash-Lite TTS",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2026-09-23",
+      "tool_call": false
+    },
+    "google/gemini-3.8-flash-tts": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.125,
+        "input": 0.5,
+        "output": 9
+      },
+      "family": "gemini",
+      "limit": {
+        "context": 0,
+        "output": 0
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "audio"
+        ]
+      },
+      "name": "Gemini 3.8 Flash TTS",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2026-09-23",
+      "tool_call": false
     },
     "google/gemini-3.8-live": {
       "attachment": false,
@@ -4211,8 +4323,9 @@
     "inclusionai/ling-3.0-flash-vl": {
       "attachment": true,
       "cost": {
-        "input": 0,
-        "output": 0
+        "cache_read": 0.22,
+        "input": 0.075,
+        "output": 0.015
       },
       "family": "ling",
       "limit": {
@@ -4229,32 +4342,6 @@
         ]
       },
       "name": "Ling 3.0 Flash VL",
-      "open_weights": false,
-      "reasoning": true,
-      "release_date": "2026-09-08",
-      "tool_call": true
-    },
-    "inclusionai/ling-3.0-flash-vl-free": {
-      "attachment": true,
-      "cost": {
-        "input": 0,
-        "output": 0
-      },
-      "family": "ling",
-      "limit": {
-        "context": 256000,
-        "output": 32000
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "Ling 3.0 Flash VL (Free)",
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-08",
@@ -7542,6 +7629,206 @@
       "temperature": false,
       "tool_call": true
     },
+    "openai/gpt-6-luna": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.01,
+        "cache_write": 0.125,
+        "context_over_200k": {
+          "cache_read": 0.02,
+          "cache_write": 0.25,
+          "input": 0.2,
+          "output": 0.75
+        },
+        "input": 0.1,
+        "output": 0.5,
+        "tiers": [
+          {
+            "cache_read": 0.02,
+            "cache_write": 0.25,
+            "input": 0.2,
+            "output": 0.75,
+            "tier": {
+              "size": 272001,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-luna",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6 Luna",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "openai/gpt-6-luna-fast": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.02,
+        "cache_write": 0.25,
+        "context_over_200k": {
+          "cache_read": 0.04,
+          "cache_write": 0.5,
+          "input": 0.4,
+          "output": 1.5
+        },
+        "input": 0.2,
+        "output": 1,
+        "tiers": [
+          {
+            "cache_read": 0.04,
+            "cache_write": 0.5,
+            "input": 0.4,
+            "output": 1.5,
+            "tier": {
+              "size": 272001,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-luna",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6 Luna (Fast)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "openai/gpt-6-sol": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "cache_write": 2.5,
+        "context_over_200k": {
+          "cache_read": 0.4,
+          "cache_write": 5,
+          "input": 4,
+          "output": 15
+        },
+        "input": 2,
+        "output": 10,
+        "tiers": [
+          {
+            "cache_read": 0.4,
+            "cache_write": 5,
+            "input": 4,
+            "output": 15,
+            "tier": {
+              "size": 272001,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-sol",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6 Sol",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "openai/gpt-6-sol-fast": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.4,
+        "cache_write": 5,
+        "context_over_200k": {
+          "cache_read": 0.8,
+          "cache_write": 10,
+          "input": 8,
+          "output": 30
+        },
+        "input": 4,
+        "output": 20,
+        "tiers": [
+          {
+            "cache_read": 0.8,
+            "cache_write": 10,
+            "input": 8,
+            "output": 30,
+            "tier": {
+              "size": 272001,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-sol",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6 Sol (Fast)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
     "openai/gpt-image-1": {
       "attachment": false,
       "cost": {
@@ -7730,6 +8017,7 @@
     "openai/gpt-oss-120b": {
       "attachment": false,
       "cost": {
+        "cache_read": 0.1,
         "input": 0.1,
         "output": 0.5
       },
@@ -8695,6 +8983,27 @@
       "reasoning": false,
       "release_date": "2026-05-14",
       "temperature": true,
+      "tool_call": false
+    },
+    "recraft/recraft-v4.1-flash": {
+      "attachment": false,
+      "family": "recraft",
+      "limit": {
+        "context": 0,
+        "output": 0
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "image"
+        ]
+      },
+      "name": "Recraft V4.1 Flash",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2026-09-23",
       "tool_call": false
     },
     "recraft/recraft-v4.1-pro": {
@@ -10239,7 +10548,7 @@
         ]
       },
       "name": "MiMo V2.6 Flash",
-      "open_weights": false,
+      "open_weights": true,
       "reasoning": true,
       "release_date": "2026-09-22",
       "temperature": true,
@@ -10267,7 +10576,7 @@
         ]
       },
       "name": "MiMo V2.6 Pro",
-      "open_weights": false,
+      "open_weights": true,
       "reasoning": true,
       "release_date": "2026-09-22",
       "temperature": true,
@@ -10295,7 +10604,7 @@
         ]
       },
       "name": "MiMo V2.6 Pro UltraSpeed",
-      "open_weights": false,
+      "open_weights": true,
       "reasoning": true,
       "release_date": "2026-09-21",
       "temperature": true,

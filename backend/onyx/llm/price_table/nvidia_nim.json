@@ -1649,6 +1649,14 @@
       "temperature": false,
       "tool_call": false
     },
+    "nvidia/llama-3_2-nv-rerankqa-1b-v2": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "mode": "rerank",
+      "name": "nvidia/llama-3_2-nv-rerankqa-1b-v2"
+    },
     "nvidia/llama-nemotron-embed-vl-1b-v2": {
       "attachment": true,
       "cost": {
@@ -2048,6 +2056,14 @@
       "release_date": "2025-03-17",
       "temperature": false,
       "tool_call": false
+    },
+    "nvidia/nv-rerankqa-mistral-4b-v3": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "mode": "rerank",
+      "name": "nvidia/nv-rerankqa-mistral-4b-v3"
     },
     "nvidia/nvidia-nemotron-nano-9b-v2": {
       "attachment": false,
@@ -2573,6 +2589,14 @@
       "structured_output": true,
       "temperature": true,
       "tool_call": true
+    },
+    "ranking/nvidia/llama-3.2-nv-rerankqa-1b-v2": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "mode": "rerank",
+      "name": "ranking/nvidia/llama-3.2-nv-rerankqa-1b-v2"
     },
     "sarvamai/sarvam-m": {
       "attachment": false,
