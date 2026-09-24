@@ -127,16 +127,6 @@ def test_no_choices_is_an_error() -> None:
         from_litellm_model_response(raw)
 
 
-def test_verbatim_repeated_message_is_kept_once() -> None:
-    """gpt-5.4+ sometimes repeats a message item verbatim (litellm#37299)."""
-    raw = _bridge_response([_text("The answer is 42."), _text("The answer is 42.")])
-    assert len(raw.choices) == 2, "guard: the bridge still splits the answer"
-
-    response = from_litellm_model_response(raw)
-
-    assert response.choice.message.content == "The answer is 42."
-
-
 def test_preamble_and_answer_are_both_kept() -> None:
     """gpt-5.4+ can put a preamble in choices[0] and the answer in choices[1].
     Reading only choices[0] would return the preamble instead of the answer."""
@@ -147,44 +137,11 @@ def test_preamble_and_answer_are_both_kept() -> None:
     assert response.choice.message.content == "Let me check. Your meeting is at 3pm."
 
 
-def test_repeat_after_a_preamble_is_kept_once() -> None:
-    raw = _bridge_response(
-        [
-            _text("Let me check. "),
-            _text("The answer is 42."),
-            _text("The answer is 42."),
-        ]
-    )
+def test_repeated_parts_are_kept() -> None:
+    """A choice has no message item id, so a repeat cannot be told apart from a
+    resend. Keep everything: dropping real text would be silent data loss."""
+    raw = _bridge_response([_text("Yes. "), _text("Yes. ")])
 
     response = from_litellm_model_response(raw)
 
-    assert response.choice.message.content == "Let me check. The answer is 42."
-
-
-def test_repeated_multi_part_message_is_kept_once() -> None:
-    """A repeated message item with two text parts arrives as four choices."""
-    two_parts = ResponseOutputMessage(
-        id="msg_1",
-        type="message",
-        role="assistant",
-        status="completed",
-        content=[
-            ResponseOutputText(type="output_text", text="A. ", annotations=[]),
-            ResponseOutputText(type="output_text", text="B.", annotations=[]),
-        ],
-    )
-    raw = _bridge_response([two_parts, two_parts])
-    assert len(raw.choices) == 4, "guard: one choice per content part"
-
-    response = from_litellm_model_response(raw)
-
-    assert response.choice.message.content == "A. B."
-
-
-def test_a_part_that_ends_earlier_text_is_not_cut() -> None:
-    """Parts are compared whole. "lo" is not a repeat of "Hello"."""
-    raw = _bridge_response([_text("Hello"), _text("lo")])
-
-    response = from_litellm_model_response(raw)
-
-    assert response.choice.message.content == "Hellolo"
+    assert response.choice.message.content == "Yes. Yes. "

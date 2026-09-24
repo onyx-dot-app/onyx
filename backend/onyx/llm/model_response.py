@@ -175,26 +175,6 @@ def _extract_id_and_created(
     return str(response_id), str(created)
 
 
-def _drop_repeated_parts(parts: list[str]) -> list[str]:
-    """Remove the parts gpt-5.4+ repeats when it re-sends a message item.
-
-    A repeated item arrives as a run of parts equal to the run just before it,
-    with or without a preamble in front. Parts are compared whole, never as
-    substrings, so real text is not cut. A part equal to all text kept so far is
-    also dropped, the same rule as upstream litellm#41123.
-    """
-    kept: list[str] = []
-    for part in parts:
-        if kept and part == "".join(kept):
-            continue
-        kept.append(part)
-        for size in range(1, len(kept) // 2 + 1):
-            if kept[-size:] == kept[-2 * size : -size]:
-                del kept[-size:]
-                break
-    return kept
-
-
 def _merge_choices_into_one(
     response_data: dict[str, Any], error_prefix: str
 ) -> dict[str, Any]:
@@ -220,10 +200,12 @@ def _merge_choices_into_one(
 
     messages = [(choice or {}).get("message") or {} for choice in choices]
     reasonings = [message.get("reasoning_content") for message in messages]
+    # Kept as sent, repeats included. gpt-5.4+ sometimes re-sends a message
+    # item, but a choice carries no item id, so a resend cannot be told apart
+    # from text that really repeats. The streamed path keeps resends too
+    # (litellm#41117 is open), so both transports return the same text.
     merged_text = "".join(
-        _drop_repeated_parts(
-            [message["content"] for message in messages if message.get("content")]
-        )
+        message["content"] for message in messages if message.get("content")
     )
     # The bridge appends the tool-call choice after the text ones, so the last
     # stated finish_reason is the one describing how the answer ended.
