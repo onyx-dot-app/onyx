@@ -203,6 +203,8 @@ export type { DataTableProps } from "@opal/components/table/components";
 export {
   ShadowDiv,
   type ShadowDivProps,
+  type ShadowDirection,
+  type ShadowDivVariant,
 } from "@opal/components/shadow-div/components";
 
 /* Popover */

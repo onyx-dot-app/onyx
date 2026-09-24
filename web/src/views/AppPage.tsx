@@ -962,7 +962,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
                     {/* OnboardingUI */}
                     {onboardingVisible && (
-                      <ShadowDiv mask className="overscroll-contain">
+                      <ShadowDiv variant="mask" className="overscroll-contain">
                         <OnboardingFlow
                           showOnboarding={showOnboarding}
                           handleHideOnboarding={hideOnboarding}
