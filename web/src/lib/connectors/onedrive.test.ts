@@ -1,15 +1,13 @@
-import {
-  connectorConfigs,
-  createConnectorInitialValues,
-  getSelectedTabValue,
-  getTabValueUpdates,
-  type TabOption,
-} from "@/lib/connectors/connectors";
+import { connectorConfigs } from "@/lib/connectors/connectors";
 import { credentialTemplates } from "@/lib/connectors/credentials";
 import {
-  FileTypeCategory,
+  createConnectorInitialValues,
   getFileTypeDefinitionForField,
-} from "@/lib/connectors/fileTypes";
+  getSelectedTabValue,
+  getTabValueUpdates,
+} from "@/lib/connectors/utils";
+import type { TabOption } from "@/lib/connectors/types";
+import { FileTypeCategory } from "@/lib/connectors/types";
 import { getSourceMetadata } from "@/lib/sources";
 import { ValidSources, validAutoSyncSources } from "@/lib/types";
 
