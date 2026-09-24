@@ -254,18 +254,18 @@ export {
 } from "@opal/components/inputs/chrono/input-date-picker/components";
 
 /* InputSingleSelect */
-export { InputSingleSelect } from "@opal/components/inputs/selects/input-single-select/components";
+export { InputSingleSelect } from "@opal/components/inputs/dropdowns/input-single-select/components";
 export {
   type InputSingleSelectProps,
   type SelectOption,
   type SelectSection,
-} from "@opal/components/inputs/selects/types";
+} from "@opal/components/inputs/dropdowns/types";
 
 /* InputMultiSelect */
 export {
   InputMultiSelect,
   type InputMultiSelectProps,
-} from "@opal/components/inputs/selects/input-multi-select/components";
+} from "@opal/components/inputs/dropdowns/input-multi-select/components";
 
 /* InputPasswordTypeIn */
 export {
