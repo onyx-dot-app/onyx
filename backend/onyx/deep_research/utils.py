@@ -23,8 +23,9 @@ class ThinkToolProcessorState(BaseModel):
     full_arguments: str = ""  # Full accumulated arguments for final tool call
     accumulated_args: str = ""  # Working buffer for JSON parsing
     json_prefix_stripped: bool = False
-    # Buffer holds content that might be the JSON suffix "}
-    # We hold back 2 chars to avoid emitting the closing "}
+    # Set once the closing quote of the reasoning string is seen
+    reasoning_closed: bool = False
+    # Pending reasoning content, e.g. a trailing backslash of a split escape
     buffer: str = ""
 
 
@@ -56,12 +57,37 @@ def _unescape_json_string(s: str) -> str:
     return result
 
 
+def _split_json_string_content(buffer: str) -> tuple[str, str, bool]:
+    """Split raw JSON string content at its closing quote.
+
+    Returns (content safe to emit, content to hold for the next chunk,
+    whether the closing quote was found). A trailing backslash is held
+    because it may start an escape sequence.
+    """
+    i = 0
+    while i < len(buffer):
+        char = buffer[i]
+        if char == "\\":
+            if i + 1 == len(buffer):
+                return buffer[:i], buffer[i:], False
+            i += 2
+        elif char == '"':
+            return buffer[:i], "", True
+        else:
+            i += 1
+    return buffer, "", False
+
+
 def _extract_reasoning_chunk(state: ThinkToolProcessorState) -> str | None:
     """
     Extract reasoning content from accumulated arguments, stripping JSON wrapper.
 
     Returns the next chunk of reasoning to emit, or None if nothing to emit yet.
     """
+    if state.reasoning_closed:
+        state.accumulated_args = ""
+        return None
+
     # If we haven't found the JSON prefix yet, look for it
     if not state.json_prefix_stripped:
         # Try both prefix variants
@@ -79,39 +105,13 @@ def _extract_reasoning_chunk(state: ThinkToolProcessorState) -> str | None:
             # Haven't seen full prefix yet, keep accumulating
             return None
     else:
-        # Already stripped prefix, add new content to buffer
         state.buffer += state.accumulated_args
         state.accumulated_args = ""
 
-    # Hold back enough chars to avoid splitting escape sequences AND the JSON suffix "}
-    # We need at least 2 for the suffix, but we also need to ensure escape sequences
-    # like \n, \t, \\, \" don't get split. The longest escape is \\ (2 chars).
-    # So we hold back 3 chars to be safe: if the last char is \, we don't want to
-    # emit it without knowing what follows.
-    holdback = 3
-    if len(state.buffer) <= holdback:
-        return None
-
-    # Check if there's a trailing backslash that could be part of an escape sequence
-    # If so, hold back one more character to avoid splitting the escape
-    to_emit = state.buffer[:-holdback]
-    remaining = state.buffer[-holdback:]
-
-    # If to_emit ends with a backslash, it might be the start of an escape sequence
-    # Move it to the remaining buffer to process with the next chunk
-    # If to_emit ends with a backslash, it might be the start of an escape sequence
-    # Move it to the remaining buffer to process with the next chunk
-    if to_emit and to_emit[-1] == "\\":
-        remaining = to_emit[-1] + remaining
-        to_emit = to_emit[:-1]
-
-    state.buffer = remaining
-
-    # Unescape JSON escape sequences (e.g., \\n -> \n)
-    if to_emit:
-        to_emit = _unescape_json_string(to_emit)
-
-    return to_emit or None
+    content, state.buffer, state.reasoning_closed = _split_json_string_content(
+        state.buffer
+    )
+    return _unescape_json_string(content) or None
 
 
 def create_think_tool_token_processor() -> Callable[
