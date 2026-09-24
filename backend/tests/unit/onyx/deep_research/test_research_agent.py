@@ -1,23 +1,35 @@
 """Deep Research batch runner: parent tool call pairing."""
 
+import queue
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from onyx.chat.chat_state import ChatStateContainer
+from onyx.chat.emitter import Emitter
 from onyx.deep_research.dr_mock_tools import (
     RESEARCH_AGENT_TASK_KEY,
     RESEARCH_AGENT_TOOL_NAME,
 )
 from onyx.deep_research.models import ResearchAgentCallResult
+from onyx.llm.interfaces import LLM
 from onyx.server.query_and_chat.placement import Placement
+from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.fake_tools import research_agent
 from onyx.tools.fake_tools.research_agent import run_research_agent_calls
 from onyx.tools.models import ToolCallKickoff
-from tests.unit.onyx.deep_research.fakes import UnusedLLM, make_emitter, token_counter
 
 TURN = 2
+
+
+def _emitter() -> Emitter:
+    merged: queue.Queue[tuple[int, Packet | Exception | object]] = queue.Queue()
+    return Emitter(merged_queue=merged)
+
+
+def _token_counter(value: str) -> int:
+    return len(value) // 4 + 1
 
 
 def _research_call(call_id: str, tab_index: int) -> ToolCallKickoff:
@@ -47,11 +59,11 @@ def _run_batch(
             research_agent_calls=calls,
             parent_tool_call_ids=parent_ids,
             tools=[],
-            emitter=make_emitter(),
+            emitter=_emitter(),
             state_container=ChatStateContainer(),
-            llm=UnusedLLM(),
+            llm=MagicMock(spec=LLM),
             is_reasoning_model=True,
-            token_counter=token_counter,
+            token_counter=_token_counter,
             citation_mapping={},
             language_section="",
         )
