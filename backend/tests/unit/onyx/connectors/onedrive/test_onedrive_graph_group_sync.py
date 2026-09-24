@@ -3,7 +3,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from ee.onyx.external_permissions.onedrive.group_sync import onedrive_group_sync
-from onyx.connectors.onedrive.errors import OneDriveGraphError
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftGraphError as OneDriveGraphError,
+)
 from onyx.connectors.onedrive.models import (
     OneDriveGroup,
     OneDriveGroupMember,
