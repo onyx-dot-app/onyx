@@ -391,7 +391,7 @@ def get_cc_pair_full_info(
 
     # Get latest permission sync attempt for status
     latest_permission_sync_attempt = None
-    if cc_pair.access_type == AccessType.SYNC:
+    if cc_pair.access_type.is_perm_synced():
         latest_permission_sync_attempt = (
             get_latest_doc_permission_sync_attempt_for_cc_pair(
                 db_session=db_session,
@@ -811,6 +811,14 @@ def associate_credential_to_connector(
     The intent of this endpoint is to handle connectors that actually need credentials.
     """
 
+    if metadata.access_type == AccessType.SYNC_RESTRICTED:
+        # Becomes creatable in the same change that enforces its data-access
+        # groups at query time, so no restricted pair exists without them.
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+            "Restricted perm-synced connectors are not available yet.",
+        )
+
     # GATE 2 write authorization (see assert_within_scope).
     #
     # A permission-synced connector carrying no groups is exempt: its ACLs are
@@ -820,7 +828,7 @@ def associate_credential_to_connector(
     # Groups may still be supplied to scope who may *manage* it, and those are
     # checked normally below.
     is_groupless_perm_sync = (
-        metadata.access_type == AccessType.SYNC and not metadata.groups
+        metadata.access_type.is_perm_synced() and not metadata.groups
     )
     if not is_groupless_perm_sync:
         assert_within_scope(

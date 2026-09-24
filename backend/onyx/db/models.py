@@ -5116,6 +5116,24 @@ class UserGroup__ConnectorCredentialPair(Base):
     )
 
 
+class UserGroup__CCPairDataAccess(Base):
+    """Data-access groups of a SYNC_RESTRICTED cc-pair: only their members may
+    read its documents, on top of the source's own permissions. Separate from
+    UserGroup__ConnectorCredentialPair, which scopes who may manage the pair."""
+
+    __tablename__ = "user_group__cc_pair_data_access"
+
+    cc_pair_id: Mapped[int] = mapped_column(
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_group_id: Mapped[int] = mapped_column(
+        ForeignKey("user_group.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+
+
 class Persona__UserGroup(Base):
     __tablename__ = "persona__user_group"
 

@@ -1416,6 +1416,9 @@ def _apply_connector_status_filters(
 ) -> list[ConnectorIndexingStatusLite]:
     """Apply filters to a list of ConnectorIndexingStatusLite objects"""
     filtered_statuses: list[ConnectorIndexingStatusLite] = []
+    # The "sync" filter covers restricted perm-synced pairs too.
+    if AccessType.SYNC in access_type_filters:
+        access_type_filters = [*access_type_filters, AccessType.SYNC_RESTRICTED]
 
     for status in statuses:
         # Filter by access type
@@ -1555,6 +1558,14 @@ def create_connector_with_mock_credential(
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     tenant_id = get_current_tenant_id()
+
+    if connector_data.access_type == AccessType.SYNC_RESTRICTED:
+        # Perm sync needs a real credential; the restriction's groups are only
+        # accepted where the pair is associated with one.
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Restricted perm-synced connectors must be created with a credential.",
+        )
 
     # GATE 2 write authorization (see assert_within_scope).
     assert_within_scope(

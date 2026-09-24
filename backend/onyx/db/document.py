@@ -879,7 +879,9 @@ def get_access_info_for_documents(
             User,
             and_(
                 Credential.user_id == User.id,
-                ConnectorCredentialPair.access_type != AccessType.SYNC,
+                ConnectorCredentialPair.access_type.notin_(
+                    AccessType.perm_synced_types()
+                ),
             ),
         )
         # don't include CC pairs that are being deleted

@@ -290,6 +290,15 @@ class AccessType(str, PyEnum):
     PUBLIC = "public"
     PRIVATE = "private"
     SYNC = "sync"
+    # Perm sync, narrowed to members of the connector's data-access groups.
+    SYNC_RESTRICTED = "sync_restricted"
+
+    def is_perm_synced(self) -> bool:
+        return self in (AccessType.SYNC, AccessType.SYNC_RESTRICTED)
+
+    @classmethod
+    def perm_synced_types(cls) -> list["AccessType"]:
+        return [cls.SYNC, cls.SYNC_RESTRICTED]
 
 
 class EmbeddingPrecision(str, PyEnum):
