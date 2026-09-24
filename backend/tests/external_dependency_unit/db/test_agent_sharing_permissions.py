@@ -310,13 +310,9 @@ def test_builtin_persona_cannot_be_deleted(
     assistant workspace-wide. mark_persona_as_deleted refuses built-ins for every
     caller, admins included."""
     ce_user = create_test_user(db_session, "builtin-del-ce")
-    # The reported repro: a fresh CE user holds ADD_AGENTS but not MANAGE_AGENTS.
-    assert has_global_permission(ce_user, Permission.ADD_AGENTS)
-    assert not has_global_permission(ce_user, Permission.MANAGE_AGENTS)
-
-    # In EE "Create Agents" is a grant, not an auto-grant — model it by pinning EE
-    # mode and holding only that permission.
     ee_user = create_test_user(db_session, "builtin-del-ee")
+    # In EE "Create Agents" is a grant, not an auto-grant — model the EE caller by
+    # holding only that permission.
     ee_user.effective_permissions = [Permission.ADD_AGENTS.value]
     db_session.commit()
 
@@ -324,9 +320,18 @@ def test_builtin_persona_cannot_be_deleted(
 
     builtin = create_test_persona(db_session, owner=None, builtin_persona=True)
     try:
-        with pytest.raises(OnyxError) as exc_info:
-            delete_persona(persona_id=builtin.id, user=ce_user, db_session=db_session)
-        assert exc_info.value.error_code == OnyxErrorCode.BAD_REQUEST
+        # Pin each edition — CI runs EE-loaded, so neither auto-grant nor grant
+        # applies on its own. In CE every non-anonymous user holds ADD_AGENTS via
+        # CE_UNGATED_PERMISSIONS — the reported repro's caller.
+        with monkeypatch.context() as m:
+            m.setattr(global_version, "is_ee_version", lambda: False)
+            assert has_global_permission(ce_user, Permission.ADD_AGENTS)
+            assert not has_global_permission(ce_user, Permission.MANAGE_AGENTS)
+            with pytest.raises(OnyxError) as exc_info:
+                delete_persona(
+                    persona_id=builtin.id, user=ce_user, db_session=db_session
+                )
+            assert exc_info.value.error_code == OnyxErrorCode.BAD_REQUEST
 
         with monkeypatch.context() as m:
             m.setattr(global_version, "is_ee_version", lambda: True)
