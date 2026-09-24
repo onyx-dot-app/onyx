@@ -61,6 +61,7 @@ from onyx.connectors.microsoft_utils.graph_auth import (
 from onyx.connectors.microsoft_utils.graph_client import (
     GraphApiClient,
     graph_error_code,
+    is_permanent_refusal,
 )
 from onyx.connectors.microsoft_utils.graph_env import (
     DEFAULT_AUTHORITY_HOST,
@@ -212,23 +213,6 @@ def _drives_matching_url_name(drives: Iterable[Drive], url_name: str) -> list[Dr
         for drive in drives
         if (_drive_url_name(drive.web_url) or "").lower() == url_name.lower()
     ]
-
-
-# `GET /sites/getAllSites` returns the tenant-wide directory of every site
-# collection, not just sites the app principal can read. Per-site content
-# access is gated separately, so some listed sites will always reject reads.
-# 403/404/410 cover "no permission / removed / gone"; 423 ("notAllowed")
-# covers admin-locked or M365-archived sites (e.g. `Set-SPOSiteArchiveState
-# -ArchiveState Archived`). All four are per-site conditions — skip the
-# site and continue the run rather than aborting the whole tenant index.
-PER_SITE_GRAPH_FAILURE_STATUSES: frozenset[int] = frozenset({403, 404, 410, 423})
-
-
-def _is_per_site_graph_failure(e: ClientRequestException | HTTPError) -> bool:
-    # response=None means a wrapped transport error; the retry layer owns it.
-    if e.response is None:
-        return False
-    return e.response.status_code in PER_SITE_GRAPH_FAILURE_STATUSES
 
 
 class SharepointConnectorCheckpoint(ConnectorCheckpoint):
@@ -1090,55 +1074,6 @@ class SharepointConnector(
             drive_id=cast(str, drive.id), name=resolved_name, web_url=drive.web_url
         )
 
-    def _get_drive_items_for_drive_id(
-        self,
-        site_descriptor: SiteDescriptor,
-        drive_id: str,
-        start: datetime | None = None,
-        end: datetime | None = None,
-    ) -> Generator[DriveItemData, None, None]:
-        """Yield drive items lazily for a given drive name.
-
-        Uses the delta API for whole-drive enumeration (flat, incremental via
-        timestamp token) and falls back to BFS /children traversal when a
-        folder_path is configured, since delta cannot scope to a subtree
-        efficiently.
-
-        Returns:
-            A generator of DriveItemData.
-            The generator paginates through the Graph API so items are never
-            all held in memory at once.
-        """
-        try:
-            if site_descriptor.folder_path:
-                yield from iter_drive_items_paged(
-                    self.graph_api,
-                    drive_id=drive_id,
-                    folder_path=site_descriptor.folder_path,
-                    start=start,
-                    end=end,
-                )
-            else:
-                yield from iter_drive_items_delta(
-                    self.graph_api,
-                    drive_id=drive_id,
-                    start=start,
-                    end=end,
-                )
-
-        except Exception as e:
-            err_str = str(e)
-            if (
-                "403 Client Error" in err_str
-                or "404 Client Error" in err_str
-                or "invalid_client" in err_str
-            ):
-                raise e
-
-            logger.warning(
-                "Failed to process site: %s - %s", site_descriptor.url, err_str
-            )
-
     def _fetch_driveitems(
         self,
         site_descriptor: SiteDescriptor,
@@ -1149,78 +1084,71 @@ class SharepointConnector(
 
         Yields (DriveItemData, drive_name, drive_web_url) tuples one item at
         a time, paginating through the Graph API internally.
+
+        A site Graph refuses for good is skipped. Anything else raises, since
+        the slim callers delete or lock out what a run did not reach.
         """
         try:
             site = self.graph_client.sites.get_by_url(site_descriptor.url)
             drives = site.drives.get().execute_query()
-            logger.debug("Found drives: %s", [d.name for d in drives])
+        # The SDK's ClientRequestException is a RequestException subclass. The
+        # site read and its drive listing run together here, before any item is
+        # yielded, so a refusal of either is the whole site, never a partial one.
+        except requests.RequestException as e:
+            if not is_permanent_refusal(e):
+                raise
+            logger.warning(
+                "Skipping site %s, Graph refused it for good: %s",
+                site_descriptor.url,
+                e,
+            )
+            return
+        logger.debug("Found drives: %s", [d.name for d in drives])
 
-            if site_descriptor.drive_name:
-                matched = [
-                    drive
-                    for drive in drives
-                    if drive.name == site_descriptor.drive_name
-                    or (
-                        drive.name in SHARED_DOCUMENTS_MAP
-                        and SHARED_DOCUMENTS_MAP[drive.name]
-                        == site_descriptor.drive_name
-                    )
-                ]
-                is_personal_site = (
-                    PERSONAL_SITE_URL_MARKER in site_descriptor.url.lower()
+        if site_descriptor.drive_name:
+            matched = [
+                drive
+                for drive in drives
+                if drive.name == site_descriptor.drive_name
+                or (
+                    drive.name in SHARED_DOCUMENTS_MAP
+                    and SHARED_DOCUMENTS_MAP[drive.name] == site_descriptor.drive_name
                 )
-                if not matched and not is_personal_site:
-                    matched = _drives_matching_url_name(
-                        drives, site_descriptor.drive_name
-                    )
-                drives = matched
-                if not drives:
-                    logger.warning("Drive '%s' not found", site_descriptor.drive_name)
-                    return
+            ]
+            is_personal_site = PERSONAL_SITE_URL_MARKER in site_descriptor.url.lower()
+            if not matched and not is_personal_site:
+                matched = _drives_matching_url_name(drives, site_descriptor.drive_name)
+            drives = matched
+            if not drives:
+                logger.warning("Drive '%s' not found", site_descriptor.drive_name)
+                return
 
-            for drive in drives:
-                try:
-                    drive_name = (
-                        SHARED_DOCUMENTS_MAP[drive.name]
-                        if drive.name in SHARED_DOCUMENTS_MAP
-                        else cast(str, drive.name)
-                    )
-                    drive_web_url: str | None = drive.web_url
+        for drive in drives:
+            drive_name = (
+                SHARED_DOCUMENTS_MAP[drive.name]
+                if drive.name in SHARED_DOCUMENTS_MAP
+                else cast(str, drive.name)
+            )
+            drive_web_url: str | None = drive.web_url
 
-                    if site_descriptor.folder_path:
-                        item_iter = iter_drive_items_paged(
-                            self.graph_api,
-                            drive_id=cast(str, drive.id),
-                            folder_path=site_descriptor.folder_path,
-                            start=start,
-                            end=end,
-                        )
-                    else:
-                        item_iter = iter_drive_items_delta(
-                            self.graph_api,
-                            drive_id=cast(str, drive.id),
-                            start=start,
-                            end=end,
-                        )
+            if site_descriptor.folder_path:
+                item_iter = iter_drive_items_paged(
+                    self.graph_api,
+                    drive_id=cast(str, drive.id),
+                    folder_path=site_descriptor.folder_path,
+                    start=start,
+                    end=end,
+                )
+            else:
+                item_iter = iter_drive_items_delta(
+                    self.graph_api,
+                    drive_id=cast(str, drive.id),
+                    start=start,
+                    end=end,
+                )
 
-                    for item in item_iter:
-                        yield item, drive_name or "", drive_web_url
-
-                except Exception as e:
-                    logger.warning(
-                        "Failed to process drive '%s': %s", drive.name, str(e)
-                    )
-
-        except Exception as e:
-            err_str = str(e)
-            if (
-                "403 Client Error" in err_str
-                or "404 Client Error" in err_str
-                or "invalid_client" in err_str
-            ):
-                raise e
-
-            logger.warning("Failed to process site: %s", err_str)
+            for item in item_iter:
+                yield item, drive_name or "", drive_web_url
 
     def _handle_paginated_sites(
         self, sites: SitesWithRoot
