@@ -7511,11 +7511,6 @@
         "description": "This name will show across the app and replace \"Onyx\" in the UI.",
         "label": "Application Display Name"
       },
-      "branding": {
-        "description": "Remove “powered by Onyx” and other Onyx branding presence in the app.",
-        "enterpriseTooltip": "Hiding Onyx branding is an Enterprise Plan feature.",
-        "label": "Hide Onyx Branding"
-      },
       "chatFooter": {
         "description": "Add markdown content for disclaimers or additional information.",
         "label": "Chat Footer Text"

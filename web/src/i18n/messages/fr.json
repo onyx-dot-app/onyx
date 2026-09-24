@@ -7511,11 +7511,6 @@
         "description": "Ce nom apparaîtra dans toute l'application et remplacera \"Onyx\" dans l'interface.",
         "label": "Nom d'affichage de l'application"
       },
-      "branding": {
-        "description": "Supprimez « powered by Onyx » et les autres présences de la marque Onyx dans l'application.",
-        "enterpriseTooltip": "Masquer la marque Onyx est une fonctionnalité du forfait Enterprise.",
-        "label": "Masquer la marque Onyx"
-      },
       "chatFooter": {
         "description": "Ajoutez du contenu markdown pour des avertissements ou des informations supplémentaires.",
         "label": "Texte du pied de page du chat"

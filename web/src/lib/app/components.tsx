@@ -2,10 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
-import {
-  DEFAULT_LOGO_SIZE_PX,
-  NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED,
-} from "@/lib/constants";
+import { DEFAULT_LOGO_SIZE_PX } from "@/lib/constants";
 import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
@@ -72,7 +69,7 @@ export function FoldableLogo({
 }: FoldableLogoProps) {
   const t = useTranslations("common");
   const resolvedSize = size ?? DEFAULT_LOGO_SIZE_PX;
-  const { enterprise } = useSettings();
+  const { enterprise, hide_onyx_branding, isLoading } = useSettings();
   const logoDisplayStyle = enterprise?.logo_display_style;
   const applicationName = enterprise?.application_name;
 
@@ -99,17 +96,17 @@ export function FoldableLogo({
             {opts.includeName && (
               <Truncated headingH3>{applicationName}</Truncated>
             )}
-            {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED &&
-              !enterprise?.hide_onyx_branding && (
-                <Text
-                  secondaryBody
-                  text03
-                  className={"line-clamp-1 truncate"}
-                  nowrap
-                >
-                  {t("logo.poweredBy.label")}
-                </Text>
-              )}
+            {/* Wait for settings so a hidden tagline never flashes. */}
+            {!isLoading && !hide_onyx_branding && (
+              <Text
+                secondaryBody
+                text03
+                className={"line-clamp-1 truncate"}
+                nowrap
+              >
+                {t("logo.poweredBy.label")}
+              </Text>
+            )}
           </div>
         )}
       </div>

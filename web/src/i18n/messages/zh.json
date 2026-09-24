@@ -7511,11 +7511,6 @@
         "description": "此名称将在整个应用中显示,并替换界面中的\"Onyx\"。",
         "label": "应用显示名称"
       },
-      "branding": {
-        "description": "移除应用中的\"powered by Onyx\"及其他 Onyx 品牌标识。",
-        "enterpriseTooltip": "隐藏 Onyx 品牌标识是企业版套餐的功能。",
-        "label": "隐藏 Onyx 品牌标识"
-      },
       "chatFooter": {
         "description": "添加用于免责声明或附加信息的 markdown 内容。",
         "label": "聊天页脚文本"
