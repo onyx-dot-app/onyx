@@ -26,21 +26,21 @@ import {
   type ToolConfigurationHandle,
 } from "@/lib/tools/hooks";
 import { ToolsPopoverProvider } from "@/lib/tools/providers";
-import MCPLineItem, { MCPServer } from "@/lib/tools/components/MCPLineItem";
+import { MCPLineItem, type MCPServer } from "@/lib/mcp/components";
 import SourcesView from "@/lib/tools/components/SourcesView";
 import SwitchList, { SwitchListItem } from "@/lib/tools/components/SwitchList";
 import ToolLineItem from "@/lib/tools/components/ToolLineItem";
+import { SecondaryViewState } from "@/lib/tools/types";
 import {
   MCPAuthenticationType,
   MCPAuthenticationPerformer,
-  SecondaryViewState,
-} from "@/lib/tools/types";
+} from "@/lib/mcp/types";
 import { Permission } from "@/lib/types";
 import {
   getMCPUserOAuthNavigationUrl,
   saveMCPUserCredentials,
   startMCPUserOAuth,
-} from "@/lib/tools/svc";
+} from "@/lib/mcp/svc";
 import { useUser } from "@/providers/UserProvider";
 
 /**

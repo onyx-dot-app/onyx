@@ -20,9 +20,10 @@ import {
   SvgStar,
   SvgUser,
 } from "@opal/icons";
-import { useMcpServers } from "@/lib/tools/hooks";
+import { useMcpServers } from "@/lib/mcp/hooks";
 import { getActionIcon } from "@/lib/tools/utils";
-import { MCPServer, ToolSnapshot } from "@/lib/tools/types";
+import { ToolSnapshot } from "@/lib/tools/types";
+import { MCPServer } from "@/lib/mcp/types";
 import { EmptyMessageCard } from "@opal/components";
 import { InputSwitch } from "@opal/components";
 import { Button } from "@opal/components";

@@ -14,11 +14,11 @@ import {
 } from "@opal/icons";
 
 import { Section } from "@/layouts/general-layouts";
+import { ToolSnapshot } from "@/lib/tools/types";
 import {
   MCPAuthenticationType,
   MCPAuthenticationPerformer,
-  ToolSnapshot,
-} from "@/lib/tools/types";
+} from "@/lib/mcp/types";
 import EnabledCount from "@/lib/tools/components/EnabledCount";
 
 export interface MCPServer {
