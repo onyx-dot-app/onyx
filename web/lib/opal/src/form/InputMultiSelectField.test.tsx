@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen } from "@tests/setup/test-utils";
+import { render, screen, waitFor } from "@tests/setup/test-utils";
 import "@testing-library/jest-dom";
 import userEvent from "@testing-library/user-event";
 import { Formik } from "formik";
@@ -73,7 +73,8 @@ describe("multi-select Formik fields", () => {
     );
     await user.click(screen.getByPlaceholderText("Pick fruits"));
     await user.click(screen.getByRole("option", { name: /Apple/ }));
-    expect(latest).toEqual(["apple"]);
+    // Formik validates asynchronously after setValue.
+    await waitFor(() => expect(latest).toEqual(["apple"]));
     expect(container.querySelector('[data-variant="error"]')).toBeNull();
   });
 });
