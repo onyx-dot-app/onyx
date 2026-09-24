@@ -7,8 +7,10 @@ from __future__ import annotations
 import pytest
 
 from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftGraphError as OutlookGraphError,
+)
 from onyx.connectors.outlook.errors import raise_for_graph_error
-from onyx.connectors.outlook.models import OutlookGraphError
 
 
 def _error(status: int | None) -> OutlookGraphError:

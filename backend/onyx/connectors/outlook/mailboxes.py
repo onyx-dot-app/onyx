@@ -7,13 +7,16 @@ the rule lives here once and neither path can drift from the other.
 from typing import Any
 
 from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftGraphError as OutlookGraphError,
+)
 from onyx.connectors.outlook.errors import (
     EXCHANGE_SCOPE_REMEDIATION,
     MAILBOX_UNAVAILABLE_REMEDIATION,
     USER_LISTING_DENIED,
     raise_for_graph_error,
 )
-from onyx.connectors.outlook.models import OutlookGraphError, OutlookMailbox
+from onyx.connectors.outlook.models import OutlookMailbox
 from onyx.connectors.outlook.source_operations import OutlookSourceOperations
 
 # Connector config key holding the explicit mailbox list. Empty means every

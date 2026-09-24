@@ -19,11 +19,11 @@ from onyx.connectors.interfaces import (
 from onyx.connectors.microsoft_utils.drive_delta import (
     DRIVE_DELTA_SELECT_FIELDS,
     DriveDeltaItem,
+    build_delta_start_url,
 )
 from onyx.connectors.microsoft_utils.drive_items import (
     DriveItemContent,
     DriveItemData,
-    build_delta_start_url,
     build_item_relative_path,
     drive_item_in_time_window,
     is_path_excluded,
@@ -32,6 +32,9 @@ from onyx.connectors.microsoft_utils.graph_env import (
     DEFAULT_AUTHORITY_HOST,
     DEFAULT_GRAPH_API_HOST,
     resolve_microsoft_environment,
+)
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftGraphError as OneDriveGraphError,
 )
 from onyx.connectors.models import (
     BasicExpertInfo,
@@ -43,7 +46,6 @@ from onyx.connectors.models import (
     HierarchyNode,
     SlimDocument,
 )
-from onyx.connectors.onedrive.errors import OneDriveGraphError
 from onyx.connectors.onedrive.models import (
     OneDriveCheckpoint,
     OneDriveDrive,

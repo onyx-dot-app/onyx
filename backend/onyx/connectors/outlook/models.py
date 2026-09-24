@@ -9,62 +9,6 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
-from onyx.connectors.microsoft_utils.graph_client import is_permanent_refusal_status
-
-# The OutlookAuthError code for a blank credential field, raised before MSAL is
-# built so a half-filled form reads as a credential problem and not a KeyError.
-MISSING_CREDENTIAL_CODE = "missing_credential"
-
-# The OutlookAuthError code for a directory id Microsoft's discovery endpoint
-# does not know. MSAL reports it as a ValueError while building the app.
-INVALID_AUTHORITY_CODE = "invalid_authority"
-
-# The OutlookAuthError code for an authentication_method value the shared
-# package does not know.
-INVALID_AUTH_METHOD_CODE = "invalid_auth_method"
-
-# The OutlookAuthError code for a PFX bundle the shared package cannot open:
-# not base64, not PKCS12, or the wrong password.
-INVALID_CERTIFICATE_CODE = "invalid_certificate"
-
-
-class OutlookGraphError(Exception):
-    """A Graph request the gateway could not complete.
-
-    Carries the HTTP status and Graph's machine-readable ``error.code`` so
-    callers branch on those and never on the message text, which Microsoft
-    says may change at any time. A transport failure or an unreadable body
-    that outlived the client's retries has no status and the exception class
-    name as its code.
-    """
-
-    def __init__(self, status: int | None, code: str, message: str) -> None:
-        self.status = status
-        self.code = code
-        super().__init__(f"Graph {status} {code}: {message}")
-
-    @property
-    def is_permanent_refusal(self) -> bool:
-        """Graph refused the entity itself (no grant, gone, or locked), not the
-        call. The shared classifier decides, so Outlook agrees with SharePoint
-        and Teams."""
-        return is_permanent_refusal_status(self.status)
-
-    @property
-    def fails_the_attempt(self) -> bool:
-        """Throttling, any 5xx, a dropped connection or a rejected token is the
-        service's or the app's trouble, not the item's, so the attempt raises
-        and runs again later instead of recording the item as failed."""
-        return self.status is None or self.status in (401, 429) or self.status >= 500
-
-
-class OutlookAuthError(Exception):
-    """MSAL refused to issue an app-only token."""
-
-    def __init__(self, code: str, description: str) -> None:
-        self.code = code
-        super().__init__(f"{code}: {description}")
-
 
 class OutlookTokenInfo(BaseModel):
     expires_in: int | None = None
