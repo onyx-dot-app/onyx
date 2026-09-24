@@ -367,7 +367,9 @@ export default function LanguageModelsPage() {
       {
         id: "addProvider",
         title: t("groups.addProvider.title"),
-        description: t("groups.addProvider.description"),
+        description: t("groups.addProvider.description", {
+          appName: settings.appName,
+        }),
         emphasis: true,
         providerNames: [
           LLMProviderName.OPENAI,
@@ -384,6 +386,7 @@ export default function LanguageModelsPage() {
           LLMProviderName.OPENROUTER,
           LLMProviderName.LITELLM_PROXY,
           LLMProviderName.PORTKEY,
+          LLMProviderName.VERCEL_AI_GATEWAY,
           LLMProviderName.NEBIUS_TOKENFACTORY,
           LLMProviderName.BIFROST,
           LLMProviderName.CHEAPERINFERENCE,
@@ -400,7 +403,7 @@ export default function LanguageModelsPage() {
         includeCustom: true,
       },
     ],
-    [t]
+    [t, settings.appName]
   );
 
   if (!existingLlmProviders) {
@@ -469,7 +472,9 @@ export default function LanguageModelsPage() {
             <Section alignItems="stretch">
               <InputHorizontal
                 title={t("defaultModel.title")}
-                description={t("defaultModel.description")}
+                description={t("defaultModel.description", {
+                  appName: settings.appName,
+                })}
                 center
                 withLabel
               >

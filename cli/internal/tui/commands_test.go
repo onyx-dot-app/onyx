@@ -325,3 +325,80 @@ func TestSelectModelInvalidIndex(t *testing.T) {
 		t.Error("expected no override for an out-of-range index")
 	}
 }
+
+func TestConfigureRefusedInRemoteMode(t *testing.T) {
+	RemoteMode = true
+	t.Cleanup(func() { RemoteMode = false })
+
+	m := NewModel(config.DefaultConfig(), nil)
+	m, cmd := handleSlashCommand(m, "/configure")
+
+	if cmd != nil || m.configState != nil {
+		t.Fatal("expected configure mode to stay closed in remote mode")
+	}
+	got := m.viewport.entries[len(m.viewport.entries)-1].content
+	if !strings.Contains(got, "disabled over SSH") {
+		t.Errorf("warning = %q, want a refusal mentioning SSH", got)
+	}
+}
+
+func TestAgentSelectionDoesNotSaveConfigInRemoteMode(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	operator := config.DefaultConfig()
+	operator.ServerURL = "https://onyx.example.com"
+	operator.APIKey = "operator-pat"
+	operator.DefaultAgentID = 1
+	if err := config.Save(operator); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	before, err := os.ReadFile(config.ConfigFilePath())
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+
+	RemoteMode = true
+	t.Cleanup(func() { RemoteMode = false })
+
+	m := NewModel(operator, nil)
+	m.agents = []models.AgentSummary{{ID: 1, Name: "Default"}, {ID: 7, Name: "Other"}}
+	m, _ = cmdSelectAgent(m, "7")
+	m, _ = cmdSelectAgentByID(m, "7")
+
+	if m.agentID != 7 {
+		t.Errorf("agentID = %d, want 7 for this session", m.agentID)
+	}
+	after, err := os.ReadFile(config.ConfigFilePath())
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	if string(after) != string(before) {
+		t.Errorf("config file changed in remote mode:\nbefore: %s\nafter:  %s", before, after)
+	}
+}
+
+func TestWebPagesNotOpenedInRemoteMode(t *testing.T) {
+	var opened []string
+	orig := openBrowser
+	openBrowser = func(url string) bool {
+		opened = append(opened, url)
+		return true
+	}
+	t.Cleanup(func() { openBrowser = orig })
+
+	RemoteMode = true
+	t.Cleanup(func() { RemoteMode = false })
+
+	cfg := config.DefaultConfig()
+	cfg.ServerURL = "https://onyx.example.com"
+	m := NewModel(cfg, nil)
+	for _, command := range []string{"/connectors", "/settings"} {
+		m, _ = handleSlashCommand(m, command)
+		got := m.viewport.entries[len(m.viewport.entries)-1].content
+		if !strings.HasPrefix(got, "Visit: https://onyx.example.com/") {
+			t.Errorf("%s message = %q, want the URL to visit", command, got)
+		}
+	}
+	if len(opened) != 0 {
+		t.Errorf("browser launched on the host for %v", opened)
+	}
+}

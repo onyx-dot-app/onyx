@@ -44,14 +44,17 @@ from onyx.llm.interfaces import (
 from onyx.llm.model_capabilities import (
     OPENAI_API_PROVIDERS,
     ReasoningParamStyle,
+    anthropic_identity_is_always_thinking,
     anthropic_omits_sampling_params,
     anthropic_supports_thinking,
     anthropic_uses_adaptive_thinking,
+    gemini_lowest_thinking_level_is_low,
     is_true_openai_model,
     model_is_reasoning_model,
     openai_chat_tools_require_reasoning_none,
     openai_chat_variant_rejects_reasoning,
     openai_model_rejects_reasoning_effort,
+    openai_model_supports_reasoning_none,
     resolve_reasoning_param_style,
 )
 from onyx.llm.model_capabilities import (
@@ -647,11 +650,18 @@ class LitellmLLM(LLM):
         max_tokens: int | None = None,
         user_identity: LLMUserIdentity | None = None,
         client: "HTTPHandler | None" = None,
+        env_injection_enabled: bool | None = None,
     ) -> Union["ModelResponse", "CustomStreamWrapper"]:
         # Lazy loading to avoid memory bloat for non-inference flows
         from litellm.exceptions import BadRequestError, RateLimitError, Timeout
 
         from onyx.llm.litellm_singleton import litellm
+
+        # One snapshot of the setting for the whole call. A caller that made a
+        # decision on it (invoke's stream choice) passes its own value so the
+        # two cannot diverge if an admin flips the setting mid-call.
+        if env_injection_enabled is None:
+            env_injection_enabled = _env_injection_enabled()
 
         #########################
         # Flags that modify the final arguments
@@ -804,26 +814,59 @@ class LitellmLLM(LLM):
             required_kwarg_keys = frozenset({"reasoning_effort"})
             _log_chat_completions_tools_disable_reasoning(model, self._api_base)
 
+        reasoning_style = resolve_reasoning_param_style(
+            self.config.model_provider,
+            model_identity_names,
+            self._api_surface,
+        )
+
+        # Fable and Mythos never stop thinking, so off there means the least
+        # reasoning they take rather than the API's own default.
+        if (
+            reasoning_effort is ReasoningEffort.OFF
+            and reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE
+            and anthropic_identity_is_always_thinking(model_identity_names)
+        ):
+            reasoning_effort = ReasoningEffort.LOW
+
+        if (
+            reasoning_effort is ReasoningEffort.OFF
+            and reasoning_style is ReasoningParamStyle.LITELLM_EFFORT
+            and any(
+                gemini_lowest_thinking_level_is_low(name)
+                for name in model_identity_names
+            )
+        ):
+            reasoning_effort = ReasoningEffort.LOW
+
+        # The tools block above already forced reasoning_effort "none".
+        sends_explicit_reasoning_none = (
+            reasoning_effort is ReasoningEffort.OFF
+            and "reasoning_effort" not in optional_kwargs
+            and any(
+                openai_model_supports_reasoning_none(name)
+                for name in model_identity_names
+            )
+        )
+
         # Note, there is a reasoning_effort parameter in LiteLLM but it is completely jank and does not work for any
         # of the major providers. Not setting it sets it to OFF.
         if (
             is_reasoning
             # The default of this parameter not set is surprisingly not the equivalent of an Auto but is actually Off
-            and reasoning_effort != ReasoningEffort.OFF
+            and (
+                reasoning_effort != ReasoningEffort.OFF or sends_explicit_reasoning_none
+            )
             and not any(
                 openai_model_rejects_reasoning_effort(name)
                 for name in model_identity_names
             )
         ):
-            openai_style_reasoning = {
+            openai_style_reasoning: dict[str, str] = {
                 "effort": OPENAI_REASONING_EFFORT[reasoning_effort],
-                "summary": "auto",
             }
-            reasoning_style = resolve_reasoning_param_style(
-                self.config.model_provider,
-                model_identity_names,
-                self._api_surface,
-            )
+            if not sends_explicit_reasoning_none:
+                openai_style_reasoning["summary"] = "auto"
 
             if reasoning_style is ReasoningParamStyle.OPENAI:
                 if is_claude_model:
@@ -841,6 +884,14 @@ class LitellmLLM(LLM):
                     )
                 if send_reasoning:
                     optional_kwargs["reasoning"] = openai_style_reasoning
+                    if (
+                        sends_explicit_reasoning_none
+                        and self.config.model_provider == LlmProviderNames.OPENAI
+                    ):
+                        # A retry without "none" runs at the medium default.
+                        # Gateways may reject "none", so only OpenAI itself
+                        # pins it.
+                        required_kwarg_keys = required_kwarg_keys | {"reasoning"}
 
             elif reasoning_style in (
                 ReasoningParamStyle.ANTHROPIC_ADAPTIVE,
@@ -906,8 +957,20 @@ class LitellmLLM(LLM):
                     # picker greys the level out for these models, so reaching
                     # here means a stored override outliving a model switch.
                     optional_kwargs["reasoning_effort"] = ReasoningEffort.HIGH.value
+                elif reasoning_effort is ReasoningEffort.OFF:
+                    optional_kwargs["reasoning_effort"] = _OPENAI_REASONING_NONE
                 else:
                     optional_kwargs["reasoning_effort"] = ReasoningEffort.MEDIUM.value
+
+        # Claude 5 thinks unless told not to, and 4.7/4.8 take the same param.
+        # No effort with it, which Opus 5 caps, and no signed-block guard like
+        # the sibling branch: that one binds only while thinking is on.
+        if (
+            is_reasoning
+            and reasoning_effort is ReasoningEffort.OFF
+            and reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE
+        ):
+            optional_kwargs["thinking"] = {"type": "disabled"}
 
         if tools:
             # OpenAI will error if parallel_tool_calls is True and tools are not specified
@@ -1033,7 +1096,7 @@ class LitellmLLM(LLM):
                 else:
                     optional_kwargs["tool_choice"] = tool_choice
 
-            if not _env_injection_enabled() and self._env_only_custom_config:
+            if not env_injection_enabled and self._env_only_custom_config:
                 _warn_dropped_env_only_keys(
                     self._model_provider,
                     tuple(sorted(self._env_only_custom_config)),
@@ -1045,7 +1108,7 @@ class LitellmLLM(LLM):
                 # because the context manager is single-use.
                 env_ctx: AbstractContextManager[None] = (
                     temporary_env_and_lock(self._env_only_custom_config)
-                    if _env_injection_enabled()
+                    if env_injection_enabled
                     else nullcontext()
                 )
                 with env_ctx:
@@ -1080,6 +1143,7 @@ class LitellmLLM(LLM):
                     "model_provider": self.config.model_provider,
                     "reasoning_effort": reasoning_effort.value,
                     "max_tokens": max_tokens,
+                    "stream": stream,
                     "sent_kwargs": {
                         k: _json_safe(opts[k])
                         for k in sorted(_BEST_EFFORT_KWARG_KEYS & opts.keys())
@@ -1174,7 +1238,18 @@ class LitellmLLM(LLM):
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
         total_timeout_override: float | None = None,
+        stream: bool = False,
     ) -> ModelResponse:
+        """One complete response. By default it is one non-streamed request,
+        2-4x cheaper in CPU than streaming and reassembling.
+
+        Pass stream=True for long or unbounded answers: without chunks the
+        socket read timeout bounds the whole response, so a long generation
+        could time out. Streaming is also forced when total_timeout_override is
+        set (the deadline is checked between chunks) or when env injection of
+        custom_config is enabled (the env rwlock must not be held for a full
+        inference; self-hosted default).
+        """
         from litellm import HTTPHandler
         from litellm import ModelResponse as LiteLLMModelResponse
 
@@ -1228,39 +1303,39 @@ class LitellmLLM(LLM):
         if self._uses_isolated_client():
             client = HTTPHandler(timeout=read_timeout)
 
-        try:
-            # When env-only custom_config keys are injected (self-hosted
-            # deployments only), they are set under a global lock. Using
-            # stream=True here means the lock is only held during connection
-            # setup (not the full inference). The chunks are then collected
-            # outside the lock and reassembled into a single ModelResponse
-            # via stream_chunk_builder.
-            from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
-            from litellm import stream_chunk_builder
+        env_injection_enabled = _env_injection_enabled()
+        use_stream = (
+            stream or total_timeout_override is not None or env_injection_enabled
+        )
 
-            stream_response = cast(
-                LiteLLMCustomStreamWrapper,
-                self._completion(
-                    prompt=prompt,
-                    tools=tools,
-                    tool_choice=tool_choice,
-                    stream=True,
-                    structured_response_format=structured_response_format,
-                    timeout_override=read_timeout,
-                    max_tokens=max_tokens,
-                    parallel_tool_calls=True,
-                    reasoning_effort=reasoning_effort,
-                    user_identity=user_identity,
-                    client=client,
-                ),
+        try:
+            raw_response = self._completion(
+                prompt=prompt,
+                tools=tools,
+                tool_choice=tool_choice,
+                stream=use_stream,
+                structured_response_format=structured_response_format,
+                timeout_override=read_timeout,
+                max_tokens=max_tokens,
+                parallel_tool_calls=True,
+                reasoning_effort=reasoning_effort,
+                user_identity=user_identity,
+                client=client,
+                env_injection_enabled=env_injection_enabled,
             )
-            chunks = _consume_stream_with_timeout(
-                stream_response, total_timeout_override
-            )
-            response = cast(
-                LiteLLMModelResponse,
-                stream_chunk_builder(chunks),
-            )
+            if use_stream:
+                from litellm import (
+                    CustomStreamWrapper as LiteLLMCustomStreamWrapper,
+                )
+                from litellm import stream_chunk_builder
+
+                chunks = _consume_stream_with_timeout(
+                    cast(LiteLLMCustomStreamWrapper, raw_response),
+                    total_timeout_override,
+                )
+                response = cast(LiteLLMModelResponse, stream_chunk_builder(chunks))
+            else:
+                response = cast(LiteLLMModelResponse, raw_response)
 
             model_response = from_litellm_model_response(response)
 

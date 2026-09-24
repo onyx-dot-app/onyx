@@ -1,11 +1,12 @@
 """Enterprise user and group budget enforcement against the usage ledger."""
 
+from collections.abc import Generator
 from datetime import datetime, timezone
 from typing import NoReturn
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 import ee.onyx.server.query_and_chat.token_limit as ee_token_limit
@@ -17,6 +18,7 @@ from onyx.db.models import (
     User,
     User__UserGroup,
     UserGroup,
+    UserUsage,
 )
 from onyx.db.user_usage import (
     TokenUsageBucket,
@@ -28,11 +30,51 @@ from onyx.db.user_usage import (
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.tracing.flows import LLMFlow
-from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 
 pytestmark = pytest.mark.usefixtures("tenant_context")
 
 _TEST_MODEL = "cost-budget-test-model"
+
+_created_users: list[User] = []
+_created_group_ids: list[int] = []
+
+
+@pytest.fixture(autouse=True)
+def _remove_created_rows(db_session: Session) -> Generator[None, None, None]:
+    """Budget checks read every row in the tenant's usage ledger and limit
+    tables, so anything left here trips budget enforcement in later suites
+    that share the database."""
+    _created_users.clear()
+    _created_group_ids.clear()
+    yield
+    db_session.rollback()
+    limit_ids = db_session.scalars(
+        select(TokenRateLimit__UserGroup.rate_limit_id).where(
+            TokenRateLimit__UserGroup.user_group_id.in_(_created_group_ids)
+        )
+    ).all()
+    db_session.execute(
+        delete(TokenRateLimit__UserGroup).where(
+            TokenRateLimit__UserGroup.rate_limit_id.in_(limit_ids)
+        )
+    )
+    db_session.execute(delete(TokenRateLimit).where(TokenRateLimit.id.in_(limit_ids)))
+    db_session.execute(
+        delete(User__UserGroup).where(
+            User__UserGroup.user_group_id.in_(_created_group_ids)
+        )
+    )
+    db_session.execute(delete(UserGroup).where(UserGroup.id.in_(_created_group_ids)))
+    db_session.execute(delete(UserUsage).where(UserUsage.model == _TEST_MODEL))
+    delete_test_user(db_session, *_created_users)
+    db_session.commit()
+
+
+def _create_user(db_session: Session, email_prefix: str) -> User:
+    user = create_test_user(db_session, email_prefix)
+    _created_users.append(user)
+    return user
 
 
 def _cost_limit(scope: TokenRateLimitScope, period_hours: int = 24) -> TokenRateLimit:
@@ -92,8 +134,8 @@ def _assert_cost_rate_limited(
 def test_user_cost_isolated_and_longest_window_reported(
     db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    user = create_test_user(db_session, "cost_budget_user")
-    other_user = create_test_user(db_session, "cost_budget_other")
+    user = _create_user(db_session, "cost_budget_user")
+    other_user = _create_user(db_session, "cost_budget_other")
     limits = [
         _cost_limit(TokenRateLimitScope.USER, period_hours=24),
         _cost_limit(TokenRateLimitScope.USER, period_hours=168),
@@ -121,6 +163,7 @@ def _create_group(db_session: Session, name: str) -> UserGroup:
     group = UserGroup(name=f"{name}-{uuid4().hex}", is_up_to_date=True)
     db_session.add(group)
     db_session.flush()
+    _created_group_ids.append(group.id)
     return group
 
 
@@ -141,8 +184,8 @@ def _add_group_limit(
 def test_group_blocks_only_when_every_group_is_over_budget(
     db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    user = create_test_user(db_session, "group_budget_user")
-    spender = create_test_user(db_session, "group_budget_spender")
+    user = _create_user(db_session, "group_budget_user")
+    spender = _create_user(db_session, "group_budget_spender")
     over_budget_group = _create_group(db_session, "over-budget")
     under_budget_group = _create_group(db_session, "under-budget")
     db_session.add_all(
@@ -179,7 +222,7 @@ def test_group_blocks_only_when_every_group_is_over_budget(
 def test_user_token_limit_behavior_is_unchanged(
     db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    user = create_test_user(db_session, "token_budget_user")
+    user = _create_user(db_session, "token_budget_user")
     limit = TokenRateLimit(
         enabled=True,
         token_budget=1,

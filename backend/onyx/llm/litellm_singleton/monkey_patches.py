@@ -33,8 +33,15 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
 3. OpenAI Responses API Non-Streaming (_patch_openai_responses_transform_response):
    - LiteLLM's transform_response joins multiple reasoning summary parts with spaces
    - We prefer double newlines for readability
+   - Also returns an empty assistant message with finish_reason "length" when the
+     response is incomplete (max_output_tokens) and carries no message item, e.g.
+     a reasoning model that spent the whole budget on reasoning. Upstream raises
+     ValueError there, which surfaces as APIConnectionError; streaming returns an
+     empty message for the same reply.
    STATUS: STILL NEEDED - Upstream now uses " ".join() instead of discarding earlier
            parts, but we override to use "\\n\\n".join() for readable section breaks.
+           The incomplete-reply handling is fixed upstream in v1.99.0 (BerriAI/litellm
+           PR #37710); drop _incomplete_response_as_empty_message once we are on >= 1.99.0.
 
 4. Responses API Fake Streaming (_patch_openai_responses_should_fake_stream):
    - LiteLLM fake-streams (MockResponsesAPIStreamingIterator) any responses-API
@@ -80,6 +87,22 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
      OpenAI-compatible gateways such as Bifrost and Portkey), so honor it
      unconditionally and pass the remainder through as the literal model id
    STATUS: STILL NEEDED - v1.93.0 consults the registry before honoring the prefix.
+
+8. Disabled Thinking Dropped On Tool Turns (_patch_anthropic_keeps_disabled_thinking):
+   - AnthropicConfig.transform_request drops the thinking param when the last
+     assistant message with tool_calls carries no thinking blocks, guarding against
+     "Expected thinking or redacted_thinking, but found tool_use"
+   - The guard tests `thinking is not None` rather than whether thinking is enabled,
+     so it also drops thinking={"type": "disabled"}, the one value that cannot
+     produce that error: disabled thinking is the state in which Anthropic requires
+     those blocks to be absent
+   - Reasoning off then silently becomes the API's own default on every turn after a
+     tool call, which on the Claude 5 line is full reasoning
+   - Bedrock Converse carries its own copy of the same check in
+     AmazonConverseConfig._transform_request_helper, and keeps thinking under
+     additionalModelRequestFields rather than at the top level, so both transforms
+     are wrapped
+   STATUS: STILL NEEDED - v1.93.0 gates on presence, not on the thinking type.
 
 """
 
@@ -351,6 +374,81 @@ def _patch_responses_reasoning_summary_newlines() -> None:
     )
 
 
+_INCOMPLETE_REASON_TO_FINISH_REASON = {
+    "max_output_tokens": "length",
+    "content_filter": "content_filter",
+}
+
+
+def _incomplete_response_as_empty_message(
+    model: str, raw_response: Any, model_response: Any
+) -> Any | None:
+    """Build the chat response for an incomplete Responses API reply whose
+    output holds nothing but reasoning items, or None for any other reply.
+
+    A reasoning model can spend all of max_output_tokens on reasoning. The
+    reply is then "incomplete" with no message item, upstream finds no
+    choices and raises. Streaming returns an empty message for the same
+    reply; mirror that, keep the reasoning summary, and report the truncation
+    as the finish reason. Every other shape, including an incomplete reply
+    that does carry a message, goes through upstream untouched.
+    """
+    from litellm.responses.utils import ResponseAPILoggingUtils
+    from litellm.types.llms.openai import ResponsesAPIResponse
+    from litellm.types.utils import Choices, Message
+    from openai.types.responses.response_reasoning_item import ResponseReasoningItem
+
+    if not isinstance(raw_response, ResponsesAPIResponse):
+        return None
+    if raw_response.error is not None:
+        return None
+    details = raw_response.incomplete_details
+    if details is None or not details.reason:
+        return None
+    if not raw_response.output or not all(
+        isinstance(item, ResponseReasoningItem) for item in raw_response.output
+    ):
+        return None
+
+    summary_texts: list[str] = [
+        summary.text
+        for item in raw_response.output
+        if isinstance(item, ResponseReasoningItem)
+        for summary in item.summary
+        if summary.text
+    ]
+    model_response.choices = [
+        Choices(
+            finish_reason=_INCOMPLETE_REASON_TO_FINISH_REASON.get(
+                details.reason, "stop"
+            ),
+            index=0,
+            message=Message(
+                content=None,
+                role="assistant",
+                reasoning_content="\n\n".join(summary_texts) or None,
+            ),
+        )
+    ]
+    model_response.model = model
+    model_response.usage = (
+        ResponseAPILoggingUtils._transform_response_api_usage_to_chat_usage(
+            raw_response.usage
+        )
+    )
+    # Same as upstream's completed path: keep provider headers (x-request-id)
+    # so a truncated reply is as traceable as a complete one.
+    hidden_params = getattr(  # ods: ignore[getattr]
+        raw_response, "_hidden_params", None
+    )
+    if hidden_params:
+        model_response._hidden_params = {
+            **(model_response._hidden_params or {}),
+            **hidden_params,
+        }
+    return model_response
+
+
 def _patch_openai_responses_transform_response() -> None:
     """
     Patches LiteLLMResponsesTransformationHandler.transform_response to properly
@@ -386,6 +484,12 @@ def _patch_openai_responses_transform_response() -> None:
     ) -> Any:
         from litellm.types.llms.openai import ResponsesAPIResponse
         from openai.types.responses.response_reasoning_item import ResponseReasoningItem
+
+        incomplete = _incomplete_response_as_empty_message(
+            model, raw_response, model_response
+        )
+        if incomplete is not None:
+            return incomplete
 
         result = original_transform_response(
             self,
@@ -708,6 +812,100 @@ def _patch_responses_api_bridge_check() -> None:
     )
 
 
+def _disabled_thinking(optional_params: dict) -> dict | None:
+    """The thinking param when it explicitly asks for no thinking at all."""
+    thinking = optional_params.get("thinking")
+    if isinstance(thinking, dict) and thinking.get("type") == "disabled":
+        return thinking
+    return None
+
+
+def _patch_anthropic_keeps_disabled_thinking() -> None:
+    """
+    Patches the two Anthropic request transforms to keep an explicit
+    thinking={"type": "disabled"} on a turn whose history carries tool calls
+    with no thinking blocks.
+
+    Upstream drops the param there to avoid "Expected thinking or
+    redacted_thinking, but found tool_use", but it gates on `thinking is not
+    None` rather than on thinking being enabled. Disabled thinking cannot raise
+    that error: it is the state where Anthropic requires the blocks to be
+    absent, which is exactly what we send. Dropping it silently returns the
+    model to its default effort, which on the Claude 5 line is full reasoning.
+
+    Bedrock Converse carries its own copy of the same check, and puts thinking
+    under additionalModelRequestFields rather than at the top level, so it
+    needs its own wrapper.
+    """
+    from litellm.llms.anthropic.chat.transformation import AnthropicConfig
+    from litellm.llms.bedrock.chat.converse_transformation import AmazonConverseConfig
+
+    if (
+        AnthropicConfig.transform_request.__name__
+        != "_patched_anthropic_transform_request"
+    ):
+        original_transform_request = AnthropicConfig.transform_request
+
+        def _patched_anthropic_transform_request(
+            self: Any,
+            model: str,
+            messages: list[Any],
+            optional_params: dict,
+            litellm_params: dict,
+            headers: dict,
+        ) -> dict:
+            thinking = _disabled_thinking(optional_params)
+            body = original_transform_request(
+                self, model, messages, optional_params, litellm_params, headers
+            )
+            if thinking is not None and "thinking" not in body:
+                body["thinking"] = thinking
+            return body
+
+        _patched_anthropic_transform_request.__name__ = (
+            "_patched_anthropic_transform_request"
+        )
+        AnthropicConfig.transform_request = _patched_anthropic_transform_request
+
+    if (
+        AmazonConverseConfig._transform_request_helper.__name__
+        != "_patched_converse_transform_request_helper"
+    ):
+        original_request_helper = AmazonConverseConfig._transform_request_helper
+
+        def _patched_converse_transform_request_helper(
+            self: Any,
+            model: str,
+            system_content_blocks: list[Any],
+            optional_params: dict,
+            messages: Optional[list[Any]] = None,
+            headers: Optional[dict] = None,
+            drop_params: bool = False,
+        ) -> Any:
+            thinking = _disabled_thinking(optional_params)
+            data = original_request_helper(
+                self,
+                model=model,
+                system_content_blocks=system_content_blocks,
+                optional_params=optional_params,
+                messages=messages,
+                headers=headers,
+                drop_params=drop_params,
+            )
+            if thinking is not None:
+                fields = data.get("additionalModelRequestFields") or {}
+                fields.setdefault("thinking", thinking)
+                data["additionalModelRequestFields"] = fields
+            return data
+
+        _patched_converse_transform_request_helper.__name__ = (
+            "_patched_converse_transform_request_helper"
+        )
+        AmazonConverseConfig._transform_request_helper = (
+            _patched_converse_transform_request_helper
+        )
+
+
 def apply_monkey_patches() -> None:
     """
     Apply all necessary monkey patches to LiteLLM for compatibility.
@@ -721,6 +919,7 @@ def apply_monkey_patches() -> None:
     - Patching ResponsesAPIResponse.model_construct to fix usage format in all code paths
     - Patching Logging._get_assembled_streaming_response to avoid mutating original response
     - Patching responses_api_bridge_check to always honor an explicit responses/ prefix
+    - Patching AnthropicConfig.transform_request to keep disabled thinking on tool turns
     """
     _patch_ollama_chunk_parser()
     _patch_responses_reasoning_summary_newlines()
@@ -729,3 +928,4 @@ def apply_monkey_patches() -> None:
     _patch_responses_api_usage_format()
     _patch_logging_assembled_streaming_response()
     _patch_responses_api_bridge_check()
+    _patch_anthropic_keeps_disabled_thinking()

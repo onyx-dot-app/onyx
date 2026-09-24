@@ -221,7 +221,7 @@ class ZoomRateLimiter:
     ) -> requests.Response:
         # Counted per kind of answer, so a run of server errors does not spend
         # the patience a later 429 deserves, and the other way round.
-        sleeps_so_far = {kind: 0 for kind in _RetryKind}
+        sleeps_so_far = dict.fromkeys(_RetryKind, 0)
 
         while True:
             try:

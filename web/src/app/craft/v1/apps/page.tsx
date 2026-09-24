@@ -38,7 +38,7 @@ import {
 import UserCredentialsModal from "@/app/craft/v1/apps/UserCredentialsModal";
 import { useUser } from "@/providers/UserProvider";
 import useUserSkills from "@/hooks/useUserSkills";
-import { useCraftMcpServers } from "@/lib/tools/hooks";
+import { useCraftMcpServers } from "@/lib/mcp/hooks";
 import { compareByName } from "@/lib/skills/picker";
 
 // Apps and MCP servers are connected, governed, and taught to the agent
@@ -66,16 +66,19 @@ export default function ExternalAppsPage() {
         icon={SvgPlug}
         title={t("header.title")}
         description={t("header.description")}
-        rightChildren={
-          isAdmin ? (
-            <Button
-              href="/admin/craft/apps"
-              prominence="secondary"
-              icon={SvgSettings}
-            >
-              {t("header.manageButton")}
-            </Button>
-          ) : undefined
+        actions={
+          isAdmin
+            ? [
+                <Button
+                  key="manage"
+                  href="/admin/craft/apps"
+                  prominence="secondary"
+                  icon={SvgSettings}
+                >
+                  {t("header.manageButton")}
+                </Button>,
+              ]
+            : []
         }
       >
         <InputTypeIn

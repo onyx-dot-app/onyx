@@ -80,7 +80,7 @@ def get_sharepoint_hierarchy_node_external_access(
     permission_cache: SharepointPermissionCache,
     node_type: HierarchyNodeType,
     drive_name: str | None = None,
-    folder_url: str | None = None,
+    folder_server_relative_path: str | None = None,
 ) -> ExternalAccess:
     def noop_fallback(
         *args: Any,  # noqa: ARG001
@@ -98,6 +98,6 @@ def get_sharepoint_hierarchy_node_external_access(
         graph_client,
         node_type,
         drive_name,
-        folder_url,
+        folder_server_relative_path,
         permission_cache,
     )

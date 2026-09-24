@@ -2,7 +2,8 @@
 
 The SharePoint test app also holds Mail.Read, Calendars.Read and User.Read.All,
 so its secret serves here. One mailbox holds the fixtures: unchanging Sent
-Items, an inbox that keeps receiving notifications, and one meeting."""
+Items, an inbox that keeps receiving notifications, and a calendar that holds
+the fixture meeting among others."""
 
 import os
 import re
@@ -45,7 +46,8 @@ FOLDER_SHARE_RECIPIENT = "subash@onyx.app"
 FOLDER_SHARE_WINDOW_START = datetime(2026, 8, 6, 17, 6, tzinfo=timezone.utc)
 FOLDER_SHARE_WINDOW_END = datetime(2026, 8, 6, 17, 8, tzinfo=timezone.utc)
 
-# The one meeting in the calendar, organized from the test mailbox.
+# The fixture meeting, organized from the test mailbox. The calendar may gain
+# other meetings, so the subject picks it out.
 EVENT_SUBJECT = "Test event"
 EVENT_START = "2026-09-16T02:00"
 EVENT_ATTENDEES = {"evan@onyx.app", "subash@onyx.app"}
@@ -113,6 +115,20 @@ def _conversation_sent_by_mailbox(documents: list[Document], subject: str) -> Do
     return matches[0]
 
 
+def _is_event(doc: Document) -> bool:
+    return doc.id.startswith(EVENT_DOCUMENT_ID_PREFIX)
+
+
+def _fixture_event(documents: list[Document]) -> Document:
+    matches = [
+        d for d in documents if _is_event(d) and d.semantic_identifier == EVENT_SUBJECT
+    ]
+    assert len(matches) == 1, (
+        f"Expected one event titled {EVENT_SUBJECT!r}, found {len(matches)}"
+    )
+    return matches[0]
+
+
 def _mailbox_node(nodes: list[HierarchyNode]) -> HierarchyNode:
     mailbox_nodes = [n for n in nodes if n.node_type == HierarchyNodeType.MAILBOX]
     assert len(mailbox_nodes) == 1, f"Expected one mailbox node, got {mailbox_nodes}"
@@ -150,10 +166,19 @@ def _assert_plain_walk(result: ConnectorOutput) -> None:
             assert section.text and section.link, doc.semantic_identifier
 
 
-def _expected_access(doc: Document) -> ExternalAccess:
-    if doc.id.startswith(EVENT_DOCUMENT_ID_PREFIX):
-        return EVENT_ACCESS
-    return OWNER_ACCESS
+def _assert_readers(doc: Document) -> None:
+    """The mailbox owner alone reads a conversation. An event adds its organizer
+    and attendees, read here from the document's owner fields, so the check holds
+    for every meeting in the calendar."""
+    readers: set[str] = {TEST_MAILBOX}
+    if _is_event(doc):
+        readers |= _emails(doc.primary_owners) | _emails(doc.secondary_owners)
+    expected = ExternalAccess(
+        external_user_emails=readers,
+        external_user_group_ids=set(),
+        is_public=False,
+    )
+    assert doc.external_access == expected, doc.semantic_identifier
 
 
 def test_mailbox_walk_yields_conversations_under_their_folders(
@@ -211,10 +236,7 @@ def test_calendar_walk_yields_the_meeting_under_the_calendar_node(
     assert calendar_nodes[0].display_name == "Calendar"
     assert calendar_nodes[0].raw_parent_id == mailbox_node.raw_node_id
 
-    events = [d for d in result.documents if d.id.startswith(EVENT_DOCUMENT_ID_PREFIX)]
-    assert len(events) == 1, [e.semantic_identifier for e in events]
-    event = events[0]
-    assert event.semantic_identifier == EVENT_SUBJECT
+    event = _fixture_event(result.documents)
     assert event.parent_hierarchy_raw_node_id == calendar_nodes[0].raw_node_id
     assert event.metadata["recurring"] == "false"
     start = event.metadata["start"]
@@ -248,10 +270,10 @@ def test_permission_sync_walks_attach_the_same_readers(
         assert node.external_access == OWNER_ACCESS, node.display_name
     indexed_access: dict[str, ExternalAccess | None] = {}
     for doc in result.documents:
-        assert doc.external_access == _expected_access(doc), doc.semantic_identifier
+        _assert_readers(doc)
         indexed_access[doc.id] = doc.external_access
-    assert [a for a in indexed_access.values() if a == EVENT_ACCESS] == [EVENT_ACCESS]
-    assert OWNER_ACCESS in indexed_access.values(), "No conversation was indexed"
+    assert _fixture_event(result.documents).external_access == EVENT_ACCESS
+    assert any(not _is_event(d) for d in result.documents), "No conversation indexed"
 
     listed_access: dict[str, ExternalAccess | None] = {}
     for batch in connector.retrieve_all_slim_docs_perm_sync():

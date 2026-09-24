@@ -1105,6 +1105,17 @@ MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE = max(
     1, _non_negative_int_env("MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE", 5)
 )
 
+# How many documents the pre-swap check samples per cc_pair and per user. 0 skips the
+# sample; the other swap conditions still apply.
+PORT_SWAP_VERIFY_DOCS_PER_UNIT = _non_negative_int_env(
+    "PORT_SWAP_VERIFY_DOCS_PER_UNIT", 3
+)
+# Seconds to hold the swap after a failed pre-swap check before checking again.
+# 0 retries on the next 15-second tick.
+PORT_SWAP_VERIFY_RETRY_DELAY_S = _non_negative_int_env(
+    "PORT_SWAP_VERIFY_RETRY_DELAY_S", 300
+)
+
 # Old-index reclamation (post-reindex deletion of the now-PAST index).
 # Master switch: when False the reclaim beat task and every dispatched task no-op.
 # Set it to false to turn reclamation off; that takes effect once the workers restart.
@@ -1212,6 +1223,23 @@ WEB_CONNECTOR_OAUTH_TOKEN_URL = os.environ.get("WEB_CONNECTOR_OAUTH_TOKEN_URL")
 # the Chromium binary installed).
 OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED = (
     os.environ.get("OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED", "true").lower() == "true"
+)
+
+# Limits for the built-in open_url crawler. The body read stops at the larger
+# of the HTML and PDF caps (decoded bytes); each type is then checked on its own.
+OPEN_URL_MAX_HTML_SIZE_BYTES = int(
+    os.environ.get("OPEN_URL_MAX_HTML_SIZE_BYTES") or 20 * 1024 * 1024
+)
+OPEN_URL_MAX_PDF_SIZE_BYTES = int(
+    os.environ.get("OPEN_URL_MAX_PDF_SIZE_BYTES") or 50 * 1024 * 1024
+)
+# Wall-clock limit for reading one response body.
+OPEN_URL_BODY_DEADLINE_SECONDS = float(
+    os.environ.get("OPEN_URL_BODY_DEADLINE_SECONDS") or 120
+)
+# Max URLs in one /web-search/open-urls request (also the MCP open_urls tool).
+OPEN_URLS_MAX_URLS_PER_REQUEST = int(
+    os.environ.get("OPEN_URLS_MAX_URLS_PER_REQUEST") or 20
 )
 
 # NOTE: the three SSRF env vars below (OPEN_URL_VALIDATE_SSRF,
@@ -1367,6 +1395,11 @@ OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD = int(
     os.environ.get("OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
+# Largest file posted in a channel that the Teams connector downloads and extracts.
+TEAMS_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD = int(
+    os.environ.get("TEAMS_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD", 20 * 1024 * 1024)
+)
+
 # When True, group sync enumerates every Azure AD group in the tenant (expensive).
 # When False (default), only groups found in site role assignments are synced.
 # Can be overridden per-connector via the "exhaustive_ad_enumeration" key in
@@ -1375,12 +1408,20 @@ SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION = (
     os.environ.get("SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION", "").lower() == "true"
 )
 
+AIRTABLE_ATTACHMENT_SIZE_THRESHOLD = int(
+    os.environ.get("AIRTABLE_ATTACHMENT_SIZE_THRESHOLD", 10 * 1024 * 1024)
+)
+
 BLOB_STORAGE_SIZE_THRESHOLD = int(
     os.environ.get("BLOB_STORAGE_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
 BOX_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("BOX_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
+)
+
+DROPBOX_CONNECTOR_SIZE_THRESHOLD = int(
+    os.environ.get("DROPBOX_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
 JIRA_CONNECTOR_LABELS_TO_SKIP = [

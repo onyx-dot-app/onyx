@@ -207,15 +207,15 @@ file_handlers = [
 setup_uvicorn_logger(shared_file_handlers=file_handlers)
 
 
-def validation_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+def validation_exception_handler(_: Request, exc: Exception) -> JSONResponse:
     if not isinstance(exc, RequestValidationError):
         logger.error(
             "Unexpected exception type in validation_exception_handler - %s", type(exc)
         )
         raise exc
 
-    exc_str = f"{exc}".replace("\n", " ").replace("   ", " ")
-    logger.error("%s: %s", request, exc_str, exc_info=exc)
+    exc_str = "Request validation failed."
+    logger.warning(exc_str)
     # message/status_code/data are kept for existing clients; error_code and
     # detail make the body match every other error the API returns.
     content = {
@@ -501,7 +501,13 @@ def log_http_error(request: Request, exc: Exception) -> JSONResponse:
         error_msg += "".join(traceback.format_tb(exc.__traceback__))
         logger.error(error_msg)
 
-    detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+    if isinstance(exc, HTTPException):
+        detail = exc.detail
+    elif status_code >= 500:
+        # Unhandled exception text can carry SQL, hostnames, or URLs. It is logged above.
+        detail = "An internal server error occurred."
+    else:
+        detail = str(exc)
     # Routes that raise HTTPException name no error code, so derive the
     # canonical one for the status. Clients reading "detail" are unaffected.
     return JSONResponse(

@@ -2,6 +2,7 @@
 
 import { PageSelector } from "@/components/PageSelector";
 import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
@@ -46,6 +47,7 @@ function ClickableTableRow({
 
 export const SlackBotTable = ({ slackBots }: { slackBots: SlackBot[] }) => {
   const t = useTranslations("admin.slackBots");
+  const { appName } = useSettings();
   const [page, setPage] = useState(1);
 
   // sort by id for consistent ordering
@@ -116,7 +118,7 @@ export const SlackBotTable = ({ slackBots }: { slackBots: SlackBot[] }) => {
                 colSpan={5}
                 className="text-center text-muted-foreground"
               >
-                {t("table.empty.message")}
+                {t("table.empty.message", { appName })}
               </TableCell>
             </TableRow>
           )}

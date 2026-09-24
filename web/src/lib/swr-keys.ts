@@ -83,6 +83,7 @@ export const SWR_KEYS = {
 
   // ── Search Settings ───────────────────────────────────────────────────────
   currentSearchSettings: "/api/search-settings/get-current-search-settings",
+  imageProcessingSettings: "/api/admin/image-processing",
   secondarySearchSettings: "/api/search-settings/get-secondary-search-settings",
   reindexProgress: "/api/search-settings/reindex-progress",
   reindexErrors: "/api/search-settings/reindex-errors",
@@ -238,6 +239,16 @@ export const SWR_KEYS = {
 
   // ── Connectors ────────────────────────────────────────────────────────────
   connector: "/api/manage/connector",
+  connectorOAuthDetails: (source: string) =>
+    `/api/connector/oauth/details/${source}`,
+  // Credentials of one source the caller may attach; `editable` narrows to
+  // the ones the caller may also edit.
+  similarCredentials: (source: string, editable: boolean = false) =>
+    `/api/manage/admin/similar-credentials/${source}${editable ? "?get_editable=True" : ""}`,
+
+  // ── CC-Pairs ──────────────────────────────────────────────────────────────
+  ccPair: (ccPairId: string | number) =>
+    `/api/manage/admin/cc-pair/${ccPairId}`,
 
   // ── Index Attempts ────────────────────────────────────────────────────────
   indexAttemptStageMetrics: (indexAttemptId: number) =>

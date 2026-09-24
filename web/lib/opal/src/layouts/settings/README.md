@@ -22,17 +22,18 @@ Width presets map to CSS variables defined by the app (`--app-container-*`):
 
 Sticky page header with icon, title, optional description, and action slots.
 Automatically shows a scroll shadow when the page has scrolled down.
-Headers are only sticky when `rightChildren` is provided.
+Headers are only sticky when `actions` is non-empty.
 
 | Prop            | Type                    | Default | Description                                               |
 | --------------- | ----------------------- | ------- | --------------------------------------------------------- |
 | `icon`          | `IconFunctionComponent` | —       | Page icon (required)                                      |
+| `moreIcon1`     | `IconFunctionComponent` | —       | Second icon in the title's icon row (see `Content`)       |
+| `moreIcon2`     | `IconFunctionComponent` | —       | Third icon in the title's icon row (see `Content`)        |
 | `title`         | `string`                | —       | Page title (required)                                     |
 | `description`   | `string`                | —       | Subtitle below the title                                  |
-| `rightChildren` | `ReactNode`             | —       | Action buttons on the right; also enables sticky behavior |
+| `actions`       | `ReactNode[]`           | —       | Controls right of the title, left to right, each with a `key`; top-aligned row with a 0.5rem gap, 1rem from the title block. Also enables sticky behavior |
 | `children`      | `ReactNode`             | —       | Content below the title row (e.g. search bar, filters)    |
-| `backButton`    | `boolean`               | `false` | Show a "← Back" button above the title                    |
-| `onBack`        | `() => void`            | —       | Override the default `router.back()` for the back button  |
+| `cancel`        | `boolean \| () => void` | `false` | Render a secondary Cancel as the first action; `true` goes back in history, a function overrides the destination |
 | `divider`       | `boolean`               | `false` | Show a horizontal divider at the bottom of the header     |
 
 ### Body
@@ -49,7 +50,11 @@ import { SettingsLayouts } from "@opal/layouts";
     icon={SvgSettings}
     title="Account Settings"
     description="Manage your preferences"
-    rightChildren={<Button onClick={save}>Save</Button>}
+    actions={[
+      <Button key="save" onClick={save}>
+        Save
+      </Button>,
+    ]}
   >
     <InputTypeIn placeholder="Search settings..." />
   </SettingsLayouts.Header>
@@ -59,11 +64,10 @@ import { SettingsLayouts } from "@opal/layouts";
   </SettingsLayouts.Body>
 </SettingsLayouts.Root>
 
-// With back button
+// With a Cancel action
 <SettingsLayouts.Header
   icon={SvgArrow}
   title="Edit Item"
-  backButton
-  onBack={() => router.push("/admin/items")}
+  cancel={() => router.push("/admin/items")}
 />
 ```
