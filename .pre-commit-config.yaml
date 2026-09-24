@@ -77,17 +77,20 @@ repos:
           ]
         files: ^(pyproject\.toml|uv\.lock|backend/requirements/.*\.txt)$
       - id: uv-run
+        alias: check-getattr
         name: Check getattr
-        # Keep the pinned version in sync with `onyx-devtools` in the dev
-        # dependency group in pyproject.toml, here and in every `ods` hook
-        # below. Without the pin, `--with` resolves the latest published wheel.
-        args: ["--no-project", "--with=onyx-devtools==0.13.7", "ods", "check-getattr"]
+        # `--only-group ods` installs ods from uv.lock, so the wheel is
+        # hash-verified and pyproject.toml holds the only pin. Every `ods` hook
+        # below works the same way. `uv run` syncs inexactly, unlike `uv sync`:
+        # it adds the group and removes nothing, so these hooks and the `ty`
+        # hook share `.venv`, and a cleaned `.venv` is rebuilt on demand.
+        args: ["--frozen", "--only-group", "ods", "ods", "check-getattr"]
         pass_filenames: true
         files: ^backend/.*\.py$
       - id: uv-run
+        alias: check-lazy-imports
         name: Check lazy imports
-        args:
-          ["--no-project", "--with=onyx-devtools==0.13.7", "ods", "check-lazy-imports"]
+        args: ["--frozen", "--only-group", "ods", "ods", "check-lazy-imports"]
         pass_filenames: true
         files: ^backend/(?!\.venv/|scripts/).*\.py$
       - id: uv-run
@@ -101,8 +104,7 @@ repos:
         # generator need an ods release before this hook picks them up — until the
         # release that adds the embedded-copy sync, the extra trigger paths below
         # are harmless no-ops (the cli module's drift test still gates staleness).
-        args:
-          ["--no-project", "--with=onyx-devtools==0.13.7", "ods", "generate-compose", "--write"]
+        args: ["--frozen", "--only-group", "ods", "ods", "generate-compose", "--write"]
         pass_filenames: false
         files: >-
           (?x)^(
@@ -144,21 +146,15 @@ repos:
       - id: uv-run
         alias: ruff
         name: ruff
-        # Run ruff from an isolated overlay (`--no-project --with`) so the hook
-        # never syncs the dev `.venv` or pulls in the backend toolchain (torch,
-        # nvidia-*, etc.) — a full project sync on a cold CI runner installs
-        # 450+ packages just to lint. Same isolation goal as the zizmor hook
-        # below. ruff discovers `[tool.ruff]` from pyproject.toml independently
-        # of uv's project handling, so config still applies. Keep the pinned
-        # version in sync with `ruff` in the dev dependency group in
-        # pyproject.toml.
-        args: ["--no-project", "--with=ruff==0.16.0", "ruff", "check", "--fix"]
+        # Same pattern as the `ods` hooks above: a one-tool group, so the hook
+        # installs one package rather than the 450+ of a full project sync.
+        args: ["--frozen", "--only-group", "ruff", "ruff", "check", "--fix"]
         pass_filenames: true
         types_or: [python]
       - id: uv-run
         alias: ruff-format
         name: ruff format
-        args: ["--no-project", "--with=ruff==0.16.0", "ruff", "format"]
+        args: ["--frozen", "--only-group", "ruff", "ruff", "format"]
         pass_filenames: true
         types_or: [python]
       - id: uv-run
@@ -168,10 +164,10 @@ repos:
         # the result matches terraform byte for byte without needing the
         # binary on PATH. Replaces the pre-commit-terraform terraform_fmt hook.
         # `ods fmt tf` and `ods lint tf` ship in onyx-devtools (tools/ods), and
-        # `--with=onyx-devtools==` resolves a published wheel, so both hooks
-        # need an ods release and a version bump before they can run. Tag
+        # the `ods` group installs a published wheel, so both hooks need an ods
+        # release and a version bump in pyproject.toml before they can run. Tag
         # `ods/` first.
-        args: ["--no-project", "--with=onyx-devtools==0.13.7", "ods", "fmt", "tf"]
+        args: ["--frozen", "--only-group", "ods", "ods", "fmt", "tf"]
         pass_filenames: true
         files: \.tf$
       - id: uv-run
@@ -181,7 +177,7 @@ repos:
         # an internal value can travel across by accident. Fails on account
         # ids, access key ids, routable IPv4 CIDRs, and email addresses.
         # Append '# public-safe: ok' to accept a line.
-        args: ["--no-project", "--with=onyx-devtools==0.13.7", "ods", "lint", "tf"]
+        args: ["--frozen", "--only-group", "ods", "ods", "lint", "tf"]
         pass_filenames: true
         files: ^deployment/terraform/.*\.tf$
       - id: uv-run
@@ -190,8 +186,7 @@ repos:
         # Type-checks web/ with TypeScript 7 and fails when a web/ directory
         # drops below its type coverage floor in web/.type-coverage-baseline.yaml.
         # Raise the floors with `ods type-coverage typescript --update`.
-        args:
-          ["--no-project", "--with=onyx-devtools==0.13.7", "ods", "type-coverage", "typescript", "--check"]
+        args: ["--frozen", "--only-group", "ods", "ods", "type-coverage", "typescript", "--check"]
         pass_filenames: false
         # The i18n catalogs are part of the type graph: keyParity.ts turns a
         # missing or extra locale key into a compile error.
@@ -199,13 +194,11 @@ repos:
       - id: uv-run
         alias: zizmor
         name: zizmor
-        # Run zizmor in an isolated overlay (`--no-project --with`) so the hook
-        # never resyncs the dev `.venv` or pulls in the backend toolchain — the
-        # same dependency-isolation goal as .github/workflows/zizmor.yml (which
-        # uses `uv sync --only-group zizmor`). `--offline` keeps it fast and
-        # token-free locally; CI runs the online audits. Keep the pinned version
-        # in sync with the `zizmor` dependency group in pyproject.toml.
-        args: ["--no-project", "--with=zizmor==1.25.2", "zizmor", "--offline"]
+        # Same pattern. zizmor's online audits (impostor-commit,
+        # known-vulnerable-actions, ...) need a GitHub API token: Quality Checks
+        # PR passes one, and zizmor skips those audits and still passes when no
+        # token is set, so local runs need no setup.
+        args: ["--frozen", "--only-group", "zizmor", "zizmor"]
         pass_filenames: true
         files: (^|/)\.github/(workflows/.+\.ya?ml|actions/.+/action\.ya?ml)$
 
@@ -372,16 +365,19 @@ repos:
         pass_filenames: false
         files: ^(package\.json|bun\.lock|(widget|examples/widget|desktop)/package\.json)$
 
+      # `bun run` rather than `bunx` here and below: it runs the binary that
+      # bun.lock pinned and installed, where `bunx` falls back to downloading
+      # the latest from npm when the local install is missing or stale.
       - id: oxfmt
         name: oxfmt
-        entry: bash -c 'cd web && bunx oxfmt "${@#web/}"' _
+        entry: bash -c 'cd web && bun run oxfmt "${@#web/}"' _
         language: system
         files: ^web/
         types_or: [html, css, javascript, ts, tsx]
 
       - id: oxlint
         name: oxlint
-        entry: bash -c 'cd web && bunx oxlint'
+        entry: bash -c 'cd web && bun run oxlint'
         language: system
         pass_filenames: false
         types_or: [javascript, ts, tsx]
@@ -392,14 +388,14 @@ repos:
       # tsgo from @typescript/native-preview in the root workspace.
       - id: widget-typescript-check
         name: widget TypeScript type check
-        entry: bash -c 'cd widget && bunx tsgo --noEmit'
+        entry: bash -c 'cd widget && bun run tsgo --noEmit'
         language: system
         pass_filenames: false
         files: ^(bun\.lock|widget/(.*\.(ts|tsx)|package\.json|tsconfig\.json))$
 
       - id: examples-widget-typescript-check
         name: examples/widget TypeScript type check
-        entry: bash -c 'cd examples/widget && bunx tsgo --noEmit'
+        entry: bash -c 'cd examples/widget && bun run tsgo --noEmit'
         language: system
         pass_filenames: false
         files: ^(bun\.lock|examples/widget/(.*\.(ts|tsx)|package\.json|tsconfig\.json))$
@@ -459,14 +455,14 @@ repos:
       # wired in here.
       - id: mobile-typescript-check
         name: mobile TypeScript type check
-        entry: bash -c 'cd mobile && bun install --frozen-lockfile && bunx tsc --noEmit'
+        entry: bash -c 'cd mobile && bun install --frozen-lockfile && bun run typecheck'
         language: system
         pass_filenames: false
         files: ^mobile/(.*\.(ts|tsx)|package\.json|tsconfig\.json|bun\.lock)$
 
       - id: mobile-lint
         name: mobile lint
-        entry: bash -c 'cd mobile && bun install --frozen-lockfile && bunx expo lint'
+        entry: bash -c 'cd mobile && bun install --frozen-lockfile && bun run lint'
         language: system
         pass_filenames: false
         files: ^mobile/.*\.(ts|tsx|js|jsx)$

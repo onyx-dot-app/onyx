@@ -313,7 +313,7 @@ class AxeroConnector(PollConnector):
         if self.include_wiki:
             entity_types.append(9)
 
-        iterable_space_ids = self.space_ids if self.space_ids else [None]
+        iterable_space_ids = self.space_ids or [None]
 
         for space_id in iterable_space_ids:
             for entity in entity_types:

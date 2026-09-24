@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, KeyboardEvent } from "react";
-import InputTypeIn from "@opal/components/inputs/input-type-in/components";
+import InputTypeIn from "@opal/components/inputs/texts/input-type-in/components";
 import { Tag } from "@opal/components/tag/components";
 
 export interface InputListProps {

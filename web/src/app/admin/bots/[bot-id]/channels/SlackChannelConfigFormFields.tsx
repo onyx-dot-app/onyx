@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import { FieldArray, useFormikContext, ErrorMessage } from "formik";
 import { DocumentSetSummary } from "@/lib/types";
 import { toast } from "@opal/layouts";
@@ -18,7 +19,7 @@ import DocumentSetCard from "@/sections/cards/DocumentSetCard";
 import CollapsibleSection from "@/app/admin/agents/CollapsibleSection";
 import { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 import { StandardAnswerCategoryDropdownField } from "@/components/standardAnswers/StandardAnswerCategoryDropdown";
-import { InputComboBox } from "@opal/components";
+import { InputSingleSelect } from "@opal/components";
 import { RadioGroup } from "@/components/ui/radio-group";
 import { RadioGroupItemField } from "@/components/ui/RadioGroupItemField";
 import { AlertCircle } from "lucide-react";
@@ -58,6 +59,7 @@ export function SlackChannelConfigFormFields({
   formikProps,
 }: SlackChannelConfigFormFieldsProps) {
   const t = useTranslations("admin.slackBots");
+  const { appName } = useSettings();
   const router = useRouter();
   const { values, setFieldValue } = useFormikContext<any>();
   const [viewUnselectableSets, setViewUnselectableSets] = useState(false);
@@ -360,14 +362,13 @@ export function SlackChannelConfigFormFields({
               </>
             </SubLabel>
 
-            <InputComboBox
+            <InputSingleSelect
               placeholder={t("form.agent.placeholder")}
               value={String(values.persona_id ?? "")}
               onValueChange={(val) =>
                 setFieldValue("persona_id", val ? Number(val) : null)
               }
               options={searchAgentOptions}
-              strict
             />
             {viewSyncEnabledAgents && syncEnabledAgents.length > 0 && (
               <div className="mt-4">
@@ -422,14 +423,13 @@ export function SlackChannelConfigFormFields({
               </>
             </SubLabel>
 
-            <InputComboBox
+            <InputSingleSelect
               placeholder={t("form.agent.placeholder")}
               value={String(values.persona_id ?? "")}
               onValueChange={(val) =>
                 setFieldValue("persona_id", val ? Number(val) : null)
               }
               options={nonSearchAgentOptions}
-              strict
             />
           </div>
         )}
@@ -479,7 +479,7 @@ export function SlackChannelConfigFormFields({
               <CheckboxField
                 name="show_continue_in_web_ui"
                 label={t("form.showContinueInWebUi.label")}
-                tooltip={t("form.showContinueInWebUi.tooltip")}
+                tooltip={t("form.showContinueInWebUi.tooltip", { appName })}
               />
 
               <CheckboxField

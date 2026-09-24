@@ -7,12 +7,13 @@ from onyx.tools.utils import explicit_tool_calling_supported
 @pytest.mark.parametrize(
     "model_provider, model_name, expected_result",
     [
-        (LlmProviderNames.ANTHROPIC, "claude-4-sonnet-20250514", True),
+        (LlmProviderNames.ANTHROPIC, "claude-sonnet-4-5", True),
         (
             "another-provider",
             "claude-haiku-4-5-20251001",
             True,
         ),
+        # Retired/absent from the catalog → no capability data → False.
         (
             LlmProviderNames.ANTHROPIC,
             "claude-3-sonnet-20240229",

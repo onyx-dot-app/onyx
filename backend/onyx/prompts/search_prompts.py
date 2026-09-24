@@ -123,7 +123,8 @@ Select the most relevant document sections for the user's query (maximum {max_se
 later to expand the section and read more from the document so include the section.
 
 # Output Format
-Return ONLY section_ids as a comma-separated list, ordered by relevance:
+Return ONLY the section_ids as a bracketed, comma-separated list of integers, ordered by relevance. \
+Do not include any other text.
 [most_relevant_section_id, second_most_relevant_section_id, ...]
 
 Section IDs:

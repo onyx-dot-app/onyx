@@ -787,7 +787,7 @@ def translate_assistant_message_to_packets(
                                 data=custom_data,
                                 file_ids=custom_file_ids,
                                 error=custom_error,
-                                tool_args=custom_args if custom_args else None,
+                                tool_args=custom_args or None,
                                 tool_id=tool_call.tool_id,
                             )
                         )

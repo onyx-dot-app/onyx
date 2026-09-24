@@ -1,4 +1,4 @@
-import { OAuthDetails } from "@/lib/connectors/credentials";
+import type { OAuthDetails } from "@/lib/connectors/types";
 import {
   CredentialCreationMethod,
   getCredentialCreationMethods,

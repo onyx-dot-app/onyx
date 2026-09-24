@@ -53,7 +53,7 @@ jobs:
           npm pkg set version="${TAG_VERSION}"
 
       # Opal's CSS build inlines @onyx-ai/shared's generated design tokens, and its
-      # dts build (tsup `dts: { resolve: true }`) inlines shared's contracts types
+      # dts build (tsdown bundles devDependencies) inlines shared's contracts types
       # (TextFont/TextColor) — so shared's full build (tokens + ts) must run first.
       # The published opal is then self-contained.
       - name: Build shared (design tokens)

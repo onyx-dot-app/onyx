@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	log "github.com/sirupsen/logrus"
@@ -43,7 +44,13 @@ Examples:
   ods fmt tf deployment/terraform  # Format one subtree
   ods fmt tf --check               # Report unformatted files, change nothing`,
 		Run: func(cmd *cobra.Command, args []string) {
-			runFmtTerraform(args, check)
+			clean, err := runFmtTerraform(args, check, os.Stderr)
+			if err != nil {
+				log.Fatal(err)
+			}
+			if !clean {
+				os.Exit(1)
+			}
 		},
 	}
 
@@ -52,12 +59,14 @@ Examples:
 	return cmd
 }
 
-func runFmtTerraform(args []string, check bool) {
+// runFmtTerraform writes unparseable and changed files to stderr and reports
+// whether every file was already formatted.
+func runFmtTerraform(args []string, check bool, stderr io.Writer) (bool, error) {
 	// The repository root only shortens paths and supplies the default target,
 	// so explicit arguments still work outside a checkout.
 	root, err := paths.GitRoot()
 	if err != nil && len(args) == 0 {
-		log.Fatalf("Cannot locate the repository root: %v", err)
+		return false, fatalErrorf("Cannot locate the repository root: %v", err)
 	}
 
 	roots := args
@@ -67,7 +76,7 @@ func runFmtTerraform(args []string, check bool) {
 
 	files, err := terraform.Discover(roots)
 	if err != nil {
-		log.Fatalf("Cannot collect Terraform files: %v", err)
+		return false, fatalErrorf("Cannot collect Terraform files: %v", err)
 	}
 
 	results, errs := terraform.FormatFiles(files, !check)
@@ -76,7 +85,7 @@ func runFmtTerraform(args []string, check bool) {
 	var failed bool
 	for i, file := range files {
 		if err := errs[i]; err != nil {
-			fmt.Fprintf(os.Stderr, "%s: %v\n", relativeTo(root, file), err)
+			_, _ = fmt.Fprintf(stderr, "%s: %v\n", relativeTo(root, file), err)
 			failed = true
 			continue
 		}
@@ -86,15 +95,13 @@ func runFmtTerraform(args []string, check bool) {
 	}
 
 	for _, path := range changed {
-		fmt.Fprintln(os.Stderr, path)
+		_, _ = fmt.Fprintln(stderr, path)
 	}
 
-	if failed {
-		os.Exit(1)
-	}
 	// pre-commit treats a rewritten file as a failure so the commit restages it.
-	if len(changed) > 0 {
-		os.Exit(1)
+	if failed || len(changed) > 0 {
+		return false, nil
 	}
 	log.Info("✅ All Terraform files are formatted!")
+	return true, nil
 }

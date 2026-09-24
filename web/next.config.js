@@ -14,6 +14,11 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: process.env.SKIP_TYPE_CHECK === "1",
   },
+  experimental: {
+    // TypeScript 7 has no classic JS API, so `next build` must type-check
+    // through the `tsc` CLI.
+    useTypeScriptCli: true,
+  },
   transpilePackages: ["@onyx-ai/opal", "@onyx-ai/shared"],
   typedRoutes: true,
   // `next dev` otherwise appends its own managed block to web/AGENTS.md on every
@@ -202,6 +207,20 @@ const nextConfig = {
       {
         source: "/admin/configuration/web-search",
         destination: "/admin/web-search",
+        permanent: true,
+      },
+      // The connector catalog moved from /admin/add-connector to
+      // /admin/connectors, beside the per-source wizard at /admin/connectors/:source.
+      {
+        source: "/admin/add-connector",
+        destination: "/admin/connectors",
+        permanent: true,
+      },
+      // The indexing status page moved from /admin/indexing/status to
+      // /admin/indexing-status; the /indexing/ segment held nothing else.
+      {
+        source: "/admin/indexing/status",
+        destination: "/admin/indexing-status",
         permanent: true,
       },
       // Replaces the redirect page that used to live at

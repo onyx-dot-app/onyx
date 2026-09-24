@@ -39,7 +39,9 @@ Examples:
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
 			dryRun, _ := cmd.Flags().GetBool("dry-run")
-			runEnv(dryRun)
+			if err := runEnv(dryRun); err != nil {
+				log.Fatal(err)
+			}
 		},
 	}
 
@@ -48,7 +50,7 @@ Examples:
 	return cmd
 }
 
-func runEnv(dryRun bool) {
+func runEnv(dryRun bool) error {
 	projName := docker.ProjectName()
 
 	resolved := queryContainerPorts(projName)
@@ -60,12 +62,12 @@ func runEnv(dryRun bool) {
 		for k, v := range appEnv {
 			fmt.Printf("%s=%s\n", k, v)
 		}
-		return
+		return nil
 	}
 
 	gitRoot, err := paths.GitRoot()
 	if err != nil {
-		log.Fatalf("Failed to find git root: %v", err)
+		return fatalErrorf("Failed to find git root: %w", err)
 	}
 
 	envPath := filepath.Join(gitRoot, ".vscode", ".env")
@@ -76,18 +78,19 @@ func runEnv(dryRun bool) {
 		log.Warnf("You may want to copy the template from the repo wiki or another developer's setup.")
 		if !prompt.Confirm("Continue creating a minimal .vscode/.env? (yes/no): ") {
 			log.Info("Aborted.")
-			return
+			return nil
 		}
 	}
 
 	if err := setEnvValues(envPath, appEnv); err != nil {
-		log.Fatalf("Failed to update %s: %v", envPath, err)
+		return fatalErrorf("Failed to update %s: %w", envPath, err)
 	}
 
 	log.Infof("Updated %s", envPath)
 	for k, v := range appEnv {
 		log.Debugf("  %s=%s", k, v)
 	}
+	return nil
 }
 
 // queryContainerPorts discovers the actual host ports of running containers by

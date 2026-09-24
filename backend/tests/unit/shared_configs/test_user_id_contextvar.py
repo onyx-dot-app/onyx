@@ -54,8 +54,14 @@ def _authenticated_app(user_id: Any | None) -> FastAPI:
     async def skip_oauth_refresh(*_: Any) -> None:
         return None
 
+    class _FakeSession:
+        # optional_user checks for an open transaction before its early
+        # connection release; report none so no commit is attempted.
+        def in_transaction(self) -> bool:
+            return False
+
     def fake_dependency() -> object:
-        return object()
+        return _FakeSession()
 
     app = FastAPI()
     app.dependency_overrides[optional_fastapi_current_user] = fake_auth
