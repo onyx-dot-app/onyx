@@ -33,6 +33,7 @@ DRIVE_ITEM_PARENT_REFERENCE_PROPERTY = "parentReference"
 DRIVE_ITEM_SHAREPOINT_IDS_PROPERTY = "sharepointIds"
 DRIVE_ITEM_DOWNLOAD_URL_PROPERTY = "@microsoft.graph.downloadUrl"
 DRIVE_ITEM_DOWNLOAD_URL_SELECT = "content.downloadUrl"
+DEFAULT_DRIVE_DELTA_PAGE_SIZE = 200
 
 HTTP_GONE_STATUS = 410
 LOCATION_HEADER = "Location"
@@ -205,7 +206,7 @@ def build_delta_start_url(
     drive_id: str,
     start: datetime | None = None,
     *,
-    page_size: int = 200,
+    page_size: int = DEFAULT_DRIVE_DELTA_PAGE_SIZE,
     select_fields: str = DRIVE_DELTA_SELECT_FIELDS,
 ) -> str:
     params = [f"$top={page_size}", f"$select={select_fields}"]
@@ -258,7 +259,7 @@ def fetch_drive_delta_checkpoint_page(
     drive_id: str,
     request_headers: dict[str, str] | None = None,
     query_params: dict[str, str] | None = None,
-    page_size: int = 200,
+    page_size: int = DEFAULT_DRIVE_DELTA_PAGE_SIZE,
     select_fields: str = DRIVE_DELTA_SELECT_FIELDS,
     allow_full_resync: bool = True,
 ) -> DriveDeltaFetchResult:

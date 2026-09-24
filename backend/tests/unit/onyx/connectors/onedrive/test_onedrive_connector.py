@@ -13,6 +13,7 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
 )
 from onyx.connectors.microsoft_utils.drive_delta import (
+    DEFAULT_DRIVE_DELTA_PAGE_SIZE,
     DriveDeltaItem,
     DriveDeltaPage,
 )
@@ -154,7 +155,7 @@ def test_onedrive_uses_shared_national_cloud_pair_validation() -> None:
         )
 
 
-def test_onedrive_checkpoint_holds_one_page_and_reads_one_delta_page() -> None:
+def test_onedrive_checkpoint_opens_first_delta_in_one_step() -> None:
     connector, gateway = _connector()
     first = _user()
     second = _user("second@example.com")
@@ -162,25 +163,17 @@ def test_onedrive_checkpoint_holds_one_page_and_reads_one_delta_page() -> None:
         users=[first, second], next_link="users-next"
     )
     gateway.get_default_drive.return_value = _drive()
-    checkpoint = connector.build_dummy_checkpoint()
-
-    output, checkpoint = _run_step(connector, checkpoint)
-    assert output == []
-    assert checkpoint.current_user == first
-    assert checkpoint.user_page == [second]
-    gateway.get_default_drive.assert_not_called()
-
-    output, checkpoint = _run_step(connector, checkpoint)
-    assert output == []
-    assert checkpoint.current_drive == _drive()
-    gateway.get_default_drive.assert_called_once()
-    gateway.get_delta_page.assert_not_called()
-
     gateway.get_delta_page.return_value = OneDriveDeltaResult(
         page=DriveDeltaPage(), next_cursor="delta-next"
     )
+    checkpoint = connector.build_dummy_checkpoint()
+
     output, checkpoint = _run_step(connector, checkpoint)
     assert [type(item) for item in output] == [HierarchyNode]
+    assert checkpoint.current_user == first
+    assert checkpoint.current_drive == _drive()
+    assert checkpoint.user_page == [second]
+    gateway.get_default_drive.assert_called_once()
     assert checkpoint.delta_cursor == "delta-next"
     gateway.get_delta_page.assert_called_once()
 
@@ -193,22 +186,22 @@ def test_onedrive_checkpoint_holds_one_page_and_reads_one_delta_page() -> None:
     assert gateway.get_delta_page.call_args.kwargs["page_url"] == "delta-next"
 
 
-def test_onedrive_new_attempt_uses_timestamp_delta_token() -> None:
+def test_onedrive_new_attempt_uses_fixed_delta_page_size() -> None:
     connector, gateway = _connector(users=["owner@example.com"])
-    connector.settings = connector.settings.model_copy(update={"batch_size": 17})
     gateway.get_user.return_value = _user()
     gateway.get_default_drive.return_value = _drive()
     gateway.get_delta_page.return_value = OneDriveDeltaResult(page=DriveDeltaPage())
     checkpoint = connector.build_dummy_checkpoint()
-    _, checkpoint = _run_step(connector, checkpoint, start=10)
-    _, checkpoint = _run_step(connector, checkpoint, start=10)
     _run_step(connector, checkpoint, start=10)
 
     page_url = gateway.get_delta_page.call_args.kwargs["page_url"]
-    assert "$top=17" in page_url
+    assert f"$top={DEFAULT_DRIVE_DELTA_PAGE_SIZE}" in page_url
     assert "$select=" in page_url
     assert "token=1970-01-01T00%3A00%3A10%2B00%3A00" in page_url
-    assert gateway.get_delta_page.call_args.kwargs["page_size"] == 17
+    assert (
+        gateway.get_delta_page.call_args.kwargs["page_size"]
+        == DEFAULT_DRIVE_DELTA_PAGE_SIZE
+    )
 
 
 def test_onedrive_explicit_user_failure_is_reported() -> None:
@@ -228,8 +221,6 @@ def test_onedrive_discovered_missing_drive_is_skipped() -> None:
     gateway.get_default_drive.return_value = None
 
     output, checkpoint = _run_step(connector, connector.build_dummy_checkpoint())
-    assert output == []
-    output, checkpoint = _run_step(connector, checkpoint)
 
     assert output == []
     assert checkpoint.current_user is None
@@ -244,7 +235,8 @@ def test_onedrive_all_user_drive_denial_skips_but_transient_error_retries() -> N
 
     output, checkpoint = _run_step(connector, checkpoint)
 
-    assert output == []
+    assert len(output) == 1
+    assert isinstance(output[0], ConnectorFailure)
     assert checkpoint.current_user is None
 
     checkpoint.current_user = _user()
@@ -359,7 +351,8 @@ def test_onedrive_delta_denial_skips_discovered_drive_and_reports_explicit_user(
 
     output, discovered_checkpoint = _run_step(discovered, discovered_checkpoint)
 
-    assert output == []
+    assert len(output) == 1
+    assert isinstance(output[0], ConnectorFailure)
     assert discovered_checkpoint.current_user is None
 
     explicit, explicit_gateway = _connector(users=["owner@example.com"])
@@ -483,7 +476,7 @@ def test_onedrive_slim_walk_is_complete_without_downloads() -> None:
     gateway.download_item.assert_not_called()
 
 
-def test_onedrive_slim_walk_skips_unselected_user_drives() -> None:
+def test_onedrive_slim_walk_fails_on_unselected_user_drive() -> None:
     connector, gateway = _connector()
     gateway.list_users.side_effect = [
         OneDriveUserPage(
@@ -498,15 +491,49 @@ def test_onedrive_slim_walk_skips_unselected_user_drives() -> None:
     ]
     gateway.get_delta_page.return_value = OneDriveDeltaResult(page=DriveDeltaPage())
 
+    with pytest.raises(RuntimeError, match="slim retrieval failed"):
+        list(connector.retrieve_all_slim_docs())
+
+    assert gateway.list_users.call_count == 1
+    gateway.get_default_drive.assert_called_once()
+
+
+def test_onedrive_slim_walk_skips_missing_configured_user() -> None:
+    connector, gateway = _connector(
+        users=["missing@example.com", "readable@example.com"]
+    )
+    gateway.get_user.side_effect = [None, _user("readable@example.com")]
+    gateway.get_default_drive.return_value = _drive()
+    gateway.get_delta_page.return_value = OneDriveDeltaResult(page=DriveDeltaPage())
+
     batches = list(connector.retrieve_all_slim_docs())
 
     assert len(batches) == 1
     assert isinstance(batches[0][0], HierarchyNode)
-    assert gateway.list_users.call_count == 2
-    gateway.list_users.assert_called_with(next_link="next-users")
+    assert batches[0][0].display_name == "readable@example.com"
+    assert gateway.get_user.call_count == 2
 
 
-def test_onedrive_slim_walk_continues_after_unselected_delta() -> None:
+def test_onedrive_slim_walk_skips_missing_configured_drive() -> None:
+    connector, gateway = _connector(
+        users=["missing-drive@example.com", "readable@example.com"]
+    )
+    gateway.get_user.side_effect = [
+        _user("missing-drive@example.com"),
+        _user("readable@example.com"),
+    ]
+    gateway.get_default_drive.side_effect = [None, _drive()]
+    gateway.get_delta_page.return_value = OneDriveDeltaResult(page=DriveDeltaPage())
+
+    batches = list(connector.retrieve_all_slim_docs())
+
+    assert len(batches) == 1
+    assert isinstance(batches[0][0], HierarchyNode)
+    assert batches[0][0].display_name == "readable@example.com"
+    assert gateway.get_default_drive.call_count == 2
+
+
+def test_onedrive_slim_walk_fails_on_unselected_delta() -> None:
     connector, gateway = _connector()
     gateway.list_users.return_value = OneDriveUserPage(
         users=[_user("denied@example.com"), _user("readable@example.com")]
@@ -517,12 +544,10 @@ def test_onedrive_slim_walk_continues_after_unselected_delta() -> None:
         OneDriveDeltaResult(page=DriveDeltaPage()),
     ]
 
-    batches = list(connector.retrieve_all_slim_docs())
+    with pytest.raises(RuntimeError, match="slim retrieval failed"):
+        list(connector.retrieve_all_slim_docs())
 
-    assert len(batches) == 1
-    assert isinstance(batches[0][0], HierarchyNode)
-    assert batches[0][0].display_name == "readable@example.com"
-    assert gateway.get_delta_page.call_count == 2
+    gateway.get_delta_page.assert_called_once()
 
 
 def test_onedrive_path_and_time_gates_run_before_download() -> None:
@@ -606,9 +631,9 @@ def test_onedrive_capability_user_probe_is_bounded_for_mock_pages() -> None:
         if check.check_id == "onedrive_drive"
     )
 
-    with pytest.raises(ConnectorValidationError, match="discovery exceeded"):
+    with pytest.raises(ConnectorValidationError, match="No readable OneDrive"):
         check.run(context)
-    assert gateway.list_users.call_count == 100
+    assert gateway.list_users.call_count == 20
 
 
 def test_onedrive_capability_config_rejects_wrong_field_types() -> None:
@@ -631,9 +656,10 @@ def test_onedrive_capability_config_rejects_wrong_field_types() -> None:
 
 def test_onedrive_drive_check_skips_unavailable_discovered_users() -> None:
     gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
-    gateway.list_users.return_value = OneDriveUserPage(
-        users=[_user("first@example.com"), _user("second@example.com")]
-    )
+    gateway.list_users.side_effect = [
+        OneDriveUserPage(users=[_user("first@example.com")], next_link="next-users"),
+        OneDriveUserPage(users=[_user("second@example.com")]),
+    ]
     gateway.get_default_drive.side_effect = [
         OneDriveGraphError(423, "locked", "not selected"),
         _drive(),
@@ -660,7 +686,7 @@ def test_onedrive_drive_check_follows_all_user_pages() -> None:
     gateway.list_users.side_effect = [
         *[
             OneDriveUserPage(users=[], next_link=f"next-users-{page}")
-            for page in range(20)
+            for page in range(19)
         ],
         OneDriveUserPage(users=[_user()]),
     ]
@@ -679,8 +705,39 @@ def test_onedrive_drive_check_follows_all_user_pages() -> None:
 
     check.run(context)
 
-    assert gateway.list_users.call_count == 21
-    assert gateway.list_users.call_args.kwargs["page_size"] == 999
+    assert gateway.list_users.call_count == 20
+    assert gateway.list_users.call_args.kwargs["page_size"] == 1
+
+
+def test_onedrive_drive_check_remembers_candidate_denial() -> None:
+    gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
+    gateway.list_users.side_effect = [
+        OneDriveUserPage(
+            users=[_user(f"user-{page}@example.com")],
+            next_link=f"next-users-{page}",
+        )
+        for page in range(20)
+    ]
+    gateway.get_default_drive.side_effect = [
+        OneDriveGraphError(403, "accessDenied", "not selected") for _ in range(20)
+    ]
+    context = CapabilityCheckContext(
+        source=DocumentSource.ONEDRIVE,
+        credential_json={},
+        connector_specific_config={},
+        source_operations=gateway,
+    )
+    check = next(
+        check
+        for check in build_onedrive_indexing_checks()
+        if check.check_id == "onedrive_drive"
+    )
+
+    with pytest.raises(InsufficientPermissionsError):
+        check.run(context)
+
+    assert gateway.list_users.call_count == 20
+    assert gateway.get_default_drive.call_count == 20
 
 
 def test_onedrive_delta_check_finds_later_readable_configured_drive() -> None:

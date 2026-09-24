@@ -33,7 +33,6 @@ class OneDriveConnectorConfig(BaseModel):
 
 class OneDriveSettings(OneDriveConnectorConfig):
     excluded_paths: list[str] = Field(default_factory=list)
-    batch_size: int = Field(gt=0)
 
 
 class OneDriveUser(BaseModel):
