@@ -160,6 +160,10 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
       >
         <ShadowDiv
           shadowHeight={3}
+          // The rise-and-settle runs on this non-scrolling wrapper: a
+          // transform on the scroller itself makes Chromium repaint it at
+          // scroll offset 0 for a frame when compositing switches.
+          containerClassName="opal-select-dropdown-content"
           className={cn(
             "opal-select-dropdown-scroll",
             !dropdownMaxHeight && "max-h-60"

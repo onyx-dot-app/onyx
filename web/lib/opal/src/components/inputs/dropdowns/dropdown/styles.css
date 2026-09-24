@@ -19,15 +19,17 @@
 }
 
 /* Open and close animations. floating-ui positions the root with a
-   transform, so the root only fades; the rise and settle run on the scroll
-   container inside it. `data-state="closed"` is the exit, kept mounted by
-   usePresence until the animation ends. */
+   transform, so the root only fades; the rise and settle run on the
+   ShadowDiv's non-scrolling wrapper, never on the scroller itself (a
+   transform there makes Chromium repaint it at scroll offset 0 for a
+   frame). `data-state="closed"` is the exit, kept mounted by usePresence
+   until the animation ends. */
 .opal-select-dropdown[data-state="open"] {
   animation: opal-select-dropdown-in 120ms ease-out;
 }
 
-.opal-select-dropdown[data-state="open"] .opal-select-dropdown-scroll {
-  animation: opal-select-dropdown-scroll-in 120ms ease-out;
+.opal-select-dropdown[data-state="open"] .opal-select-dropdown-content {
+  animation: opal-select-dropdown-content-in 120ms ease-out;
 }
 
 .opal-select-dropdown[data-state="closed"] {
@@ -35,8 +37,8 @@
   pointer-events: none;
 }
 
-.opal-select-dropdown[data-state="closed"] .opal-select-dropdown-scroll {
-  animation: opal-select-dropdown-scroll-out 80ms ease-in forwards;
+.opal-select-dropdown[data-state="closed"] .opal-select-dropdown-content {
+  animation: opal-select-dropdown-content-out 80ms ease-in forwards;
 }
 
 @keyframes opal-select-dropdown-in {
@@ -51,13 +53,13 @@
   }
 }
 
-@keyframes opal-select-dropdown-scroll-in {
+@keyframes opal-select-dropdown-content-in {
   from {
     transform: translateY(-4px) scale(0.98);
   }
 }
 
-@keyframes opal-select-dropdown-scroll-out {
+@keyframes opal-select-dropdown-content-out {
   to {
     transform: translateY(-4px) scale(0.98);
   }
@@ -65,7 +67,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .opal-select-dropdown[data-state],
-  .opal-select-dropdown[data-state] .opal-select-dropdown-scroll {
+  .opal-select-dropdown[data-state] .opal-select-dropdown-content {
     animation: none;
   }
 }
