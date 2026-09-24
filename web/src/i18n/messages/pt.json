@@ -2562,6 +2562,36 @@
       }
     },
     "connectorsList": {
+      "oneDrive": {
+        "description": "Configurar o conector do OneDrive",
+        "indexingScope": {
+          "label": "Quais arquivos do OneDrive o Onyx deve indexar?",
+          "general": {
+            "label": "Geral",
+            "description": "Indexe todos os usuários qualificados que o aplicativo da Microsoft pode acessar."
+          },
+          "specific": {
+            "label": "Específico",
+            "users": {
+              "label": "Usuários",
+              "description": "Adicione o nome principal ou o endereço de e-mail principal de cada usuário a ser indexado.",
+              "required": "Adicione pelo menos um usuário para o escopo específico"
+            }
+          }
+        },
+        "excludedPaths": {
+          "label": "Caminhos excluídos",
+          "description": "Padrões glob comparados com cada caminho e nome de arquivo, como '*.tmp' ou 'Archive/*'."
+        },
+        "authorityHost": {
+          "label": "Host de autoridade",
+          "description": "Host de autoridade de identidade da Microsoft. Use https://login.microsoftonline.us para GCC High ou DoD."
+        },
+        "graphApiHost": {
+          "label": "Host da API Graph",
+          "description": "Host do Microsoft Graph. Use https://graph.microsoft.us para GCC High ou DoD."
+        }
+      },
       "add": {
         "authorizeButton": {
           "label": "Autorizar com {source}",

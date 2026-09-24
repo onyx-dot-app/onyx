@@ -1,8 +1,14 @@
 import { credentialTemplates } from "@/lib/connectors/credentials";
-import { getFileTypeDefinitionForField } from "@/lib/connectors/utils";
-import { FileTypeCategory } from "@/lib/connectors/types";
+import {
+  createConnectorInitialValues,
+  createConnectorValidationSchema,
+  getFileTypeDefinitionForField,
+} from "@/lib/connectors/utils";
+import { FileTypeCategory, OneDriveScope } from "@/lib/connectors/types";
 import { getSourceMetadata } from "@/lib/sources";
 import { ValidSources, validAutoSyncSources } from "@/lib/types";
+
+const ONE_DRIVE_USERS_REQUIRED = "Add at least one user for Specific scope";
 
 describe("OneDrive connector metadata", () => {
   it("defines both app-only credential methods", () => {
@@ -38,5 +44,48 @@ describe("OneDrive connector metadata", () => {
       FileTypeCategory.ONEDRIVE_PFX_FILE
     );
     expect(validAutoSyncSources).not.toContain(ValidSources.OneDrive);
+  });
+
+  it("defaults to General scope and initializes nested users", () => {
+    expect(createConnectorInitialValues(ValidSources.OneDrive)).toMatchObject({
+      indexing_scope: OneDriveScope.General,
+      users: [],
+    });
+  });
+
+  it("accepts General scope without hidden field values", async () => {
+    const values = {
+      ...createConnectorInitialValues(ValidSources.OneDrive),
+      name: "OneDrive",
+      access_type: "public",
+    };
+
+    await expect(
+      createConnectorValidationSchema(ValidSources.OneDrive).validate(values)
+    ).resolves.toMatchObject({
+      indexing_scope: OneDriveScope.General,
+      users: [],
+    });
+  });
+
+  it("requires at least one user for Specific scope", async () => {
+    const schema = createConnectorValidationSchema(
+      ValidSources.OneDrive,
+      false,
+      { oneDriveUsersRequired: ONE_DRIVE_USERS_REQUIRED }
+    );
+
+    await expect(
+      schema.validateAt("users", {
+        indexing_scope: OneDriveScope.Specific,
+        users: [],
+      })
+    ).rejects.toThrow(ONE_DRIVE_USERS_REQUIRED);
+    await expect(
+      schema.validateAt("users", {
+        indexing_scope: OneDriveScope.General,
+        users: [],
+      })
+    ).resolves.toEqual([]);
   });
 });

@@ -214,6 +214,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     icon: SvgOnedrive,
     displayName: "OneDrive",
     category: SourceCategory.Storage,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/onedrive`,
   },
   box: {
     icon: BoxIcon,

@@ -2,7 +2,6 @@ import { expect, type Page, type Request } from "@playwright/test";
 
 export interface OneDriveConfigRequest {
   connector_specific_config: {
-    all_users: boolean;
     users: string[];
   };
 }
@@ -107,7 +106,6 @@ export class OneDriveConnectorSetupPage {
       }
       const config = request.connector_specific_config;
       if (
-        typeof config.all_users !== "boolean" ||
         !Array.isArray(config.users) ||
         !config.users.every((user) => typeof user === "string")
       ) {
@@ -115,7 +113,6 @@ export class OneDriveConnectorSetupPage {
       }
       this.connectorRequests.push({
         connector_specific_config: {
-          all_users: config.all_users,
           users: config.users,
         },
       });
@@ -161,9 +158,8 @@ export class OneDriveConnectorSetupPage {
     await this.submitCredential();
   }
 
-  async continueToConfiguration() {
-    await this.page.getByRole("button", { name: "Continue" }).click();
-    await expect(this.page.getByTestId("name")).toBeVisible();
+  async expectConfigurationEnabled() {
+    await expect(this.page.getByTestId("name")).toBeEnabled();
   }
 
   async selectSpecificScope(user?: string) {
@@ -177,24 +173,30 @@ export class OneDriveConnectorSetupPage {
     await this.page.getByRole("tab", { name: "General" }).click();
   }
 
-  async submitConnector(name: string, expectedStatus = 200) {
+  async submitConnector(name: string) {
     await this.page.getByTestId("name").fill(name);
     const responsePromise = this.page.waitForResponse(
       (response) =>
         response.request().method() === "POST" &&
         new URL(response.url()).pathname === "/api/manage/admin/connector"
     );
-    await this.page.getByRole("button", { name: "Create Connector" }).click();
+    await this.page
+      .getByRole("button", { name: "Connect", exact: true })
+      .click();
     const response = await responsePromise;
-    expect(response.status()).toBe(expectedStatus);
+    expect(response.status()).toBe(200);
+  }
+
+  async submitInvalidConnector(name: string, message: string) {
+    await this.page.getByTestId("name").fill(name);
+    await expect(
+      this.page.getByRole("button", { name: "Connect", exact: true })
+    ).toBeDisabled();
+    await expect(this.page.getByText(message)).toBeVisible();
   }
 
   async expectCreated() {
-    await this.page.waitForURL("**/admin/indexing/status**");
-  }
-
-  async expectConfigurationError(message: string) {
-    await expect(this.page.getByText(message)).toBeVisible();
+    await expect(this.page).toHaveURL(/\/admin\/indexing-status/);
   }
 
   private async openCredentialForm() {
@@ -203,7 +205,10 @@ export class OneDriveConnectorSetupPage {
   }
 
   private async fillCredentialIdentity() {
-    await this.page.getByTestId("name").fill("OneDrive test credential");
+    await this.page
+      .getByRole("dialog")
+      .getByTestId("name")
+      .fill("OneDrive test credential");
     await this.page.getByTestId("onedrive_client_id").fill("client-id");
     await this.page.getByTestId("onedrive_directory_id").fill("directory-id");
   }
@@ -217,12 +222,13 @@ export class OneDriveConnectorSetupPage {
           "/api/manage/credential/private-key",
         ].includes(new URL(response.url()).pathname)
     );
-    await this.page.getByRole("button", { name: "Create Credential" }).click();
+    await this.page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Create", exact: true })
+      .click();
     const response = await responsePromise;
     expect(response.ok()).toBeTruthy();
-    await expect(
-      this.page.getByRole("button", { name: "Continue" })
-    ).toBeEnabled();
+    await expect(this.page.getByRole("dialog")).toBeHidden();
   }
 
   private credentialResponse(id: number) {

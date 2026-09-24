@@ -2562,6 +2562,36 @@
       }
     },
     "connectorsList": {
+      "oneDrive": {
+        "description": "配置 OneDrive 连接器",
+        "indexingScope": {
+          "label": "Onyx 应为哪些用户的 OneDrive 文件建立索引？",
+          "general": {
+            "label": "常规",
+            "description": "为 Microsoft 应用程序可以访问的所有符合条件的用户建立索引。"
+          },
+          "specific": {
+            "label": "指定",
+            "users": {
+              "label": "用户",
+              "description": "添加要建立索引的每个用户的用户主体名称或主电子邮件地址。",
+              "required": "请为指定范围添加至少一个用户"
+            }
+          }
+        },
+        "excludedPaths": {
+          "label": "排除的路径",
+          "description": "与每个文件路径和文件名匹配的 glob 模式，例如“*.tmp”或“Archive/*”。"
+        },
+        "authorityHost": {
+          "label": "授权主机",
+          "description": "Microsoft 标识授权主机。GCC High 或 DoD 请使用 https://login.microsoftonline.us。"
+        },
+        "graphApiHost": {
+          "label": "Graph API 主机",
+          "description": "Microsoft Graph 主机。GCC High 或 DoD 请使用 https://graph.microsoft.us。"
+        }
+      },
       "add": {
         "authorizeButton": {
           "label": "使用 {source} 授权",

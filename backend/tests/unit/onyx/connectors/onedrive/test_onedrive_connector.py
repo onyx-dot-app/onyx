@@ -155,12 +155,6 @@ def test_onedrive_uses_shared_national_cloud_pair_validation() -> None:
         )
 
 
-def test_onedrive_preserves_organization_link_setting() -> None:
-    connector = OneDriveConnector(treat_organization_link_as_public=True)
-
-    assert connector.settings.treat_organization_link_as_public
-
-
 def test_onedrive_checkpoint_opens_first_delta_in_one_step() -> None:
     connector, gateway = _connector()
     first = _user()
