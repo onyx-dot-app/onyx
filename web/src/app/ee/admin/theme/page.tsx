@@ -191,7 +191,6 @@ export default function ThemePage() {
               Yup.string().url().isValidSync(value)
           ),
       }),
-    hide_onyx_branding: Yup.boolean().nullable(),
     system_announcement_enabled: Yup.boolean().nullable(),
     system_announcement_header: Yup.string()
       .trim()
@@ -245,7 +244,6 @@ export default function ThemePage() {
         custom_help_link_url: enterpriseSettings?.custom_help_link_url || "",
         custom_help_link_label:
           enterpriseSettings?.custom_help_link_label || "",
-        hide_onyx_branding: enterpriseSettings?.hide_onyx_branding || false,
         system_announcement_enabled: !!currentBanner,
         system_announcement_header: currentBanner?.title || "",
         system_announcement_content: currentBanner?.content || "",
@@ -298,7 +296,6 @@ export default function ThemePage() {
           consent_screen_prompt: values.consent_screen_prompt || null,
           custom_help_link_url: values.custom_help_link_url?.trim() || null,
           custom_help_link_label: values.custom_help_link_label?.trim() || null,
-          hide_onyx_branding: values.hide_onyx_branding ?? null,
         });
 
         // Only touch the banner after the settings save succeeds, and only when

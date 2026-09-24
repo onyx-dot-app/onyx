@@ -7511,11 +7511,6 @@
         "description": "この名前はアプリ全体に表示され、UI内の「Onyx」を置き換えます。",
         "label": "アプリケーションの表示名"
       },
-      "branding": {
-        "description": "アプリ内の「powered by Onyx」やその他のOnyxブランディングを削除します。",
-        "enterpriseTooltip": "Onyxブランディングの非表示はEnterpriseプランの機能です。",
-        "label": "Onyxブランディングを非表示"
-      },
       "chatFooter": {
         "description": "免責事項や追加情報のためのマークダウンコンテンツを追加します。",
         "label": "チャットフッターのテキスト"
