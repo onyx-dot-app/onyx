@@ -709,7 +709,7 @@ export const connectorConfigs: Record<
   },
   jira_service_management: {
     description: "Configure Jira Service Management connector",
-    subtext: `Configure which Jira Service Management content to index. By default all service desk projects are indexed; you can also pin a single project or provide a custom JQL query.`,
+    subtext: `Configure which Jira Service Management content to index. By default all service desk projects are indexed; you can also pin a single project or provide a custom JQL query. If a Jira connector already indexes this site, first exclude the service desk projects from it (pin its projects, or on Jira Cloud use the JQL projectType != service_desk) so these tickets are attributed to Jira Service Management.`,
     values: [
       {
         type: "text",

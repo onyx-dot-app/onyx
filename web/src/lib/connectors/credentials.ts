@@ -63,6 +63,7 @@ type CredentialTemplateMap = Record<ValidSources, object | null> & {
   outline: OutlineCredentialJson;
   confluence: ConfluenceCredentialJson;
   jira: JiraCredentialJson;
+  jira_service_management: JiraCredentialJson;
   productboard: ProductboardCredentialJson;
   slab: SlabCredentialJson;
   coda: CodaCredentialJson;

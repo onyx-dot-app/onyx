@@ -1,8 +1,9 @@
 """Jira Service Management (JSM) connector.
 
 JSM runs on top of the same Jira Cloud/Data Center REST API as regular Jira, so
-this connector reuses all of the fetching, parsing, checkpointing and
-permission-sync logic in :class:`~onyx.connectors.jira.connector.JiraConnector`.
+this connector reuses the fetching, parsing and checkpointing logic in
+:class:`~onyx.connectors.jira.connector.JiraConnector`. Permission sync (Auto
+Sync) is not wired up for this source yet.
 
 Only two things differ from a plain Jira connector:
 
@@ -21,6 +22,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.jira.connector import JiraConnector
+from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -28,6 +30,12 @@ logger = setup_logger()
 # Atlassian's project type key for Jira Service Management projects.
 # https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-projects/
 _SERVICE_DESK_PROJECT_TYPE_KEY = "service_desk"
+
+_NO_SERVICE_DESK_PROJECTS_MESSAGE = (
+    "No Jira Service Management (service desk) projects were found for the "
+    "provided credentials. Ensure the account has access to at least one service "
+    "desk project, or configure a specific project key or JQL query."
+)
 
 
 class JiraServiceManagementConnector(JiraConnector):
@@ -59,8 +67,9 @@ class JiraServiceManagementConnector(JiraConnector):
 
         service_desk_keys: list[str] = []
         for project in self.jira_client.projects():
-            project_type = getattr(project, "projectTypeKey", None)
-            if project_type == _SERVICE_DESK_PROJECT_TYPE_KEY:
+            # projectTypeKey is absent on some Jira Server/DC versions.
+            type_key = getattr(project, "projectTypeKey", None)  # ods: ignore[getattr]
+            if type_key == _SERVICE_DESK_PROJECT_TYPE_KEY:
                 service_desk_keys.append(project.key)
 
         self._service_desk_project_keys = service_desk_keys
@@ -73,23 +82,25 @@ class JiraServiceManagementConnector(JiraConnector):
 
     @override
     def validate_connector_settings(self) -> None:
-        if not self.jql_query and not self.jira_project:
-            # Auto-scoping: a single project listing both proves Jira API access
-            # (via the jira_client property, which raises if credentials are
-            # missing) and confirms at least one service desk project exists.
-            # Bypass the base validator here to avoid a second, redundant
-            # project-list request. The base is still used for the explicit
-            # project / JQL cases below.
-            if not self._get_service_desk_project_keys():
-                raise ConnectorValidationError(
-                    "No Jira Service Management (service desk) projects were "
-                    "found for the provided credentials. Ensure the account has "
-                    "access to at least one service desk project, or configure a "
-                    "specific project key or JQL query."
-                )
+        if self.jql_query or self.jira_project:
+            super().validate_connector_settings()
             return
 
-        super().validate_connector_settings()
+        # Auto-scoping: one project listing both proves Jira API access and
+        # confirms at least one service desk project exists, so the base
+        # validator's separate projects() probe is skipped. Errors go through
+        # the same mapping as the base validator (401/403/429 -> typed errors).
+        # The credential check comes first because ConnectorMissingCredentialError
+        # would otherwise be mapped to UnexpectedValidationError.
+        if self._jira_client is None:
+            raise ConnectorMissingCredentialError("Jira")
+        service_desk_keys: list[str] = []
+        try:
+            service_desk_keys = self._get_service_desk_project_keys()
+        except Exception as e:
+            self._handle_jira_connector_settings_error(e)
+        if not service_desk_keys:
+            raise ConnectorValidationError(_NO_SERVICE_DESK_PROJECTS_MESSAGE)
 
     @override
     def _get_jql_query(
@@ -118,12 +129,7 @@ class JiraServiceManagementConnector(JiraConnector):
         # Otherwise auto-scope to every service desk project we can see.
         service_desk_keys = self._get_service_desk_project_keys()
         if not service_desk_keys:
-            raise ConnectorValidationError(
-                "No Jira Service Management (service desk) projects were found for "
-                "the provided credentials. Ensure the account has access to at "
-                "least one service desk project, or configure a specific project "
-                "key or JQL query."
-            )
+            raise ConnectorValidationError(_NO_SERVICE_DESK_PROJECTS_MESSAGE)
 
         quoted_keys = ", ".join(f'"{key}"' for key in service_desk_keys)
         return f"project in ({quoted_keys}) AND {time_jql}"

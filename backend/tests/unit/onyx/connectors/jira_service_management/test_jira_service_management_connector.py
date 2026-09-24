@@ -9,12 +9,18 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+from jira import JIRAError
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+)
 from onyx.connectors.jira_service_management.connector import (
     JiraServiceManagementConnector,
 )
+from onyx.connectors.models import ConnectorMissingCredentialError
 
 BASE_URL = "https://danswerai.atlassian.net"
 
@@ -28,8 +34,13 @@ def _project(key: str, project_type: str) -> SimpleNamespace:
     return SimpleNamespace(key=key, projectTypeKey=project_type)
 
 
-def _connector(**kwargs: object) -> JiraServiceManagementConnector:
-    return JiraServiceManagementConnector(jira_base_url=BASE_URL, **kwargs)
+def _connector(
+    project_key: str | None = None,
+    jql_query: str | None = None,
+) -> JiraServiceManagementConnector:
+    return JiraServiceManagementConnector(
+        jira_base_url=BASE_URL, project_key=project_key, jql_query=jql_query
+    )
 
 
 def test_document_source_is_jira_service_management() -> None:
@@ -139,3 +150,32 @@ def test_validate_with_explicit_project_skips_service_desk_check() -> None:
 
     # Should not raise.
     connector.validate_connector_settings()
+
+
+@pytest.mark.parametrize(
+    "status_code, expected_error, match",
+    [
+        (401, CredentialExpiredError, "HTTP 401"),
+        (403, InsufficientPermissionsError, "HTTP 403"),
+        (429, ConnectorValidationError, "rate-limits"),
+    ],
+)
+def test_validate_maps_jira_errors_when_auto_scoping(
+    status_code: int, expected_error: type[Exception], match: str
+) -> None:
+    # The auto-scope path skips the base validator's projects() probe, so it
+    # must still map Jira HTTP errors to the same typed errors as the base.
+    connector = _connector()
+    mock_client = MagicMock()
+    mock_client.projects.side_effect = JIRAError(status_code=status_code, text="err")
+    connector._jira_client = mock_client
+
+    with pytest.raises(expected_error, match=match):
+        connector.validate_connector_settings()
+
+
+def test_validate_without_credentials_raises_missing_credential() -> None:
+    connector = _connector()
+
+    with pytest.raises(ConnectorMissingCredentialError):
+        connector.validate_connector_settings()
