@@ -109,7 +109,6 @@ def _connector(
             state.owner.user_principal_name,
             state.second_owner.user_principal_name,
         ],
-        all_users=False,
         excluded_paths=FIXTURE_EXCLUDED_PATHS,
         treat_organization_link_as_public=True,
         batch_size=LIVE_PAGE_SIZE,
