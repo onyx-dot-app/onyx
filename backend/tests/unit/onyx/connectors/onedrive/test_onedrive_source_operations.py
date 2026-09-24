@@ -29,7 +29,6 @@ from onyx.server.documents.private_key_types import (
     FILE_TYPE_TO_FILE_PROCESSOR,
     PrivateKeyFileTypes,
     process_pkcs12_private_key_file,
-    process_sharepoint_private_key_file,
 )
 
 
@@ -221,7 +220,6 @@ def test_onedrive_uses_shared_pkcs12_processor() -> None:
         FILE_TYPE_TO_FILE_PROCESSOR[PrivateKeyFileTypes.ONEDRIVE_PFX_FILE]
         is FILE_TYPE_TO_FILE_PROCESSOR[PrivateKeyFileTypes.SHAREPOINT_PFX_FILE]
     )
-    assert process_sharepoint_private_key_file is process_pkcs12_private_key_file
 
 
 @pytest.mark.parametrize(

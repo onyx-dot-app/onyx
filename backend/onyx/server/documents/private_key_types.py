@@ -39,10 +39,6 @@ def process_pkcs12_private_key_file(file: UploadFile) -> str:
     return base64.b64encode(private_key_bytes).decode("ascii")
 
 
-# SharePoint imports this public processor name.
-process_sharepoint_private_key_file = process_pkcs12_private_key_file
-
-
 FILE_TYPE_TO_FILE_PROCESSOR: dict[
     PrivateKeyFileTypes, ProcessPrivateKeyFileProtocol
 ] = {
