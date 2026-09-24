@@ -19,7 +19,7 @@ import DocumentSetCard from "@/sections/cards/DocumentSetCard";
 import CollapsibleSection from "@/app/admin/agents/CollapsibleSection";
 import { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 import { StandardAnswerCategoryDropdownField } from "@/components/standardAnswers/StandardAnswerCategoryDropdown";
-import { InputSingleSelect } from "@opal/components";
+import { InputSingleComboBox } from "@opal/components";
 import { RadioGroup } from "@/components/ui/radio-group";
 import { RadioGroupItemField } from "@/components/ui/RadioGroupItemField";
 import { AlertCircle } from "lucide-react";
@@ -362,7 +362,7 @@ export function SlackChannelConfigFormFields({
               </>
             </SubLabel>
 
-            <InputSingleSelect
+            <InputSingleComboBox
               placeholder={t("form.agent.placeholder")}
               value={String(values.persona_id ?? "")}
               onValueChange={(val) =>
@@ -423,7 +423,7 @@ export function SlackChannelConfigFormFields({
               </>
             </SubLabel>
 
-            <InputSingleSelect
+            <InputSingleComboBox
               placeholder={t("form.agent.placeholder")}
               value={String(values.persona_id ?? "")}
               onValueChange={(val) =>

@@ -6,7 +6,7 @@ import "@opal/components/inputs/texts/input-type-in/styles.css";
 import "@opal/components/inputs/texts/input-type-in-tag/styles.css";
 import { useCallback, useEffect, useRef } from "react";
 import type { IconFunctionComponent } from "@opal/types";
-import { Button, Tag, TAG_REMOVE_CLASS } from "@opal/components";
+import { Button, Tag, TAG_REMOVE_CLASS, Text } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import { useOpalStrings } from "@opal/strings";
 
@@ -68,9 +68,10 @@ interface TagFieldProps extends TagFieldBaseProps {
 
   /**
    * Runs before the field's own Enter and Backspace handling. Calling
-   * `preventDefault` claims the key.
+   * `preventDefault` claims the key. Read-only, it receives the wrapper's
+   * own key events instead.
    */
-  onInputKeyDown?: (event: React.KeyboardEvent<HTMLInputElement>) => void;
+  onInputKeyDown?: (event: React.KeyboardEvent<HTMLElement>) => void;
 
   /** Enter with non-empty trimmed text, unless `onInputKeyDown` claimed it. */
   onEnter?: (trimmed: string) => void;
@@ -84,6 +85,17 @@ interface TagFieldProps extends TagFieldBaseProps {
 
   /** Trailing controls after the clear button (a select's chevron and dropdown). */
   children?: React.ReactNode;
+
+  /**
+   * No text input: the chips are the whole field (a select's button
+   * trigger). A focusable combobox element takes the aria and the key
+   * events the input would have, and shows `placeholder` while there are
+   * no tags. Chips stay removable.
+   */
+  readOnly?: boolean;
+
+  /** The read-only trigger element, when the caller must focus it. */
+  triggerRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 // ---------------------------------------------------------------------------
@@ -116,11 +128,22 @@ function TagField({
   onInputClick,
   inputAriaProps,
   children,
+  readOnly = false,
+  triggerRef: triggerRefProp,
 }: TagFieldProps) {
   const strings = useOpalStrings();
   const ownRootRef = useRef<HTMLDivElement>(null);
   const ownInputRef = useRef<HTMLInputElement>(null);
+  const ownTriggerRef = useRef<HTMLDivElement>(null);
   const inputRef = inputRefProp ?? ownInputRef;
+  const triggerRef = triggerRefProp ?? ownTriggerRef;
+
+  // Read-only, the combobox element is the focusable field. Disabled, a
+  // click must not move focus into the field.
+  const focusField = useCallback(() => {
+    if (disabled) return;
+    (readOnly ? triggerRef.current : inputRef.current)?.focus();
+  }, [disabled, readOnly, triggerRef, inputRef]);
 
   const setRootRef = useCallback(
     (node: HTMLDivElement | null) => {
@@ -131,7 +154,7 @@ function TagField({
   );
 
   useEffect(() => {
-    if (focusOnMount) inputRef.current?.focus();
+    if (focusOnMount) focusField();
     // Mount only: later prop changes must not steal focus back.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -177,8 +200,9 @@ function TagField({
       role="presentation"
       className="opal-input opal-input-type-in-tag"
       data-variant={disabled ? "disabled" : variant}
+      data-read-only={readOnly || undefined}
       onKeyDown={handleRootKeyDown}
-      onClick={() => inputRef.current?.focus()}
+      onClick={focusField}
     >
       {Icon && (
         <div className="opal-input-type-in-tag-icon-container">
@@ -205,27 +229,52 @@ function TagField({
             disabled={disabled}
             onRemove={() => {
               onRemoveTag(tag.id);
-              inputRef.current?.focus();
+              focusField();
             }}
           />
         ))}
-        {/* raw-ok: nesting InputTypeIn double-pads the composite chrome, so the inner field reuses InputTypeIn's .opal-input-field styling directly */}
-        <input
-          ref={inputRef}
-          type="text"
-          // dir="auto": typed text decides the direction, as in InputTypeIn.
-          dir="auto"
-          className="opal-input-field opal-input-type-in-tag-field"
-          disabled={disabled}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          onFocus={onInputFocus}
-          onClick={onInputClick}
-          onKeyDown={handleInputKeyDown}
-          placeholder={placeholder}
-          aria-label={placeholder}
-          {...inputAriaProps}
-        />
+        {readOnly ? (
+          <div
+            ref={triggerRef}
+            role="combobox"
+            tabIndex={disabled ? -1 : 0}
+            className="opal-input-type-in-tag-trigger"
+            aria-label={placeholder}
+            {...inputAriaProps}
+            // Named here as well as in the spread: the combobox role
+            // requires them, and the caller's spread is opaque to lint.
+            aria-expanded={inputAriaProps?.["aria-expanded"] ?? false}
+            aria-controls={inputAriaProps?.["aria-controls"]}
+            aria-disabled={disabled || undefined}
+            onFocus={disabled ? undefined : onInputFocus}
+            onClick={disabled ? undefined : onInputClick}
+            onKeyDown={disabled ? undefined : onInputKeyDown}
+          >
+            {tags.length === 0 && placeholder && (
+              <Text font="main-ui-muted" color="text-02">
+                {placeholder}
+              </Text>
+            )}
+          </div>
+        ) : (
+          /* raw-ok: nesting InputTypeIn double-pads the composite chrome, so the inner field reuses InputTypeIn's .opal-input-field styling directly */
+          <input
+            ref={inputRef}
+            type="text"
+            // dir="auto": typed text decides the direction, as in InputTypeIn.
+            dir="auto"
+            className="opal-input-field opal-input-type-in-tag-field"
+            disabled={disabled}
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            onFocus={onInputFocus}
+            onClick={onInputClick}
+            onKeyDown={handleInputKeyDown}
+            placeholder={placeholder}
+            aria-label={placeholder}
+            {...inputAriaProps}
+          />
+        )}
       </div>
       {onClear !== undefined && !disabled && (
         <Button

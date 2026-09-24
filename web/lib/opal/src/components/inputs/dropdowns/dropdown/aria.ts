@@ -14,7 +14,12 @@ interface BuildAriaAttributesProps {
   highlightedIndex: number;
   fieldId: string;
   allVisibleOptions: SelectOption[];
-  placeholder: string;
+  placeholder?: string;
+  /**
+   * Whether the trigger is a text input that filters the list. A button
+   * trigger has no autocomplete to announce.
+   */
+  typeIn?: boolean;
 }
 
 /**
@@ -28,6 +33,7 @@ export function buildAriaAttributes({
   fieldId,
   allVisibleOptions,
   placeholder,
+  typeIn = true,
 }: BuildAriaAttributesProps) {
   const activeOption =
     isOpen && highlightedIndex >= 0
@@ -44,7 +50,7 @@ export function buildAriaAttributes({
     "aria-activedescendant": activeOption
       ? `${fieldId}-option-${sanitizeOptionId(activeOption.value)}`
       : undefined,
-    "aria-autocomplete": "list" as const,
+    "aria-autocomplete": typeIn ? ("list" as const) : undefined,
     role: "combobox" as const,
   };
 }

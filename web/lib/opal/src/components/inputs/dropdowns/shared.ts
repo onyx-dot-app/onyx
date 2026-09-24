@@ -80,7 +80,7 @@ export function useSelectKeyboard({
   onSelect,
 }: UseSelectKeyboardProps) {
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
+    (e: React.KeyboardEvent<HTMLElement>) => {
       switch (e.key) {
         case "ArrowDown":
           e.preventDefault();

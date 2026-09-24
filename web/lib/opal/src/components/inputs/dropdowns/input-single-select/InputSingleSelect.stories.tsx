@@ -29,42 +29,41 @@ const fruitOptions = [
   { value: "elderberry", label: "Elderberry" },
 ];
 
+const strategySections = [
+  {
+    options: [
+      {
+        value: "none",
+        label: "Do not re-index",
+        description: "Save the settings; existing documents are untouched.",
+      },
+    ],
+  },
+  {
+    label: "Re-index options",
+    options: [
+      {
+        value: "reindex",
+        label: "Re-index all, then switch",
+        description: "Keeps the current index live until the new one is ready.",
+      },
+      {
+        value: "instant",
+        label: "Switch, then re-index",
+        description: "Clears the current index first.",
+      },
+    ],
+  },
+];
+
+/** Nothing to type: the trigger only opens the full set. */
 export const Default: Story = {
   render: function DefaultStory() {
     const [value, setValue] = React.useState("");
     return (
       <InputSingleSelect
-        placeholder="Type or select..."
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        options={fruitOptions}
-      />
-    );
-  },
-};
-
-export const StrictMode: Story = {
-  render: function StrictStory() {
-    const [value, setValue] = React.useState("");
-    return (
-      <InputSingleSelect
-        placeholder="Select a fruit (closed)"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        options={fruitOptions}
-      />
-    );
-  },
-};
-
-export const WithPreselectedValue: Story = {
-  render: function PreselectedStory() {
-    const [value, setValue] = React.useState("cherry");
-    return (
-      <InputSingleSelect
         placeholder="Select a fruit"
         value={value}
-        onChange={(e) => setValue(e.target.value)}
         onValueChange={setValue}
         options={fruitOptions}
       />
@@ -72,58 +71,31 @@ export const WithPreselectedValue: Story = {
   },
 };
 
-export const Disabled: Story = {
-  render: () => (
-    <InputSingleSelect
-      placeholder="Cannot interact"
-      value="banana"
-      options={fruitOptions}
-      disabled
-    />
-  ),
-};
-
-export const WithSearchIcon: Story = {
-  render: function SearchIconStory() {
+/** Sections render with a titled Divider between them. */
+export const WithSections: Story = {
+  render: function WithSectionsStory() {
     const [value, setValue] = React.useState("");
     return (
       <InputSingleSelect
-        placeholder="Search fruits..."
+        placeholder="Choose a strategy"
         value={value}
-        onChange={(e) => setValue(e.target.value)}
-        options={fruitOptions}
-        searchIcon
+        onValueChange={setValue}
+        options={strategySections}
       />
     );
   },
 };
 
-export const ErrorState: Story = {
-  render: function ErrorStory() {
-    const [value, setValue] = React.useState("invalid-value");
-    return (
-      <InputSingleSelect
-        placeholder="Select a fruit"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        options={fruitOptions}
-        isError
-      />
-    );
-  },
-};
-
-export const WithOtherOptions: Story = {
-  render: function OtherOptionsStory() {
+/** With a default the select never empties: re-picking falls back to it. */
+export const WithDefaultOption: Story = {
+  render: function WithDefaultOptionStory() {
     const [value, setValue] = React.useState("");
     return (
       <InputSingleSelect
-        placeholder="Search or select..."
+        defaultOption="reindex"
         value={value}
-        onChange={(e) => setValue(e.target.value)}
-        options={fruitOptions}
-        showOtherOptions
-        separatorLabel="Other fruits"
+        onValueChange={setValue}
+        options={strategySections}
       />
     );
   },

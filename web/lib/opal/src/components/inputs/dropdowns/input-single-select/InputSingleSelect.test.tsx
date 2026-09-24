@@ -29,591 +29,196 @@ function setupUser() {
 }
 
 describe("InputSingleSelect", () => {
-  describe("Rendering", () => {
-    test("renders with placeholder", () => {
-      render(
-        <InputSingleSelect
-          placeholder="Select an option"
-          value=""
-          options={mockOptions}
-        />
-      );
-      const input = screen.getByPlaceholderText("Select an option");
-      expect(input).toBeInTheDocument();
-    });
+  describe("Rendering and picking", () => {
+    const sectionedOptions = [
+      { options: [{ value: "none", label: "Do not re-index" }] },
+      {
+        label: "Re-index options",
+        options: [
+          { value: "reindex", label: "Re-index all" },
+          { value: "instant", label: "Switch first" },
+        ],
+      },
+    ];
 
-    test("renders with initial value", () => {
-      render(
-        <InputSingleSelect
-          placeholder="Select"
-          value="apple"
-          options={mockOptions}
-        />
-      );
-      const input = screen.getByDisplayValue("Apple");
-      expect(input).toBeInTheDocument();
-    });
-
-    test("renders with an empty option set", () => {
-      render(
-        <InputSingleSelect placeholder="Type here" value="" options={[]} />
-      );
-      const input = screen.getByPlaceholderText("Type here");
-      expect(input).toBeInTheDocument();
-    });
-
-    test("renders disabled state", () => {
-      render(
-        <InputSingleSelect
-          placeholder="Select"
-          value=""
-          options={mockOptions}
-          disabled
-        />
-      );
-      const input = screen.getByPlaceholderText("Select");
-      expect(input).toBeDisabled();
-    });
-
-    test("renders with options that have descriptions", () => {
-      render(
-        <InputSingleSelect
-          placeholder="Select"
-          value=""
-          options={mockOptionsWithDescriptions}
-        />
-      );
-      const input = screen.getByPlaceholderText("Select");
-      fireEvent.focus(input);
-      expect(screen.getByText("A red fruit")).toBeInTheDocument();
-    });
-  });
-
-  describe("Dropdown Behavior", () => {
-    test("opens dropdown on focus when options exist", () => {
-      render(
-        <InputSingleSelect
-          placeholder="Select"
-          value=""
-          options={mockOptions}
-        />
-      );
-      const input = screen.getByPlaceholderText("Select");
-      fireEvent.focus(input);
-      expect(screen.getByRole("listbox")).toBeInTheDocument();
-    });
-
-    test("opens on focus with an empty option set and shows the empty state", () => {
-      render(<InputSingleSelect placeholder="Select" value="" options={[]} />);
-      const input = screen.getByPlaceholderText("Select");
-      fireEvent.focus(input);
-      expect(screen.getByRole("listbox")).toBeInTheDocument();
-      expect(screen.queryAllByRole("option")).toHaveLength(0);
-    });
-
-    test("closes dropdown on escape", async () => {
-      const user = setupUser();
-      render(
-        <InputSingleSelect
-          placeholder="Select"
-          value=""
-          options={mockOptions}
-        />
-      );
-      const input = screen.getByPlaceholderText("Select");
-
-      await user.click(input);
-      expect(screen.getByRole("listbox")).toBeInTheDocument();
-
-      await user.keyboard("{Escape}");
-      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
-    });
-
-    test("focus with a selection keeps the label as the filter", () => {
-      render(
-        <InputSingleSelect
-          placeholder="Select"
-          value="apple"
-          options={mockOptions}
-        />
-      );
-      const input = screen.getByDisplayValue("Apple");
-      fireEvent.focus(input);
-
-      // The selected label stays in the trigger and filters the list, so
-      // only the selection shows, painted as the exact match.
-      const options = screen.getAllByRole("option");
-      expect(options.length).toBe(1);
-      expect(options[0]).toHaveAttribute("aria-selected", "true");
-    });
-
-    test("chevron shows all options when a value is already selected", async () => {
-      const user = setupUser();
-      render(
-        <InputSingleSelect
-          placeholder="Select"
-          value="apple"
-          options={mockOptions}
-        />
-      );
-
-      await user.click(screen.getByRole("button"));
-
-      expect(screen.getAllByRole("option").length).toBe(3);
-    });
-
-    test("closes dropdown on tab", async () => {
-      const user = setupUser();
-      render(
-        <InputSingleSelect
-          placeholder="Select"
-          value=""
-          options={mockOptions}
-        />
-      );
-      const input = screen.getByPlaceholderText("Select");
-
-      await user.click(input);
-      expect(screen.getByRole("listbox")).toBeInTheDocument();
-
-      await user.tab();
-      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
-    });
-  });
-
-  describe("Keyboard Navigation", () => {
-    test("ArrowDown opens dropdown and highlights first option", async () => {
-      const user = setupUser();
-      render(
-        <InputSingleSelect
-          placeholder="Select"
-          value=""
-          options={mockOptions}
-        />
-      );
-      const input = screen.getByPlaceholderText("Select");
-
-      await user.click(input);
-      await user.keyboard("{ArrowDown}");
-
-      const listbox = screen.getByRole("listbox");
-      expect(listbox).toBeInTheDocument();
-    });
-
-    test("ArrowUp moves highlight up through options", async () => {
-      const user = setupUser();
-      render(
-        <InputSingleSelect
-          placeholder="Select"
-          value=""
-          options={mockOptions}
-        />
-      );
-      const input = screen.getByPlaceholderText("Select");
-
-      await user.click(input);
-      await user.keyboard("{ArrowDown}");
-      await user.keyboard("{ArrowDown}");
-      await user.keyboard("{ArrowUp}");
-
-      // Highlight should have moved
-      expect(screen.getByRole("listbox")).toBeInTheDocument();
-    });
-
-    test("Enter selects highlighted option", async () => {
-      const handleValueChange = jest.fn();
-      const user = setupUser();
-      render(
-        <InputSingleSelect
-          placeholder="Select"
-          value=""
-          options={mockOptions}
-          onValueChange={handleValueChange}
-        />
-      );
-      const input = screen.getByPlaceholderText("Select");
-
-      await user.click(input);
-      await user.keyboard("{ArrowDown}");
-      await user.keyboard("{Enter}");
-
-      expect(handleValueChange).toHaveBeenCalledWith("apple");
-    });
-  });
-
-  describe("Filtering", () => {
-    test("filters options based on input value", async () => {
-      const user = setupUser();
-      render(
-        <InputSingleSelect
-          placeholder="Select"
-          value=""
-          options={mockOptions}
-          mode="open"
-        />
-      );
-      const input = screen.getByPlaceholderText("Select");
-
-      await user.type(input, "app");
-
-      // In open mode, searching shows:
-      // 1) a create option for the current input and
-      // 2) matched options.
-      const options = screen.getAllByRole("option");
-      expect(options.length).toBe(2);
-      expect(screen.getByLabelText('Create "app"')).toBeInTheDocument();
-      expect(
-        options.some((option: HTMLElement) =>
-          option.textContent?.includes("Apple")
-        )
-      ).toBe(true);
-      expect(screen.queryByText("Banana")).not.toBeInTheDocument();
-    });
-
-    test("shows 'No options found' when no matches and strict mode", async () => {
-      const user = setupUser();
-      render(
-        <InputSingleSelect
-          placeholder="Select"
-          value=""
-          options={mockOptions}
-          mode="closed"
-        />
-      );
-      const input = screen.getByPlaceholderText("Select");
-
-      await user.type(input, "xyz");
-
-      expect(screen.getByText("No options found")).toBeInTheDocument();
-    });
-
-    test("shows divider between matched and unmatched options when enabled", async () => {
-      const user = setupUser();
-      render(
-        <InputSingleSelect
-          placeholder="Select"
-          value=""
-          options={mockOptions}
-          separatorLabel="Other fruits"
-          showOtherOptions
-        />
-      );
-      const input = screen.getByPlaceholderText("Select");
-
-      await user.type(input, "app");
-
-      expect(screen.getByText("Other fruits")).toBeInTheDocument();
-    });
-  });
-
-  describe("Selection", () => {
-    test("clicking option selects it and closes dropdown", async () => {
-      const handleChange = jest.fn();
-      const handleValueChange = jest.fn();
-      const user = setupUser();
-      render(
-        <InputSingleSelect
-          placeholder="Select"
-          value=""
-          options={mockOptions}
-          onChange={handleChange}
-          onValueChange={handleValueChange}
-        />
-      );
-      const input = screen.getByPlaceholderText("Select");
-
-      await user.click(input);
-      const option = screen.getByText("Banana");
-      await user.click(option);
-
-      expect(handleChange).toHaveBeenCalled();
-      expect(handleValueChange).toHaveBeenCalledWith("banana");
-      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
-    });
-
-    test("displays label instead of value when closed", () => {
-      render(
-        <InputSingleSelect
-          placeholder="Select"
-          value="apple"
-          options={mockOptions}
-        />
-      );
-      // Should show "Apple" (label) not "apple" (value)
-      expect(screen.getByDisplayValue("Apple")).toBeInTheDocument();
-    });
-
-    test("clicking the create row commits trimmed free-form text", async () => {
-      const handleValueChange = jest.fn();
-      const user = setupUser();
-      render(
-        <InputSingleSelect
-          placeholder="Select"
-          value=""
-          options={mockOptions}
-          mode="open"
-          onValueChange={handleValueChange}
-        />
-      );
-      const input = screen.getByPlaceholderText("Select");
-
-      await user.type(input, "kiwi ");
-      await user.click(screen.getByLabelText('Create "kiwi"'));
-
-      expect(handleValueChange).toHaveBeenCalledWith("kiwi");
-    });
-
-    test("Enter on the create row commits trimmed free-form text", async () => {
-      const handleValueChange = jest.fn();
-      const user = setupUser();
-      render(
-        <InputSingleSelect
-          placeholder="Select"
-          value=""
-          options={mockOptions}
-          mode="open"
-          onValueChange={handleValueChange}
-        />
-      );
-      const input = screen.getByPlaceholderText("Select");
-
-      // Typing auto-highlights the first row, which is the create row.
-      await user.type(input, "kiwi ");
-      await user.keyboard("{Enter}");
-
-      expect(handleValueChange).toHaveBeenCalledWith("kiwi");
-    });
-  });
-
-  describe("Strict Mode", () => {
-    test("strict=true shows error when value not in options", () => {
-      render(
-        <InputSingleSelect
-          placeholder="Select"
-          value="invalid"
-          options={mockOptions}
-          mode="closed"
-        />
-      );
-      expect(
-        screen.getByText("Please select a valid option from the list")
-      ).toBeInTheDocument();
-    });
-
-    test("strict=false allows custom values", () => {
-      render(
-        <InputSingleSelect
-          placeholder="Select"
-          value="custom-value"
-          options={mockOptions}
-          mode="open"
-        />
-      );
-      expect(
-        screen.queryByText("Please select a valid option from the list")
-      ).not.toBeInTheDocument();
-    });
-
-    test("strict=false shows create option when no matches", async () => {
-      const user = setupUser();
-      render(
-        <InputSingleSelect
-          placeholder="Select"
-          value=""
-          options={mockOptions}
-          mode="open"
-        />
-      );
-      const input = screen.getByPlaceholderText("Select");
-
-      await user.type(input, "newvalue");
-
-      // Should show the create option with the typed value
-      expect(screen.getByText("newvalue")).toBeInTheDocument();
-    });
-  });
-
-  describe("External Error State", () => {
-    test("shows error styling when isError is true", () => {
-      const { container } = render(
-        <InputSingleSelect
-          placeholder="Select"
-          value=""
-          options={mockOptions}
-          isError
-        />
-      );
-      // The input should have error styling applied
-      expect(container.querySelector("input")).toBeInTheDocument();
-    });
-
-    test("does not show internal error when isError is provided", () => {
-      render(
-        <InputSingleSelect
-          placeholder="Select"
-          value="invalid"
-          options={mockOptions}
-          mode="closed"
-          isError={false}
-        />
-      );
-      // Internal validation error should not show when isError is explicitly false
-      expect(
-        screen.queryByText("Please select a valid option from the list")
-      ).not.toBeInTheDocument();
-    });
-  });
-
-  describe("Accessibility", () => {
-    test("has correct ARIA attributes", () => {
-      render(
-        <InputSingleSelect
-          placeholder="Select"
-          value=""
-          options={mockOptions}
-        />
-      );
-      const input = screen.getByRole("combobox");
-      expect(input).toHaveAttribute("aria-autocomplete", "list");
-      expect(input).toHaveAttribute("aria-expanded", "false");
-    });
-
-    test("aria-expanded is true when dropdown is open", () => {
-      render(
-        <InputSingleSelect
-          placeholder="Select"
-          value=""
-          options={mockOptions}
-        />
-      );
-      const input = screen.getByRole("combobox");
-      fireEvent.focus(input);
-      expect(input).toHaveAttribute("aria-expanded", "true");
-    });
-
-    test("options have role option", () => {
-      render(
-        <InputSingleSelect
-          placeholder="Select"
-          value=""
-          options={mockOptions}
-        />
-      );
-      const input = screen.getByPlaceholderText("Select");
-      fireEvent.focus(input);
-
-      const options = screen.getAllByRole("option");
-      expect(options.length).toBe(3);
-    });
-
-    test("listbox has correct aria-label", () => {
+    test("renders a read-only trigger showing the selected label", () => {
       render(
         <InputSingleSelect
           placeholder="Select a fruit"
-          value=""
+          value="banana"
           options={mockOptions}
         />
       );
       const input = screen.getByPlaceholderText("Select a fruit");
-      fireEvent.focus(input);
-
-      const listbox = screen.getByRole("listbox");
-      expect(listbox).toHaveAttribute("aria-label", "Select a fruit");
+      expect(input).toHaveAttribute("readonly");
+      expect(input).toHaveValue("Banana");
+      expect(input).not.toHaveAttribute("aria-autocomplete");
     });
-  });
 
-  describe("Text Highlighting", () => {
-    test("matching text is highlighted in option labels", async () => {
-      const user = setupUser();
-      const { container } = render(
-        <InputSingleSelect
-          placeholder="Select"
-          value=""
-          options={mockOptions}
-        />
-      );
-      const input = screen.getByPlaceholderText("Select");
-
-      await user.type(input, "app");
-
-      // Look for the highlighted match span
-      const boldText = container.querySelector(".opal-select-match");
-      expect(boldText).toBeInTheDocument();
-      expect(boldText?.textContent).toBe("App");
-    });
-  });
-
-  describe("onChange vs onValueChange", () => {
-    test("onChange is called on every keystroke", async () => {
-      const handleChange = jest.fn();
+    test("opens on click and lists every option, ignoring keystrokes", async () => {
       const user = setupUser();
       render(
         <InputSingleSelect
-          placeholder="Select"
-          value=""
+          placeholder="Select a fruit"
+          value="banana"
           options={mockOptions}
-          onChange={handleChange}
         />
       );
-      const input = screen.getByPlaceholderText("Select");
+      const input = screen.getByPlaceholderText("Select a fruit");
+      await user.click(input);
+      expect(screen.getAllByRole("option")).toHaveLength(3);
 
-      await user.type(input, "abc");
-
-      expect(handleChange).toHaveBeenCalledTimes(3);
+      await user.keyboard("ap");
+      expect(input).toHaveValue("Banana");
+      expect(screen.getAllByRole("option")).toHaveLength(3);
     });
 
-    test("onValueChange is only called on option select", async () => {
-      const handleChange = jest.fn();
-      const handleValueChange = jest.fn();
+    test("a second click closes it, and focus alone does not open it", async () => {
       const user = setupUser();
       render(
         <InputSingleSelect
-          placeholder="Select"
-          value=""
+          placeholder="Select a fruit"
+          value="banana"
           options={mockOptions}
-          onChange={handleChange}
-          onValueChange={handleValueChange}
         />
       );
-      const input = screen.getByPlaceholderText("Select");
-
-      await user.type(input, "app");
-      expect(handleValueChange).not.toHaveBeenCalled();
-
-      // Get the Apple option by role and click it
-      const options = screen.getAllByRole("option");
-      const appleOption = options.find(
-        (opt: HTMLElement) => opt.textContent === "Apple"
-      );
-      expect(appleOption).toBeDefined();
-      await user.click(appleOption!);
-      expect(handleValueChange).toHaveBeenCalledWith("apple");
-    });
-  });
-
-  describe("Disabled Options", () => {
-    test("disabled options cannot be selected", async () => {
-      const handleValueChange = jest.fn();
-      const user = setupUser();
-      const optionsWithDisabled = [
-        { value: "apple", label: "Apple" },
-        { value: "banana", label: "Banana", disabled: true },
-      ];
-      render(
-        <InputSingleSelect
-          placeholder="Select"
-          value=""
-          options={optionsWithDisabled}
-          onValueChange={handleValueChange}
-        />
-      );
-      const input = screen.getByPlaceholderText("Select");
+      const input = screen.getByPlaceholderText("Select a fruit");
+      await user.tab();
+      expect(input).toHaveFocus();
+      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
 
       await user.click(input);
-      const disabledOption = screen.getByText("Banana");
-      await user.click(disabledOption);
+      expect(screen.getByRole("listbox")).toBeInTheDocument();
+      await user.click(input);
+      await waitFor(() => {
+        expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+      });
+    });
 
+    test("renders sectioned options with a titled divider", async () => {
+      const user = setupUser();
+      render(
+        <InputSingleSelect
+          placeholder="Choose a strategy"
+          value=""
+          options={sectionedOptions}
+        />
+      );
+      await user.click(screen.getByPlaceholderText("Choose a strategy"));
+      expect(screen.getByText("Re-index options")).toBeInTheDocument();
+      expect(screen.getAllByRole("option")).toHaveLength(3);
+    });
+
+    test("picking an option emits it and closes", async () => {
+      const handleValueChange = jest.fn();
+      const user = setupUser();
+      render(
+        <InputSingleSelect
+          placeholder="Select a fruit"
+          value=""
+          onValueChange={handleValueChange}
+          options={mockOptions}
+        />
+      );
+      await user.click(screen.getByPlaceholderText("Select a fruit"));
+      await user.click(screen.getByRole("option", { name: /Cherry/ }));
+      expect(handleValueChange).toHaveBeenCalledWith("cherry");
+      await waitFor(() => {
+        expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+      });
+    });
+  });
+
+  describe("Default option", () => {
+    test("shows the default at rest when the value is empty", () => {
+      render(
+        <InputSingleSelect
+          defaultOption="apple"
+          value=""
+          options={mockOptions}
+        />
+      );
+      expect(screen.getByRole("combobox")).toHaveValue("Apple");
+    });
+
+    test("picking the displayed default commits it when the value is empty", async () => {
+      const handleValueChange = jest.fn();
+      const user = setupUser();
+      render(
+        <InputSingleSelect
+          defaultOption="apple"
+          value=""
+          onValueChange={handleValueChange}
+          options={mockOptions}
+        />
+      );
+      await user.click(screen.getByRole("combobox"));
+      await user.click(screen.getByRole("option", { name: /Apple/ }));
+      expect(handleValueChange).toHaveBeenCalledWith("apple");
+    });
+
+    test("a strict value outside the set shows the placeholder, not the value", () => {
+      render(
+        <InputSingleSelect
+          placeholder="Select a fruit"
+          value="kiwi"
+          options={mockOptions}
+        />
+      );
+      expect(screen.getByPlaceholderText("Select a fruit")).toHaveValue("");
+    });
+
+    test("re-picking the default itself does nothing", async () => {
+      const handleValueChange = jest.fn();
+      const user = setupUser();
+      render(
+        <InputSingleSelect
+          defaultOption="apple"
+          value="apple"
+          onValueChange={handleValueChange}
+          options={mockOptions}
+        />
+      );
+      await user.click(screen.getByRole("combobox"));
+      await user.click(screen.getByRole("option", { name: /Apple/ }));
       expect(handleValueChange).not.toHaveBeenCalled();
+      await waitFor(() => {
+        expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+      });
+      expect(screen.getByRole("combobox")).toHaveValue("Apple");
+    });
+
+    test("re-picking a non-default selected option falls back to the default", async () => {
+      const handleValueChange = jest.fn();
+      const user = setupUser();
+      render(
+        <InputSingleSelect
+          defaultOption="apple"
+          value="banana"
+          onValueChange={handleValueChange}
+          options={mockOptions}
+        />
+      );
+      await user.click(screen.getByRole("combobox"));
+      await user.click(screen.getByRole("option", { name: /Banana/ }));
+      expect(handleValueChange).toHaveBeenCalledWith("apple");
+      expect(handleValueChange).not.toHaveBeenCalledWith("");
+    });
+
+    test("without a default, re-picking the selected option unselects it", async () => {
+      const handleValueChange = jest.fn();
+      const user = setupUser();
+      render(
+        <InputSingleSelect
+          placeholder="Select a fruit"
+          value="banana"
+          onValueChange={handleValueChange}
+          options={mockOptions}
+        />
+      );
+      await user.click(screen.getByRole("combobox"));
+      await user.click(screen.getByRole("option", { name: /Banana/ }));
+      expect(handleValueChange).toHaveBeenCalledWith("");
     });
   });
 });

@@ -1,4 +1,5 @@
 import type { IconFunctionComponent } from "@opal/types";
+import type { InputTypeInTagProps } from "@opal/components/inputs/texts/input-type-in-tag/components";
 
 export type SelectOption = {
   value: string;
@@ -19,46 +20,154 @@ export type SelectSection = {
 };
 
 /**
- * `mode` picks the set's openness: "closed" (default) permits only option
- * values; "open" also commits raw text via the create row. A select always
- * has a set; for a plain text input use `InputTypeIn`.
+ * The family's trigger axis, internal to the two implementations. A
+ * `"type-in"` trigger is a text input whose text filters the set (the
+ * ComboBoxes); a `"button"` trigger has nothing to type and is pressed to
+ * open the full set, like a native `<select>` (the Selects).
  */
-export type InputSingleSelectOptionsProps = {
+export type DropdownTrigger = "type-in" | "button";
+
+// ---------------------------------------------------------------------------
+// Single arity
+// ---------------------------------------------------------------------------
+
+type InputSingleBaseProps = Omit<
+  React.InputHTMLAttributes<HTMLInputElement>,
+  "onChange" | "value" | "placeholder" | "readOnly"
+> & {
   /** Options, flat or sectioned. Sections render with a Divider between them. */
   options: SelectOption[] | SelectSection[];
-  mode?: "closed" | "open";
+  /** Current value */
+  value: string;
+  /** Called when an option is selected from the dropdown (and on a create-row commit). */
+  onValueChange?: (value: string) => void;
+  /** Disabled state */
+  disabled?: boolean;
+  /** External error state - overrides internal validation */
+  isError?: boolean;
+  /** Optional name for the field (for accessibility) */
+  name?: string;
+  /** Right content slot for custom UI elements (e.g., refresh button) */
+  rightChildren?: React.ReactNode;
+  /** Max height of the dropdown in CSS units. Defaults to "15rem". */
+  dropdownMaxHeight?: string;
 };
 
-export type InputSingleSelectProps = InputSingleSelectOptionsProps &
-  Omit<React.InputHTMLAttributes<HTMLInputElement>, "onChange" | "value"> & {
-    /** Current value */
-    value: string;
-    /** Change handler (React event style) - Called on every keystroke */
-    onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
-    /** Change handler (direct value style, for InputSingleSelect compatibility) - Only called when option is selected from dropdown */
-    onValueChange?: (value: string) => void;
+/**
+ * `InputSingleComboBox`: a text input whose text filters the set. It takes
+ * no `defaultOption`: a default would pre-fill the filter with a label the
+ * user never chose, so the opened list would show only that row.
+ */
+export type InputSingleComboBoxProps = InputSingleBaseProps & {
+  /**
+   * Set openness: `"closed"` (default) permits only option values; `"open"`
+   * also commits raw text via the create row.
+   */
+  mode?: "closed" | "open";
+  /** Change handler (React event style) - called on every keystroke. */
+  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  /** Callback to handle validation errors - integrates with form libraries. */
+  onValidationError?: (errorMessage: string | null) => void;
+  /** Left search icon. */
+  searchIcon?: boolean;
+  /** Label for the separator between matched and unmatched options. */
+  separatorLabel?: string;
+  /**
+   * When true, keep non-matching options visible under a separator while
+   * searching. Defaults to false so search results are strictly filtered.
+   */
+  showOtherOptions?: boolean;
+  defaultOption?: never;
+  /** Trigger placeholder. */
+  placeholder: string;
+};
 
-    /** Disabled state */
-    disabled?: boolean;
-    /** Placeholder text */
-    placeholder: string;
-    /** External error state (for InputSingleSelect compatibility) - overrides internal validation */
-    isError?: boolean;
-    /** Callback to handle validation errors - integrates with form libraries */
-    onValidationError?: (errorMessage: string | null) => void;
-    /** Optional name for the field (for accessibility) */
-    name?: string;
-    /** Left search icon */
-    searchIcon?: boolean;
-    /** Right content slot for custom UI elements (e.g., refresh button) */
-    rightChildren?: React.ReactNode;
-    /** Label for the separator between matched and unmatched options */
-    separatorLabel?: string;
-    /**
-     * When true, keep non-matching options visible under a separator while searching.
-     * Defaults to false so search results are strictly filtered.
-     */
-    showOtherOptions?: boolean;
-    /** Max height of the dropdown in CSS units. Defaults to "15rem". */
-    dropdownMaxHeight?: string;
-  };
+/**
+ * `InputSingleSelect`: nothing to type; the trigger is pressed to open the
+ * full set, like a native `<select>`. With a `defaultOption` it never reads
+ * as empty: an empty `value` resolves to it, re-picking the default does
+ * nothing, and re-picking any other selected option falls back to it. The
+ * trigger then always has a label, so `placeholder` is optional.
+ */
+export type InputSingleSelectProps = InputSingleBaseProps & {
+  mode?: never;
+  onChange?: never;
+  onValidationError?: never;
+  searchIcon?: never;
+  separatorLabel?: never;
+  showOtherOptions?: never;
+} & (
+    | {
+        /** The option value an empty `value` resolves to. Must be in the set. */
+        defaultOption: string;
+        /** Trigger placeholder. */
+        placeholder?: string;
+      }
+    | {
+        defaultOption?: undefined;
+        /** Trigger placeholder (required without a `defaultOption`). */
+        placeholder: string;
+      }
+  );
+
+/** The internal single implementation: either public prop set plus its trigger. */
+export type SingleDropdownProps =
+  | (InputSingleComboBoxProps & { trigger: "type-in" })
+  | (InputSingleSelectProps & { trigger: "button" });
+
+// ---------------------------------------------------------------------------
+// Multi arity
+// ---------------------------------------------------------------------------
+
+type InputMultiBaseProps = Omit<
+  InputTypeInTagProps,
+  "value" | "onChange" | "onAdd"
+> & {
+  /**
+   * The selectable set. Flat or sectioned — sections render with a Divider
+   * between them. Convention: a chosen option becomes a tag whose `id` is
+   * the option's `value`, so the dropdown can show it selected and toggle
+   * it off.
+   */
+  options: SelectOption[] | SelectSection[];
+  /**
+   * Called when a dropdown option is chosen. Choosing an already-selected
+   * option calls `onRemoveTag(option.value)` instead — one removal path.
+   */
+  onSelectOption: (option: SelectOption) => void;
+  /** Max height of the dropdown in CSS units. Defaults to "15rem". */
+  dropdownMaxHeight?: string;
+};
+
+/** `InputMultiComboBox`: chips beside a text input whose text filters the set. */
+export type InputMultiComboBoxProps = InputMultiBaseProps & {
+  /**
+   * Set openness:
+   * - "closed" (default): only options can be chosen; typing filters.
+   * - "open": typing filters AND the raw text commits via the create row.
+   */
+  mode?: "closed" | "open";
+  /** Controlled filter text. */
+  value: string;
+  onChange: (value: string) => void;
+  /** Called with the trimmed text on a create-row commit (`mode="open"`). */
+  onAdd: (value: string) => void;
+};
+
+/**
+ * `InputMultiSelect`: the chips are the whole field, a focusable combobox
+ * element takes the keyboard, and the list always shows the full set.
+ */
+export type InputMultiSelectProps = InputMultiBaseProps & {
+  /** Names the combobox element, which has no text input to inherit one. */
+  placeholder: string;
+  mode?: never;
+  value?: never;
+  onChange?: never;
+  onAdd?: never;
+};
+
+/** The internal multi implementation: either public prop set plus its trigger. */
+export type MultiDropdownProps =
+  | (InputMultiComboBoxProps & { trigger: "type-in" })
+  | (InputMultiSelectProps & { trigger: "button" });

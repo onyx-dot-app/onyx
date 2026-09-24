@@ -17,6 +17,11 @@ export interface InputTypeInProps extends WithoutStyles<
   rightChildren?: React.ReactNode;
   /** Show the clear (×) button when the field has a value. */
   clearButton?: boolean;
+  /**
+   * Read-only regardless of `variant`, for a field that is only a trigger
+   * (a select's button trigger). `variant="readOnly"` implies it.
+   */
+  readOnly?: boolean;
 }
 
 /**
@@ -55,13 +60,14 @@ export default function InputTypeIn({
   searchIcon,
   rightChildren,
   clearButton = false,
+  readOnly = false,
   value,
   onChange,
   name,
   ...props
 }: InputTypeInProps) {
   const disabled = variant === "disabled";
-  const isReadOnly = variant === "readOnly";
+  const isReadOnly = readOnly || variant === "readOnly";
 
   const handleClear = useCallback(() => {
     onChange?.({
