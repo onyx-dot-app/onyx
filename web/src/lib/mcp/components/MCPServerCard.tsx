@@ -11,7 +11,11 @@ import SwitchField from "@/refresh-components/form/SwitchField";
 import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/lib/tools/components/EnabledCount";
 import { getActionIcon } from "@/lib/tools/utils";
-import type { AgentEditorMCPServer, MCPTool } from "@/lib/mcp/types";
+import type {
+  AgentEditorMCPServer,
+  MCPServersFormValues,
+  MCPTool,
+} from "@/lib/mcp/types";
 
 export interface MCPServerCardProps {
   server: AgentEditorMCPServer;
@@ -31,10 +35,10 @@ export default function MCPServerCard({
 }: MCPServerCardProps) {
   const t = useTranslations("agents");
   const [isFolded, setIsFolded] = useState(false);
-  const { values, setFieldValue } = useFormikContext<any>();
-  const serverFieldName = `mcp_server_${server.id}`;
+  const { values, setFieldValue } = useFormikContext<MCPServersFormValues>();
+  const serverFieldName = `mcp_server_${server.id}` as const;
   const serverEnabledField = `${serverFieldName}.enabled`;
-  const isServerEnabled: boolean = values[serverFieldName]?.enabled ?? false;
+  const isServerEnabled = values[serverFieldName]?.enabled ?? false;
   const {
     query,
     setQuery,

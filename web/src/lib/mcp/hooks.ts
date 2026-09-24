@@ -189,9 +189,7 @@ export function useServerTools(
     error,
     mutate,
   } = useSWR<ToolSnapshot[]>(
-    shouldFetch
-      ? `/api/admin/mcp/server/${server.id}/tools/snapshots?source=db`
-      : null,
+    shouldFetch ? SWR_KEYS.adminMcpServerToolSnapshots(server.id) : null,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,

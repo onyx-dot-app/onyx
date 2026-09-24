@@ -118,3 +118,15 @@ export enum MCPTransportType {
   STREAMABLE_HTTP = "STREAMABLE_HTTP",
   SSE = "SSE",
 }
+
+/** The agent editor's form fields for one MCP server: its switch, then one per tool. */
+export interface MCPServerFormValues {
+  enabled: boolean;
+  [tool: `tool_${string}`]: boolean;
+}
+
+/** The MCP slice of the agent editor's form, keyed by server field name. */
+export type MCPServersFormValues = Record<
+  `mcp_server_${number}`,
+  MCPServerFormValues | undefined
+>;
