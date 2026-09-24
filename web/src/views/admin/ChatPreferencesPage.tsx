@@ -562,6 +562,8 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
 
   const handleSelectChange = (next: string) => {
     setPresetsReopened(false);
+    // Re-picking the selected preset unselects it; the field keeps its value.
+    if (next === "") return;
     if (next === CUSTOM_RETENTION_VALUE) {
       focusCustomOnShowRef.current = true;
       setShowCustom(true);
