@@ -79,6 +79,7 @@ MAX_USER_LISTING_PAGES = 100_000
 MAX_DRIVE_DELTA_PAGES = 100_000
 DRIVE_ENTITY_PREFIX = "drive:"
 MAX_PERMISSION_ENTRIES = ExternalAccess.MAX_NUM_ENTRIES
+MAX_PERMISSION_PAGES = 10_000
 MAX_CACHED_FOLDER_PERMISSIONS = 1_000
 
 
@@ -284,7 +285,8 @@ class OneDriveConnector(
     ) -> list[OneDrivePermission]:
         permissions: list[OneDrivePermission] = []
         next_link: str | None = None
-        while True:
+        for _ in range(MAX_PERMISSION_PAGES):
+            request_url = next_link
             page = self.ops.list_permissions(
                 drive_id=drive_id,
                 item_id=item_id,
@@ -298,6 +300,13 @@ class OneDriveConnector(
             next_link = page.next_link
             if next_link is None:
                 return permissions
+            if next_link == request_url:
+                raise ValueError(
+                    f"OneDrive item `{item_id}` returned a repeated permission cursor."
+                )
+        raise ValueError(
+            f"OneDrive item `{item_id}` exceeds the permission page limit."
+        )
 
     def _direct_access(
         self,
