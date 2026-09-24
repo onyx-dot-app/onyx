@@ -35,6 +35,12 @@ interface SelectDropdownProps {
   showCreateOption: boolean;
   /** Max height of the dropdown in CSS units. Defaults to "15rem". */
   dropdownMaxHeight?: string;
+  /**
+   * Whether the highlight is being driven by the keyboard. Only then does
+   * the list scroll to keep the highlighted row in view; a pointer moving
+   * over rows must never scroll the list under itself.
+   */
+  keyboardNav: boolean;
 }
 
 /**
@@ -65,13 +71,16 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
       allowCreate,
       showCreateOption,
       dropdownMaxHeight,
+      keyboardNav,
     },
     ref
   ) => {
-    // Scroll highlighted option into view
+    // Keyboard navigation keeps the highlighted row in view. Pointer
+    // highlights never scroll: the list must not move under the mouse.
     useEffect(() => {
       if (
         isOpen &&
+        keyboardNav &&
         ref &&
         typeof ref !== "function" &&
         ref.current &&
@@ -87,7 +96,22 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
           });
         }
       }
-    }, [highlightedIndex, isOpen, ref]);
+    }, [highlightedIndex, isOpen, keyboardNav, ref]);
+
+    // Opening shows the selection: the (first) selected row scrolls into
+    // view, so a long list opens where the current value is.
+    useEffect(() => {
+      if (!isOpen || !ref || typeof ref === "function" || !ref.current) {
+        return;
+      }
+      const selectedElement = ref.current.querySelector(
+        '[role="option"][aria-selected="true"]'
+      );
+      selectedElement?.scrollIntoView({
+        block: "nearest",
+        behavior: "instant",
+      });
+    }, [isOpen, ref]);
 
     if (!isOpen || disabled || typeof document === "undefined") {
       return null;

@@ -552,6 +552,7 @@ const SingleDropdown = ({
           allowCreate={!strict}
           showCreateOption={showCreateOption}
           dropdownMaxHeight={dropdownMaxHeight}
+          keyboardNav={isKeyboardNav}
         />
       </>
 

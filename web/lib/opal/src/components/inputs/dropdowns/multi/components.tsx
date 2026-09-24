@@ -281,6 +281,7 @@ function MultiDropdown(props: MultiDropdownProps) {
         allowCreate={freeEntry}
         showCreateOption={showCreateOption}
         dropdownMaxHeight={dropdownMaxHeight}
+        keyboardNav={isKeyboardNav}
       />
     </TagField>
   );
