@@ -18,6 +18,58 @@
   @apply flex flex-col gap-1 overflow-x-hidden p-1;
 }
 
+/* Open and close animations. floating-ui positions the root with a
+   transform, so the root only fades; the rise and settle run on the scroll
+   container inside it. `data-state="closed"` is the exit, kept mounted by
+   usePresence until the animation ends. */
+.opal-select-dropdown[data-state="open"] {
+  animation: opal-select-dropdown-in 120ms ease-out;
+}
+
+.opal-select-dropdown[data-state="open"] .opal-select-dropdown-scroll {
+  animation: opal-select-dropdown-scroll-in 120ms ease-out;
+}
+
+.opal-select-dropdown[data-state="closed"] {
+  animation: opal-select-dropdown-out 80ms ease-in forwards;
+  pointer-events: none;
+}
+
+.opal-select-dropdown[data-state="closed"] .opal-select-dropdown-scroll {
+  animation: opal-select-dropdown-scroll-out 80ms ease-in forwards;
+}
+
+@keyframes opal-select-dropdown-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes opal-select-dropdown-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes opal-select-dropdown-scroll-in {
+  from {
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+@keyframes opal-select-dropdown-scroll-out {
+  to {
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opal-select-dropdown[data-state],
+  .opal-select-dropdown[data-state] .opal-select-dropdown-scroll {
+    animation: none;
+  }
+}
+
 .opal-select-empty-set {
   @apply p-2;
 }

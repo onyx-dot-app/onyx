@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import "@opal/components/inputs/dropdowns/dropdown/styles.css";
 import { cn } from "@opal/utils";
 import { ShadowDiv } from "@opal/components/shadow-div/components";
+import usePresence from "@opal/hooks/usePresence";
 import { OptionsList } from "./OptionsList";
 import type { SelectOption } from "../types";
 import type { OptionGroup } from "../shared";
@@ -75,6 +76,10 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
     },
     ref
   ) => {
+    // The listbox stays mounted one exit animation longer than `isOpen`, so
+    // it can animate out without living in the tree while closed.
+    const presence = usePresence(isOpen);
+
     // Keyboard navigation keeps the highlighted row in view. Pointer
     // highlights never scroll: the list must not move under the mouse.
     useEffect(() => {
@@ -113,7 +118,7 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
       });
     }, [isOpen, ref]);
 
-    if (!isOpen || disabled || typeof document === "undefined") {
+    if (!presence.mounted || disabled || typeof document === "undefined") {
       return null;
     }
 
@@ -132,8 +137,12 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
         role="listbox"
         tabIndex={-1}
         aria-label={placeholder}
+        // Closed while exiting: invisible to AT and to the pointer.
+        aria-hidden={presence.state === "closed" || undefined}
+        data-state={presence.state}
         className="opal-select-dropdown"
         style={floatingStyles}
+        onAnimationEnd={presence.onAnimationEnd}
         onMouseLeave={onMouseLeave}
         onMouseDown={(e) => {
           // Clicks on padding, gaps, or dividers must not steal focus from
