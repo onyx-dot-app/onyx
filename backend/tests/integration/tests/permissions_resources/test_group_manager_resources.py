@@ -755,6 +755,7 @@ def test_manager_reads_detail_of_own_groupless_cc_pair(env: _ScopedEnv) -> None:
         f"/manage/admin/cc-pair/{cc_pair.id}/last_pruned",
         f"/manage/admin/cc-pair/{cc_pair.id}/permission-sync-attempts",
         f"/manage/admin/cc-pair/{cc_pair.id}/errors?page_num=0&page_size=10",
+        f"/manage/admin/cc-pair/{cc_pair.id}/get-docs-sync-status",
     ]:
         resp = call_endpoint(
             "GET", path, None, env.manager.headers, env.manager.cookies
