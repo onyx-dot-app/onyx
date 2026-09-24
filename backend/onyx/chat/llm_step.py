@@ -88,6 +88,7 @@ _FUNCTION_CALLS_OPEN_RE = re.compile(
     r"<function_calls(?=[> \t\n\r]|\Z)", re.IGNORECASE | re.ASCII
 )
 _FUNCTION_CALLS_CLOSE_RE = re.compile(r"</function_calls>", re.IGNORECASE | re.ASCII)
+_HORIZONTAL_WHITESPACE = " \t\r\f\v"
 
 
 class _XmlToolCallContentFilter:
@@ -100,12 +101,11 @@ class _XmlToolCallContentFilter:
     def __init__(self) -> None:
         self._pending = ""
         self._inside_block = False
-        # True until non-whitespace text is emitted, so a block at the very
-        # start also drops the whitespace that follows it.
-        self._emitted_ends_with_whitespace = True
-        # Drop whitespace after a removed block so it does not double up with
-        # whitespace already emitted before the block.
-        self._strip_leading_whitespace = False
+        # Empty until text is emitted.
+        self._last_emitted_char = ""
+        # Set after a removed block so its trailing separator does not double
+        # up with whitespace already emitted before the block.
+        self._drop_separator = False
 
     def process(self, content: str) -> str:
         self._pending += content
@@ -117,13 +117,14 @@ class _XmlToolCallContentFilter:
                     break
                 self._pending = self._pending[close.end() :]
                 self._inside_block = False
-                self._strip_leading_whitespace = self._emitted_ends_with_whitespace
+                self._drop_separator = (
+                    not self._last_emitted_char or self._last_emitted_char.isspace()
+                )
 
-            if self._strip_leading_whitespace:
-                self._pending = self._pending.lstrip()
-                if not self._pending:
+            if self._drop_separator:
+                if not self._try_drop_separator():
                     break
-                self._strip_leading_whitespace = False
+                self._drop_separator = False
 
             open_match = _FUNCTION_CALLS_OPEN_RE.search(self._pending)
             if open_match is not None:
@@ -138,7 +139,7 @@ class _XmlToolCallContentFilter:
 
             if cut > 0:
                 output_parts.append(self._pending[:cut])
-                self._emitted_ends_with_whitespace = self._pending[cut - 1].isspace()
+                self._last_emitted_char = self._pending[cut - 1]
 
             if open_match is None:
                 self._pending = self._pending[cut:]
@@ -148,11 +149,29 @@ class _XmlToolCallContentFilter:
 
         return "".join(output_parts)
 
+    def _try_drop_separator(self) -> bool:
+        """Drop the whitespace after a removed block that duplicates the
+        whitespace before it, keeping line breaks and indentation. Returns
+        False if more text is needed to decide."""
+        if not self._last_emitted_char:
+            self._pending = self._pending.lstrip()
+            return bool(self._pending)
+        end = len(self._pending) - len(self._pending.lstrip(_HORIZONTAL_WHITESPACE))
+        if end == len(self._pending):
+            return False
+        after_newline = self._last_emitted_char == "\n"
+        if self._pending[end] == "\n":
+            self._pending = self._pending[end + 1 if after_newline else end :]
+        elif not after_newline:
+            self._pending = self._pending[end:]
+        return True
+
     def flush(self) -> str:
-        # An incomplete block at stream end is dropped.
-        remaining = "" if self._inside_block else self._pending
+        # An incomplete block, or whitespace after a block, at stream end is dropped.
+        remaining = "" if self._inside_block or self._drop_separator else self._pending
         self._pending = ""
         self._inside_block = False
+        self._drop_separator = False
         return remaining
 
 

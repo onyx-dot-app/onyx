@@ -380,11 +380,42 @@ class TestXmlToolCallContentFilter:
             "before ",
             "<function_calls><invoke></invoke></function_calls>",
             "  ",
-            "\n",
+            "\t",
             "after",
         ]
         output = "".join(f.process(chunk) for chunk in chunks) + f.flush()
         assert output == "before after"
+
+    def test_newline_after_block_is_kept_after_space(self) -> None:
+        f = _XmlToolCallContentFilter()
+        chunks = [
+            "Text ",
+            "<function_calls><invoke></invoke></function_calls>",
+            "  ",
+            "\n",
+            "## Details",
+        ]
+        output = "".join(f.process(chunk) for chunk in chunks) + f.flush()
+        assert output == "Text \n## Details"
+
+    def test_indentation_after_block_is_kept(self) -> None:
+        f = _XmlToolCallContentFilter()
+        chunks = [
+            "Intro\n",
+            "<function_calls><invoke></invoke></function_calls>",
+            "\n  ",
+            "  code",
+        ]
+        output = "".join(f.process(chunk) for chunk in chunks) + f.flush()
+        assert output == "Intro\n    code"
+
+    def test_indentation_on_block_line_is_kept(self) -> None:
+        f = _XmlToolCallContentFilter()
+        output = f.process(
+            "- item\n<function_calls><invoke></invoke></function_calls>  - nested"
+        )
+        output += f.flush()
+        assert output == "- item\n  - nested"
 
     def test_block_at_start_drops_leading_whitespace(self) -> None:
         f = _XmlToolCallContentFilter()
@@ -396,7 +427,7 @@ class TestXmlToolCallContentFilter:
     def test_block_at_end_keeps_preceding_text(self) -> None:
         f = _XmlToolCallContentFilter()
         output = f.process("Answer. <function_calls><invoke></invoke>")
-        output += f.process("</function_calls>\n")
+        output += f.process("</function_calls> ")
         output += f.flush()
         assert output == "Answer. "
 
