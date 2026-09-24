@@ -482,8 +482,8 @@ export default function AddConnector({
                 currentCredential ||
                 liveGDriveCredential ||
                 liveGmailCredential;
-              // TODO(ENG-4342): send wireAccess.restriction_group_ids once
-              // linkCredential accepts them; this call creates the cc-pair.
+              // TODO(evan, ENG-4342): send wireAccess.restriction_group_ids
+              // once the backend accepts them; this call creates the cc-pair.
               const linkCredentialResponse = await linkCredential(
                 response.id,
                 credential!.id,
