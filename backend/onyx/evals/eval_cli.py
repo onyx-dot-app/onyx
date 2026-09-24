@@ -257,9 +257,7 @@ def main() -> None:
     if args.remote:
         if not args.api_key:
             print("Using API Key from ONYX_EVAL_API_KEY")
-        api_key: str = (
-            args.api_key if args.api_key else os.environ.get("ONYX_EVAL_API_KEY", "")
-        )
+        api_key: str = args.api_key or os.environ.get("ONYX_EVAL_API_KEY", "")
         print(f"Running evaluation on remote server: {args.base_url}")
 
         if args.search_permissions_email:

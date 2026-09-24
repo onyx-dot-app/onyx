@@ -58,6 +58,10 @@ jobs:
     outputs:
       integration: ${{ steps.filter.outputs.integration || 'true' }}
       gateway: ${{ steps.filter.outputs.gateway || 'true' }}
+      # The live Slack suite shares its workspaces' rate limits across all CI runs,
+      # so PRs run it only for related changes. Merge queue and tag runs include it
+      # whenever the integration suite runs.
+      slack: ${{ github.event_name == 'pull_request' && steps.filter.outputs.slack || 'true' }}
     steps:
       - name: Checkout code
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
@@ -84,6 +88,20 @@ jobs:
             gateway:
               - 'backend/onyx/server/gateway/**'
               - 'backend/tests/integration/tests/gateway_clients/**'
+            slack:
+              - 'backend/onyx/connectors/slack/**'
+              - 'backend/onyx/connectors/*.py'
+              - 'backend/onyx/connectors/capability_checks/**'
+              - 'backend/onyx/utils/retry_after.py'
+              - 'backend/ee/onyx/db/external_perm.py'
+              - 'backend/onyx/access/**'
+              - 'backend/ee/onyx/access/**'
+              - 'backend/ee/onyx/external_permissions/*.py'
+              - 'backend/ee/onyx/external_permissions/slack/**'
+              - 'backend/ee/onyx/background/celery/tasks/doc_permission_syncing/**'
+              - 'backend/ee/onyx/background/celery/tasks/external_group_syncing/**'
+              - 'backend/tests/integration/connector_job_tests/slack/**'
+              - '.github/workflows/pr-integration-tests.yml'
 
   discover-test-dirs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
@@ -104,6 +122,7 @@ jobs:
         id: set-matrix
         env:
           GATEWAY_CHANGED: ${{ needs.changes.outputs.gateway }}
+          SLACK_CHANGED: ${{ needs.changes.outputs.slack }}
         run: |
           # Find all leaf-level directories in both test directories.
           # ``craft`` excluded: needs sandbox infra this lane doesn't set up;
@@ -111,7 +130,10 @@ jobs:
           if [[ "$GATEWAY_CHANGED" == "true" ]]; then
             tests_dirs="$tests_dirs gateway_clients"
           fi
-          connector_dirs=$(find backend/tests/integration/connector_job_tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" -exec basename {} \; | sort)
+          connector_dirs=$(find backend/tests/integration/connector_job_tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "slack" -exec basename {} \; | sort)
+          if [[ "$SLACK_CHANGED" == "true" ]]; then
+            connector_dirs="$connector_dirs slack"
+          fi
 
           # Create JSON array with directory info
           all_dirs=""

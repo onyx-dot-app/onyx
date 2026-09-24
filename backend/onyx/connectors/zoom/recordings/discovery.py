@@ -11,7 +11,7 @@ documents are keyed by occurrence UUID and get upserted.
 
 import abc
 from bisect import bisect_left, bisect_right
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -48,15 +48,45 @@ _OCCURRENCE_POLL_OVERLAP_SECONDS = ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS * 60 * 60
 # real meeting to a single listing.
 _MAX_WORK_PER_STEP = 200
 
+# Zoom's reference puts "The maximum range can be a month" on the `from` parameter
+# here, and a wider range comes back clamped rather than refused.
+_MAX_LISTING_WINDOW_DAYS = 30
+
+# Past about two years, a poll window this wide is far more likely a connector with
+# no indexing start date than a deliberate backfill.
+_WIDE_BACKFILL_WINDOWS = 24
+
+
+def _poll_window_range(
+    start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
+) -> tuple[datetime, datetime]:
+    """A failure covers the lag buffer too, because the buffer is part of the
+    window the connector actually asked Zoom for."""
+    return (
+        datetime.fromtimestamp(
+            start - _OCCURRENCE_POLL_OVERLAP_SECONDS, tz=timezone.utc
+        ),
+        datetime.fromtimestamp(end, tz=timezone.utc),
+    )
+
+
+def _listing_window_range(from_date: date, to_date: date) -> tuple[datetime, datetime]:
+    """Zoom scopes a listing by whole UTC days, so a window that failed cost
+    exactly those days, not the rest of the poll window."""
+    return (
+        datetime(from_date.year, from_date.month, from_date.day, tzinfo=timezone.utc),
+        datetime(to_date.year, to_date.month, to_date.day, tzinfo=timezone.utc)
+        + timedelta(days=1),
+    )
+
 
 def _entity_failure(
     entity_id: str,
     message: str,
-    start: SecondsSinceUnixEpoch,
-    end: SecondsSinceUnixEpoch,
+    missed_time_range: tuple[datetime, datetime],
     error: Exception | None = None,
 ) -> ConnectorFailure:
-    """Discovery moves on, and this window is the only trace the skipped scope
+    """Discovery moves on, and this range is the only trace the skipped scope
     leaves. Targeted reindex is keyed on document ids, so an entity failure can
     never be replayed: recovery means widening ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS
     or reindexing from scratch.
@@ -64,12 +94,7 @@ def _entity_failure(
     return ConnectorFailure(
         failed_entity=EntityFailure(
             entity_id=entity_id,
-            missed_time_range=(
-                datetime.fromtimestamp(
-                    start - _OCCURRENCE_POLL_OVERLAP_SECONDS, tz=timezone.utc
-                ),
-                datetime.fromtimestamp(end, tz=timezone.utc),
-            ),
+            missed_time_range=missed_time_range,
         ),
         failure_message=message,
         exception=error,
@@ -80,17 +105,34 @@ def _poll_window_dates(
     start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
 ) -> tuple[date, date]:
     """The lag buffer comes off the start before the dates are rounded, or a
-    transcript that lands slowly falls outside the window and is never indexed.
-
-    The window is sent whole however long it is, even a first run's epoch-to-now.
-    The one-month range cap everyone repeats for this endpoint is not in Zoom's own
-    reference, and narrowing it on a guess would silently index a slice of the
-    history the admin asked for.
-    """
+    transcript that lands slowly falls outside the window and is never indexed."""
     from_moment = datetime.fromtimestamp(
         max(start - _OCCURRENCE_POLL_OVERLAP_SECONDS, 0), tz=timezone.utc
     )
     return from_moment.date(), datetime.fromtimestamp(end, tz=timezone.utc).date()
+
+
+def _listing_windows(from_date: date, to_date: date) -> list[tuple[date, date]]:
+    """Zoom never documents whether `to` includes its own date, so windows share
+    their boundary day and the last one runs a day past the poll window. Without
+    both, a boundary day or the poll window's last day would be asked for by no
+    window at all.
+
+    Boundaries fall off from_date alone, so a resumed attempt rebuilds the same list.
+    """
+    if to_date < from_date:
+        return []
+
+    windows: list[tuple[date, date]] = []
+    window_start = from_date
+    last_date = to_date + timedelta(days=1)
+    step = timedelta(days=_MAX_LISTING_WINDOW_DAYS)
+    while True:
+        window_end = min(window_start + step - timedelta(days=1), last_date)
+        windows.append((window_start, window_end))
+        if window_end >= last_date:
+            return windows
+        window_start = window_end
 
 
 def _occurrence_in_poll_window(
@@ -188,8 +230,7 @@ class IdAllowlistSource(DiscoverySource):
                     # which one failed.
                     entity_id=f"{session_type.value}:{session_id}",
                     message=f"Failed to list occurrences for Zoom {session_type.value} {session_id}: {e}",
-                    start=start,
-                    end=end,
+                    missed_time_range=_poll_window_range(start, end),
                     error=e,
                 )
             )
@@ -248,7 +289,22 @@ class _Host(BaseModel):
 
 class _UserRecordingsCursor(BaseModel):
     host_id: str | None = None
+    window_start: date | None = None
     after: tuple[str, str] | None = None
+
+
+def _past_the_poll_window(
+    recording: ZoomRecordingEntry, end: SecondsSinceUnixEpoch
+) -> bool:
+    """Zoom scopes a listing by whole UTC days and the last window asks for one more
+    besides, so a session that started after the poll end -- during the attempt, or
+    on the day after a resumed attempt's pinned end -- comes back anyway. The next
+    poll starts at this end and covers those properly, so indexing them here only
+    repeats their transcript downloads against an account-wide rate limit.
+    """
+    if not recording.start_time:
+        return False
+    return time_str_to_utc(recording.start_time).timestamp() > end
 
 
 def _recording_key(recording: ZoomRecordingEntry) -> tuple[str, str]:
@@ -264,6 +320,32 @@ def _resume_at(hosts: list[_Host], host_id: str | None) -> int:
     if host_id is None:
         return 0
     return bisect_left([host.user_id for host in hosts], host_id)
+
+
+def _resume_window_at(
+    windows: list[tuple[date, date]], window_start: date | None
+) -> int:
+    """The cursor names the window rather than its index, so a poll window that grew
+    at the front cannot shift it."""
+    if window_start is None:
+        return 0
+    return bisect_left([window[0] for window in windows], window_start)
+
+
+def _advance_host(
+    hosts: list["_Host"],
+    index: int,
+    work: list[OccurrenceWork],
+    failures: list[ConnectorFailure],
+) -> "DiscoveryStepResult":
+    next_index = index + 1
+    done = next_index >= len(hosts)
+    return DiscoveryStepResult(
+        work=work,
+        failures=failures,
+        next_cursor=None if done else {"host_id": hosts[next_index].user_id},
+        done=done,
+    )
 
 
 def _work_from_recording(recording: ZoomRecordingEntry) -> OccurrenceWork | None:
@@ -335,7 +417,7 @@ class _UserRecordingsSource(DiscoverySource):
     def __init__(self, scope_entity_id: str) -> None:
         self._scope_entity_id = scope_entity_id
         self._resolved: list[_Host] | None = None
-        self._listed_host: str | None = None
+        self._listed_key: tuple[str, date] | None = None
         self._listed: list[ZoomRecordingEntry] = []
 
     @abc.abstractmethod
@@ -375,15 +457,13 @@ class _UserRecordingsSource(DiscoverySource):
                 _entity_failure(
                     entity_id=self._scope_entity_id,
                     message=f"Failed to resolve the Zoom hosts for {self._scope_entity_id}: {e}",
-                    start=start,
-                    end=end,
+                    missed_time_range=_poll_window_range(start, end),
                     error=e,
                 )
             ]
 
-        # Zoom promises no order. A resumed run resolves again, and the cursor
-        # is an index into this list, so a different order would step past a
-        # host that was never crawled.
+        # Zoom promises no order, and `_resume_at` bisects this list, which only
+        # works if it is sorted the same way on every attempt.
         hosts.sort(key=lambda host: host.user_id)
         self._resolved = hosts
         return hosts, failures
@@ -394,6 +474,7 @@ class _UserRecordingsSource(DiscoverySource):
         host: _Host,
         from_date: date,
         to_date: date,
+        end: SecondsSinceUnixEpoch,
     ) -> list[ZoomRecordingEntry]:
         """Listing a host again on every step costs another pass over its pages, and
         Zoom's rate limit is account-wide, shared with every other integration the
@@ -402,11 +483,50 @@ class _UserRecordingsSource(DiscoverySource):
         Zoom documents no order here, and a resumed attempt only lines up if the
         order is the same every time.
         """
-        if self._listed_host != host.user_id:
+        key = (host.user_id, from_date)
+        if self._listed_key != key:
+            # Consecutive windows share their boundary day, so Zoom returns those
+            # recordings in both, and indexing them a second time repeats a
+            # transcript download. This holds only within an attempt: nothing here
+            # is checkpointed, so a resumed attempt lists its first window with no
+            # record of the one before it.
+            already_listed = (
+                {entry.uuid for entry in self._listed}
+                if self._listed_key is not None and self._listed_key[0] == host.user_id
+                else set()
+            )
             recordings = _list_every_recording(client, host, from_date, to_date)
-            self._listed = sorted(recordings, key=_recording_key)
-            self._listed_host = host.user_id
+            self._listed = sorted(
+                (
+                    entry
+                    for entry in recordings
+                    if entry.uuid not in already_listed
+                    and not _past_the_poll_window(entry, end)
+                ),
+                key=_recording_key,
+            )
+            self._listed_key = key
         return self._listed
+
+    def _warn_if_backfill_is_wide(
+        self, windows: list[tuple[date, date]], hosts: int
+    ) -> None:
+        """Nothing bounds how long an indexing run may take, and an empty window
+        looks like progress rather than a stall, so an unset indexing start date
+        stays invisible until Zoom starts refusing calls."""
+        if len(windows) <= _WIDE_BACKFILL_WINDOWS:
+            return
+        logger.warning(
+            "Zoom %s is listing recordings from %s, which Zoom's %s-day range cap "
+            "splits into %s calls per host (%s hosts, about %s calls). Set an "
+            "indexing start date on the connector to narrow this.",
+            self._scope_entity_id,
+            windows[0][0],
+            _MAX_LISTING_WINDOW_DAYS,
+            len(windows),
+            hosts,
+            len(windows) * hosts,
+        )
 
     def discover_step(
         self,
@@ -426,35 +546,58 @@ class _UserRecordingsSource(DiscoverySource):
             return DiscoveryStepResult(failures=failures, done=True)
 
         host = hosts[index]
-        resume_after = position.after if host.user_id == position.host_id else None
-        from_date, to_date = _poll_window_dates(start, end)
+        # The window and offset belong to the host the cursor named. If that host is
+        # gone, `_resume_at` lands on a different one, which starts from the top.
+        on_named_host = host.user_id == position.host_id
+        windows = _listing_windows(*_poll_window_dates(start, end))
+        window_index = (
+            _resume_window_at(windows, position.window_start) if on_named_host else 0
+        )
+        if cursor is None:
+            self._warn_if_backfill_is_wide(windows, len(hosts))
+        if window_index >= len(windows):
+            return _advance_host(hosts, index, [], failures)
+
+        from_date, to_date = windows[window_index]
+        resume_after = (
+            position.after
+            if on_named_host and position.window_start == from_date
+            else None
+        )
 
         ordered: list[ZoomRecordingEntry] = []
         try:
-            ordered = self._recordings(client, host, from_date, to_date)
+            ordered = self._recordings(client, host, from_date, to_date, end)
         except Exception as e:
             if fails_the_whole_run(e):
                 raise
-            logger.exception("Failed to list Zoom recordings for %s", host.entity_id)
+            logger.exception(
+                "Failed to list Zoom recordings for %s over %s..%s",
+                host.entity_id,
+                from_date,
+                to_date,
+            )
             failures.append(
                 _entity_failure(
                     entity_id=host.entity_id,
-                    message=f"Failed to list Zoom recordings for {host.entity_id}: {e}",
-                    start=start,
-                    end=end,
+                    message=(
+                        f"Failed to list Zoom recordings for {host.entity_id} "
+                        f"over {from_date}..{to_date}: {e}"
+                    ),
+                    missed_time_range=_listing_window_range(from_date, to_date),
                     error=e,
                 )
             )
 
-        # A resumed attempt lists the host again, and Zoom's late transcripts
-        # arrive carrying their meeting's own old start time, so entries appear
-        # and vanish ahead of where we stopped. A count would move with them; the
-        # recording we stopped on does not.
+        # Zoom's late transcripts arrive carrying their meeting's own old start time,
+        # so entries appear and vanish ahead of where we stopped. A count would move
+        # with them; the recording we stopped on does not.
         first = (
             bisect_right([_recording_key(r) for r in ordered], resume_after)
             if resume_after
             else 0
         )
+
         page = ordered[first : first + _MAX_WORK_PER_STEP]
         work = [
             item
@@ -468,19 +611,24 @@ class _UserRecordingsSource(DiscoverySource):
                 failures=failures,
                 next_cursor={
                     "host_id": host.user_id,
+                    "window_start": windows[window_index][0].isoformat(),
                     "after": _recording_key(page[-1]),
                 },
                 done=False,
             )
 
-        next_index = index + 1
-        done = next_index >= len(hosts)
-        return DiscoveryStepResult(
-            work=work,
-            failures=failures,
-            next_cursor=None if done else {"host_id": hosts[next_index].user_id},
-            done=done,
-        )
+        next_window = window_index + 1
+        if next_window < len(windows):
+            return DiscoveryStepResult(
+                work=work,
+                failures=failures,
+                next_cursor={
+                    "host_id": host.user_id,
+                    "window_start": windows[next_window][0].isoformat(),
+                },
+                done=False,
+            )
+        return _advance_host(hosts, index, work, failures)
 
 
 class HostAllowlistSource(_UserRecordingsSource):
@@ -517,8 +665,7 @@ class HostAllowlistSource(_UserRecordingsSource):
             _entity_failure(
                 entity_id=f"host:{email}",
                 message=f"No active Zoom user has the email {email}, so none of that host's sessions were indexed",
-                start=start,
-                end=end,
+                missed_time_range=_poll_window_range(start, end),
             )
             for email in sorted(unmatched)
         ]

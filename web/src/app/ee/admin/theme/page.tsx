@@ -367,8 +367,9 @@ export default function ThemePage() {
                 title={adminRouteTitle(route)}
                 description={t("page.description")}
                 icon={route.icon}
-                rightChildren={
+                actions={[
                   <Button
+                    key="primary"
                     disabled={isSubmitting || (!dirty && !hasLogoChange)}
                     type="button"
                     onClick={async () => {
@@ -384,8 +385,8 @@ export default function ThemePage() {
                     {isSubmitting
                       ? t("page.applying.label")
                       : t("page.applyButton.label")}
-                  </Button>
-                }
+                  </Button>,
+                ]}
               />
               <SettingsLayouts.Body>
                 <AppearanceThemeSettings

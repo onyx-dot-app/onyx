@@ -23,7 +23,12 @@ from ee.onyx.db.license import get_cached_license_metadata, refresh_license_cach
 from ee.onyx.server.license.models import CustomerTier
 from ee.onyx.server.tenants.billing import fetch_billing_information
 from ee.onyx.server.tenants.models import BillingInformation, SubscriptionStatusResponse
-from ee.onyx.server.tenants.tier_management import get_cached_tier, update_tenant_tier
+from ee.onyx.server.tenants.tier_management import (
+    get_cached_tier,
+    has_recent_tenant_tier_miss,
+    mark_tenant_tier_miss,
+    update_tenant_tier,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -32,7 +37,7 @@ from onyx.server.settings.models import ApplicationStatus, Tier
 from onyx.server.settings.tier_order import tier_at_least
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
-from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -117,17 +122,13 @@ def _extract_billing_state(
 def _lazy_refresh_from_cp(
     tenant_id: str,
 ) -> tuple[CustomerTier, datetime | None] | None:
-    try:
-        billing = fetch_billing_information(tenant_id)
-    except (requests.RequestException, ValueError) as e:
-        logger.warning(
-            "Tier lazy-refresh failed for tenant %s. CP request or payload failed: %s",
-            tenant_id,
-            e,
-        )
-        return None
-
-    return _extract_billing_state(billing)
+    billing = fetch_billing_information(tenant_id)
+    state = _extract_billing_state(billing)
+    if state is None and not (
+        isinstance(billing, SubscriptionStatusResponse) and not billing.subscribed
+    ):
+        raise ValueError("Control-plane response has no customer tier")
+    return state
 
 
 def get_tier(tenant_id: str | None = None) -> Tier:
@@ -136,8 +137,12 @@ def get_tier(tenant_id: str | None = None) -> Tier:
 
     tid = tenant_id or get_current_tenant_id()
 
+    if tid == POSTGRES_DEFAULT_SCHEMA:
+        return Tier.BUSINESS
+
     try:
         cached = get_cached_tier(tid)
+        recent_miss = cached is None and has_recent_tenant_tier_miss(tid)
     except RedisError as e:
         # Don't try CP either — likely a wider outage; keep failures cheap.
         logger.warning(
@@ -150,7 +155,14 @@ def get_tier(tenant_id: str | None = None) -> Tier:
     if cached is not None:
         return _cloud_tier(cached.customer_tier)
 
-    fresh = _lazy_refresh_from_cp(tid)
+    if recent_miss:
+        return Tier.BUSINESS
+
+    try:
+        fresh = _lazy_refresh_from_cp(tid)
+    except (requests.RequestException, ValueError, TypeError) as e:
+        logger.warning("Tier lazy-refresh failed for tenant %s: %s", tid, e)
+        return Tier.BUSINESS
     if fresh is not None:
         fresh_tier, fresh_trial_end = fresh
         try:
@@ -163,7 +175,10 @@ def get_tier(tenant_id: str | None = None) -> Tier:
             )
         return _cloud_tier(fresh_tier)
 
-    # Don't cache the fallback — next call retries the refresh.
+    try:
+        mark_tenant_tier_miss(tid)
+    except RedisError as e:
+        logger.warning("Tier miss marker write failed for tenant %s: %s", tid, e)
     return Tier.BUSINESS
 
 
@@ -187,6 +202,21 @@ def require_business_tier_for_sync_access(access_type: AccessType) -> None:
         raise OnyxError(
             OnyxErrorCode.FEATURE_NOT_AVAILABLE,
             "Auto-sync access requires the Business or Enterprise plan.",
+        )
+
+
+def require_business_tier_for_connector_group_restrictions() -> None:
+    """Gate turning on data-access group restrictions for perm-synced
+    connectors. Groups and perm sync are Business+, so the setting would be
+    inert below that. LICENSE_ENFORCEMENT_ENABLED=False passes, matching the
+    sync-access guard."""
+    if not LICENSE_ENFORCEMENT_ENABLED:
+        return
+    if not tier_at_least(get_tier(), Tier.BUSINESS):
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+            "Group restrictions on permission-synced connectors require the "
+            "Business or Enterprise plan.",
         )
 
 

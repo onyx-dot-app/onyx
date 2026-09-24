@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+import threading
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 
 import requests
+import urllib3
 
-from onyx.configs.app_configs import OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED
+from onyx.configs.app_configs import (
+    OPEN_URL_BODY_DEADLINE_SECONDS,
+    OPEN_URL_MAX_HTML_SIZE_BYTES,
+    OPEN_URL_MAX_PDF_SIZE_BYTES,
+    OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED,
+)
 from onyx.file_processing.html_utils import ParsedHTML, web_html_cleanup
 from onyx.server.security.models import outbound_allow_private_network
 from onyx.server.security.store import get_security_settings
@@ -33,9 +40,10 @@ logger = setup_logger()
 DEFAULT_READ_TIMEOUT_SECONDS = 15
 DEFAULT_CONNECT_TIMEOUT_SECONDS = 5
 DEFAULT_USER_AGENT = "OnyxWebCrawler/1.0 (+https://www.onyx.app)"
-DEFAULT_MAX_PDF_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB
-DEFAULT_MAX_HTML_SIZE_BYTES = 20 * 1024 * 1024  # 20 MB
+DEFAULT_MAX_PDF_SIZE_BYTES = OPEN_URL_MAX_PDF_SIZE_BYTES
+DEFAULT_MAX_HTML_SIZE_BYTES = OPEN_URL_MAX_HTML_SIZE_BYTES
 DEFAULT_MAX_WORKERS = 5
+_BODY_CHUNK_SIZE = 64 * 1024
 
 # Headers that, when present on a 4xx response, signal that the upstream
 # is a Cloudflare-style bot challenge (vs. a real auth/not-found error)
@@ -63,6 +71,8 @@ class FailureReason:
     NETWORK_ERROR = "network error while fetching the URL"
     OVERSIZED_HTML = "HTML response exceeded the configured maximum size"
     OVERSIZED_PDF = "PDF response exceeded the configured maximum size"
+    OVERSIZED_BODY = "response body exceeded the configured maximum size"
+    BODY_TIMEOUT = "response body took too long to download"
     DECODE_ERROR = "could not decode the response body"
     EMPTY_OR_UNPARSEABLE = "response could not be parsed into readable text"
 
@@ -80,6 +90,55 @@ def _failed_result(url: str, failure_reason: str | None = None) -> WebContent:
         scrape_successful=False,
         failure_reason=failure_reason,
     )
+
+
+class _BodyReadError(Exception):
+    def __init__(self, failure_reason: str) -> None:
+        super().__init__(failure_reason)
+        self.failure_reason = failure_reason
+
+
+def _read_bounded_body(
+    response: requests.Response, *, max_bytes: int, deadline_seconds: float
+) -> bytes:
+    """Read the decoded body, stopping once it exceeds ``max_bytes`` or the
+    wall-clock deadline passes. Raises ``_BodyReadError``."""
+    declared = response.headers.get("Content-Length")
+    if declared is not None and declared.isdigit() and int(declared) > max_bytes:
+        raise _BodyReadError(FailureReason.OVERSIZED_BODY)
+
+    deadline_hit = threading.Event()
+
+    def _on_deadline() -> None:
+        deadline_hit.set()
+        # Shutting down the read side ends a read blocked on a stalled server.
+        try:
+            response.raw.shutdown()
+        except Exception:
+            pass
+
+    timer = threading.Timer(deadline_seconds, _on_deadline)
+    timer.daemon = True
+    timer.start()
+    chunks: list[bytes] = []
+    total = 0
+    try:
+        # read1 returns what is available; urllib3 bounds decoded output.
+        while chunk := response.raw.read1(_BODY_CHUNK_SIZE, decode_content=True):
+            if deadline_hit.is_set():
+                break
+            total += len(chunk)
+            if total > max_bytes:
+                raise _BodyReadError(FailureReason.OVERSIZED_BODY)
+            chunks.append(chunk)
+    except urllib3.exceptions.HTTPError:
+        if not deadline_hit.is_set():
+            raise
+    finally:
+        timer.cancel()
+    if deadline_hit.is_set():
+        raise _BodyReadError(FailureReason.BODY_TIMEOUT)
+    return b"".join(chunks)
 
 
 def _has_cloudflare_signals(response: requests.Response) -> bool:
@@ -177,12 +236,25 @@ class OnyxWebCrawler(WebContentProvider):
         max_html_size_bytes: int | None = None,
         playwright_fallback_enabled: bool = OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED,
         validate_ssrf: bool | None = None,
+        body_deadline_seconds: float | None = None,
     ) -> None:
         self._read_timeout_seconds = timeout_seconds
         self._connect_timeout_seconds = connect_timeout_seconds
         self._max_pdf_size_bytes = max_pdf_size_bytes
         self._max_html_size_bytes = max_html_size_bytes
         self._playwright_fallback_enabled = playwright_fallback_enabled
+        # Per-read timeouts alone let a slow-drip server hold the worker.
+        self._body_deadline_seconds = (
+            body_deadline_seconds
+            if body_deadline_seconds is not None
+            else OPEN_URL_BODY_DEADLINE_SECONDS
+        )
+        # Per-type caps are applied after sniffing; the read itself is always
+        # bounded by the larger of them.
+        self._max_body_bytes = max(
+            max_pdf_size_bytes or DEFAULT_MAX_PDF_SIZE_BYTES,
+            max_html_size_bytes or DEFAULT_MAX_HTML_SIZE_BYTES,
+        )
         # None => resolve from the admin SSRF Protection setting per fetch (see
         # _should_validate_ssrf); a non-None caller value pins it.
         self._validate_ssrf_override = validate_ssrf
@@ -230,6 +302,7 @@ class OnyxWebCrawler(WebContentProvider):
                 headers=self._headers,
                 timeout=(self._connect_timeout_seconds, self._read_timeout_seconds),
                 allow_private_network=not self._should_validate_ssrf(),
+                stream=True,
             )
         except SSRFException as exc:
             logger.error(
@@ -246,6 +319,10 @@ class OnyxWebCrawler(WebContentProvider):
             )
             return _failed_result(url, FailureReason.NETWORK_ERROR)
 
+        with response:
+            return self._handle_response(url, response)
+
+    def _handle_response(self, url: str, response: requests.Response) -> WebContent:
         if response.status_code >= 400:
             # Decide separately:
             #   - whether to attempt the Playwright fallback (broad, any 403
@@ -283,7 +360,20 @@ class OnyxWebCrawler(WebContentProvider):
             )
 
         content_type = response.headers.get("Content-Type", "")
-        content = response.content
+        try:
+            content = _read_bounded_body(
+                response,
+                max_bytes=self._max_body_bytes,
+                deadline_seconds=self._body_deadline_seconds,
+            )
+        except _BodyReadError as exc:
+            logger.warning("Onyx crawler rejected body of %s: %s", url, exc)
+            return _failed_result(url, exc.failure_reason)
+        except (requests.RequestException, urllib3.exceptions.HTTPError) as exc:
+            logger.warning(
+                "Onyx crawler failed to read %s (%s)", url, exc.__class__.__name__
+            )
+            return _failed_result(url, FailureReason.NETWORK_ERROR)
 
         content_sniff = content[:1024] if content else None
         if is_pdf_resource(url, content_type, content_sniff):

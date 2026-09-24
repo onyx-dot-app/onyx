@@ -8,7 +8,7 @@ import { InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Divider } from "@opal/components";
 import type { MCPAuthFormValues } from "@/sections/actions/modals/MCPAuthenticationModal";
-import { MCPAuthenticationType } from "@/lib/tools/types";
+import { MCPAuthenticationType } from "@/lib/mcp/types";
 import { SvgUser } from "@opal/icons";
 
 // Rendered verbatim inside the help copy. Kept as ICU arguments so the braces

@@ -154,7 +154,9 @@ function VertexFormFields(
               </FormField.Control>
               <FormField.Message
                 messages={{
-                  idle: t("form.authMethod.idle"),
+                  idle: t("form.authMethod.idle", {
+                    appName: settings.appName,
+                  }),
                 }}
               />
             </FormField>
@@ -247,7 +249,9 @@ function VertexFormFields(
               ) : (
                 <FormField.Message
                   messages={{
-                    idle: t("form.projectId.idle"),
+                    idle: t("form.projectId.idle", {
+                      appName: settings.appName,
+                    }),
                     error: meta.error,
                   }}
                 />

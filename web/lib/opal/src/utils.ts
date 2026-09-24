@@ -20,6 +20,12 @@ export function markdown(...lines: string[]): RichStr {
   return { __brand: "RichStr", raw: lines.join("\n") };
 }
 
+export function escapeMarkdown(value: string): string {
+  return value
+    .replace(/[!-/:-@[-`{-~]/g, (character) => `&#${character.charCodeAt(0)};`)
+    .replace(/[\r\n]+/g, " ");
+}
+
 /**
  * Brands React nodes as deliberate `Text` children.
  *

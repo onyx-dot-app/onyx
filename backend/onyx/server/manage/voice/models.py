@@ -1,6 +1,8 @@
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from onyx.voice.interface import normalize_provider_type
 
 
 class VoiceProviderView(BaseModel):
@@ -8,7 +10,7 @@ class VoiceProviderView(BaseModel):
 
     id: int
     name: str
-    provider_type: str  # "openai", "azure", "elevenlabs"
+    provider_type: str  # "openai", "azure", "elevenlabs", "zoom"
     is_default_stt: bool
     is_default_tts: bool
     stt_model: str | None
@@ -50,7 +52,7 @@ class VoiceProviderUpsertRequest(BaseModel):
 
     id: int | None = Field(default=None, description="Existing provider ID to update.")
     name: str
-    provider_type: str  # "openai", "azure", "elevenlabs"
+    provider_type: str  # "openai", "azure", "elevenlabs", "zoom"
     api_key: str | None = Field(
         default=None,
         description="API key for the provider.",
@@ -93,6 +95,11 @@ class VoiceProviderUpsertRequest(BaseModel):
         description="If true, sets this provider as the default TTS provider after upsert.",
     )
 
+    @field_validator("provider_type")
+    @classmethod
+    def _lowercase_provider_type(cls, value: str) -> str:
+        return normalize_provider_type(value)
+
 
 class VoiceProviderTestRequest(BaseModel):
     """Request model for testing a voice provider connection."""
@@ -124,3 +131,8 @@ class VoiceProviderTestRequest(BaseModel):
         description="Target URI for Azure Speech Services (maps to api_base).",
     )
     custom_config: dict[str, Any] | None = None
+
+    @field_validator("provider_type")
+    @classmethod
+    def _lowercase_provider_type(cls, value: str) -> str:
+        return normalize_provider_type(value)

@@ -12,23 +12,22 @@ import {
   updateCredentialWithPrivateKey,
 } from "@/lib/credential";
 import { Section, toast } from "@opal/layouts";
-import { CCPairFullInfo } from "@/app/admin/connector/[ccPairId]/types";
+import type { CCPairFullInfo } from "@/lib/connectors/types";
 import { Button, Card, Modal, Text } from "@opal/components";
 import {
   buildCCPairInfoUrl,
   buildSimilarCredentialInfoURL,
-} from "@/app/admin/connector/[ccPairId]/lib";
+} from "@/lib/connectors/utils";
 import { getSourceDisplayName } from "@/lib/sources";
-import {
+import type {
   ConfluenceCredentialJson,
   Credential,
-} from "@/lib/connectors/credentials";
-import {
-  getConnectorOauthRedirectUrl,
-  useOAuthDetails,
-} from "@/lib/connectors/oauth";
+} from "@/lib/connectors/types";
+import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
+import { useOAuthDetails } from "@/lib/connectors/hooks";
 import { Spinner } from "@/components/Spinner";
-import { isTypedFileField, TypedFile } from "@/lib/connectors/fileTypes";
+import { TypedFile } from "@/lib/connectors/fileTypes";
+import { isTypedFileField } from "@/lib/connectors/utils";
 import { SvgEdit, SvgKey } from "@opal/icons";
 import CreateCredential from "@/lib/credentials/components/CreateCredential";
 import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";

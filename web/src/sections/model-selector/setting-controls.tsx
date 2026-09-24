@@ -45,6 +45,17 @@ export function maxReasoningStop(
   );
 }
 
+/** Lowest supported stop. The slider is a range, so omitting "off" needs a floor. */
+export function minReasoningStop(
+  supported: ReasoningEffortOverride[] | undefined
+): number {
+  if (!supported) return 0;
+  const stops = supported
+    .map((effort) => ALL_REASONING_STOPS.indexOf(effort))
+    .filter((index) => index >= 0);
+  return stops.length ? Math.min(...stops) : 0;
+}
+
 export function reasoningStopIndex(
   effort: ReasoningEffortOverride | null | undefined
 ): number {

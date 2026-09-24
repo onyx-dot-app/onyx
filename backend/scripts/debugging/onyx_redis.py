@@ -92,7 +92,7 @@ def onyx_redis(
         host=host,
         port=port,
         db=db,
-        password=password if password else "",
+        password=password or "",
         ssl=ssl,
         ssl_cert_reqs="optional",
         ssl_ca_certs=None,

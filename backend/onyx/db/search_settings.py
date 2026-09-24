@@ -92,7 +92,7 @@ def get_embedding_provider_from_provider_type(
         CloudEmbeddingProvider.provider_type == provider_type
     )
     provider = db_session.execute(query).scalars().first()
-    return provider if provider else None
+    return provider or None
 
 
 def get_current_db_embedding_provider(

@@ -127,7 +127,6 @@
     "@types/stats.js": "^0.17.4",
     "babel-plugin-react-compiler": "^1.0.0",
     "dotenv": "^17.4.2",
-    "esbuild-plugin-preserve-directives": "^0.0.11",
     "jest": "^30.4.2",
     "jest-environment-jsdom": "^30.2.0",
     "oxfmt": "0.59.0",
@@ -136,9 +135,7 @@
     "stats.js": "^0.17.0",
     "storybook": "10.5.0",
     "tailwindcss": "^4.3.3",
-    "ts-unused-exports": "^11.0.1",
-    "typescript": "^5.9.3",
-    "typescript-7": "npm:typescript@^7.0.2",
+    "typescript": "7.1.0-dev.20260916.1",
     "whatwg-fetch": "^3.6.20"
   },
   "overrides": {

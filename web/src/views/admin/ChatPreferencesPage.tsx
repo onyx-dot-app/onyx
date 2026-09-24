@@ -23,6 +23,7 @@ import { InputTextArea, InputTypeIn } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
 import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
+import { findProviderOwningModelConfig } from "@/lib/languageModels/utils";
 import {
   SvgAddLines,
   SvgActions,
@@ -67,12 +68,12 @@ import {
 import { Modal } from "@opal/components";
 import GenericConfirmModal from "@/sections/modals/GenericConfirmModal";
 import { InputSwitch } from "@opal/components";
-import { useMcpServers } from "@/lib/tools/hooks";
+import { useMcpServers } from "@/lib/mcp/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { getActionIcon } from "@/lib/tools/utils";
 import { Disabled, Hoverable } from "@opal/core";
 import useFilter from "@/hooks/useFilter";
-import { MCPServer } from "@/lib/tools/types";
+import { MCPServer } from "@/lib/mcp/types";
 import type { IconProps } from "@opal/types";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
@@ -699,12 +700,15 @@ export default function ChatPreferencesPage() {
   const handleChatNamingModelChange = useCallback(
     async ({
       modelName,
-      providerName,
+      modelConfigurationId,
     }: {
       modelName: string;
-      providerName: string | null;
+      modelConfigurationId: number | null | undefined;
     }) => {
-      const provider = llmProviders?.find((p) => p.name === providerName);
+      const provider = findProviderOwningModelConfig(
+        llmProviders,
+        modelConfigurationId
+      );
       if (!provider) {
         toast.error(t("toasts.providerResolveFailed"));
         return;
@@ -1073,7 +1077,7 @@ export default function ChatPreferencesPage() {
                     onChange={(opt) =>
                       void handleChatNamingModelChange({
                         modelName: opt.modelName,
-                        providerName: opt.name,
+                        modelConfigurationId: opt.modelConfigurationId,
                       })
                     }
                   />
@@ -1112,7 +1116,9 @@ export default function ChatPreferencesPage() {
               withLabel
             >
               <InputTextArea
-                placeholder={t("teamContext.placeholder")}
+                placeholder={t("teamContext.placeholder", {
+                  appName: settings.appName,
+                })}
                 rows={4}
                 maxRows={10}
                 autoResize
@@ -1192,7 +1198,7 @@ export default function ChatPreferencesPage() {
                         </Section>
 
                         <Button
-                          href="/admin/indexing/status"
+                          href="/admin/indexing-status"
                           prominence="tertiary"
                           rightIcon={SvgExternalLink}
                         >
@@ -1409,7 +1415,9 @@ export default function ChatPreferencesPage() {
                     >
                       <InputHorizontal
                         title={t("retention.title")}
-                        description={t("retention.description")}
+                        description={t("retention.description", {
+                          appName: settings.appName,
+                        })}
                         tag={
                           !enterpriseTier
                             ? {

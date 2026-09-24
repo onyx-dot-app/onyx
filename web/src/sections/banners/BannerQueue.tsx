@@ -64,7 +64,7 @@ interface BannerContent {
 
 type BannerTypeConfigMap = Partial<Record<NotificationType, BannerTypeConfig>>;
 
-const CONNECTORS_LINK = "/admin/indexing/status";
+const CONNECTORS_LINK = "/admin/indexing-status";
 
 export default function BannerQueue() {
   const t = useTranslations("chat.banners");

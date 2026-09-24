@@ -7,11 +7,29 @@ from typing import Any, TypeVar, cast
 
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import RecordType, optional_telemetry
+from shared_configs.contextvars import get_current_user_id
 
 logger = setup_logger()
 
 F = TypeVar("F", bound=Callable)
 FG = TypeVar("FG", bound=Callable[..., Generator | Iterator])
+
+
+def _telemetry_user_id(kwargs: dict[str, Any]) -> str:
+    """User id for a latency record.
+
+    Prefer an explicit ``user`` keyword argument. Otherwise use the request's
+    user contextvar, which the auth dependencies set for every API call.
+    Never raises: telemetry must not break the decorated function.
+    """
+    try:
+        user = kwargs.get("user")
+        if user is not None:
+            return str(user.id)
+        return get_current_user_id() or "Unknown"
+    except Exception:
+        logger.warning("Failed to resolve user id for latency telemetry", exc_info=True)
+        return "Unknown"
 
 
 def log_function_time(
@@ -62,11 +80,10 @@ def log_function_time(
                 logger.notice(final_log)
 
             if not print_only:
-                user = kwargs.get("user")
                 optional_telemetry(
                     record_type=RecordType.LATENCY,
                     data={"function": log_name, "latency": str(elapsed_time_str)},
-                    user_id=str(user.id) if user else "Unknown",
+                    user_id=_telemetry_user_id(kwargs),
                 )
 
         if inspect.iscoroutinefunction(func):
@@ -99,7 +116,7 @@ def log_generator_function_time(
         @wraps(func)
         def wrapped_func(*args: Any, **kwargs: Any) -> Any:
             start_time = time.monotonic()
-            user = kwargs.get("user")
+            user_id = _telemetry_user_id(kwargs)
             try:
                 # `yield from` delegates send/throw/close to the inner generator,
                 # so its own finally (cleanup) runs synchronously when an exception
@@ -114,7 +131,7 @@ def log_generator_function_time(
                     optional_telemetry(
                         record_type=RecordType.LATENCY,
                         data={"function": log_name, "latency": str(elapsed_time_str)},
-                        user_id=str(user.id) if user else "Unknown",
+                        user_id=user_id,
                     )
 
         return cast(FG, wrapped_func)

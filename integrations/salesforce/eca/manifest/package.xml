@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Package xmlns="http://soap.sforce.com/2006/04/metadata">
+    <types>
+        <members>Onyx_Cloud</members>
+        <name>ExternalClientApplication</name>
+    </types>
+    <types>
+        <members>Onyx_Cloud_oauth</members>
+        <name>ExtlClntAppOauthSettings</name>
+    </types>
+    <version>67.0</version>
+</Package>

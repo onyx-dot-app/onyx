@@ -6,7 +6,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useUser } from "@/providers/UserProvider";
 import { AccountType, UserStatus } from "@/lib/types";
-import type { FullUserSnapshot } from "@/views/admin/UsersPage/interfaces";
+import type { FullUserSnapshot } from "@/views/admin/UsersPage/types";
 import type { ApiKeyDescriptor, MemberRow } from "./interfaces";
 
 interface ManageUsersResponse {
@@ -31,6 +31,7 @@ function snapshotToMemberRow(snapshot: FullUserSnapshot): MemberRow {
     personal_name: snapshot.personal_name,
     created_at: snapshot.created_at,
     updated_at: snapshot.updated_at,
+    last_active: snapshot.last_active,
     groups: snapshot.groups,
   };
 }
@@ -52,6 +53,7 @@ function serviceAccountToMemberRow(
       apiKey?.api_key_name ?? snapshot.personal_name ?? "Unnamed Key",
     created_at: null,
     updated_at: null,
+    last_active: null,
     groups: [],
     api_key_display: apiKey?.api_key_display,
   };

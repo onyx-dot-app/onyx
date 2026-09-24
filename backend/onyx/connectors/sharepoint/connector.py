@@ -13,9 +13,9 @@ from urllib.parse import unquote, urlsplit
 import msal
 import requests
 from office365.graph_client import GraphClient
+from office365.onedrive.drives.drive import Drive
 from office365.onedrive.sites.site import Site
 from office365.onedrive.sites.sites_with_root import SitesWithRoot
-from office365.runtime.auth.token_response import TokenResponse
 from office365.runtime.client_request import ClientRequestException
 from office365.sharepoint.client_context import ClientContext
 from pydantic import BaseModel, Field
@@ -55,6 +55,7 @@ from onyx.connectors.microsoft_utils.drive_items import (
 from onyx.connectors.microsoft_utils.graph_auth import (
     MicrosoftAuthMethod,
     acquire_graph_token,
+    acquire_token_for_rest,
     build_msal_app,
 )
 from onyx.connectors.microsoft_utils.graph_client import (
@@ -193,6 +194,26 @@ def _site_page_in_time_window(
     return timestamp_in_window(last_modified, start, end)
 
 
+def _drive_url_name(drive_web_url: str | None) -> str | None:
+    if not drive_web_url:
+        return None
+    return unquote(urlsplit(drive_web_url).path.rstrip("/").rsplit("/", 1)[-1])
+
+
+def _drives_matching_url_name(drives: Iterable[Drive], url_name: str) -> list[Drive]:
+    """Match drives by the library segment of their URL, case-insensitively.
+
+    A site URL scoped to a library carries the URL segment, which can differ from
+    the display name: SharePoint strips characters like "&", and renames keep the
+    old URL.
+    """
+    return [
+        drive
+        for drive in drives
+        if (_drive_url_name(drive.web_url) or "").lower() == url_name.lower()
+    ]
+
+
 # `GET /sites/getAllSites` returns the tenant-wide directory of every site
 # collection, not just sites the app principal can read. Per-site content
 # access is gated separately, so some listed sites will always reject reads.
@@ -253,17 +274,6 @@ def _is_graph_invalid_request(response: requests.Response) -> bool:
         return False
     error = body.get("error", {})
     return error.get("code") == GRAPH_INVALID_REQUEST_CODE
-
-
-def acquire_token_for_rest(
-    msal_app: msal.ConfidentialClientApplication,
-    sp_tenant_domain: str,
-    sharepoint_domain_suffix: str,
-) -> TokenResponse:
-    token = msal_app.acquire_token_for_client(
-        scopes=[f"https://{sp_tenant_domain}.{sharepoint_domain_suffix}/.default"]
-    )
-    return TokenResponse.from_json(token)
 
 
 def _probe_site_role_assignments_authorized(
@@ -512,8 +522,7 @@ def _convert_sitepage_to_document(
 
     web_url = site_page["webUrl"]
     semantic_identifier = cast(str, site_page.get("name", title))
-    if semantic_identifier.endswith(ASPX_EXTENSION):
-        semantic_identifier = semantic_identifier[: -len(ASPX_EXTENSION)]
+    semantic_identifier = semantic_identifier.removesuffix(ASPX_EXTENSION)
 
     if include_permissions:
         external_access = get_sharepoint_external_access(
@@ -1007,16 +1016,21 @@ class SharepointConnector(
         self,
         site_descriptor: SiteDescriptor,
         drive_name: str,
-    ) -> tuple[str, str | None] | None:
-        """Find the drive ID and web_url for a given drive name on a site.
+    ) -> SiteDrive | None:
+        """Find the drive for a given drive name on a site.
 
-        Returns (drive_id, drive_web_url) or None if the drive was not found.
-        Raises on auth/permission errors so callers can propagate them.
+        The returned name is ``drive_name`` unless the drive only matched by its
+        URL segment, in which case it is the drive's display name (what
+        SharePoint list lookups need).
+
+        Returns None if the drive was not found. Raises on auth/permission errors
+        so callers can propagate them.
         """
         site = self.graph_client.sites.get_by_url(site_descriptor.url)
         drives = site.drives.get().execute_query()
         logger.info("Found drives: %s", [d.name for d in drives])
 
+        resolved_name = drive_name
         matched = [
             d
             for d in drives
@@ -1026,6 +1040,11 @@ class SharepointConnector(
                 and SHARED_DOCUMENTS_MAP[d.name] == drive_name
             )
         ]
+        is_personal_site = PERSONAL_SITE_URL_MARKER in site_descriptor.url.lower()
+        if not matched and not is_personal_site:
+            matched = _drives_matching_url_name(drives, drive_name)
+            if matched and matched[0].name:
+                resolved_name = matched[0].name
         if not matched and drives:
             # Fallback for OneDrive personal sites: Graph reports the primary
             # library's name as "OneDrive"/"documentLibrary" while the
@@ -1044,7 +1063,7 @@ class SharepointConnector(
                 d for d in drives if d.name and d.name.lower() in ONEDRIVE_DRIVE_NAMES
             ]
             onedrive_matches = type_matches or name_matches
-            if PERSONAL_SITE_URL_MARKER in site_descriptor.url.lower():
+            if is_personal_site:
                 # A personal site has exactly one user OneDrive; refuse to guess
                 # when the lookup is ambiguous rather than index an arbitrary
                 # library.
@@ -1066,9 +1085,10 @@ class SharepointConnector(
             return None
 
         drive = matched[0]
-        drive_web_url: str | None = drive.web_url
-        logger.info("Found drive: %s (web_url: %s)", drive.name, drive_web_url)
-        return cast(str, drive.id), drive_web_url
+        logger.info("Found drive: %s (web_url: %s)", drive.name, drive.web_url)
+        return SiteDrive(
+            drive_id=cast(str, drive.id), name=resolved_name, web_url=drive.web_url
+        )
 
     def _get_drive_items_for_drive_id(
         self,
@@ -1136,7 +1156,7 @@ class SharepointConnector(
             logger.debug("Found drives: %s", [d.name for d in drives])
 
             if site_descriptor.drive_name:
-                drives = [
+                matched = [
                     drive
                     for drive in drives
                     if drive.name == site_descriptor.drive_name
@@ -1146,6 +1166,14 @@ class SharepointConnector(
                         == site_descriptor.drive_name
                     )
                 ]
+                is_personal_site = (
+                    PERSONAL_SITE_URL_MARKER in site_descriptor.url.lower()
+                )
+                if not matched and not is_personal_site:
+                    matched = _drives_matching_url_name(
+                        drives, site_descriptor.drive_name
+                    )
+                drives = matched
                 if not drives:
                     logger.warning("Drive '%s' not found", site_descriptor.drive_name)
                     return
@@ -1686,6 +1714,17 @@ class SharepointConnector(
         """
         return f"{drive_web_url}/{folder_path}"
 
+    def _build_folder_server_relative_path(
+        self, drive_web_url: str, folder_path: str
+    ) -> str:
+        """Build the decoded server-relative path SharePoint uses to find a folder.
+
+        Uses the library's web URL, not its display name: SharePoint strips
+        characters like "&" from the library URL, and renames keep the old URL.
+        """
+        library_path = unquote(urlsplit(drive_web_url).path).rstrip("/")
+        return f"{library_path}/{unquote(folder_path)}"
+
     def _yield_site_hierarchy_node(
         self,
         site_descriptor: SiteDescriptor,
@@ -1801,7 +1840,9 @@ class SharepointConnector(
                     self.graph_client,
                     checkpoint.permission_cache,
                     HierarchyNodeType.FOLDER,
-                    folder_url=folder_url,
+                    folder_server_relative_path=self._build_folder_server_relative_path(
+                        drive_web_url, current_path
+                    ),
                 )
 
             # Determine parent URL
@@ -2130,13 +2171,18 @@ class SharepointConnector(
                 logger.info(
                     "Fetching drive items for drive name: %s", current_drive_name
                 )
-                result = self._resolve_drive(site_descriptor, current_drive_name)
-                if result is None:
+                resolved_drive = self._resolve_drive(
+                    site_descriptor, current_drive_name
+                )
+                if resolved_drive is None:
                     logger.warning("Drive '%s' not found, skipping", current_drive_name)
                     self._clear_drive_checkpoint_state(checkpoint)
                     return checkpoint
 
-                drive_id, drive_web_url = result
+                drive_id = resolved_drive.drive_id
+                drive_web_url = resolved_drive.web_url
+                current_drive_name = resolved_drive.name
+                checkpoint.current_drive_name = current_drive_name
                 checkpoint.current_drive_id = drive_id
                 checkpoint.current_drive_web_url = drive_web_url
             except Exception as e:

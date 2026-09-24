@@ -28,6 +28,7 @@ type ModelSubtitleKey =
   | "models.whisper.subtitle"
   | "models.azureSpeechStt.subtitle"
   | "models.elevenlabsStt.subtitle"
+  | "models.zoomScribe.subtitle"
   | "models.tts1.subtitle"
   | "models.tts1Hd.subtitle"
   | "models.azureSpeechTts.subtitle"
@@ -67,6 +68,12 @@ const STT_MODELS: ModelDetails[] = [
     label: "ElevenAPI",
     subtitleKey: "models.elevenlabsStt.subtitle",
     providerType: "elevenlabs",
+  },
+  {
+    id: "scribe-live",
+    label: "Zoom Scribe",
+    subtitleKey: "models.zoomScribe.subtitle",
+    providerType: "zoom",
   },
 ];
 

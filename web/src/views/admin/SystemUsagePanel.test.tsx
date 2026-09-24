@@ -7,6 +7,10 @@ jest.mock("@/lib/usage/hooks", () => ({
   useSystemUsage: jest.fn(),
 }));
 
+jest.mock("@/lib/settings/hooks", () => ({
+  useSettings: () => ({ appName: "Onyx" }),
+}));
+
 const mockUseSystemUsage = useSystemUsage as jest.MockedFunction<
   typeof useSystemUsage
 >;
@@ -104,11 +108,14 @@ test("preserves filters while a new date range loads", async () => {
 
   const modelSelect = screen.getAllByRole("combobox")[0]!;
   await user.click(modelSelect);
+  // The trigger keeps the current label as the filter on open; clear it to
+  // list every model.
+  await user.clear(modelSelect);
   const modelOption = await screen.findByRole("option", {
     name: "claude-sonnet",
   });
   await user.click(modelOption);
-  expect(modelSelect).toHaveTextContent("claude-sonnet");
+  expect(modelSelect).toHaveValue("claude-sonnet");
   expect(screen.queryByText("$3.00")).not.toBeInTheDocument();
 
   mockUseSystemUsage.mockReturnValue({
