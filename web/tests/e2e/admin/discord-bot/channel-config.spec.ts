@@ -50,8 +50,11 @@ test.describe("Guild Detail Page & Channel Configuration", () => {
       timeout: 10000,
     });
 
-    // Find the persona/agent dropdown (InputSelect)
-    const agentDropdown = adminPage.locator('button:has-text("Default Agent")');
+    // The persona/agent dropdown: Opal's select is a read-only input named
+    // by its placeholder.
+    const agentDropdown = adminPage.getByRole("combobox", {
+      name: "Select agent",
+    });
 
     if (await agentDropdown.isVisible({ timeout: 5000 }).catch(() => false)) {
       await agentDropdown.click();

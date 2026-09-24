@@ -30,7 +30,7 @@ import {
   InputTypeIn,
   InputPasswordTypeIn,
 } from "@opal/components";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelect } from "@opal/components";
 import { InputSwitch } from "@opal/components";
 import { useUser } from "@/providers/UserProvider";
 import { useTheme } from "next-themes";
@@ -353,29 +353,27 @@ function PATModal({
           }
           withLabel
         >
-          <InputSelect
+          <InputSingleSelect
             value={expirationDays}
             onValueChange={setExpirationDays}
             disabled={isCreating}
-          >
-            <InputSelect.Trigger
-              placeholder={t("apiKeys.createModal.expiration.placeholder")}
-            />
-            <InputSelect.Content>
-              <InputSelect.Item value="7">
-                {t("apiKeys.createModal.expiration.days7")}
-              </InputSelect.Item>
-              <InputSelect.Item value="30">
-                {t("apiKeys.createModal.expiration.days30")}
-              </InputSelect.Item>
-              <InputSelect.Item value="365">
-                {t("apiKeys.createModal.expiration.days365")}
-              </InputSelect.Item>
-              <InputSelect.Item value="null">
-                {t("apiKeys.createModal.expiration.noExpiration")}
-              </InputSelect.Item>
-            </InputSelect.Content>
-          </InputSelect>
+            placeholder={t("apiKeys.createModal.expiration.placeholder")}
+            options={[
+              { value: "7", title: t("apiKeys.createModal.expiration.days7") },
+              {
+                value: "30",
+                title: t("apiKeys.createModal.expiration.days30"),
+              },
+              {
+                value: "365",
+                title: t("apiKeys.createModal.expiration.days365"),
+              },
+              {
+                value: "null",
+                title: t("apiKeys.createModal.expiration.noExpiration"),
+              },
+            ]}
+          />
         </InputVertical>
         <InputVertical
           title={t("apiKeys.createModal.permissions.title")}
@@ -386,23 +384,22 @@ function PATModal({
           }
           withLabel
         >
-          <InputSelect
+          <InputSingleSelect
             value={accessMode}
             onValueChange={(value) => setAccessMode(value as AccessMode)}
             disabled={isCreating}
-          >
-            <InputSelect.Trigger
-              placeholder={t("apiKeys.createModal.permissions.placeholder")}
-            />
-            <InputSelect.Content>
-              <InputSelect.Item value="full">
-                {t("apiKeys.createModal.permissions.fullAccessOption")}
-              </InputSelect.Item>
-              <InputSelect.Item value="limited">
-                {t("apiKeys.createModal.permissions.limitedAccessOption")}
-              </InputSelect.Item>
-            </InputSelect.Content>
-          </InputSelect>
+            placeholder={t("apiKeys.createModal.permissions.placeholder")}
+            options={[
+              {
+                value: "full",
+                title: t("apiKeys.createModal.permissions.fullAccessOption"),
+              },
+              {
+                value: "limited",
+                title: t("apiKeys.createModal.permissions.limitedAccessOption"),
+              },
+            ]}
+          />
         </InputVertical>
         {accessMode === "limited" && (
           <ScopeSelector
@@ -534,6 +531,7 @@ function usePATCreation({
 
 function GeneralSettings() {
   const t = useTranslations("settings");
+  const tInputSelect = useTranslations("common.inputSelect");
   const {
     user,
     updateUserPersonalization,
@@ -728,48 +726,46 @@ function GeneralSettings() {
                 center
                 withLabel
               >
-                <InputSelect
-                  value={theme}
+                <InputSingleSelect
+                  value={theme ?? ""}
                   onValueChange={(value) => {
                     setTheme(value);
                     updateUserThemePreference(value as ThemePreference);
                   }}
-                >
-                  <InputSelect.Trigger />
-                  <InputSelect.Content>
-                    <InputSelect.Item
-                      value={ThemePreference.SYSTEM}
-                      icon={() => (
-                        <ColorSwatch
-                          light={systemTheme === "light"}
-                          dark={systemTheme === "dark"}
-                        />
-                      )}
-                      description={
+                  placeholder={tInputSelect("placeholder.fallback")}
+                  options={[
+                    {
+                      value: ThemePreference.SYSTEM,
+                      title: t("appearance.colorMode.auto"),
+                      description:
                         systemTheme === "light"
                           ? t("appearance.colorMode.light")
                           : systemTheme === "dark"
                             ? t("appearance.colorMode.dark")
-                            : undefined
-                      }
-                    >
-                      {t("appearance.colorMode.auto")}
-                    </InputSelect.Item>
-                    <InputSelect.Separator />
-                    <InputSelect.Item
-                      value={ThemePreference.LIGHT}
-                      icon={() => <ColorSwatch light />}
-                    >
-                      {t("appearance.colorMode.light")}
-                    </InputSelect.Item>
-                    <InputSelect.Item
-                      value={ThemePreference.DARK}
-                      icon={() => <ColorSwatch dark />}
-                    >
-                      {t("appearance.colorMode.dark")}
-                    </InputSelect.Item>
-                  </InputSelect.Content>
-                </InputSelect>
+                            : undefined,
+                      icon: () => (
+                        <ColorSwatch
+                          light={systemTheme === "light"}
+                          dark={systemTheme === "dark"}
+                        />
+                      ),
+                    },
+                    {
+                      options: [
+                        {
+                          value: ThemePreference.LIGHT,
+                          title: t("appearance.colorMode.light"),
+                          icon: () => <ColorSwatch light />,
+                        },
+                        {
+                          value: ThemePreference.DARK,
+                          title: t("appearance.colorMode.dark"),
+                          icon: () => <ColorSwatch dark />,
+                        },
+                      ],
+                    },
+                  ]}
+                />
               </InputHorizontal>
               <InputVertical title={t("appearance.chatBackground.title")}>
                 <div className="flex flex-wrap gap-2">
@@ -842,25 +838,21 @@ function GeneralSettings() {
                 center
                 withLabel
               >
-                <InputSelect
+                <InputSingleSelect
                   value={currentLanguage}
                   onValueChange={(value) => {
-                    // SAFETY: the items below only carry SUPPORTED_LOCALES
+                    // SAFETY: the options below only carry SUPPORTED_LOCALES
                     // values, so the select can't emit anything else.
                     updateUserLanguage(value as Locale).catch(() => {
                       toast.error(t("language.toasts.updateFailed"));
                     });
                   }}
-                >
-                  <InputSelect.Trigger />
-                  <InputSelect.Content>
-                    {SUPPORTED_LOCALES.map((locale) => (
-                      <InputSelect.Item key={locale} value={locale}>
-                        {LOCALE_ENDONYMS[locale]}
-                      </InputSelect.Item>
-                    ))}
-                  </InputSelect.Content>
-                </InputSelect>
+                  placeholder={tInputSelect("placeholder.fallback")}
+                  options={SUPPORTED_LOCALES.map((locale) => ({
+                    value: locale,
+                    title: LOCALE_ENDONYMS[locale],
+                  }))}
+                />
               </InputHorizontal>
             </Section>
           </Card>
@@ -1184,6 +1176,7 @@ function PromptShortcuts() {
 
 function ChatPreferencesSettings() {
   const t = useTranslations("settings");
+  const tInputSelect = useTranslations("common.inputSelect");
   const tModelSelector = useTranslations("chat.modelSelector");
   const {
     user,
@@ -1497,23 +1490,24 @@ function ChatPreferencesSettings() {
                   disabled={!searchUiEnabled}
                   withLabel
                 >
-                  <InputSelect
+                  <InputSingleSelect
                     value={user?.preferences.default_app_mode ?? "CHAT"}
                     onValueChange={(value) => {
                       void updateUserDefaultAppMode(value as "CHAT" | "SEARCH");
                     }}
                     disabled={!searchUiEnabled}
-                  >
-                    <InputSelect.Trigger />
-                    <InputSelect.Content>
-                      <InputSelect.Item value="CHAT">
-                        {t("chats.defaultAppMode.chatOption")}
-                      </InputSelect.Item>
-                      <InputSelect.Item value="SEARCH">
-                        {t("chats.defaultAppMode.searchOption")}
-                      </InputSelect.Item>
-                    </InputSelect.Content>
-                  </InputSelect>
+                    placeholder={tInputSelect("placeholder.fallback")}
+                    options={[
+                      {
+                        value: "CHAT",
+                        title: t("chats.defaultAppMode.chatOption"),
+                      },
+                      {
+                        value: "SEARCH",
+                        title: t("chats.defaultAppMode.searchOption"),
+                      },
+                    ]}
+                  />
                 </InputHorizontal>
               </Tooltip>
             )}

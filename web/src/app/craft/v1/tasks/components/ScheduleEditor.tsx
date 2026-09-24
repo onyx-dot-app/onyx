@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { InputTypeIn, Tabs, Text } from "@opal/components";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelect } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { cn } from "@opal/utils";
 import type {
@@ -154,6 +154,7 @@ interface IntervalEditorProps {
 
 function IntervalEditor({ payload, onChange }: IntervalEditorProps) {
   const t = useTranslations("craft.tasks.scheduleEditor");
+  const tInputSelect = useTranslations("common.inputSelect");
   return (
     <Section gap={2}>
       <div className="flex items-center gap-2 flex-wrap">
@@ -172,21 +173,17 @@ function IntervalEditor({ payload, onChange }: IntervalEditorProps) {
           />
         </div>
         <div className="w-32">
-          <InputSelect
+          <InputSingleSelect
             value={payload.unit}
             onValueChange={(value) =>
               onChange({ ...payload, unit: value as IntervalUnit })
             }
-          >
-            <InputSelect.Trigger />
-            <InputSelect.Content>
-              {INTERVAL_UNITS.map((unit) => (
-                <InputSelect.Item key={unit} value={unit}>
-                  {t(`intervalUnits.${unit}`)}
-                </InputSelect.Item>
-              ))}
-            </InputSelect.Content>
-          </InputSelect>
+            placeholder={tInputSelect("placeholder.fallback")}
+            options={INTERVAL_UNITS.map((unit) => ({
+              value: unit,
+              title: t(`intervalUnits.${unit}`),
+            }))}
+          />
         </div>
       </div>
     </Section>

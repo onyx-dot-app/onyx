@@ -49,7 +49,7 @@ import {
   SvgVector,
 } from "@opal/icons";
 import SwitchField from "@/refresh-components/form/SwitchField";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelect } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
@@ -625,6 +625,7 @@ function isContextualModelOnlyChange(
 
 export default function IndexSettingsPage() {
   const t = useTranslations("admin.indexSettings");
+  const tInputSelect = useTranslations("common.inputSelect");
   const adminRouteTitle = useAdminRouteTitle();
   const router = useRouter();
   const settings = useSettings();
@@ -1071,40 +1072,31 @@ export default function IndexSettingsPage() {
                 initialFormValues
               );
               const switchoverStrategySelect = (
-                <InputSelect
+                <InputSingleSelect
                   value={switchoverType}
                   onValueChange={(v) => setSwitchoverType(v as SwitchoverType)}
-                >
-                  <InputSelect.Trigger
-                    placeholder={t("switchover.placeholder")}
-                  />
-                  <InputSelect.Content>
-                    <InputSelect.Item
-                      value={SwitchoverType.REINDEX}
-                      icon={SvgClock}
-                      wrapDescription
-                      description={t("switchover.reindexAll.description")}
-                    >
-                      {t("switchover.reindexAll.label")}
-                    </InputSelect.Item>
-                    <InputSelect.Item
-                      value={SwitchoverType.ACTIVE_ONLY}
-                      icon={SvgSlowTime}
-                      wrapDescription
-                      description={t("switchover.activeOnly.description")}
-                    >
-                      {t("switchover.activeOnly.label")}
-                    </InputSelect.Item>
-                    <InputSelect.Item
-                      value={SwitchoverType.INSTANT}
-                      icon={SvgEmpty}
-                      wrapDescription
-                      description={t("switchover.instant.description")}
-                    >
-                      {t("switchover.instant.label")}
-                    </InputSelect.Item>
-                  </InputSelect.Content>
-                </InputSelect>
+                  placeholder={t("switchover.placeholder")}
+                  options={[
+                    {
+                      value: SwitchoverType.REINDEX,
+                      title: t("switchover.reindexAll.label"),
+                      description: t("switchover.reindexAll.description"),
+                      icon: SvgClock,
+                    },
+                    {
+                      value: SwitchoverType.ACTIVE_ONLY,
+                      title: t("switchover.activeOnly.label"),
+                      description: t("switchover.activeOnly.description"),
+                      icon: SvgSlowTime,
+                    },
+                    {
+                      value: SwitchoverType.INSTANT,
+                      title: t("switchover.instant.label"),
+                      description: t("switchover.instant.description"),
+                      icon: SvgEmpty,
+                    },
+                  ]}
+                />
               );
               const revertButton = (
                 <Button
@@ -1939,7 +1931,7 @@ export default function IndexSettingsPage() {
                                   disabled={!imageProcessingEnabled}
                                   withLabel
                                 >
-                                  <InputSelect
+                                  <InputSingleSelect
                                     value={String(
                                       settings.image_analysis_max_size_mb ?? 20
                                     )}
@@ -1952,19 +1944,16 @@ export default function IndexSettingsPage() {
                                       });
                                     }}
                                     disabled={!imageProcessingEnabled}
-                                  >
-                                    <InputSelect.Trigger />
-                                    <InputSelect.Content>
-                                      {MAX_IMAGE_SIZE_OPTIONS.map((size) => (
-                                        <InputSelect.Item
-                                          key={size}
-                                          value={size}
-                                        >
-                                          {size}
-                                        </InputSelect.Item>
-                                      ))}
-                                    </InputSelect.Content>
-                                  </InputSelect>
+                                    placeholder={tInputSelect(
+                                      "placeholder.fallback"
+                                    )}
+                                    options={MAX_IMAGE_SIZE_OPTIONS.map(
+                                      (size) => ({
+                                        value: size,
+                                        title: size,
+                                      })
+                                    )}
+                                  />
                                 </InputHorizontal>
                               </Disabled>
                             </GeneralLayouts.Section>

@@ -6,8 +6,7 @@ import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import { FileUploadFormField } from "@/components/Field";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import InputSelectField from "@/refresh-components/form/InputSelectField";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelectField } from "@opal/form";
 import { Card, MessageCard } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { InputDivider, InputPadder, InputVertical, toast } from "@opal/layouts";
@@ -62,6 +61,7 @@ function VertexAIModalInternals({
   isOnboarding,
 }: VertexAIModalInternalsProps) {
   const t = useTranslations("admin.languageModels.modals");
+  const tInputSelect = useTranslations("common.inputSelect");
   const formikProps = useFormikContext<VertexAIModalValues>();
   const authMethod = formikProps.values.custom_config?.vertex_auth_method;
   const settings = useSettings();
@@ -90,27 +90,26 @@ function VertexAIModalInternals({
                 appName: settings.appName,
               })}
             >
-              <InputSelectField name={FIELD_VERTEX_AUTH_METHOD}>
-                <InputSelect.Trigger />
-                <InputSelect.Content>
-                  <InputSelect.Item
-                    value={AUTH_METHOD_SERVICE_ACCOUNT}
-                    description={t(
+              <InputSingleSelectField
+                name={FIELD_VERTEX_AUTH_METHOD}
+                placeholder={tInputSelect("placeholder.fallback")}
+                options={[
+                  {
+                    value: AUTH_METHOD_SERVICE_ACCOUNT,
+                    title: t("vertexAi.authMethodField.serviceAccount.label"),
+                    description: t(
                       "vertexAi.authMethodField.serviceAccount.description"
-                    )}
-                  >
-                    {t("vertexAi.authMethodField.serviceAccount.label")}
-                  </InputSelect.Item>
-                  <InputSelect.Item
-                    value={AUTH_METHOD_WORKLOAD_IDENTITY}
-                    description={t(
+                    ),
+                  },
+                  {
+                    value: AUTH_METHOD_WORKLOAD_IDENTITY,
+                    title: t("vertexAi.authMethodField.workloadIdentity.label"),
+                    description: t(
                       "vertexAi.authMethodField.workloadIdentity.description"
-                    )}
-                  >
-                    {t("vertexAi.authMethodField.workloadIdentity.label")}
-                  </InputSelect.Item>
-                </InputSelect.Content>
-              </InputSelectField>
+                    ),
+                  },
+                ]}
+              />
             </InputVertical>
           )}
 

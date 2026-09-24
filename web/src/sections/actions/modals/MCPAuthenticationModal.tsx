@@ -10,7 +10,7 @@ import { Modal } from "@opal/components";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import { Section } from "@/layouts/general-layouts";
 import { FormField } from "@/refresh-components/form/FormField";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelect } from "@opal/components";
 import {
   Button,
   CopyButton,
@@ -570,7 +570,7 @@ export default function MCPAuthenticationModal({
                         {t("mcpAuthModal.authType.label")}
                       </FormField.Label>
                       <FormField.Control asChild>
-                        <InputSelect
+                        <InputSingleSelect
                           value={values.auth_type}
                           onValueChange={(value) => {
                             setFieldValue("auth_type", value);
@@ -601,49 +601,48 @@ export default function MCPAuthenticationModal({
                               );
                             }
                           }}
-                        >
-                          <InputSelect.Trigger
-                            placeholder={t("mcpAuthModal.authType.placeholder")}
-                            data-testid="mcp-auth-method-select"
-                          />
-                          <InputSelect.Content>
-                            <InputSelect.Item
-                              value={MCPAuthenticationType.OAUTH}
-                              description={t(
+                          placeholder={t("mcpAuthModal.authType.placeholder")}
+                          data-testid="mcp-auth-method-select"
+                          options={[
+                            {
+                              value: MCPAuthenticationType.OAUTH,
+                              title: t("mcpAuthModal.authType.oauth.label"),
+                              description: t(
                                 "mcpAuthModal.authType.oauth.description"
-                              )}
-                            >
-                              {t("mcpAuthModal.authType.oauth.label")}
-                            </InputSelect.Item>
-                            {isOAuthEnabled && (
-                              <InputSelect.Item
-                                value={MCPAuthenticationType.PT_OAUTH}
-                                description={t(
-                                  "mcpAuthModal.authType.ptOauth.description",
-                                  { appName }
-                                )}
-                              >
-                                {t("mcpAuthModal.authType.ptOauth.label")}
-                              </InputSelect.Item>
-                            )}
-                            <InputSelect.Item
-                              value={MCPAuthenticationType.API_TOKEN}
-                              description={t(
+                              ),
+                            },
+                            ...(isOAuthEnabled
+                              ? [
+                                  {
+                                    value: MCPAuthenticationType.PT_OAUTH,
+                                    title: t(
+                                      "mcpAuthModal.authType.ptOauth.label"
+                                    ),
+                                    description: t(
+                                      "mcpAuthModal.authType.ptOauth.description",
+                                      {
+                                        appName,
+                                      }
+                                    ),
+                                  },
+                                ]
+                              : []),
+                            {
+                              value: MCPAuthenticationType.API_TOKEN,
+                              title: t("mcpAuthModal.authType.apiToken.label"),
+                              description: t(
                                 "mcpAuthModal.authType.apiToken.description"
-                              )}
-                            >
-                              {t("mcpAuthModal.authType.apiToken.label")}
-                            </InputSelect.Item>
-                            <InputSelect.Item
-                              value={MCPAuthenticationType.NONE}
-                              description={t(
+                              ),
+                            },
+                            {
+                              value: MCPAuthenticationType.NONE,
+                              title: t("mcpAuthModal.authType.none.label"),
+                              description: t(
                                 "mcpAuthModal.authType.none.description"
-                              )}
-                            >
-                              {t("mcpAuthModal.authType.none.label")}
-                            </InputSelect.Item>
-                          </InputSelect.Content>
-                        </InputSelect>
+                              ),
+                            },
+                          ]}
+                        />
                       </FormField.Control>
                       <FormField.Message
                         messages={{
@@ -777,44 +776,37 @@ export default function MCPAuthenticationModal({
                                 {t("mcpAuthModal.providerMode.label")}
                               </FormField.Label>
                               <FormField.Control asChild>
-                                <InputSelect
+                                <InputSingleSelect
                                   value={values.oauth_provider_mode}
                                   onValueChange={(value) => {
                                     setFieldValue("oauth_provider_mode", value);
                                   }}
-                                >
-                                  <InputSelect.Trigger
-                                    placeholder={t(
-                                      "mcpAuthModal.providerMode.placeholder"
-                                    )}
-                                  />
-                                  <InputSelect.Content>
-                                    <InputSelect.Item
-                                      value={
-                                        MCPOAuthProviderMode.AUTO_DISCOVERY
-                                      }
-                                      description={t(
-                                        "mcpAuthModal.providerMode.autoDiscovery.description"
-                                      )}
-                                    >
-                                      {t(
+                                  placeholder={t(
+                                    "mcpAuthModal.providerMode.placeholder"
+                                  )}
+                                  options={[
+                                    {
+                                      value:
+                                        MCPOAuthProviderMode.AUTO_DISCOVERY,
+                                      title: t(
                                         "mcpAuthModal.providerMode.autoDiscovery.label"
-                                      )}
-                                    </InputSelect.Item>
-                                    <InputSelect.Item
-                                      value={
-                                        MCPOAuthProviderMode.KNOWN_PROVIDER
-                                      }
-                                      description={t(
-                                        "mcpAuthModal.providerMode.knownProvider.description"
-                                      )}
-                                    >
-                                      {t(
+                                      ),
+                                      description: t(
+                                        "mcpAuthModal.providerMode.autoDiscovery.description"
+                                      ),
+                                    },
+                                    {
+                                      value:
+                                        MCPOAuthProviderMode.KNOWN_PROVIDER,
+                                      title: t(
                                         "mcpAuthModal.providerMode.knownProvider.label"
-                                      )}
-                                    </InputSelect.Item>
-                                  </InputSelect.Content>
-                                </InputSelect>
+                                      ),
+                                      description: t(
+                                        "mcpAuthModal.providerMode.knownProvider.description"
+                                      ),
+                                    },
+                                  ]}
+                                />
                               </FormField.Control>
                             </FormField>
 
