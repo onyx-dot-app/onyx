@@ -388,6 +388,8 @@ def test_onedrive_checkpoint_emits_later_occurrences_across_pages() -> None:
     assert [type(item) for item in second_output] == [HierarchyNode, Document]
     assert checkpoint.current_user is None
     assert gateway.download_item.call_count == 2
+
+
 def test_onedrive_delta_page_keeps_last_occurrence_order() -> None:
     connector, gateway = _connector()
     old_item = _file_item()
@@ -656,6 +658,22 @@ def test_onedrive_fixture_permission_mutations_traverse_connector(
         remove_share.id,
         restore_inheritance.id,
     ]
+
+
+def test_onedrive_permission_pagination_rejects_page_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connector, gateway = _connector()
+    monkeypatch.setattr("onyx.connectors.onedrive.connector.MAX_PERMISSION_PAGES", 2)
+    gateway.list_permissions.side_effect = [
+        OneDrivePermissionPage(permissions=[], next_link="permissions-1"),
+        OneDrivePermissionPage(permissions=[], next_link="permissions-2"),
+    ]
+
+    with pytest.raises(ValueError, match="permission page limit"):
+        connector._list_all_permissions("drive", "item")
+
+    assert gateway.list_permissions.call_count == 2
 
 
 def test_onedrive_fixture_child_before_parent_reads_child_permissions(
