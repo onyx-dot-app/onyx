@@ -2583,6 +2583,10 @@
           "label": "除外するパス",
           "description": "各ファイルパスとファイル名に照合する glob パターン（例: '*.tmp'、'Archive/*'）。"
         },
+        "organizationLinks": {
+          "label": "組織リンクを公開として扱う",
+          "description": "組織全体のリンクで共有されたファイルをすべての Onyx ユーザーに表示します。"
+        },
         "authorityHost": {
           "label": "機関ホスト",
           "description": "Microsoft ID 機関ホスト。GCC High または DoD では https://login.microsoftonline.us を使用してください。"

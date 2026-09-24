@@ -2583,6 +2583,10 @@
           "label": "Caminhos excluídos",
           "description": "Padrões glob comparados com cada caminho e nome de arquivo, como '*.tmp' ou 'Archive/*'."
         },
+        "organizationLinks": {
+          "label": "Tratar links da organização como públicos",
+          "description": "Torne os arquivos compartilhados por um link de toda a organização visíveis para todos os usuários do Onyx."
+        },
         "authorityHost": {
           "label": "Host de autoridade",
           "description": "Host de autoridade de identidade da Microsoft. Use https://login.microsoftonline.us para GCC High ou DoD."

@@ -214,6 +214,7 @@ class OneDriveConnector(
         self,
         users: list[str] | None = None,
         excluded_paths: list[str] | None = None,
+        treat_organization_link_as_public: bool = False,
         authority_host: str = DEFAULT_AUTHORITY_HOST,
         graph_api_host: str = DEFAULT_GRAPH_API_HOST,
     ) -> None:
@@ -223,6 +224,7 @@ class OneDriveConnector(
             excluded_paths=[
                 path.strip() for path in excluded_paths or [] if path.strip()
             ],
+            treat_organization_link_as_public=treat_organization_link_as_public,
             authority_host=authority_host.rstrip("/"),
             graph_api_host=graph_api_host.rstrip("/"),
         )

@@ -184,6 +184,14 @@ def test_onedrive_scope_is_ordered_normalized_and_deduplicated() -> None:
         normalize_configured_users([" ", ""])
 
 
+def test_onedrive_preserves_organization_link_setting() -> None:
+    connector: OneDriveConnector = OneDriveConnector(
+        treat_organization_link_as_public=True
+    )
+
+    assert connector.settings.treat_organization_link_as_public
+
+
 def test_onedrive_credential_validation_error_does_not_expose_input() -> None:
     secret = "do-not-expose"
     error = OneDriveAuthError(MISSING_CREDENTIAL_CODE, secret)

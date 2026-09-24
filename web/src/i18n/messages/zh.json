@@ -2583,6 +2583,10 @@
           "label": "排除的路径",
           "description": "与每个文件路径和文件名匹配的 glob 模式，例如“*.tmp”或“Archive/*”。"
         },
+        "organizationLinks": {
+          "label": "将组织链接视为公开链接",
+          "description": "让所有 Onyx 用户都能看到通过组织范围链接共享的文件。"
+        },
         "authorityHost": {
           "label": "授权主机",
           "description": "Microsoft 标识授权主机。GCC High 或 DoD 请使用 https://login.microsoftonline.us。"
