@@ -710,9 +710,6 @@ class ConnectorCredentialPairMetadata(BaseModel):
     access_type: AccessType
     auto_sync_options: dict[str, Any] | None = None
     groups: list[int] = Field(default_factory=list)
-    # Data-access groups, only for SYNC_RESTRICTED. Separate from `groups`,
-    # which scope who may manage the pair.
-    restriction_group_ids: list[int] = Field(default_factory=list)
     processing_mode: ProcessingMode = ProcessingMode.REGULAR
 
 
