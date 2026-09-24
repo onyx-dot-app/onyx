@@ -3,16 +3,12 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { cn } from "@opal/utils";
 
+type ShadowDirection = "top-and-bottom" | "top-only" | "bottom-only";
+
 interface ShadowDivProps extends React.HTMLAttributes<HTMLDivElement> {
   /**
-   * Background color to use for the shadow gradients.
-   * Defaults to --background-neutral-00
-   */
-  backgroundColor?: string;
-
-  /**
    * Height of the shadow gradients.
-   * Defaults to 1.5rem (24px)
+   * Defaults to 0.5rem (8px)
    */
   shadowHeight?: string;
 
@@ -22,14 +18,10 @@ interface ShadowDivProps extends React.HTMLAttributes<HTMLDivElement> {
   scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
 
   /**
-   * Show only bottom shadow (similar to OverflowDiv behavior)
+   * Which edges get a shadow.
+   * Defaults to both.
    */
-  bottomOnly?: boolean;
-
-  /**
-   * Show only top shadow
-   */
-  topOnly?: boolean;
+  shadowDirection?: ShadowDirection;
 
   /**
    * Fade the content itself via mask-image instead of painting gradient
@@ -42,6 +34,10 @@ interface ShadowDivProps extends React.HTMLAttributes<HTMLDivElement> {
    */
   containerClassName?: string;
 }
+
+// A translucent shadow token, so the gradients read as a shadow on any
+// surface instead of matching one.
+const SHADOW_COLOR = "var(--shadow-01)";
 
 /**
  * ShadowDiv - A scrollable container with automatic top/bottom shadow indicators
@@ -60,16 +56,14 @@ interface ShadowDivProps extends React.HTMLAttributes<HTMLDivElement> {
  *
  * @example
  * // Only show bottom shadow
- * <ShadowDiv bottomOnly className="max-h-80">
+ * <ShadowDiv shadowDirection="bottom-only" className="max-h-80">
  *   <div>Content...</div>
  * </ShadowDiv>
  */
 function ShadowDiv({
-  backgroundColor = "var(--background-neutral-00)",
-  shadowHeight = "1.5rem",
+  shadowHeight = "0.5rem",
   scrollContainerRef,
-  bottomOnly = false,
-  topOnly = false,
+  shadowDirection = "top-and-bottom",
   mask = false,
   containerClassName,
   className,
@@ -82,23 +76,26 @@ function ShadowDiv({
   const internalRef = React.useRef<HTMLDivElement>(null);
   const containerRef = scrollContainerRef || internalRef;
 
+  const showTop = shadowDirection !== "bottom-only";
+  const showBottom = shadowDirection !== "top-only";
+
   const checkScroll = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
 
     // Show top shadow if scrolled down
-    if (!bottomOnly) {
+    if (showTop) {
       setShowTopShadow(container.scrollTop > 1);
     }
 
     // Show bottom shadow if there's more content to scroll down
-    if (!topOnly) {
+    if (showBottom) {
       const hasMoreBelow =
         container.scrollHeight - container.scrollTop - container.clientHeight >
         1;
       setShowBottomShadow(hasMoreBelow);
     }
-  }, [containerRef, bottomOnly, topOnly]);
+  }, [containerRef, showTop, showBottom]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -118,8 +115,8 @@ function ShadowDiv({
     };
   }, [containerRef, checkScroll]);
 
-  const topFade = !bottomOnly && showTopShadow ? shadowHeight : "0px";
-  const bottomFade = !topOnly && showBottomShadow ? shadowHeight : "0px";
+  const topFade = showTop && showTopShadow ? shadowHeight : "0px";
+  const bottomFade = showBottom && showBottomShadow ? shadowHeight : "0px";
   const maskImage = `linear-gradient(to bottom, transparent 0, black ${topFade}, black calc(100% - ${bottomFade}), transparent 100%)`;
 
   return (
@@ -136,7 +133,7 @@ function ShadowDiv({
       </div>
 
       {/* Top scroll shadow indicator */}
-      {!mask && !bottomOnly && (
+      {!mask && showTop && (
         <div
           className={cn(
             "absolute top-0 start-0 end-0 pointer-events-none transition-opacity duration-150",
@@ -144,13 +141,13 @@ function ShadowDiv({
           )}
           style={{
             height: shadowHeight,
-            background: `linear-gradient(to bottom, ${backgroundColor}, transparent)`,
+            background: `linear-gradient(to bottom, ${SHADOW_COLOR}, transparent)`,
           }}
         />
       )}
 
       {/* Bottom scroll shadow indicator */}
-      {!mask && !topOnly && (
+      {!mask && showBottom && (
         <div
           className={cn(
             "absolute bottom-0 start-0 end-0 pointer-events-none transition-opacity duration-150",
@@ -158,7 +155,7 @@ function ShadowDiv({
           )}
           style={{
             height: shadowHeight,
-            background: `linear-gradient(to top, ${backgroundColor}, transparent)`,
+            background: `linear-gradient(to top, ${SHADOW_COLOR}, transparent)`,
           }}
         />
       )}
@@ -166,4 +163,4 @@ function ShadowDiv({
   );
 }
 
-export { ShadowDiv, type ShadowDivProps };
+export { ShadowDiv, type ShadowDivProps, type ShadowDirection };
