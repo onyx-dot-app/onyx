@@ -20,6 +20,13 @@ export class IndexSettingsPage {
   readonly applyReindexButton: Locator;
   readonly applyContextualModelForwardButton: Locator;
   readonly rebuildExistingDocumentsButton: Locator;
+  readonly applyWithoutReindexButton: Locator;
+  readonly revertButton: Locator;
+  /** The re-indexing strategy dropdown in the changes banner. */
+  readonly strategySelect: Locator;
+  readonly imageProcessingSwitch: Locator;
+  readonly captioningModelTrigger: Locator;
+  readonly noModelSelectedWarning: Locator;
 
   // The provider setup modal opened via `openProviderSetup`. Held so the
   // credential / model-spec fill methods scope their fields to the right
@@ -43,6 +50,23 @@ export class IndexSettingsPage {
     this.rebuildExistingDocumentsButton = page.getByRole("button", {
       name: "Rebuild all existing documents",
     });
+    this.applyWithoutReindexButton = page.getByRole("button", {
+      name: "Apply without Re-index",
+    });
+    this.revertButton = page.getByRole("button", { name: "Revert" });
+    // Opal's dropdown select is a read-only input named by its placeholder.
+    this.strategySelect = page.getByRole("combobox", {
+      name: "Select a switchover strategy",
+    });
+    this.imageProcessingSwitch = page.getByRole("switch", {
+      name: /extract & caption images/i,
+    });
+    this.captioningModelTrigger = page
+      .locator("label")
+      .filter({ hasText: "Captioning LLM" })
+      .getByTestId("llm-popover-trigger")
+      .getByRole("button");
+    this.noModelSelectedWarning = page.getByText("No model selected");
   }
 
   // ---------------------------------------------------------------------------
@@ -161,15 +185,56 @@ export class IndexSettingsPage {
   }
 
   async stageContextualModel(displayName: string): Promise<void> {
-    const contextualModelField = this.page
+    await this.pickModelInField("Contextual Retrieval LLM", displayName);
+  }
+
+  async pickCaptioningModel(displayName: string): Promise<void> {
+    await this.pickModelInField("Captioning LLM", displayName);
+  }
+
+  /**
+   * Open the model picker inside the labeled field, filter it, and choose
+   * the row. The match is scoped to the open popover so page text with the
+   * same name (the trigger itself, other fields) cannot collide.
+   */
+  private async pickModelInField(
+    fieldLabel: string,
+    displayName: string
+  ): Promise<void> {
+    await this.page
       .locator("label")
-      .filter({ hasText: "Contextual Retrieval LLM" });
-    await contextualModelField
+      .filter({ hasText: fieldLabel })
       .getByTestId("llm-popover-trigger")
       .getByRole("button")
       .click();
-    await this.page.getByPlaceholder("Search models...").fill(displayName);
-    await this.page.getByText(displayName, { exact: true }).click();
+    const popover = this.page.getByRole("dialog");
+    await popover.getByPlaceholder("Search models...").fill(displayName);
+    await popover.getByText(displayName, { exact: true }).click();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Re-indexing strategy
+  // ---------------------------------------------------------------------------
+
+  async selectStrategy(label: string): Promise<void> {
+    await this.strategySelect.click();
+    await this.page.getByRole("option", { name: label }).click();
+  }
+
+  async expectStrategy(label: RegExp): Promise<void> {
+    await expect(this.strategySelect).toHaveValue(label);
+  }
+
+  /** Opens the dropdown, asserts the option is not offered, and closes it. */
+  async expectStrategyOptionAbsent(label: string): Promise<void> {
+    await this.strategySelect.click();
+    await expect(this.page.getByRole("option").first()).toBeVisible();
+    await expect(this.page.getByRole("option", { name: label })).toHaveCount(0);
+    await this.page.keyboard.press("Escape");
+  }
+
+  async expectBannerTitle(title: string): Promise<void> {
+    await expect(this.page.getByText(title, { exact: true })).toBeVisible();
   }
 
   async expectContextualModelActions(): Promise<void> {

@@ -4810,6 +4810,9 @@
         "applyForward": {
           "label": "Auf neue und aktualisierte Dokumente anwenden"
         },
+        "applyWithoutReindex": {
+          "label": "Ohne Neuindexierung anwenden"
+        },
         "applyReindex": {
           "label": "Anwenden & neu indizieren",
           "statusesLoading": "Konnektor-Status wird geladen…",
@@ -4852,6 +4855,10 @@
         "title": "LLM für Bildbeschreibungen"
       },
       "changesBanner": {
+        "captioningModelMissing": {
+          "description": "„Bilder extrahieren & beschriften“ ist aktiv, aber kein Modell ist ausgewählt. Wählen Sie unten ein bildfähiges Captioning-LLM, bevor Sie anwenden.",
+          "title": "Wählen Sie ein Captioning-LLM"
+        },
         "contextualModelMissing": {
           "description": "Contextual Retrieval ist aktiviert, aber es ist kein Modell ausgewählt. Wählen Sie unten ein LLM für Contextual Retrieval, bevor Sie neu indizieren — ohne ein solches Modell kann die Neuindizierung nicht laufen.",
           "title": "Wählen Sie ein LLM für Contextual Retrieval"
@@ -4863,6 +4870,10 @@
         "default": {
           "description": "Änderungen an den Embedding- oder Retrieval-Einstellungen erfordern eine vollständige Neuindizierung aller Dokumente, damit sie wirksam werden. Das kann je nach Korpusgröße **Stunden oder Tage** dauern. [Mehr erfahren](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "Änderungen erfordern eine vollständige Neuindizierung."
+        },
+        "imageProcessingOnly": {
+          "description": "Ohne Neuindexierung anwenden, damit nur ab jetzt indexierte Dokumente die neuen Einstellungen nutzen, oder alle vorhandenen Dokumente neu aufbauen, damit jedes Bild damit beschriftet wird.",
+          "title": "Wählen Sie, wie diese Bildverarbeitungseinstellungen angewendet werden"
         },
         "orSeparator": {
           "label": "oder"
@@ -4962,12 +4973,13 @@
         "description": "Konfigurieren Sie, wie Dokumente indiziert, eingebettet und für Suche und Retrieval vorbereitet werden."
       },
       "imageExtraction": {
-        "description": "Extrahieren Sie eingebettete Bilder aus hochgeladenen Dateien (PDF, DOCX usw.) und fassen Sie sie mit einem LLM mit Bildverständnis zusammen, damit reine Bilddokumente durchsuchbar und beantwortbar werden. Erfordert ein Standard-LLM mit Bildverständnis.",
+        "description": "Extrahieren Sie eingebettete Bilder aus hochgeladenen Dateien (PDFs, DOCX usw.) und fassen Sie sie mit einem bildfähigen LLM zusammen, damit reine Bilddokumente durchsuchbar und beantwortbar werden. Erfordert ein unten ausgewähltes Captioning-LLM.",
         "title": "Bilder extrahieren & beschreiben"
       },
       "imageProcessing": {
         "description": "Verwenden Sie ein LLM-Modell, um Bilder während der Indizierung zu analysieren und mit Beschreibungen zu versehen.",
         "enableFirstTooltip": "Aktivieren Sie „Bilder extrahieren & beschreiben“, um dies zu konfigurieren.",
+        "noModelSelected": "Kein Modell ausgewählt",
         "noVisionModelsTooltip": "Die Bildverarbeitung ist deaktiviert, weil keine Modelle mit Bildverständnis konfiguriert sind. Richten Sie zuerst ein [Sprachmodell]({link}) mit Bildverständnis ein.",
         "title": "Bildverarbeitung"
       },
@@ -5151,6 +5163,10 @@
           "description": "Verwenden Sie den aktuellen Dokumentenindex mit den bestehenden Einstellungen weiter, bis alle aktiven Konnektoren (nicht pausiert oder in Löschung) einen erfolgreichen Indizierungsversuch abgeschlossen haben.",
           "label": "Aktive Konnektoren neu indizieren, dann umstellen"
         },
+        "doNotReindex": {
+          "description": "Speichert die Einstellungen und lässt den aktuellen Index unverändert. Nur ab jetzt indexierte Dokumente nutzen sie.",
+          "label": "Nicht neu indexieren"
+        },
         "instant": {
           "description": "Leeren Sie den aktuellen Dokumentenindex sofort und wechseln Sie zu den neuen Einstellungen. Erfordert eine Neuindizierung aller Konnektoren, bevor der Index wieder für die Suche gefüllt ist.",
           "label": "Vor der Neuindizierung umstellen"
@@ -5159,13 +5175,15 @@
         "reindexAll": {
           "description": "Sicherste Option. Verwenden Sie den aktuellen Dokumentenindex mit den bestehenden Einstellungen weiter, bis alle Konnektoren einen erfolgreichen Indizierungsversuch abgeschlossen haben.",
           "label": "Alle Konnektoren neu indizieren, dann umstellen"
+        },
+        "reindexOptions": {
+          "label": "Neuindexierungsoptionen"
         }
       },
       "toasts": {
         "applyFailed": "Die Einstellungen konnten nicht angewendet werden",
         "cancelReindexFailed": "Die Neuindizierung konnte nicht abgebrochen werden",
-        "captioningUpdateFailed": "Das LLM für Bildbeschreibungen konnte nicht aktualisiert werden",
-        "captioningUpdated": "LLM für Bildbeschreibungen aktualisiert",
+        "captioningModelRequired": "Wählen Sie vor dem Anwenden ein Captioning-LLM.",
         "contextualModelRequired": "Wählen Sie ein LLM für Contextual Retrieval, bevor Sie neu indizieren.",
         "contextualModelUpdateFailed": "Das LLM für Contextual Retrieval konnte nicht aktualisiert werden",
         "contextualModelUpdated": "LLM für Contextual Retrieval aktualisiert",

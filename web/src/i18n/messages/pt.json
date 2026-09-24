@@ -4810,6 +4810,9 @@
         "applyForward": {
           "label": "Aplicar a documentos novos e atualizados"
         },
+        "applyWithoutReindex": {
+          "label": "Aplicar sem reindexar"
+        },
         "applyReindex": {
           "label": "Aplicar e reindexar",
           "statusesLoading": "Carregando o estado dos conectores…",
@@ -4852,6 +4855,10 @@
         "title": "LLM de legendagem"
       },
       "changesBanner": {
+        "captioningModelMissing": {
+          "description": "Extrair e legendar imagens está ativado, mas nenhum modelo está selecionado. Escolha abaixo um LLM de legendagem com capacidade de visão antes de aplicar.",
+          "title": "Selecione um LLM de legendagem"
+        },
         "contextualModelMissing": {
           "description": "A recuperação contextual está ativada, mas nenhum modelo foi selecionado. Escolha um LLM de recuperação contextual abaixo antes de reindexar — sem ele, a reindexação não pode ser executada.",
           "title": "Selecione um LLM de recuperação contextual"
@@ -4863,6 +4870,10 @@
         "default": {
           "description": "Alterar as configurações de embedding ou de recuperação exige uma reindexação completa de todos os documentos para entrar em vigor, o que pode levar **horas ou dias** dependendo do tamanho do corpus. [Saiba mais](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "As alterações exigem uma reindexação completa."
+        },
+        "imageProcessingOnly": {
+          "description": "Aplique sem reindexar para que apenas os documentos indexados a partir de agora usem as novas configurações, ou reconstrua todos os documentos existentes para que cada imagem seja legendada com elas.",
+          "title": "Escolha como aplicar estas configurações de processamento de imagens"
         },
         "orSeparator": {
           "label": "ou"
@@ -4962,12 +4973,13 @@
         "description": "Configure como os documentos são indexados, transformados em embeddings e preparados para pesquisa e recuperação."
       },
       "imageExtraction": {
-        "description": "Extraia imagens incorporadas de arquivos enviados (PDFs, DOCX etc.) e resuma-as com um LLM com capacidade de visão para que documentos só de imagem possam ser pesquisados e respondidos. Requer um LLM padrão com capacidade de visão.",
+        "description": "Extraia imagens incorporadas de arquivos enviados (PDF, DOCX etc.) e resuma-as com um LLM com capacidade de visão para que documentos somente com imagens se tornem pesquisáveis e respondíveis. Requer um LLM de legendagem, escolhido abaixo.",
         "title": "Extrair e legendar imagens"
       },
       "imageProcessing": {
         "description": "Use um modelo de LLM para analisar e adicionar descrições às imagens durante a indexação.",
         "enableFirstTooltip": "Ative Extrair e legendar imagens para configurar isto.",
+        "noModelSelected": "Nenhum modelo selecionado",
         "noVisionModelsTooltip": "O processamento de imagens está desativado porque você não tem modelos com capacidade de visão configurados. Configure primeiro um [modelo de linguagem]({link}) com capacidade de visão.",
         "title": "Processamento de imagens"
       },
@@ -5151,6 +5163,10 @@
           "description": "Continue usando o índice de documentos atual com as configurações existentes até que todos os conectores ativos (não pausados nem em exclusão) concluam uma tentativa de indexação bem-sucedida.",
           "label": "Reindexar os conectores ativos e depois trocar"
         },
+        "doNotReindex": {
+          "description": "Salva as configurações e mantém o índice atual como está. Apenas os documentos indexados a partir de agora as usam.",
+          "label": "Não reindexar"
+        },
         "instant": {
           "description": "Limpe imediatamente o índice de documentos atual e mude para as novas configurações. Exige reindexar todos os conectores antes que o índice seja repovoado para pesquisa.",
           "label": "Trocar antes de reindexar"
@@ -5159,13 +5175,15 @@
         "reindexAll": {
           "description": "Opção mais segura. Continue usando o índice de documentos atual com as configurações existentes até que todos os conectores concluam uma tentativa de indexação bem-sucedida.",
           "label": "Reindexar todos os conectores e depois trocar"
+        },
+        "reindexOptions": {
+          "label": "Opções de reindexação"
         }
       },
       "toasts": {
         "applyFailed": "Falha ao aplicar as configurações",
         "cancelReindexFailed": "Falha ao cancelar a reindexação",
-        "captioningUpdateFailed": "Falha ao atualizar o LLM de legendagem",
-        "captioningUpdated": "LLM de legendagem atualizado",
+        "captioningModelRequired": "Selecione um LLM de legendagem antes de aplicar.",
         "contextualModelRequired": "Selecione um LLM de recuperação contextual antes de reindexar.",
         "contextualModelUpdateFailed": "Falha ao atualizar o LLM de recuperação contextual",
         "contextualModelUpdated": "LLM de recuperação contextual atualizado",
