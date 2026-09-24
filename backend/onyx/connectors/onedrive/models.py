@@ -105,8 +105,10 @@ class OneDriveCheckpoint(ConnectorCheckpoint):
     user_page: list[OneDriveUser] = Field(default_factory=list)
     users_next_link: str | None = None
     user_listing_started: bool = False
+    user_listing_pages: int = 0
     configured_user_index: int = 0
     current_user: OneDriveUser | None = None
     current_drive: OneDriveDrive | None = None
     delta_cursor: str | None = None
     delta_started: bool = False
+    delta_pages: int = 0
