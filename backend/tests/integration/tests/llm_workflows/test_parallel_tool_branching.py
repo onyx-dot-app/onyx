@@ -1,35 +1,47 @@
 from typing import Any
 from uuid import uuid4
 
-from onyx.configs import app_configs
 from onyx.configs.constants import DocumentSource
-from onyx.llm.mock_llm_script import MockLLMStep, MockToolCall
 from onyx.server.query_and_chat.streaming_models import StreamingType
 from onyx.tools.constants import SEARCH_TOOL_ID
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
-from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.tool import ToolManager
 from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.mock_services.mock_llm_server.handle import ScriptHandle
+from tests.integration.mock_services.mock_llm_server.models import (
+    Matcher,
+    Step,
+    ToolCall,
+)
 
-_DUMMY_OPENAI_API_KEY = "sk-mock-llm-workflow-tests"
 _BRANCHING = StreamingType.TOP_LEVEL_BRANCHING.value
+_SEARCH_TOOL_NAME = "internal_search"
+_UNKNOWN_TOOL_NAME = "tool_that_does_not_exist"
 
 
-def _setup(admin_user: DATestUser) -> None:
-    assert app_configs.INTEGRATION_TESTS_MODE is True, (
-        "Integration tests require INTEGRATION_TESTS_MODE=true."
-    )
-    # SearchTool is only exposed when at least one non-default connector exists.
+def _create_connector(admin_user: DATestUser) -> None:
+    # internal_search is only offered when a non-default connector exists.
     CCPairManager.create_from_scratch(
         source=DocumentSource.INGESTION_API,
         user_performing_action=admin_user,
     )
-    LLMProviderManager.create(
-        user_performing_action=admin_user,
-        api_key=_DUMMY_OPENAI_API_KEY,
-    )
+
+
+def _search_calls() -> list[ToolCall]:
+    return [
+        ToolCall(
+            id="call_search_alpha",
+            name=_SEARCH_TOOL_NAME,
+            arguments={"queries": ["alpha"]},
+        ),
+        ToolCall(
+            id="call_search_beta",
+            name=_SEARCH_TOOL_NAME,
+            arguments={"queries": ["beta"]},
+        ),
+    ]
 
 
 def _packet_indices(packets: list[dict[str, Any]], packet_type: str) -> list[int]:
@@ -39,40 +51,29 @@ def _packet_indices(packets: list[dict[str, Any]], packet_type: str) -> list[int
 
 
 def test_merged_searches_and_unknown_tool_do_not_branch(
-    admin_user: DATestUser,
+    admin_user: DATestUser, mock_llm: ScriptHandle
 ) -> None:
-    _setup(admin_user)
+    _create_connector(admin_user)
+    mock_llm.lane(
+        "chat",
+        Step(
+            tool_calls=[
+                *_search_calls(),
+                ToolCall(id="call_unknown", name=_UNKNOWN_TOOL_NAME, arguments={}),
+            ],
+            match=Matcher(offered_tools=[_SEARCH_TOOL_NAME]),
+        ),
+        Step(
+            text="Merged answer.",
+            match=Matcher(tool_results_for=["call_search_alpha"]),
+        ),
+    )
     chat_session = ChatSessionManager.create(user_performing_action=admin_user)
 
     response = ChatSessionManager.send_message(
         chat_session_id=chat_session.id,
         message="what is the answer?",
         user_performing_action=admin_user,
-        mock_llm_script=[
-            MockLLMStep(
-                tool_calls=[
-                    MockToolCall(
-                        id="call_search_alpha",
-                        name="internal_search",
-                        arguments={"queries": ["alpha"]},
-                    ),
-                    MockToolCall(
-                        id="call_search_beta",
-                        name="internal_search",
-                        arguments={"queries": ["beta"]},
-                    ),
-                    MockToolCall(
-                        id="call_unknown",
-                        name="tool_that_does_not_exist",
-                        arguments={},
-                    ),
-                ],
-            ),
-            MockLLMStep(
-                text="Merged answer.",
-                match_prompt_contains="call_search_alpha",
-            ),
-        ],
     )
 
     assert response.error is None, f"Unexpected stream error: {response.error}"
@@ -97,11 +98,15 @@ def test_merged_searches_and_unknown_tool_do_not_branch(
 
     assert response.full_message == "Merged answer."
 
+    tool_step, answer_step = mock_llm.lane_requests("chat")
+    assert _UNKNOWN_TOOL_NAME not in tool_step.tools
+    assert answer_step.tool_result_ids() == ["call_search_alpha"]
+
 
 def test_distinct_executed_tools_branch_before_tool_starts(
-    admin_user: DATestUser,
+    admin_user: DATestUser, mock_llm: ScriptHandle
 ) -> None:
-    _setup(admin_user)
+    _create_connector(admin_user)
 
     custom_tool_name = f"branching_ping_{uuid4().hex[:8]}"
     # Points at the API server itself so the call needs no external service.
@@ -138,32 +143,25 @@ def test_distinct_executed_tools_branch_before_tool_starts(
     chat_session = ChatSessionManager.create(
         persona_id=persona.id, user_performing_action=admin_user
     )
+    mock_llm.lane(
+        "chat",
+        Step(
+            tool_calls=[
+                *_search_calls(),
+                ToolCall(id="call_ping", name=custom_tool_name, arguments={}),
+            ],
+            match=Matcher(offered_tools=[_SEARCH_TOOL_NAME, custom_tool_name]),
+        ),
+        Step(
+            text="Both tools ran.",
+            match=Matcher(tool_results_for=["call_search_alpha", "call_ping"]),
+        ),
+    )
 
     response = ChatSessionManager.send_message(
         chat_session_id=chat_session.id,
         message="search and ping",
         user_performing_action=admin_user,
-        mock_llm_script=[
-            MockLLMStep(
-                tool_calls=[
-                    MockToolCall(
-                        id="call_search_alpha",
-                        name="internal_search",
-                        arguments={"queries": ["alpha"]},
-                    ),
-                    MockToolCall(
-                        id="call_search_beta",
-                        name="internal_search",
-                        arguments={"queries": ["beta"]},
-                    ),
-                    MockToolCall(id="call_ping", name=custom_tool_name, arguments={}),
-                ],
-            ),
-            MockLLMStep(
-                text="Both tools ran.",
-                match_prompt_contains="call_ping",
-            ),
-        ],
     )
 
     assert response.error is None, f"Unexpected stream error: {response.error}"
@@ -186,3 +184,6 @@ def test_distinct_executed_tools_branch_before_tool_starts(
         )
 
     assert response.full_message == "Both tools ran."
+
+    _, answer_step = mock_llm.lane_requests("chat")
+    assert sorted(answer_step.tool_result_ids()) == ["call_ping", "call_search_alpha"]
