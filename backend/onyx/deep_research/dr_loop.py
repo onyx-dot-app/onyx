@@ -34,6 +34,7 @@ from onyx.deep_research.dr_mock_tools import (
     get_clarification_tool_definitions,
     get_orchestrator_tools,
 )
+from onyx.deep_research.models import ResearchAgentCallFailure
 from onyx.deep_research.utils import (
     check_special_tool_calls,
     create_think_tool_token_processor,
@@ -773,7 +774,7 @@ def run_deep_research_llm_loop(
                     for tab_index, report in enumerate(
                         research_results.intermediate_reports
                     ):
-                        if report is None:
+                        if isinstance(report, ResearchAgentCallFailure):
                             # Every tool_use id in the preceding assistant message must have a
                             # matching TOOL_CALL_RESPONSE or strict providers (e.g. AWS Bedrock
                             # Converse) reject the next request with 400 "Expected toolResult
@@ -785,7 +786,7 @@ def run_deep_research_llm_loop(
                                 tab_index,
                             )
                             failed_tool_call = research_agent_calls[tab_index]
-                            failure_message = "Research agent call failed. Try a different approach or continue without this result."
+                            failure_message = report.message
                             simple_chat_history.append(
                                 ChatMessageSimple(
                                     message=failure_message,
