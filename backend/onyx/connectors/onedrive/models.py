@@ -110,5 +110,3 @@ class OneDriveCheckpoint(ConnectorCheckpoint):
     current_drive: OneDriveDrive | None = None
     delta_cursor: str | None = None
     delta_started: bool = False
-    seen_document_ids: set[str] = Field(default_factory=set)
-    seen_hierarchy_raw_ids: set[str] = Field(default_factory=set)

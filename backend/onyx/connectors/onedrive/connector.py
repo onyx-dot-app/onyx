@@ -246,8 +246,6 @@ class OneDriveConnector(
 
     def _finish_drive(self, checkpoint: OneDriveCheckpoint) -> None:
         self._clear_current_user(checkpoint)
-        checkpoint.seen_document_ids.clear()
-        checkpoint.seen_hierarchy_raw_ids.clear()
 
     def _select_explicit_user(
         self, checkpoint: OneDriveCheckpoint
@@ -395,10 +393,8 @@ class OneDriveConnector(
                 )
             self._finish_drive(checkpoint)
             return
-        root_id = drive_root_id(drive.id)
-        if root_id not in checkpoint.seen_hierarchy_raw_ids:
+        if not checkpoint.delta_started:
             yield user_root_node(user, drive)
-            checkpoint.seen_hierarchy_raw_ids.add(root_id)
         checkpoint.delta_started = True
         checkpoint.delta_cursor = result.next_cursor
         if result.resynced:
@@ -407,20 +403,12 @@ class OneDriveConnector(
             if item.is_tombstone:
                 continue
             if item.is_folder:
-                raw_id = hierarchy_item_id(drive.id, item.id)
-                if (
-                    not self._path_allowed(item)
-                    or raw_id in checkpoint.seen_hierarchy_raw_ids
-                ):
+                if not self._path_allowed(item):
                     continue
                 yield folder_node(drive, item)
-                checkpoint.seen_hierarchy_raw_ids.add(raw_id)
                 continue
             if not item.is_file or not self._item_allowed(item, start_at, end_at):
                 continue
-            if item.id in checkpoint.seen_document_ids:
-                continue
-            checkpoint.seen_document_ids.add(item.id)
             yield OneDriveDiscoveredFile(drive=drive, item=item)
         if result.next_cursor is None:
             self._finish_drive(checkpoint)
