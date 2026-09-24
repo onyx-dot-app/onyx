@@ -3,7 +3,6 @@ from datetime import datetime, timezone
 from typing import Any
 
 from onyx.access.models import ExternalAccess
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.interfaces import (
@@ -16,6 +15,7 @@ from onyx.connectors.interfaces import (
     SlimConnector,
 )
 from onyx.connectors.microsoft_utils.drive_delta import (
+    DEFAULT_DRIVE_DELTA_PAGE_SIZE,
     DRIVE_DELTA_SELECT_FIELDS,
     DriveDeltaItem,
     build_delta_start_url,
@@ -186,7 +186,6 @@ class OneDriveConnector(
         excluded_paths: list[str] | None = None,
         authority_host: str = DEFAULT_AUTHORITY_HOST,
         graph_api_host: str = DEFAULT_GRAPH_API_HOST,
-        batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
         normalized_users = normalize_configured_users(users)
         self.settings = OneDriveSettings(
@@ -196,7 +195,6 @@ class OneDriveConnector(
             ],
             authority_host=authority_host.rstrip("/"),
             graph_api_host=graph_api_host.rstrip("/"),
-            batch_size=batch_size,
         )
         resolve_microsoft_environment(
             self.settings.graph_api_host, self.settings.authority_host
@@ -302,24 +300,23 @@ class OneDriveConnector(
         except OneDriveGraphError as error:
             if not error.is_permanent_refusal:
                 raise
-            if not self.settings.indexes_all_users:
-                yield _entity_failure(user, str(error), error)
-            else:
+            if self.settings.indexes_all_users:
                 logger.info(
                     "OneDrive: skipping inaccessible drive for %s (%s)",
                     user.user_principal_name,
                     error.code,
                 )
+            yield _entity_failure(user, str(error), error)
             self._clear_current_user(checkpoint)
             return
         if drive is None:
-            if not self.settings.indexes_all_users:
-                yield _entity_failure(
-                    user, f"`{user.user_principal_name}` has no OneDrive."
-                )
-            else:
+            if self.settings.indexes_all_users:
                 logger.info(
                     "OneDrive: skipping %s without a drive", user.user_principal_name
+                )
+            else:
+                yield _entity_failure(
+                    user, f"`{user.user_principal_name}` has no OneDrive."
                 )
             self._clear_current_user(checkpoint)
             return
@@ -382,7 +379,7 @@ class OneDriveConnector(
             f"{self.settings.graph_api_host}/{GRAPH_API_VERSION}",
             drive.id,
             start=start_at,
-            page_size=self.settings.batch_size,
+            page_size=DEFAULT_DRIVE_DELTA_PAGE_SIZE,
             select_fields=DRIVE_DELTA_SELECT_FIELDS,
         )
         if checkpoint.delta_pages >= MAX_DRIVE_DELTA_PAGES:
@@ -394,19 +391,18 @@ class OneDriveConnector(
             result = self.ops.get_delta_page(
                 drive_id=drive.id,
                 page_url=page_url,
-                page_size=self.settings.batch_size,
+                page_size=DEFAULT_DRIVE_DELTA_PAGE_SIZE,
             )
         except OneDriveGraphError as error:
             if not error.is_permanent_refusal:
                 raise
-            if not self.settings.indexes_all_users:
-                yield _entity_failure(user, str(error), error)
-            else:
+            if self.settings.indexes_all_users:
                 logger.info(
                     "OneDrive: skipping inaccessible delta for %s (%s)",
                     user.user_principal_name,
                     error.code,
                 )
+            yield _entity_failure(user, str(error), error)
             self._finish_drive(checkpoint)
             return
         if not result.resynced and result.next_cursor == page_url:
@@ -449,10 +445,12 @@ class OneDriveConnector(
                 self._select_discovered_user(checkpoint)
             else:
                 yield from self._select_explicit_user(checkpoint)
-            return checkpoint
+            if checkpoint.current_user is None:
+                return checkpoint
         if checkpoint.current_drive is None:
             yield from self._open_current_drive(checkpoint)
-            return checkpoint
+            if checkpoint.current_drive is None:
+                return checkpoint
         yield from self._discover_delta_page(checkpoint, start, end)
         return checkpoint
 
@@ -495,6 +493,8 @@ class OneDriveConnector(
             batch: list[SlimDocument | HierarchyNode] = []
             for item in self._discover_from_checkpoint(0, 0, checkpoint):
                 if isinstance(item, ConnectorFailure):
+                    if item.exception is None:
+                        continue
                     raise RuntimeError(
                         f"OneDrive slim retrieval failed: {item.failure_message}"
                     ) from item.exception

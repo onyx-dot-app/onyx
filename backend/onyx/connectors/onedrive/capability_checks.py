@@ -1,4 +1,5 @@
-from collections.abc import Generator
+from collections.abc import Callable, Generator
+from typing import TypeVar
 
 from pydantic import ValidationError
 
@@ -28,17 +29,19 @@ from onyx.connectors.onedrive.models import (
     OneDriveConnectorConfig,
     OneDriveDrive,
     OneDriveUser,
+    OneDriveUserPage,
 )
 from onyx.connectors.onedrive.scope import normalize_configured_users
 from onyx.connectors.onedrive.source_operations import (
     GRAPH_API_VERSION,
-    USERS_PAGE_SIZE,
     OneDriveSourceOperations,
 )
 
 _DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/onedrive"
-_DELTA_PROBE_PAGE_SIZE = 1
-_CANDIDATE_PAGES = 100
+_PROBE_PAGE_SIZE = 1
+_CANDIDATE_PAGES = 20
+
+T = TypeVar("T")
 
 
 def _gateway(context: CapabilityCheckContext) -> OneDriveSourceOperations:
@@ -68,11 +71,13 @@ def _candidate_users(
     config = _config(context)
     configured = normalize_configured_users(config.users)
     if configured:
-        for identifier in configured:
+        for identifier in configured[:_CANDIDATE_PAGES]:
             try:
                 user = gateway.get_user(identifier=identifier)
             except OneDriveGraphError as error:
                 if not error.is_permanent_refusal:
+                    raise
+                if error.status == 403:
                     raise
                 continue
             if user is not None:
@@ -82,31 +87,50 @@ def _candidate_users(
     next_link: str | None = None
     for _ in range(_CANDIDATE_PAGES):
         page = gateway.list_users(
-            page_size=USERS_PAGE_SIZE,
+            page_size=_PROBE_PAGE_SIZE,
             next_link=next_link,
         )
-        yield from page.users
+        if not isinstance(page, OneDriveUserPage):
+            continue
+        if page.users:
+            yield page.users[0]
         next_link = page.next_link
         if next_link is None:
             return
-    raise ConnectorValidationError(
-        f"OneDrive user discovery exceeded {_CANDIDATE_PAGES} pages."
-    )
 
 
-def _candidate_drives(
+def _first_drive_that(
     context: CapabilityCheckContext,
-) -> Generator[OneDriveDrive, None, None]:
+    opens: Callable[[OneDriveDrive], T | None],
+    denied_message: str,
+    nothing_to_probe: str,
+) -> tuple[OneDriveDrive, T]:
     gateway = _gateway(context)
+    denied: OneDriveGraphError | None = None
     for user in _candidate_users(context):
         try:
             drive = gateway.get_default_drive(user_id=user.id)
         except OneDriveGraphError as error:
             if not error.is_permanent_refusal:
                 raise
+            if error.status == 403:
+                denied = error
             continue
-        if drive is not None:
-            yield drive
+        if drive is None:
+            continue
+        try:
+            opened = opens(drive)
+        except OneDriveGraphError as error:
+            if error.fails_the_attempt:
+                raise
+            if error.status == 403:
+                denied = error
+            continue
+        if opened is not None:
+            return drive, opened
+    if denied is not None:
+        raise_for_graph_error(denied, denied_message)
+    raise ConnectorValidationError(nothing_to_probe)
 
 
 class _TokenCheck(CapabilityCheck):
@@ -142,7 +166,7 @@ class _UsersCheck(CapabilityCheck):
 
     def run(self, context: CapabilityCheckContext) -> None:
         try:
-            _gateway(context).list_users(page_size=_DELTA_PROBE_PAGE_SIZE)
+            _gateway(context).list_users(page_size=_PROBE_PAGE_SIZE)
         except OneDriveGraphError as error:
             raise_for_graph_error(error, "The app cannot list tenant users.")
 
@@ -184,8 +208,12 @@ class _DriveCheck(CapabilityCheck):
 
     def run(self, context: CapabilityCheckContext) -> None:
         try:
-            if next(_candidate_drives(context), None) is None:
-                raise ConnectorValidationError("No readable OneDrive was found.")
+            _first_drive_that(
+                context,
+                lambda drive: drive,
+                "The app cannot read the tenant's first OneDrives.",
+                "No readable OneDrive was found among the first users.",
+            )
         except OneDriveGraphError as error:
             raise_for_graph_error(error, "The app cannot read this user's OneDrive.")
 
@@ -206,26 +234,23 @@ class _DeltaCheck(CapabilityCheck):
         gateway = _gateway(context)
         try:
             host = _config(context).graph_api_host.rstrip("/")
-            for drive in _candidate_drives(context):
-                try:
-                    gateway.get_delta_page(
-                        drive_id=drive.id,
-                        page_url=build_delta_start_url(
-                            f"{host}/{GRAPH_API_VERSION}",
-                            drive.id,
-                            page_size=_DELTA_PROBE_PAGE_SIZE,
-                            select_fields=DRIVE_DELTA_SELECT_FIELDS,
-                        ),
-                        page_size=_DELTA_PROBE_PAGE_SIZE,
-                    )
-                except OneDriveGraphError as error:
-                    if error.fails_the_attempt:
-                        raise
-                    continue
-                return
+            _first_drive_that(
+                context,
+                lambda drive: gateway.get_delta_page(
+                    drive_id=drive.id,
+                    page_url=build_delta_start_url(
+                        f"{host}/{GRAPH_API_VERSION}",
+                        drive.id,
+                        page_size=_PROBE_PAGE_SIZE,
+                        select_fields=DRIVE_DELTA_SELECT_FIELDS,
+                    ),
+                    page_size=_PROBE_PAGE_SIZE,
+                ),
+                "The app cannot read changes in the tenant's first OneDrives.",
+                "No readable OneDrive delta was found among the first users.",
+            )
         except OneDriveGraphError as error:
             raise_for_graph_error(error, "The app cannot read OneDrive changes.")
-        raise ConnectorValidationError("No readable OneDrive delta was found.")
 
 
 def build_onedrive_indexing_checks() -> list[CapabilityCheck]:
