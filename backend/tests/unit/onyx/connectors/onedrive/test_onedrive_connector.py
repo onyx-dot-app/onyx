@@ -456,8 +456,9 @@ def test_onedrive_slim_walk_is_complete_without_downloads() -> None:
 
     batches = list(connector.retrieve_all_slim_docs())
 
-    assert len(batches) == 2
-    slim_document = batches[1][0]
+    assert len(batches) == 1
+    assert isinstance(batches[0][0], HierarchyNode)
+    slim_document = batches[0][1]
     assert isinstance(slim_document, SlimDocument)
     assert slim_document.id == "raw-item-id"
     gateway.download_item.assert_not_called()
@@ -465,9 +466,13 @@ def test_onedrive_slim_walk_is_complete_without_downloads() -> None:
 
 def test_onedrive_slim_walk_skips_unselected_user_drives() -> None:
     connector, gateway = _connector()
-    gateway.list_users.return_value = OneDriveUserPage(
-        users=[_user("denied@example.com"), _user("readable@example.com")]
-    )
+    gateway.list_users.side_effect = [
+        OneDriveUserPage(
+            users=[_user("denied@example.com")],
+            next_link="next-users",
+        ),
+        OneDriveUserPage(users=[_user("readable@example.com")]),
+    ]
     gateway.get_default_drive.side_effect = [
         OneDriveGraphError(403, "accessDenied", "not selected"),
         _drive(),
@@ -478,6 +483,8 @@ def test_onedrive_slim_walk_skips_unselected_user_drives() -> None:
 
     assert len(batches) == 1
     assert isinstance(batches[0][0], HierarchyNode)
+    assert gateway.list_users.call_count == 2
+    gateway.list_users.assert_called_with(next_link="next-users")
 
 
 def test_onedrive_slim_walk_continues_after_unselected_delta() -> None:
@@ -493,7 +500,9 @@ def test_onedrive_slim_walk_continues_after_unselected_delta() -> None:
 
     batches = list(connector.retrieve_all_slim_docs())
 
-    assert len(batches) == 2
+    assert len(batches) == 1
+    assert isinstance(batches[0][0], HierarchyNode)
+    assert batches[0][0].display_name == "readable@example.com"
     assert gateway.get_delta_page.call_count == 2
 
 
