@@ -289,7 +289,7 @@ def test_onedrive_systemic_graph_errors_propagate(status: int) -> None:
         _run_step(connector, delta_checkpoint)
 
 
-def test_onedrive_checkpoint_deduplicates_pages_then_clears_drive_state() -> None:
+def test_onedrive_checkpoint_emits_later_occurrences_across_pages() -> None:
     connector, gateway = _connector()
     item = _file_item()
     folder = _folder_item()
@@ -312,18 +312,13 @@ def test_onedrive_checkpoint_deduplicates_pages_then_clears_drive_state() -> Non
     first_output, checkpoint = _run_step(connector, checkpoint)
 
     assert len(first_output) == 3
-    assert checkpoint.seen_document_ids == {"raw-item-id"}
-    assert checkpoint.seen_hierarchy_raw_ids == {
-        "drive-1:root",
-        "drive-1:folder-1",
-    }
+    checkpoint = connector.validate_checkpoint_json(checkpoint.model_dump_json())
 
     second_output, checkpoint = _run_step(connector, checkpoint)
 
-    assert second_output == []
-    assert checkpoint.seen_document_ids == set()
-    assert checkpoint.seen_hierarchy_raw_ids == set()
-    gateway.download_item.assert_called_once()
+    assert [type(item) for item in second_output] == [HierarchyNode, Document]
+    assert checkpoint.current_user is None
+    assert gateway.download_item.call_count == 2
 
 
 def test_onedrive_delta_denial_skips_discovered_drive_and_reports_explicit_user() -> (
