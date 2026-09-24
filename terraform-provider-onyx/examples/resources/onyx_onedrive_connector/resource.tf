@@ -19,8 +19,7 @@ resource "onyx_connector" "onedrive" {
   input_type = "poll"
 
   connector_specific_config = jsonencode({
-    all_users = false
-    users     = var.onedrive_users
+    users = var.onedrive_users
   })
 }
 
