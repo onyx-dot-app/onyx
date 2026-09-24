@@ -16,16 +16,20 @@ type PresenceState = "open" | "closed";
  * animation runs (reduced motion, a test DOM), so nothing can stick.
  */
 export default function usePresence(open: boolean, exitFallbackMs = 160) {
-  // True from the moment `open` drops until the exit animation ends.
+  // True from the moment `open` drops until the exit animation ends. It is
+  // derived during render, not in an effect: an effect would run one render
+  // after `open` dropped, and in that render the element would unmount and
+  // then remount fresh (scrolled to the top) to play its exit.
   const [exiting, setExiting] = useState(false);
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    // Closing starts the exit; re-opening mid-exit cancels it in place.
+    setExiting(!open);
+  }
 
   useEffect(() => {
-    if (open) {
-      // Re-opening mid-exit cancels the exit in place.
-      setExiting(false);
-      return;
-    }
-    setExiting(true);
+    if (open) return;
     const id = window.setTimeout(() => setExiting(false), exitFallbackMs);
     return () => window.clearTimeout(id);
   }, [open, exitFallbackMs]);
