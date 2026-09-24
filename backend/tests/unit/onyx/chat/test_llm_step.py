@@ -407,7 +407,7 @@ class TestXmlToolCallContentFilter:
             "  code",
         ]
         output = "".join(f.process(chunk) for chunk in chunks) + f.flush()
-        assert output == "Intro\n    code"
+        assert output == "Intro\n\n    code"
 
     def test_indentation_on_block_line_is_kept(self) -> None:
         f = _XmlToolCallContentFilter()
@@ -417,12 +417,12 @@ class TestXmlToolCallContentFilter:
         output += f.flush()
         assert output == "- item\n  - nested"
 
-    def test_block_at_start_drops_leading_whitespace(self) -> None:
+    def test_block_at_start_drops_spaces_and_keeps_line_breaks(self) -> None:
         f = _XmlToolCallContentFilter()
-        output = f.process("<function_calls><invoke></invoke></function_calls>\n\n")
-        output += f.process("Answer")
+        output = f.process("<function_calls><invoke></invoke></function_calls>  ")
+        output += f.process("\nAnswer")
         output += f.flush()
-        assert output == "Answer"
+        assert output == "\nAnswer"
 
     def test_block_at_end_keeps_preceding_text(self) -> None:
         f = _XmlToolCallContentFilter()
@@ -431,13 +431,13 @@ class TestXmlToolCallContentFilter:
         output += f.flush()
         assert output == "Answer. "
 
-    def test_newline_separated_block(self) -> None:
+    def test_newline_separated_block_keeps_line_breaks(self) -> None:
         f = _XmlToolCallContentFilter()
         output = f.process(
             "Line one.\n<function_calls><invoke></invoke></function_calls>\nLine two."
         )
         output += f.flush()
-        assert output == "Line one.\nLine two."
+        assert output == "Line one.\n\nLine two."
 
     def test_whitespace_kept_when_none_precedes_block(self) -> None:
         f = _XmlToolCallContentFilter()

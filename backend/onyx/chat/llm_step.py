@@ -88,7 +88,7 @@ _FUNCTION_CALLS_OPEN_RE = re.compile(
     r"<function_calls(?=[> \t\n\r]|\Z)", re.IGNORECASE | re.ASCII
 )
 _FUNCTION_CALLS_CLOSE_RE = re.compile(r"</function_calls>", re.IGNORECASE | re.ASCII)
-_HORIZONTAL_WHITESPACE = " \t\r\f\v"
+_SPACES = " \t"
 
 
 class _XmlToolCallContentFilter:
@@ -103,9 +103,9 @@ class _XmlToolCallContentFilter:
         self._inside_block = False
         # Empty until text is emitted.
         self._last_emitted_char = ""
-        # Set after a removed block so its trailing separator does not double
-        # up with whitespace already emitted before the block.
-        self._drop_separator = False
+        # Set after a removed block so spaces after it do not double up with
+        # spaces emitted before it. Line breaks are always kept.
+        self._drop_spaces = False
 
     def process(self, content: str) -> str:
         self._pending += content
@@ -117,14 +117,13 @@ class _XmlToolCallContentFilter:
                     break
                 self._pending = self._pending[close.end() :]
                 self._inside_block = False
-                self._drop_separator = (
-                    not self._last_emitted_char or self._last_emitted_char.isspace()
-                )
+                self._drop_spaces = self._last_emitted_char in ("", *_SPACES)
 
-            if self._drop_separator:
-                if not self._try_drop_separator():
+            if self._drop_spaces:
+                self._pending = self._pending.lstrip(_SPACES)
+                if not self._pending:
                     break
-                self._drop_separator = False
+                self._drop_spaces = False
 
             open_match = _FUNCTION_CALLS_OPEN_RE.search(self._pending)
             if open_match is not None:
@@ -149,29 +148,12 @@ class _XmlToolCallContentFilter:
 
         return "".join(output_parts)
 
-    def _try_drop_separator(self) -> bool:
-        """Drop the whitespace after a removed block that duplicates the
-        whitespace before it, keeping line breaks and indentation. Returns
-        False if more text is needed to decide."""
-        if not self._last_emitted_char:
-            self._pending = self._pending.lstrip()
-            return bool(self._pending)
-        end = len(self._pending) - len(self._pending.lstrip(_HORIZONTAL_WHITESPACE))
-        if end == len(self._pending):
-            return False
-        after_newline = self._last_emitted_char == "\n"
-        if self._pending[end] == "\n":
-            self._pending = self._pending[end + 1 if after_newline else end :]
-        elif not after_newline:
-            self._pending = self._pending[end:]
-        return True
-
     def flush(self) -> str:
-        # An incomplete block, or whitespace after a block, at stream end is dropped.
-        remaining = "" if self._inside_block or self._drop_separator else self._pending
+        # An incomplete block at stream end is dropped.
+        remaining = "" if self._inside_block else self._pending
         self._pending = ""
         self._inside_block = False
-        self._drop_separator = False
+        self._drop_spaces = False
         return remaining
 
 
