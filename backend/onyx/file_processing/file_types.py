@@ -61,6 +61,11 @@ class OnyxFileExtensions:
     SPREADSHEET_EXTENSIONS = {
         ".xlsx",
         ".xlsm",
+        # Legacy BIFF workbooks, read by xlrd. This set feeds DOCUMENT_EXTENSIONS and so
+        # ALL_ALLOWED_EXTENSIONS, which every connector tests before it builds a document —
+        # so without this entry a .xls is dropped with a warning and no document exists to
+        # fix later.
+        ".xls",
     }
     TABULAR_EXTENSIONS = {
         ".csv",

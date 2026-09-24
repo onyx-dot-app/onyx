@@ -15,7 +15,9 @@ from zipfile import BadZipFile
 
 import chardet
 import openpyxl
+import xlrd
 from openpyxl.worksheet._read_only import ReadOnlyWorksheet
+from xlrd.compdoc import CompDocError
 
 from onyx.configs.app_configs import (
     MAX_EMBEDDED_IMAGES_PER_FILE,
@@ -680,14 +682,46 @@ def _cell(value: Any) -> str:
     return "" if value is None else str(value)
 
 
-def stage_xlsx_sheets(
+def _stage_rows(
+    title: str,
+    rows: Iterator[tuple[Any, ...]],
+    stage: Callable[[IO[bytes], str], str],
+) -> StreamedSheet | None:
+    """One sheet's rows to a temp CSV, staged. None if the sheet held no content."""
+    with tempfile.TemporaryFile(mode="w+", encoding="utf-8", newline="") as tmp:
+        writer = csv.writer(tmp, lineterminator="\n")
+        for row in rows:
+            if _row_has_content(row):
+                writer.writerow([_cell(v) for v in row])
+        tmp.flush()
+        binary = cast(IO[bytes], tmp.buffer)
+        if binary.seek(0, io.SEEK_END) == 0:
+            return None
+        binary.seek(0)
+        return StreamedSheet(title, stage(binary, "text/csv"))
+
+
+def stage_spreadsheet_sheets(
     file: IO[bytes],
     stage: Callable[[IO[bytes], str], str],
     file_name: str = "",
 ) -> list[StreamedSheet]:
     """Stream each non-empty worksheet to a temp CSV row by row (never holding a
     full sheet in memory), then stage it via `stage` and reference it by
-    `csv_file_id`. Empty rows are dropped; columns are not trimmed."""
+    `csv_file_id`. Empty rows are dropped; columns are not trimmed.
+
+    Renamed from `stage_xlsx_sheets` because it now also serves `.xls`: openpyxl cannot
+    open a legacy BIFF workbook, so that format takes the xlrd path. The streaming
+    guarantee holds only for the openpyxl branch — see `_xls_sheet_rows` for why the
+    legacy format does not need one.
+    """
+    if get_file_ext(file_name) == ".xls":
+        staged = [
+            _stage_rows(title, iter(tuple(row) for row in rows), stage)
+            for title, rows in _xls_sheet_rows(file, file_name)
+        ]
+        return [sheet for sheet in staged if sheet is not None]
+
     sheets: list[StreamedSheet] = []
     workbook = _load_readonly_workbook(file, file_name)
     if workbook is None:
@@ -696,17 +730,11 @@ def stage_xlsx_sheets(
         for sheet in workbook.worksheets:
             ro_sheet = cast(ReadOnlyWorksheet, sheet)
             ro_sheet.reset_dimensions()
-            with tempfile.TemporaryFile(mode="w+", encoding="utf-8", newline="") as tmp:
-                writer = csv.writer(tmp, lineterminator="\n")
-                for row in ro_sheet.iter_rows(values_only=True):
-                    if _row_has_content(row):
-                        writer.writerow([_cell(v) for v in row])
-                tmp.flush()
-                binary = cast(IO[bytes], tmp.buffer)
-                if binary.seek(0, io.SEEK_END) == 0:
-                    continue
-                binary.seek(0)
-                sheets.append(StreamedSheet(ro_sheet.title, stage(binary, "text/csv")))
+            staged_sheet = _stage_rows(
+                ro_sheet.title, ro_sheet.iter_rows(values_only=True), stage
+            )
+            if staged_sheet is not None:
+                sheets.append(staged_sheet)
     finally:
         workbook.close()
     return sheets
@@ -716,6 +744,97 @@ def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
     sheets = xlsx_sheet_extraction(file, file_name)
     return TEXT_SECTION_SEPARATOR.join(
         csv_text for csv_text, _title in sheets if csv_text
+    )
+
+
+def _xls_sheet_rows(
+    file: IO[Any], file_name: str = ""
+) -> list[tuple[str, list[list[str]]]]:
+    """Every sheet of a legacy BIFF workbook as ``(title, rows)``.
+
+    openpyxl cannot read ``.xls`` -- it raises ``InvalidFileException`` -- and xlrd 2.x
+    dropped ``.xlsx`` and kept exactly this format, so the two libraries divide the work
+    cleanly. xlrd is already installed: ``pyproject.toml`` asks for ``markitdown[..., xls]``,
+    whose ``xls`` extra is xlrd, so this adds no package. See the PR description for whether
+    you would rather it were declared directly.
+
+    markitdown itself is the other candidate here and is deliberately not used: the .docx and
+    .pptx paths call it because they want markdown, whereas every spreadsheet path renders
+    through ``_sheet_to_csv`` so that ``TabularSection`` staging gets one CSV per sheet. Taking
+    the markitdown route for .xls alone would make a legacy workbook render unlike every other
+    spreadsheet and would not produce the per-sheet CSVs the tabular pipeline needs.
+
+    Unlike the ``.xlsx`` path there is no streaming variant: xlrd parses the whole workbook
+    up front and exposes no row iterator. That is acceptable because the format itself caps a
+    sheet at 65,536 rows by 256 columns, so the worst case is bounded by the file format
+    rather than by the caller.
+    """
+    file.seek(0)
+    try:
+        workbook = xlrd.open_workbook(file_contents=file.read())
+    except (xlrd.XLRDError, CompDocError) as e:
+        # Mirrors _load_readonly_workbook's BadZipFile branch: a file that is not this format
+        # (most often an .xlsx misnamed .xls) is a log line and an empty result, because one
+        # bad attachment must not fail the document it arrived in. Anything else propagates,
+        # exactly as it does on the .xlsx path -- an unknown failure is not silently a
+        # zero-content spreadsheet.
+        logger.warning("Failed to extract text from %s: %s", file_name or "xls file", e)
+        return []
+
+    sheets: list[tuple[str, list[list[str]]]] = []
+    try:
+        for sheet in workbook.sheets():
+            rows = [
+                [_xls_cell(cell, workbook.datemode) for cell in sheet.row(index)]
+                for index in range(sheet.nrows)
+            ]
+            sheets.append((sheet.name, rows))
+    finally:
+        workbook.release_resources()
+    return sheets
+
+
+def _xls_cell(cell: "xlrd.sheet.Cell", datemode: int) -> str:
+    """One BIFF cell as text.
+
+    xlrd hands back every number as a float and every date as a float too, distinguished
+    only by the cell type, so a date read naively indexes as ``45931.0``. Integers are
+    rendered without the trailing ``.0`` to match what the ``.xlsx`` path produces for the
+    same value.
+    """
+    if cell.ctype == xlrd.XL_CELL_DATE:
+        try:
+            return xlrd.xldate.xldate_as_datetime(cell.value, datemode).isoformat(" ")
+        except Exception:
+            return str(cell.value)
+    if cell.ctype == xlrd.XL_CELL_BOOLEAN:
+        return "TRUE" if cell.value else "FALSE"
+    if cell.ctype == xlrd.XL_CELL_EMPTY or cell.ctype == xlrd.XL_CELL_BLANK:
+        return ""
+    if cell.ctype == xlrd.XL_CELL_NUMBER:
+        number = float(cell.value)
+        return str(int(number)) if number.is_integer() else str(number)
+    return str(cell.value)
+
+
+def xls_sheet_extraction(file: IO[Any], file_name: str = "") -> list[tuple[str, str]]:
+    """``.xls`` equivalent of xlsx_sheet_extraction -- (csv_text, sheet title) per sheet.
+
+    Shares _sheet_to_csv with the ``.xlsx`` path so a legacy workbook and a modern one
+    holding the same values render identically, including the empty-row and empty-column
+    collapsing.
+    """
+    return [
+        (_sheet_to_csv(iter(tuple(row) for row in rows)).strip(), title)
+        for title, rows in _xls_sheet_rows(file, file_name)
+    ]
+
+
+def xls_to_text(file: IO[Any], file_name: str = "") -> str:
+    return TEXT_SECTION_SEPARATOR.join(
+        csv_text
+        for csv_text, _title in xls_sheet_extraction(file, file_name)
+        if csv_text
     )
 
 
@@ -822,6 +941,8 @@ def extract_file_text_locally(
         ".xlsx": lambda f: xlsx_to_text(f, file_name),
         # openpyxl reads macro-enabled workbooks like any other.
         ".xlsm": lambda f: xlsx_to_text(f, file_name),
+        # ...but not legacy BIFF, which is xlrd's remaining job.
+        ".xls": lambda f: xls_to_text(f, file_name),
         ".eml": eml_to_text,
         ".epub": epub_to_text,
         ".html": parse_html_page_basic,
@@ -967,6 +1088,13 @@ def _extract_text_and_images(
             )
             return ExtractionResult(
                 text_content=text_content, embedded_images=images, metadata={}
+            )
+
+        if extension == ".xls":
+            return ExtractionResult(
+                text_content=xls_to_text(file, file_name=file_name),
+                embedded_images=[],
+                metadata={},
             )
 
         if extension == ".xlsx":
