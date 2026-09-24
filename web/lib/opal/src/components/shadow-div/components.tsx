@@ -5,6 +5,13 @@ import { cn } from "@opal/utils";
 
 type ShadowDirection = "top-and-bottom" | "top-only" | "bottom-only";
 
+/**
+ * How the edges fade. `"shadow"` paints translucent gradients over the
+ * content; `"mask"` fades the content itself via mask-image, for surfaces
+ * a painted gradient could not match.
+ */
+type ShadowDivVariant = "shadow" | "mask";
+
 interface ShadowDivProps extends React.HTMLAttributes<HTMLDivElement> {
   /**
    * Height of the shadow gradients.
@@ -24,10 +31,10 @@ interface ShadowDivProps extends React.HTMLAttributes<HTMLDivElement> {
   shadowDirection?: ShadowDirection;
 
   /**
-   * Fade the content itself via mask-image instead of painting gradient
-   * overlays. Use over non-flat backgrounds the gradients can't match.
+   * How the edges fade.
+   * Defaults to `"shadow"`.
    */
-  mask?: boolean;
+  variant?: ShadowDivVariant;
 
   /**
    * Class for the outer wrapper (e.g. flex sizing within a parent column).
@@ -64,7 +71,7 @@ function ShadowDiv({
   shadowHeight = "0.5rem",
   scrollContainerRef,
   shadowDirection = "top-and-bottom",
-  mask = false,
+  variant = "shadow",
   containerClassName,
   className,
   children,
@@ -125,7 +132,9 @@ function ShadowDiv({
         ref={containerRef}
         className={cn("overflow-y-auto", className)}
         style={
-          mask ? { ...style, maskImage, WebkitMaskImage: maskImage } : style
+          variant === "mask"
+            ? { ...style, maskImage, WebkitMaskImage: maskImage }
+            : style
         }
         {...props}
       >
@@ -133,7 +142,7 @@ function ShadowDiv({
       </div>
 
       {/* Top scroll shadow indicator */}
-      {!mask && showTop && (
+      {variant === "shadow" && showTop && (
         <div
           className={cn(
             "absolute top-0 start-0 end-0 pointer-events-none transition-opacity duration-150",
@@ -147,7 +156,7 @@ function ShadowDiv({
       )}
 
       {/* Bottom scroll shadow indicator */}
-      {!mask && showBottom && (
+      {variant === "shadow" && showBottom && (
         <div
           className={cn(
             "absolute bottom-0 start-0 end-0 pointer-events-none transition-opacity duration-150",
@@ -163,4 +172,9 @@ function ShadowDiv({
   );
 }
 
-export { ShadowDiv, type ShadowDivProps, type ShadowDirection };
+export {
+  ShadowDiv,
+  type ShadowDivProps,
+  type ShadowDirection,
+  type ShadowDivVariant,
+};
