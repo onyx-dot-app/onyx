@@ -721,7 +721,7 @@ def run_deep_research_llm_loop(
                         # The tool calls here contain the placement information
                         research_agent_calls=research_agent_calls,
                         parent_tool_call_ids=[
-                            tool_call.tool_call_id for tool_call in tool_calls
+                            tool_call.tool_call_id for tool_call in research_agent_calls
                         ],
                         tools=allowed_tools,
                         emitter=emitter,
