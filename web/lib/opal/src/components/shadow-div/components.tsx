@@ -15,7 +15,7 @@ type ShadowDivVariant = "shadow" | "mask";
 interface ShadowDivProps extends React.HTMLAttributes<HTMLDivElement> {
   /**
    * Height of the shadow gradients.
-   * Defaults to 0.5rem (8px)
+   * Defaults to 1.5rem (24px)
    */
   shadowHeight?: string;
 
@@ -68,7 +68,7 @@ const SHADOW_COLOR = "var(--shadow-01)";
  * </ShadowDiv>
  */
 function ShadowDiv({
-  shadowHeight = "0.5rem",
+  shadowHeight = "1.5rem",
   scrollContainerRef,
   shadowDirection = "top-and-bottom",
   variant = "shadow",
