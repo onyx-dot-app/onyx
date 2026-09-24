@@ -4,19 +4,27 @@ from collections import deque
 from collections.abc import Generator, Sequence
 from datetime import datetime
 from typing import Any
+from urllib.parse import quote
 
 import pytest
 
 from onyx.connectors.microsoft_utils.drive_items import DriveItemData
 from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
-from onyx.connectors.models import Document, DocumentSource, TextSection
+from onyx.connectors.models import (
+    Document,
+    DocumentSource,
+    HierarchyNode,
+    TextSection,
+)
 from onyx.connectors.sharepoint import connector as sp_connector
 from onyx.connectors.sharepoint.connector import (
     SHARED_DOCUMENTS_MAP,
     SharepointConnector,
     SharepointConnectorCheckpoint,
     SiteDescriptor,
+    SiteDrive,
 )
+from onyx.db.enums import HierarchyNodeType
 
 
 class _FakeQuery:
@@ -28,11 +36,18 @@ class _FakeQuery:
 
 
 class _FakeDrive:
-    def __init__(self, name: str, drive_type: str | None = None) -> None:
+    def __init__(
+        self,
+        name: str,
+        drive_type: str | None = None,
+        url_name: str | None = None,
+    ) -> None:
         self.name = name
         self.drive_type = drive_type
         self.id = f"fake-drive-id-{name}"
-        self.web_url = f"https://example.sharepoint.com/sites/sample/{name}"
+        self.web_url = (
+            f"https://example.sharepoint.com/sites/sample/{quote(url_name or name)}"
+        )
 
 
 class _FakeDrivesCollection:
@@ -186,11 +201,12 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
         self: SharepointConnector,  # noqa: ARG001
         site_descriptor: SiteDescriptor,  # noqa: ARG001
         drive_name: str,
-    ) -> tuple[str, str | None]:
+    ) -> SiteDrive:
         assert drive_name == "Documents"
-        return (
-            "fake-drive-id",
-            "https://example.sharepoint.com/sites/sample/Documents",
+        return SiteDrive(
+            drive_id="fake-drive-id",
+            name=drive_name,
+            web_url="https://example.sharepoint.com/sites/sample/Documents",
         )
 
     def fake_fetch_one_delta_page(
@@ -286,7 +302,7 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
 _PERSONAL_SITE_URL = "https://example-my.sharepoint.com/personal/user_example_com"
 
 
-def _resolve_personal(drives: list[_FakeDrive]) -> tuple[str, str | None] | None:
+def _resolve_personal(drives: list[_FakeDrive]) -> SiteDrive | None:
     connector = _build_connector(drives)
     site_descriptor = SiteDescriptor(
         url=_PERSONAL_SITE_URL,
@@ -306,8 +322,7 @@ def test_resolve_drive_personal_picks_by_drive_type_not_position() -> None:
     result = _resolve_personal([extra_library, onedrive])
 
     assert result is not None
-    drive_id, _ = result
-    assert drive_id == onedrive.id
+    assert result.drive_id == onedrive.id
 
 
 def test_resolve_drive_personal_falls_back_to_name_when_type_missing() -> None:
@@ -317,8 +332,7 @@ def test_resolve_drive_personal_falls_back_to_name_when_type_missing() -> None:
     result = _resolve_personal([extra_library, onedrive])
 
     assert result is not None
-    drive_id, _ = result
-    assert drive_id == onedrive.id
+    assert result.drive_id == onedrive.id
 
 
 def test_resolve_drive_personal_prefers_type_over_name_collision() -> None:
@@ -332,8 +346,7 @@ def test_resolve_drive_personal_prefers_type_over_name_collision() -> None:
     result = _resolve_personal([extra_library, primary])
 
     assert result is not None
-    drive_id, _ = result
-    assert drive_id == primary.id
+    assert result.drive_id == primary.id
 
 
 def test_resolve_drive_personal_ambiguous_returns_none() -> None:
@@ -342,6 +355,110 @@ def test_resolve_drive_personal_ambiguous_returns_none() -> None:
     second = _FakeDrive("Second OneDrive", drive_type="personal")
 
     assert _resolve_personal([first, second]) is None
+
+
+# SharePoint strips "&" from the library URL, so "R&D Library" lives at "RD Library".
+_STRIPPED_URL_DRIVE = _FakeDrive("R&D Library", url_name="RD Library")
+_STRIPPED_URL_SITE = SiteDescriptor(
+    url="https://example.sharepoint.com/sites/sample",
+    drive_name="RD Library",
+    folder_path=None,
+)
+
+
+def test_resolve_drive_matches_library_url_and_returns_display_name() -> None:
+    connector = _build_connector([_FakeDrive("Documents"), _STRIPPED_URL_DRIVE])
+
+    result = connector._resolve_drive(_STRIPPED_URL_SITE, "RD Library")
+
+    assert result is not None
+    assert result.drive_id == _STRIPPED_URL_DRIVE.id
+    assert result.name == "R&D Library"
+
+
+def test_resolve_drive_prefers_display_name_over_library_url() -> None:
+    """A display-name match keeps the requested name, as before."""
+    renamed = _FakeDrive("Archive", url_name="Reports")
+    reports = _FakeDrive("Reports", url_name="Reports2")
+    connector = _build_connector([renamed, reports])
+
+    result = connector._resolve_drive(_STRIPPED_URL_SITE, "Reports")
+
+    assert result is not None
+    assert result.drive_id == reports.id
+    assert result.name == "Reports"
+
+
+def test_fetch_driveitems_matches_library_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connector = _build_connector([_FakeDrive("Documents"), _STRIPPED_URL_DRIVE])
+    monkeypatch.setattr(
+        sp_connector, "iter_drive_items_delta", _fake_iter_drive_items_delta
+    )
+
+    results = list(connector._fetch_driveitems(site_descriptor=_STRIPPED_URL_SITE))
+
+    assert [(name, url) for _, name, url in results] == [
+        ("R&D Library", _STRIPPED_URL_DRIVE.web_url)
+    ]
+
+
+def test_load_from_checkpoint_uses_display_name_for_library_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Drive nodes and documents carry the display name SharePoint list lookups need."""
+    connector = _build_connector([_FakeDrive("Documents"), _STRIPPED_URL_DRIVE])
+    connector.include_site_pages = False
+    captured_drive_names: list[str] = []
+
+    def fake_convert(
+        driveitem: DriveItemData, drive_name: str, *_: Any, **__: Any
+    ) -> Document:
+        captured_drive_names.append(drive_name)
+        return Document(
+            id=driveitem.id,
+            source=DocumentSource.SHAREPOINT,
+            semantic_identifier=driveitem.name,
+            metadata={},
+            sections=[TextSection(link="https://example.com", text="content")],
+        )
+
+    monkeypatch.setattr(
+        sp_connector,
+        "fetch_one_delta_page",
+        lambda *_, **__: ([_SAMPLE_ITEM], None),
+    )
+    monkeypatch.setattr(
+        sp_connector, "_convert_driveitem_to_document_with_permissions", fake_convert
+    )
+    monkeypatch.setattr(
+        SharepointConnector, "_get_graph_access_token", lambda _self: "fake-token"
+    )
+
+    checkpoint = SharepointConnectorCheckpoint(has_more=True)
+    checkpoint.cached_site_descriptors = deque()
+    checkpoint.current_site_descriptor = _STRIPPED_URL_SITE
+    checkpoint.cached_drive_names = deque(["RD Library"])
+    checkpoint.process_site_pages = False
+
+    yielded: list[Any] = []
+    generator = connector._load_from_checkpoint(
+        start=0, end=0, checkpoint=checkpoint, include_permissions=False
+    )
+    try:
+        while True:
+            yielded.append(next(generator))
+    except StopIteration:
+        pass
+
+    drive_nodes = [
+        item
+        for item in yielded
+        if isinstance(item, HierarchyNode) and item.node_type == HierarchyNodeType.DRIVE
+    ]
+    assert [node.display_name for node in drive_nodes] == ["R&D Library"]
+    assert captured_drive_names == ["R&D Library"]
 
 
 def test_get_drive_items_uses_delta_when_no_folder_path(
