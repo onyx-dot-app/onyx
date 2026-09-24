@@ -76,11 +76,11 @@ class vespa_fixture:
             acl_entries: set[str] = set(source.get("access_control_list") or [])
             if source.get("public"):
                 acl_entries.add("PUBLIC")
-            source["access_control_list"] = {entry: 1 for entry in acl_entries}
+            source["access_control_list"] = dict.fromkeys(acl_entries, 1)
 
-            source["document_sets"] = {
-                entry: 1 for entry in (source.get("document_sets") or [])
-            }
+            source["document_sets"] = dict.fromkeys(
+                source.get("document_sets") or [], 1
+            )
 
             if "image_file_id" in source:
                 source["image_file_name"] = source["image_file_id"]

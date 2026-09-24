@@ -46,16 +46,17 @@ function Shell({ children, onAddProvider, addGated }: ShellProps) {
         title={adminRouteTitle(route)}
         description={t("page.description")}
         divider
-        rightChildren={
+        actions={[
           <Button
+            key="primary"
             icon={SvgPlus}
             onClick={onAddProvider}
             disabled={addGated}
             tooltip={addGated ? t("addProvider.gatedTooltip") : undefined}
           >
             {t("addProvider.button.label")}
-          </Button>
-        }
+          </Button>,
+        ]}
       />
       <SettingsLayouts.Body>{children}</SettingsLayouts.Body>
     </SettingsLayouts.Root>

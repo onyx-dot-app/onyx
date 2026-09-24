@@ -600,3 +600,7 @@ class AllVersions(BaseModel):
     stable: ContainerVersions
     dev: ContainerVersions
     migration: ContainerVersions
+
+
+class UnstructuredApiKeyRequest(BaseModel):
+    unstructured_api_key: str = Field(min_length=1, pattern=r"\S")

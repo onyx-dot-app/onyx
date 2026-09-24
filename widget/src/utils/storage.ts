@@ -11,17 +11,24 @@ export interface StoredSession {
   sessionId: string;
   messages: ChatMessage[];
   timestamp: number;
+  // Who the transcript belongs to. See `deriveCredentialIdentity`.
+  identity: string;
 }
 
 /**
  * Save session to sessionStorage
  */
-export function saveSession(sessionId: string, messages: ChatMessage[]): void {
+export function saveSession(
+  sessionId: string,
+  messages: ChatMessage[],
+  identity: string
+): void {
   try {
     const session: StoredSession = {
       sessionId,
       messages,
       timestamp: Date.now(),
+      identity,
     };
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
   } catch (e) {
@@ -31,9 +38,11 @@ export function saveSession(sessionId: string, messages: ChatMessage[]): void {
 
 /**
  * Load session from sessionStorage
- * Returns null if session doesn't exist or has expired
+ * Returns null if the session is missing, has expired, or belongs to someone
+ * else. A stored session for another identity is discarded, so a shared tab
+ * never shows the previous person's messages.
  */
-export function loadSession(): StoredSession | null {
+export function loadSession(identity: string): StoredSession | null {
   try {
     const data = sessionStorage.getItem(SESSION_KEY);
     if (!data) return null;
@@ -42,6 +51,11 @@ export function loadSession(): StoredSession | null {
 
     // Check if session has expired
     if (Date.now() - session.timestamp > SESSION_TTL) {
+      clearSession();
+      return null;
+    }
+
+    if (session.identity !== identity) {
       clearSession();
       return null;
     }
@@ -65,23 +79,8 @@ export function clearSession(): void {
 }
 
 /**
- * Check if a session exists
+ * Check if a usable session exists for this identity
  */
-export function hasSession(): boolean {
-  try {
-    const data = sessionStorage.getItem(SESSION_KEY);
-    if (!data) return false;
-
-    const session: StoredSession = JSON.parse(data);
-
-    // Check if session has expired
-    if (Date.now() - session.timestamp > SESSION_TTL) {
-      clearSession();
-      return false;
-    }
-
-    return true;
-  } catch (e) {
-    return false;
-  }
+export function hasSession(identity: string): boolean {
+  return loadSession(identity) !== null;
 }

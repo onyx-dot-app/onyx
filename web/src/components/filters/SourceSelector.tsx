@@ -1,6 +1,6 @@
 import React, { JSX } from "react";
 import { DocumentSetSummary, Tag, ValidSources } from "@/lib/types";
-import { SourceMetadata } from "@/lib/search/interfaces";
+import { SourceMetadata } from "@/lib/search/types";
 import { FiBook, FiBookmark, FiMap, FiX } from "react-icons/fi";
 import { SearchDateRangeSelector } from "@/components/dateRangeSelectors/SearchDateRangeSelector";
 import { InputDateRangePickerValue } from "@opal/components";

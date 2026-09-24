@@ -1,6 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import { useEffect } from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
@@ -78,6 +79,7 @@ function BedrockModalInternals({
   isOnboarding,
 }: BedrockModalInternalsProps) {
   const t = useTranslations("admin.languageModels.modals");
+  const { appName } = useSettings();
   const formikProps = useFormikContext<BedrockModalValues>();
   const authMethod = formikProps.values.custom_config?.BEDROCK_AUTH_METHOD;
 
@@ -148,7 +150,9 @@ function BedrockModalInternals({
           <InputVertical
             withLabel={FIELD_BEDROCK_AUTH_METHOD}
             title={t("bedrock.authMethodField.title")}
-            subDescription={t("bedrock.authMethodField.description")}
+            subDescription={t("bedrock.authMethodField.description", {
+              appName,
+            })}
           >
             <InputSelectField name={FIELD_BEDROCK_AUTH_METHOD}>
               <InputSelect.Trigger />
@@ -209,7 +213,10 @@ function BedrockModalInternals({
 
       {authMethod === AUTH_METHOD_IAM && (
         <InputPadder>
-          <MessageCard variant="info" title={t("bedrock.iamNotice.title")} />
+          <MessageCard
+            variant="info"
+            title={t("bedrock.iamNotice.title", { appName })}
+          />
         </InputPadder>
       )}
 

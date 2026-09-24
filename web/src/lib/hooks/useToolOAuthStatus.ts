@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import useSWR from "swr";
+import { toast } from "@opal/layouts";
+import { useTranslations } from "next-intl";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
 import { initiateOAuthFlow } from "@/lib/oauth/api";
 import { OAuthTokenStatus, ToolSnapshot } from "@/lib/tools/types";
@@ -13,6 +15,7 @@ export interface ToolAuthStatus {
 }
 
 export function useToolOAuthStatus(agentId?: number) {
+  const t = useTranslations("common.oauthCallback");
   const {
     data: oauthTokenStatuses = [],
     isLoading: loading,
@@ -77,20 +80,22 @@ export function useToolOAuthStatus(agentId?: number) {
   const authenticateTool = useCallback(
     async (tool: ToolSnapshot): Promise<void> => {
       if (!tool.oauth_config_id) {
-        throw new Error("Tool does not have OAuth configuration");
+        toast.error(t("genericError.description"));
+        return;
       }
 
       try {
         await initiateOAuthFlow(
           tool.oauth_config_id,
-          window.location.pathname + window.location.search
+          window.location.pathname + window.location.search,
+          t("genericError.description")
         );
-      } catch (err) {
-        console.error("Error initiating OAuth flow:", err);
-        throw err;
+      } catch {
+        console.error("[useToolOAuthStatus] OAuth initiation failed");
+        toast.error(t("genericError.description"));
       }
     },
-    []
+    [t]
   );
 
   /**

@@ -21,8 +21,9 @@ one shard costs another shard nothing.
 import json
 import threading
 import urllib.parse
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Generic, TypeVar
 
 from sqlalchemy import event
 from sqlalchemy.engine import Engine, create_engine
@@ -265,6 +266,52 @@ def get_new_tenant_shard_name() -> str:
     return ONYX_DB_NEW_TENANT_SHARD
 
 
+EngineT = TypeVar("EngineT")
+
+
+class EngineCreationHooks(Generic[EngineT]):
+    """Callbacks invoked for each engine a lazy registry builds.
+
+    Shard engines are created on first tenant access, so a one-time sweep at
+    startup would miss them. Subscribing replays engines that already exist and
+    covers each engine built later. Delivery is at-least-once: a subscriber
+    racing a build can see an engine twice, so callbacks must be idempotent
+    per engine.
+    """
+
+    def __init__(self, snapshot: Callable[[], list[tuple[str, EngineT]]]) -> None:
+        self._callbacks: list[Callable[[str, EngineT], None]] = []
+        self._lock = threading.Lock()
+        self._snapshot = snapshot
+
+    def subscribe(self, callback: Callable[[str, EngineT], None]) -> None:
+        with self._lock:
+            self._callbacks.append(callback)
+        for shard_name, engine in self._snapshot():
+            callback(shard_name, engine)
+
+    def notify(self, shard_name: str, engine: EngineT) -> None:
+        with self._lock:
+            callbacks = list(self._callbacks)
+        for callback in callbacks:
+            try:
+                callback(shard_name, engine)
+            except Exception:
+                logger.exception("engine callback failed for shard %s", shard_name)
+
+
+def _snapshot_shard_engines() -> list[tuple[str, Engine]]:
+    # Under the registry lock: a consistent snapshot without relying on the
+    # GIL making dict iteration atomic.
+    with ShardRegistry._lock:
+        return list(ShardRegistry._engines.items())
+
+
+shard_engine_hooks: EngineCreationHooks[Engine] = EngineCreationHooks(
+    _snapshot_shard_engines
+)
+
+
 class ShardRegistry:
     """Lazily-created engines for non-default shards.
 
@@ -305,7 +352,8 @@ class ShardRegistry:
             engine = cls._build_engine(spec)
             cls._engines[shard_name] = engine
             logger.info("Created engine for shard %s", spec)
-            return engine
+        shard_engine_hooks.notify(shard_name, engine)
+        return engine
 
     @classmethod
     def _build_engine(cls, spec: ShardSpec) -> Engine:

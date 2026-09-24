@@ -28,6 +28,7 @@ import {
 } from "@/lib/languageModels/cache";
 import { deleteLlmProvider } from "@/lib/languageModels/svc";
 import { buildLlmOptions, groupLlmOptions } from "@/lib/languageModels/options";
+import { findProviderOwningModelConfig } from "@/lib/languageModels/utils";
 import { useSettings } from "@/lib/settings/hooks";
 import { updateAdminSettings } from "@/lib/settings/svc";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -366,7 +367,9 @@ export default function LanguageModelsPage() {
       {
         id: "addProvider",
         title: t("groups.addProvider.title"),
-        description: t("groups.addProvider.description"),
+        description: t("groups.addProvider.description", {
+          appName: settings.appName,
+        }),
         emphasis: true,
         providerNames: [
           LLMProviderName.OPENAI,
@@ -383,6 +386,7 @@ export default function LanguageModelsPage() {
           LLMProviderName.OPENROUTER,
           LLMProviderName.LITELLM_PROXY,
           LLMProviderName.PORTKEY,
+          LLMProviderName.VERCEL_AI_GATEWAY,
           LLMProviderName.NEBIUS_TOKENFACTORY,
           LLMProviderName.BIFROST,
         ],
@@ -398,7 +402,7 @@ export default function LanguageModelsPage() {
         includeCustom: true,
       },
     ],
-    [t]
+    [t, settings.appName]
   );
 
   if (!existingLlmProviders) {
@@ -467,17 +471,24 @@ export default function LanguageModelsPage() {
             <Section alignItems="stretch">
               <InputHorizontal
                 title={t("defaultModel.title")}
-                description={t("defaultModel.description")}
+                description={t("defaultModel.description", {
+                  appName: settings.appName,
+                })}
                 center
                 withLabel
               >
                 <ModelSelector
                   value={defaultModelConfigId}
                   onChange={(opt) => {
-                    const provider = existingLlmProviders?.find(
-                      (p) =>
-                        p.provider === opt.provider &&
-                        (p.name === opt.name || (!p.name && !opt.name))
+                    // Keyed on the model configuration id. Matching on provider
+                    // type plus display name picks the first of several
+                    // same-named providers — and nameless providers are the
+                    // common case, so `!p.name && !opt.name` matched any of
+                    // them. The backend accepts the wrong provider whenever it
+                    // also hosts a model of that name, so this failed silently.
+                    const provider = findProviderOwningModelConfig(
+                      existingLlmProviders,
+                      opt.modelConfigurationId
                     );
                     if (provider) {
                       void handleDefaultModelChange(

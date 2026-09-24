@@ -19,6 +19,7 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     FOLDER_3_URL,
     SHARED_DRIVE_1_FILE_IDS,
     SHARED_DRIVE_1_ID,
+    SHORTCUT_ANCESTOR_NODE_IDS,
     TEST_USER_1_EMAIL,
     TEST_USER_1_FILE_IDS,
     _clear_parents,
@@ -199,6 +200,7 @@ def test_my_drive_only(
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
         expected_nodes=get_expected_hierarchy_for_test_user_1_my_drive_only(),
+        ignorable_node_ids=set(SHORTCUT_ANCESTOR_NODE_IDS),
     )
 
 

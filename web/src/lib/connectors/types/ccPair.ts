@@ -1,0 +1,190 @@
+import type { UUID } from "crypto";
+import type { PermissionsOf } from "@/lib/permissions/resource-actions";
+import type {
+  AccessType,
+  DeletionAttemptSnapshot,
+  IndexAttemptSnapshot,
+  ValidStatuses,
+} from "@/lib/types";
+import type { Connector } from "./connector";
+import type { Credential } from "./credential";
+
+export enum ConnectorCredentialPairStatus {
+  SCHEDULED = "SCHEDULED",
+  INITIAL_INDEXING = "INITIAL_INDEXING",
+  ACTIVE = "ACTIVE",
+  PAUSED = "PAUSED",
+  DELETING = "DELETING",
+  INVALID = "INVALID",
+}
+
+export enum PermissionSyncStatusEnum {
+  CANCELED = "canceled",
+  COMPLETED_WITH_ERRORS = "completed_with_errors",
+  FAILED = "failed",
+  IN_PROGRESS = "in_progress",
+  NOT_STARTED = "not_started",
+  SUCCESS = "success",
+}
+
+export interface CCPairFullInfo {
+  id: number;
+  name: string;
+  status: ConnectorCredentialPairStatus;
+  in_repeated_error_state: boolean;
+  num_docs_indexed: number;
+  connector: Connector<any>;
+  credential: Credential<any>;
+  number_of_index_attempts: number;
+  last_index_attempt_status: ValidStatuses | null;
+  latest_deletion_attempt: DeletionAttemptSnapshot | null;
+  access_type: AccessType;
+  is_editable_for_current_user: boolean;
+  // per-action affordance map for the requesting user (mirrors the write-side gate)
+  permissions: PermissionsOf<"CCPair">;
+  deletion_failure_message: string | null;
+  indexing: boolean;
+  creator: UUID | null;
+  creator_email: string | null;
+
+  last_indexed: string | null;
+  last_pruned: string | null;
+  last_full_permission_sync: string | null;
+  overall_indexing_speed: number | null;
+  latest_checkpoint_description: string | null;
+
+  // permission sync attempt status
+  last_permission_sync_attempt_status: PermissionSyncStatusEnum | null;
+  permission_syncing: boolean;
+  last_permission_sync_attempt_finished: string | null;
+  last_permission_sync_attempt_error_message: string | null;
+
+  // True if the connector implements `Resolver.reindex` (targeted reindex).
+  // False -> Resolve All falls back to a full connector reindex.
+  supports_targeted_reindex: boolean;
+}
+
+export interface PaginatedIndexAttempts {
+  index_attempts: IndexAttemptSnapshot[];
+  page: number;
+  total_pages: number;
+}
+
+/**
+ * One row of the document-permission-sync attempt history. Mirrors
+ * `DocPermissionSyncAttemptSnapshot` in
+ * `backend/onyx/server/documents/models.py`.
+ *
+ * Note: timestamps are pre-serialized to ISO strings on the backend
+ * (matching `IndexAttemptSnapshot.time_started`/`time_updated`), so the
+ * frontend never has to handle `Date` objects directly here.
+ */
+export interface DocPermissionSyncAttemptSnapshot {
+  id: number;
+  status: PermissionSyncStatusEnum;
+  error_message: string | null;
+  full_exception_trace: string | null;
+  total_docs_synced: number;
+  docs_with_permission_errors: number;
+  time_created: string;
+  time_started: string | null;
+  time_finished: string | null;
+}
+
+/**
+ * One row of the external-group-sync attempt history. Mirrors
+ * `ExternalGroupSyncAttemptSnapshot` in
+ * `backend/onyx/server/documents/models.py`. The progress fields differ
+ * from the doc-sync shape because group sync tracks user/group/membership
+ * counts rather than document-level counts.
+ */
+export interface ExternalGroupSyncAttemptSnapshot {
+  id: number;
+  status: PermissionSyncStatusEnum;
+  error_message: string | null;
+  full_exception_trace: string | null;
+  total_users_processed: number;
+  total_groups_processed: number;
+  total_group_memberships_synced: number;
+  time_created: string;
+  time_started: string | null;
+  time_finished: string | null;
+}
+
+/**
+ * Response wrapper used by both per-cc-pair sync-attempt endpoints
+ * (`/permission-sync-attempts` and `/external-group-sync-attempts`).
+ * Mirrors `CCPairSyncAttemptsResponse` in
+ * `backend/onyx/server/documents/models.py`.
+ *
+ * `applicable === false` means the cc-pair's source does not run this
+ * kind of sync job at all (e.g. Salesforce has no doc sync; Slack has
+ * no group sync) and `items` will always be `[]`. The frontend MUST
+ * use this flag to render the explanatory "this connector does not use
+ * a separate ... syncing job" message rather than the generic empty
+ * state — the two cases are different and `items.length === 0` alone
+ * does NOT distinguish them.
+ */
+export interface CCPairSyncAttemptsResponse<T> {
+  applicable: boolean;
+  items: T[];
+  total_items: number;
+}
+
+export interface IndexAttemptError {
+  id: number;
+  connector_credential_pair_id: number;
+
+  document_id: string | null;
+  document_link: string | null;
+
+  entity_id: string | null;
+  failed_time_range_start: string | null;
+  failed_time_range_end: string | null;
+
+  failure_message: string;
+  is_resolved: boolean;
+
+  time_created: string;
+
+  index_attempt_id: number;
+
+  error_type: string | null;
+}
+
+export interface PaginatedIndexAttemptErrors {
+  items: IndexAttemptError[];
+  total_items: number;
+}
+
+/** Request body for `POST /manage/admin/indexing/targeted-reindex`. */
+export interface TargetedReindexRequest {
+  error_ids?: number[];
+  targets?: { cc_pair_id: number; document_id: string }[];
+}
+
+/** Response from `POST /manage/admin/indexing/targeted-reindex`. */
+export interface TargetedReindexResponse {
+  targeted_reindex_job_id: number;
+  queued_count: number;
+  skipped_count: number;
+}
+
+/** Job status payload from `GET /manage/admin/indexing/targeted-reindex/{job_id}`. */
+export interface TargetedReindexJobStatus {
+  id: number;
+  status:
+    | "not_started"
+    | "in_progress"
+    | "success"
+    | "failed"
+    | "completed_with_errors"
+    | "canceled";
+  requested_at: string;
+  completed_at: string | null;
+  target_count: number;
+  resolved_count: number;
+  still_failing_count: number;
+  skipped_count: number;
+  resolved_summary: { id: number; document_id: string }[];
+}

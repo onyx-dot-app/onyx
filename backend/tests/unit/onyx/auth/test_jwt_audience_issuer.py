@@ -31,7 +31,9 @@ def _mint(claims: dict[str, Any]) -> str:
 @pytest.fixture
 def signed_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        jwt_module, "get_public_key", lambda _token, _url, _pinned, _params: _PUBLIC_PEM
+        jwt_module,
+        "get_public_key",
+        lambda _token, _url, _pinned, _params, _force: _PUBLIC_PEM,
     )
 
 
@@ -162,7 +164,9 @@ async def test_claim_rejection_does_not_refetch_keys(
 ) -> None:
     calls: list[int] = []
 
-    def _counting_get(_token: str, _url: str, _pinned: bool, _params: object) -> str:
+    def _counting_get(
+        _token: str, _url: str, _pinned: bool, _params: object, _force: bool
+    ) -> str:
         calls.append(1)
         return _PUBLIC_PEM
 
@@ -222,7 +226,6 @@ def test_db_origin_fetch_uses_hardened_get(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(
         jwt_module.requests, "get", lambda _url, **_kw: calls.append("raw") or _Resp()
     )
-    jwt_module._fetch_public_key_payload.cache_clear()
     jwt_module._fetch_public_key_payload(
         "https://db-origin/keys", False, False, True, False
     )

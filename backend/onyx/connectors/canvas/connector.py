@@ -139,9 +139,7 @@ def _parse_canvas_dt(timestamp_str: str) -> datetime:
     Canvas returns timestamps with a trailing 'Z' instead of '+00:00',
     so we normalise before parsing.
     """
-    return datetime.fromisoformat(timestamp_str.replace("Z", "+00:00")).astimezone(
-        timezone.utc
-    )
+    return datetime.fromisoformat(timestamp_str).astimezone(timezone.utc)
 
 
 def _unix_to_canvas_time(epoch: float) -> str:

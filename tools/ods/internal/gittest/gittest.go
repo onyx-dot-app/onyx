@@ -22,6 +22,14 @@ func Git(t *testing.T, dir string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
+// IsolateConfig hides the global and system git config for the rest of the
+// test, so only each repository's own config applies.
+func IsolateConfig(t *testing.T) {
+	t.Helper()
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+}
+
 // Commit creates a file and commits it in dir, returning the commit SHA.
 func Commit(t *testing.T, dir, filename string) string {
 	t.Helper()
@@ -59,6 +67,7 @@ func RejectPushes(t *testing.T, dir string) {
 // write FETCH_HEAD here and never create origin/release/vX.Y).
 func InitOriginAndWork(t *testing.T) (origin, work string) {
 	t.Helper()
+	IsolateConfig(t)
 
 	origin = t.TempDir()
 	Git(t, origin, "init", "--bare", "-b", "main")
@@ -68,6 +77,7 @@ func InitOriginAndWork(t *testing.T) (origin, work string) {
 	Git(t, work, "config", "user.email", "test@test.com")
 	Git(t, work, "config", "user.name", "Test")
 	Git(t, work, "config", "commit.gpgsign", "false")
+	Git(t, work, "config", "tag.gpgSign", "false")
 	Git(t, work, "remote", "add", "origin", origin)
 	Git(t, work, "config", "remote.origin.fetch", "+refs/heads/main:refs/remotes/origin/main")
 
