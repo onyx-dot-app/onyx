@@ -37,6 +37,16 @@ Organization description: {company_description}
 """
 
 # This is added to the system prompt prior to the tools section and is applied only if search tools have been run
+# Added to the system prompt alongside the citation guidance, so it applies only
+# to turns that ran a search. Complements ANSWER_COMPLETENESS_REMINDER: that one
+# asks for every part of the question and the exact values; this one covers how
+# the answer is laid out and which passage it is drawn from.
+ANSWER_COVERAGE_GUIDANCE = """
+
+When the answer has several components, lay them out as a list rather than compressing them into one sentence. Include the secondary elements the question asks for, not only its main point. Check that the passage you rely on matches the full context of the question - a near-miss document will not contain the details it asks for.
+"""
+
+
 REQUIRE_CITATION_GUIDANCE = """
 
 CRITICAL: If referencing knowledge from searches, cite relevant statements INLINE using the format [1], [2], [3], etc. to reference the "document" field. \
