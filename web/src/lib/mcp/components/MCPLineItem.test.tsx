@@ -1,10 +1,10 @@
 import { render, screen, setupUser } from "@tests/setup/test-utils";
+import { ToolSnapshot } from "@/lib/tools/types";
 import {
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
-  ToolSnapshot,
-} from "@/lib/tools/types";
-import MCPLineItem, { MCPServer } from "@/lib/tools/components/MCPLineItem";
+} from "@/lib/mcp/types";
+import MCPLineItem, { MCPServer } from "@/lib/mcp/components/MCPLineItem";
 
 const oauthServer: MCPServer = {
   id: 1,

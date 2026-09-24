@@ -125,7 +125,7 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
         }}
       >
         <ShadowDiv
-          shadowHeight="0.75rem"
+          shadowHeight={3}
           className={cn(
             "opal-select-dropdown-scroll",
             !dropdownMaxHeight && "max-h-60"

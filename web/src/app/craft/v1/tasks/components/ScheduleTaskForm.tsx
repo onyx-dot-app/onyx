@@ -24,7 +24,7 @@ import {
 import EntryPickerPopover from "@/sections/input/EntryPickerPopover";
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
-import { useCraftMcpServers } from "@/lib/tools/hooks";
+import { useCraftMcpServers } from "@/lib/mcp/hooks";
 import {
   detectSlashTrigger,
   pickerEntryConnectionPath,

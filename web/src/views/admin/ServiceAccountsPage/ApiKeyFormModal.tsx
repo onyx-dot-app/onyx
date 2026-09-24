@@ -211,7 +211,7 @@ export default function ApiKeyFormModal({
                             </LineItem>
                           ) : (
                             <ShadowDiv
-                              shadowHeight="0.75rem"
+                              shadowHeight={3}
                               className={cn(
                                 "flex flex-col gap-1 max-h-[15rem] rounded-08"
                               )}
@@ -243,7 +243,7 @@ export default function ApiKeyFormModal({
                         className={cn(
                           "max-h-[11rem] flex flex-col gap-1 rounded-08"
                         )}
-                        shadowHeight="0.75rem"
+                        shadowHeight={3}
                       >
                         {joinedGroups.length === 0 ? (
                           <LineItem

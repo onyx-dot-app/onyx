@@ -3,7 +3,7 @@
 import { useTranslations } from "next-intl";
 import { Tag, Text } from "@opal/components";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
-import { useCraftMcpServers } from "@/lib/tools/hooks";
+import { useCraftMcpServers } from "@/lib/mcp/hooks";
 import { getActionIcon } from "@/lib/tools/utils";
 import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
 

@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_token_manager import ensure_offline_access_auth_params
 from onyx.cache.interface import CacheLockAcquisitionError
-from onyx.cache.locks import cache_shared_lock
+from onyx.cache.locks import async_cache_shared_lock, cache_shared_lock
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import MCPOAuthProviderMode
 from onyx.db.mcp import (
@@ -718,7 +718,7 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
             await self._initialize()
             if not self.context.is_token_valid() and self.context.can_refresh_token():
                 try:
-                    with cache_shared_lock(
+                    async with async_cache_shared_lock(
                         _refresh_lock_name(connection_config_id),
                         max_time_lock_held_s=_REFRESH_LOCK_LEASE_S,
                         wait_for_lock_s=_REFRESH_LOCK_WAIT_S,

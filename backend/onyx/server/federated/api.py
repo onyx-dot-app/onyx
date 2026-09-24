@@ -435,12 +435,12 @@ def handle_oauth_callback_generic(
     )
     oauth_result = connector_instance.callback(callback_data, get_oauth_callback_uri())
 
-    # Convert OAuthResult to OAuthCallbackResult for API response
-    oauth_result_dict = oauth_result.model_dump()
-    oauth_callback_result = OAuthCallbackResult(**oauth_result_dict)
-
-    # Add source information to the response
-    oauth_callback_result.source = federated_connector.source
+    oauth_callback_result = OAuthCallbackResult(
+        expires_at=oauth_result.expires_at,
+        token_type=oauth_result.token_type,
+        scope=oauth_result.scope,
+        source=federated_connector.source,
+    )
 
     # Store OAuth token in database if we have an access token
     if oauth_result.access_token:

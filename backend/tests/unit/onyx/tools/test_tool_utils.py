@@ -13,6 +13,7 @@ from onyx.tools.utils import explicit_tool_calling_supported
             "claude-haiku-4-5-20251001",
             True,
         ),
+        # Retired/absent from the catalog → no capability data → False.
         (
             LlmProviderNames.ANTHROPIC,
             "claude-3-sonnet-20240229",
