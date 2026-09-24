@@ -32,6 +32,7 @@ COMPACTION_TRIGGER_RATIO = 0.85
 RECENT_CONTEXT_RATIO = 0.2
 SUMMARY_OUTPUT_LIMIT = 2048
 MAX_SUMMARY_BATCHES = 32
+SUMMARY_TIMEOUT_SECONDS = 180
 MESSAGE_OVERHEAD_TOKENS = 8
 IMAGE_TOKEN_ESTIMATE = 2048
 
@@ -267,7 +268,15 @@ def compact_history(
                     reasoning_effort=ReasoningEffort.OFF,
                 ),
             ),
-            execution.model_copy(update={"flow": LLMFlow.CHAT_HISTORY_SUMMARIZATION}),
+            execution.model_copy(
+                update={
+                    "flow": LLMFlow.CHAT_HISTORY_SUMMARIZATION,
+                    "total_timeout": min(
+                        execution.total_timeout or SUMMARY_TIMEOUT_SECONDS,
+                        SUMMARY_TIMEOUT_SECONDS,
+                    ),
+                }
+            ),
         )
         if not response.text.strip() or response.stop_reason in {"error", "aborted"}:
             raise ContextLimitError("The model did not produce a usable summary")

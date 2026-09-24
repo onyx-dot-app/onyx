@@ -240,6 +240,7 @@ class ChatAgent(FeatureRestoration):
                 if self.file_metadata
                 else None,
                 llm_info=self.llm.info,
+                available_tool_names=selected_names,
             ),
         )
 

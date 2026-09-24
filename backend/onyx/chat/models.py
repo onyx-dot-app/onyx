@@ -399,7 +399,6 @@ class ChatTurnSetup(BaseModel):
     skip_clarification: bool
     cache: CacheBackend
     # Execution params forwarded to per-model tool construction
-    bypass_acl: bool
     slack_context: SlackContext | None
     custom_tool_additional_headers: dict[str, str] | None
     mcp_headers: dict[str, str] | None

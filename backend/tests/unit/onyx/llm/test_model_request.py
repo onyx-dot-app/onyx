@@ -110,7 +110,7 @@ def test_invoke_preserves_options_and_returns_canonical_content() -> None:
     options = provider.calls[0]
     assert options["structured_response_format"] == {"type": "json_object"}
     assert options["tool_choice"] == request.options.tool_choice
-    assert options["timeout_override"] == 12
+    assert options["total_timeout_s"] == 18.5
     assert options["max_tokens"] == 42
     assert [message.content for message in options["prompt"]] == [
         "instructions",

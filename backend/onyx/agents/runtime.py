@@ -91,6 +91,7 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
+from onyx.llm.token_budget import resolve_token_budget
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_with_context
 
@@ -1562,7 +1563,7 @@ class _Execution:
         budget = context_budget(self.llm)
         size = request_tokens(request)
         if not force and size <= budget.trigger:
-            return request
+            return self._limit_output(request)
         try:
             checkpoint = self.work.blocking(
                 lambda: compact_history(self.llm, source, previous, execution),
@@ -1574,7 +1575,7 @@ class _Execution:
                     "Proactive compaction failed while request still fits",
                     exc_info=True,
                 )
-                return request
+                return self._limit_output(request)
             raise
         request = self.work.blocking(
             lambda: prepared.generation_request(working_messages(source, checkpoint)),
@@ -1587,6 +1588,18 @@ class _Execution:
         with self.state.lock:
             signal.check()
             self.state.record.checkpoint = checkpoint
+        return self._limit_output(request)
+
+    def _limit_output(self, request: GenerationRequest) -> GenerationRequest:
+        allowance = resolve_token_budget(self.llm.info).output_allowance(
+            request_tokens(request)
+        )
+        if allowance is not None:
+            request.options.max_tokens = (
+                min(request.options.max_tokens, allowance)
+                if request.options.max_tokens is not None
+                else allowance
+            )
         return request
 
     def _finalize_tool_result(

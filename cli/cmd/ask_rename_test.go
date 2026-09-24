@@ -51,8 +51,8 @@ func streamLine(objType string, extra map[string]any) string {
 		obj[k] = v
 	}
 	line, _ := json.Marshal(map[string]any{
-		"placement": map[string]any{"turn_index": 1},
-		"obj":       obj,
+		"identity": map[string]any{"response_id": 1, "message_id": "answer", "part_id": "text"},
+		"obj":      obj,
 	})
 	return string(line)
 }
@@ -90,8 +90,8 @@ func runAsk(t *testing.T, args ...string) (*lockedBuffer, *bytes.Buffer, *rename
 	rec := &renameRecord{
 		renameStatus: http.StatusOK,
 		streamPackets: []string{
-			streamLine("message_delta", map[string]any{"content": "hello "}),
-			streamLine("message_delta", map[string]any{"content": "world"}),
+			streamLine("item_update", map[string]any{"item": map[string]any{"kind": "text", "purpose": "answer", "text": "hello ", "status": "running"}}),
+			streamLine("item_delta", map[string]any{"delta": map[string]any{"kind": "text", "text": "world"}}),
 			streamLine("stop", nil),
 		},
 	}
@@ -159,7 +159,7 @@ func TestAsk_RenameFailureWarnsAndKeepsExitZero(t *testing.T) {
 	errOut := &bytes.Buffer{}
 	rec := &renameRecord{
 		renameStatus:  http.StatusInternalServerError,
-		streamPackets: []string{streamLine("message_delta", map[string]any{"content": "hi"}), streamLine("stop", nil)},
+		streamPackets: []string{streamLine("item_update", map[string]any{"item": map[string]any{"kind": "text", "purpose": "answer", "text": "hi", "status": "complete"}}), streamLine("stop", nil)},
 	}
 	newAskServer(t, rec, out)
 	ios := &iostreams.IOStreams{In: &bytes.Buffer{}, Out: out, ErrOut: errOut, IsStdinTTY: true, IsStdoutTTY: true}

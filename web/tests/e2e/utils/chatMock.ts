@@ -6,7 +6,7 @@ import type {
   PacketIdentity,
 } from "@/app/app/services/streamingModels";
 import { StopReason } from "@/app/app/services/streamingModels";
-import type { OnyxDocument } from "@/lib/search/interfaces";
+import type { OnyxDocument } from "@/lib/search/types";
 
 let turnCounter = 0;
 

@@ -12,7 +12,7 @@ from onyx.llm.litellm_models import (
     StreamingChoice,
     UserMessage,
 )
-from onyx.llm.multi_llm import LitellmTransport
+from onyx.llm.multi_llm import LitellmTransport, LLMRateLimitError, LLMTimeoutError
 
 
 def _make_fake_llm() -> MagicMock:
@@ -87,7 +87,7 @@ def test_stream_does_not_retry_after_first_chunk() -> None:
         patch("onyx.llm.multi_llm.logger") as mock_logger,
     ):
         # Bind the unbound method to a fake self to isolate retry behavior.
-        with pytest.raises(LiteLLMTimeout):
+        with pytest.raises(LLMTimeoutError) as raised:
             list(LitellmTransport.stream(fake_llm, prompt=_make_prompt()))
 
     assert isinstance(raised.value.__cause__, LiteLLMTimeout)
@@ -117,11 +117,11 @@ def test_stream_maps_a_rate_limit_wrapped_mid_stream() -> None:
     with (
         patch("onyx.llm.multi_llm.is_true_openai_model", return_value=False),
         patch(
-            "onyx.llm.model_response.from_litellm_model_response_stream",
+            "onyx.llm.litellm_conversion.from_litellm_model_response_stream",
             return_value=translated_chunk,
         ),
     ):
         with pytest.raises(LLMRateLimitError) as raised:
-            list(LitellmLLM.stream(fake_llm, prompt=_make_prompt()))
+            list(LitellmTransport.stream(fake_llm, prompt=_make_prompt()))
 
     assert raised.value.__cause__ is rate_limit

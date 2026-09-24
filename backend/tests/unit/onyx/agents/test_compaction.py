@@ -16,6 +16,7 @@ from onyx.llm.models import (
     AssistantMessage,
     GenerationDoneEvent,
     GenerationEvent,
+    GenerationOptions,
     GenerationRequest,
     Message,
     SystemMessage,
@@ -25,6 +26,7 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
+from onyx.llm.token_budget import TokenBudget
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.traces import TraceContentMode
 
@@ -236,3 +238,42 @@ def test_checkpoint_from_another_branch_is_removed_from_context() -> None:
     assert run.wait_for_idle(2)
     assert run.snapshot().checkpoint is None
     assert agent.context.checkpoint is None
+
+
+@pytest.mark.parametrize("max_tokens", [None, 200])
+def test_output_budget_is_recalculated_after_compaction(
+    monkeypatch: pytest.MonkeyPatch, max_tokens: int | None
+) -> None:
+    budget = TokenBudget(
+        input_tokens=1080,
+        max_output_tokens=4096,
+        context_tokens=4300,
+        safety_tokens=120,
+    )
+    monkeypatch.setattr("onyx.agents.runtime.resolve_token_budget", lambda _: budget)
+    model = ContextModel(reject_first=True)
+    agent = Agent(
+        model,
+        context=AgentContext(
+            messages=[
+                UserMessage(content="Old question"),
+                AssistantMessage(content=[TextContent(text="Old evidence " * 100)]),
+                UserMessage(content=TASK),
+            ]
+        ),
+        options=GenerationOptions(max_tokens=max_tokens),
+    )
+    agent.execute(max_steps=1).result()
+    assert len(model.generations) == 2
+    assert model.summaries
+    for request in model.generations:
+        expected = budget.output_allowance(request_tokens(request))
+        assert expected is not None
+        assert request.options.max_tokens == (
+            min(max_tokens, expected) if max_tokens else expected
+        )
+    if max_tokens is None:
+        before = model.generations[0].options.max_tokens
+        after = model.generations[1].options.max_tokens
+        assert before is not None and after is not None
+        assert after > before

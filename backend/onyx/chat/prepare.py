@@ -141,12 +141,11 @@ def _build_model_display_name(override: LLMOverride | None, llm: LLM) -> str:
 
 
 def _load_session(
-    request: SendMessageRequest, user: User, db_session: Session, *, bypass_acl: bool
+    request: SendMessageRequest, user: User, db_session: Session
 ) -> ChatSession:
     filters = request.internal_search_filters
     if (
-        not bypass_acl
-        and not user.is_anonymous
+        not user.is_anonymous
         and filters is not None
         and filters.document_set is not None
     ):
@@ -328,9 +327,8 @@ def _prepare_chat_data(
     db_session: Session,
     llm_overrides: list[LLMOverride] | None,
     litellm_additional_headers: dict[str, str] | None,
-    bypass_acl: bool,
 ) -> _ChatPreparation:
-    chat_session = _load_session(request, user, db_session, bypass_acl=bypass_acl)
+    chat_session = _load_session(request, user, db_session)
     persona = chat_session.persona
     selected_models = _select_models(
         request,
@@ -525,7 +523,6 @@ def prepare_chat_turn(
     litellm_additional_headers: dict[str, str] | None = None,
     custom_tool_additional_headers: dict[str, str] | None = None,
     mcp_headers: dict[str, str] | None = None,
-    bypass_acl: bool = False,
     slack_context: SlackContext | None = None,
     additional_context: str | None = None,
 ) -> ChatTurnSetup:
@@ -537,7 +534,6 @@ def prepare_chat_turn(
             session,
             llm_overrides,
             litellm_additional_headers,
-            bypass_acl,
         )
     token_counter = get_llm_token_counter(prepared.selected_models[0][0])
     extracted_files = extract_context_files(
@@ -642,7 +638,6 @@ def prepare_chat_turn(
         user_memory_context=prepared.user_memory_context,
         skip_clarification=prepared.skip_clarification,
         cache=get_cache_backend(),
-        bypass_acl=bypass_acl,
         slack_context=slack_context,
         custom_tool_additional_headers=custom_tool_additional_headers,
         mcp_headers=mcp_headers,
@@ -689,7 +684,6 @@ def create_chat_agent(
                 user_selected_filters=setup.new_msg_req.internal_search_filters,
                 project_id_filter=setup.search_params.project_id_filter,
                 persona_id_filter=setup.search_params.persona_id_filter,
-                bypass_acl=setup.bypass_acl,
                 slack_context=setup.slack_context,
                 enable_slack_search=_should_enable_slack_search(
                     setup.persona_id, setup.new_msg_req.internal_search_filters

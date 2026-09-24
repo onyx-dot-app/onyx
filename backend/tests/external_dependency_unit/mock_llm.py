@@ -306,11 +306,10 @@ class MockLLM(LitellmTransport, MockLLMController):
         tools: list[dict[str, JsonValue]] | None = None,
         tool_choice: ToolChoice | None = None,
         structured_response_format: dict[str, JsonValue] | None = None,
-        timeout_override: int | None = None,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
-        total_timeout_override: float | None = None,
+        total_timeout_s: float = 60,
         operation: ProviderOperation | None = None,
     ) -> ModelResponse:
         raise NotImplementedError("We only care about streaming atm")
@@ -321,7 +320,7 @@ class MockLLM(LitellmTransport, MockLLMController):
         tools: list[dict[str, JsonValue]] | None = None,  # noqa: ARG002
         tool_choice: ToolChoice | None = None,  # noqa: ARG002
         structured_response_format: dict[str, JsonValue] | None = None,  # noqa: ARG002
-        timeout_override: int | None = None,  # noqa: ARG002
+        stall_timeout_s: int = 60,  # noqa: ARG002
         max_tokens: int | None = None,  # noqa: ARG002
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,  # noqa: ARG002
         user_identity: LLMUserIdentity | None = None,  # noqa: ARG002

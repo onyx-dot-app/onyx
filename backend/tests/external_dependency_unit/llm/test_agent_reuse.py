@@ -36,7 +36,6 @@ def test_child_reuse_preserves_context_with_a_fresh_budget(db_session: Session) 
     llm = llm_from_provider(
         model_name="gpt-5-mini",
         llm_provider=LLMProviderView.from_model(provider),
-        timeout=60,
     )
     child = Agent(
         llm,

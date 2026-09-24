@@ -144,7 +144,7 @@ def collect_credential_values(
     return credential_values
 
 
-def test_llm(llm: LLM) -> str | None:
+def test_llm(llm: LLM, total_timeout_s: float = LLM_PROBE_TIMEOUT_S) -> str | None:
     """Probe a model and return either `None` (success) or a sanitized error.
 
     The returned message is intended to be safe to surface to admin callers:
@@ -164,7 +164,9 @@ def test_llm(llm: LLM) -> str | None:
                     messages=[UserMessage(content="Do not respond")],
                     options=GenerationOptions(max_tokens=50),
                 ),
-                context=GenerationContext(flow=LLMFlow.MODEL_VALIDATION),
+                context=GenerationContext(
+                    flow=LLMFlow.MODEL_VALIDATION, total_timeout=total_timeout_s
+                ),
             )
             return None
         except Exception as e:

@@ -23,6 +23,80 @@ _XML_PARAMETER_RE = re.compile(
 )
 
 
+_FUNCTION_CALLS_OPEN_MARKER = "<function_calls"
+_FUNCTION_CALLS_OPEN_RE = re.compile(
+    r"<function_calls(?=[> \t\n\r]|\Z)", re.IGNORECASE | re.ASCII
+)
+_FUNCTION_CALLS_CLOSE_RE = re.compile(r"</function_calls>", re.IGNORECASE | re.ASCII)
+_SPACES = " \t"
+
+
+class XmlToolCallContentFilter:
+    """Streaming filter that strips XML-style tool call payload blocks from text.
+
+    Text that could be the start of a split "<function_calls" marker is held
+    back until the next chunk (or flush) decides it.
+    """
+
+    def __init__(self) -> None:
+        self._pending = ""
+        self._inside_block = False
+        # Empty until text is emitted.
+        self._last_emitted_char = ""
+        # Set after a removed block so spaces after it do not double up with
+        # spaces emitted before it. Line breaks are always kept.
+        self._drop_spaces = False
+
+    def process(self, content: str) -> str:
+        self._pending += content
+        output_parts: list[str] = []
+        while True:
+            if self._inside_block:
+                close = _FUNCTION_CALLS_CLOSE_RE.search(self._pending)
+                if close is None:
+                    break
+                self._pending = self._pending[close.end() :]
+                self._inside_block = False
+                self._drop_spaces = self._last_emitted_char in ("", *_SPACES)
+
+            if self._drop_spaces:
+                self._pending = self._pending.lstrip(_SPACES)
+                if not self._pending:
+                    break
+                self._drop_spaces = False
+
+            open_match = _FUNCTION_CALLS_OPEN_RE.search(self._pending)
+            if open_match is not None:
+                cut = open_match.start()
+            else:
+                # A possible marker prefix can only start at the last "<".
+                cut = self._pending.rfind("<")
+                if cut == -1 or not _FUNCTION_CALLS_OPEN_MARKER.startswith(
+                    self._pending[cut:].lower()
+                ):
+                    cut = len(self._pending)
+
+            if cut > 0:
+                output_parts.append(self._pending[:cut])
+                self._last_emitted_char = self._pending[cut - 1]
+
+            if open_match is None:
+                self._pending = self._pending[cut:]
+                break
+            self._pending = self._pending[open_match.end() :]
+            self._inside_block = True
+
+        return "".join(output_parts)
+
+    def flush(self) -> str:
+        # An incomplete block at stream end is dropped.
+        remaining = "" if self._inside_block else self._pending
+        self._pending = ""
+        self._inside_block = False
+        self._drop_spaces = False
+        return remaining
+
+
 def _looks_like_xml_tool_call_payload(text: str | None) -> bool:
     """Detect XML-style marshaled tool calls emitted as plain text.
 

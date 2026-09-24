@@ -45,7 +45,7 @@ from onyx.server.query_and_chat.streaming_models import (
 )
 from onyx.server.utils import get_json_line
 from onyx.utils.logger import setup_logger
-from onyx.utils.timing import log_function_time
+from onyx.utils.timing import log_function_time, log_generator_function_time
 from shared_configs.contextvars import (
     CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR,
     CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR,
@@ -85,7 +85,6 @@ def _stream_chat_turn(
             litellm_additional_headers=litellm_additional_headers,
             custom_tool_additional_headers=custom_tool_additional_headers,
             mcp_headers=mcp_headers,
-            bypass_acl=bypass_acl,
             slack_context=slack_context,
             additional_context=additional_context,
         )
@@ -170,6 +169,7 @@ def handle_stream_message_objects(
     )
 
 
+@log_generator_function_time()
 def handle_multi_model_stream(
     new_msg_req: SendMessageRequest,
     user: User,

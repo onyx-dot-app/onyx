@@ -53,7 +53,6 @@ import {
   ToolCallMetadata,
   UserKnowledgeFilePacket,
 } from "@/app/app/interfaces";
-import { createChatSession } from "@/app/app/services/lib";
 import {
   getFinalLLM,
   modelSupportsImageInput,

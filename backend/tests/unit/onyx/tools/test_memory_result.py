@@ -55,7 +55,7 @@ def test_memory_outcome_is_final_before_serialization(
             user_memory_context=UserMemoryContext(
                 user_id=None if outcome == "missing_user" else uuid4(),
                 user_info=UserInfo(name=None, email=None, role=None),
-                memories=tuple([]),
+                memories=(),
             )
         ),
     )

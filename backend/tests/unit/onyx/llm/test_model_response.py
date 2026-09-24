@@ -12,6 +12,8 @@ from onyx.llm.litellm_conversion import (
     MessageAccumulator,
     from_litellm_model_response,
     from_litellm_model_response_stream,
+    normalized_stream,
+    recover_tool_calls,
 )
 from onyx.llm.litellm_models import (
     ChatCompletionDeltaToolCall,
@@ -25,9 +27,11 @@ from onyx.llm.litellm_models import (
 from onyx.llm.litellm_models import ChatCompletionMessageToolCall as WireToolCall
 from onyx.llm.litellm_models import Message as ResponseMessage
 from onyx.llm.models import (
+    AssistantMessage,
     GenerationDoneEvent,
     GenerationOptions,
     GenerationRequest,
+    TextContent,
     ThinkingBlock,
     ToolCallEndEvent,
     ToolChoiceOptions,
@@ -530,3 +534,42 @@ def test_shared_client_classifies_only_provider_failures(
         assert caught.value.__cause__ is error
     else:
         assert caught.value is error
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("prefix", ["Before ", ""])
+def test_xml_tool_recovery_preserves_visible_prose(
+    streaming: bool, prefix: str
+) -> None:
+    fragments = [
+        prefix,
+        '<function_calls><invoke name="search">',
+        '<parameter name="queries" string="false">["Onyx"]</parameter>',
+        "</invoke></function_calls>",
+        "  ",
+        "\nAfter",
+    ]
+    request = GenerationRequest(
+        tools=[ToolDefinition(name="search", description="Search", parameters={})],
+    )
+    if streaming:
+        source = iter(
+            ModelResponseStream(
+                id="response",
+                created="1",
+                choice=StreamingChoice(delta=Delta(content=fragment)),
+            )
+            for fragment in fragments
+        )
+        accumulator = MessageAccumulator(request.tools)
+        for chunk in normalized_stream(source, request):
+            accumulator.add(chunk)
+        message = accumulator.finish()
+    else:
+        message = recover_tool_calls(
+            AssistantMessage(content=[TextContent(text="".join(fragments))]), request
+        )
+    assert message.text == prefix + "\nAfter"
+    assert len(message.tool_calls) == 1
+    assert message.tool_calls[0].name == "search"
+    assert message.tool_calls[0].arguments == {"queries": ["Onyx"]}

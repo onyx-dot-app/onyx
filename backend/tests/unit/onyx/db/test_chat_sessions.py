@@ -12,8 +12,9 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.db.chat import get_chat_sessions_by_user
-from onyx.db.models import ChatSession
+from onyx.db.chat import create_chat_session_from_request, get_chat_sessions_by_user
+from onyx.db.models import ChatSession, User
+from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 
 
 def _make_session(
@@ -220,3 +221,20 @@ class TestGetChatSessionsByUser:
 
         assert result == []
         assert db_session.execute.call_count == 1
+
+
+def test_anonymous_chat_creation_checks_persona_access(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    access = MagicMock(return_value=False)
+    monkeypatch.setattr("onyx.db.chat.user_can_access_persona", access)
+    user = MagicMock(spec=User)
+    user.is_anonymous = True
+    db_session = MagicMock(spec=Session)
+    request = ChatSessionCreationRequest(persona_id=42)
+    with pytest.raises(ValueError, match="access to persona"):
+        create_chat_session_from_request(request, user, db_session)
+    access.assert_called_once_with(
+        db_session=db_session, persona_id=42, user=user, get_editable=False
+    )
+    db_session.add.assert_not_called()

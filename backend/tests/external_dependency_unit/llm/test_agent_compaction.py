@@ -27,7 +27,6 @@ def test_compacted_tool_history_preserves_answer_and_source(
             model_provider="openai",
             model_name="gpt-5-mini",
             max_input_tokens=6000,
-            timeout=60,
         )
     )
     history: list[Message] = [

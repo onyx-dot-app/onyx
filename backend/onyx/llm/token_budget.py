@@ -1,10 +1,10 @@
-from dataclasses import dataclass
+from pydantic import BaseModel, ConfigDict
 
 from onyx.configs.model_configs import (
     GEN_AI_INPUT_TOKEN_SAFETY_MARGIN,
     GEN_AI_NUM_RESERVED_OUTPUT_TOKENS,
 )
-from onyx.llm.interfaces import LLM
+from onyx.llm.interfaces import LLMInfo
 from onyx.llm.model_capabilities import (
     find_model_obj,
     get_model_map,
@@ -12,8 +12,9 @@ from onyx.llm.model_capabilities import (
 )
 
 
-@dataclass(frozen=True)
-class ChatTokenBudget:
+class TokenBudget(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     input_tokens: int
     max_output_tokens: int | None
     context_tokens: int | None
@@ -42,8 +43,7 @@ def _positive_int(value: object) -> int | None:
     return None
 
 
-def resolve_chat_token_budget(llm: LLM) -> ChatTokenBudget:
-    config = llm.config
+def resolve_token_budget(config: LLMInfo) -> TokenBudget:
     raw_input_tokens = max(0, config.max_input_tokens)
     input_tokens = max(
         0, int(raw_input_tokens * (1 - GEN_AI_INPUT_TOKEN_SAFETY_MARGIN))
@@ -55,11 +55,16 @@ def resolve_chat_token_budget(llm: LLM) -> ChatTokenBudget:
         model_input = _positive_int(model_obj.get("max_input_tokens"))
         model_output = _positive_int(model_obj.get("max_output_tokens"))
         if model_input is not None and model_output is not None:
-            return ChatTokenBudget(
+            return TokenBudget(
                 input_tokens=input_tokens,
                 max_output_tokens=model_output,
                 context_tokens=_positive_int(model_obj.get("max_context_tokens"))
                 or model_input,
                 safety_tokens=safety_tokens,
             )
-    return ChatTokenBudget(input_tokens, None, None, safety_tokens)
+    return TokenBudget(
+        input_tokens=input_tokens,
+        max_output_tokens=None,
+        context_tokens=None,
+        safety_tokens=safety_tokens,
+    )

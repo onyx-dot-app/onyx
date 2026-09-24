@@ -12,10 +12,11 @@ from litellm.types.utils import ChatCompletionDeltaToolCall, Delta
 from litellm.types.utils import Function as LiteLLMFunction
 from pydantic import JsonValue
 
+import onyx.llm.litellm_models
+import onyx.llm.models
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
 from onyx.llm.cancellation import CancellationSignal, cancellation_scope
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.exceptions import LLMTimeoutError
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.litellm_models import (
     AssistantMessage,
@@ -26,12 +27,16 @@ from onyx.llm.litellm_models import (
     ToolMessage,
     UserMessage,
 )
-from onyx.llm.litellm_models import ToolFunctionCall as FunctionCall
+from onyx.llm.litellm_models import (
+    ToolFunctionCall as FunctionCall,
+)
 from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.llm.models import NamedToolChoice, ReasoningEffort, ToolChoiceOptions, Usage
 from onyx.llm.multi_llm import (
     LitellmTransport,
-    _consume_stream_with_timeout,
+    LLMRateLimitError,
+    LLMTimeoutError,
+    _consume_stream_until_deadline,
     temporary_env_and_lock,
 )
 
@@ -131,7 +136,7 @@ def _accumulate_stream_to_assistant_message(
         ]
 
     return AssistantMessage(
-        content=accumulated_content if accumulated_content else None,
+        content=accumulated_content or None,
         tool_calls=tool_calls,
     )
 
@@ -605,6 +610,127 @@ def test_claude_adaptive_thinking_uses_output_config(
         assert "budget_tokens" not in kwargs["thinking"]
 
 
+def test_claude_adaptive_thinking_sends_output_config_after_tool_call() -> None:
+    # No signed blocks to replay costs us `thinking`, not the effort.
+    llm = LitellmTransport(
+        api_key="test_key",
+        model_provider=LlmProviderNames.LITELLM_PROXY,
+        model_name="claude-sonnet-5",
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.LITELLM_PROXY,
+            model_name="claude-sonnet-5",
+        ),
+    )
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
+    ):
+        mock_completion.return_value = []
+
+        list(llm.stream(_tool_cycle_prompt(), reasoning_effort=ReasoningEffort.LOW))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert "thinking" not in kwargs
+        assert kwargs["output_config"] == {"effort": "low"}
+
+
+@pytest.mark.parametrize(
+    "model_name, expected_thinking",
+    [
+        ("claude-sonnet-5", {"type": "disabled"}),
+        ("claude-opus-5", {"type": "disabled"}),
+        ("claude-opus-4-7", {"type": "disabled"}),
+        # Pre-adaptive Claude only thinks when the param asks for it.
+        ("claude-3-7-sonnet", None),
+    ],
+)
+def test_reasoning_off_disables_adaptive_thinking(
+    model_name: str, expected_thinking: dict[str, str] | None
+) -> None:
+    # The Claude 5 line thinks unless told not to, so off has to be sent.
+    # Older adaptive models take the same param, pre-adaptive ones take none.
+    kwargs = _anthropic_completion_kwargs(model_name, ReasoningEffort.OFF)
+    assert kwargs.get("thinking") == expected_thinking
+    # Opus 5 rejects disabled thinking paired with an effort above high.
+    assert "output_config" not in kwargs
+
+
+@pytest.mark.parametrize("model_name", ["claude-fable-5", "claude-mythos-5-1"])
+def test_reasoning_off_floors_always_thinking_models_at_low(model_name: str) -> None:
+    # These reject disabled thinking, so off lands on the least they accept
+    # instead of silence, which the API would fill with its high default.
+    kwargs = _anthropic_completion_kwargs(model_name, ReasoningEffort.OFF)
+    assert kwargs["thinking"] == {"type": "adaptive"}
+    assert kwargs["output_config"] == {"effort": "low"}
+
+
+def test_reasoning_off_follows_deployment_alias_over_model_name() -> None:
+    # The alias is the model that answers, and Opus accepts disabled thinking.
+    kwargs = _anthropic_completion_kwargs(
+        "claude-fable-5", ReasoningEffort.OFF, deployment_name="claude-opus-5"
+    )
+    assert kwargs["thinking"] == {"type": "disabled"}
+    assert "output_config" not in kwargs
+
+
+def _anthropic_completion_kwargs(
+    model_name: str,
+    reasoning_effort: ReasoningEffort,
+    deployment_name: str | None = None,
+) -> Mapping[str, Any]:
+    llm = LitellmTransport(
+        api_key="test_key",
+        model_provider=LlmProviderNames.ANTHROPIC,
+        model_name=model_name,
+        deployment_name=deployment_name,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.ANTHROPIC,
+            model_name=model_name,
+        ),
+    )
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=reasoning_effort))
+        return mock_completion.call_args.kwargs
+
+
+@pytest.mark.parametrize(
+    "model_provider, model_name, expected_effort",
+    [
+        (LlmProviderNames.VERTEX_AI, "gemini-3.8-flash", "low"),
+        (LlmProviderNames.VERTEX_AI, "gemini-3.7-flash", "low"),
+        (LlmProviderNames.OPENROUTER, "google/gemini-3.8-flash", "low"),
+        (LlmProviderNames.VERTEX_AI, "gemini-3.5-flash", None),
+        (LlmProviderNames.VERTEX_AI, "gemini-3-flash-preview", None),
+        (LlmProviderNames.VERTEX_AI, "gemini-3.1-pro-preview", None),
+    ],
+)
+def test_reasoning_off_for_gemini_uses_lowest_accepted_level(
+    model_provider: str, model_name: str, expected_effort: str | None
+) -> None:
+    llm = LitellmTransport(
+        api_key="test_key",
+        model_provider=model_provider,
+        model_name=model_name,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=model_provider,
+            model_name=model_name,
+        ),
+    )
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
+    ):
+        mock_completion.return_value = []
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.OFF))
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs.get("reasoning_effort") == expected_effort
+        assert "reasoning" not in kwargs
+
+
 def test_keeps_temperature_for_other_models(
     default_multi_llm: LitellmTransport,
 ) -> None:
@@ -836,7 +962,7 @@ def test_legacy_claude_thinking_budget_fits_inside_max_tokens(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr("onyx.llm.multi_llm.GEN_AI_NUM_RESERVED_OUTPUT_TOKENS", 1024)
-    llm = LitellmLLM(
+    llm = LitellmTransport(
         api_key="test_key",
         model_provider=LlmProviderNames.VERTEX_AI,
         model_name="claude-sonnet-4-5",
@@ -894,7 +1020,7 @@ def test_openai_chat_omits_reasoning_params() -> None:
                 id="chatcmpl-123",
                 choices=[
                     litellm.Choices(
-                        delta=_create_delta(content="Hello"),
+                        delta=_create_delta(role="assistant", content="Hello"),
                         finish_reason="stop",
                         index=0,
                     )
@@ -1134,7 +1260,7 @@ def test_user_identity_metadata_enabled(default_multi_llm: LitellmTransport) -> 
                 id="chatcmpl-123",
                 choices=[
                     litellm.Choices(
-                        delta=_create_delta(content="Hello"),
+                        delta=_create_delta(role="assistant", content="Hello"),
                         finish_reason="stop",
                         index=0,
                     )
@@ -1167,7 +1293,7 @@ def test_user_identity_user_id_truncated_to_64_chars(
                 id="chatcmpl-123",
                 choices=[
                     litellm.Choices(
-                        delta=_create_delta(content="Hello"),
+                        delta=_create_delta(role="assistant", content="Hello"),
                         finish_reason="stop",
                         index=0,
                     )
@@ -1200,7 +1326,7 @@ def test_user_identity_metadata_disabled_omits_identity(
                 id="chatcmpl-123",
                 choices=[
                     litellm.Choices(
-                        delta=_create_delta(content="Hello"),
+                        delta=_create_delta(role="assistant", content="Hello"),
                         finish_reason="stop",
                         index=0,
                     )
@@ -1245,7 +1371,7 @@ def test_existing_metadata_pass_through_when_identity_disabled() -> None:
                 id="chatcmpl-123",
                 choices=[
                     litellm.Choices(
-                        delta=_create_delta(content="Hello"),
+                        delta=_create_delta(role="assistant", content="Hello"),
                         finish_reason="stop",
                         index=0,
                     )
@@ -1278,7 +1404,7 @@ def test_openai_model_invoke_uses_httphandler_client(
                 id="chatcmpl-123",
                 choices=[
                     litellm.Choices(
-                        delta=_create_delta(content="Hello"),
+                        delta=_create_delta(role="assistant", content="Hello"),
                         finish_reason="stop",
                         index=0,
                     )
@@ -1331,7 +1457,7 @@ def test_anthropic_model_passes_isolated_client() -> None:
                 id="chatcmpl-123",
                 choices=[
                     litellm.Choices(
-                        delta=_create_delta(content="Hello"),
+                        delta=_create_delta(role="assistant", content="Hello"),
                         finish_reason="stop",
                         index=0,
                     )
@@ -1371,7 +1497,7 @@ def test_bedrock_model_passes_isolated_client(model_provider: str) -> None:
                 id="chatcmpl-123",
                 choices=[
                     litellm.Choices(
-                        delta=_create_delta(content="Hello"),
+                        delta=_create_delta(role="assistant", content="Hello"),
                         finish_reason="stop",
                         index=0,
                     )
@@ -1412,7 +1538,7 @@ def test_azure_openai_model_uses_httphandler_client() -> None:
                 id="chatcmpl-123",
                 choices=[
                     litellm.Choices(
-                        delta=_create_delta(content="Hello"),
+                        delta=_create_delta(role="assistant", content="Hello"),
                         finish_reason="stop",
                         index=0,
                     )
@@ -1459,8 +1585,384 @@ def test_openai_only_in_deployment_name_gets_isolated_client() -> None:
         assert isinstance(kwargs["client"], HTTPHandler)
 
 
+def test_temporary_env_cleanup(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Assign some environment variables
+    EXPECTED_ENV_VARS = {
+        "TEST_ENV_VAR": "test_value",
+        "ANOTHER_ONE": "1",
+        "THIRD_ONE": "2",
+    }
+
+    CUSTOM_CONFIG = {
+        "TEST_ENV_VAR": "fdsfsdf",
+        "ANOTHER_ONE": "3",
+        "THIS_IS_RANDOM": "123213",
+    }
+
+    for env_var, value in EXPECTED_ENV_VARS.items():
+        monkeypatch.setenv(env_var, value)
+
+    model_provider = LlmProviderNames.OPENAI
+    model_name = "gpt-3.5-turbo"
+
+    llm = LitellmTransport(
+        api_key="test_key",
+        model_provider=model_provider,
+        model_name=model_name,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=model_provider,
+            model_name=model_name,
+        ),
+        model_kwargs={"metadata": {"foo": "bar"}},
+        custom_config=CUSTOM_CONFIG,
+    )
+
+    # When custom_config is set, env injection forces stream=True and
+    # reassembles via stream_chunk_builder, so the mock must return stream chunks.
+    mock_stream_chunks = [
+        litellm.ModelResponse(
+            id="chatcmpl-123",
+            choices=[
+                litellm.Choices(
+                    delta=_create_delta(role="assistant", content="Hello"),
+                    finish_reason="stop",
+                    index=0,
+                )
+            ],
+            model="gpt-3.5-turbo",
+        ),
+    ]
+
+    def on_litellm_completion(
+        **kwargs: dict[str, Any],  # noqa: ARG001
+    ) -> list[litellm.ModelResponse]:
+        # Validate that the environment variables are those in custom config
+        for env_var, value in CUSTOM_CONFIG.items():
+            assert env_var in os.environ
+            assert os.environ[env_var] == value
+
+        return mock_stream_chunks
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.utils.SEND_USER_METADATA_TO_LLM_PROVIDER", False),
+    ):
+        mock_completion.side_effect = on_litellm_completion
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        identity = LLMUserIdentity(user_id="user_123", session_id="session_abc")
+
+        llm.invoke(messages, user_identity=identity)
+
+        mock_completion.assert_called_once()
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["stream"] is True
+        assert "user" not in kwargs
+        assert kwargs["metadata"]["foo"] == "bar"
+
+        # Check that the environment variables are back to the original values
+        for env_var, value in EXPECTED_ENV_VARS.items():
+            assert env_var in os.environ
+            assert os.environ[env_var] == value
+
+        # Check that temporary env var from CUSTOM_CONFIG is no longer set
+        assert "THIS_IS_RANDOM" not in os.environ
+
+
+def test_temporary_env_cleanup_on_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify env vars are restored even when an exception occurs during LLM invocation."""
+    # Assign some environment variables
+    EXPECTED_ENV_VARS = {
+        "TEST_ENV_VAR": "test_value",
+        "ANOTHER_ONE": "1",
+        "THIRD_ONE": "2",
+    }
+
+    CUSTOM_CONFIG = {
+        "TEST_ENV_VAR": "fdsfsdf",
+        "ANOTHER_ONE": "3",
+        "THIS_IS_RANDOM": "123213",
+    }
+
+    for env_var, value in EXPECTED_ENV_VARS.items():
+        monkeypatch.setenv(env_var, value)
+
+    model_provider = LlmProviderNames.OPENAI
+    model_name = "gpt-3.5-turbo"
+
+    llm = LitellmTransport(
+        api_key="test_key",
+        model_provider=model_provider,
+        model_name=model_name,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=model_provider,
+            model_name=model_name,
+        ),
+        model_kwargs={"metadata": {"foo": "bar"}},
+        custom_config=CUSTOM_CONFIG,
+    )
+
+    def on_litellm_completion_raises(
+        **kwargs: dict[str, Any],  # noqa: ARG001
+    ) -> None:  # noqa: ARG001
+        # Validate that the environment variables are those in custom config
+        for env_var, value in CUSTOM_CONFIG.items():
+            assert env_var in os.environ
+            assert os.environ[env_var] == value
+
+        # Simulate an error during LLM call
+        raise RuntimeError("Simulated LLM API failure")
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.utils.SEND_USER_METADATA_TO_LLM_PROVIDER", False),
+    ):
+        mock_completion.side_effect = on_litellm_completion_raises
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        identity = LLMUserIdentity(user_id="user_123", session_id="session_abc")
+
+        with pytest.raises(RuntimeError, match="Simulated LLM API failure"):
+            llm.invoke(messages, user_identity=identity)
+
+        mock_completion.assert_called_once()
+
+        # Check that the environment variables are back to the original values
+        for env_var, value in EXPECTED_ENV_VARS.items():
+            assert env_var in os.environ
+            assert os.environ[env_var] == value
+
+        # Check that temporary env var from CUSTOM_CONFIG is no longer set
+        assert "THIS_IS_RANDOM" not in os.environ
+
+
+@pytest.mark.parametrize("use_stream", [False, True], ids=["invoke", "stream"])
+def test_multithreaded_custom_config_isolation(
+    monkeypatch: pytest.MonkeyPatch,
+    use_stream: bool,
+) -> None:
+    """Verify the env lock prevents concurrent LLM calls from seeing each other's custom_config.
+
+    Two LitellmTransport instances with different custom_config dicts call invoke/stream
+    concurrently. Both hold the exclusive write side of the env rwlock in
+    temporary_env_and_lock, which serializes their access so each call only ever
+    sees its own env vars—never the other's.
+    """
+    # Ensure these keys start unset
+    monkeypatch.delenv("SHARED_KEY", raising=False)
+    monkeypatch.delenv("LLM_A_ONLY", raising=False)
+    monkeypatch.delenv("LLM_B_ONLY", raising=False)
+
+    CONFIG_A = {
+        "SHARED_KEY": "value_from_A",
+        "LLM_A_ONLY": "a_secret",
+    }
+    CONFIG_B = {
+        "SHARED_KEY": "value_from_B",
+        "LLM_B_ONLY": "b_secret",
+    }
+
+    all_env_keys = list(set(list(CONFIG_A.keys()) + list(CONFIG_B.keys())))
+
+    model_provider = LlmProviderNames.OPENAI
+    model_name = "gpt-3.5-turbo"
+
+    llm_a = LitellmTransport(
+        api_key="key_a",
+        model_provider=model_provider,
+        model_name=model_name,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=model_provider,
+            model_name=model_name,
+        ),
+        custom_config=CONFIG_A,
+    )
+    llm_b = LitellmTransport(
+        api_key="key_b",
+        model_provider=model_provider,
+        model_name=model_name,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=model_provider,
+            model_name=model_name,
+        ),
+        custom_config=CONFIG_B,
+    )
+
+    # Both invoke (under env injection) and stream use stream=True at the
+    # litellm level, so the mock must return stream chunks.
+    mock_stream_chunks = [
+        litellm.ModelResponse(
+            id="chatcmpl-123",
+            choices=[
+                litellm.Choices(
+                    delta=_create_delta(role="assistant", content="Hi"),
+                    finish_reason="stop",
+                    index=0,
+                )
+            ],
+            model=model_name,
+        ),
+    ]
+
+    # Track what each call observed inside litellm.completion.
+    # Keyed by api_key so we can identify which LLM instance made the call.
+    observed_envs: dict[str, dict[str, str | None]] = {}
+
+    def fake_completion(**kwargs: Any) -> list[litellm.ModelResponse]:
+        time.sleep(0.1)  # We expect someone to get caught on the lock
+        api_key = kwargs.get("api_key", "")
+        label = "A" if api_key == "key_a" else "B"
+
+        snapshot: dict[str, str | None] = {}
+        for key in all_env_keys:
+            snapshot[key] = os.environ.get(key)
+        observed_envs[label] = snapshot
+
+        return mock_stream_chunks
+
+    errors: list[Exception] = []
+
+    def run_llm(llm: LitellmTransport) -> None:
+        try:
+            messages: LanguageModelInput = [UserMessage(content="Hi")]
+            if use_stream:
+                list(llm.stream(messages))
+            else:
+                llm.invoke(messages)
+        except Exception as e:
+            errors.append(e)
+
+    with patch("litellm.completion", side_effect=fake_completion):
+        t_a = threading.Thread(target=run_llm, args=(llm_a,))
+        t_b = threading.Thread(target=run_llm, args=(llm_b,))
+
+        t_a.start()
+        t_b.start()
+        t_a.join(timeout=10)
+        t_b.join(timeout=10)
+
+    assert not errors, f"Thread errors: {errors}"
+    assert "A" in observed_envs and "B" in observed_envs
+
+    # Thread A must have seen its own config for SHARED_KEY, not B's
+    assert observed_envs["A"]["SHARED_KEY"] == "value_from_A"
+    assert observed_envs["A"]["LLM_A_ONLY"] == "a_secret"
+    # A must NOT see B's exclusive key
+    assert observed_envs["A"]["LLM_B_ONLY"] is None
+
+    # Thread B must have seen its own config for SHARED_KEY, not A's
+    assert observed_envs["B"]["SHARED_KEY"] == "value_from_B"
+    assert observed_envs["B"]["LLM_B_ONLY"] == "b_secret"
+    # B must NOT see A's exclusive key
+    assert observed_envs["B"]["LLM_A_ONLY"] is None
+
+    # After both calls, env should be clean
+    assert os.environ.get("SHARED_KEY") is None
+    assert os.environ.get("LLM_A_ONLY") is None
+    assert os.environ.get("LLM_B_ONLY") is None
+
+
+def test_multithreaded_invoke_without_custom_config_does_not_inject_env() -> None:
+    """invoke() without custom_config takes the shared read lock but injects no env vars.
+
+    Every call goes through temporary_env_and_lock (so it participates in the
+    env rwlock during its litellm call and can't observe a concurrent
+    custom_config call's injected secrets). Calls without custom_config pass an
+    empty mapping, so they take the read lock but never mutate os.environ.
+    """
+    from onyx.llm import multi_llm as multi_llm_module
+
+    model_provider = LlmProviderNames.OPENAI
+    model_name = "gpt-3.5-turbo"
+
+    llm_a = LitellmTransport(
+        api_key="key_a",
+        model_provider=model_provider,
+        model_name=model_name,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=model_provider,
+            model_name=model_name,
+        ),
+    )
+    llm_b = LitellmTransport(
+        api_key="key_b",
+        model_provider=model_provider,
+        model_name=model_name,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=model_provider,
+            model_name=model_name,
+        ),
+    )
+
+    mock_stream_chunks = [
+        litellm.ModelResponse(
+            id="chatcmpl-123",
+            choices=[
+                litellm.Choices(
+                    delta=_create_delta(role="assistant", content="Hi"),
+                    finish_reason="stop",
+                    index=0,
+                )
+            ],
+            model=model_name,
+        ),
+    ]
+
+    call_kwargs: dict[str, dict[str, Any]] = {}
+
+    def fake_completion(**kwargs: Any) -> list[litellm.ModelResponse]:
+        api_key = kwargs.get("api_key", "")
+        label = "A" if api_key == "key_a" else "B"
+        call_kwargs[label] = kwargs
+        return mock_stream_chunks
+
+    errors: list[Exception] = []
+
+    def run_llm(llm: LitellmTransport) -> None:
+        try:
+            messages: LanguageModelInput = [UserMessage(content="Hi")]
+            llm.invoke(messages)
+        except Exception as e:
+            errors.append(e)
+
+    with (
+        patch("litellm.completion", side_effect=fake_completion),
+        patch.object(
+            multi_llm_module,
+            "temporary_env_and_lock",
+            wraps=multi_llm_module.temporary_env_and_lock,
+        ) as mock_env_lock,
+    ):
+        t_a = threading.Thread(target=run_llm, args=(llm_a,))
+        t_b = threading.Thread(target=run_llm, args=(llm_b,))
+
+        t_a.start()
+        t_b.start()
+        t_a.join(timeout=10)
+        t_b.join(timeout=10)
+
+    assert not errors, f"Thread errors: {errors}"
+    assert "A" in call_kwargs and "B" in call_kwargs
+
+    # Env injection forces the streamed transport so the env rwlock covers
+    # connection setup only, never a whole inference.
+    assert call_kwargs["A"]["stream"] is True
+    assert call_kwargs["B"]["stream"] is True
+
+    # Each call takes the lock via temporary_env_and_lock but injects nothing.
+    assert mock_env_lock.call_count == 2
+    for call in mock_env_lock.call_args_list:
+        assert call.args[0] == {}
+
+
 def test_invokes_without_custom_config_run_concurrently() -> None:
-    """Independent provider calls can establish connections concurrently."""
+    """Calls without custom_config must not serialize each other.
+
+    They take the shared read side of the env rwlock, so two concurrent
+    invoke() calls run their litellm completions in parallel. Pins the fix for
+    the regression where a global mutex serialized every LLM call in the
+    process (parallel secondary-flow calls ran one at a time).
+    """
     model_provider = LlmProviderNames.OPENAI
     model_name = "gpt-3.5-turbo"
 
@@ -1483,7 +1985,7 @@ def test_invokes_without_custom_config_run_concurrently() -> None:
             id="chatcmpl-123",
             choices=[
                 litellm.Choices(
-                    delta=_create_delta(content="Hi"),
+                    delta=_create_delta(role="assistant", content="Hi"),
                     finish_reason="stop",
                     index=0,
                 )
@@ -1496,13 +1998,17 @@ def test_invokes_without_custom_config_run_concurrently() -> None:
     b_inside = threading.Event()
 
     def fake_completion(**kwargs: Any) -> list[litellm.ModelResponse]:
-        # Both connections must start before either response completes.
+        # Each call waits for the other to also be inside its completion. If
+        # readers were serialized by an exclusive lock, the first call would
+        # time out here because the second could never enter.
         api_key = kwargs.get("api_key", "")
         mine, other = (
             (a_inside, b_inside) if api_key == "key_a" else (b_inside, a_inside)
         )
         mine.set()
-        assert other.wait(timeout=5), "Independent provider calls were serialized"
+        assert other.wait(timeout=5), (
+            "Concurrent no-custom-config calls were serialized by the env lock"
+        )
         return mock_stream_chunks
 
     errors: list[Exception] = []
@@ -1524,6 +2030,391 @@ def test_invokes_without_custom_config_run_concurrently() -> None:
 
     assert not errors, f"Thread errors: {errors}"
     assert a_inside.is_set() and b_inside.is_set()
+
+
+def test_keyless_reader_cannot_observe_writer_injected_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cross-tenant credential isolation in the shared process os.environ.
+
+    A "victim" Bedrock call injects an env-only custom_config secret into
+    os.environ for the duration of its litellm call (its AWS creds have kwarg
+    equivalents and never take the env path). It does so under the env write
+    lock. A concurrent keyless "attacker" Bedrock call (no custom_config) takes
+    the shared read lock, so it must block until the writer releases the lock and
+    restores os.environ — it can therefore only ever read a clean environment.
+
+    Before the fix the attacker took nullcontext() (no lock) and could read the
+    victim's secret straight out of os.environ. This test pins that the reader is
+    blocked during the writer's window and sees no secret.
+    """
+    monkeypatch.delenv("AWS_SECRET_ACCESS_KEY", raising=False)
+    monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)
+    monkeypatch.delenv("VICTIM_ENV_ONLY_SECRET", raising=False)
+
+    VICTIM_SECRET = "victim-aws-secret-DO-NOT-LEAK-0001"
+    VICTIM_ACCESS_KEY_ID = "victim-akid-0002"
+    VICTIM_ENV_ONLY_VALUE = "victim-env-only-DO-NOT-LEAK-0003"
+
+    # Victim: Bedrock provider whose creds live in custom_config (env-var
+    # format, mapped to kwargs) plus an env-only key that has no kwarg
+    # equivalent and is therefore injected under the write lock.
+    victim_llm = LitellmTransport(
+        api_key=None,
+        model_provider=LlmProviderNames.BEDROCK,
+        model_name="anthropic.claude-3-sonnet-20240229-v1:0",
+        max_input_tokens=200000,
+        custom_config={
+            "AWS_SECRET_ACCESS_KEY": VICTIM_SECRET,
+            "AWS_ACCESS_KEY_ID": VICTIM_ACCESS_KEY_ID,
+            "AWS_REGION_NAME": "us-east-1",
+            "VICTIM_ENV_ONLY_SECRET": VICTIM_ENV_ONLY_VALUE,
+        },
+    )
+    # Attacker: keyless Bedrock provider, NO custom_config -> shared read lock.
+    attacker_llm = LitellmTransport(
+        api_key=None,
+        model_provider=LlmProviderNames.BEDROCK,
+        model_name="anthropic.claude-3-haiku-20240307-v1:0",
+        max_input_tokens=200000,
+    )
+
+    mock_stream_chunks = [
+        litellm.ModelResponse(
+            id="chatcmpl-123",
+            choices=[
+                litellm.Choices(
+                    delta=_create_delta(role="assistant", content="Hi"),
+                    finish_reason="stop",
+                    index=0,
+                )
+            ],
+            model="anthropic.claude-3-sonnet-20240229-v1:0",
+        ),
+    ]
+
+    writer_inside = threading.Event()
+    release_writer = threading.Event()
+    reader_ran = threading.Event()
+    reader_env_snapshot: dict[str, str | None] = {}
+    writer_env_snapshot: dict[str, str | None] = {}
+
+    def fake_completion(**kwargs: Any) -> list[litellm.ModelResponse]:
+        # The victim's custom_config is mapped into explicit kwargs, so its
+        # presence distinguishes the victim (writer) from the keyless attacker.
+        is_writer = "aws_secret_access_key" in kwargs
+        if is_writer:
+            # Holding the env write lock here; the env-only secret is live in
+            # os.environ, while the mapped AWS creds must NOT be (they travel
+            # as kwargs only). Keep the window open until released (bounded so
+            # a broken lock can't hang).
+            writer_env_snapshot["AWS_SECRET_ACCESS_KEY"] = os.environ.get(
+                "AWS_SECRET_ACCESS_KEY"
+            )
+            writer_env_snapshot["VICTIM_ENV_ONLY_SECRET"] = os.environ.get(
+                "VICTIM_ENV_ONLY_SECRET"
+            )
+            writer_inside.set()
+            release_writer.wait(timeout=5)
+        else:
+            reader_env_snapshot["VICTIM_ENV_ONLY_SECRET"] = os.environ.get(
+                "VICTIM_ENV_ONLY_SECRET"
+            )
+            reader_env_snapshot["AWS_SECRET_ACCESS_KEY"] = os.environ.get(
+                "AWS_SECRET_ACCESS_KEY"
+            )
+            reader_ran.set()
+        return mock_stream_chunks
+
+    errors: list[Exception] = []
+
+    def run_llm(llm: LitellmTransport) -> None:
+        try:
+            llm.invoke([UserMessage(content="Hi")])
+        except Exception as e:
+            errors.append(e)
+
+    with patch("litellm.completion", side_effect=fake_completion):
+        victim_thread = threading.Thread(target=run_llm, args=(victim_llm,))
+        victim_thread.start()
+        assert writer_inside.wait(timeout=5), (
+            "victim never entered the write-locked section"
+        )
+
+        attacker_thread = threading.Thread(target=run_llm, args=(attacker_llm,))
+        attacker_thread.start()
+
+        # While the writer holds the env write lock, the reader must be blocked
+        # on the read lock: it cannot have run its completion yet. A leak (no
+        # lock for readers) would let it read os.environ immediately.
+        reader_ran_during_window = reader_ran.wait(timeout=1.0)
+
+        release_writer.set()
+        victim_thread.join(timeout=10)
+        attacker_thread.join(timeout=10)
+
+    assert not errors, f"Thread errors: {errors}"
+    assert reader_ran.is_set(), "attacker never completed"
+
+    # Inside the writer's window: the env-only key was injected, the mapped
+    # AWS creds never touched os.environ.
+    assert writer_env_snapshot["VICTIM_ENV_ONLY_SECRET"] == VICTIM_ENV_ONLY_VALUE
+    assert writer_env_snapshot["AWS_SECRET_ACCESS_KEY"] is None
+
+    # The attacker was blocked during the writer's env window...
+    assert not reader_ran_during_window, (
+        "Cross-tenant leak: keyless reader ran concurrently with the victim's "
+        "env injection"
+    )
+    # ...and when it finally ran, the environment was clean.
+    assert reader_env_snapshot["VICTIM_ENV_ONLY_SECRET"] is None
+    assert reader_env_snapshot["AWS_SECRET_ACCESS_KEY"] is None
+
+    # Env fully restored after the writer finished.
+    assert os.environ.get("VICTIM_ENV_ONLY_SECRET") is None
+    assert os.environ.get("AWS_SECRET_ACCESS_KEY") is None
+    assert os.environ.get("AWS_ACCESS_KEY_ID") is None
+
+
+# ---- Tests for temporary_env_and_lock reader/writer permutations ----
+#
+# These exercise the env rwlock directly (no LitellmTransport plumbing) so each
+# reader/writer interleaving is pinned explicitly:
+#   - reader || reader: concurrent
+#   - reader -> writer: writer waits for active readers to drain
+#   - writer -> reader: reader waits for the writer (covered here and by
+#     test_keyless_reader_cannot_observe_writer_injected_secret above)
+#   - reader -> writer -> reader: a reader arriving behind a queued writer
+#     waits for that writer (write preference), then sees a clean env
+#   - writer || writer: mutually exclusive
+#   - exceptions: lock released and env restored on both paths
+
+_ENV_LOCK_TEST_KEY = "ENV_RWLOCK_TEST_KEY"
+
+
+def test_env_lock_many_readers_hold_concurrently() -> None:
+    """All readers must be inside the lock at the same time."""
+    num_readers = 4
+    barrier = threading.Barrier(num_readers)
+    errors: list[Exception] = []
+
+    def reader() -> None:
+        try:
+            with temporary_env_and_lock({}):
+                # Completes only if every reader is inside simultaneously; an
+                # exclusive lock would leave the first reader stuck here until
+                # the barrier times out and breaks.
+                barrier.wait(timeout=5)
+        except Exception as e:
+            errors.append(e)
+
+    threads = [threading.Thread(target=reader) for _ in range(num_readers)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=10)
+
+    assert not errors, f"Thread errors: {errors}"
+
+
+def test_env_lock_writer_waits_for_active_reader(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A writer must block until in-flight readers finish, and readers never
+    observe the writer's env vars."""
+    monkeypatch.delenv(_ENV_LOCK_TEST_KEY, raising=False)
+
+    reader_inside = threading.Event()
+    release_reader = threading.Event()
+    writer_inside = threading.Event()
+    errors: list[Exception] = []
+
+    def reader() -> None:
+        try:
+            with temporary_env_and_lock({}):
+                reader_inside.set()
+                assert release_reader.wait(timeout=5), "reader never released"
+                # Writer is queued but must not have injected env yet.
+                assert os.environ.get(_ENV_LOCK_TEST_KEY) is None
+        except Exception as e:
+            errors.append(e)
+
+    def writer() -> None:
+        try:
+            with temporary_env_and_lock({_ENV_LOCK_TEST_KEY: "writer_value"}):
+                writer_inside.set()
+                assert os.environ.get(_ENV_LOCK_TEST_KEY) == "writer_value"
+        except Exception as e:
+            errors.append(e)
+
+    reader_thread = threading.Thread(target=reader)
+    reader_thread.start()
+    assert reader_inside.wait(timeout=5), "reader never entered"
+
+    writer_thread = threading.Thread(target=writer)
+    writer_thread.start()
+
+    # Writer must stay blocked while the read lock is held.
+    assert not writer_inside.wait(timeout=0.3), (
+        "writer entered while a reader held the lock"
+    )
+
+    release_reader.set()
+    reader_thread.join(timeout=10)
+    writer_thread.join(timeout=10)
+
+    assert not errors, f"Thread errors: {errors}"
+    assert writer_inside.is_set(), "writer never entered after readers drained"
+    assert os.environ.get(_ENV_LOCK_TEST_KEY) is None
+
+
+def test_env_lock_read_write_read_sequencing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """reader1 -> writer -> reader2: a reader arriving while a writer is queued
+    must wait behind it (write preference, so writers can't starve), and once
+    the writer finishes the late reader sees a clean environment."""
+    monkeypatch.delenv(_ENV_LOCK_TEST_KEY, raising=False)
+
+    r1_inside = threading.Event()
+    release_r1 = threading.Event()
+    writer_inside = threading.Event()
+    release_writer = threading.Event()
+    r2_inside = threading.Event()
+    order: list[str] = []
+    order_lock = threading.Lock()
+    errors: list[Exception] = []
+
+    def record(label: str) -> None:
+        with order_lock:
+            order.append(label)
+
+    def reader1() -> None:
+        try:
+            with temporary_env_and_lock({}):
+                record("r1")
+                r1_inside.set()
+                assert release_r1.wait(timeout=5), "r1 never released"
+        except Exception as e:
+            errors.append(e)
+
+    def writer() -> None:
+        try:
+            with temporary_env_and_lock({_ENV_LOCK_TEST_KEY: "writer_value"}):
+                record("w")
+                writer_inside.set()
+                assert os.environ.get(_ENV_LOCK_TEST_KEY) == "writer_value"
+                assert release_writer.wait(timeout=5), "writer never released"
+        except Exception as e:
+            errors.append(e)
+
+    def reader2() -> None:
+        try:
+            with temporary_env_and_lock({}):
+                record("r2")
+                r2_inside.set()
+                # Writer restored the env before releasing the lock.
+                assert os.environ.get(_ENV_LOCK_TEST_KEY) is None
+        except Exception as e:
+            errors.append(e)
+
+    r1_thread = threading.Thread(target=reader1)
+    r1_thread.start()
+    assert r1_inside.wait(timeout=5), "r1 never entered"
+
+    writer_thread = threading.Thread(target=writer)
+    writer_thread.start()
+    # Let the writer reach the blocked wlock acquisition before r2 arrives.
+    assert not writer_inside.wait(timeout=0.3), "writer entered while r1 held the lock"
+
+    r2_thread = threading.Thread(target=reader2)
+    r2_thread.start()
+    # r2 arrived after the writer queued, so it must wait behind the writer.
+    assert not r2_inside.wait(timeout=0.3), (
+        "late reader jumped ahead of a queued writer"
+    )
+
+    release_r1.set()
+    assert writer_inside.wait(timeout=5), "writer never entered after r1 exited"
+    # While the writer holds the lock, r2 must still be blocked.
+    assert not r2_inside.wait(timeout=0.3), "reader entered during write section"
+
+    release_writer.set()
+    assert r2_inside.wait(timeout=5), "r2 never entered after the writer exited"
+
+    r1_thread.join(timeout=10)
+    writer_thread.join(timeout=10)
+    r2_thread.join(timeout=10)
+
+    assert not errors, f"Thread errors: {errors}"
+    assert order == ["r1", "w", "r2"]
+    assert os.environ.get(_ENV_LOCK_TEST_KEY) is None
+
+
+def test_env_lock_writers_are_mutually_exclusive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Concurrent writers serialize; each sees only its own env value and the
+    environment is fully restored afterwards."""
+    monkeypatch.delenv(_ENV_LOCK_TEST_KEY, raising=False)
+
+    active = 0
+    max_active = 0
+    counter_lock = threading.Lock()
+    errors: list[Exception] = []
+
+    def writer(value: str) -> None:
+        nonlocal active, max_active
+        try:
+            with temporary_env_and_lock({_ENV_LOCK_TEST_KEY: value}):
+                with counter_lock:
+                    active += 1
+                    max_active = max(max_active, active)
+                assert os.environ.get(_ENV_LOCK_TEST_KEY) == value
+                time.sleep(0.05)
+                assert os.environ.get(_ENV_LOCK_TEST_KEY) == value
+                with counter_lock:
+                    active -= 1
+        except Exception as e:
+            errors.append(e)
+
+    threads = [threading.Thread(target=writer, args=(f"value_{i}",)) for i in range(3)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=10)
+
+    assert not errors, f"Thread errors: {errors}"
+    assert max_active == 1, "two writers held the lock at once"
+    assert os.environ.get(_ENV_LOCK_TEST_KEY) is None
+
+
+def test_env_lock_released_and_env_restored_on_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An exception inside either section releases the lock and, for writers,
+    restores the pre-existing env value."""
+    monkeypatch.setenv(_ENV_LOCK_TEST_KEY, "original")
+
+    with pytest.raises(RuntimeError, match="writer boom"):
+        with temporary_env_and_lock({_ENV_LOCK_TEST_KEY: "writer_value"}):
+            assert os.environ.get(_ENV_LOCK_TEST_KEY) == "writer_value"
+            raise RuntimeError("writer boom")
+    assert os.environ.get(_ENV_LOCK_TEST_KEY) == "original"
+
+    with pytest.raises(RuntimeError, match="reader boom"):
+        with temporary_env_and_lock({}):
+            raise RuntimeError("reader boom")
+
+    # Lock is still usable in both modes afterwards.
+    with temporary_env_and_lock({_ENV_LOCK_TEST_KEY: "writer_value_2"}):
+        assert os.environ.get(_ENV_LOCK_TEST_KEY) == "writer_value_2"
+    assert os.environ.get(_ENV_LOCK_TEST_KEY) == "original"
+    with temporary_env_and_lock({}):
+        assert os.environ.get(_ENV_LOCK_TEST_KEY) == "original"
+
+
+# ---- Tests for Bedrock tool content stripping ----
 
 
 def test_messages_contain_tool_content_with_tool_role() -> None:
@@ -1606,15 +2497,20 @@ def test_strip_tool_content_converts_assistant_tool_calls_to_text() -> None:
     assert "tool_calls" not in result[1]
     assert isinstance(result[1]["content"], str)
     assert "Let me search." in result[1]["content"]
+    assert isinstance(result[1]["content"], str)
     assert "[Tool Call]" in result[1]["content"]
+    assert isinstance(result[1]["content"], str)
     assert "search" in result[1]["content"]
+    assert isinstance(result[1]["content"], str)
     assert "tc_1" in result[1]["content"]
 
     # Tool response → user message
     assert result[2]["role"] == "user"
     assert isinstance(result[2]["content"], str)
     assert "[Tool Result]" in result[2]["content"]
+    assert isinstance(result[2]["content"], str)
     assert "tc_1" in result[2]["content"]
+    assert isinstance(result[2]["content"], str)
     assert "Found 3 results about cats." in result[2]["content"]
 
     # Final assistant message unchanged
@@ -1689,6 +2585,7 @@ def test_strip_tool_content_handles_list_content_blocks() -> None:
     assert result[0]["role"] == "assistant"
     assert isinstance(result[0]["content"], str)
     assert "Searching now." in result[0]["content"]
+    assert isinstance(result[0]["content"], str)
     assert "[Tool Call]" in result[0]["content"]
     assert isinstance(result[0]["content"], str)
 
@@ -1696,6 +2593,7 @@ def test_strip_tool_content_handles_list_content_blocks() -> None:
     assert result[1]["role"] == "user"
     assert isinstance(result[1]["content"], str)
     assert "result A" in result[1]["content"]
+    assert isinstance(result[1]["content"], str)
     assert "result B" in result[1]["content"]
     assert isinstance(result[1]["content"], str)
 
@@ -1757,7 +2655,7 @@ def test_no_tool_choice_sent_when_no_tools(default_multi_llm: LitellmTransport) 
             id="chatcmpl-123",
             choices=[
                 litellm.Choices(
-                    delta=_create_delta(content="Hello!"),
+                    delta=_create_delta(role="assistant", content="Hello!"),
                     finish_reason="stop",
                     index=0,
                 )
@@ -2036,7 +2934,7 @@ def test_bedrock_claude_drops_thinking_when_thinking_blocks_missing() -> None:
                 )
             ],
         ),
-        ToolMessage(
+        onyx.llm.litellm_models.ToolMessage(
             content="22°C sunny",
             tool_call_id="tc_1",
         ),
@@ -2144,7 +3042,7 @@ def test_bifrost_claude_includes_allowed_openai_params() -> None:
             id="chatcmpl-123",
             choices=[
                 litellm.Choices(
-                    delta=_create_delta(content="Done"),
+                    delta=_create_delta(role="assistant", content="Done"),
                     finish_reason="stop",
                     index=0,
                 )
@@ -2165,7 +3063,7 @@ def test_bifrost_claude_includes_allowed_openai_params() -> None:
         assert kwargs["allowed_openai_params"] == ["tool_choice"]
 
 
-# Provider credentials use request arguments.
+# ---- Tests for env-injection gating (llm_custom_config_env_injection) ----
 
 
 def _simple_stream_chunks(model_name: str) -> list[litellm.ModelResponse]:
@@ -2174,7 +3072,7 @@ def _simple_stream_chunks(model_name: str) -> list[litellm.ModelResponse]:
             id="chatcmpl-123",
             choices=[
                 litellm.Choices(
-                    delta=_create_delta(content="Hi"),
+                    delta=_create_delta(role="assistant", content="Hi"),
                     finish_reason="stop",
                     index=0,
                 )
@@ -2182,6 +3080,140 @@ def _simple_stream_chunks(model_name: str) -> list[litellm.ModelResponse]:
             model=model_name,
         ),
     ]
+
+
+def _simple_response(model_name: str) -> litellm.ModelResponse:
+    return litellm.ModelResponse(
+        id="chatcmpl-123",
+        choices=[
+            litellm.Choices(
+                message=litellm.Message(role="assistant", content="Hi"),
+                finish_reason="stop",
+                index=0,
+            )
+        ],
+        model=model_name,
+    )
+
+
+def _simple_completion_result(
+    kwargs: Mapping[str, Any], model_name: str
+) -> litellm.ModelResponse | list[litellm.ModelResponse]:
+    """Return what litellm.completion returns for the requested stream mode."""
+    if kwargs.get("stream"):
+        return _simple_stream_chunks(model_name)
+    return _simple_response(model_name)
+
+
+def test_injection_disabled_maps_kwargs_and_never_touches_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cloud posture: mapped keys become litellm kwargs, unmapped keys are
+    dropped, and os.environ is never mutated."""
+    monkeypatch.delenv("AWS_SECRET_ACCESS_KEY", raising=False)
+    monkeypatch.delenv("ENV_ONLY_KEY", raising=False)
+
+    llm = LitellmTransport(
+        api_key=None,
+        model_provider=LlmProviderNames.BEDROCK,
+        model_name="anthropic.claude-3-sonnet-20240229-v1:0",
+        max_input_tokens=200000,
+        custom_config={
+            "AWS_ACCESS_KEY_ID": "akid",
+            "AWS_SECRET_ACCESS_KEY": "secret",
+            "AWS_REGION_NAME": "us-east-1",
+            "ENV_ONLY_KEY": "env-only-value",
+        },
+    )
+
+    env_during_call: dict[str, str | None] = {}
+
+    def fake_completion(
+        **kwargs: Any,
+    ) -> litellm.ModelResponse | list[litellm.ModelResponse]:
+        env_during_call["AWS_SECRET_ACCESS_KEY"] = os.environ.get(
+            "AWS_SECRET_ACCESS_KEY"
+        )
+        env_during_call["ENV_ONLY_KEY"] = os.environ.get("ENV_ONLY_KEY")
+        return _simple_completion_result(
+            kwargs, "anthropic.claude-3-sonnet-20240229-v1:0"
+        )
+
+    from onyx.llm import multi_llm as multi_llm_module
+
+    env_before = dict(os.environ)
+    with (
+        patch("litellm.completion", side_effect=fake_completion) as mock_completion,
+        patch(
+            "onyx.llm.multi_llm._env_injection_enabled",
+            return_value=False,
+        ),
+        patch.object(
+            multi_llm_module,
+            "temporary_env_and_lock",
+            wraps=multi_llm_module.temporary_env_and_lock,
+        ) as mock_env_lock,
+    ):
+        llm.invoke([UserMessage(content="Hi")])
+
+    kwargs = mock_completion.call_args.kwargs
+    assert kwargs["aws_access_key_id"] == "akid"
+    assert kwargs["aws_secret_access_key"] == "secret"
+    assert kwargs["aws_region_name"] == "us-east-1"
+    # The env-only key is dropped: not a kwarg, not an env var.
+    assert "ENV_ONLY_KEY" not in kwargs
+    assert env_during_call["AWS_SECRET_ACCESS_KEY"] is None
+    assert env_during_call["ENV_ONLY_KEY"] is None
+    assert dict(os.environ) == env_before
+    # With injection disabled there can be no env writers, so the call must
+    # bypass the rwlock entirely.
+    mock_env_lock.assert_not_called()
+
+
+def test_injection_enabled_still_injects_env_only_keys(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Self-hosted posture: env-only keys are injected during the call, while
+    mapped keys still travel as kwargs only."""
+    monkeypatch.delenv("AWS_SECRET_ACCESS_KEY", raising=False)
+    monkeypatch.delenv("ENV_ONLY_KEY", raising=False)
+
+    llm = LitellmTransport(
+        api_key=None,
+        model_provider=LlmProviderNames.BEDROCK,
+        model_name="anthropic.claude-3-sonnet-20240229-v1:0",
+        max_input_tokens=200000,
+        custom_config={
+            "AWS_SECRET_ACCESS_KEY": "secret",
+            "ENV_ONLY_KEY": "env-only-value",
+        },
+    )
+
+    env_during_call: dict[str, str | None] = {}
+
+    def fake_completion(**kwargs: Any) -> list[litellm.ModelResponse]:  # noqa: ARG001
+        env_during_call["AWS_SECRET_ACCESS_KEY"] = os.environ.get(
+            "AWS_SECRET_ACCESS_KEY"
+        )
+        env_during_call["ENV_ONLY_KEY"] = os.environ.get("ENV_ONLY_KEY")
+        return _simple_stream_chunks("anthropic.claude-3-sonnet-20240229-v1:0")
+
+    with (
+        patch("litellm.completion", side_effect=fake_completion) as mock_completion,
+        patch(
+            "onyx.llm.multi_llm._env_injection_enabled",
+            return_value=True,
+        ),
+    ):
+        llm.invoke([UserMessage(content="Hi")])
+
+    kwargs = mock_completion.call_args.kwargs
+    assert kwargs["aws_secret_access_key"] == "secret"
+    assert env_during_call["ENV_ONLY_KEY"] == "env-only-value"
+    # Mapped keys never take the env path regardless of the flag.
+    assert env_during_call["AWS_SECRET_ACCESS_KEY"] is None
+    # Cleaned up after the call.
+    assert os.environ.get("ENV_ONLY_KEY") is None
 
 
 def test_custom_config_bearer_token_clobbers_provider_api_key() -> None:
@@ -2205,7 +3237,8 @@ def test_custom_config_bearer_token_clobbers_provider_api_key() -> None:
 def test_generic_custom_provider_api_key_reaches_litellm(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Provider credentials use explicit arguments and preserve process environment."""
+    """A custom provider keeping its key in custom_config (legacy env-var
+    style) still authenticates via kwargs when injection is disabled."""
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
 
     llm = LitellmTransport(
@@ -2226,11 +3259,148 @@ def test_generic_custom_provider_api_key_reaches_litellm(
 
     with (
         patch("litellm.completion", side_effect=fake_completion) as mock_completion,
+        patch(
+            "onyx.llm.multi_llm._env_injection_enabled",
+            return_value=False,
+        ),
     ):
         llm.invoke([UserMessage(content="Hi")])
 
     assert mock_completion.call_args.kwargs["api_key"] == "groq-key"
     assert env_during_call["GROQ_API_KEY"] is None
+
+
+def test_ui_only_keys_never_injected_or_warned(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """UI form-state keys are excluded from the env-only bucket: no injection
+    when enabled, no drop warning when disabled."""
+    monkeypatch.delenv("BEDROCK_AUTH_METHOD", raising=False)
+
+    llm = LitellmTransport(
+        api_key=None,
+        model_provider=LlmProviderNames.BEDROCK,
+        model_name="anthropic.claude-3-sonnet-20240229-v1:0",
+        max_input_tokens=200000,
+        custom_config={
+            "BEDROCK_AUTH_METHOD": "long_term_api_key",
+            "AWS_REGION_NAME": "us-east-1",
+            "AWS_BEARER_TOKEN_BEDROCK": "bearer",
+        },
+    )
+    assert llm._env_only_custom_config == {}
+
+    env_during_call: dict[str, str | None] = {}
+
+    def fake_completion(
+        **kwargs: Any,
+    ) -> litellm.ModelResponse | list[litellm.ModelResponse]:
+        env_during_call["BEDROCK_AUTH_METHOD"] = os.environ.get("BEDROCK_AUTH_METHOD")
+        return _simple_completion_result(
+            kwargs, "anthropic.claude-3-sonnet-20240229-v1:0"
+        )
+
+    for injection_enabled in (True, False):
+        with (
+            patch("litellm.completion", side_effect=fake_completion),
+            patch(
+                "onyx.llm.multi_llm._env_injection_enabled",
+                return_value=injection_enabled,
+            ),
+            patch("onyx.llm.multi_llm._warn_dropped_env_only_keys") as mock_warn,
+        ):
+            llm.invoke([UserMessage(content="Hi")])
+        assert env_during_call["BEDROCK_AUTH_METHOD"] is None
+        mock_warn.assert_not_called()
+
+
+# ---- Tests for the invoke() stream / non-stream decision ----
+
+
+def _invoke_stream_flag(
+    llm: LitellmTransport,
+    injection_enabled: bool,
+    total_timeout_s: float = 60,
+    tools: list[dict] | None = None,
+) -> tuple[bool, ModelResponse]:
+    """Run invoke() with litellm mocked and report the stream kwarg it sent."""
+    model_name = llm.config.model_name
+
+    def fake_completion(
+        **kwargs: Any,
+    ) -> litellm.ModelResponse | list[litellm.ModelResponse]:
+        return _simple_completion_result(kwargs, model_name)
+
+    with (
+        patch("litellm.completion", side_effect=fake_completion) as mock_completion,
+        patch(
+            "onyx.llm.multi_llm._env_injection_enabled",
+            return_value=injection_enabled,
+        ) as mock_injection_setting,
+    ):
+        response = llm.invoke(
+            [UserMessage(content="Hi")],
+            tools=tools,
+            total_timeout_s=total_timeout_s,
+        )
+
+    # One snapshot drives both the stream choice and the env lock, so the two
+    # cannot diverge if an admin flips the setting mid-call.
+    assert mock_injection_setting.call_count == 1
+
+    kwargs = mock_completion.call_args.kwargs
+    if kwargs["stream"]:
+        assert kwargs["stream_options"] == {"include_usage": True}
+    else:
+        assert "stream_options" not in kwargs
+    return kwargs["stream"], response
+
+
+def test_invoke_plain_request_by_default(default_multi_llm: LitellmTransport) -> None:
+    """Cloud posture: invoke() sends one non-streamed request and takes the
+    response as one body."""
+    streamed, response = _invoke_stream_flag(default_multi_llm, injection_enabled=False)
+
+    assert streamed is False
+    assert response.choice.message.content == "Hi"
+    assert response.choice.finish_reason == "stop"
+
+
+def test_invoke_plain_request_even_for_a_long_timeout(
+    default_multi_llm: LitellmTransport,
+) -> None:
+    """A long total timeout does not switch transports. Only env injection does."""
+    streamed, response = _invoke_stream_flag(
+        default_multi_llm, injection_enabled=False, total_timeout_s=600
+    )
+
+    assert streamed is False
+    assert response.choice.message.content == "Hi"
+
+
+def test_invoke_streams_when_injection_enabled(
+    default_multi_llm: LitellmTransport,
+) -> None:
+    """Self-hosted posture: streaming keeps the env rwlock to connection setup."""
+    streamed, response = _invoke_stream_flag(default_multi_llm, injection_enabled=True)
+
+    assert streamed is True
+    assert response.choice.message.content == "Hi"
+
+
+def test_invoke_plain_request_even_with_tools(
+    default_multi_llm: LitellmTransport,
+) -> None:
+    """Tools do not force a transport. The responses bridge spreads one answer
+    over several choices on a plain reply; from_litellm_model_response merges
+    them."""
+    streamed, _ = _invoke_stream_flag(
+        default_multi_llm,
+        injection_enabled=False,
+        tools=[{"type": "function", "function": {"name": "search"}}],
+    )
+
+    assert streamed is False
 
 
 def _openai_compatible_llm(
@@ -2330,19 +3500,128 @@ def test_consume_stream_ping_flood_trips_total_timeout() -> None:
     assert time.monotonic() - start < 2.0
 
 
-@pytest.mark.parametrize(
-    "total_timeout_override, expected_read_timeout",
-    [
-        (30, 30),  # total below the socket read timeout -> read timeout capped at it
-        (300, 60),  # total above it -> read timeout unchanged
-        (None, 60),  # no total -> read timeout unchanged
-    ],
-)
-def test_invoke_caps_read_timeout_at_total_budget(
-    total_timeout_override: int | None, expected_read_timeout: int
-) -> None:
-    # The deadline is only checked between chunks, so the per-read timeout must be
-    # capped at the total or a blocking read could overshoot a sub-read-timeout budget.
+def test_consume_stream_maps_a_mid_drain_rate_limit() -> None:
+    """The request already succeeded, so _completion's mapper never sees this.
+    litellm wraps the real cause in MidStreamFallbackError; unwrap and map it,
+    or the same 429 looks different depending on the transport."""
+
+    rate_limit = litellm.exceptions.RateLimitError(
+        message="rate limited", model="gpt-4", llm_provider="openai"
+    )
+
+    def _rate_limited() -> Iterator[object]:
+        yield object()
+        raise litellm.exceptions.MidStreamFallbackError(
+            message="rate limited",
+            model="gpt-4",
+            llm_provider="openai",
+            original_exception=rate_limit,
+        )
+
+    with pytest.raises(LLMRateLimitError) as raised:
+        _consume_stream_until_deadline(_rate_limited(), time.monotonic() + 5)
+
+    assert raised.value.__cause__ is rate_limit
+
+
+def test_consume_stream_keeps_the_real_cause_of_an_unmapped_error() -> None:
+    """litellm puts only a message in the wrapper's args and leaves __cause__
+    empty. Set __cause__, so chat's classifier sees the real 500, not the
+    wrapper."""
+    server_error = litellm.exceptions.InternalServerError(
+        message="upstream exploded", model="gpt-4", llm_provider="openai"
+    )
+
+    def _failing() -> Iterator[object]:
+        yield object()
+        raise litellm.exceptions.MidStreamFallbackError(
+            message="upstream exploded",
+            model="gpt-4",
+            llm_provider="openai",
+            original_exception=server_error,
+        )
+
+    with pytest.raises(litellm.exceptions.MidStreamFallbackError) as raised:
+        _consume_stream_until_deadline(_failing(), time.monotonic() + 5)
+
+    assert raised.value.__cause__ is server_error
+
+
+def _ladder_llm() -> LitellmTransport:
+    # Sends thinking and temperature, so a 400 naming them walks the whole
+    # retry ladder: as given, without reasoning keys, without both.
+    return LitellmTransport(
+        api_key="test_key",
+        model_provider=LlmProviderNames.LITELLM_PROXY,
+        model_name="claude-haiku-4-5",
+        max_input_tokens=100_000,
+    )
+
+
+def test_invoke_retries_share_one_total_timeout() -> None:
+    """Each retry gets only the time left, not a fresh total_timeout_s."""
+    sent_timeouts: list[float] = []
+
+    def slow_rejection(**kwargs: Any) -> Any:
+        sent_timeouts.append(kwargs["timeout"])
+        time.sleep(0.2)
+        raise litellm.exceptions.BadRequestError(
+            "temperature is not supported", "claude-haiku-4-5", "litellm_proxy"
+        )
+
+    with (
+        patch("litellm.completion", side_effect=slow_rejection),
+        patch("onyx.llm.multi_llm._env_injection_enabled", return_value=False),
+        pytest.raises(litellm.exceptions.BadRequestError),
+    ):
+        _ladder_llm().invoke([UserMessage(content="Hi")], total_timeout_s=30)
+
+    assert len(sent_timeouts) == 3
+    assert sent_timeouts[1] <= sent_timeouts[0] - 0.15
+    assert sent_timeouts[2] <= sent_timeouts[1] - 0.15
+
+
+def test_invoke_stops_retrying_when_the_total_timeout_is_spent() -> None:
+    calls = 0
+
+    def slow_rejection(**_kwargs: Any) -> Any:
+        nonlocal calls
+        calls += 1
+        time.sleep(0.3)
+        raise litellm.exceptions.BadRequestError(
+            "temperature is not supported", "claude-haiku-4-5", "litellm_proxy"
+        )
+
+    with (
+        patch("litellm.completion", side_effect=slow_rejection),
+        patch("onyx.llm.multi_llm._env_injection_enabled", return_value=False),
+        pytest.raises(LLMTimeoutError),
+    ):
+        _ladder_llm().invoke([UserMessage(content="Hi")], total_timeout_s=0.2)
+
+    assert calls == 1
+
+
+def test_consume_stream_leaves_an_unmapped_error_unchanged() -> None:
+    """An error with no Onyx equivalent is re-raised as-is, and never becomes
+    its own cause."""
+    failure = ValueError("boom")
+
+    def _failing() -> Iterator[object]:
+        yield object()
+        raise failure
+
+    with pytest.raises(ValueError) as raised:
+        _consume_stream_until_deadline(_failing(), time.monotonic() + 5)
+
+    assert raised.value is failure
+    assert raised.value.__cause__ is None
+
+
+@pytest.mark.parametrize("total_timeout_s", [30, 2.5, 600])
+def test_invoke_read_timeout_is_the_time_left(total_timeout_s: float) -> None:
+    """A plain request has one read, so its timeout is the whole budget that is
+    left when the request is sent."""
     llm = LitellmTransport(
         api_key="test_key",
         model_provider=LlmProviderNames.LITELLM_PROXY,
@@ -2356,7 +3635,7 @@ def test_invoke_caps_read_timeout_at_total_budget(
         id="chatcmpl-1",
         choices=[
             litellm.Choices(
-                delta=_create_delta(content="hi"),
+                delta=_create_delta(role="assistant", content="hi"),
                 finish_reason="stop",
                 index=0,
             )
@@ -2433,902 +3712,6 @@ def test_track_llm_cost_prices_cache_creation_at_write_rate(
     )
 
     assert increment_usage.call_args.args[2] == pytest.approx(1.05)
-
-
-_ENV_LOCK_TEST_KEY = "ENV_RWLOCK_TEST_KEY"
-
-
-def test_temporary_env_cleanup(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Assign some environment variables
-    EXPECTED_ENV_VARS = {
-        "TEST_ENV_VAR": "test_value",
-        "ANOTHER_ONE": "1",
-        "THIRD_ONE": "2",
-    }
-
-    CUSTOM_CONFIG = {
-        "TEST_ENV_VAR": "fdsfsdf",
-        "ANOTHER_ONE": "3",
-        "THIS_IS_RANDOM": "123213",
-    }
-
-    for env_var, value in EXPECTED_ENV_VARS.items():
-        monkeypatch.setenv(env_var, value)
-
-    model_provider = LlmProviderNames.OPENAI
-    model_name = "gpt-3.5-turbo"
-
-    llm = LitellmTransport(
-        api_key="test_key",
-        timeout=30,
-        model_provider=model_provider,
-        model_name=model_name,
-        max_input_tokens=get_max_input_tokens(
-            model_provider=model_provider,
-            model_name=model_name,
-        ),
-        model_kwargs={"metadata": {"foo": "bar"}},
-        custom_config=CUSTOM_CONFIG,
-    )
-
-    # When custom_config is set, invoke() internally uses stream=True and
-    # reassembles via stream_chunk_builder, so the mock must return stream chunks.
-    mock_stream_chunks = [
-        litellm.ModelResponse(
-            id="chatcmpl-123",
-            choices=[
-                litellm.Choices(
-                    delta=_create_delta(role="assistant", content="Hello"),
-                    finish_reason="stop",
-                    index=0,
-                )
-            ],
-            model="gpt-3.5-turbo",
-        ),
-    ]
-
-    def on_litellm_completion(
-        **kwargs: dict[str, Any],  # noqa: ARG001
-    ) -> list[litellm.ModelResponse]:
-        # Validate that the environment variables are those in custom config
-        for env_var, value in CUSTOM_CONFIG.items():
-            assert env_var in os.environ
-            assert os.environ[env_var] == value
-
-        return mock_stream_chunks
-
-    with (
-        patch("litellm.completion") as mock_completion,
-        patch("onyx.llm.utils.SEND_USER_METADATA_TO_LLM_PROVIDER", False),
-    ):
-        mock_completion.side_effect = on_litellm_completion
-
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
-        identity = LLMUserIdentity(user_id="user_123", session_id="session_abc")
-
-        llm.invoke(messages, user_identity=identity)
-
-        mock_completion.assert_called_once()
-        kwargs = mock_completion.call_args.kwargs
-        assert kwargs["stream"] is True
-        assert "user" not in kwargs
-        assert kwargs["metadata"]["foo"] == "bar"
-
-        # Check that the environment variables are back to the original values
-        for env_var, value in EXPECTED_ENV_VARS.items():
-            assert env_var in os.environ
-            assert os.environ[env_var] == value
-
-        # Check that temporary env var from CUSTOM_CONFIG is no longer set
-        assert "THIS_IS_RANDOM" not in os.environ
-
-
-def test_temporary_env_cleanup_on_exception(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify env vars are restored even when an exception occurs during LLM invocation."""
-    # Assign some environment variables
-    EXPECTED_ENV_VARS = {
-        "TEST_ENV_VAR": "test_value",
-        "ANOTHER_ONE": "1",
-        "THIRD_ONE": "2",
-    }
-
-    CUSTOM_CONFIG = {
-        "TEST_ENV_VAR": "fdsfsdf",
-        "ANOTHER_ONE": "3",
-        "THIS_IS_RANDOM": "123213",
-    }
-
-    for env_var, value in EXPECTED_ENV_VARS.items():
-        monkeypatch.setenv(env_var, value)
-
-    model_provider = LlmProviderNames.OPENAI
-    model_name = "gpt-3.5-turbo"
-
-    llm = LitellmTransport(
-        api_key="test_key",
-        timeout=30,
-        model_provider=model_provider,
-        model_name=model_name,
-        max_input_tokens=get_max_input_tokens(
-            model_provider=model_provider,
-            model_name=model_name,
-        ),
-        model_kwargs={"metadata": {"foo": "bar"}},
-        custom_config=CUSTOM_CONFIG,
-    )
-
-    def on_litellm_completion_raises(
-        **kwargs: dict[str, Any],  # noqa: ARG001
-    ) -> None:  # noqa: ARG001
-        # Validate that the environment variables are those in custom config
-        for env_var, value in CUSTOM_CONFIG.items():
-            assert env_var in os.environ
-            assert os.environ[env_var] == value
-
-        # Simulate an error during LLM call
-        raise RuntimeError("Simulated LLM API failure")
-
-    with (
-        patch("litellm.completion") as mock_completion,
-        patch("onyx.llm.utils.SEND_USER_METADATA_TO_LLM_PROVIDER", False),
-    ):
-        mock_completion.side_effect = on_litellm_completion_raises
-
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
-        identity = LLMUserIdentity(user_id="user_123", session_id="session_abc")
-
-        with pytest.raises(RuntimeError, match="Simulated LLM API failure"):
-            llm.invoke(messages, user_identity=identity)
-
-        mock_completion.assert_called_once()
-
-        # Check that the environment variables are back to the original values
-        for env_var, value in EXPECTED_ENV_VARS.items():
-            assert env_var in os.environ
-            assert os.environ[env_var] == value
-
-        # Check that temporary env var from CUSTOM_CONFIG is no longer set
-        assert "THIS_IS_RANDOM" not in os.environ
-
-
-@pytest.mark.parametrize("use_stream", [False, True], ids=["invoke", "stream"])
-def test_multithreaded_custom_config_isolation(
-    monkeypatch: pytest.MonkeyPatch,
-    use_stream: bool,
-) -> None:
-    """Verify the env lock prevents concurrent LLM calls from seeing each other's custom_config.
-
-    Two LitellmTransport instances with different custom_config dicts call invoke/stream
-    concurrently. Both hold the exclusive write side of the env rwlock in
-    temporary_env_and_lock, which serializes their access so each call only ever
-    sees its own env vars—never the other's.
-    """
-    # Ensure these keys start unset
-    monkeypatch.delenv("SHARED_KEY", raising=False)
-    monkeypatch.delenv("LLM_A_ONLY", raising=False)
-    monkeypatch.delenv("LLM_B_ONLY", raising=False)
-
-    CONFIG_A = {
-        "SHARED_KEY": "value_from_A",
-        "LLM_A_ONLY": "a_secret",
-    }
-    CONFIG_B = {
-        "SHARED_KEY": "value_from_B",
-        "LLM_B_ONLY": "b_secret",
-    }
-
-    all_env_keys = list(set(list(CONFIG_A.keys()) + list(CONFIG_B.keys())))
-
-    model_provider = LlmProviderNames.OPENAI
-    model_name = "gpt-3.5-turbo"
-
-    llm_a = LitellmTransport(
-        api_key="key_a",
-        timeout=30,
-        model_provider=model_provider,
-        model_name=model_name,
-        max_input_tokens=get_max_input_tokens(
-            model_provider=model_provider,
-            model_name=model_name,
-        ),
-        custom_config=CONFIG_A,
-    )
-    llm_b = LitellmTransport(
-        api_key="key_b",
-        timeout=30,
-        model_provider=model_provider,
-        model_name=model_name,
-        max_input_tokens=get_max_input_tokens(
-            model_provider=model_provider,
-            model_name=model_name,
-        ),
-        custom_config=CONFIG_B,
-    )
-
-    # Both invoke (with custom_config) and stream use stream=True at the
-    # litellm level, so the mock must return stream chunks.
-    mock_stream_chunks = [
-        litellm.ModelResponse(
-            id="chatcmpl-123",
-            choices=[
-                litellm.Choices(
-                    delta=_create_delta(role="assistant", content="Hi"),
-                    finish_reason="stop",
-                    index=0,
-                )
-            ],
-            model=model_name,
-        ),
-    ]
-
-    # Track what each call observed inside litellm.completion.
-    # Keyed by api_key so we can identify which LLM instance made the call.
-    observed_envs: dict[str, dict[str, str | None]] = {}
-
-    def fake_completion(**kwargs: Any) -> list[litellm.ModelResponse]:
-        time.sleep(0.1)  # We expect someone to get caught on the lock
-        api_key = kwargs.get("api_key", "")
-        label = "A" if api_key == "key_a" else "B"
-
-        snapshot: dict[str, str | None] = {}
-        for key in all_env_keys:
-            snapshot[key] = os.environ.get(key)
-        observed_envs[label] = snapshot
-
-        return mock_stream_chunks
-
-    errors: list[Exception] = []
-
-    def run_llm(llm: LitellmTransport) -> None:
-        try:
-            messages: LanguageModelInput = [UserMessage(content="Hi")]
-            if use_stream:
-                list(llm.stream(messages))
-            else:
-                llm.invoke(messages)
-        except Exception as e:
-            errors.append(e)
-
-    with patch("litellm.completion", side_effect=fake_completion):
-        t_a = threading.Thread(target=run_llm, args=(llm_a,))
-        t_b = threading.Thread(target=run_llm, args=(llm_b,))
-
-        t_a.start()
-        t_b.start()
-        t_a.join(timeout=10)
-        t_b.join(timeout=10)
-
-    assert not errors, f"Thread errors: {errors}"
-    assert "A" in observed_envs and "B" in observed_envs
-
-    # Thread A must have seen its own config for SHARED_KEY, not B's
-    assert observed_envs["A"]["SHARED_KEY"] == "value_from_A"
-    assert observed_envs["A"]["LLM_A_ONLY"] == "a_secret"
-    # A must NOT see B's exclusive key
-    assert observed_envs["A"]["LLM_B_ONLY"] is None
-
-    # Thread B must have seen its own config for SHARED_KEY, not A's
-    assert observed_envs["B"]["SHARED_KEY"] == "value_from_B"
-    assert observed_envs["B"]["LLM_B_ONLY"] == "b_secret"
-    # B must NOT see A's exclusive key
-    assert observed_envs["B"]["LLM_A_ONLY"] is None
-
-    # After both calls, env should be clean
-    assert os.environ.get("SHARED_KEY") is None
-    assert os.environ.get("LLM_A_ONLY") is None
-    assert os.environ.get("LLM_B_ONLY") is None
-
-
-def test_multithreaded_invoke_without_custom_config_does_not_inject_env() -> None:
-    """invoke() without custom_config takes the shared read lock but injects no env vars.
-
-    Every call goes through temporary_env_and_lock (so it participates in the
-    env rwlock during its litellm call and can't observe a concurrent
-    custom_config call's injected secrets). Calls without custom_config pass an
-    empty mapping, so they take the read lock but never mutate os.environ.
-    """
-    from onyx.llm import multi_llm as multi_llm_module
-
-    model_provider = LlmProviderNames.OPENAI
-    model_name = "gpt-3.5-turbo"
-
-    llm_a = LitellmTransport(
-        api_key="key_a",
-        timeout=30,
-        model_provider=model_provider,
-        model_name=model_name,
-        max_input_tokens=get_max_input_tokens(
-            model_provider=model_provider,
-            model_name=model_name,
-        ),
-    )
-    llm_b = LitellmTransport(
-        api_key="key_b",
-        timeout=30,
-        model_provider=model_provider,
-        model_name=model_name,
-        max_input_tokens=get_max_input_tokens(
-            model_provider=model_provider,
-            model_name=model_name,
-        ),
-    )
-
-    mock_stream_chunks = [
-        litellm.ModelResponse(
-            id="chatcmpl-123",
-            choices=[
-                litellm.Choices(
-                    delta=_create_delta(role="assistant", content="Hi"),
-                    finish_reason="stop",
-                    index=0,
-                )
-            ],
-            model=model_name,
-        ),
-    ]
-
-    call_kwargs: dict[str, dict[str, Any]] = {}
-
-    def fake_completion(**kwargs: Any) -> list[litellm.ModelResponse]:
-        api_key = kwargs.get("api_key", "")
-        label = "A" if api_key == "key_a" else "B"
-        call_kwargs[label] = kwargs
-        return mock_stream_chunks
-
-    errors: list[Exception] = []
-
-    def run_llm(llm: LitellmTransport) -> None:
-        try:
-            messages: LanguageModelInput = [UserMessage(content="Hi")]
-            llm.invoke(messages)
-        except Exception as e:
-            errors.append(e)
-
-    with (
-        patch("litellm.completion", side_effect=fake_completion),
-        patch.object(
-            multi_llm_module,
-            "temporary_env_and_lock",
-            wraps=multi_llm_module.temporary_env_and_lock,
-        ) as mock_env_lock,
-    ):
-        t_a = threading.Thread(target=run_llm, args=(llm_a,))
-        t_b = threading.Thread(target=run_llm, args=(llm_b,))
-
-        t_a.start()
-        t_b.start()
-        t_a.join(timeout=10)
-        t_b.join(timeout=10)
-
-    assert not errors, f"Thread errors: {errors}"
-    assert "A" in call_kwargs and "B" in call_kwargs
-
-    # invoke() always uses stream=True internally (reassembles via stream_chunk_builder)
-    assert call_kwargs["A"]["stream"] is True
-    assert call_kwargs["B"]["stream"] is True
-
-    # Each call takes the lock via temporary_env_and_lock but injects nothing.
-    assert mock_env_lock.call_count == 2
-    for call in mock_env_lock.call_args_list:
-        assert call.args[0] == {}
-
-
-def test_keyless_reader_cannot_observe_writer_injected_secret(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Cross-tenant credential isolation in the shared process os.environ.
-
-    A "victim" Bedrock call injects an env-only custom_config secret into
-    os.environ for the duration of its litellm call (its AWS creds have kwarg
-    equivalents and never take the env path). It does so under the env write
-    lock. A concurrent keyless "attacker" Bedrock call (no custom_config) takes
-    the shared read lock, so it must block until the writer releases the lock and
-    restores os.environ — it can therefore only ever read a clean environment.
-
-    Before the fix the attacker took nullcontext() (no lock) and could read the
-    victim's secret straight out of os.environ. This test pins that the reader is
-    blocked during the writer's window and sees no secret.
-    """
-    monkeypatch.delenv("AWS_SECRET_ACCESS_KEY", raising=False)
-    monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)
-    monkeypatch.delenv("VICTIM_ENV_ONLY_SECRET", raising=False)
-
-    VICTIM_SECRET = "victim-aws-secret-DO-NOT-LEAK-0001"
-    VICTIM_ACCESS_KEY_ID = "victim-akid-0002"
-    VICTIM_ENV_ONLY_VALUE = "victim-env-only-DO-NOT-LEAK-0003"
-
-    # Victim: Bedrock provider whose creds live in custom_config (env-var
-    # format, mapped to kwargs) plus an env-only key that has no kwarg
-    # equivalent and is therefore injected under the write lock.
-    victim_llm = LitellmTransport(
-        api_key=None,
-        timeout=30,
-        model_provider=LlmProviderNames.BEDROCK,
-        model_name="anthropic.claude-3-sonnet-20240229-v1:0",
-        max_input_tokens=200000,
-        custom_config={
-            "AWS_SECRET_ACCESS_KEY": VICTIM_SECRET,
-            "AWS_ACCESS_KEY_ID": VICTIM_ACCESS_KEY_ID,
-            "AWS_REGION_NAME": "us-east-1",
-            "VICTIM_ENV_ONLY_SECRET": VICTIM_ENV_ONLY_VALUE,
-        },
-    )
-    # Attacker: keyless Bedrock provider, NO custom_config -> shared read lock.
-    attacker_llm = LitellmTransport(
-        api_key=None,
-        timeout=30,
-        model_provider=LlmProviderNames.BEDROCK,
-        model_name="anthropic.claude-3-haiku-20240307-v1:0",
-        max_input_tokens=200000,
-    )
-
-    mock_stream_chunks = [
-        litellm.ModelResponse(
-            id="chatcmpl-123",
-            choices=[
-                litellm.Choices(
-                    delta=_create_delta(role="assistant", content="Hi"),
-                    finish_reason="stop",
-                    index=0,
-                )
-            ],
-            model="anthropic.claude-3-sonnet-20240229-v1:0",
-        ),
-    ]
-
-    writer_inside = threading.Event()
-    release_writer = threading.Event()
-    reader_ran = threading.Event()
-    reader_env_snapshot: dict[str, str | None] = {}
-    writer_env_snapshot: dict[str, str | None] = {}
-
-    def fake_completion(**kwargs: Any) -> list[litellm.ModelResponse]:
-        # The victim's custom_config is mapped into explicit kwargs, so its
-        # presence distinguishes the victim (writer) from the keyless attacker.
-        is_writer = "aws_secret_access_key" in kwargs
-        if is_writer:
-            # Holding the env write lock here; the env-only secret is live in
-            # os.environ, while the mapped AWS creds must NOT be (they travel
-            # as kwargs only). Keep the window open until released (bounded so
-            # a broken lock can't hang).
-            writer_env_snapshot["AWS_SECRET_ACCESS_KEY"] = os.environ.get(
-                "AWS_SECRET_ACCESS_KEY"
-            )
-            writer_env_snapshot["VICTIM_ENV_ONLY_SECRET"] = os.environ.get(
-                "VICTIM_ENV_ONLY_SECRET"
-            )
-            writer_inside.set()
-            release_writer.wait(timeout=5)
-        else:
-            reader_env_snapshot["VICTIM_ENV_ONLY_SECRET"] = os.environ.get(
-                "VICTIM_ENV_ONLY_SECRET"
-            )
-            reader_env_snapshot["AWS_SECRET_ACCESS_KEY"] = os.environ.get(
-                "AWS_SECRET_ACCESS_KEY"
-            )
-            reader_ran.set()
-        return mock_stream_chunks
-
-    errors: list[Exception] = []
-
-    def run_llm(llm: LitellmTransport) -> None:
-        try:
-            llm.invoke([UserMessage(content="Hi")])
-        except Exception as e:
-            errors.append(e)
-
-    with patch("litellm.completion", side_effect=fake_completion):
-        victim_thread = threading.Thread(target=run_llm, args=(victim_llm,))
-        victim_thread.start()
-        assert writer_inside.wait(timeout=5), (
-            "victim never entered the write-locked section"
-        )
-
-        attacker_thread = threading.Thread(target=run_llm, args=(attacker_llm,))
-        attacker_thread.start()
-
-        # While the writer holds the env write lock, the reader must be blocked
-        # on the read lock: it cannot have run its completion yet. A leak (no
-        # lock for readers) would let it read os.environ immediately.
-        reader_ran_during_window = reader_ran.wait(timeout=1.0)
-
-        release_writer.set()
-        victim_thread.join(timeout=10)
-        attacker_thread.join(timeout=10)
-
-    assert not errors, f"Thread errors: {errors}"
-    assert reader_ran.is_set(), "attacker never completed"
-
-    # Inside the writer's window: the env-only key was injected, the mapped
-    # AWS creds never touched os.environ.
-    assert writer_env_snapshot["VICTIM_ENV_ONLY_SECRET"] == VICTIM_ENV_ONLY_VALUE
-    assert writer_env_snapshot["AWS_SECRET_ACCESS_KEY"] is None
-
-    # The attacker was blocked during the writer's env window...
-    assert not reader_ran_during_window, (
-        "Cross-tenant leak: keyless reader ran concurrently with the victim's "
-        "env injection"
-    )
-    # ...and when it finally ran, the environment was clean.
-    assert reader_env_snapshot["VICTIM_ENV_ONLY_SECRET"] is None
-    assert reader_env_snapshot["AWS_SECRET_ACCESS_KEY"] is None
-
-    # Env fully restored after the writer finished.
-    assert os.environ.get("VICTIM_ENV_ONLY_SECRET") is None
-    assert os.environ.get("AWS_SECRET_ACCESS_KEY") is None
-    assert os.environ.get("AWS_ACCESS_KEY_ID") is None
-
-
-def test_env_lock_many_readers_hold_concurrently() -> None:
-    """All readers must be inside the lock at the same time."""
-    num_readers = 4
-    barrier = threading.Barrier(num_readers)
-    errors: list[Exception] = []
-
-    def reader() -> None:
-        try:
-            with temporary_env_and_lock({}):
-                # Completes only if every reader is inside simultaneously; an
-                # exclusive lock would leave the first reader stuck here until
-                # the barrier times out and breaks.
-                barrier.wait(timeout=5)
-        except Exception as e:
-            errors.append(e)
-
-    threads = [threading.Thread(target=reader) for _ in range(num_readers)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join(timeout=10)
-
-    assert not errors, f"Thread errors: {errors}"
-
-
-def test_env_lock_writer_waits_for_active_reader(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A writer must block until in-flight readers finish, and readers never
-    observe the writer's env vars."""
-    monkeypatch.delenv(_ENV_LOCK_TEST_KEY, raising=False)
-
-    reader_inside = threading.Event()
-    release_reader = threading.Event()
-    writer_inside = threading.Event()
-    errors: list[Exception] = []
-
-    def reader() -> None:
-        try:
-            with temporary_env_and_lock({}):
-                reader_inside.set()
-                assert release_reader.wait(timeout=5), "reader never released"
-                # Writer is queued but must not have injected env yet.
-                assert os.environ.get(_ENV_LOCK_TEST_KEY) is None
-        except Exception as e:
-            errors.append(e)
-
-    def writer() -> None:
-        try:
-            with temporary_env_and_lock({_ENV_LOCK_TEST_KEY: "writer_value"}):
-                writer_inside.set()
-                assert os.environ.get(_ENV_LOCK_TEST_KEY) == "writer_value"
-        except Exception as e:
-            errors.append(e)
-
-    reader_thread = threading.Thread(target=reader)
-    reader_thread.start()
-    assert reader_inside.wait(timeout=5), "reader never entered"
-
-    writer_thread = threading.Thread(target=writer)
-    writer_thread.start()
-
-    # Writer must stay blocked while the read lock is held.
-    assert not writer_inside.wait(timeout=0.3), (
-        "writer entered while a reader held the lock"
-    )
-
-    release_reader.set()
-    reader_thread.join(timeout=10)
-    writer_thread.join(timeout=10)
-
-    assert not errors, f"Thread errors: {errors}"
-    assert writer_inside.is_set(), "writer never entered after readers drained"
-    assert os.environ.get(_ENV_LOCK_TEST_KEY) is None
-
-
-def test_env_lock_read_write_read_sequencing(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """reader1 -> writer -> reader2: a reader arriving while a writer is queued
-    must wait behind it (write preference, so writers can't starve), and once
-    the writer finishes the late reader sees a clean environment."""
-    monkeypatch.delenv(_ENV_LOCK_TEST_KEY, raising=False)
-
-    r1_inside = threading.Event()
-    release_r1 = threading.Event()
-    writer_inside = threading.Event()
-    release_writer = threading.Event()
-    r2_inside = threading.Event()
-    order: list[str] = []
-    order_lock = threading.Lock()
-    errors: list[Exception] = []
-
-    def record(label: str) -> None:
-        with order_lock:
-            order.append(label)
-
-    def reader1() -> None:
-        try:
-            with temporary_env_and_lock({}):
-                record("r1")
-                r1_inside.set()
-                assert release_r1.wait(timeout=5), "r1 never released"
-        except Exception as e:
-            errors.append(e)
-
-    def writer() -> None:
-        try:
-            with temporary_env_and_lock({_ENV_LOCK_TEST_KEY: "writer_value"}):
-                record("w")
-                writer_inside.set()
-                assert os.environ.get(_ENV_LOCK_TEST_KEY) == "writer_value"
-                assert release_writer.wait(timeout=5), "writer never released"
-        except Exception as e:
-            errors.append(e)
-
-    def reader2() -> None:
-        try:
-            with temporary_env_and_lock({}):
-                record("r2")
-                r2_inside.set()
-                # Writer restored the env before releasing the lock.
-                assert os.environ.get(_ENV_LOCK_TEST_KEY) is None
-        except Exception as e:
-            errors.append(e)
-
-    r1_thread = threading.Thread(target=reader1)
-    r1_thread.start()
-    assert r1_inside.wait(timeout=5), "r1 never entered"
-
-    writer_thread = threading.Thread(target=writer)
-    writer_thread.start()
-    # Let the writer reach the blocked wlock acquisition before r2 arrives.
-    assert not writer_inside.wait(timeout=0.3), "writer entered while r1 held the lock"
-
-    r2_thread = threading.Thread(target=reader2)
-    r2_thread.start()
-    # r2 arrived after the writer queued, so it must wait behind the writer.
-    assert not r2_inside.wait(timeout=0.3), (
-        "late reader jumped ahead of a queued writer"
-    )
-
-    release_r1.set()
-    assert writer_inside.wait(timeout=5), "writer never entered after r1 exited"
-    # While the writer holds the lock, r2 must still be blocked.
-    assert not r2_inside.wait(timeout=0.3), "reader entered during write section"
-
-    release_writer.set()
-    assert r2_inside.wait(timeout=5), "r2 never entered after the writer exited"
-
-    r1_thread.join(timeout=10)
-    writer_thread.join(timeout=10)
-    r2_thread.join(timeout=10)
-
-    assert not errors, f"Thread errors: {errors}"
-    assert order == ["r1", "w", "r2"]
-    assert os.environ.get(_ENV_LOCK_TEST_KEY) is None
-
-
-def test_env_lock_writers_are_mutually_exclusive(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Concurrent writers serialize; each sees only its own env value and the
-    environment is fully restored afterwards."""
-    monkeypatch.delenv(_ENV_LOCK_TEST_KEY, raising=False)
-
-    active = 0
-    max_active = 0
-    counter_lock = threading.Lock()
-    errors: list[Exception] = []
-
-    def writer(value: str) -> None:
-        nonlocal active, max_active
-        try:
-            with temporary_env_and_lock({_ENV_LOCK_TEST_KEY: value}):
-                with counter_lock:
-                    active += 1
-                    max_active = max(max_active, active)
-                assert os.environ.get(_ENV_LOCK_TEST_KEY) == value
-                time.sleep(0.05)
-                assert os.environ.get(_ENV_LOCK_TEST_KEY) == value
-                with counter_lock:
-                    active -= 1
-        except Exception as e:
-            errors.append(e)
-
-    threads = [threading.Thread(target=writer, args=(f"value_{i}",)) for i in range(3)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join(timeout=10)
-
-    assert not errors, f"Thread errors: {errors}"
-    assert max_active == 1, "two writers held the lock at once"
-    assert os.environ.get(_ENV_LOCK_TEST_KEY) is None
-
-
-def test_env_lock_released_and_env_restored_on_exception(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """An exception inside either section releases the lock and, for writers,
-    restores the pre-existing env value."""
-    monkeypatch.setenv(_ENV_LOCK_TEST_KEY, "original")
-
-    with pytest.raises(RuntimeError, match="writer boom"):
-        with temporary_env_and_lock({_ENV_LOCK_TEST_KEY: "writer_value"}):
-            assert os.environ.get(_ENV_LOCK_TEST_KEY) == "writer_value"
-            raise RuntimeError("writer boom")
-    assert os.environ.get(_ENV_LOCK_TEST_KEY) == "original"
-
-    with pytest.raises(RuntimeError, match="reader boom"):
-        with temporary_env_and_lock({}):
-            raise RuntimeError("reader boom")
-
-    # Lock is still usable in both modes afterwards.
-    with temporary_env_and_lock({_ENV_LOCK_TEST_KEY: "writer_value_2"}):
-        assert os.environ.get(_ENV_LOCK_TEST_KEY) == "writer_value_2"
-    assert os.environ.get(_ENV_LOCK_TEST_KEY) == "original"
-    with temporary_env_and_lock({}):
-        assert os.environ.get(_ENV_LOCK_TEST_KEY) == "original"
-
-
-def test_injection_disabled_maps_kwargs_and_never_touches_env(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Cloud posture: mapped keys become litellm kwargs, unmapped keys are
-    dropped, and os.environ is never mutated."""
-    monkeypatch.delenv("AWS_SECRET_ACCESS_KEY", raising=False)
-    monkeypatch.delenv("ENV_ONLY_KEY", raising=False)
-
-    llm = LitellmTransport(
-        api_key=None,
-        timeout=30,
-        model_provider=LlmProviderNames.BEDROCK,
-        model_name="anthropic.claude-3-sonnet-20240229-v1:0",
-        max_input_tokens=200000,
-        custom_config={
-            "AWS_ACCESS_KEY_ID": "akid",
-            "AWS_SECRET_ACCESS_KEY": "secret",
-            "AWS_REGION_NAME": "us-east-1",
-            "ENV_ONLY_KEY": "env-only-value",
-        },
-    )
-
-    env_during_call: dict[str, str | None] = {}
-
-    def fake_completion(**kwargs: Any) -> list[litellm.ModelResponse]:  # noqa: ARG001
-        env_during_call["AWS_SECRET_ACCESS_KEY"] = os.environ.get(
-            "AWS_SECRET_ACCESS_KEY"
-        )
-        env_during_call["ENV_ONLY_KEY"] = os.environ.get("ENV_ONLY_KEY")
-        return _simple_stream_chunks("anthropic.claude-3-sonnet-20240229-v1:0")
-
-    from onyx.llm import multi_llm as multi_llm_module
-
-    env_before = dict(os.environ)
-    with (
-        patch("litellm.completion", side_effect=fake_completion) as mock_completion,
-        patch(
-            "onyx.llm.multi_llm._env_injection_enabled",
-            return_value=False,
-        ),
-        patch.object(
-            multi_llm_module,
-            "temporary_env_and_lock",
-            wraps=multi_llm_module.temporary_env_and_lock,
-        ) as mock_env_lock,
-    ):
-        llm.invoke([UserMessage(content="Hi")])
-
-    kwargs = mock_completion.call_args.kwargs
-    assert kwargs["aws_access_key_id"] == "akid"
-    assert kwargs["aws_secret_access_key"] == "secret"
-    assert kwargs["aws_region_name"] == "us-east-1"
-    # The env-only key is dropped: not a kwarg, not an env var.
-    assert "ENV_ONLY_KEY" not in kwargs
-    assert env_during_call["AWS_SECRET_ACCESS_KEY"] is None
-    assert env_during_call["ENV_ONLY_KEY"] is None
-    assert dict(os.environ) == env_before
-    # With injection disabled there can be no env writers, so the call must
-    # bypass the rwlock entirely.
-    mock_env_lock.assert_not_called()
-
-
-def test_injection_enabled_still_injects_env_only_keys(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Self-hosted posture: env-only keys are injected during the call, while
-    mapped keys still travel as kwargs only."""
-    monkeypatch.delenv("AWS_SECRET_ACCESS_KEY", raising=False)
-    monkeypatch.delenv("ENV_ONLY_KEY", raising=False)
-
-    llm = LitellmTransport(
-        api_key=None,
-        timeout=30,
-        model_provider=LlmProviderNames.BEDROCK,
-        model_name="anthropic.claude-3-sonnet-20240229-v1:0",
-        max_input_tokens=200000,
-        custom_config={
-            "AWS_SECRET_ACCESS_KEY": "secret",
-            "ENV_ONLY_KEY": "env-only-value",
-        },
-    )
-
-    env_during_call: dict[str, str | None] = {}
-
-    def fake_completion(**kwargs: Any) -> list[litellm.ModelResponse]:  # noqa: ARG001
-        env_during_call["AWS_SECRET_ACCESS_KEY"] = os.environ.get(
-            "AWS_SECRET_ACCESS_KEY"
-        )
-        env_during_call["ENV_ONLY_KEY"] = os.environ.get("ENV_ONLY_KEY")
-        return _simple_stream_chunks("anthropic.claude-3-sonnet-20240229-v1:0")
-
-    with (
-        patch("litellm.completion", side_effect=fake_completion) as mock_completion,
-        patch(
-            "onyx.llm.multi_llm._env_injection_enabled",
-            return_value=True,
-        ),
-    ):
-        llm.invoke([UserMessage(content="Hi")])
-
-    kwargs = mock_completion.call_args.kwargs
-    assert kwargs["aws_secret_access_key"] == "secret"
-    assert env_during_call["ENV_ONLY_KEY"] == "env-only-value"
-    # Mapped keys never take the env path regardless of the flag.
-    assert env_during_call["AWS_SECRET_ACCESS_KEY"] is None
-    # Cleaned up after the call.
-    assert os.environ.get("ENV_ONLY_KEY") is None
-
-
-def test_ui_only_keys_never_injected_or_warned(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """UI form-state keys are excluded from the env-only bucket: no injection
-    when enabled, no drop warning when disabled."""
-    monkeypatch.delenv("BEDROCK_AUTH_METHOD", raising=False)
-
-    llm = LitellmTransport(
-        api_key=None,
-        timeout=30,
-        model_provider=LlmProviderNames.BEDROCK,
-        model_name="anthropic.claude-3-sonnet-20240229-v1:0",
-        max_input_tokens=200000,
-        custom_config={
-            "BEDROCK_AUTH_METHOD": "long_term_api_key",
-            "AWS_REGION_NAME": "us-east-1",
-            "AWS_BEARER_TOKEN_BEDROCK": "bearer",
-        },
-    )
-    assert llm._env_only_custom_config == {}
-
-    env_during_call: dict[str, str | None] = {}
-
-    def fake_completion(**kwargs: Any) -> list[litellm.ModelResponse]:  # noqa: ARG001
-        env_during_call["BEDROCK_AUTH_METHOD"] = os.environ.get("BEDROCK_AUTH_METHOD")
-        return _simple_stream_chunks("anthropic.claude-3-sonnet-20240229-v1:0")
-
-    for injection_enabled in (True, False):
-        with (
-            patch("litellm.completion", side_effect=fake_completion),
-            patch(
-                "onyx.llm.multi_llm._env_injection_enabled",
-                return_value=injection_enabled,
-            ),
-            patch("onyx.llm.multi_llm._warn_dropped_env_only_keys") as mock_warn,
-        ):
-            llm.invoke([UserMessage(content="Hi")])
-        assert env_during_call["BEDROCK_AUTH_METHOD"] is None
-        mock_warn.assert_not_called()
 
 
 def test_cancellable_provider_setup_restores_environment_on_failure(

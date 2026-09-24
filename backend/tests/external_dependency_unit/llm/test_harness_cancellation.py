@@ -262,7 +262,6 @@ def test_cancel_closes_provider_connection(
                 else "harness-model",
                 max_input_tokens=4096,
                 api_base=url,
-                timeout=30,
             )
         )
 
@@ -312,7 +311,6 @@ def test_cancellable_model_completes_normally(invoke: bool) -> None:
                 model_name="harness-model",
                 max_input_tokens=4096,
                 api_base=url,
-                timeout=10,
             )
         )
         request = GenerationRequest(messages=[UserMessage(content="test")])
@@ -346,7 +344,6 @@ def test_cancel_does_not_interrupt_another_run() -> None:
                         model_name="harness-model",
                         max_input_tokens=4096,
                         api_base=url,
-                        timeout=10,
                     )
                 )
                 list(
@@ -397,7 +394,6 @@ def test_azure_preserves_authentication_and_endpoint(
                 if ad_token
                 else None,
                 max_input_tokens=4096,
-                timeout=5,
             )
         )
         result = client.invoke(

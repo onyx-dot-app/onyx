@@ -5,6 +5,8 @@ used to be injected as a bare "File: x\n\nEnd of File" block, which led models
 to invent workarounds (web-searching for the document, guessing contents).
 """
 
+import pytest
+
 from onyx.chat.files import (
     CONTENT_PENDING_NOTICE,
     CONTENT_UNAVAILABLE_NOTICE,
@@ -66,7 +68,7 @@ def test_empty_pending_content_gets_pending_notice() -> None:
 def test_metadata_only_files_keep_tool_instructions(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("onyx.chat.chat_utils.DISABLE_VECTOR_DB", True)
+    monkeypatch.setattr("onyx.chat.files.DISABLE_VECTOR_DB", True)
     result = build_file_context(
         tool_file_id="abc",
         filename="sheet.xlsx",
@@ -74,5 +76,5 @@ def test_metadata_only_files_keep_tool_instructions(
         content_text=None,
         token_count=0,
     )
-    assert "file_reader" in result.message.text
+    assert "read_file" in result.message.text
     assert CONTENT_UNAVAILABLE_NOTICE not in result.message.text
