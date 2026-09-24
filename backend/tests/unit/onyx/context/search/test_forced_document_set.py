@@ -77,7 +77,7 @@ def _build_filters(monkeypatch: pytest.MonkeyPatch, *, force: bool) -> IndexFilt
         persona_document_sets=None,
         persona_time_cutoff=None,
         db_session=None,
-        bypass_acl=True,
+        acl_filters=["user_email:test@example.com"],
         force_configured_document_set_scope=force,
     )
 

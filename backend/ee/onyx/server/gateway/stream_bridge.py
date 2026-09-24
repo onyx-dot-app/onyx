@@ -6,9 +6,10 @@ circular import.
 
 import queue
 import threading
+import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 from fastapi.responses import StreamingResponse
 
@@ -77,6 +78,34 @@ class _StreamAccumulator:
         return "".join(self.content)
 
 
+_USAGE_DRAIN_MAX_CHUNKS = 2_000
+_USAGE_DRAIN_MAX_SECONDS = 10.0
+
+
+def _drain_for_usage(state: _StreamAccumulator, label: str, model: str) -> None:
+    """Read trailing usage after disconnect, within chunk and elapsed-time limits."""
+    upstream = state.upstream
+    # Native passthrough owns an ExitStack, not a chunk iterator.
+    if state.usage is not None or not isinstance(upstream, Iterator):
+        return
+    chunks = cast(Iterator[ModelResponseStream], upstream)
+    deadline = time.monotonic() + _USAGE_DRAIN_MAX_SECONDS
+    try:
+        for count, chunk in enumerate(chunks, start=1):
+            state.observe(chunk)
+            if state.usage is not None:
+                return
+            if count >= _USAGE_DRAIN_MAX_CHUNKS or time.monotonic() >= deadline:
+                break
+    except Exception as drain_error:
+        logger.warning(
+            "LLM gateway %s usage drain failed (%s) for model %s",
+            label,
+            type(drain_error).__name__,
+            model,
+        )
+
+
 _RATE_LIMIT_ERROR = (
     "The selected model is temporarily rate limited.",
     "rate_limit_error",
@@ -120,6 +149,7 @@ def _stream_worker_guard(
         )
         emit_error(message=message, error_type=error_type)
     finally:
+        _drain_for_usage(state, label, model)
         try:
             if isinstance(state.upstream, _ClosableStream):
                 state.upstream.close()

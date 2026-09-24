@@ -9,6 +9,8 @@ export type OpalStrings = {
   close: string;
   loading: string;
   loadingPage: string;
+  /** The Cancel action `SettingsLayouts.Header` renders when `cancel` is set. */
+  settingsHeaderCancel: string;
   copy: string;
   copied: string;
   copyCode: string;
@@ -75,6 +77,8 @@ export type OpalStrings = {
   comboBoxOtherOptions: string;
   comboBoxCreate: string;
   comboBoxCreateOption: (prefix: string, value: string) => string;
+  selectEmptySet: string;
+  selectInvalidOption: string;
   keyValueKey: string;
   keyValueValue: string;
   keyValueAddLine: string;
@@ -104,6 +108,7 @@ export const defaultOpalStrings: OpalStrings = {
   close: "Close",
   loading: "Loading",
   loadingPage: "Loading …",
+  settingsHeaderCancel: "Cancel",
   copy: "Copy",
   copied: "Copied!",
   copyCode: "Copy code",
@@ -171,6 +176,8 @@ export const defaultOpalStrings: OpalStrings = {
   comboBoxOtherOptions: "Other options",
   comboBoxCreate: "Create",
   comboBoxCreateOption: (prefix, value) => `${prefix} "${value}"`,
+  selectEmptySet: "No items found",
+  selectInvalidOption: "Please select a valid option from the list",
   keyValueKey: "Key",
   keyValueValue: "Value",
   keyValueAddLine: "Add Line",

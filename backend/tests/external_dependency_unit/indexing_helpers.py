@@ -23,6 +23,7 @@ from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
     Credential,
+    Document__Tag,
     DocumentByConnectorCredentialPair,
     FileRecord,
     IndexAttempt,
@@ -190,6 +191,9 @@ def cleanup_cc_pair(db_session: Session, pair: ConnectorCredentialPair) -> None:
                 pass
 
         if orphan_doc_ids:
+            db_session.query(Document__Tag).filter(
+                Document__Tag.document_id.in_(orphan_doc_ids)
+            ).delete(synchronize_session="fetch")
             db_session.query(DBDocument).filter(
                 DBDocument.id.in_(orphan_doc_ids)
             ).delete(synchronize_session="fetch")
@@ -239,10 +243,12 @@ def seed_cc_pair_documents(
     *,
     prefix: str = "portdoc-",
     unique: bool = False,
+    chunk_count: int | None = None,
 ) -> list[str]:
     """Create `count` documents linked to the cc_pair; returns their ids, sorted.
     `unique=True` adds a random suffix so a test seeding a real index across runs
-    never collides."""
+    never collides. `chunk_count` is stored on each document; the pre-swap sample
+    skips documents whose count is 0."""
     if unique:
         doc_ids = sorted(
             f"{prefix}{i:03d}-{uuid4().hex[:6]}" for i in range(1, count + 1)
@@ -251,7 +257,12 @@ def seed_cc_pair_documents(
         doc_ids = [f"{prefix}{i:03d}" for i in range(1, count + 1)]
     for doc_id in doc_ids:
         db_session.add(
-            DBDocument(id=doc_id, semantic_id=doc_id, kg_stage=KGStage.NOT_STARTED)
+            DBDocument(
+                id=doc_id,
+                semantic_id=doc_id,
+                kg_stage=KGStage.NOT_STARTED,
+                chunk_count=chunk_count,
+            )
         )
     db_session.flush()
     for doc_id in doc_ids:

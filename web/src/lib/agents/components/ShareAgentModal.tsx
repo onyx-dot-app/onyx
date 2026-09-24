@@ -35,7 +35,7 @@ import {
   SvgUserManage,
   SvgUsers,
 } from "@opal/icons";
-import { copyText, markdown } from "@opal/utils";
+import { copyText, escapeMarkdown, markdown } from "@opal/utils";
 import { useModal } from "@opal/components";
 import { AddPeoplePicker } from "@/sections/modals/AddPeoplePicker";
 import { ShareAccessRow } from "@/sections/modals/ShareAccessRow";
@@ -749,8 +749,16 @@ export function ShareAgentModal({
           onClose={closeModal}
           title={
             view === "transfer"
-              ? markdown(t("shareAgent.transfer.title", { name: agentName }))
-              : markdown(t("shareAgent.share.title", { name: agentName }))
+              ? markdown(
+                  t("shareAgent.transfer.title", {
+                    name: escapeMarkdown(agentName),
+                  })
+                )
+              : markdown(
+                  t("shareAgent.share.title", {
+                    name: escapeMarkdown(agentName),
+                  })
+                )
           }
         />
 

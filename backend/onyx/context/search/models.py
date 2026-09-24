@@ -177,9 +177,6 @@ class ChunkSearchRequest(BasicChunkRequest):
     # Final filters are calculated from these
     user_selected_filters: BaseFilters | None = None
 
-    # Use with caution!
-    bypass_acl: bool = False
-
 
 # From the Chat Session we know what project (if any) this search should include
 # From the user uploads and persona uploaded files, we know which of those to include
@@ -287,8 +284,7 @@ class InferenceChunkUncleaned(InferenceChunk):
         inference_chunk_data = {
             k: v
             for k, v in self.model_dump().items()
-            if k
-            not in ["metadata_suffix"]  # May be other fields to throw out in the future
+            if k != "metadata_suffix"  # May be other fields to throw out in the future
         }
         return InferenceChunk(**inference_chunk_data)
 

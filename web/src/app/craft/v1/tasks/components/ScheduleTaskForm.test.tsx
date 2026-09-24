@@ -29,7 +29,7 @@ jest.mock("@/hooks/useUserExternalApps", () => ({
   default: () => ({ data: [] }),
 }));
 
-jest.mock("@/lib/tools/hooks", () => ({
+jest.mock("@/lib/mcp/hooks", () => ({
   useCraftMcpServers: () => ({ data: { mcp_servers: [] } }),
 }));
 

@@ -376,10 +376,10 @@ def try_creating_permissions_sync_task(
 
         result = app.send_task(
             OnyxCeleryTask.CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK,
-            kwargs=dict(
-                cc_pair_id=cc_pair_id,
-                tenant_id=tenant_id,
-            ),
+            kwargs={
+                "cc_pair_id": cc_pair_id,
+                "tenant_id": tenant_id,
+            },
             queue=OnyxCeleryQueues.CONNECTOR_DOC_PERMISSIONS_SYNC,
             task_id=custom_task_id,
             priority=OnyxCeleryPriority.MEDIUM,

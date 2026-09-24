@@ -41,17 +41,17 @@ type userGroupResource struct {
 }
 
 type userGroupResourceModel struct {
-	ID               types.String   `tfsdk:"id"`
-	Name             types.String   `tfsdk:"name"`
 	UserIDs          types.Set      `tfsdk:"user_ids"`
 	ManagerIDs       types.Set      `tfsdk:"manager_ids"`
 	Permissions      types.Set      `tfsdk:"permissions"`
-	IncognitoEnabled types.Bool     `tfsdk:"incognito_enabled"`
 	CCPairIDs        types.Set      `tfsdk:"cc_pair_ids"`
 	DocumentSetIDs   types.Set      `tfsdk:"document_set_ids"`
 	AgentIDs         types.Set      `tfsdk:"agent_ids"`
-	IsDefault        types.Bool     `tfsdk:"is_default"`
+	ID               types.String   `tfsdk:"id"`
+	Name             types.String   `tfsdk:"name"`
 	Timeouts         timeouts.Value `tfsdk:"timeouts"`
+	IncognitoEnabled types.Bool     `tfsdk:"incognito_enabled"`
+	IsDefault        types.Bool     `tfsdk:"is_default"`
 }
 
 func (r *userGroupResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {

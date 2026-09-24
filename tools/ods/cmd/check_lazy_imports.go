@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	log "github.com/sirupsen/logrus"
@@ -29,19 +30,26 @@ Examples:
   ods check-lazy-imports onyx/llm/           # Check only files in onyx/llm/
   ods check-lazy-imports onyx/chat/chat.py   # Check a specific file`,
 		Run: func(cmd *cobra.Command, args []string) {
-			runCheckLazyImports(args)
+			clean, err := runCheckLazyImports(args, os.Stderr)
+			if err != nil {
+				log.Fatal(err)
+			}
+			if !clean {
+				os.Exit(1)
+			}
 		},
 	}
 
 	return cmd
 }
 
-func runCheckLazyImports(providedPaths []string) {
+// runCheckLazyImports reports whether no module is imported eagerly.
+func runCheckLazyImports(providedPaths []string, stderr io.Writer) (bool, error) {
 	modules := lazyimports.DefaultLazyImportModules()
 
 	violations, allViolatedModules, err := lazyimports.CheckLazyImports(modules, providedPaths)
 	if err != nil {
-		log.Fatalf("Error checking lazy imports: %v", err)
+		return false, fatalErrorf("Error checking lazy imports: %v", err)
 	}
 
 	if len(violations) > 0 {
@@ -59,10 +67,10 @@ func runCheckLazyImports(providedPaths []string) {
 		}
 
 		violatedModulesStr := lazyimports.FormatViolatedModules(allViolatedModules)
-		fmt.Fprintf(os.Stderr, "\nFound eager imports of %s. You must import them only when needed.\n", violatedModulesStr)
-		os.Exit(1)
+		_, _ = fmt.Fprintf(stderr, "\nFound eager imports of %s. You must import them only when needed.\n", violatedModulesStr)
+		return false, nil
 	}
 
 	log.Info("✅ All lazy modules are properly imported!")
+	return true, nil
 }
-

@@ -59,8 +59,12 @@ def _get_local_secrets(keys: Sequence[AnySecret]) -> dict[AnySecret, str]:
     found: dict[AnySecret, str] = {}
 
     for key in keys:
-        env_val = os.environ.get(key.value)
-        value = env_val if env_val is not None else dotenv.get(key.value)
+        value = (
+            os.environ.get(key.name)
+            or os.environ.get(key.value)
+            or dotenv.get(key.name)
+            or dotenv.get(key.value)
+        )
         if value:
             found[key] = value
 
@@ -112,11 +116,7 @@ def _get_aws_secrets(
             secret_value = secret.get("SecretString")
 
             if secret_value:
-                key_name = (
-                    secret_id[len(prefix) :]
-                    if secret_id.startswith(prefix)
-                    else secret_id
-                )
+                key_name = secret_id.removeprefix(prefix)
                 try:
                     secrets[enum_type(key_name)] = secret_value
                 except ValueError:

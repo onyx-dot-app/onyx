@@ -18,8 +18,8 @@ from onyx.db.models import LLMProvider, ModelConfiguration
 from onyx.llm.exceptions import ClassifiedLLMError
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.model_capabilities import (
+    catalog_model_supports_image_input,
     get_max_input_tokens,
-    litellm_thinks_model_supports_image_input,
     model_identity_names,
 )
 from onyx.llm.model_response import ModelResponse
@@ -521,7 +521,7 @@ def get_max_input_tokens_from_llm_provider(
     Fallback order:
     1. Use max_input_tokens from model_configuration (populated from source APIs
        like OpenRouter, Ollama, or our Bedrock mapping)
-    2. Look up in litellm.model_cost dictionary
+    2. Look up in the vendored model catalog
     3. Fall back to GEN_AI_MODEL_FALLBACK_MAX_TOKENS (32000)
 
     Most dynamic providers (OpenRouter, Ollama) provide context_length via their
@@ -533,13 +533,9 @@ def get_max_input_tokens_from_llm_provider(
     for model_configuration in llm_provider.model_configurations:
         if model_configuration.name == model_name:
             max_input_tokens = model_configuration.max_input_tokens
-    return (
-        max_input_tokens
-        if max_input_tokens
-        else get_max_input_tokens(
-            model_provider=llm_provider.provider,
-            model_name=model_name,
-        )
+    return max_input_tokens or get_max_input_tokens(
+        model_provider=llm_provider.provider,
+        model_name=model_name,
     )
 
 
@@ -576,11 +572,11 @@ def model_supports_image_input(
             e,
         )
 
-    # Fallback to looking up the model in the litellm model_cost dict. A
+    # Fallback to looking up the model in the model catalog. A
     # custom provider (e.g. Azure AI Foundry) may carry the real model
     # identity only in the deployment alias.
     return any(
-        litellm_thinks_model_supports_image_input(name, model_provider)
+        catalog_model_supports_image_input(name, model_provider)
         for name in model_identity_names(model_name, deployment_name)
     )
 

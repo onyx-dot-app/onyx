@@ -68,7 +68,11 @@ from onyx.server.query_and_chat.streaming_models import (
 )
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolCallInfo, ToolCallKickoff, ToolResponse
+from onyx.tools.tool_implementations.images.image_generation_tool import (
+    ImageGenerationTool,
+)
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
@@ -208,7 +212,7 @@ def generate_intermediate_report(
         llm_step_result = cast(LlmStepResult, llm_step_result)
 
         final_report = llm_step_result.answer
-        span.span_data.output = final_report if final_report else None
+        span.span_data.output = final_report or None
         if final_report is None:
             raise ValueError(
                 f"LLM failed to generate a report for research task: {research_topic}"
@@ -426,7 +430,7 @@ def run_research_agent_call(
                             tab_index=tab_index,
                         ),
                     )
-                    span.span_data.output = final_report if final_report else None
+                    span.span_data.output = final_report or None
                     return ResearchAgentCallResult(
                         intermediate_report=final_report,
                         citation_mapping=citation_processor.get_seen_citations(),
@@ -628,7 +632,7 @@ def run_research_agent_call(
                     tab_index=tab_index,
                 ),
             )
-            span.span_data.output = final_report if final_report else None
+            span.span_data.output = final_report or None
             return ResearchAgentCallResult(
                 intermediate_report=final_report,
                 citation_mapping=citation_processor.get_seen_citations(),
@@ -779,19 +783,22 @@ if __name__ == "__main__":
         emitter = Emitter(merged_queue=emitter_queue)
         state_container = ChatStateContainer()
 
+        # No chat session exists here, so skip the tools that write
+        # session-scoped generated files.
         tool_dict = construct_tools(
             persona=persona,
             db_session=db_session,
             emitter=emitter,
             user=user,
             llm=llm,
+            allowed_tool_ids=[
+                tool.id
+                for tool in persona.tools
+                if tool.in_code_tool_id
+                not in (ImageGenerationTool.__name__, PythonTool.__name__)
+            ],
         )
-        tools = [
-            tool
-            for tool_list in tool_dict.values()
-            for tool in tool_list
-            if tool.name != "generate_image"
-        ]
+        tools = [tool for tool_list in tool_dict.values() for tool in tool_list]
 
         logger.info("Running research agent with prompt: %s", RESEARCH_PROMPT)
         logger.info("LLM: %s/%s", llm.config.model_provider, llm.config.model_name)

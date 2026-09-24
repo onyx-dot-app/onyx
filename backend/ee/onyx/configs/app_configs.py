@@ -112,6 +112,18 @@ TEAMS_PERMISSION_DOC_SYNC_FREQUENCY = int(
     os.environ.get("TEAMS_PERMISSION_DOC_SYNC_FREQUENCY") or 5 * 60
 )
 
+# In seconds, default is 5 minutes
+TEAMS_PERMISSION_GROUP_SYNC_FREQUENCY = int(
+    os.environ.get("TEAMS_PERMISSION_GROUP_SYNC_FREQUENCY") or 5 * 60
+)
+
+#####
+# Outlook
+#####
+OUTLOOK_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("OUTLOOK_PERMISSION_DOC_SYNC_FREQUENCY") or 5 * 60
+)
+
 #####
 # SharePoint
 #####

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import { Formik, Form, useFormikContext } from "formik";
 import * as Yup from "yup";
 import { Button, LinkButton, Text } from "@opal/components";
@@ -110,6 +111,7 @@ interface TimeoutFieldProps {
 
 function TimeoutField({ spec }: TimeoutFieldProps) {
   const t = useTranslations("admin.hooks");
+  const { appName } = useSettings();
   const { values, setFieldValue, isSubmitting } =
     useFormikContext<HookFormState>();
 
@@ -120,6 +122,7 @@ function TimeoutField({ spec }: TimeoutFieldProps) {
       suffix={t("form.timeout.suffix")}
       subDescription={t("form.timeout.description", {
         max: MAX_TIMEOUT_SECONDS,
+        appName,
       })}
     >
       <div className="[&_input]:!font-main-ui-mono [&_input::placeholder]:!font-main-ui-mono [&_input]:[appearance:textfield]! [&_input::-webkit-outer-spin-button]:appearance-none! [&_input::-webkit-inner-spin-button]:appearance-none! w-full">
@@ -163,6 +166,7 @@ export default function HookFormModal({
   onSuccess,
 }: HookFormModalProps) {
   const t = useTranslations("admin.hooks");
+  const { appName } = useSettings();
   const isEdit = !!hook;
   const [isConnected, setIsConnected] = useState(false);
   const [apiKeyCleared, setApiKeyCleared] = useState(false);
@@ -264,7 +268,7 @@ export default function HookFormModal({
           {({ values, setFieldValue, isSubmitting, isValid, dirty }) => {
             const failStrategyDescription =
               values.fail_strategy === "soft"
-                ? t("form.softStrategy.description")
+                ? t("form.softStrategy.description", { appName })
                 : spec?.fail_hard_description;
 
             return (
@@ -380,7 +384,7 @@ export default function HookFormModal({
                   <InputVertical
                     withLabel="api_key"
                     title={t("form.apiKey.title")}
-                    subDescription={t("form.apiKey.description")}
+                    subDescription={t("form.apiKey.description", { appName })}
                   >
                     <PasswordInputTypeInField
                       name="api_key"
