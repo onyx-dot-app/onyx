@@ -12,8 +12,8 @@ the DB layer and the outbound network call.
 import asyncio
 import threading
 import time
-from collections.abc import Iterator
-from contextlib import contextmanager
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 from types import SimpleNamespace
 from typing import Any, cast
 from urllib.parse import parse_qs, urlencode
@@ -86,6 +86,11 @@ def _noop_shared_lock(*_args: Any, **_kwargs: Any) -> Iterator[None]:
     yield
 
 
+@asynccontextmanager
+async def _noop_async_shared_lock(*_args: Any, **_kwargs: Any) -> AsyncIterator[None]:
+    yield
+
+
 def _install_mocks(
     monkeypatch: pytest.MonkeyPatch,
     config_data: dict[str, Any],
@@ -100,6 +105,7 @@ def _install_mocks(
 
     # Keep this a true unit test: no live cache backend for the single-flight lock.
     monkeypatch.setattr(mcp_oauth, "cache_shared_lock", _noop_shared_lock)
+    monkeypatch.setattr(mcp_oauth, "async_cache_shared_lock", _noop_async_shared_lock)
     monkeypatch.setattr(
         mcp_oauth, "get_session_with_current_tenant", lambda: _FakeDbSession()
     )
@@ -574,11 +580,7 @@ def test_form_encoded_refresh_error_is_logged_without_secrets(
 @pytest.mark.parametrize(
     ("expiry_offset_s", "expected_header"),
     [
-        # Winner already persisted a fresh token: hand its header back.
         (3600, "Bearer PERSISTED"),
-        # Winner still refreshing, so the stored token is expired and there is no
-        # fresh header yet: return None. The caller (MCPTool.run) then falls back
-        # to its existing header (which will 401 until the refresh lands).
         (-60, None),
     ],
 )
@@ -653,8 +655,8 @@ def test_sdk_auth_flow_single_flights_refresh_across_concurrent_calls(
     config_data = _expired_grant_config()
     thread_lock = threading.Lock()
 
-    @contextmanager
-    def _serializing_lock(*_args: Any, **_kwargs: Any) -> Iterator[None]:
+    @asynccontextmanager
+    async def _serializing_lock(*_args: Any, **_kwargs: Any) -> AsyncIterator[None]:
         acquired = thread_lock.acquire(timeout=10)
         if not acquired:
             raise CacheLockAcquisitionError("held by a concurrent refresher")
@@ -664,7 +666,7 @@ def test_sdk_auth_flow_single_flights_refresh_across_concurrent_calls(
             thread_lock.release()
 
     _install_mocks(monkeypatch, config_data, response=None)
-    monkeypatch.setattr(mcp_oauth, "cache_shared_lock", _serializing_lock)
+    monkeypatch.setattr(mcp_oauth, "async_cache_shared_lock", _serializing_lock)
 
     refresh_posts: list[httpx.Request] = []
     authorized_requests: list[str | None] = []
@@ -673,7 +675,6 @@ def test_sdk_auth_flow_single_flights_refresh_across_concurrent_calls(
         body = parse_qs(request.content.decode()) if request.content else {}
         if body.get("grant_type") == ["refresh_token"]:
             refresh_posts.append(request)
-            # A refresh token is single-use: a second redemption must fail.
             if body["refresh_token"] != ["REFRESH_1"] or len(refresh_posts) > 1:
                 return httpx.Response(
                     400, json={"error": "invalid_grant"}, request=request
@@ -759,3 +760,64 @@ def test_sdk_auth_flow_rechecks_grant_inside_the_lock(
 
     asyncio.run(run())
     assert len(refresh_posts) == 1
+
+
+def test_sdk_auth_flow_contention_on_one_event_loop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """oauth_flow probes run on the shared app event loop, so a waiter must not
+    block that loop while the holder's refresh is in flight — a synchronous
+    blocking acquire would stall the holder too and deadlock until timeout.
+    Two concurrent flows on ONE loop must still single-flight the refresh."""
+    config_data = _expired_grant_config()
+    lock_held = False
+    lock_released = asyncio.Event()
+    lock_released.set()
+
+    @asynccontextmanager
+    async def _serializing_lock(*_args: Any, **_kwargs: Any) -> AsyncIterator[None]:
+        nonlocal lock_held
+        await lock_released.wait()
+        lock_held = True
+        lock_released.clear()
+        try:
+            yield
+        finally:
+            lock_held = False
+            lock_released.set()
+
+    _install_mocks(monkeypatch, config_data, response=None)
+    monkeypatch.setattr(mcp_oauth, "async_cache_shared_lock", _serializing_lock)
+
+    refresh_posts: list[httpx.Request] = []
+
+    def handle_request(request: httpx.Request) -> httpx.Response:
+        body = parse_qs(request.content.decode()) if request.content else {}
+        if body.get("grant_type") == ["refresh_token"]:
+            refresh_posts.append(request)
+            if body["refresh_token"] != ["REFRESH_1"] or len(refresh_posts) > 1:
+                return httpx.Response(
+                    400, json={"error": "invalid_grant"}, request=request
+                )
+            return _token_response()
+        return httpx.Response(200, json={"ok": True}, request=request)
+
+    async def run() -> list[httpx.Response]:
+        async def flow() -> httpx.Response:
+            provider = make_oauth_provider(
+                _server_stub(MCPTransport.STREAMABLE_HTTP), 42, None
+            )
+            async with httpx.AsyncClient(
+                auth=provider,
+                transport=httpx.MockTransport(handle_request),
+            ) as client:
+                return await client.post("https://mcp.gitlab.example.com/mcp")
+
+        return list(await asyncio.gather(flow(), flow()))
+
+    responses = asyncio.run(run())
+
+    assert all(response.status_code == 200 for response in responses)
+    assert len(refresh_posts) == 1
+    assert config_data[MCPOAuthKeys.TOKENS.value]["refresh_token"] == "REFRESH_2"
+    assert config_data["headers"]["Authorization"] == "Bearer NEW"
