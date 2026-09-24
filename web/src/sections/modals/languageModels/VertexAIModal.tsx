@@ -92,6 +92,7 @@ function VertexAIModalInternals({
             >
               <InputSingleSelectField
                 name={FIELD_VERTEX_AUTH_METHOD}
+                defaultOption={AUTH_METHOD_SERVICE_ACCOUNT}
                 placeholder={tInputSelect("placeholder.fallback")}
                 options={[
                   {

@@ -178,6 +178,7 @@ function IntervalEditor({ payload, onChange }: IntervalEditorProps) {
             onValueChange={(value) =>
               onChange({ ...payload, unit: value as IntervalUnit })
             }
+            defaultOption={INTERVAL_UNITS[0]}
             placeholder={tInputSelect("placeholder.fallback")}
             options={INTERVAL_UNITS.map((unit) => ({
               value: unit,

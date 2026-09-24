@@ -98,6 +98,7 @@ function ModelConfigurationItem({
         onValueChange={(value) =>
           onChange({ ...model, supports_image_input: value === "text-image" })
         }
+        defaultOption="text-only"
         placeholder={t("custom.modelRow.inputTypePlaceholder")}
         options={[
           { value: "text-only", title: t("custom.modelRow.textOnly.label") },

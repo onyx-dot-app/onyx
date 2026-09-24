@@ -1075,6 +1075,7 @@ export default function IndexSettingsPage() {
                 <InputSingleSelect
                   value={switchoverType}
                   onValueChange={(v) => setSwitchoverType(v as SwitchoverType)}
+                  defaultOption={SwitchoverType.REINDEX}
                   placeholder={t("switchover.placeholder")}
                   options={[
                     {
@@ -1944,6 +1945,7 @@ export default function IndexSettingsPage() {
                                       });
                                     }}
                                     disabled={!imageProcessingEnabled}
+                                    defaultOption="20"
                                     placeholder={tInputSelect(
                                       "placeholder.fallback"
                                     )}

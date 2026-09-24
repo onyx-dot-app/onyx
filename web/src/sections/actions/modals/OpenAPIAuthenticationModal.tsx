@@ -390,6 +390,7 @@ export default function OpenAPIAuthenticationModal({
                             onValueChange={(value) =>
                               setFieldValue("authMethod", value)
                             }
+                            defaultOption="oauth"
                             placeholder={t(
                               "openApiAuthModal.authMethod.placeholder"
                             )}

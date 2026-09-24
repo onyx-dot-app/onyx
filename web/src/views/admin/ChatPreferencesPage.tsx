@@ -1481,6 +1481,7 @@ export default function ChatPreferencesPage() {
                             query_history_type: value as QueryHistoryType,
                           });
                         }}
+                        defaultOption={QueryHistoryType.NORMAL}
                         placeholder={tInputSelect("placeholder.fallback")}
                         options={[
                           {

@@ -290,6 +290,7 @@ export function ModelAccessField() {
           <InputSingleSelect
             value={isPublic ? "public" : "private"}
             onValueChange={handleAccessChange}
+            defaultOption="public"
             placeholder={t("access.select.placeholder")}
             options={[
               {

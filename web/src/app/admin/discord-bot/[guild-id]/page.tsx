@@ -373,6 +373,7 @@ export default function Page({ params }: Props) {
                   )
                 }
                 disabled={isUpdating || !guild?.enabled || personasLoading}
+                defaultOption="default"
                 placeholder={t("defaultAgent.select.placeholder")}
                 options={[
                   {

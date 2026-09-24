@@ -131,6 +131,7 @@ function VertexFormFields(
                   value={field.value}
                   onValueChange={(value) => helper.setValue(value)}
                   disabled={disabled}
+                  defaultOption={AUTH_METHOD_SERVICE_ACCOUNT}
                   placeholder={tInputSelect("placeholder.fallback")}
                   options={[
                     {

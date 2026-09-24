@@ -243,6 +243,8 @@ interface PATModalProps {
   setExpirationDays: (days: string) => void;
   accessMode: AccessMode;
   setAccessMode: (mode: AccessMode) => void;
+  /** The access mode the modal opened with; the select never empties below it. */
+  defaultAccessMode: AccessMode;
   scopeOptions: PatScopeOption[];
   scopesError: boolean;
   selectedScopes: string[];
@@ -260,6 +262,7 @@ function PATModal({
   setExpirationDays,
   accessMode,
   setAccessMode,
+  defaultAccessMode,
   scopeOptions,
   scopesError,
   selectedScopes,
@@ -357,6 +360,7 @@ function PATModal({
             value={expirationDays}
             onValueChange={setExpirationDays}
             disabled={isCreating}
+            defaultOption="30"
             placeholder={t("apiKeys.createModal.expiration.placeholder")}
             options={[
               { value: "7", title: t("apiKeys.createModal.expiration.days7") },
@@ -388,6 +392,7 @@ function PATModal({
             value={accessMode}
             onValueChange={(value) => setAccessMode(value as AccessMode)}
             disabled={isCreating}
+            defaultOption={defaultAccessMode}
             placeholder={t("apiKeys.createModal.permissions.placeholder")}
             options={[
               {
@@ -520,6 +525,7 @@ function usePATCreation({
     setExpirationDays,
     accessMode,
     setAccessMode,
+    defaultAccessMode,
     selectedScopes,
     toggleScope,
     newlyCreatedToken,
@@ -732,6 +738,7 @@ function GeneralSettings() {
                     setTheme(value);
                     updateUserThemePreference(value as ThemePreference);
                   }}
+                  defaultOption={ThemePreference.SYSTEM}
                   placeholder={tInputSelect("placeholder.fallback")}
                   options={[
                     {
@@ -847,6 +854,7 @@ function GeneralSettings() {
                       toast.error(t("language.toasts.updateFailed"));
                     });
                   }}
+                  defaultOption={DEFAULT_LOCALE}
                   placeholder={tInputSelect("placeholder.fallback")}
                   options={SUPPORTED_LOCALES.map((locale) => ({
                     value: locale,
@@ -1496,6 +1504,7 @@ function ChatPreferencesSettings() {
                       void updateUserDefaultAppMode(value as "CHAT" | "SEARCH");
                     }}
                     disabled={!searchUiEnabled}
+                    defaultOption="CHAT"
                     placeholder={tInputSelect("placeholder.fallback")}
                     options={[
                       {
@@ -1920,6 +1929,7 @@ function LLMGatewaySettings() {
           setExpirationDays={tokenCreation.setExpirationDays}
           accessMode={tokenCreation.accessMode}
           setAccessMode={tokenCreation.setAccessMode}
+          defaultAccessMode={tokenCreation.defaultAccessMode}
           scopeOptions={scopeOptions}
           scopesError={Boolean(scopeOptionsError)}
           selectedScopes={tokenCreation.selectedScopes}
@@ -2120,6 +2130,7 @@ function AccountsAccessSettings() {
           setExpirationDays={tokenCreation.setExpirationDays}
           accessMode={tokenCreation.accessMode}
           setAccessMode={tokenCreation.setAccessMode}
+          defaultAccessMode={tokenCreation.defaultAccessMode}
           scopeOptions={scopeOptions}
           scopesError={Boolean(scopeOptionsError)}
           selectedScopes={tokenCreation.selectedScopes}

@@ -601,6 +601,7 @@ export default function MCPAuthenticationModal({
                               );
                             }
                           }}
+                          defaultOption={MCPAuthenticationType.OAUTH}
                           placeholder={t("mcpAuthModal.authType.placeholder")}
                           data-testid="mcp-auth-method-select"
                           options={[
@@ -781,6 +782,9 @@ export default function MCPAuthenticationModal({
                                   onValueChange={(value) => {
                                     setFieldValue("oauth_provider_mode", value);
                                   }}
+                                  defaultOption={
+                                    MCPOAuthProviderMode.AUTO_DISCOVERY
+                                  }
                                   placeholder={t(
                                     "mcpAuthModal.providerMode.placeholder"
                                   )}

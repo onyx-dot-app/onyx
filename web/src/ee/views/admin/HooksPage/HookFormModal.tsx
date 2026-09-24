@@ -334,6 +334,7 @@ export default function HookFormModal({
                         setFieldValue("fail_strategy", v as HookFailStrategy)
                       }
                       disabled={isSubmitting}
+                      defaultOption={spec?.default_fail_strategy ?? "hard"}
                       placeholder={t("form.failStrategy.placeholder")}
                       options={[
                         {

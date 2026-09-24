@@ -635,6 +635,7 @@ export default function SecurityHardeningPage() {
                         user_directory_admin_only: value === "admins_only",
                       })
                     }
+                    defaultOption="all_users"
                     placeholder={tInputSelect("placeholder.fallback")}
                     options={[
                       {
@@ -673,6 +674,7 @@ export default function SecurityHardeningPage() {
                       });
                       await mutate(SWR_KEYS.incognitoAvailability);
                     }}
+                    defaultOption="off"
                     placeholder={tInputSelect("placeholder.fallback")}
                     options={[
                       {
@@ -715,6 +717,7 @@ export default function SecurityHardeningPage() {
                         incognito_record_mode: value as IncognitoRecordMode,
                       })
                     }
+                    defaultOption="usage_only"
                     placeholder={tInputSelect("placeholder.fallback")}
                     options={[
                       {
@@ -757,6 +760,7 @@ export default function SecurityHardeningPage() {
                           mask_credential_prefix: value === "masked",
                         })
                       }
+                      defaultOption="masked"
                       placeholder={tInputSelect("placeholder.fallback")}
                       options={[
                         {
@@ -844,6 +848,7 @@ export default function SecurityHardeningPage() {
                           ssrf_protection_level: value as SSRFProtectionLevel,
                         })
                       }
+                      defaultOption="validate_all"
                       placeholder={tInputSelect("placeholder.fallback")}
                       options={[
                         {

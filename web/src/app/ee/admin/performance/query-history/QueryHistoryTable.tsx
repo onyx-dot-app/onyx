@@ -113,6 +113,7 @@ function SelectFeedbackType({
       <InputSingleSelect
         value={value}
         onValueChange={onValueChange as (value: string) => void}
+        defaultOption="all"
         placeholder={tInputSelect("placeholder.fallback")}
         options={[
           { value: "all", title: t("filters.any.label"), icon: SvgMinusCircle },

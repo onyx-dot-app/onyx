@@ -148,6 +148,7 @@ export function DiscordChannelsTable({
                     )
                   }
                   disabled={disabled}
+                  defaultOption="default"
                   placeholder="-"
                   options={[
                     { value: "default", title: "-" },

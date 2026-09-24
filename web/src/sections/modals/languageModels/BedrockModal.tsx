@@ -152,6 +152,7 @@ function BedrockModalInternals({
           >
             <InputSingleSelectField
               name={FIELD_BEDROCK_AUTH_METHOD}
+              defaultOption={AUTH_METHOD_IAM}
               placeholder={tInputSelect("placeholder.fallback")}
               options={[
                 {
