@@ -2152,12 +2152,29 @@
           "title": "Error de sincronización de pertenencia a grupos"
         }
       },
+      "groupRestriction": {
+        "empty": {
+          "description": "Todos conservan el acceso sincronizado desde el origen.",
+          "title": "Sin restricción hasta que se añadan grupos"
+        },
+        "memberCount": "{count, plural, one {# miembro} other {# miembros}}",
+        "picker": {
+          "placeholder": "Añade grupos para restringir el acceso a este conector"
+        },
+        "remove": {
+          "tooltip": "Quitar {name}"
+        },
+        "toggle": {
+          "description": "Limita el acceso a los miembros de los grupos seleccionados. Los permisos sincronizados siguen aplicándose.",
+          "title": "Restringir acceso a grupos"
+        }
+      },
       "groupSelector": {
         "assignGroupAccess": {
           "title": "Asignar acceso de grupos a este conector"
         },
         "assignToGroup": {
-          "title": "Asignar este conector a un grupo"
+          "title": "Grupos que pueden administrar este conector"
         },
         "scopedManagerGroups": {
           "description": "Selecciona uno o más de los grupos que administras para dar acceso a este conector"

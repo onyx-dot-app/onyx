@@ -245,3 +245,20 @@ export function useFederatedConnector(
     error,
   };
 }
+
+interface ConnectorGroupRestrictionsStatus {
+  enabled: boolean;
+}
+
+/**
+ * Whether connector forms offer the data-access group restriction. Set by the
+ * workspace toggle in Security and Hardening. Fails closed: hidden until the
+ * setting loads, and hidden if the request fails.
+ */
+export function useConnectorGroupRestrictionsEnabled(): boolean {
+  const { data } = useSWR<ConnectorGroupRestrictionsStatus>(
+    SWR_KEYS.connectorGroupRestrictions,
+    errorHandlingFetcher
+  );
+  return data?.enabled ?? false;
+}

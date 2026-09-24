@@ -2152,12 +2152,29 @@
           "title": "그룹 멤버십 동기화 오류"
         }
       },
+      "groupRestriction": {
+        "empty": {
+          "description": "모든 사용자가 소스에서 동기화된 접근 권한을 유지합니다.",
+          "title": "그룹을 추가하기 전까지 제한 없음"
+        },
+        "memberCount": "{count, plural, other {멤버 #명}}",
+        "picker": {
+          "placeholder": "이 커넥터에 대한 접근을 제한할 그룹 추가"
+        },
+        "remove": {
+          "tooltip": "{name} 제거"
+        },
+        "toggle": {
+          "description": "선택한 그룹의 멤버로 접근을 제한합니다. 동기화된 권한은 계속 적용됩니다.",
+          "title": "그룹으로 접근 제한"
+        }
+      },
       "groupSelector": {
         "assignGroupAccess": {
           "title": "이 커넥터에 대한 그룹 액세스 할당"
         },
         "assignToGroup": {
-          "title": "이 커넥터를 그룹에 할당"
+          "title": "이 커넥터를 관리할 수 있는 그룹"
         },
         "scopedManagerGroups": {
           "description": "이 커넥터에 대한 액세스 권한을 부여하려면 관리 중인 그룹을 하나 이상 선택하세요"

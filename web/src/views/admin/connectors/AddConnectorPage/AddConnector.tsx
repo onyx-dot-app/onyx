@@ -66,6 +66,7 @@ import { deleteConnector } from "@/lib/connector";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
 import { SvgArrowExchange, SvgKey, SvgSimpleLoader } from "@opal/icons";
 import { useTranslations } from "next-intl";
+import { toWireAccess } from "@/lib/connectors/accessType";
 
 export interface AdvancedConfig {
   refreshFreq: number;
@@ -334,13 +335,21 @@ export default function AddConnector({
         const {
           name,
           groups,
-          access_type,
+          access_type: formAccessType,
+          restrict_access_to_groups,
+          restriction_group_ids,
           pruneFreq,
           indexingStart,
           refreshFreq,
           auto_sync_options,
           ...connector_specific_config
         } = values;
+
+        const wireAccess = toWireAccess(formAccessType, {
+          restrict_access_to_groups,
+          restriction_group_ids,
+        });
+        const access_type = wireAccess.access_type;
 
         // Apply special transforms according to application logic
         const transformedConnectorSpecificConfig = Object.entries(
@@ -473,6 +482,8 @@ export default function AddConnector({
                 currentCredential ||
                 liveGDriveCredential ||
                 liveGmailCredential;
+              // TODO(evan, ENG-4342): send wireAccess.restriction_group_ids
+              // once the backend accepts them; this call creates the cc-pair.
               const linkCredentialResponse = await linkCredential(
                 response.id,
                 credential!.id,

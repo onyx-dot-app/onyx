@@ -814,6 +814,15 @@ def associate_credential_to_connector(
     if metadata.access_type == AccessType.SYNC_RESTRICTED:
         # Becomes creatable in the same change that enforces its data-access
         # groups at query time, so no restricted pair exists without them.
+        # TODO(evan, ENG-4342): remove this rejection in the enforcement change,
+        # together with:
+        # - the allowed-connector query filter and the /chat/file check
+        # - the creation path: restriction_group_ids, validation, persistence
+        #   (branch jtahara/connector-group-restrictions-creation-path)
+        # - SYNC-only checks in connector_credential_pair.py: listing
+        #   visibility, tier/source validation, get_all_auto_sync_cc_pairs,
+        #   get_cc_pairs_by_source
+        # - creating the pair and its data-access rows in one transaction
         raise OnyxError(
             OnyxErrorCode.FEATURE_NOT_AVAILABLE,
             "Restricted perm-synced connectors are not available yet.",
