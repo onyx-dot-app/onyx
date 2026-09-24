@@ -84,6 +84,17 @@ function MultiDropdown(props: MultiDropdownProps) {
     [tags]
   );
 
+  // A chip shows its option's icon (by the tag id = option value
+  // convention) unless the caller set one on the tag itself.
+  const iconTags = useMemo<TagItem[]>(() => {
+    const iconByValue = new Map(
+      flatOptions.map((option) => [option.value, option.icon])
+    );
+    return tags.map((tag) =>
+      tag.icon ? tag : { ...tag, icon: iconByValue.get(tag.id) }
+    );
+  }, [tags, flatOptions]);
+
   // Free-form tags (open mode, outside the set) appear in the dropdown as
   // real, selected rows — the single's `customSelected` — so re-picking one
   // routes through the toggle-off instead of the create row.
@@ -212,7 +223,7 @@ function MultiDropdown(props: MultiDropdownProps) {
 
   return (
     <TagField
-      tags={tags}
+      tags={iconTags}
       onRemoveTag={onRemoveTag}
       readOnly={!typeIn}
       triggerRef={triggerRef}

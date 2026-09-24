@@ -19,10 +19,10 @@ selected option falls back to the default. `onValueChange` never receives `""`.
 `placeholder` stays required: it is the field's accessible name even when the
 default keeps the trigger filled.
 
-`options` is a list of loose options and titled dividers in any order, like
-`<option>`s beside `<optgroup>`s: a divider is `{ title, options }` and renders
-as a titled `Divider` above its rows. A value outside the set shows the
-placeholder with the validation error.
+`options` is a list of loose options and dividers in any order, like
+`<option>`s beside `<optgroup>`s: a divider is `{ title?, options }` and renders
+a separator line above its rows, carrying `title` when there is one. The trigger shows the chosen option's `icon`, when it has one. A value
+outside the set shows the placeholder with the validation error.
 
 ```tsx
 <InputSingleSelect
@@ -49,7 +49,7 @@ placeholder with the validation error.
 | --------------- | ----------------------------------- | ------- | --------------------------------------------------------------- |
 | `value`         | `string`                            | —       | Current value (controlled)                                      |
 | `onValueChange` | `(value: string) => void`           | —       | Fires on a pick, and with `""` on an unpick                     |
-| `options`       | `SelectOptions` | `[]`    | Loose options and titled dividers, in order                 |
+| `options`       | `SelectOptions` | `[]`    | Loose options and dividers, in order                        |
 | `defaultOption` | `string`                            | —       | Option value an empty `value` resolves to; never empties then   |
 | `placeholder`   | `string`                            | —       | Shown while empty; always the accessible name (required)        |
 | `isError`       | `boolean`                           | —       | External error state (overrides internal validation)            |

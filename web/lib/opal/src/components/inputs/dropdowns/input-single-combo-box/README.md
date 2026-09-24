@@ -20,10 +20,11 @@ Re-picking the selected option unselects it. There is no `defaultOption`: the
 text is the filter, so a default would pre-fill it with a label the user never
 chose and the opened list would show only that row.
 
-`options` is a list of loose options and titled dividers in any order, like
-`<option>`s beside `<optgroup>`s: a divider is `{ title, options }` and renders
-as a titled `Divider` above its rows; a divider whose options all filter out
-disappears with its title.
+`options` is a list of loose options and dividers in any order, like
+`<option>`s beside `<optgroup>`s: a divider is `{ title?, options }` and renders
+a separator line above its rows, carrying `title` when there is one.
+A divider whose options all filter out disappears with its line. The trigger
+is typed text, so it shows no option icon.
 
 ```tsx
 <InputSingleComboBox
@@ -58,7 +59,7 @@ Key props (`InputSingleComboBoxProps` also passes DOM input attributes through):
 | `value`         | `string`                            | —          | Current value (controlled)                           |
 | `onValueChange` | `(value: string) => void`           | —          | Fires on option selection (and create-row commit)    |
 | `onChange`      | `(e) => void`                       | —          | Fires on every keystroke (controlled-input style)    |
-| `options`       | `SelectOptions` | `[]`       | Loose options and titled dividers, in order      |
+| `options`       | `SelectOptions` | `[]`       | Loose options and dividers, in order             |
 | `mode`          | `"closed" \| "open"`                | `"closed"` | Set openness                                         |
 | `placeholder`   | `string`                            | —          | Trigger placeholder (required)                       |
 | `isError`       | `boolean`                           | —          | External error state (overrides internal validation) |

@@ -31,7 +31,7 @@ Interaction model:
 
 ### `TagItem`
 
-`TagItem` is `{ id: string; label: string; error?: boolean }`. `error` shows the warning indicator on that tag.
+`TagItem` is `{ id: string; label: string; icon?: IconFunctionComponent; error?: boolean }`. `icon` leads the tag; `error` shows the warning indicator on it.
 
 ## Usage
 

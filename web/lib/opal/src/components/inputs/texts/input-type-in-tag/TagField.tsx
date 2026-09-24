@@ -18,6 +18,9 @@ interface TagItem {
   id: string;
   label: string;
 
+  /** Leading icon on the tag. */
+  icon?: IconFunctionComponent;
+
   /** Shows the warning indicator on the tag. */
   error?: boolean;
 }
@@ -245,6 +248,7 @@ function TagField({
             key={tag.id}
             size="md"
             title={tag.label}
+            icon={tag.icon}
             error={tag.error}
             disabled={disabled}
             onRemove={() => {

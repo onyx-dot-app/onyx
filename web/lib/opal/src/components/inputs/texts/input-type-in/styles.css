@@ -9,6 +9,15 @@
   font: inherit;
 }
 
+/* A chosen option's icon, sized like the search icon. */
+.opal-input-leading-icon {
+  @apply flex shrink-0 items-center justify-center px-1;
+}
+
+.opal-input-leading-icon-svg {
+  @apply h-4 w-4 stroke-text-02;
+}
+
 .opal-input[data-variant="primary"] .opal-input-field,
 .opal-input[data-variant="internal"] .opal-input-field,
 .opal-input[data-variant="error"] .opal-input-field {

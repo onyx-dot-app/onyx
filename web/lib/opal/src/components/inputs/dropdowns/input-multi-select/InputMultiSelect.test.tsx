@@ -24,6 +24,25 @@ function setupUser() {
 
 describe("InputMultiSelect", () => {
   describe("Rendering and picking", () => {
+    test("a chip shows its option's icon", () => {
+      function Swatch(props: React.SVGProps<SVGSVGElement>) {
+        return <svg data-testid="swatch" {...props} />;
+      }
+      render(
+        <InputMultiSelect
+          tags={[{ id: "apple", label: "Apple" }]}
+          options={[
+            { value: "apple", title: "Apple", icon: Swatch },
+            { value: "banana", title: "Banana" },
+          ]}
+          placeholder="Pick"
+          onSelectOption={jest.fn()}
+          onRemoveTag={jest.fn()}
+        />
+      );
+      expect(screen.getByTestId("swatch")).toBeInTheDocument();
+    });
+
     test("renders no text input and opens from the combobox element", async () => {
       const user = setupUser();
       render(

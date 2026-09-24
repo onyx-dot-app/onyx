@@ -10,7 +10,8 @@ type-in sibling is [InputMultiComboBox](../input-multi-combo-box/README.md).
 
 A chosen option becomes a tag whose `id` is the option's `value` (via
 `onSelectOption`); choosing it again, in the list or on the chip, removes it
-through `onRemoveTag`. A tag outside the set flags the chrome's error variant.
+through `onRemoveTag`. A chip shows its option's `icon`, when it has one. A
+tag outside the set flags the chrome's error variant.
 
 ```tsx
 <InputMultiSelect
@@ -30,7 +31,7 @@ Every [InputTypeInTag](../../texts/input-type-in-tag/README.md) chrome prop (`ta
 
 | Prop                | Type                                | Default        | Description                                                        |
 | ------------------- | ----------------------------------- | -------------- | ------------------------------------------------------------------ |
-| `options`           | `SelectOptions` | **(required)** | Loose options and titled dividers, in order |
+| `options`           | `SelectOptions` | **(required)** | Loose options and dividers, in order        |
 | `onSelectOption`    | `(option: SelectOption) => void`    | **(required)** | Called when an option is chosen                                    |
 | `placeholder`       | `string`                            | **(required)** | Names the combobox element and shows while there are no chips      |
 | `dropdownMaxHeight` | `string`                            | `"15rem"`      | Max height of the dropdown in CSS units                            |

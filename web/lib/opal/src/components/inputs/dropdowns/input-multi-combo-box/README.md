@@ -8,7 +8,7 @@ Free tagging with no set to pick from is `InputTypeInTag` itself. `InputMultiCom
 
 ## The option set
 
-A chosen option becomes a tag whose `id` is the option's `value` (via `onSelectOption`); choosing it again, in the list or on the chip, removes it through `onRemoveTag`.
+A chosen option becomes a tag whose `id` is the option's `value` (via `onSelectOption`); choosing it again, in the list or on the chip, removes it through `onRemoveTag`. A chip shows its option's `icon`, when it has one.
 
 - **`mode="closed"`** (default): only options can be chosen. A committed tag outside the set (a stale seed, or the options shrank) flags the chrome's error variant.
 - **`mode="open"`**: the raw text can also be committed via the create row, landing in `onAdd` like a plain tag. Free-form tags then appear at the top of the list as selected rows, and picking one again removes it through `onRemoveTag`.
@@ -40,7 +40,7 @@ Every [InputTypeInTag](../../texts/input-type-in-tag/README.md) prop, plus:
 
 | Prop                | Type                                | Default        | Description                                                        |
 | ------------------- | ----------------------------------- | -------------- | ------------------------------------------------------------------ |
-| `options`           | `SelectOptions` | **(required)** | Loose options and titled dividers, in order |
+| `options`           | `SelectOptions` | **(required)** | Loose options and dividers, in order        |
 | `onSelectOption`    | `(option: SelectOption) => void`    | **(required)** | Called when an option is chosen                                    |
 | `mode`              | `"closed" \| "open"`                | `"closed"`     | Set openness, see above                                            |
 | `dropdownMaxHeight` | `string`                            | `"15rem"`      | Max height of the dropdown in CSS units                            |

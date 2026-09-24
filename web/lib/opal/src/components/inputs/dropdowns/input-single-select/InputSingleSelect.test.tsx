@@ -95,6 +95,57 @@ describe("InputSingleSelect", () => {
       });
     });
 
+    test("an untitled divider renders a plain line between its rows and the loose ones", async () => {
+      const user = setupUser();
+      const { container } = render(
+        <InputSingleSelect
+          placeholder="Choose a strategy"
+          value=""
+          options={[
+            { value: "none", title: "Do not re-index" },
+            {
+              options: [
+                { value: "reindex", title: "Re-index all" },
+                { value: "instant", title: "Switch first" },
+              ],
+            },
+          ]}
+        />
+      );
+      await user.click(screen.getByPlaceholderText("Choose a strategy"));
+      expect(screen.getAllByRole("option")).toHaveLength(3);
+      expect(container.querySelectorAll(".opal-divider")).toHaveLength(1);
+      expect(container.querySelector(".opal-divider-title")).toBeNull();
+    });
+
+    test("the trigger shows the chosen option's icon", () => {
+      function Swatch(props: React.SVGProps<SVGSVGElement>) {
+        return <svg data-testid="swatch" {...props} />;
+      }
+      const { rerender } = render(
+        <InputSingleSelect
+          placeholder="Color mode"
+          value="dark"
+          options={[
+            { value: "light", title: "Light" },
+            { value: "dark", title: "Dark", icon: Swatch },
+          ]}
+        />
+      );
+      expect(screen.getByTestId("swatch")).toBeInTheDocument();
+      rerender(
+        <InputSingleSelect
+          placeholder="Color mode"
+          value="light"
+          options={[
+            { value: "light", title: "Light" },
+            { value: "dark", title: "Dark", icon: Swatch },
+          ]}
+        />
+      );
+      expect(screen.queryByTestId("swatch")).not.toBeInTheDocument();
+    });
+
     test("renders a loose option and a titled divider", async () => {
       const user = setupUser();
       render(

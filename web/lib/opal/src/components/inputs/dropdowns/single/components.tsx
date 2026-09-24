@@ -108,13 +108,14 @@ function SingleDropdown({
   // The selection's visible text — the ONLY value-to-text crossing point.
   // A strict set shows nothing for a value outside it (the placeholder, with
   // the validation error); only an open set displays a free-form value.
+  const selectedOption = useMemo(
+    () => options.find((opt) => opt.value === effectiveValue),
+    [options, effectiveValue]
+  );
   const selectedLabel = useMemo(() => {
     if (!effectiveValue) return "";
-    return (
-      options.find((opt) => opt.value === effectiveValue)?.title ??
-      (strict ? "" : effectiveValue)
-    );
-  }, [options, effectiveValue, strict]);
+    return selectedOption?.title ?? (strict ? "" : effectiveValue);
+  }, [selectedOption, effectiveValue, strict]);
 
   useEffect(() => {
     if (
@@ -455,6 +456,9 @@ function SingleDropdown({
           name={name}
           placeholder={placeholder}
           readOnly={!typeIn}
+          // A Select shows the chosen option's icon; a ComboBox's text is
+          // typed, so it shows none.
+          icon={typeIn ? undefined : selectedOption?.icon}
           value={inputValue}
           onChange={handleInputChange}
           // A button trigger opens on click or ArrowDown and a second click
