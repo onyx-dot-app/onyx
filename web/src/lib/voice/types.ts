@@ -35,7 +35,7 @@ export interface VoiceProviderView {
 /** A selectable voice option returned by a provider's voices endpoint. */
 export interface VoiceOption {
   value: string;
-  label: string;
+  title: string;
   description?: string;
 }
 

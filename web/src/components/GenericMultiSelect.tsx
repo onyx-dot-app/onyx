@@ -129,7 +129,7 @@ export function GenericMultiSelect<
             options={items
               .filter((item) => !selectedIds.includes(item.id))
               .map((item) => ({
-                label: item.name,
+                title: item.name,
                 value: String(item.id),
               }))}
             searchIcon

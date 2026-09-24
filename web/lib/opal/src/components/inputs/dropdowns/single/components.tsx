@@ -110,7 +110,7 @@ const SingleDropdown = ({
   const selectedLabel = useMemo(() => {
     if (!effectiveValue) return "";
     return (
-      options.find((opt) => opt.value === effectiveValue)?.label ??
+      options.find((opt) => opt.value === effectiveValue)?.title ??
       (strict ? "" : effectiveValue)
     );
   }, [options, effectiveValue, strict]);
@@ -149,7 +149,7 @@ const SingleDropdown = ({
   const customSelected = useMemo(() => {
     if (strict || !effectiveValue) return null;
     if (options.some((opt) => opt.value === effectiveValue)) return null;
-    return { value: effectiveValue, label: effectiveValue };
+    return { value: effectiveValue, title: effectiveValue };
   }, [strict, effectiveValue, options]);
 
   // What filters the list. A button trigger never filters: its text is
@@ -162,7 +162,7 @@ const SingleDropdown = ({
     const customSection =
       customSelected &&
       (!hasSearchTerm ||
-        customSelected.label
+        customSelected.title
           .toLowerCase()
           .includes(filterText.trim().toLowerCase()))
         ? [{ options: [customSelected] }]
@@ -182,7 +182,7 @@ const SingleDropdown = ({
         return [
           ...filtered,
           {
-            label: separatorLabel ?? strings.comboBoxOtherOptions,
+            title: separatorLabel ?? strings.comboBoxOtherOptions,
             options: unmatched,
           },
         ];
@@ -208,7 +208,7 @@ const SingleDropdown = ({
     return candidates.some(
       (opt) =>
         opt.value.toLowerCase() === trimmedInput ||
-        opt.label.toLowerCase() === trimmedInput
+        opt.title.toLowerCase() === trimmedInput
     );
   }, [customSelected, options, trimmedInput]);
   const showCreateOption = !strict && hasSearchTerm && !exactVisibleMatch;
@@ -221,7 +221,7 @@ const SingleDropdown = ({
       // Prepend a synthetic option for the "create new" item. Trimmed to
       // match what the rendered create row commits.
       const createText = filterText.trim();
-      return [{ value: createText, label: createText }, ...baseOptions];
+      return [{ value: createText, title: createText }, ...baseOptions];
     }
     return baseOptions;
   }, [visibleSections, showCreateOption, filterText]);
@@ -236,7 +236,7 @@ const SingleDropdown = ({
 
       return (
         option.value.toLowerCase() === currentValue ||
-        option.label.toLowerCase() === currentValue
+        option.title.toLowerCase() === currentValue
       );
     },
     [filterText, effectiveValue]
@@ -260,7 +260,7 @@ const SingleDropdown = ({
     const exactMatchIndex = allVisibleOptions.findIndex(
       (opt) =>
         opt.value.toLowerCase() === filterText.trim().toLowerCase() ||
-        opt.label.toLowerCase() === filterText.trim().toLowerCase()
+        opt.title.toLowerCase() === filterText.trim().toLowerCase()
     );
 
     if (exactMatchIndex >= 0) {
@@ -338,7 +338,7 @@ const SingleDropdown = ({
         if (defaultOption !== undefined) {
           if (value !== defaultOption) {
             setInputValue(
-              options.find((opt) => opt.value === defaultOption)?.label ??
+              options.find((opt) => opt.value === defaultOption)?.title ??
                 defaultOption
             );
             emitValue(defaultOption);
@@ -354,7 +354,7 @@ const SingleDropdown = ({
         return;
       }
 
-      setInputValue(option.label);
+      setInputValue(option.title);
       emitValue(option.value);
       setIsOpen(false);
       inputRef.current?.focus();

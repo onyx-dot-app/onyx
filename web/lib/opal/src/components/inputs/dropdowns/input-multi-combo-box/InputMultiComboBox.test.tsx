@@ -14,8 +14,8 @@ jest.mock("react-dom", () => ({
 Element.prototype.scrollIntoView = jest.fn();
 
 const mockOptions = [
-  { value: "apple", label: "Apple" },
-  { value: "banana", label: "Banana" },
+  { value: "apple", title: "Apple" },
+  { value: "banana", title: "Banana" },
 ];
 
 function setupUser() {
@@ -96,5 +96,4 @@ describe("InputMultiComboBox", () => {
       ).not.toBeInTheDocument();
     });
   });
-
 });

@@ -15,7 +15,7 @@ import {
 import { SelectDropdown } from "../dropdown/SelectDropdown";
 import { SelectChevron } from "../dropdown/SelectChevron";
 import { buildAriaAttributes } from "../dropdown/aria";
-import type { MultiDropdownProps, SelectOption, SelectSection } from "../types";
+import type { MultiDropdownProps, SelectOption } from "../types";
 
 // ---------------------------------------------------------------------------
 // MultiDropdown
@@ -91,7 +91,7 @@ function MultiDropdown(props: MultiDropdownProps) {
     const optionValues = new Set(flatOptions.map((option) => option.value));
     return tags
       .filter((tag) => !optionValues.has(tag.id))
-      .map((tag) => ({ value: tag.id, label: tag.label }));
+      .map((tag) => ({ value: tag.id, title: tag.label }));
   }, [freeEntry, flatOptions, tags]);
 
   // Closed-set doctrine, committed values only: a tag outside the supplied
@@ -128,7 +128,7 @@ function MultiDropdown(props: MultiDropdownProps) {
     flatOptions.some(
       (option) =>
         option.value.toLowerCase() === trimmedValue ||
-        option.label.toLowerCase() === trimmedValue
+        option.title.toLowerCase() === trimmedValue
     ) ||
     tags.some(
       (tag) =>
@@ -143,7 +143,7 @@ function MultiDropdown(props: MultiDropdownProps) {
       // Trimmed, like the create row's own element id, so the keyboard's
       // aria-activedescendant resolves.
       const trimmed = value.trim();
-      return [{ value: trimmed, label: trimmed }, ...baseOptions];
+      return [{ value: trimmed, title: trimmed }, ...baseOptions];
     }
     return baseOptions;
   }, [visibleSections, showCreateOption, value]);

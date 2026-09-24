@@ -22,11 +22,11 @@ Closing the list drops whatever was typed: the filter is transient UI state, so 
   onChange={setQuery}
   options={groups.map((g) => ({
     value: String(g.id),
-    label: g.name,
+    title: g.name,
     description: t("memberCount", { count: g.users.length }),
   }))}
   onSelectOption={(option) =>
-    setTags((prev) => [...prev, { id: option.value, label: option.label }])
+    setTags((prev) => [...prev, { id: option.value, label: option.title }])
   }
   onRemoveTag={(id) => setTags((prev) => prev.filter((t) => t.id !== id))}
   onAdd={() => {}}
@@ -40,7 +40,7 @@ Every [InputTypeInTag](../../texts/input-type-in-tag/README.md) prop, plus:
 
 | Prop                | Type                                | Default        | Description                                                        |
 | ------------------- | ----------------------------------- | -------------- | ------------------------------------------------------------------ |
-| `options`           | `SelectOption[] \| SelectSection[]` | **(required)** | The selectable set, flat or sectioned; sections render with a Divider |
+| `options`           | `SelectOptions` | **(required)** | Loose options and titled dividers, in order |
 | `onSelectOption`    | `(option: SelectOption) => void`    | **(required)** | Called when an option is chosen                                    |
 | `mode`              | `"closed" \| "open"`                | `"closed"`     | Set openness, see above                                            |
 | `dropdownMaxHeight` | `string`                            | `"15rem"`      | Max height of the dropdown in CSS units                            |

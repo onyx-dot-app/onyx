@@ -247,11 +247,11 @@ export default function SpendByUserTable({
                 options={[
                   {
                     value: ALL,
-                    label: t("spendByUser.filters.allModels.label"),
+                    title: t("spendByUser.filters.allModels.label"),
                   },
                   ...models.map((option) => ({
                     value: option,
-                    label: option,
+                    title: option,
                   })),
                 ]}
               />
@@ -266,11 +266,11 @@ export default function SpendByUserTable({
                 options={[
                   {
                     value: ALL,
-                    label: t("spendByUser.filters.allFlows.label"),
+                    title: t("spendByUser.filters.allFlows.label"),
                   },
                   ...flows.map((option) => ({
                     value: option,
-                    label: option,
+                    title: option,
                   })),
                 ]}
               />

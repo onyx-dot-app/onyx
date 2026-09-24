@@ -58,14 +58,14 @@ export function TransferOwnershipView({
 
     const userOptions = users.map((user) => ({
       value: `user-${user.id}`,
-      label: user.email,
+      title: user.email,
       description: ownerUserId === user.id ? currentOwnerLabel : undefined,
       disabled: ownerUserId === user.id,
     }));
 
     const groupOptions = groups.map((group) => ({
       value: `group-${group.id}`,
-      label: group.name,
+      title: group.name,
       description: ownerGroupId === group.id ? currentOwnerLabel : undefined,
       disabled: ownerGroupId === group.id,
     }));
@@ -82,7 +82,7 @@ export function TransferOwnershipView({
 
     if (value.startsWith("user-")) {
       onSelectedTargetChange({
-        label: selectedOption.label,
+        label: selectedOption.title,
         type: "user",
         value: value as `user-${string}`,
       });
@@ -90,7 +90,7 @@ export function TransferOwnershipView({
     }
 
     onSelectedTargetChange({
-      label: selectedOption.label,
+      label: selectedOption.title,
       type: "group",
       value: value as `group-${number}`,
     });

@@ -4,7 +4,8 @@ import "@opal/components/inputs/dropdowns/dropdown/styles.css";
 import { cn } from "@opal/utils";
 import { ShadowDiv } from "@opal/components/shadow-div/components";
 import { OptionsList } from "./OptionsList";
-import { SelectOption, SelectSection } from "../types";
+import type { SelectOption } from "../types";
+import type { OptionGroup } from "../shared";
 
 interface SelectDropdownProps {
   isOpen: boolean;
@@ -13,7 +14,7 @@ interface SelectDropdownProps {
   setFloatingRef: (node: HTMLDivElement | null) => void;
   fieldId: string;
   placeholder: string;
-  sections: SelectSection[];
+  sections: OptionGroup[];
   /** The supplied set itself is empty (options={[]}), not merely filtered out. */
   emptySet?: boolean;
   value: string;

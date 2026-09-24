@@ -1,23 +1,31 @@
 import type { IconFunctionComponent } from "@opal/types";
 import type { InputTypeInTagProps } from "@opal/components/inputs/texts/input-type-in-tag/components";
 
+/** A clickable row. `title`, `description` and `icon` match `Content`'s props. */
 export type SelectOption = {
   value: string;
-  label: string;
+  title: string;
   description?: string;
   icon?: IconFunctionComponent;
   disabled?: boolean;
 };
 
 /**
- * A titled slice of the dropdown. Sections render in order with a Divider
- * between each; a section whose options all filter out disappears, so
- * separators never dangle.
+ * A titled divider with the rows under it, like an `<optgroup>`. Dividers
+ * render in order; on a ComboBox a divider whose options all filter out
+ * disappears with its title, so nothing dangles.
  */
-export type SelectSection = {
-  label?: string;
+export type SelectDivider = {
+  title: string;
   options: SelectOption[];
 };
+
+/**
+ * The set: loose options and titled dividers in any order, like `<option>`s
+ * beside `<optgroup>`s. A loose option renders as a plain row with no
+ * divider above it.
+ */
+export type SelectOptions = (SelectOption | SelectDivider)[];
 
 /**
  * The family's trigger axis, internal to the two implementations. A
@@ -35,8 +43,8 @@ type InputSingleBaseProps = Omit<
   React.InputHTMLAttributes<HTMLInputElement>,
   "onChange" | "value" | "placeholder" | "readOnly"
 > & {
-  /** Options, flat or sectioned. Sections render with a Divider between them. */
-  options: SelectOption[] | SelectSection[];
+  /** The set: loose options and titled dividers, in order. */
+  options: SelectOptions;
   /** Current value */
   value: string;
   /** Called when an option is selected from the dropdown (and on a create-row commit). */
@@ -124,12 +132,11 @@ type InputMultiBaseProps = Omit<
   "value" | "onChange" | "onAdd"
 > & {
   /**
-   * The selectable set. Flat or sectioned — sections render with a Divider
-   * between them. Convention: a chosen option becomes a tag whose `id` is
-   * the option's `value`, so the dropdown can show it selected and toggle
-   * it off.
+   * The selectable set: loose options and titled dividers, in order.
+   * Convention: a chosen option becomes a tag whose `id` is the option's
+   * `value`, so the dropdown can show it selected and toggle it off.
    */
-  options: SelectOption[] | SelectSection[];
+  options: SelectOptions;
   /**
    * Called when a dropdown option is chosen. Choosing an already-selected
    * option calls `onRemoveTag(option.value)` instead — one removal path.

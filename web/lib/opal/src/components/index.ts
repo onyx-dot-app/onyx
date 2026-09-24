@@ -264,7 +264,8 @@ export {
   type InputMultiSelectProps,
   type InputMultiComboBoxProps,
   type SelectOption,
-  type SelectSection,
+  type SelectDivider,
+  type SelectOptions,
 } from "@opal/components/inputs/dropdowns/types";
 
 /* InputPasswordTypeIn */

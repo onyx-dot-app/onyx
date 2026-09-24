@@ -14,14 +14,14 @@ jest.mock("react-dom", () => ({
 Element.prototype.scrollIntoView = jest.fn();
 
 const mockOptions = [
-  { value: "apple", label: "Apple" },
-  { value: "banana", label: "Banana" },
-  { value: "cherry", label: "Cherry" },
+  { value: "apple", title: "Apple" },
+  { value: "banana", title: "Banana" },
+  { value: "cherry", title: "Cherry" },
 ];
 
 const mockOptionsWithDescriptions = [
-  { value: "apple", label: "Apple", description: "A red fruit" },
-  { value: "banana", label: "Banana", description: "A yellow fruit" },
+  { value: "apple", title: "Apple", description: "A red fruit" },
+  { value: "banana", title: "Banana", description: "A yellow fruit" },
 ];
 
 function setupUser() {
@@ -30,13 +30,13 @@ function setupUser() {
 
 describe("InputSingleSelect", () => {
   describe("Rendering and picking", () => {
-    const sectionedOptions = [
-      { options: [{ value: "none", label: "Do not re-index" }] },
+    const dividedOptions = [
+      { value: "none", title: "Do not re-index" },
       {
-        label: "Re-index options",
+        title: "Re-index options",
         options: [
-          { value: "reindex", label: "Re-index all" },
-          { value: "instant", label: "Switch first" },
+          { value: "reindex", title: "Re-index all" },
+          { value: "instant", title: "Switch first" },
         ],
       },
     ];
@@ -95,13 +95,13 @@ describe("InputSingleSelect", () => {
       });
     });
 
-    test("renders sectioned options with a titled divider", async () => {
+    test("renders a loose option and a titled divider", async () => {
       const user = setupUser();
       render(
         <InputSingleSelect
           placeholder="Choose a strategy"
           value=""
-          options={sectionedOptions}
+          options={dividedOptions}
         />
       );
       await user.click(screen.getByPlaceholderText("Choose a strategy"));

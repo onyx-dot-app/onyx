@@ -112,7 +112,7 @@ export function VoiceProviderSetupModal({
       .then((data: Array<{ id: string; name: string }>) => {
         const options = data.map((v) => ({
           value: v.id,
-          label: v.name,
+          title: v.name,
           description: v.id,
         }));
         setVoiceOptions(options);

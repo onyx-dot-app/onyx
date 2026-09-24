@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import React from "react";
 import { InputSingleSelect } from "./components";
+import type { SelectOptions } from "@opal/components";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 const meta: Meta<typeof InputSingleSelect> = {
@@ -22,34 +23,30 @@ export default meta;
 type Story = StoryObj<typeof InputSingleSelect>;
 
 const fruitOptions = [
-  { value: "apple", label: "Apple" },
-  { value: "banana", label: "Banana" },
-  { value: "cherry", label: "Cherry" },
-  { value: "dragonfruit", label: "Dragonfruit" },
-  { value: "elderberry", label: "Elderberry" },
+  { value: "apple", title: "Apple" },
+  { value: "banana", title: "Banana" },
+  { value: "cherry", title: "Cherry" },
+  { value: "dragonfruit", title: "Dragonfruit" },
+  { value: "elderberry", title: "Elderberry" },
 ];
 
-const strategySections = [
+const strategyOptions: SelectOptions = [
   {
-    options: [
-      {
-        value: "none",
-        label: "Do not re-index",
-        description: "Save the settings; existing documents are untouched.",
-      },
-    ],
+    value: "none",
+    title: "Do not re-index",
+    description: "Save the settings; existing documents are untouched.",
   },
   {
-    label: "Re-index options",
+    title: "Re-index options",
     options: [
       {
         value: "reindex",
-        label: "Re-index all, then switch",
+        title: "Re-index all, then switch",
         description: "Keeps the current index live until the new one is ready.",
       },
       {
         value: "instant",
-        label: "Switch, then re-index",
+        title: "Switch, then re-index",
         description: "Clears the current index first.",
       },
     ],
@@ -80,7 +77,7 @@ export const WithSections: Story = {
         placeholder="Choose a strategy"
         value={value}
         onValueChange={setValue}
-        options={strategySections}
+        options={strategyOptions}
       />
     );
   },
@@ -95,7 +92,7 @@ export const WithDefaultOption: Story = {
         defaultOption="reindex"
         value={value}
         onValueChange={setValue}
-        options={strategySections}
+        options={strategyOptions}
       />
     );
   },

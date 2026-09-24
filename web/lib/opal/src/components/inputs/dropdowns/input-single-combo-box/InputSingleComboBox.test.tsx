@@ -14,14 +14,14 @@ jest.mock("react-dom", () => ({
 Element.prototype.scrollIntoView = jest.fn();
 
 const mockOptions = [
-  { value: "apple", label: "Apple" },
-  { value: "banana", label: "Banana" },
-  { value: "cherry", label: "Cherry" },
+  { value: "apple", title: "Apple" },
+  { value: "banana", title: "Banana" },
+  { value: "cherry", title: "Cherry" },
 ];
 
 const mockOptionsWithDescriptions = [
-  { value: "apple", label: "Apple", description: "A red fruit" },
-  { value: "banana", label: "Banana", description: "A yellow fruit" },
+  { value: "apple", title: "Apple", description: "A red fruit" },
+  { value: "banana", title: "Banana", description: "A yellow fruit" },
 ];
 
 function setupUser() {
@@ -104,7 +104,9 @@ describe("InputSingleComboBox", () => {
     });
 
     test("opens on focus with an empty option set and shows the empty state", () => {
-      render(<InputSingleComboBox placeholder="Select" value="" options={[]} />);
+      render(
+        <InputSingleComboBox placeholder="Select" value="" options={[]} />
+      );
       const input = screen.getByPlaceholderText("Select");
       fireEvent.focus(input);
       expect(screen.getByRole("listbox")).toBeInTheDocument();
@@ -596,8 +598,8 @@ describe("InputSingleComboBox", () => {
       const handleValueChange = jest.fn();
       const user = setupUser();
       const optionsWithDisabled = [
-        { value: "apple", label: "Apple" },
-        { value: "banana", label: "Banana", disabled: true },
+        { value: "apple", title: "Apple" },
+        { value: "banana", title: "Banana", disabled: true },
       ];
       render(
         <InputSingleComboBox
@@ -616,5 +618,4 @@ describe("InputSingleComboBox", () => {
       expect(handleValueChange).not.toHaveBeenCalled();
     });
   });
-
 });

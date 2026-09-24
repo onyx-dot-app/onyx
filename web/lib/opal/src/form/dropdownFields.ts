@@ -8,7 +8,7 @@ import {
 } from "@opal/components/inputs/dropdowns/shared";
 import type {
   SelectOption,
-  SelectSection,
+  SelectOptions,
 } from "@opal/components/inputs/dropdowns/types";
 import type { TagItem } from "@opal/components/inputs/texts/input-type-in-tag/TagField";
 
@@ -46,7 +46,7 @@ export function useSingleDropdownField(
  */
 export function useMultiDropdownField(
   name: string,
-  options: SelectOption[] | SelectSection[],
+  options: SelectOptions,
   openSet: boolean
 ) {
   const [field, , helpers] = useField<string[]>(name);
@@ -65,7 +65,7 @@ export function useMultiDropdownField(
         );
         return {
           id: value,
-          label: option?.label ?? value,
+          label: option?.title ?? value,
           error: option === undefined && !openSet,
         };
       }),

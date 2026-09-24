@@ -127,7 +127,7 @@ export function SlackChannelConfigFormFields({
   const searchAgentOptions = useMemo(
     () =>
       availableAgents.map((persona) => ({
-        label: persona.name,
+        title: persona.name,
         value: String(persona.id),
       })),
     [availableAgents]
@@ -136,7 +136,7 @@ export function SlackChannelConfigFormFields({
   const nonSearchAgentOptions = useMemo(
     () =>
       nonSearchAgents.map((persona) => ({
-        label: persona.name,
+        title: persona.name,
         value: String(persona.id),
       })),
     [nonSearchAgents]

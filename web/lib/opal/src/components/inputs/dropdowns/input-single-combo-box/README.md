@@ -1,6 +1,6 @@
 # InputSingleComboBox
 
-**Import:** `import { InputSingleComboBox, type InputSingleComboBoxProps, type SelectOption, type SelectSection } from "@opal/components";`
+**Import:** `import { InputSingleComboBox, type InputSingleComboBoxProps, type SelectOption, type SelectDivider, type SelectOptions } from "@opal/components";`
 
 A single pick from a set behind a text input: typing filters the options, focus
 opens the list, and a click while focused reopens it. Keyboard navigation
@@ -20,9 +20,10 @@ Re-picking the selected option unselects it. There is no `defaultOption`: the
 text is the filter, so a default would pre-fill it with a label the user never
 chose and the opened list would show only that row.
 
-Options are flat or sectioned. Sections render in order with a `Divider`
-between each and an optional titled heading; a section whose options all
-filter out disappears.
+`options` is a list of loose options and titled dividers in any order, like
+`<option>`s beside `<optgroup>`s: a divider is `{ title, options }` and renders
+as a titled `Divider` above its rows; a divider whose options all filter out
+disappears with its title.
 
 ```tsx
 <InputSingleComboBox
@@ -31,10 +32,10 @@ filter out disappears.
   placeholder="Choose a model"
   options={[
     {
-      label: "OpenAI",
-      options: [{ value: "gpt", label: "GPT-5", description: "Default" }],
+      title: "OpenAI",
+      options: [{ value: "gpt", title: "GPT-5", description: "Default" }],
     },
-    { label: "Anthropic", options: [{ value: "opus", label: "Claude Opus" }] },
+    { title: "Anthropic", options: [{ value: "opus", title: "Claude Opus" }] },
   ]}
 />
 
@@ -57,7 +58,7 @@ Key props (`InputSingleComboBoxProps` also passes DOM input attributes through):
 | `value`         | `string`                            | —          | Current value (controlled)                           |
 | `onValueChange` | `(value: string) => void`           | —          | Fires on option selection (and create-row commit)    |
 | `onChange`      | `(e) => void`                       | —          | Fires on every keystroke (controlled-input style)    |
-| `options`       | `SelectOption[] \| SelectSection[]` | `[]`       | The set; sectioned options render with Dividers      |
+| `options`       | `SelectOptions` | `[]`       | Loose options and titled dividers, in order      |
 | `mode`          | `"closed" \| "open"`                | `"closed"` | Set openness                                         |
 | `placeholder`   | `string`                            | —          | Trigger placeholder (required)                       |
 | `isError`       | `boolean`                           | —          | External error state (overrides internal validation) |

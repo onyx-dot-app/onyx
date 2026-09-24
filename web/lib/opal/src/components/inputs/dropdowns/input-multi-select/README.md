@@ -17,7 +17,7 @@ through `onRemoveTag`. A tag outside the set flags the chrome's error variant.
   tags={tags}
   options={groupOptions}
   onSelectOption={(option) =>
-    setTags((prev) => [...prev, { id: option.value, label: option.label }])
+    setTags((prev) => [...prev, { id: option.value, label: option.title }])
   }
   onRemoveTag={(id) => setTags((prev) => prev.filter((t) => t.id !== id))}
   placeholder={t("groups.placeholder")}
@@ -30,7 +30,7 @@ Every [InputTypeInTag](../../texts/input-type-in-tag/README.md) chrome prop (`ta
 
 | Prop                | Type                                | Default        | Description                                                        |
 | ------------------- | ----------------------------------- | -------------- | ------------------------------------------------------------------ |
-| `options`           | `SelectOption[] \| SelectSection[]` | **(required)** | The selectable set, flat or sectioned; sections render with a Divider |
+| `options`           | `SelectOptions` | **(required)** | Loose options and titled dividers, in order |
 | `onSelectOption`    | `(option: SelectOption) => void`    | **(required)** | Called when an option is chosen                                    |
 | `placeholder`       | `string`                            | **(required)** | Names the combobox element and shows while there are no chips      |
 | `dropdownMaxHeight` | `string`                            | `"15rem"`      | Max height of the dropdown in CSS units                            |

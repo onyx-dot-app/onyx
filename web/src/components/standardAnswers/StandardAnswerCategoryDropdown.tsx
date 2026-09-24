@@ -60,7 +60,7 @@ export const StandardAnswerCategoryDropdownField: FC<
           options={allCategories
             .filter((category) => !selectedIds.has(category.id))
             .map((category) => ({
-              label: category.name,
+              title: category.name,
               value: category.id.toString(),
             }))}
           searchIcon

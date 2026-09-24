@@ -216,14 +216,14 @@ export function ModelAccessField() {
     businessTier && !userGroupsIsLoading && userGroups
       ? userGroups.map((g) => ({
           value: `${GROUP_PREFIX}${g.id}`,
-          label: g.name,
+          title: g.name,
           description: t("access.groupOption.description"),
         }))
       : [];
 
   const agentOptions = agents.map((a) => ({
     value: `${AGENT_PREFIX}${a.id}`,
-    label: a.name,
+    title: a.name,
     description: t("access.agentOption.description"),
   }));
 

@@ -1,6 +1,6 @@
 # InputSingleSelect
 
-**Import:** `import { InputSingleSelect, type InputSingleSelectProps, type SelectOption, type SelectSection } from "@opal/components";`
+**Import:** `import { InputSingleSelect, type InputSingleSelectProps, type SelectOption, type SelectDivider, type SelectOptions } from "@opal/components";`
 
 A single pick from a set, with nothing to type. The trigger is an input-shaped
 button: like a native `<select>`, a click or ArrowDown opens the full set, a
@@ -18,8 +18,9 @@ to it, re-picking the default itself does nothing, and re-picking any other
 selected option falls back to the default. `onValueChange` never receives `""`.
 The trigger then always has a label, so `placeholder` becomes optional.
 
-Options are flat or sectioned. Sections render in order with a `Divider`
-between each and an optional titled heading. A value outside the set shows the
+`options` is a list of loose options and titled dividers in any order, like
+`<option>`s beside `<optgroup>`s: a divider is `{ title, options }` and renders
+as a titled `Divider` above its rows. A value outside the set shows the
 placeholder with the validation error.
 
 ```tsx
@@ -28,12 +29,12 @@ placeholder with the validation error.
   onValueChange={setStrategy}
   defaultOption="reindex"
   options={[
-    { options: [{ value: "none", label: "Do not re-index" }] },
+    { options: [{ value: "none", title: "Do not re-index" }] },
     {
-      label: "Re-index options",
+      title: "Re-index options",
       options: [
-        { value: "reindex", label: "Re-index all, then switch" },
-        { value: "instant", label: "Switch, then re-index" },
+        { value: "reindex", title: "Re-index all, then switch" },
+        { value: "instant", title: "Switch, then re-index" },
       ],
     },
   ]}
@@ -46,7 +47,7 @@ placeholder with the validation error.
 | --------------- | ----------------------------------- | ------- | --------------------------------------------------------------- |
 | `value`         | `string`                            | —       | Current value (controlled)                                      |
 | `onValueChange` | `(value: string) => void`           | —       | Fires on a pick, and with `""` on an unpick                     |
-| `options`       | `SelectOption[] \| SelectSection[]` | `[]`    | The set; sectioned options render with Dividers                 |
+| `options`       | `SelectOptions` | `[]`    | Loose options and titled dividers, in order                 |
 | `defaultOption` | `string`                            | —       | Option value an empty `value` resolves to; never empties then   |
 | `placeholder`   | `string`                            | —       | Trigger placeholder (required without `defaultOption`)          |
 | `isError`       | `boolean`                           | —       | External error state (overrides internal validation)            |

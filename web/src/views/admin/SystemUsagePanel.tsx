@@ -292,10 +292,10 @@ export default function SystemUsagePanel({ timeRange }: SystemUsagePanelProps) {
               onValueChange={setModel}
               placeholder={t("filters.allModels.label")}
               options={[
-                { value: ALL_FILTER, label: t("filters.allModels.label") },
+                { value: ALL_FILTER, title: t("filters.allModels.label") },
                 ...models.map((option) => ({
                   value: option,
-                  label: option,
+                  title: option,
                 })),
               ]}
             />
@@ -308,10 +308,10 @@ export default function SystemUsagePanel({ timeRange }: SystemUsagePanelProps) {
               onValueChange={setProvider}
               placeholder={t("filters.allProviders.label")}
               options={[
-                { value: ALL_FILTER, label: t("filters.allProviders.label") },
+                { value: ALL_FILTER, title: t("filters.allProviders.label") },
                 ...providers.map((option) => ({
                   value: option,
-                  label: option,
+                  title: option,
                 })),
               ]}
             />

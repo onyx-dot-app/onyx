@@ -22,11 +22,11 @@ export default meta;
 type Story = StoryObj<typeof InputSingleComboBox>;
 
 const fruitOptions = [
-  { value: "apple", label: "Apple" },
-  { value: "banana", label: "Banana" },
-  { value: "cherry", label: "Cherry" },
-  { value: "dragonfruit", label: "Dragonfruit" },
-  { value: "elderberry", label: "Elderberry" },
+  { value: "apple", title: "Apple" },
+  { value: "banana", title: "Banana" },
+  { value: "cherry", title: "Cherry" },
+  { value: "dragonfruit", title: "Dragonfruit" },
+  { value: "elderberry", title: "Elderberry" },
 ];
 
 export const Default: Story = {

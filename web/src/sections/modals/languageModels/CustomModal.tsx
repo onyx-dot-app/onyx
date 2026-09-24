@@ -235,7 +235,7 @@ function ProviderNameSelect({ disabled }: { disabled?: boolean }) {
     () =>
       (customProviderNames ?? []).map((opt) => ({
         value: opt.value,
-        label: opt.value,
+        title: opt.value,
         description: opt.label,
       })),
     [customProviderNames]

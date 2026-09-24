@@ -88,7 +88,7 @@ export const OptionItem = React.memo(
         <span className="opal-select-option-label">
           {option.icon && <option.icon className="opal-select-option-icon" />}
           <span className="opal-select-option-text">
-            {highlightMatch(option.label, searchTerm)}
+            {highlightMatch(option.title, searchTerm)}
           </span>
         </span>
         {option.description && (

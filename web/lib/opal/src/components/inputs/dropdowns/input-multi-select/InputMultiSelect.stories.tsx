@@ -12,9 +12,9 @@ export default meta;
 type Story = StoryObj<typeof InputMultiSelect>;
 
 const GROUP_OPTIONS = [
-  { value: "1", label: "Engineering", description: "14 members" },
-  { value: "2", label: "Design", description: "5 members" },
-  { value: "3", label: "Sales", description: "9 members" },
+  { value: "1", title: "Engineering", description: "14 members" },
+  { value: "2", title: "Design", description: "5 members" },
+  { value: "3", title: "Sales", description: "9 members" },
 ];
 
 function ControlledSelect() {
@@ -28,7 +28,7 @@ function ControlledSelect() {
         onSelectOption={(option) =>
           setTags((prev) => [
             ...prev,
-            { id: option.value, label: option.label },
+            { id: option.value, label: option.title },
           ])
         }
         onRemoveTag={(id) =>
