@@ -26,7 +26,7 @@ through `onRemoveTag`. A tag outside the set flags the chrome's error variant.
 
 ## Props
 
-Every [InputTypeInTag](../../texts/input-type-in-tag/README.md) chrome prop (`tags`, `onRemoveTag`, `variant`, `disabled`, `icon`, `onClear`, `minRows`), plus:
+Every [InputTypeInTag](../../texts/input-type-in-tag/README.md) chrome prop (`tags`, `onRemoveTag`, `variant`, `disabled`, `icon`, `onClear`, `minRows`, `maxRows`), plus:
 
 | Prop                | Type                                | Default        | Description                                                        |
 | ------------------- | ----------------------------------- | -------------- | ------------------------------------------------------------------ |

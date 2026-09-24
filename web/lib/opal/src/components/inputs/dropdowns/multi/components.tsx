@@ -44,6 +44,7 @@ function MultiDropdown(props: MultiDropdownProps) {
     icon,
     onClear,
     minRows,
+    maxRows,
     focusOnMount,
     dropdownMaxHeight,
   } = props;
@@ -230,6 +231,7 @@ function MultiDropdown(props: MultiDropdownProps) {
       icon={icon}
       onClear={onClear}
       minRows={minRows}
+      maxRows={maxRows}
       focusOnMount={focusOnMount}
       rootRef={setRootRef}
       inputRef={inputRef}

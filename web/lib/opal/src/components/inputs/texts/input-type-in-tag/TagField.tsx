@@ -54,6 +54,13 @@ interface TagFieldBaseProps {
   /** Tag rows the field is tall enough to show before it grows. */
   minRows?: number;
 
+  /**
+   * Tag rows the field grows to before the chips scroll inside it. The
+   * text input (or the button trigger) is the last row, so a new chip
+   * scrolls it into view.
+   */
+  maxRows?: number;
+
   /** Focuses the text input on mount. */
   focusOnMount?: boolean;
 }
@@ -119,6 +126,7 @@ function TagField({
   icon: Icon,
   onClear,
   minRows = 1,
+  maxRows = 2,
   focusOnMount = false,
   rootRef,
   inputRef: inputRefProp,
@@ -135,6 +143,7 @@ function TagField({
   const ownRootRef = useRef<HTMLDivElement>(null);
   const ownInputRef = useRef<HTMLInputElement>(null);
   const ownTriggerRef = useRef<HTMLDivElement>(null);
+  const tagsRef = useRef<HTMLDivElement>(null);
   const inputRef = inputRefProp ?? ownInputRef;
   const triggerRef = triggerRefProp ?? ownTriggerRef;
 
@@ -158,6 +167,18 @@ function TagField({
     // Mount only: later prop changes must not steal focus back.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // A new chip lands on the last row, next to the input or the trigger.
+  // Past `maxRows` that row is below the fold, so follow it. Removals keep
+  // the scroll position: the chip the user is looking at must not move.
+  const prevTagCount = useRef(tags.length);
+  useEffect(() => {
+    const grew = tags.length > prevTagCount.current;
+    prevTagCount.current = tags.length;
+    const tagsElement = tagsRef.current;
+    if (!grew || !tagsElement) return;
+    tagsElement.scrollTop = tagsElement.scrollHeight;
+  }, [tags.length]);
 
   function handleInputKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     // During IME composition, Enter confirms the candidate and Backspace
@@ -210,14 +231,13 @@ function TagField({
         </div>
       )}
       <div
+        ref={tagsRef}
         className="opal-input-type-in-tag-tags"
-        data-multi-row={minRows > 1 || undefined}
         style={
-          minRows > 1
-            ? ({
-                "--opal-input-type-in-tag-rows": minRows,
-              } as React.CSSProperties)
-            : undefined
+          {
+            "--opal-input-type-in-tag-rows": minRows,
+            "--opal-input-type-in-tag-max-rows": Math.max(maxRows, minRows),
+          } as React.CSSProperties
         }
       >
         {tags.map((tag) => (
