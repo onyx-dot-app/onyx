@@ -196,6 +196,35 @@ class LLMRateLimitError(Exception):
     """
 
 
+def _as_onyx_llm_error(error: Exception) -> Exception:
+    """Translate a litellm exception into the Onyx one callers catch.
+
+    litellm raises a failure during a stream as ``MidStreamFallbackError`` (a
+    ``ServiceUnavailableError``), including 429s. It keeps the real cause in
+    ``original_exception``, but leaves ``__cause__`` empty and puts only a
+    message in ``args``. Chat's error classifier follows ``__cause__``, so we
+    set it on the wrapper, whether or not the cause maps to an Onyx error.
+
+    A mapped error also has its ``__cause__`` set to the real cause, so raise
+    the result without ``from``.
+    """
+    from litellm.exceptions import MidStreamFallbackError, RateLimitError, Timeout
+
+    cause = error
+    if isinstance(error, MidStreamFallbackError) and error.original_exception:
+        cause = error.original_exception
+        error.__cause__ = cause
+    mapped: Exception
+    if isinstance(cause, Timeout):
+        mapped = LLMTimeoutError(cause)
+    elif isinstance(cause, RateLimitError):
+        mapped = LLMRateLimitError(cause)
+    else:
+        return error
+    mapped.__cause__ = cause
+    return mapped
+
+
 def _consume_stream_with_timeout(stream: Any, total_timeout: float | None) -> list[Any]:
     """Drain a litellm stream, capping total wall-clock time when set.
 
@@ -204,17 +233,20 @@ def _consume_stream_with_timeout(stream: Any, total_timeout: float | None) -> li
     since litellm 1.93.0 exposes only async ``aclose`` — which frees the thread;
     GC releases the connection.
     """
-    if total_timeout is None:
-        return list(stream)
-
-    deadline = time.monotonic() + total_timeout
+    deadline = None if total_timeout is None else time.monotonic() + total_timeout
     chunks: list[Any] = []
-    for chunk in stream:
-        chunks.append(chunk)
-        if time.monotonic() > deadline:
-            raise LLMTimeoutError(
-                f"LLM streaming call exceeded total timeout of {total_timeout}s"
-            )
+    try:
+        for chunk in stream:
+            chunks.append(chunk)
+            if deadline is not None and time.monotonic() > deadline:
+                raise LLMTimeoutError(
+                    f"LLM streaming call exceeded total timeout of {total_timeout}s"
+                )
+    except LLMTimeoutError:
+        raise
+    except Exception as e:
+        # The request itself succeeded, so _completion's mapping never saw this.
+        raise _as_onyx_llm_error(e)
     return chunks
 
 
@@ -653,7 +685,7 @@ class LitellmLLM(LLM):
         env_injection_enabled: bool | None = None,
     ) -> Union["ModelResponse", "CustomStreamWrapper"]:
         # Lazy loading to avoid memory bloat for non-inference flows
-        from litellm.exceptions import BadRequestError, RateLimitError, Timeout
+        from litellm.exceptions import BadRequestError
 
         from onyx.llm.litellm_singleton import litellm
 
@@ -1187,14 +1219,7 @@ class LitellmLLM(LLM):
                     )
             raise RuntimeError("unreachable: retry ladder always returns or raises")
         except Exception as e:
-            # for break pointing
-            if isinstance(e, Timeout):
-                raise LLMTimeoutError(e)
-
-            elif isinstance(e, RateLimitError):
-                raise LLMRateLimitError(e)
-
-            raise e
+            raise _as_onyx_llm_error(e)
 
     @property
     def config(self) -> LLMConfig:
@@ -1333,7 +1358,14 @@ class LitellmLLM(LLM):
                     cast(LiteLLMCustomStreamWrapper, raw_response),
                     total_timeout_override,
                 )
-                response = cast(LiteLLMModelResponse, stream_chunk_builder(chunks))
+                # stream_chunk_builder returns None for an empty stream. Without
+                # this the cast would hide it until an AttributeError downstream.
+                built = stream_chunk_builder(chunks)
+                if built is None:
+                    raise ValueError(
+                        f"LLM {self.config.model_name} returned an empty stream"
+                    )
+                response = cast(LiteLLMModelResponse, built)
             else:
                 response = cast(LiteLLMModelResponse, raw_response)
 
@@ -1443,7 +1475,7 @@ class LitellmLLM(LLM):
                 return
             except retryable_exceptions as e:
                 if yielded_any or attempt >= max_attempts - 1:
-                    raise
+                    raise _as_onyx_llm_error(e)
                 logger.warning(
                     "Retrying pre-chunk stream for model %s after %s on attempt %d/%d",
                     self.config.model_name,
