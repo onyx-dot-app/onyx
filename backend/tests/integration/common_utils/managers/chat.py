@@ -332,6 +332,11 @@ class ChatSessionManager:
             used_tools=list(ind_to_tool_use.values()),
             tool_call_debug=tool_call_debug,
             heartbeat_packets=[dict(packet) for packet in heartbeat_packets],
+            packets=[
+                {"placement": dict(data["placement"]), "obj": dict(data["obj"])}
+                for data in response_data
+                if "obj" in data and "placement" in data
+            ],
             error=error,
         )
 
