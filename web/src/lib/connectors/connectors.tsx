@@ -493,12 +493,10 @@ export const connectorConfigs: Record<
         name: "indexing_scope",
         label: "Whose OneDrive files should Onyx index?",
         optional: true,
-        selectionField: "all_users",
         tabs: [
           {
             value: "general",
             label: "General",
-            selectionValue: true,
             fields: [
               {
                 type: "string_tab",
@@ -512,7 +510,6 @@ export const connectorConfigs: Record<
           {
             value: "specific",
             label: "Specific",
-            selectionValue: false,
             fields: [
               {
                 type: "list",
