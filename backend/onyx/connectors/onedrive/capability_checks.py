@@ -165,6 +165,26 @@ def _first_delta_item(
     )
 
 
+def _probe_item_permissions(
+    gateway: OneDriveSourceOperations,
+    drive: OneDriveDrive,
+    graph_api_base: str,
+) -> bool:
+    item = _first_delta_item(
+        gateway,
+        drive,
+        build_delta_start_url(
+            graph_api_base,
+            drive.id,
+            page_size=_PROBE_PAGE_SIZE,
+            select_fields=DRIVE_DELTA_SELECT_FIELDS,
+        ),
+    )
+    if item is not None:
+        gateway.list_permissions(drive_id=drive.id, item_id=item.id)
+    return True
+
+
 def _group_membership_probe_group(
     gateway: OneDriveSourceOperations,
 ) -> OneDriveGroup | None:
@@ -329,24 +349,18 @@ class _PermissionCheck(CapabilityCheck):
         gateway = _gateway(context)
         host = _config(context).graph_api_host.rstrip("/")
         try:
-            for drive in _candidate_drives(context):
-                item = _first_delta_item(
+            _first_drive_that(
+                context,
+                lambda drive: _probe_item_permissions(
                     gateway,
                     drive,
-                    build_delta_start_url(
-                        f"{host}/{GRAPH_API_VERSION}",
-                        drive.id,
-                        page_size=_PROBE_PAGE_SIZE,
-                        select_fields=DRIVE_DELTA_SELECT_FIELDS,
-                    ),
-                )
-                if item is None:
-                    return
-                gateway.list_permissions(drive_id=drive.id, item_id=item.id)
-                return
+                    f"{host}/{GRAPH_API_VERSION}",
+                ),
+                "The app cannot read permissions in the tenant's first OneDrives.",
+                "No readable OneDrive was found among the first users.",
+            )
         except OneDriveGraphError as error:
             raise_for_graph_error(error, "The app cannot read OneDrive permissions.")
-        raise ConnectorValidationError("No readable OneDrive was found.")
 
 
 class _GroupListCheck(CapabilityCheck):
