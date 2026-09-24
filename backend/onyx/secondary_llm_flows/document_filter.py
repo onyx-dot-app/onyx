@@ -138,7 +138,7 @@ def classify_section_relevance(
             response = llm.invoke(
                 prompt=prompt_msg,
                 reasoning_effort=ReasoningEffort.OFF,
-                timeout_override=SECONDARY_LLM_FLOW_TIMEOUT_S,
+                total_timeout_s=SECONDARY_LLM_FLOW_TIMEOUT_S,
             )
             record_llm_response(span_generation, response)
             llm_response = response.choice.message.content
@@ -318,7 +318,7 @@ def select_sections_for_expansion(
             response = llm.invoke(
                 prompt=[prompt_text],
                 reasoning_effort=ReasoningEffort.OFF,
-                timeout_override=SECONDARY_LLM_FLOW_TIMEOUT_S,
+                total_timeout_s=SECONDARY_LLM_FLOW_TIMEOUT_S,
             )
             record_llm_response(span_generation, response)
             llm_response = response.choice.message.content

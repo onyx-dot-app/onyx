@@ -15,7 +15,6 @@ def _make_fake_llm() -> MagicMock:
     llm = MagicMock()
     llm.config.model_name = "gpt-test"
     llm.config.model_provider = "openai"
-    llm._timeout = 30
     llm._track_llm_cost = MagicMock()
     return llm
 

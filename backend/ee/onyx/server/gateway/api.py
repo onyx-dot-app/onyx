@@ -61,7 +61,10 @@ from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.llm.tracing_wrap import _finalize_tool_calls
 from onyx.server.features.build.craft_gateway import gateway_request_flow
-from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
+from onyx.server.gateway.configs import (
+    GATEWAY_LLM_TOTAL_TIMEOUT_SECONDS,
+    GATEWAY_PATH_PREFIX,
+)
 from onyx.server.gateway.model_catalog import build_gateway_model_catalog
 from onyx.server.gateway.models import (
     AnthropicContentBlock,
@@ -406,7 +409,7 @@ def handle_chat_completion(
         try:
             response = llm.invoke(
                 prompt=messages,
-                stream=True,
+                total_timeout_s=GATEWAY_LLM_TOTAL_TIMEOUT_SECONDS,
                 tools=request.tools,
                 tool_choice=tool_choice,
                 structured_response_format=request.response_format,
@@ -786,7 +789,7 @@ def handle_responses_request(
         try:
             response = llm.invoke(
                 prompt=messages,
-                stream=True,
+                total_timeout_s=GATEWAY_LLM_TOTAL_TIMEOUT_SECONDS,
                 tools=tools,
                 tool_choice=tool_choice,
                 max_tokens=max_tokens,
@@ -1336,7 +1339,7 @@ def handle_anthropic_messages(
         try:
             response = llm.invoke(
                 prompt=messages,
-                stream=True,
+                total_timeout_s=GATEWAY_LLM_TOTAL_TIMEOUT_SECONDS,
                 tools=tools,
                 tool_choice=tool_choice,
                 max_tokens=max_tokens,

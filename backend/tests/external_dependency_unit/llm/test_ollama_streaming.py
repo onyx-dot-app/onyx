@@ -48,7 +48,6 @@ def test_streaming_separates_reasoning_content_from_visible_content(
         model_name=_THINKING_MODEL,
         api_base="https://ollama.com",
         max_input_tokens=8192,
-        timeout=120,
     )
 
     prompt: list[ChatCompletionMessage] = [
@@ -62,7 +61,7 @@ def test_streaming_separates_reasoning_content_from_visible_content(
 
     reasoning_parts: list[str] = []
     content_parts: list[str] = []
-    for chunk in llm.stream(prompt=prompt):
+    for chunk in llm.stream(prompt=prompt, stall_timeout_s=120):
         delta = chunk.choice.delta
         rc = delta.reasoning_content
         content = delta.content

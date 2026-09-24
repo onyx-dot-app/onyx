@@ -240,7 +240,6 @@ def get_llm_for_persona(
 
 
 def get_default_llm_with_vision(
-    timeout: int | None = None,
     temperature: float | None = None,
     additional_headers: dict[str, str] | None = None,
 ) -> LLM | None:
@@ -280,7 +279,6 @@ def get_default_llm_with_vision(
         return llm_from_provider(
             model_name=default_model.name,
             llm_provider=LLMProviderView.from_model(default_model.llm_provider),
-            timeout=timeout,
             temperature=temperature,
             additional_headers=additional_headers,
         )
@@ -289,7 +287,6 @@ def get_default_llm_with_vision(
 def llm_from_provider(
     model_name: str,
     llm_provider: LLMProviderView,
-    timeout: int | None = None,
     temperature: float | None = None,
     additional_headers: dict[str, str] | None = None,
     policy_fn: Callable[[str], LlmRequestPolicy] | None = None,
@@ -328,7 +325,6 @@ def llm_from_provider(
         api_base=llm_provider.api_base,
         api_version=llm_provider.api_version,
         custom_config=llm_provider.custom_config,
-        timeout=timeout,
         temperature=temperature,
         additional_headers=additional_headers,
         max_input_tokens=max_input_tokens,
@@ -378,7 +374,6 @@ def get_contextual_rag_llm_for_search_settings(
 
 
 def get_default_llm(
-    timeout: int | None = None,
     temperature: float | None = None,
     additional_headers: dict[str, str] | None = None,
     policy_fn: Callable[[str], LlmRequestPolicy] | None = None,
@@ -393,7 +388,6 @@ def get_default_llm(
         return llm_from_provider(
             model_name=model.name,
             llm_provider=LLMProviderView.from_model(model.llm_provider),
-            timeout=timeout,
             temperature=temperature,
             additional_headers=additional_headers,
             policy_fn=policy_fn,
@@ -411,7 +405,6 @@ def get_llm(
     api_version: str | None = None,
     custom_config: dict[str, str] | None = None,
     temperature: float | None = None,
-    timeout: int | None = None,
     additional_headers: dict[str, str] | None = None,
     model_kwargs: dict[str, Any] | None = None,
     policy_headers: dict[str, str] | None = None,
@@ -448,7 +441,6 @@ def get_llm(
         api_key=api_key,
         api_base=api_base,
         api_version=api_version,
-        timeout=timeout,
         temperature=temperature,
         custom_config=custom_config,
         extra_headers=extra_headers,

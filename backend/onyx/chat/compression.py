@@ -40,6 +40,10 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+# The summary prompt asks for long-form output with no token cap, so this call
+# outruns the default invoke timeout. A timeout leaves the turn uncompressed.
+_SUMMARY_TIMEOUT_S = 180
+
 # Ratio of available context to allocate for recent messages after compression
 RECENT_MESSAGES_RATIO = 0.2
 
@@ -367,7 +371,10 @@ def generate_summary(
         flow=LLMFlow.CHAT_HISTORY_SUMMARIZATION,
         input_messages=input_messages,
     ) as span_generation:
-        response = llm.invoke(input_messages, stream=True)
+        response = llm.invoke(
+            input_messages,
+            total_timeout_s=_SUMMARY_TIMEOUT_S,
+        )
         record_llm_response(span_generation, response)
 
     content = response.choice.message.content

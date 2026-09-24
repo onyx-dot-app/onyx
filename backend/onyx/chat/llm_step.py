@@ -17,6 +17,7 @@ from onyx.configs.app_configs import (
     LOG_ONYX_MODEL_INTERACTIONS,
     PROMPT_CACHE_CHAT_HISTORY,
 )
+from onyx.configs.chat_configs import LLM_SOCKET_READ_TIMEOUT
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import ChatFileType
@@ -1090,7 +1091,7 @@ def run_llm_step_pkt_generator(
     use_existing_tab_index: bool = False,
     is_deep_research: bool = False,
     pre_answer_processing_time: float | None = None,
-    timeout_override: int | None = None,
+    stall_timeout_s: int = LLM_SOCKET_READ_TIMEOUT,
 ) -> Generator[Packet, None, tuple[LlmStepResult, bool]]:
     """Run an LLM step and stream the response as packets.
     NOTE: DO NOT TOUCH THIS FUNCTION BEFORE ASKING YUHONG, this is very finicky and
@@ -1125,7 +1126,7 @@ def run_llm_step_pkt_generator(
             when tool_choice is REQUIRED.
         pre_answer_processing_time: Optional time spent processing before the
             answer started, recorded in state_container for analytics.
-        timeout_override: Optional timeout override for the LLM call.
+        stall_timeout_s: Longest gap tolerated between stream deltas.
 
     Yields:
         Packet: Streaming packets containing:
@@ -1312,7 +1313,7 @@ def run_llm_step_pkt_generator(
             max_tokens=max_tokens,
             reasoning_effort=reasoning_effort,
             user_identity=user_identity,
-            timeout_override=timeout_override,
+            stall_timeout_s=stall_timeout_s,
         ):
             # On the first chunk, not at stream end: a mid-step stop persists
             # from another thread and needs this step's params already there.
@@ -1591,7 +1592,7 @@ def run_llm_step(
     use_existing_tab_index: bool = False,
     is_deep_research: bool = False,
     pre_answer_processing_time: float | None = None,
-    timeout_override: int | None = None,
+    stall_timeout_s: int = LLM_SOCKET_READ_TIMEOUT,
 ) -> tuple[LlmStepResult, bool]:
     """Wrapper around run_llm_step_pkt_generator that consumes packets and emits them.
 
@@ -1614,7 +1615,7 @@ def run_llm_step(
         use_existing_tab_index=use_existing_tab_index,
         is_deep_research=is_deep_research,
         pre_answer_processing_time=pre_answer_processing_time,
-        timeout_override=timeout_override,
+        stall_timeout_s=stall_timeout_s,
     )
 
     while True:

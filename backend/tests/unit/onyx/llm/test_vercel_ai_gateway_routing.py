@@ -22,7 +22,6 @@ def _make_llm(
 ) -> LitellmLLM:
     return LitellmLLM(
         api_key="vck-test-key",
-        timeout=30,
         model_provider=LlmProviderNames.VERCEL_AI_GATEWAY,
         model_name=model_name,
         max_input_tokens=200_000,
