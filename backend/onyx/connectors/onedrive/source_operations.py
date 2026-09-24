@@ -1,8 +1,6 @@
 from typing import Any
-from urllib.parse import quote
 
 import requests
-from msal.exceptions import MsalServiceError
 
 from onyx.configs.app_configs import SHAREPOINT_CONNECTOR_SIZE_THRESHOLD
 from onyx.configs.constants import DocumentSource
@@ -17,28 +15,25 @@ from onyx.connectors.microsoft_utils.drive_items import (
     DriveItemData,
     extract_drive_item_content,
 )
-from onyx.connectors.microsoft_utils.graph_auth import (
-    MicrosoftAuthContext,
-    MicrosoftAuthMethod,
-    acquire_graph_token,
-    build_msal_app,
-)
 from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
 from onyx.connectors.microsoft_utils.graph_env import (
     DEFAULT_AUTHORITY_HOST,
     DEFAULT_GRAPH_API_HOST,
 )
 from onyx.connectors.microsoft_utils.graph_errors import (
-    is_msal_decode_error,
-    msal_http_status,
-    parse_graph_error,
-    parse_msal_error,
-)
-from onyx.connectors.onedrive.errors import (
-    INVALID_AUTHORITY_CODE,
     MISSING_CREDENTIAL_CODE,
-    OneDriveAuthError,
-    OneDriveGraphError,
+    microsoft_error_from_exception,
+)
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftAuthError as OneDriveAuthError,
+)
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftGraphError as OneDriveGraphError,
+)
+from onyx.connectors.microsoft_utils.graph_gateway import (
+    MicrosoftGraphAuthConfig,
+    MicrosoftGraphGateway,
+    build_graph_user_url,
 )
 from onyx.connectors.onedrive.models import (
     OneDriveCredentials,
@@ -67,15 +62,6 @@ CONFIG_GRAPH_API_HOST = "graph_api_host"
 CONFIG_USERS = "users"
 
 
-def _graph_error(error: Exception) -> OneDriveGraphError:
-    details = (
-        parse_graph_error(error)
-        if isinstance(error, requests.RequestException)
-        else parse_msal_error(error)
-    )
-    return OneDriveGraphError(details.status, details.code, details.message)
-
-
 def _user(raw: dict[str, Any]) -> OneDriveUser | None:
     if (
         not raw.get("id")
@@ -96,8 +82,7 @@ class OneDriveSourceOperations(SourceOperations):
     source = DocumentSource.ONEDRIVE
     sdk_modules = ("msal", "requests")
 
-    _auth_context: MicrosoftAuthContext | None = None
-    _graph_client: GraphApiClient | None = None
+    _graph_gateway: MicrosoftGraphGateway | None = None
 
     def _config(self, key: str, default: str) -> str:
         return str((self.connector_specific_config or {}).get(key) or default).rstrip(
@@ -108,7 +93,7 @@ class OneDriveSourceOperations(SourceOperations):
         return self._config(CONFIG_GRAPH_API_HOST, DEFAULT_GRAPH_API_HOST)
 
     def _base(self) -> str:
-        return f"{self._graph_host()}/{GRAPH_API_VERSION}"
+        return self._gateway().graph_api_base
 
     def _credentials(self) -> OneDriveCredentials:
         try:
@@ -118,62 +103,38 @@ class OneDriveSourceOperations(SourceOperations):
         except ValueError as error:
             raise OneDriveAuthError(MISSING_CREDENTIAL_CODE, str(error)) from error
 
-    def _auth(self) -> MicrosoftAuthContext:
-        if self._auth_context is not None:
-            return self._auth_context
+    def _gateway(self) -> MicrosoftGraphGateway:
+        if self._graph_gateway is not None:
+            return self._graph_gateway
         credential = self._credentials()
-        method = MicrosoftAuthMethod.parse(credential.onedrive_authentication_method)
-        try:
-            self._auth_context = build_msal_app(
+        self._graph_gateway = MicrosoftGraphGateway(
+            auth_config=MicrosoftGraphAuthConfig(
                 client_id=credential.onedrive_client_id,
                 directory_id=credential.onedrive_directory_id,
                 authority_host=self._config(
                     CONFIG_AUTHORITY_HOST, DEFAULT_AUTHORITY_HOST
                 ),
-                auth_method=method,
+                auth_method=credential.onedrive_authentication_method,
                 client_secret=credential.onedrive_client_secret,
                 private_key_b64=credential.onedrive_private_key,
                 certificate_password=credential.onedrive_certificate_password,
-            )
-        except ValueError as error:
-            status = msal_http_status(error)
-            if (
-                status == 429
-                or status is not None
-                and status >= 500
-                or is_msal_decode_error(error)
-            ):
-                raise _graph_error(error) from error
-            raise OneDriveAuthError(INVALID_AUTHORITY_CODE, str(error)) from error
-        except (MsalServiceError, requests.RequestException) as error:
-            raise _graph_error(error) from error
-        return self._auth_context
+            ),
+            graph_api_host=self._graph_host(),
+            graph_api_version=GRAPH_API_VERSION,
+        )
+        return self._graph_gateway
 
     def _token_response(self) -> dict[str, Any]:
-        try:
-            response = acquire_graph_token(self._auth().app, self._graph_host())
-        except (MsalServiceError, ValueError, requests.RequestException) as error:
-            raise _graph_error(error) from error
-        if "access_token" not in response:
-            raise OneDriveAuthError(
-                str(response.get("error") or "unknown_error"),
-                str(response.get("error_description") or ""),
-            )
-        return response
+        return self._gateway().token_response()
 
     def _access_token(self) -> str:
-        return str(self._token_response()["access_token"])
+        return self._gateway().access_token()
 
     def _client(self) -> GraphApiClient:
-        if self._graph_client is None:
-            self._graph_client = GraphApiClient(self._access_token, self._base())
-        return self._graph_client
+        return self._gateway().client
 
     def _get(self, url: str, params: dict[str, str] | None = None) -> dict[str, Any]:
-        try:
-            return self._client().get_json(url, params)
-        except (requests.RequestException, ValueError) as error:
-            raise _graph_error(error) from error
+        return self._gateway().get_json(url, params)
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
@@ -213,7 +174,7 @@ class OneDriveSourceOperations(SourceOperations):
     def get_user(self, *, identifier: str) -> OneDriveUser | None:
         try:
             raw = self._get(
-                f"{self._base()}/users/{quote(identifier, safe='@')}",
+                build_graph_user_url(self._base(), identifier),
                 {"$select": USER_SELECT},
             )
         except OneDriveGraphError as error:
@@ -228,7 +189,7 @@ class OneDriveSourceOperations(SourceOperations):
     )
     def get_default_drive(self, *, user_id: str) -> OneDriveDrive | None:
         try:
-            raw = self._get(f"{self._base()}/users/{quote(user_id)}/drive")
+            raw = self._get(f"{build_graph_user_url(self._base(), user_id)}/drive")
         except OneDriveGraphError as error:
             if error.status == 404:
                 return None
@@ -254,7 +215,7 @@ class OneDriveSourceOperations(SourceOperations):
                 select_fields=DRIVE_DELTA_SELECT_FIELDS,
             )
         except (requests.RequestException, ValueError) as error:
-            raise _graph_error(error) from error
+            raise microsoft_error_from_exception(error) from error
         return OneDriveDeltaResult(
             page=result.page,
             next_cursor=result.next_checkpoint_url,

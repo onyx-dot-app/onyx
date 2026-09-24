@@ -12,11 +12,15 @@ from onyx.connectors.exceptions import (
 )
 from onyx.connectors.microsoft_utils.drive_delta import (
     DRIVE_DELTA_SELECT_FIELDS,
+    build_delta_start_url,
 )
-from onyx.connectors.microsoft_utils.drive_items import build_delta_start_url
-from onyx.connectors.onedrive.errors import (
-    OneDriveAuthError,
-    OneDriveGraphError,
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftAuthError as OneDriveAuthError,
+)
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftGraphError as OneDriveGraphError,
+)
+from onyx.connectors.microsoft_utils.graph_errors import (
     raise_for_auth_error,
     raise_for_graph_error,
 )

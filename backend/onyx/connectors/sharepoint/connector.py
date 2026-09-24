@@ -39,13 +39,13 @@ from onyx.connectors.interfaces import (
     SlimConnectorWithPermSync,
 )
 from onyx.connectors.microsoft_utils.drive_delta import (
+    build_delta_start_url,
     fetch_drive_delta_checkpoint_page,
 )
 from onyx.connectors.microsoft_utils.drive_items import (
     DRIVE_ITEM_SELECT_FIELDS,
     DriveItemContentError,
     DriveItemData,
-    build_delta_start_url,
     build_item_relative_path,
     extract_drive_item_content,
     extract_folder_path_from_parent_reference,

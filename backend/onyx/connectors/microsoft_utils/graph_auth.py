@@ -17,12 +17,24 @@ from enum import Enum
 from typing import Any, assert_never
 
 import msal
+import requests
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
+from msal.exceptions import MsalServiceError
 from office365.runtime.auth.token_response import TokenResponse
 from pydantic import BaseModel
 
 from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.microsoft_utils.graph_errors import (
+    INVALID_AUTH_METHOD_CODE,
+    INVALID_AUTHORITY_CODE,
+    INVALID_CERTIFICATE_CODE,
+    MISSING_CREDENTIAL_CODE,
+    MicrosoftAuthError,
+    is_msal_decode_error,
+    microsoft_error_from_exception,
+    msal_http_status,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -168,6 +180,79 @@ def acquire_graph_token(
 ) -> dict[str, Any]:
     """Acquire an app-only Graph token. Returns MSAL's raw response."""
     return msal_app.acquire_token_for_client(scopes=[f"{graph_api_host}/.default"])
+
+
+def build_graph_auth_context(
+    *,
+    client_id: str | None,
+    directory_id: str | None,
+    authority_host: str,
+    auth_method_value: str | None,
+    client_secret: str | None,
+    private_key_b64: str | None,
+    certificate_password: str | None,
+) -> MicrosoftAuthContext:
+    try:
+        auth_method = MicrosoftAuthMethod.parse(auth_method_value)
+    except ConnectorValidationError as error:
+        raise MicrosoftAuthError(INVALID_AUTH_METHOD_CODE, str(error)) from error
+
+    required = [client_id, directory_id]
+    if auth_method is MicrosoftAuthMethod.CLIENT_SECRET:
+        required.append(client_secret)
+    else:
+        required.extend((private_key_b64, certificate_password))
+    if any(not str(value or "").strip() for value in required):
+        raise MicrosoftAuthError(
+            MISSING_CREDENTIAL_CODE, "one or more required fields are missing"
+        )
+
+    if auth_method is MicrosoftAuthMethod.CERTIFICATE:
+        try:
+            base64.b64decode(private_key_b64 or "", validate=True)
+        except ValueError as error:
+            raise MicrosoftAuthError(INVALID_CERTIFICATE_CODE, str(error)) from error
+
+    try:
+        return build_msal_app(
+            client_id=client_id or "",
+            directory_id=directory_id or "",
+            authority_host=authority_host,
+            auth_method=auth_method,
+            client_secret=client_secret,
+            private_key_b64=private_key_b64,
+            certificate_password=certificate_password,
+        )
+    except ValueError as error:
+        status = msal_http_status(error)
+        if (
+            status == 429
+            or status is not None
+            and status >= 500
+            or is_msal_decode_error(error)
+        ):
+            raise microsoft_error_from_exception(error) from error
+        raise MicrosoftAuthError(INVALID_AUTHORITY_CODE, str(error)) from error
+    except RuntimeError as error:
+        raise MicrosoftAuthError(INVALID_CERTIFICATE_CODE, str(error)) from error
+    except (MsalServiceError, requests.RequestException) as error:
+        raise microsoft_error_from_exception(error) from error
+
+
+def acquire_graph_token_response(
+    auth_context: MicrosoftAuthContext,
+    graph_api_host: str,
+) -> dict[str, Any]:
+    try:
+        response = acquire_graph_token(auth_context.app, graph_api_host)
+    except (MsalServiceError, ValueError, requests.RequestException) as error:
+        raise microsoft_error_from_exception(error) from error
+    if "access_token" not in response:
+        raise MicrosoftAuthError(
+            str(response.get("error") or "unknown_error"),
+            str(response.get("error_description") or ""),
+        )
+    return response
 
 
 def acquire_token_for_rest(

@@ -8,11 +8,17 @@ from onyx.connectors.microsoft_utils.drive_delta import (
     DRIVE_DELTA_SELECT_FIELDS,
     HIERARCHICAL_SHARING_PREFERENCE,
     PREFER_HEADER,
+    build_delta_start_url,
 )
-from onyx.connectors.microsoft_utils.drive_items import build_delta_start_url
 from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
 from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
-from onyx.connectors.onedrive.errors import OneDriveGraphError
+from onyx.connectors.microsoft_utils.graph_errors import INVALID_CERTIFICATE_CODE
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftAuthError as OneDriveAuthError,
+)
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftGraphError as OneDriveGraphError,
+)
 from onyx.connectors.onedrive.models import OneDriveCredentials
 from onyx.connectors.onedrive.source_operations import OneDriveSourceOperations
 
@@ -27,7 +33,7 @@ def _gateway() -> tuple[OneDriveSourceOperations, Any]:
     gateway = OneDriveSourceOperations(credentials_provider=provider)
     client = MagicMock(spec=GraphApiClient)
     client.graph_api_base = "https://graph.microsoft.com/v1.0"
-    gateway._graph_client = client
+    gateway._gateway()._client = client
     return gateway, client
 
 
@@ -101,11 +107,11 @@ def test_onedrive_preserves_msal_throttle_status() -> None:
     gateway, _ = _gateway()
 
     with patch(
-        "onyx.connectors.onedrive.source_operations.build_msal_app",
+        "onyx.connectors.microsoft_utils.graph_auth.build_msal_app",
         side_effect=ValueError("authority discovery failed; HTTP status: 429"),
     ):
         with pytest.raises(OneDriveGraphError) as raised:
-            gateway._auth()
+            _ = gateway._gateway().auth_context
 
     assert raised.value.status == 429
 
@@ -145,15 +151,36 @@ def test_onedrive_builds_both_app_only_auth_methods(
         onedrive_directory_id="tenant",
         onedrive_client_secret="secret",
         onedrive_authentication_method=method,
-        onedrive_private_key="certificate-data",
+        onedrive_private_key="Y2VydA==",
         onedrive_certificate_password="password",
     ).model_dump()
     gateway = OneDriveSourceOperations(credentials_provider=provider)
 
     with patch(
-        "onyx.connectors.onedrive.source_operations.build_msal_app",
+        "onyx.connectors.microsoft_utils.graph_auth.build_msal_app",
         return_value=MagicMock(),
     ) as build:
-        gateway._auth()
+        _ = gateway._gateway().auth_context
 
     assert build.call_args.kwargs["auth_method"] is expected
+
+
+def test_onedrive_classifies_invalid_certificate() -> None:
+    provider = MagicMock()
+    provider.get_credentials.return_value = OneDriveCredentials(
+        onedrive_client_id="client",
+        onedrive_directory_id="tenant",
+        onedrive_authentication_method="certificate",
+        onedrive_private_key="Y2VydA==",
+        onedrive_certificate_password="password",
+    ).model_dump()
+    gateway = OneDriveSourceOperations(credentials_provider=provider)
+
+    with patch(
+        "onyx.connectors.microsoft_utils.graph_auth.build_msal_app",
+        side_effect=RuntimeError("Failed to load certificate"),
+    ):
+        with pytest.raises(OneDriveAuthError) as raised:
+            _ = gateway._gateway().auth_context
+
+    assert raised.value.code == INVALID_CERTIFICATE_CODE

@@ -17,6 +17,16 @@ from onyx.connectors.microsoft_utils.drive_delta import (
     DriveDeltaPage,
 )
 from onyx.connectors.microsoft_utils.drive_items import DriveItemContent, DriveItemData
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MISSING_CREDENTIAL_CODE,
+    raise_for_auth_error,
+)
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftAuthError as OneDriveAuthError,
+)
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftGraphError as OneDriveGraphError,
+)
 from onyx.connectors.models import (
     ConnectorFailure,
     Document,
@@ -31,12 +41,6 @@ from onyx.connectors.onedrive.connector import (
     drive_root_id,
     folder_node,
     hierarchy_item_id,
-)
-from onyx.connectors.onedrive.errors import (
-    MISSING_CREDENTIAL_CODE,
-    OneDriveAuthError,
-    OneDriveGraphError,
-    raise_for_auth_error,
 )
 from onyx.connectors.onedrive.models import (
     OneDriveCheckpoint,
