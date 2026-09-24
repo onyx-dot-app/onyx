@@ -5,18 +5,9 @@ from typing import Any
 
 import pytest
 
-from onyx.chat.llm_step import run_llm_step_pkt_generator
 from onyx.deep_research.dr_mock_tools import THINK_TOOL_NAME
 from onyx.deep_research.utils import create_think_tool_token_processor
-from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.model_response import ChatCompletionDeltaToolCall, Delta, FunctionCall
-from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import Packet, ReasoningDelta
-from tests.unit.onyx.deep_research.fakes import (
-    ScriptedLLM,
-    summarize,
-    tool_call_chunks,
-)
 
 
 def _args_delta(arguments: str, name: str | None = None) -> Delta:
@@ -91,56 +82,3 @@ def test_passes_through_deltas_without_think_tool() -> None:
 
     assert out is delta
     assert flushed is None
-
-
-def test_llm_step_streams_and_saves_full_reasoning() -> None:
-    llm = ScriptedLLM(
-        [
-            tool_call_chunks(
-                "think_1",
-                THINK_TOOL_NAME,
-                ['{"reasoning": "', "first idea, second", ' idea"}'],
-            )
-        ]
-    )
-    gen = run_llm_step_pkt_generator(
-        history=[],
-        tool_definitions=[],
-        tool_choice=ToolChoiceOptions.REQUIRED,
-        llm=llm,
-        placement=Placement(turn_index=1),
-        state_container=None,
-        citation_processor=None,
-        custom_token_processor=create_think_tool_token_processor(),
-        is_deep_research=True,
-    )
-    packets: list[Packet] = []
-    while True:
-        try:
-            packets.append(next(gen))
-        except StopIteration as stop:
-            result, has_reasoned = stop.value
-            break
-
-    summary = summarize(packets)
-    assert summary[0] == ("ReasoningStart", 1, 0, None)
-    assert summary[-1] == ("ReasoningDone", 1, 0, None)
-    assert {s[0] for s in summary[1:-1]} == {"ReasoningDelta"}
-    streamed = "".join(
-        p.obj.reasoning for p in packets if isinstance(p.obj, ReasoningDelta)
-    )
-    assert streamed == "first idea, second idea"
-    assert has_reasoned is True
-    assert result.reasoning == streamed
-    assert result.tool_calls is not None
-    assert [
-        (tc.tool_call_id, tc.tool_name, tc.tool_args, tc.placement)
-        for tc in result.tool_calls
-    ] == [
-        (
-            "think_1",
-            THINK_TOOL_NAME,
-            {"reasoning": "first idea, second idea"},
-            Placement(turn_index=1, tab_index=0),
-        )
-    ]

@@ -183,6 +183,7 @@ class DATestChatMessage(BaseModel):
     message: str
     message_type: MessageType | None = None
     files: list | None = None
+    reasoning_tokens: str | None = None
 
 
 class DATestChatSession(BaseModel):
