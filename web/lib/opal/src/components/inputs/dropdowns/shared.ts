@@ -15,29 +15,32 @@ import { SelectOption, SelectOptions } from "./types";
 // =============================================================================
 
 /**
- * The listbox's render unit: a run of rows, headed by a titled divider or
- * not. Internal: callers write `SelectOptions`, where loose options sit
- * beside titled dividers; each run of loose options becomes an untitled
- * group.
+ * The listbox's render unit: a run of rows. Internal: callers write
+ * `SelectOptions`, where loose options sit beside dividers; each divider is
+ * a group and each run of loose options between them is one too. A
+ * separator line renders between consecutive groups, titled when the group
+ * below it has a title.
  */
 export interface OptionGroup {
   title?: string;
   options: SelectOption[];
 }
 
-/** Groups the set for rendering: each divider is a group, each run of loose options an untitled one. */
+/** Groups the set for rendering: each divider is a group, each run of loose options one too. */
 export function normalizeSections(options: SelectOptions = []): OptionGroup[] {
   const groups: OptionGroup[] = [];
+  let looseRun: OptionGroup | null = null;
   for (const entry of options) {
     if ("options" in entry) {
       groups.push({ title: entry.title, options: entry.options });
+      looseRun = null;
       continue;
     }
-    const last = groups[groups.length - 1];
-    if (last && last.title === undefined) {
-      last.options.push(entry);
+    if (looseRun) {
+      looseRun.options.push(entry);
     } else {
-      groups.push({ options: [entry] });
+      looseRun = { options: [entry] };
+      groups.push(looseRun);
     }
   }
   return groups;

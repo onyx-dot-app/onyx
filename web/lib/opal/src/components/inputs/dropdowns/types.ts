@@ -11,19 +11,20 @@ export type SelectOption = {
 };
 
 /**
- * A titled divider with the rows under it, like an `<optgroup>`. Dividers
- * render in order; on a ComboBox a divider whose options all filter out
- * disappears with its title, so nothing dangles.
+ * A divider with the rows under it, like an `<optgroup>`. A separator line
+ * sits above it, carrying `title` when there is one. Dividers render in
+ * order; on a ComboBox a divider whose options all filter out disappears
+ * with its line, so nothing dangles.
  */
 export type SelectDivider = {
-  title: string;
+  title?: string;
   options: SelectOption[];
 };
 
 /**
- * The set: loose options and titled dividers in any order, like `<option>`s
- * beside `<optgroup>`s. A loose option renders as a plain row with no
- * divider above it.
+ * The set: loose options and dividers in any order, like `<option>`s beside
+ * `<optgroup>`s. A loose option renders as a plain row; a run of them after
+ * a divider gets a plain line above it.
  */
 export type SelectOptions = (SelectOption | SelectDivider)[];
 

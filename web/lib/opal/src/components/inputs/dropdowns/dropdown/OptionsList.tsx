@@ -121,14 +121,19 @@ export const OptionsList: React.FC<OptionsListProps> = ({
         </div>
       )}
 
-      {/* Groups: a titled Divider heads each divider group; loose rows have none */}
+      {/* A line separates consecutive groups; it carries the group's title
+          when it has one. A titled first group keeps its title line. */}
       {(() => {
         let globalIndex = indexOffset;
         let exactSeen = false;
         return sections.map((group, groupIdx) => {
           const rows = (
             <React.Fragment key={groupIdx}>
-              {group.title !== undefined && <Divider title={group.title} />}
+              {group.title !== undefined ? (
+                <Divider title={group.title} />
+              ) : (
+                groupIdx > 0 && <Divider />
+              )}
               {group.options.map((option) => {
                 const index = globalIndex++;
                 const isExact =
