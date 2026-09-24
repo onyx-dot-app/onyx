@@ -15,6 +15,7 @@ const CURRENT_SEARCH_SETTINGS_API =
 const SECONDARY_SEARCH_SETTINGS_API =
   "**/api/search-settings/get-secondary-search-settings**";
 const LLM_PROVIDER_API = "**/api/llm/provider**";
+const IMAGE_PROCESSING_API = "**/api/admin/image-processing";
 
 interface TestModelConfiguration {
   id: number | null;
@@ -40,6 +41,12 @@ interface TestSearchSettings {
   enable_contextual_rag: boolean;
   contextual_rag_model_configuration_id: number | null;
   [key: string]: unknown;
+}
+
+/** `null` means image processing is off. */
+interface TestImageProcessingSettings {
+  model_configuration_id: number;
+  max_size_mb: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -626,4 +633,305 @@ test.describe("Index Settings — empty-registry providers @exclusive", () => {
       expect(body.provider_type).toBe(providerType);
     });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Image processing (staged in the same form; may apply without a re-index)
+// ---------------------------------------------------------------------------
+
+interface ImageProcessingMocks {
+  visionModel: TestModelConfiguration;
+  putBodies: TestImageProcessingSettings[];
+  /** Every write in arrival order: "put", "delete", "set-new", "update-inference". */
+  calls: string[];
+}
+
+/**
+ * Mocks the image-processing row, the LLM providers (with a visible
+ * vision-capable model injected, which the card's gate and the captioning
+ * picker both need) and the search-settings endpoints, recording every write.
+ */
+async function mockImageProcessing(
+  page: Page,
+  options: {
+    served: TestImageProcessingSettings | null;
+    contextualModelId?: number | null;
+  }
+): Promise<ImageProcessingMocks | null> {
+  const current = (await getCurrentSearchSettings(page)) as TestSearchSettings;
+  const llmProviderResponse = await getLlmProviderResponse(page);
+  const models = getVisibleLlmModels(llmProviderResponse);
+  const baseModel = models[0];
+  if (!baseModel) return null;
+
+  const visionModel: TestModelConfiguration = {
+    ...baseModel,
+    id: baseModel.id! + 2000000,
+    name: "vision-test-model",
+    custom_display_name: "Vision test model",
+    is_visible: true,
+    supports_image_input: true,
+  };
+  const mockedLlmProviderResponse: TestLlmProviderResponse = {
+    ...llmProviderResponse,
+    providers: llmProviderResponse.providers.map((provider, index) =>
+      index === 0
+        ? {
+            ...provider,
+            model_configurations: [
+              ...provider.model_configurations,
+              visionModel,
+            ],
+          }
+        : provider
+    ),
+  };
+
+  let servedImageProcessing = options.served;
+  let servedSettings: TestSearchSettings =
+    options.contextualModelId === undefined
+      ? current
+      : {
+          ...current,
+          enable_contextual_rag: options.contextualModelId !== null,
+          contextual_rag_model_configuration_id: options.contextualModelId,
+        };
+  const mocks: ImageProcessingMocks = {
+    visionModel,
+    putBodies: [],
+    calls: [],
+  };
+
+  await page.route(LLM_PROVIDER_API, async (route) => {
+    await route.fulfill({
+      status: 200,
+      body: JSON.stringify(mockedLlmProviderResponse),
+    });
+  });
+  await page.route(CURRENT_SEARCH_SETTINGS_API, async (route) => {
+    await route.fulfill({ status: 200, body: JSON.stringify(servedSettings) });
+  });
+  await page.route(SECONDARY_SEARCH_SETTINGS_API, async (route) => {
+    await route.fulfill({ status: 200, body: "null" });
+  });
+  await page.route(SET_NEW_SETTINGS_API, async (route) => {
+    mocks.calls.push("set-new");
+    await route.fulfill({ status: 200, body: JSON.stringify({ id: 1 }) });
+  });
+  await page.route(UPDATE_INFERENCE_SETTINGS_API, async (route) => {
+    mocks.calls.push("update-inference");
+    const body = JSON.parse(
+      route.request().postData() ?? "{}"
+    ) as TestSearchSettings;
+    servedSettings = body;
+    await route.fulfill({
+      status: 200,
+      body: JSON.stringify({
+        contextual_rag_model_configuration_id:
+          body.contextual_rag_model_configuration_id,
+      }),
+    });
+  });
+  await page.route(IMAGE_PROCESSING_API, async (route) => {
+    const method = route.request().method();
+    if (method === "PUT") {
+      const body = JSON.parse(
+        route.request().postData() ?? "{}"
+      ) as TestImageProcessingSettings;
+      mocks.calls.push("put");
+      mocks.putBodies.push(body);
+      servedImageProcessing = body;
+      await route.fulfill({ status: 200, body: JSON.stringify(body) });
+      return;
+    }
+    if (method === "DELETE") {
+      mocks.calls.push("delete");
+      servedImageProcessing = null;
+      await route.fulfill({ status: 200, body: "null" });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      body: JSON.stringify(servedImageProcessing),
+    });
+  });
+
+  return mocks;
+}
+
+test.describe("Index Settings — image processing @exclusive", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.context().clearCookies();
+    await loginAs(page, "admin");
+  });
+
+  test("applies image processing without a re-index", async ({ page }) => {
+    const mocks = await mockImageProcessing(page, { served: null });
+    test.skip(mocks === null, "A visible LLM model is required");
+
+    const indexSettings = new IndexSettingsPage(page);
+    await indexSettings.goto();
+    await indexSettings.imageProcessingSwitch.click();
+    await indexSettings.pickCaptioningModel(
+      modelDisplayName(mocks!.visionModel)
+    );
+
+    // Image processing is the only diff: the fourth option is offered and
+    // stands in as the default.
+    await indexSettings.expectStrategy(/do not re-index/i);
+    await expect(indexSettings.applyWithoutReindexButton).toBeEnabled();
+    await expect(indexSettings.applyReindexButton).not.toBeVisible();
+
+    await indexSettings.applyWithoutReindexButton.click();
+
+    await expect.poll(() => mocks!.putBodies.length).toBe(1);
+    expect(mocks!.putBodies[0]).toEqual({
+      model_configuration_id: mocks!.visionModel.id,
+      max_size_mb: 20,
+    });
+    expect(mocks!.calls).toEqual(["put"]);
+
+    // The form rebased onto the saved row: clean banner, switch still on.
+    await expect(indexSettings.applyWithoutReindexButton).not.toBeVisible();
+    await expect(indexSettings.imageProcessingSwitch).toHaveAttribute(
+      "aria-checked",
+      "true"
+    );
+  });
+
+  test("switching on without a model blocks apply and shows the warning", async ({
+    page,
+  }) => {
+    const mocks = await mockImageProcessing(page, { served: null });
+    test.skip(mocks === null, "A visible LLM model is required");
+
+    const indexSettings = new IndexSettingsPage(page);
+    await indexSettings.goto();
+    await indexSettings.imageProcessingSwitch.click();
+
+    await expect(indexSettings.noModelSelectedWarning).toBeVisible();
+    await indexSettings.expectBannerTitle("Select a Captioning LLM");
+    await expect(indexSettings.applyWithoutReindexButton).toBeDisabled();
+
+    await indexSettings.pickCaptioningModel(
+      modelDisplayName(mocks!.visionModel)
+    );
+    await expect(indexSettings.noModelSelectedWarning).not.toBeVisible();
+    await expect(indexSettings.applyWithoutReindexButton).toBeEnabled();
+    expect(mocks!.calls).toEqual([]);
+  });
+
+  test("an embedding change plus an image change re-indexes after saving the row", async ({
+    page,
+  }) => {
+    const mocks = await mockImageProcessing(page, { served: null });
+    test.skip(mocks === null, "A visible LLM model is required");
+
+    const indexSettings = new IndexSettingsPage(page);
+    await indexSettings.goto();
+    await indexSettings.imageProcessingSwitch.click();
+    await indexSettings.pickCaptioningModel(
+      modelDisplayName(mocks!.visionModel)
+    );
+    await stageNonCurrentSelfHostedModel(page);
+
+    // Another section is in the diff: only the three re-index strategies.
+    await indexSettings.expectStrategyOptionAbsent("Do Not Re-index");
+    await indexSettings.expectStrategy(/re-index all connectors/i);
+    await expect(indexSettings.applyWithoutReindexButton).not.toBeVisible();
+
+    await indexSettings.applyReindexButton.click();
+
+    await expect.poll(() => mocks!.calls.length).toBe(2);
+    expect(mocks!.calls).toEqual(["put", "set-new"]);
+  });
+
+  test("leaving the image-only state falls back to a re-index strategy", async ({
+    page,
+  }) => {
+    const mocks = await mockImageProcessing(page, { served: null });
+    test.skip(mocks === null, "A visible LLM model is required");
+
+    const indexSettings = new IndexSettingsPage(page);
+    await indexSettings.goto();
+    await indexSettings.imageProcessingSwitch.click();
+    await indexSettings.pickCaptioningModel(
+      modelDisplayName(mocks!.visionModel)
+    );
+    await indexSettings.selectStrategy("Do Not Re-index");
+    await indexSettings.expectStrategy(/do not re-index/i);
+
+    await stageNonCurrentSelfHostedModel(page);
+    await indexSettings.expectStrategy(/re-index all connectors/i);
+    await expect(indexSettings.applyReindexButton).toBeVisible();
+
+    // Reverting drops the whole diff, so the banner actions go away.
+    await indexSettings.revertButton.click();
+    await expect(indexSettings.applyReindexButton).not.toBeVisible();
+    expect(mocks!.calls).toEqual([]);
+  });
+
+  test("switching off deletes the row without a re-index", async ({ page }) => {
+    const seeded = await mockImageProcessing(page, { served: null });
+    test.skip(seeded === null, "A visible LLM model is required");
+    await page.unrouteAll();
+    const mocks = await mockImageProcessing(page, {
+      served: {
+        model_configuration_id: seeded!.visionModel.id!,
+        max_size_mb: 20,
+      },
+    });
+
+    const indexSettings = new IndexSettingsPage(page);
+    await indexSettings.goto();
+    await expect(indexSettings.imageProcessingSwitch).toHaveAttribute(
+      "aria-checked",
+      "true"
+    );
+
+    await indexSettings.imageProcessingSwitch.click();
+    await expect(indexSettings.applyWithoutReindexButton).toBeEnabled();
+    await indexSettings.applyWithoutReindexButton.click();
+
+    await expect.poll(() => mocks!.calls.length).toBe(1);
+    expect(mocks!.calls).toEqual(["delete"]);
+    await expect(indexSettings.imageProcessingSwitch).toHaveAttribute(
+      "aria-checked",
+      "false"
+    );
+  });
+
+  test("a contextual model change with image changes goes forward-only and saves the row", async ({
+    page,
+  }) => {
+    const llmProviderResponse = await getLlmProviderResponse(page);
+    const models = getVisibleLlmModels(llmProviderResponse);
+    test.skip(models.length === 0, "A visible LLM model is required");
+    const currentContextualModel = models[0]!;
+
+    const mocks = await mockImageProcessing(page, {
+      served: null,
+      contextualModelId: currentContextualModel.id,
+    });
+    test.skip(mocks === null, "A visible LLM model is required");
+
+    const indexSettings = new IndexSettingsPage(page);
+    await indexSettings.goto();
+    // The injected vision model doubles as the new contextual model.
+    await indexSettings.stageContextualModel(
+      modelDisplayName(mocks!.visionModel)
+    );
+    await indexSettings.imageProcessingSwitch.click();
+    await indexSettings.pickCaptioningModel(
+      modelDisplayName(mocks!.visionModel)
+    );
+
+    await indexSettings.expectContextualModelActions();
+    await indexSettings.expectStrategyOptionAbsent("Do Not Re-index");
+    await indexSettings.openForwardOnlyConfirmation();
+    await indexSettings.confirmForwardOnlyUpdate();
+
+    await expect.poll(() => mocks!.calls.length).toBe(2);
+    expect(mocks!.calls).toEqual(["put", "update-inference"]);
+  });
 });

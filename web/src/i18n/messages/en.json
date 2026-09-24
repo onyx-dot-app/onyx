@@ -4810,6 +4810,9 @@
         "applyForward": {
           "label": "Apply to new and updated documents"
         },
+        "applyWithoutReindex": {
+          "label": "Apply without Re-index"
+        },
         "applyReindex": {
           "label": "Apply & Re-index",
           "statusesLoading": "Loading connector statuses…",
@@ -4852,6 +4855,10 @@
         "title": "Captioning LLM"
       },
       "changesBanner": {
+        "captioningModelMissing": {
+          "description": "Extract & Caption Images is on but no model is selected. Pick a vision-capable Captioning LLM below before applying.",
+          "title": "Select a Captioning LLM"
+        },
         "contextualModelMissing": {
           "description": "Contextual Retrieval is enabled but no model is selected. Pick a Contextual Retrieval LLM below before re-indexing — without one, the re-index cannot run.",
           "title": "Select a Contextual Retrieval LLM"
@@ -4863,6 +4870,10 @@
         "default": {
           "description": "Modifying embedding or retrieval settings requires a full re-index of all documents to take effect, which may take **hours or days** depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "Changes require a full re-index."
+        },
+        "imageProcessingOnly": {
+          "description": "Apply without re-indexing so only documents indexed from now on use the new settings, or rebuild all existing documents so every image is captioned with them.",
+          "title": "Choose how to apply these image processing settings"
         },
         "orSeparator": {
           "label": "or"
@@ -4962,12 +4973,13 @@
         "description": "Configure how documents are indexed, embedded, and prepared for search and retrieval."
       },
       "imageExtraction": {
-        "description": "Extract embedded images from uploaded files (PDFs, DOCX, etc.) and summarize them with a vision-capable LLM so image-only documents become searchable and answerable. Requires a vision-capable default LLM.",
+        "description": "Extract embedded images from uploaded files (PDFs, DOCX, etc.) and summarize them with a vision-capable LLM so image-only documents become searchable and answerable. Requires a Captioning LLM, chosen below.",
         "title": "Extract & Caption Images"
       },
       "imageProcessing": {
         "description": "Use LLM model to analyze and add descriptions to images during indexing.",
         "enableFirstTooltip": "Enable Extract & Caption Images to configure this.",
+        "noModelSelected": "No model selected",
         "noVisionModelsTooltip": "Image Processing is disabled because you have no vision-capable models configured. Set up a vision-capable [Language Model]({link}) first.",
         "title": "Image Processing"
       },
@@ -5151,6 +5163,10 @@
           "description": "Continue using the current document index with existing settings until all active (not paused/deleting) connectors have completed a successful index attempt.",
           "label": "Re-index Active Connectors Then Switch"
         },
+        "doNotReindex": {
+          "description": "Save the settings and leave the current index as it is. Only documents indexed from now on use them.",
+          "label": "Do Not Re-index"
+        },
         "instant": {
           "description": "Immediately clear the current document index and switch to the new settings. Requires re-indexing all connectors before the index is repopulated for search.",
           "label": "Switch Before Re-index"
@@ -5159,13 +5175,15 @@
         "reindexAll": {
           "description": "Safest option. Continue using the current document index with existing settings until all connectors have completed a successful index attempt.",
           "label": "Re-index All Connectors Then Switch"
+        },
+        "reindexOptions": {
+          "label": "Re-index Options"
         }
       },
       "toasts": {
         "applyFailed": "Failed to apply settings",
         "cancelReindexFailed": "Failed to cancel re-indexing",
-        "captioningUpdateFailed": "Failed to update captioning LLM",
-        "captioningUpdated": "Captioning LLM updated",
+        "captioningModelRequired": "Select a Captioning LLM before applying.",
         "contextualModelRequired": "Select a Contextual Retrieval LLM before re-indexing.",
         "contextualModelUpdateFailed": "Failed to update Contextual Retrieval LLM",
         "contextualModelUpdated": "Contextual Retrieval LLM updated",

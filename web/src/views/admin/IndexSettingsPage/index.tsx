@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Formik } from "formik";
 import { markdown } from "@opal/utils";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import { mutate } from "swr";
 import { PageLoader } from "@opal/layouts";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -30,8 +29,11 @@ import {
   InputSwitch,
   Tabs,
   Text,
+  type SelectDivider,
+  type SelectOptions,
 } from "@opal/components";
 import {
+  SvgAlertTriangle,
   SvgArrowExchange,
   SvgCheckSquare,
   SvgClock,
@@ -62,10 +64,12 @@ import {
   type EmbeddingModelSelection,
   type EmbeddingModelState,
   type EmbeddingProvider,
+  type ImageProcessingSettings,
 } from "@/lib/searchSettings/types";
 import {
   CLOUD_BASED_PROVIDERS,
   CUSTOM_PROVIDER,
+  DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB,
   MAX_IMAGE_SIZE_OPTIONS,
   SELF_HOSTED_PROVIDERS,
 } from "@/lib/searchSettings/constants";
@@ -82,9 +86,11 @@ import {
   savedModelSelection,
 } from "@/lib/searchSettings/utils";
 import {
-  saveAdminSettings,
   cancelNewEmbedding,
+  disableImageProcessing,
   disconnectEmbeddingProvider,
+  enableImageProcessing,
+  ImageProcessingRequestError,
   setNewSearchSettings,
   updateInferenceSettings,
 } from "@/lib/searchSettings/svc";
@@ -92,12 +98,11 @@ import { useCreateModal } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { useSettings } from "@/lib/settings/hooks";
-import { Settings, toSettings } from "@/lib/settings/types";
-import { findProviderOwningModelConfig } from "@/lib/languageModels/utils";
 import {
   useConfiguredEmbeddingProviders,
   useCurrentEmbeddingModel,
   useCurrentSearchSettings,
+  useImageProcessingSettings,
   useReindexProgress,
   useSecondarySearchSettings,
 } from "@/lib/searchSettings/hooks";
@@ -607,33 +612,118 @@ function EmbeddingModelCard({
 interface IndexSettingsFormValues extends EmbeddingModelSelection {
   enable_contextual_rag: boolean;
   contextual_rag_model_configuration_id: number | null;
+  image_processing_enabled: boolean;
+  image_processing_model_configuration_id: number | null;
+  image_processing_max_size_mb: number;
 }
 
-function isContextualModelOnlyChange(
+/**
+ * The fourth re-indexing option: save the staged settings and start nothing.
+ * Only offered when Image Processing is the only section that changed; the
+ * backend only ever sees a `SwitchoverType`.
+ */
+const DO_NOT_REINDEX = "do_not_reindex";
+type ApplyStrategy = SwitchoverType | typeof DO_NOT_REINDEX;
+
+const APPLY_STRATEGIES: readonly ApplyStrategy[] = [
+  DO_NOT_REINDEX,
+  SwitchoverType.REINDEX,
+  SwitchoverType.ACTIVE_ONLY,
+  SwitchoverType.INSTANT,
+];
+
+function isApplyStrategy(value: string): value is ApplyStrategy {
+  return APPLY_STRATEGIES.some((strategy) => strategy === value);
+}
+
+function toSwitchoverType(strategy: ApplyStrategy): SwitchoverType {
+  return strategy === DO_NOT_REINDEX ? SwitchoverType.REINDEX : strategy;
+}
+
+interface IndexSettingsChanges {
+  embeddingChanged: boolean;
+  contextualToggleChanged: boolean;
+  /** Contextual Retrieval stays on and points at a different model. */
+  contextualModelChanged: boolean;
+  imageChanged: boolean;
+}
+
+function classifyChanges(
   values: IndexSettingsFormValues,
   initialValues: IndexSettingsFormValues
-): boolean {
-  return (
-    values.enable_contextual_rag &&
-    values.enable_contextual_rag === initialValues.enable_contextual_rag &&
-    values.contextual_rag_model_configuration_id !== null &&
-    values.contextual_rag_model_configuration_id !==
-      initialValues.contextual_rag_model_configuration_id &&
-    isSameModelSelection(values, initialValues)
-  );
+): IndexSettingsChanges {
+  // The model and the size only matter while the feature is on, so switching
+  // on, picking a model and switching back off stages nothing, and the pick
+  // survives in the form for a later re-enable.
+  const imageChanged =
+    values.image_processing_enabled !==
+      initialValues.image_processing_enabled ||
+    (values.image_processing_enabled &&
+      (values.image_processing_model_configuration_id !==
+        initialValues.image_processing_model_configuration_id ||
+        values.image_processing_max_size_mb !==
+          initialValues.image_processing_max_size_mb));
+  return {
+    embeddingChanged: !isSameModelSelection(values, initialValues),
+    contextualToggleChanged:
+      values.enable_contextual_rag !== initialValues.enable_contextual_rag,
+    contextualModelChanged:
+      values.enable_contextual_rag &&
+      initialValues.enable_contextual_rag &&
+      values.contextual_rag_model_configuration_id !== null &&
+      values.contextual_rag_model_configuration_id !==
+        initialValues.contextual_rag_model_configuration_id,
+    imageChanged,
+  };
 }
+
+/**
+ * Which banner the staged changes get. An embedding or contextual-toggle
+ * change needs a re-index; a contextual model change on its own offers the
+ * forward-only pair; image processing on its own may skip re-indexing.
+ */
+type BannerMode = "reindex" | "contextualModelOnly" | "imageOnly";
+
+function bannerModeFor(changes: IndexSettingsChanges): BannerMode {
+  if (changes.embeddingChanged || changes.contextualToggleChanged) {
+    return "reindex";
+  }
+  if (changes.contextualModelChanged) return "contextualModelOnly";
+  if (changes.imageChanged) return "imageOnly";
+  return "reindex";
+}
+
+/**
+ * The strategy the dropdown shows. `null` means the admin has not chosen, so
+ * the least destructive option for the banner mode stands in. A stored
+ * "do not re-index" cannot survive a mode that no longer offers it.
+ */
+function resolveApplyStrategy(
+  stored: ApplyStrategy | null,
+  mode: BannerMode
+): ApplyStrategy {
+  if (mode === "imageOnly") return stored ?? DO_NOT_REINDEX;
+  return stored === null || stored === DO_NOT_REINDEX
+    ? SwitchoverType.REINDEX
+    : stored;
+}
+
+type ImagePersistResult =
+  | { status: "skipped" }
+  | { status: "saved"; settings: ImageProcessingSettings | null }
+  | { status: "failed" };
 
 export default function IndexSettingsPage() {
   const t = useTranslations("admin.indexSettings");
   const tInputSelect = useTranslations("common.inputSelect");
   const adminRouteTitle = useAdminRouteTitle();
-  const router = useRouter();
   const settings = useSettings();
   const editModal = useCreateModal();
   const [viewAllModelsOpen, setViewAllModelsOpen] = useState(false);
   const [activeModelTab, setActiveModelTab] = useState(MODEL_TAB_CLOUD);
-  const [switchoverType, setSwitchoverType] = useState<SwitchoverType>(
-    SwitchoverType.REINDEX
+  // The admin's explicit pick in the strategy dropdown; null until they pick.
+  const [applyStrategy, setApplyStrategy] = useState<ApplyStrategy | null>(
+    null
   );
 
   const allModels = useMemo(
@@ -665,25 +755,6 @@ export default function IndexSettingsPage() {
         ),
       };
     }, [filteredProviders]);
-
-  const saveSettings = useCallback(
-    async (updates: Partial<Settings>) => {
-      if (!settings) return;
-
-      try {
-        await saveAdminSettings({ ...toSettings(settings), ...updates });
-        router.refresh();
-        await mutate(SWR_KEYS.settings);
-        toast.success(t("toasts.settingsUpdated"));
-      } catch {
-        toast.error(t("toasts.settingsUpdateFailed"));
-      }
-    },
-    [settings, router, t]
-  );
-
-  const imageProcessingEnabled =
-    settings.image_extraction_and_analysis_enabled ?? false;
 
   const { data: secondarySearchSettings } = useSecondarySearchSettings();
   // INSTANT switchover swaps immediately — no secondary settings — and backfills on the
@@ -774,10 +845,6 @@ export default function IndexSettingsPage() {
         .filter((s): s is ConnectorIndexingStatusLite => "cc_pair_status" in s),
     [indexingStatusData]
   );
-  const wontPortConnectors = useMemo(
-    () => computeWontPortConnectors(connectorStatuses, switchoverType),
-    [connectorStatuses, switchoverType]
-  );
   // Frozen when Apply is pressed, and read by both the modal and the submitted
   // acknowledgement, so a background poll can't grow the set under an open confirmation.
   // A ref rather than state so the no-modal path can submit the value it just froze.
@@ -794,75 +861,17 @@ export default function IndexSettingsPage() {
   const connectorStatusesReady = statusesSettled && !statusesError;
 
   const {
-    llmProviders,
     hasAnyLlm,
     hasAnyVisionLlm,
-    defaultLlm,
-    defaultVision,
     isLoading: isLoadingLlmProviders,
   } = useLlmDefaults();
 
-  /**
-   * Persist a new default vision model. Onyx routes all image-captioning
-   * calls through `get_default_llm_with_vision()` (`backend/onyx/llm/factory.py`),
-   * which reads `default_vision` — so writing here switches the model the
-   * indexer uses for new captions. Existing captions stay baked into the
-   * embeddings of already-indexed documents.
-   */
-  const handleCaptioningModelChange = useCallback(
-    async ({
-      modelName,
-      modelConfigurationId,
-    }: {
-      modelName: string;
-      modelConfigurationId: number | null | undefined;
-    }) => {
-      const provider = findProviderOwningModelConfig(
-        llmProviders,
-        modelConfigurationId
-      );
-      if (!provider) {
-        toast.error(t("toasts.providerResolveFailed"));
-        return;
-      }
-      try {
-        const response = await fetch("/api/admin/llm/default-vision", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            provider_id: provider.id,
-            model_name: modelName,
-          }),
-        });
-        if (!response.ok) {
-          throw new Error(
-            (await response.json()).detail ?? t("toasts.captioningUpdateFailed")
-          );
-        }
-        await mutate(SWR_KEYS.llmProviders);
-        toast.success(t("toasts.captioningUpdated"));
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : t("toasts.unknownError")
-        );
-      }
-    },
-    [llmProviders, t]
-  );
-
-  // Resolve defaultVision to a model_configuration_id for ModelSelector. Keyed on
-  // providerId: display names are not unique, so a name match can land on a
-  // provider that does not own this model.
-  const captioningModelConfigId = useMemo(() => {
-    if (!defaultVision?.modelName || !llmProviders) return null;
-    const provider = llmProviders.find(
-      (p) => p.id === defaultVision.providerId
-    );
-    const mc = provider?.model_configurations.find(
-      (m) => m.name === defaultVision.modelName
-    );
-    return mc?.id ?? null;
-  }, [llmProviders, defaultVision]);
+  // `null` is the feature off; only `isLoading` tells it from "not fetched".
+  const {
+    data: imageProcessing,
+    isLoading: isLoadingImageProcessing,
+    mutate: mutateImageProcessing,
+  } = useImageProcessingSettings();
 
   const savedSelection = useMemo(
     () =>
@@ -879,19 +888,75 @@ export default function IndexSettingsPage() {
       enable_contextual_rag: searchSettings?.enable_contextual_rag ?? false,
       contextual_rag_model_configuration_id:
         searchSettings?.contextual_rag_model_configuration_id ?? null,
+      image_processing_enabled: imageProcessing != null,
+      image_processing_model_configuration_id:
+        imageProcessing?.model_configuration_id ?? null,
+      image_processing_max_size_mb:
+        imageProcessing?.max_size_mb ?? DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB,
     }),
-    [savedSelection, searchSettings]
+    [savedSelection, searchSettings, imageProcessing]
+  );
+
+  /**
+   * Save the staged image processing settings, if any changed. Leaves the SWR
+   * cache alone: the caller commits it alongside the other keys, in one tick,
+   * so `enableReinitialize` sees the final form once instead of a mix.
+   */
+  const persistImageProcessing = useCallback(
+    async (values: IndexSettingsFormValues): Promise<ImagePersistResult> => {
+      if (!classifyChanges(values, initialFormValues).imageChanged) {
+        return { status: "skipped" };
+      }
+      try {
+        if (values.image_processing_enabled) {
+          if (values.image_processing_model_configuration_id === null) {
+            toast.error(t("toasts.captioningModelRequired"));
+            return { status: "failed" };
+          }
+          const saved = await enableImageProcessing({
+            modelConfigurationId:
+              values.image_processing_model_configuration_id,
+            maxSizeMb: values.image_processing_max_size_mb,
+          });
+          return { status: "saved", settings: saved };
+        }
+        await disableImageProcessing();
+        return { status: "saved", settings: null };
+      } catch (error) {
+        const detail =
+          error instanceof ImageProcessingRequestError ? error.detail : null;
+        toast.error(detail ?? t("toasts.settingsUpdateFailed"));
+        return { status: "failed" };
+      }
+    },
+    [initialFormValues, t]
+  );
+
+  // `null` must be passed explicitly: SWR would store `undefined` otherwise.
+  const commitImageProcessing = useCallback(
+    (result: ImagePersistResult) => {
+      if (result.status === "saved") {
+        void mutateImageProcessing(result.settings, { revalidate: false });
+      }
+    },
+    [mutateImageProcessing]
   );
 
   const applyContextualModelForward = useCallback(
-    async (modelConfigurationId: number): Promise<boolean> => {
-      if (!searchSettings) return false;
+    async (values: IndexSettingsFormValues): Promise<boolean> => {
+      const modelConfigurationId = values.contextual_rag_model_configuration_id;
+      if (!searchSettings || modelConfigurationId === null) return false;
 
+      // Image settings first: a failed save aborts before anything else moves.
+      const image = await persistImageProcessing(values);
+      if (image.status === "failed") return false;
+
+      const updatedSearchSettings = {
+        ...searchSettings,
+        contextual_rag_model_configuration_id: modelConfigurationId,
+      };
       try {
-        const response = await updateInferenceSettings({
-          ...searchSettings,
-          contextual_rag_model_configuration_id: modelConfigurationId,
-        });
+        const response = await updateInferenceSettings(updatedSearchSettings);
         if (!response.ok) {
           toast.error(
             await parseErrorDetail(
@@ -899,20 +964,34 @@ export default function IndexSettingsPage() {
               t("toasts.contextualModelUpdateFailed")
             )
           );
+          // The image save stands, so the form rebases onto it; leaving the
+          // modal open would resubmit the old contextual id.
+          commitImageProcessing(image);
+          forwardOnlyModal.toggle(false);
           return false;
         }
 
-        await mutate(SWR_KEYS.currentSearchSettings);
+        // Both caches land in the same tick. The request body is what the
+        // GET returns, so the revalidation lands deep-equal and stays quiet.
+        void mutate(SWR_KEYS.currentSearchSettings, updatedSearchSettings);
+        commitImageProcessing(image);
         forwardOnlyModal.toggle(false);
         toast.success(t("toasts.contextualModelUpdated"));
         return true;
       } catch (error) {
         console.error(CONTEXTUAL_MODEL_UPDATE_LOG, error);
         toast.error(t("toasts.contextualModelUpdateFailed"));
+        commitImageProcessing(image);
         return false;
       }
     },
-    [forwardOnlyModal, searchSettings, t]
+    [
+      forwardOnlyModal,
+      searchSettings,
+      t,
+      persistImageProcessing,
+      commitImageProcessing,
+    ]
   );
 
   const handleCancelReindex = useCallback(async () => {
@@ -935,7 +1014,8 @@ export default function IndexSettingsPage() {
   if (
     isLoadingCurrentModel ||
     isLoadingSearchSettings ||
-    isLoadingLlmProviders
+    isLoadingLlmProviders ||
+    isLoadingImageProcessing
   ) {
     return (
       <SettingsLayouts.Root>
@@ -1007,12 +1087,30 @@ export default function IndexSettingsPage() {
                 toast.error(t("toasts.contextualModelRequired"));
                 return;
               }
+              if (
+                values.image_processing_enabled &&
+                values.image_processing_model_configuration_id === null
+              ) {
+                toast.error(t("toasts.captioningModelRequired"));
+                return;
+              }
               const resolved = resolveModelForApply(values);
               if (!resolved) {
                 toast.error(t("toasts.modelNotFound"));
                 return;
               }
 
+              // Image settings first, so the new index captions with the new
+              // model from its first document. A failed save aborts here.
+              const image = await persistImageProcessing(values);
+              if (image.status === "failed") return;
+
+              const switchoverType = toSwitchoverType(
+                resolveApplyStrategy(
+                  applyStrategy,
+                  bannerModeFor(classifyChanges(values, initialFormValues))
+                )
+              );
               const response = await setNewSearchSettings({
                 model: resolved.model,
                 providerName: resolved.providerName,
@@ -1040,12 +1138,15 @@ export default function IndexSettingsPage() {
                     return undefined;
                   });
                 toast.error(detail || t("toasts.applyFailed"));
+                // The image save stands (server truth); the form rebases.
+                commitImageProcessing(image);
                 return;
               }
 
               wontPortConsentModal.toggle(false);
               toast.success(t("toasts.reindexStarted"));
-              setSwitchoverType(SwitchoverType.REINDEX);
+              setApplyStrategy(null);
+              commitImageProcessing(image);
               await Promise.all([
                 mutate(SWR_KEYS.currentSearchSettings),
                 mutate(SWR_KEYS.secondarySearchSettings),
@@ -1067,44 +1168,91 @@ export default function IndexSettingsPage() {
               const contextualRagModelMissing =
                 values.enable_contextual_rag &&
                 values.contextual_rag_model_configuration_id === null;
-              const contextualModelOnlyChange = isContextualModelOnlyChange(
-                values,
-                initialFormValues
+              // Same for image processing: on with no captioning model.
+              const captioningModelMissing =
+                values.image_processing_enabled &&
+                values.image_processing_model_configuration_id === null;
+              const applyBlocked =
+                contextualRagModelMissing || captioningModelMissing;
+              const bannerMode = bannerModeFor(
+                classifyChanges(values, initialFormValues)
               );
+              const contextualModelOnlyChange =
+                bannerMode === "contextualModelOnly";
+              const imageOnlyChange = bannerMode === "imageOnly";
+              const effectiveStrategy = resolveApplyStrategy(
+                applyStrategy,
+                bannerMode
+              );
+              const saveOnly = effectiveStrategy === DO_NOT_REINDEX;
+              const wontPortConnectors = computeWontPortConnectors(
+                connectorStatuses,
+                toSwitchoverType(effectiveStrategy)
+              );
+
+              const reindexStrategyOptions: SelectDivider = {
+                title: t("switchover.reindexOptions.label"),
+                options: [
+                  {
+                    value: SwitchoverType.REINDEX,
+                    title: t("switchover.reindexAll.label"),
+                    description: t("switchover.reindexAll.description"),
+                    icon: SvgClock,
+                  },
+                  {
+                    value: SwitchoverType.ACTIVE_ONLY,
+                    title: t("switchover.activeOnly.label"),
+                    description: t("switchover.activeOnly.description"),
+                    icon: SvgSlowTime,
+                  },
+                  {
+                    value: SwitchoverType.INSTANT,
+                    title: t("switchover.instant.label"),
+                    description: t("switchover.instant.description"),
+                    icon: SvgEmpty,
+                  },
+                ],
+              };
+              // "Do Not Re-index" exists only while Image Processing is the
+              // only diff. It is absent, not disabled, everywhere else.
+              const strategyOptions: SelectOptions = imageOnlyChange
+                ? [
+                    {
+                      value: DO_NOT_REINDEX,
+                      title: t("switchover.doNotReindex.label"),
+                      description: t("switchover.doNotReindex.description"),
+                      icon: SvgCheckSquare,
+                    },
+                    reindexStrategyOptions,
+                  ]
+                : [reindexStrategyOptions];
               const switchoverStrategySelect = (
                 <InputSingleSelect
-                  value={switchoverType}
-                  onValueChange={(v) => setSwitchoverType(v as SwitchoverType)}
-                  defaultOption={SwitchoverType.REINDEX}
+                  value={effectiveStrategy}
+                  defaultOption={
+                    imageOnlyChange ? DO_NOT_REINDEX : SwitchoverType.REINDEX
+                  }
+                  onValueChange={(next) => {
+                    if (isApplyStrategy(next)) setApplyStrategy(next);
+                  }}
+                  options={strategyOptions}
                   placeholder={t("switchover.placeholder")}
-                  options={[
-                    {
-                      value: SwitchoverType.REINDEX,
-                      title: t("switchover.reindexAll.label"),
-                      description: t("switchover.reindexAll.description"),
-                      icon: SvgClock,
-                    },
-                    {
-                      value: SwitchoverType.ACTIVE_ONLY,
-                      title: t("switchover.activeOnly.label"),
-                      description: t("switchover.activeOnly.description"),
-                      icon: SvgSlowTime,
-                    },
-                    {
-                      value: SwitchoverType.INSTANT,
-                      title: t("switchover.instant.label"),
-                      description: t("switchover.instant.description"),
-                      icon: SvgEmpty,
-                    },
-                  ]}
                 />
               );
+              const applyWithoutReindex = async () => {
+                const image = await persistImageProcessing(values);
+                if (image.status === "failed") return;
+                commitImageProcessing(image);
+                resetForm({ values });
+                setApplyStrategy(null);
+                toast.success(t("toasts.settingsUpdated"));
+              };
               const revertButton = (
                 <Button
                   prominence="secondary"
                   onClick={() => {
                     resetForm();
-                    setSwitchoverType(SwitchoverType.REINDEX);
+                    setApplyStrategy(null);
                   }}
                 >
                   {t("actions.revert.label")}
@@ -1113,6 +1261,10 @@ export default function IndexSettingsPage() {
               const rebuildButton = (
                 <Button
                   onClick={() => {
+                    if (saveOnly) {
+                      void applyWithoutReindex();
+                      return;
+                    }
                     frozenWontPortRef.current = wontPortConnectors;
                     if (wontPortConnectors.length > 0) {
                       wontPortConsentModal.toggle(true);
@@ -1121,10 +1273,10 @@ export default function IndexSettingsPage() {
                     }
                   }}
                   disabled={
-                    contextualRagModelMissing || !connectorStatusesReady
+                    applyBlocked || (!saveOnly && !connectorStatusesReady)
                   }
                   tooltip={
-                    !connectorStatusesReady
+                    !saveOnly && !connectorStatusesReady
                       ? statusesError
                         ? t("actions.applyReindex.statusesFailed")
                         : t("actions.applyReindex.statusesLoading")
@@ -1133,7 +1285,9 @@ export default function IndexSettingsPage() {
                 >
                   {contextualModelOnlyChange
                     ? t("actions.rebuildAll.label")
-                    : t("actions.applyReindex.label")}
+                    : saveOnly
+                      ? t("actions.applyWithoutReindex.label")
+                      : t("actions.applyReindex.label")}
                 </Button>
               );
 
@@ -1145,17 +1299,13 @@ export default function IndexSettingsPage() {
                       title={t("forwardOnlyModal.title")}
                       submit={
                         <Button
+                          disabled={applyBlocked}
                           onClick={async () => {
-                            const modelConfigurationId =
-                              values.contextual_rag_model_configuration_id;
-                            if (modelConfigurationId === null) return;
                             const updated =
-                              await applyContextualModelForward(
-                                modelConfigurationId
-                              );
+                              await applyContextualModelForward(values);
                             if (updated) {
                               resetForm({ values });
-                              setSwitchoverType(SwitchoverType.REINDEX);
+                              setApplyStrategy(null);
                             }
                           }}
                         >
@@ -1297,27 +1447,37 @@ export default function IndexSettingsPage() {
                   ) : (
                     !NEXT_PUBLIC_CLOUD_ENABLED && (
                       <MessageCard
-                        variant={
-                          contextualRagModelMissing ? "error" : statusVariant
-                        }
+                        variant={applyBlocked ? "error" : statusVariant}
                         headerPadding={2}
                         title={
                           contextualRagModelMissing
                             ? t("changesBanner.contextualModelMissing.title")
-                            : contextualModelOnlyChange
-                              ? t("changesBanner.contextualModelOnly.title")
-                              : t("changesBanner.default.title")
+                            : captioningModelMissing
+                              ? t("changesBanner.captioningModelMissing.title")
+                              : contextualModelOnlyChange
+                                ? t("changesBanner.contextualModelOnly.title")
+                                : imageOnlyChange
+                                  ? t("changesBanner.imageProcessingOnly.title")
+                                  : t("changesBanner.default.title")
                         }
                         description={markdown(
                           contextualRagModelMissing
                             ? t(
                                 "changesBanner.contextualModelMissing.description"
                               )
-                            : contextualModelOnlyChange
+                            : captioningModelMissing
                               ? t(
-                                  "changesBanner.contextualModelOnly.description"
+                                  "changesBanner.captioningModelMissing.description"
                                 )
-                              : t("changesBanner.default.description")
+                              : contextualModelOnlyChange
+                                ? t(
+                                    "changesBanner.contextualModelOnly.description"
+                                  )
+                                : imageOnlyChange
+                                  ? t(
+                                      "changesBanner.imageProcessingOnly.description"
+                                    )
+                                  : t("changesBanner.default.description")
                         )}
                         bottomChildren={
                           dirty ? (
@@ -1338,6 +1498,7 @@ export default function IndexSettingsPage() {
                                   {revertButton}
                                   <Button
                                     prominence="secondary"
+                                    disabled={applyBlocked}
                                     onClick={() =>
                                       forwardOnlyModal.toggle(true)
                                     }
@@ -1867,7 +2028,13 @@ export default function IndexSettingsPage() {
                               : undefined
                           }
                         >
-                          <Card border="solid" rounding={4}>
+                          <Card
+                            border="solid"
+                            borderColor={
+                              captioningModelMissing ? "warning" : statusVariant
+                            }
+                            rounding={4}
+                          >
                             <GeneralLayouts.Section
                               width="full"
                               alignItems="stretch"
@@ -1877,20 +2044,23 @@ export default function IndexSettingsPage() {
                                 description={t("imageExtraction.description")}
                                 withLabel
                               >
-                                <InputSwitch
-                                  checked={imageProcessingEnabled}
-                                  onCheckedChange={(checked) => {
-                                    void saveSettings({
-                                      image_extraction_and_analysis_enabled:
-                                        checked,
-                                    });
-                                  }}
-                                />
+                                <SwitchField name="image_processing_enabled" />
                               </InputHorizontal>
+
+                              {captioningModelMissing && (
+                                <Content
+                                  icon={SvgAlertTriangle}
+                                  title={t("imageProcessing.noModelSelected")}
+                                  sizePreset="main-ui"
+                                  variant="body"
+                                  color="warning"
+                                />
+                              )}
 
                               <Disabled
                                 disabled={
-                                  !imageProcessingEnabled && !isReindexing
+                                  !values.image_processing_enabled &&
+                                  !isReindexing
                                 }
                                 tooltip={t(
                                   "imageProcessing.enableFirstTooltip"
@@ -1899,19 +2069,20 @@ export default function IndexSettingsPage() {
                                 <InputHorizontal
                                   title={t("captioningModel.title")}
                                   description={t("captioningModel.description")}
-                                  disabled={!imageProcessingEnabled}
+                                  disabled={!values.image_processing_enabled}
                                   withLabel
                                 >
                                   <ModelSelector
-                                    value={captioningModelConfigId}
-                                    disabled={!imageProcessingEnabled}
+                                    value={
+                                      values.image_processing_model_configuration_id
+                                    }
+                                    disabled={!values.image_processing_enabled}
                                     requiresImageInput
                                     onChange={(opt) =>
-                                      void handleCaptioningModelChange({
-                                        modelName: opt.modelName,
-                                        modelConfigurationId:
-                                          opt.modelConfigurationId,
-                                      })
+                                      void setFieldValue(
+                                        "image_processing_model_configuration_id",
+                                        opt.modelConfigurationId ?? null
+                                      )
                                     }
                                   />
                                 </InputHorizontal>
@@ -1919,7 +2090,8 @@ export default function IndexSettingsPage() {
 
                               <Disabled
                                 disabled={
-                                  !imageProcessingEnabled && !isReindexing
+                                  !values.image_processing_enabled &&
+                                  !isReindexing
                                 }
                                 tooltip={t(
                                   "imageProcessing.enableFirstTooltip"
@@ -1929,22 +2101,20 @@ export default function IndexSettingsPage() {
                                   title={t("maxImageSize.title")}
                                   suffix={t("maxImageSize.suffix")}
                                   description={t("maxImageSize.description")}
-                                  disabled={!imageProcessingEnabled}
+                                  disabled={!values.image_processing_enabled}
                                   withLabel
                                 >
                                   <InputSingleSelect
                                     value={String(
-                                      settings.image_analysis_max_size_mb ?? 20
+                                      values.image_processing_max_size_mb
                                     )}
                                     onValueChange={(value) => {
-                                      void saveSettings({
-                                        image_analysis_max_size_mb: parseInt(
-                                          value,
-                                          10
-                                        ),
-                                      });
+                                      void setFieldValue(
+                                        "image_processing_max_size_mb",
+                                        parseInt(value, 10)
+                                      );
                                     }}
-                                    disabled={!imageProcessingEnabled}
+                                    disabled={!values.image_processing_enabled}
                                     defaultOption="20"
                                     placeholder={tInputSelect(
                                       "placeholder.fallback"

@@ -4810,6 +4810,9 @@
         "applyForward": {
           "label": "새 문서와 업데이트된 문서에 적용"
         },
+        "applyWithoutReindex": {
+          "label": "재인덱싱 없이 적용"
+        },
         "applyReindex": {
           "label": "적용 및 재인덱싱",
           "statusesLoading": "커넥터 상태를 불러오는 중…",
@@ -4852,6 +4855,10 @@
         "title": "캡션 생성 LLM"
       },
       "changesBanner": {
+        "captioningModelMissing": {
+          "description": "이미지 추출 및 캡션이 켜져 있지만 선택된 모델이 없습니다. 적용하기 전에 아래에서 비전 지원 캡션 LLM을 선택하세요.",
+          "title": "캡션 LLM을 선택하세요"
+        },
         "contextualModelMissing": {
           "description": "컨텍스트 검색이 활성화되어 있지만 선택된 모델이 없습니다. 재인덱싱 전에 아래에서 컨텍스트 검색 LLM을 선택하세요. 모델이 없으면 재인덱싱을 실행할 수 없습니다.",
           "title": "컨텍스트 검색 LLM 선택"
@@ -4863,6 +4870,10 @@
         "default": {
           "description": "embedding 또는 검색 설정을 변경하면 적용을 위해 모든 문서를 전체 재인덱싱해야 하며, 문서 규모에 따라 **몇 시간에서 며칠**이 걸릴 수 있습니다. [자세히 알아보기](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "변경 사항을 적용하려면 전체 재인덱싱이 필요합니다."
+        },
+        "imageProcessingOnly": {
+          "description": "재인덱싱 없이 적용하면 지금부터 인덱싱되는 문서에만 새 설정이 사용됩니다. 기존 문서를 모두 다시 빌드하면 모든 이미지에 이 설정으로 캡션이 생성됩니다.",
+          "title": "이 이미지 처리 설정을 적용할 방법 선택"
         },
         "orSeparator": {
           "label": "또는"
@@ -4962,12 +4973,13 @@
         "description": "문서를 인덱싱하고 embedding하여 검색과 조회에 사용할 방식을 설정합니다."
       },
       "imageExtraction": {
-        "description": "업로드된 파일(PDF, DOCX 등)에 포함된 이미지를 추출하고 비전 기능이 있는 LLM으로 요약하여, 이미지만 있는 문서도 검색하고 답변에 활용할 수 있게 합니다. 비전 기능이 있는 기본 LLM이 필요합니다.",
+        "description": "업로드된 파일(PDF, DOCX 등)에서 포함된 이미지를 추출하고 비전 지원 LLM으로 요약하여 이미지 전용 문서도 검색하고 답변할 수 있게 합니다. 아래에서 선택하는 캡션 LLM이 필요합니다.",
         "title": "이미지 추출 및 캡션 생성"
       },
       "imageProcessing": {
         "description": "인덱싱 중에 LLM으로 이미지를 분석하고 설명을 추가합니다.",
         "enableFirstTooltip": "이 항목을 설정하려면 이미지 추출 및 캡션 생성을 활성화하세요.",
+        "noModelSelected": "선택된 모델이 없습니다",
         "noVisionModelsTooltip": "비전 기능이 있는 모델이 설정되어 있지 않아 이미지 처리를 사용할 수 없습니다. 먼저 비전 기능이 있는 [언어 모델]({link})을 설정하세요.",
         "title": "이미지 처리"
       },
@@ -5151,6 +5163,10 @@
           "description": "일시 중지 또는 삭제 중이 아닌 모든 활성 커넥터가 인덱싱을 성공적으로 완료할 때까지 기존 설정의 현재 문서 인덱스를 계속 사용합니다.",
           "label": "활성 커넥터 재인덱싱 후 전환"
         },
+        "doNotReindex": {
+          "description": "설정을 저장하고 현재 인덱스는 그대로 둡니다. 지금부터 인덱싱되는 문서에만 적용됩니다.",
+          "label": "재인덱싱 안 함"
+        },
         "instant": {
           "description": "현재 문서 인덱스를 즉시 비우고 새 설정으로 전환합니다. 검색용 인덱스를 다시 채우려면 모든 커넥터를 재인덱싱해야 합니다.",
           "label": "재인덱싱 전에 전환"
@@ -5159,13 +5175,15 @@
         "reindexAll": {
           "description": "가장 안전한 방식입니다. 모든 커넥터가 인덱싱을 성공적으로 완료할 때까지 기존 설정의 현재 문서 인덱스를 계속 사용합니다.",
           "label": "모든 커넥터 재인덱싱 후 전환"
+        },
+        "reindexOptions": {
+          "label": "재인덱싱 옵션"
         }
       },
       "toasts": {
         "applyFailed": "설정 적용에 실패했습니다",
         "cancelReindexFailed": "재인덱싱 취소에 실패했습니다",
-        "captioningUpdateFailed": "캡션 생성 LLM 업데이트에 실패했습니다",
-        "captioningUpdated": "캡션 생성 LLM을 업데이트했습니다",
+        "captioningModelRequired": "적용하기 전에 캡션 LLM을 선택하세요.",
         "contextualModelRequired": "재인덱싱 전에 컨텍스트 검색 LLM을 선택하세요.",
         "contextualModelUpdateFailed": "컨텍스트 검색 LLM 업데이트에 실패했습니다",
         "contextualModelUpdated": "컨텍스트 검색 LLM을 업데이트했습니다",

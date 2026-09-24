@@ -4810,6 +4810,9 @@
         "applyForward": {
           "label": "新規および更新されたドキュメントに適用"
         },
+        "applyWithoutReindex": {
+          "label": "再インデックスせずに適用"
+        },
         "applyReindex": {
           "label": "適用して再インデックス",
           "statusesLoading": "コネクタの状態を読み込んでいます…",
@@ -4852,6 +4855,10 @@
         "title": "キャプション生成 LLM"
       },
       "changesBanner": {
+        "captioningModelMissing": {
+          "description": "「画像の抽出とキャプション」はオンですが、モデルが選択されていません。適用する前に、下で画像対応のキャプション用LLMを選択してください。",
+          "title": "キャプション用LLMを選択してください"
+        },
         "contextualModelMissing": {
           "description": "コンテキスト検索は有効ですが、モデルが選択されていません。再インデックスの前に、下でコンテキスト検索 LLM を選択してください。選択しないと再インデックスは実行できません。",
           "title": "コンテキスト検索 LLM を選択してください"
@@ -4863,6 +4870,10 @@
         "default": {
           "description": "embedding または検索の設定を変更すると、反映するためにすべてのドキュメントの完全な再インデックスが必要です。コーパスの規模によっては **数時間から数日** かかることがあります。[詳細を見る](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "変更には完全な再インデックスが必要です。"
+        },
+        "imageProcessingOnly": {
+          "description": "再インデックスせずに適用すると、今後インデックスされるドキュメントのみに新しい設定が使われます。既存のすべてのドキュメントを再構築すると、すべての画像がこの設定でキャプション付けされます。",
+          "title": "この画像処理設定の適用方法を選択"
         },
         "orSeparator": {
           "label": "または"
@@ -4962,12 +4973,13 @@
         "description": "ドキュメントのインデックス作成、embedding の生成、検索と取得に向けた準備の方法を設定します。"
       },
       "imageExtraction": {
-        "description": "アップロードされたファイル (PDF、DOCX など) に含まれる画像を抽出し、画像認識に対応した LLM で要約します。これにより、画像だけのドキュメントも検索や回答に使用できます。画像認識に対応したデフォルト LLM が必要です。",
+        "description": "アップロードされたファイル（PDF、DOCXなど）から埋め込み画像を抽出し、画像対応のLLMで要約して、画像のみのドキュメントを検索・回答可能にします。下で選択するキャプション用LLMが必要です。",
         "title": "画像の抽出とキャプション生成"
       },
       "imageProcessing": {
         "description": "インデックス作成時に LLM を使用して画像を解析し、説明を追加します。",
         "enableFirstTooltip": "設定するには「画像の抽出とキャプション生成」を有効にしてください。",
+        "noModelSelected": "モデルが選択されていません",
         "noVisionModelsTooltip": "画像認識に対応したモデルが設定されていないため、画像処理は無効です。先に画像認識に対応した [言語モデル]({link}) を設定してください。",
         "title": "画像処理"
       },
@@ -5151,6 +5163,10 @@
           "description": "アクティブな (一時停止中でも削除中でもない) すべてのコネクターがインデックス作成に成功するまで、既存の設定の現在のドキュメントインデックスを使い続けます。",
           "label": "アクティブなコネクターを再インデックスしてから切り替え"
         },
+        "doNotReindex": {
+          "description": "設定を保存し、現在のインデックスはそのままにします。今後インデックスされるドキュメントのみに適用されます。",
+          "label": "再インデックスしない"
+        },
         "instant": {
           "description": "現在のドキュメントインデックスをすぐに消去し、新しい設定に切り替えます。検索用のインデックスが再び揃うまで、すべてのコネクターの再インデックスが必要です。",
           "label": "再インデックスの前に切り替え"
@@ -5159,13 +5175,15 @@
         "reindexAll": {
           "description": "最も安全な方法です。すべてのコネクターがインデックス作成に成功するまで、既存の設定の現在のドキュメントインデックスを使い続けます。",
           "label": "すべてのコネクターを再インデックスしてから切り替え"
+        },
+        "reindexOptions": {
+          "label": "再インデックスのオプション"
         }
       },
       "toasts": {
         "applyFailed": "設定を適用できませんでした",
         "cancelReindexFailed": "再インデックスをキャンセルできませんでした",
-        "captioningUpdateFailed": "キャプション生成 LLM を更新できませんでした",
-        "captioningUpdated": "キャプション生成 LLM を更新しました",
+        "captioningModelRequired": "適用する前にキャプション用LLMを選択してください。",
         "contextualModelRequired": "再インデックスの前にコンテキスト検索 LLM を選択してください。",
         "contextualModelUpdateFailed": "コンテキスト検索 LLM を更新できませんでした",
         "contextualModelUpdated": "コンテキスト検索 LLM を更新しました",

@@ -4810,6 +4810,9 @@
         "applyForward": {
           "label": "应用于新增和更新的文档"
         },
+        "applyWithoutReindex": {
+          "label": "应用但不重新索引"
+        },
         "applyReindex": {
           "label": "应用并重新索引",
           "statusesLoading": "正在加载连接器状态…",
@@ -4852,6 +4855,10 @@
         "title": "图像描述 LLM"
       },
       "changesBanner": {
+        "captioningModelMissing": {
+          "description": "“提取并为图片添加字幕”已开启，但尚未选择模型。请在应用前于下方选择一个支持视觉的字幕 LLM。",
+          "title": "请选择字幕 LLM"
+        },
         "contextualModelMissing": {
           "description": "上下文检索已启用，但尚未选择模型。请先在下方选择上下文检索 LLM，再重新索引——没有模型，重新索引无法运行。",
           "title": "选择上下文检索 LLM"
@@ -4863,6 +4870,10 @@
         "default": {
           "description": "修改 embedding 或检索设置后，需要对所有文档进行完整的重新索引才能生效，这可能需要**数小时或数天**，具体取决于语料库规模。[了解更多](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "更改需要完整的重新索引。"
+        },
+        "imageProcessingOnly": {
+          "description": "不重新索引直接应用，则仅今后索引的文档使用新设置；重建所有现有文档，则每张图片都会用新设置生成字幕。",
+          "title": "选择如何应用这些图片处理设置"
         },
         "orSeparator": {
           "label": "或"
@@ -4962,12 +4973,13 @@
         "description": "配置文档的索引方式、embedding 方式，以及为搜索和检索所做的准备。"
       },
       "imageExtraction": {
-        "description": "从上传的文件（PDF、DOCX 等）中提取内嵌图像，并用支持视觉的 LLM 进行总结，让纯图像文档也可被搜索和回答。需要支持视觉的默认 LLM。",
+        "description": "从上传的文件（PDF、DOCX 等）中提取内嵌图片，并用支持视觉的 LLM 进行摘要，使纯图片文档也可被搜索和回答。需要在下方选择一个字幕 LLM。",
         "title": "提取并描述图像"
       },
       "imageProcessing": {
         "description": "在索引期间使用 LLM 分析图像并为其添加描述。",
         "enableFirstTooltip": "启用“提取并描述图像”后才能配置此项。",
+        "noModelSelected": "未选择模型",
         "noVisionModelsTooltip": "图像处理已禁用，因为您尚未配置支持视觉的模型。请先设置支持视觉的[语言模型]({link})。",
         "title": "图像处理"
       },
@@ -5151,6 +5163,10 @@
           "description": "继续使用当前文档索引和现有设置，直到所有活动（未暂停/未删除）的连接器都成功完成一次索引尝试。",
           "label": "重新索引活动连接器后再切换"
         },
+        "doNotReindex": {
+          "description": "保存设置并保持当前索引不变。仅今后索引的文档会使用这些设置。",
+          "label": "不重新索引"
+        },
         "instant": {
           "description": "立即清空当前文档索引并切换到新设置。需要重新索引所有连接器，索引才能重新填充以供搜索。",
           "label": "先切换再重新索引"
@@ -5159,13 +5175,15 @@
         "reindexAll": {
           "description": "最安全的选项。继续使用当前文档索引和现有设置，直到所有连接器都成功完成一次索引尝试。",
           "label": "重新索引所有连接器后再切换"
+        },
+        "reindexOptions": {
+          "label": "重新索引选项"
         }
       },
       "toasts": {
         "applyFailed": "应用设置失败",
         "cancelReindexFailed": "取消重新索引失败",
-        "captioningUpdateFailed": "更新图像描述 LLM 失败",
-        "captioningUpdated": "已更新图像描述 LLM",
+        "captioningModelRequired": "请在应用前选择字幕 LLM。",
         "contextualModelRequired": "请在重新索引前选择上下文检索 LLM。",
         "contextualModelUpdateFailed": "更新上下文检索 LLM 失败",
         "contextualModelUpdated": "已更新上下文检索 LLM",

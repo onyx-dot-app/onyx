@@ -4810,6 +4810,9 @@
         "applyForward": {
           "label": "Appliquer aux documents nouveaux et mis à jour"
         },
+        "applyWithoutReindex": {
+          "label": "Appliquer sans réindexer"
+        },
         "applyReindex": {
           "label": "Appliquer et réindexer",
           "statusesLoading": "Chargement de l'état des connecteurs…",
@@ -4852,6 +4855,10 @@
         "title": "LLM de légendage"
       },
       "changesBanner": {
+        "captioningModelMissing": {
+          "description": "L’extraction et le légendage des images sont activés mais aucun modèle n’est sélectionné. Choisissez ci-dessous un LLM de légendage capable de vision avant d’appliquer.",
+          "title": "Sélectionnez un LLM de légendage"
+        },
         "contextualModelMissing": {
           "description": "La récupération contextuelle est activée mais aucun modèle n'est sélectionné. Choisissez un LLM de récupération contextuelle ci-dessous avant de réindexer : sans modèle, la réindexation ne peut pas démarrer.",
           "title": "Sélectionnez un LLM de récupération contextuelle"
@@ -4863,6 +4870,10 @@
         "default": {
           "description": "La modification des paramètres d'embedding ou de récupération exige une réindexation complète de tous les documents pour prendre effet. Cela peut prendre **des heures ou des jours** selon la taille du corpus. [En savoir plus](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "Les modifications exigent une réindexation complète."
+        },
+        "imageProcessingOnly": {
+          "description": "Appliquez sans réindexer pour que seuls les documents indexés à partir de maintenant utilisent les nouveaux paramètres, ou reconstruisez tous les documents existants pour que chaque image soit légendée avec eux.",
+          "title": "Choisissez comment appliquer ces paramètres de traitement d’images"
         },
         "orSeparator": {
           "label": "ou"
@@ -4962,12 +4973,13 @@
         "description": "Configurez la façon dont les documents sont indexés, encodés et préparés pour la recherche et la récupération."
       },
       "imageExtraction": {
-        "description": "Extrayez les images intégrées aux fichiers téléversés (PDF, DOCX, etc.) et résumez-les avec un LLM capable de traiter les images, afin que les documents composés uniquement d'images deviennent consultables. Nécessite un LLM par défaut capable de traiter les images.",
+        "description": "Extrayez les images intégrées des fichiers importés (PDF, DOCX, etc.) et résumez-les avec un LLM capable de vision afin que les documents composés uniquement d’images deviennent consultables et interrogeables. Nécessite un LLM de légendage, choisi ci-dessous.",
         "title": "Extraire et légender les images"
       },
       "imageProcessing": {
         "description": "Utilisez un LLM pour analyser les images et leur ajouter des descriptions pendant l'indexation.",
         "enableFirstTooltip": "Activez Extraire et légender les images pour configurer cette option.",
+        "noModelSelected": "Aucun modèle sélectionné",
         "noVisionModelsTooltip": "Le traitement des images est désactivé car aucun modèle capable de traiter les images n'est configuré. Configurez d'abord un [modèle de langage]({link}) capable de traiter les images.",
         "title": "Traitement des images"
       },
@@ -5151,6 +5163,10 @@
           "description": "Continuez d'utiliser l'index de documents actuel avec les paramètres existants jusqu'à ce que tous les connecteurs actifs (ni en pause ni en cours de suppression) aient terminé une indexation réussie.",
           "label": "Réindexer les connecteurs actifs puis basculer"
         },
+        "doNotReindex": {
+          "description": "Enregistre les paramètres et laisse l’index actuel tel quel. Seuls les documents indexés à partir de maintenant les utilisent.",
+          "label": "Ne pas réindexer"
+        },
         "instant": {
           "description": "Videz immédiatement l'index de documents actuel et passez aux nouveaux paramètres. Nécessite de réindexer tous les connecteurs avant que l'index soit de nouveau disponible pour la recherche.",
           "label": "Basculer avant la réindexation"
@@ -5159,13 +5175,15 @@
         "reindexAll": {
           "description": "Option la plus sûre. Continuez d'utiliser l'index de documents actuel avec les paramètres existants jusqu'à ce que tous les connecteurs aient terminé une indexation réussie.",
           "label": "Réindexer tous les connecteurs puis basculer"
+        },
+        "reindexOptions": {
+          "label": "Options de réindexation"
         }
       },
       "toasts": {
         "applyFailed": "Échec de l'application des paramètres",
         "cancelReindexFailed": "Échec de l'annulation de la réindexation",
-        "captioningUpdateFailed": "Échec de la mise à jour du LLM de légendage",
-        "captioningUpdated": "LLM de légendage mis à jour",
+        "captioningModelRequired": "Sélectionnez un LLM de légendage avant d’appliquer.",
         "contextualModelRequired": "Sélectionnez un LLM de récupération contextuelle avant de réindexer.",
         "contextualModelUpdateFailed": "Échec de la mise à jour du LLM de récupération contextuelle",
         "contextualModelUpdated": "LLM de récupération contextuelle mis à jour",
