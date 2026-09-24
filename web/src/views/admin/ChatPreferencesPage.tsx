@@ -469,6 +469,10 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
   // trigger opens on click, not on focus.
   const selectWrapperRef = useRef<HTMLDivElement>(null);
   const reopenPresetsRef = useRef(false);
+  // True while the presets are open in place of a stored custom value. The
+  // select gives no close signal, so while it is set, a pointer down outside
+  // the field and its list, or Escape, returns to the custom input.
+  const [presetsReopened, setPresetsReopened] = useState(false);
   // Set when a preset is chosen from the dropdown, so leaving the dropdown
   // doesn't bounce a still-custom value back into the input (see onBlur).
   const pickedPresetRef = useRef(false);
@@ -505,6 +509,31 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
     }
   }, [showCustom]);
 
+  useEffect(() => {
+    if (!presetsReopened) return;
+    const revert = () => {
+      setPresetsReopened(false);
+      if (valueIsCustomRetention(value)) setShowCustom(true);
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (selectWrapperRef.current?.contains(target)) return;
+      // A pick in the portalled list lands in handleSelectChange instead.
+      if (target.closest('[role="listbox"]')) return;
+      revert();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") revert();
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [presetsReopened, value]);
+
   // Only read while in select mode. A stored custom value (transiently visible
   // here after "More") maps to no option, so the select is left empty and the
   // trigger shows the placeholder until the user picks.
@@ -532,6 +561,7 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
   };
 
   const handleSelectChange = (next: string) => {
+    setPresetsReopened(false);
     if (next === CUSTOM_RETENTION_VALUE) {
       focusCustomOnShowRef.current = true;
       setShowCustom(true);
@@ -550,6 +580,7 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
     if (!pickedPresetRef.current && valueIsCustomRetention(value)) {
       setShowCustom(true);
     }
+    setPresetsReopened(false);
     pickedPresetRef.current = false;
   };
 
@@ -581,6 +612,7 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
   // More → leave custom mode and reopen the preset dropdown.
   const handleReopenPresets = () => {
     reopenPresetsRef.current = true;
+    setPresetsReopened(true);
     setShowCustom(false);
   };
 

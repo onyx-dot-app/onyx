@@ -82,6 +82,16 @@ function BedrockModalInternals({
   const { appName } = useSettings();
   const formikProps = useFormikContext<BedrockModalValues>();
   const authMethod = formikProps.values.custom_config?.BEDROCK_AUTH_METHOD;
+  // A provider saved with a region outside the list (a newer AWS region)
+  // keeps it as an option, so the saved value shows instead of an error.
+  const savedRegion = formikProps.values.custom_config?.AWS_REGION_NAME;
+  const regionOptions = AWS_REGION_OPTIONS.map((option) => ({
+    value: option.value,
+    title: option.name,
+  }));
+  if (savedRegion && !AWS_REGION_OPTIONS.some((o) => o.value === savedRegion)) {
+    regionOptions.push({ value: savedRegion, title: savedRegion });
+  }
 
   useEffect(() => {
     if (authMethod === AUTH_METHOD_IAM) {
@@ -136,10 +146,7 @@ function BedrockModalInternals({
             <InputSingleSelectField
               name={FIELD_AWS_REGION_NAME}
               placeholder={t("bedrock.regionField.placeholder")}
-              options={AWS_REGION_OPTIONS.map((option) => ({
-                value: option.value,
-                title: option.name,
-              }))}
+              options={regionOptions}
             />
           </InputVertical>
 
