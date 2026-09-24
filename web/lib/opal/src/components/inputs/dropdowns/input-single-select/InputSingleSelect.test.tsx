@@ -242,7 +242,7 @@ describe("InputSingleSelect", () => {
       expect(screen.getByRole("combobox")).toHaveValue("Apple");
     });
 
-    test("re-picking a non-default selected option falls back to the default", async () => {
+    test("with a default, re-picking a non-default selected option does nothing", async () => {
       const handleValueChange = jest.fn();
       const user = setupUser();
       render(
@@ -256,8 +256,11 @@ describe("InputSingleSelect", () => {
       );
       await user.click(screen.getByRole("combobox"));
       await user.click(screen.getByRole("option", { name: /Banana/ }));
-      expect(handleValueChange).toHaveBeenCalledWith("apple");
-      expect(handleValueChange).not.toHaveBeenCalledWith("");
+      expect(handleValueChange).not.toHaveBeenCalled();
+      await waitFor(() => {
+        expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+      });
+      expect(screen.getByRole("combobox")).toHaveValue("Banana");
     });
 
     test("without a default, re-picking the selected option unselects it", async () => {

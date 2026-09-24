@@ -17,10 +17,10 @@
  *
  * Re-picking the selected option unselects it. A Select may carry a
  * `defaultOption`, and then never reads as empty: an empty value resolves to
- * it, re-picking the default does nothing, and re-picking any other option
- * falls back to it. A ComboBox takes none: its text is the filter, and a
- * default would pre-fill it with a label the user never chose. Either way
- * `placeholder` names the field for assistive technology.
+ * it and re-picking any option is a no-op, like a native `<select>`. A
+ * ComboBox takes none: its text is the filter, and a default would pre-fill
+ * it with a label the user never chose. Either way `placeholder` names the
+ * field for assistive technology.
  *
  * With no options a ComboBox degrades to a plain input.
  */
@@ -333,18 +333,10 @@ function SingleDropdown({
       // commit it. Re-picking the committed option then has the multi's
       // symmetry: it unselects, and the dropdown stays open with the filter
       // cleared, ready for a different pick. With a default there is nothing
-      // to unselect into: re-picking the default itself does nothing, and
-      // re-picking any other option falls back to the default. Both triggers
-      // behave the same.
+      // to unselect into, so a re-pick just closes the list, like a native
+      // <select>. Both triggers behave the same.
       if (option.value === value && value !== "") {
         if (defaultOption !== undefined) {
-          if (value !== defaultOption) {
-            setInputValue(
-              options.find((opt) => opt.value === defaultOption)?.title ??
-                defaultOption
-            );
-            emitValue(defaultOption);
-          }
           setIsOpen(false);
           inputRef.current?.focus();
           return;

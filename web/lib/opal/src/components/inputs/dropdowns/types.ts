@@ -94,8 +94,8 @@ export type InputSingleComboBoxProps = InputSingleBaseProps & {
 /**
  * `InputSingleSelect`: nothing to type; the trigger is pressed to open the
  * full set, like a native `<select>`. With a `defaultOption` it never reads
- * as empty: an empty `value` resolves to it, re-picking the default does
- * nothing, and re-picking any other selected option falls back to it.
+ * as empty: an empty `value` resolves to it and re-picking the selected
+ * option does nothing.
  */
 export type InputSingleSelectProps = InputSingleBaseProps & {
   mode?: never;

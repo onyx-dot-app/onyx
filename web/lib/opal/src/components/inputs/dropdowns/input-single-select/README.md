@@ -14,8 +14,8 @@ placeholder shows).
 ## Default option
 
 With `defaultOption` the select never reads as empty: an empty `value` resolves
-to it, re-picking the default itself does nothing, and re-picking any other
-selected option falls back to the default. `onValueChange` never receives `""`.
+to it, and re-picking the selected option does nothing, like a native
+`<select>`. `onValueChange` never receives `""`.
 `placeholder` stays required: it is the field's accessible name even when the
 default keeps the trigger filled.
 

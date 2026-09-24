@@ -83,7 +83,7 @@ export const WithSections: Story = {
   },
 };
 
-/** With a default the select never empties: re-picking falls back to it. */
+/** With a default the select never empties: a re-pick does nothing. */
 export const WithDefaultOption: Story = {
   render: function WithDefaultOptionStory() {
     const [value, setValue] = React.useState("");
