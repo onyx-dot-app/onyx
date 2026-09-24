@@ -93,6 +93,11 @@ class _XmlToolCallContentFilter:
     def __init__(self) -> None:
         self._pending = ""
         self._inside_function_calls_block = False
+        # Last character emitted so far, or None if nothing has been emitted.
+        self._last_emitted_char: str | None = None
+        # Drop whitespace after a removed block so it does not double up with
+        # whitespace already emitted before the block.
+        self._strip_leading_whitespace = False
 
     def process(self, content: str) -> str:
         if not content:
@@ -100,8 +105,23 @@ class _XmlToolCallContentFilter:
 
         self._pending += content
         output_parts: list[str] = []
+        output = self._process_pending(output_parts)
+        if output:
+            self._last_emitted_char = output[-1]
+        return output
 
+    def _emitted_text_ends_with_whitespace(self, output_parts: list[str]) -> bool:
+        last_char = output_parts[-1][-1] if output_parts else self._last_emitted_char
+        return last_char is None or last_char.isspace()
+
+    def _process_pending(self, output_parts: list[str]) -> str:
         while self._pending:
+            if self._strip_leading_whitespace and not self._inside_function_calls_block:
+                self._pending = self._pending.lstrip()
+                if not self._pending:
+                    return "".join(output_parts)
+                self._strip_leading_whitespace = False
+
             pending_lower = self._pending.lower()
 
             if self._inside_function_calls_block:
@@ -115,6 +135,9 @@ class _XmlToolCallContentFilter:
                     end_idx + len(_FUNCTION_CALLS_CLOSE_MARKER) :
                 ]
                 self._inside_function_calls_block = False
+                self._strip_leading_whitespace = (
+                    self._emitted_text_ends_with_whitespace(output_parts)
+                )
                 continue
 
             start_idx = _find_function_calls_open_marker(pending_lower)
