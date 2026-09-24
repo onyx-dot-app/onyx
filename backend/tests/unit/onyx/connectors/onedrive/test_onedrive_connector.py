@@ -1072,10 +1072,7 @@ def test_onedrive_permission_and_group_checks_use_gateway() -> None:
     context = CapabilityCheckContext(
         source=DocumentSource.ONEDRIVE,
         credential_json={},
-        connector_specific_config={
-            "all_users": False,
-            "users": ["owner@example.com"],
-        },
+        connector_specific_config={"users": ["owner@example.com"]},
         source_operations=gateway,
     )
 
@@ -1109,10 +1106,7 @@ def test_onedrive_permission_check_follows_tombstone_pages() -> None:
     context = CapabilityCheckContext(
         source=DocumentSource.ONEDRIVE,
         credential_json={},
-        connector_specific_config={
-            "all_users": False,
-            "users": ["owner@example.com"],
-        },
+        connector_specific_config={"users": ["owner@example.com"]},
         source_operations=gateway,
     )
 
@@ -1133,10 +1127,7 @@ def test_onedrive_permission_check_accepts_empty_drive_at_end_cursor() -> None:
     context = CapabilityCheckContext(
         source=DocumentSource.ONEDRIVE,
         credential_json={},
-        connector_specific_config={
-            "all_users": False,
-            "users": ["owner@example.com"],
-        },
+        connector_specific_config={"users": ["owner@example.com"]},
         source_operations=gateway,
     )
 
@@ -1157,10 +1148,7 @@ def test_onedrive_permission_check_bounds_empty_delta_pages() -> None:
     context = CapabilityCheckContext(
         source=DocumentSource.ONEDRIVE,
         credential_json={},
-        connector_specific_config={
-            "all_users": False,
-            "users": ["owner@example.com"],
-        },
+        connector_specific_config={"users": ["owner@example.com"]},
         source_operations=gateway,
     )
 
