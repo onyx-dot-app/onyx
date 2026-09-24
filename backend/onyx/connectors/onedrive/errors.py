@@ -7,6 +7,9 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     UnexpectedValidationError,
 )
+from onyx.connectors.microsoft_utils.graph_client import (
+    is_permanent_refusal_status,
+)
 
 MISSING_CREDENTIAL_CODE = "missing_credential"
 INVALID_AUTHORITY_CODE = "invalid_authority"
@@ -17,6 +20,14 @@ class OneDriveGraphError(Exception):
         self.status = status
         self.code = code
         super().__init__(f"Graph {status} {code}: {message}")
+
+    @property
+    def is_permanent_refusal(self) -> bool:
+        return is_permanent_refusal_status(self.status)
+
+    @property
+    def fails_the_attempt(self) -> bool:
+        return self.status is None or self.status in (401, 429) or self.status >= 500
 
 
 class OneDriveAuthError(Exception):
@@ -46,9 +57,9 @@ def raise_for_graph_error(error: OneDriveGraphError, denied_message: str) -> NoR
         raise CredentialExpiredError("Graph rejected the access token.") from error
     if error.status == 403:
         raise InsufficientPermissionsError(denied_message) from error
-    if error.status == 404:
+    if error.is_permanent_refusal:
         raise ConnectorValidationError(denied_message) from error
-    if error.status is None or error.status == 429 or error.status >= 500:
+    if error.fails_the_attempt:
         raise UnexpectedValidationError(
             f"Graph is throttling or unavailable ({error.status} {error.code})."
         ) from error

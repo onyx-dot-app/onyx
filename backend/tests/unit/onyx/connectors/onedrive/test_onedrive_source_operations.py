@@ -8,8 +8,8 @@ from onyx.connectors.microsoft_utils.drive_delta import (
     DRIVE_DELTA_SELECT_FIELDS,
     HIERARCHICAL_SHARING_PREFERENCE,
     PREFER_HEADER,
-    build_drive_delta_start_url,
 )
+from onyx.connectors.microsoft_utils.drive_items import build_delta_start_url
 from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
 from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
 from onyx.connectors.onedrive.errors import OneDriveGraphError
@@ -86,7 +86,7 @@ def test_onedrive_delta_410_uses_safe_full_resync_cursor() -> None:
 
 
 def test_onedrive_delta_start_url_uses_sharing_fields_and_page_size() -> None:
-    url = build_drive_delta_start_url(
+    url = build_delta_start_url(
         "https://graph.microsoft.com/v1.0",
         "drive",
         page_size=23,

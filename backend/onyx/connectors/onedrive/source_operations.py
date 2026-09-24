@@ -1,6 +1,3 @@
-import json
-import re
-from collections.abc import Generator
 from typing import Any
 from urllib.parse import quote
 
@@ -30,6 +27,12 @@ from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
 from onyx.connectors.microsoft_utils.graph_env import (
     DEFAULT_AUTHORITY_HOST,
     DEFAULT_GRAPH_API_HOST,
+)
+from onyx.connectors.microsoft_utils.graph_errors import (
+    is_msal_decode_error,
+    msal_http_status,
+    parse_graph_error,
+    parse_msal_error,
 )
 from onyx.connectors.onedrive.errors import (
     INVALID_AUTHORITY_CODE,
@@ -63,44 +66,15 @@ CONFIG_AUTHORITY_HOST = "authority_host"
 CONFIG_GRAPH_API_HOST = "graph_api_host"
 CONFIG_ALL_USERS = "all_users"
 CONFIG_USERS = "users"
-_MSAL_STATUS_RE = re.compile(r"HTTP (?:status|Error): (\d{3})")
-
-
-def _exception_chain(error: BaseException) -> Generator[BaseException, None, None]:
-    current: BaseException | None = error
-    while current is not None:
-        yield current
-        current = current.__cause__ or current.__context__
-
-
-def _msal_status(error: BaseException) -> int | None:
-    for wrapped in _exception_chain(error):
-        match = _MSAL_STATUS_RE.search(str(wrapped))
-        if match:
-            return int(match.group(1))
-    return None
-
-
-def _is_transient_status(status: int | None) -> bool:
-    return status == 429 or status is not None and status >= 500
 
 
 def _graph_error(error: Exception) -> OneDriveGraphError:
-    response = error.response if isinstance(error, requests.RequestException) else None
-    if response is None:
-        return OneDriveGraphError(_msal_status(error), type(error).__name__, str(error))
-    try:
-        payload = response.json()
-    except ValueError:
-        payload = {}
-    detail = payload.get("error", {}) if isinstance(payload, dict) else {}
-    if not isinstance(detail, dict):
-        detail = {}
-    return OneDriveGraphError(
-        response.status_code,
-        str(detail.get("code") or "<no code>"),
-        str(detail.get("message") or response.text)[:500],
+    details = (
+        parse_graph_error(error)
+        if isinstance(error, requests.RequestException)
+        else parse_msal_error(error)
     )
+    return OneDriveGraphError(details.status, details.code, details.message)
 
 
 def _user(raw: dict[str, Any]) -> OneDriveUser | None:
@@ -163,10 +137,12 @@ class OneDriveSourceOperations(SourceOperations):
                 certificate_password=credential.onedrive_certificate_password,
             )
         except ValueError as error:
-            status = _msal_status(error)
-            if _is_transient_status(status) or any(
-                isinstance(item, json.JSONDecodeError)
-                for item in _exception_chain(error)
+            status = msal_http_status(error)
+            if (
+                status == 429
+                or status is not None
+                and status >= 500
+                or is_msal_decode_error(error)
             ):
                 raise _graph_error(error) from error
             raise OneDriveAuthError(INVALID_AUTHORITY_CODE, str(error)) from error

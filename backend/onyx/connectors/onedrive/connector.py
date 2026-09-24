@@ -2,6 +2,7 @@ from collections.abc import Generator
 from datetime import datetime, timezone
 from typing import Any
 
+from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
@@ -18,11 +19,11 @@ from onyx.connectors.interfaces import (
 from onyx.connectors.microsoft_utils.drive_delta import (
     DRIVE_DELTA_SELECT_FIELDS,
     DriveDeltaItem,
-    build_drive_delta_start_url,
 )
 from onyx.connectors.microsoft_utils.drive_items import (
     DriveItemContent,
     DriveItemData,
+    build_delta_start_url,
     build_item_relative_path,
     drive_item_in_time_window,
     is_path_excluded,
@@ -42,7 +43,6 @@ from onyx.connectors.models import (
     HierarchyNode,
     SlimDocument,
 )
-from onyx.connectors.onedrive.access import get_ce_onedrive_access
 from onyx.connectors.onedrive.errors import OneDriveGraphError
 from onyx.connectors.onedrive.models import (
     OneDriveCheckpoint,
@@ -71,11 +71,6 @@ ROOT_NODE_SUFFIX = "root"
 HIERARCHY_ID_SEPARATOR = ":"
 METADATA_DRIVE = "drive"
 METADATA_PATH = "path"
-USER_UNAVAILABLE_STATUSES = frozenset({403, 404})
-
-
-def _is_user_unavailable(error: OneDriveGraphError) -> bool:
-    return error.status in USER_UNAVAILABLE_STATUSES
 
 
 def _validate_user_scope(settings: OneDriveSettings) -> None:
@@ -112,7 +107,7 @@ def user_root_node(user: OneDriveUser, drive: OneDriveDrive) -> HierarchyNode:
         display_name=user.display_name or user.user_principal_name,
         link=drive.web_url,
         node_type=HierarchyNodeType.MY_DRIVE,
-        external_access=get_ce_onedrive_access(),
+        external_access=ExternalAccess.empty(),
     )
 
 
@@ -123,7 +118,7 @@ def folder_node(drive: OneDriveDrive, item: DriveDeltaItem) -> HierarchyNode:
         display_name=item.name or "",
         link=item.web_url,
         node_type=HierarchyNodeType.FOLDER,
-        external_access=get_ce_onedrive_access(),
+        external_access=ExternalAccess.empty(),
     )
 
 
@@ -159,7 +154,7 @@ def drive_item_document(
                 item.parent_reference_path, item.name
             ),
         },
-        external_access=get_ce_onedrive_access(),
+        external_access=ExternalAccess.empty(),
         parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
         file_id=content.staged_file_id,
     )
@@ -277,7 +272,7 @@ class OneDriveConnector(
         try:
             user = self.ops.get_user(identifier=identifier)
         except OneDriveGraphError as error:
-            if not _is_user_unavailable(error):
+            if not error.is_permanent_refusal:
                 raise
             checkpoint.configured_user_index += 1
             yield _entity_failure(identifier, str(error), error)
@@ -309,7 +304,7 @@ class OneDriveConnector(
         try:
             drive = self.ops.get_default_drive(user_id=user.id)
         except OneDriveGraphError as error:
-            if not _is_user_unavailable(error):
+            if not error.is_permanent_refusal:
                 raise
             if not self.settings.all_users:
                 yield _entity_failure(user, str(error), error)
@@ -385,7 +380,7 @@ class OneDriveConnector(
         assert user is not None and drive is not None
         start_at = datetime.fromtimestamp(start, tz=timezone.utc) if start else None
         end_at = datetime.fromtimestamp(end, tz=timezone.utc) if end else None
-        page_url = checkpoint.delta_cursor or build_drive_delta_start_url(
+        page_url = checkpoint.delta_cursor or build_delta_start_url(
             f"{self.settings.graph_api_host}/{GRAPH_API_VERSION}",
             drive.id,
             start=start_at,
@@ -399,7 +394,7 @@ class OneDriveConnector(
                 page_size=self.settings.batch_size,
             )
         except OneDriveGraphError as error:
-            if not _is_user_unavailable(error):
+            if not error.is_permanent_refusal:
                 raise
             if not self.settings.all_users:
                 yield _entity_failure(user, str(error), error)
@@ -484,7 +479,7 @@ class OneDriveConnector(
         callback: IndexingHeartbeatInterface | None,
     ) -> GenerateSlimDocumentOutput:
         yield [user_root_node(user, drive)]
-        cursor = build_drive_delta_start_url(
+        cursor = build_delta_start_url(
             f"{self.settings.graph_api_host}/{GRAPH_API_VERSION}",
             drive.id,
             page_size=self.settings.batch_size,
@@ -520,7 +515,7 @@ class OneDriveConnector(
                     batch.append(
                         SlimDocument(
                             id=item.id,
-                            external_access=get_ce_onedrive_access(),
+                            external_access=ExternalAccess.empty(),
                             parent_hierarchy_raw_node_id=item_parent_id(drive.id, item),
                             doc_created_at=item.created_datetime,
                         )
@@ -540,7 +535,7 @@ class OneDriveConnector(
             try:
                 drive = self.ops.get_default_drive(user_id=user.id)
             except OneDriveGraphError as error:
-                if not self.settings.all_users or not _is_user_unavailable(error):
+                if not self.settings.all_users or not error.is_permanent_refusal:
                     raise
                 logger.info(
                     "OneDrive: skipping inaccessible drive for %s (%s)",
@@ -557,7 +552,7 @@ class OneDriveConnector(
             try:
                 yield from self._retrieve_slim_drive(user, drive, callback)
             except OneDriveGraphError as error:
-                if not self.settings.all_users or not _is_user_unavailable(error):
+                if not self.settings.all_users or not error.is_permanent_refusal:
                     raise
                 logger.info(
                     "OneDrive: skipping inaccessible delta for %s (%s)",
