@@ -9,7 +9,7 @@ import * as Yup from "yup";
 import { SvgOnyxLogo } from "@opal/logos";
 import { Modal } from "@opal/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
-import InputComboBoxField from "@/refresh-components/form/InputComboBoxField";
+import { InputSingleComboBoxField } from "@opal/form";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import InputSelectField from "@/refresh-components/form/InputSelectField";
@@ -112,7 +112,7 @@ export function VoiceProviderSetupModal({
       .then((data: Array<{ id: string; name: string }>) => {
         const options = data.map((v) => ({
           value: v.id,
-          label: v.name,
+          title: v.name,
           description: v.id,
         }));
         setVoiceOptions(options);
@@ -474,7 +474,7 @@ export function VoiceProviderSetupModal({
                         )}
                         withLabel="default_voice"
                       >
-                        <InputComboBoxField
+                        <InputSingleComboBoxField
                           name="default_voice"
                           options={voiceOptions}
                           placeholder={

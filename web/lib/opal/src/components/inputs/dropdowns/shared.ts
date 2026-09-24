@@ -8,48 +8,69 @@ import {
   size,
 } from "@floating-ui/react-dom";
 import { useClickOutside } from "@opal/hooks/useClickOutside";
-import { SelectOption, SelectSection } from "./types";
+import { SelectOption, SelectOptions } from "./types";
 
 // =============================================================================
-// Section helpers
+// Group helpers
 // =============================================================================
 
-/** Accepts flat options or sections; flat becomes one anonymous section. */
-export function normalizeSections(
-  options: SelectOption[] | SelectSection[] = []
-): SelectSection[] {
-  const first = options[0];
-  if (!first) return [];
-  return "options" in first
-    ? (options as SelectSection[])
-    : [{ options: options as SelectOption[] }];
+/**
+ * The listbox's render unit: a run of rows. Internal: callers write
+ * `SelectOptions`, where loose options sit beside dividers; each divider is
+ * a group and each run of loose options between them is one too. A
+ * separator line renders between consecutive groups, titled when the group
+ * below it has a title.
+ */
+export interface OptionGroup {
+  title?: string;
+  options: SelectOption[];
+}
+
+/** Groups the set for rendering: each divider is a group, each run of loose options one too. */
+export function normalizeSections(options: SelectOptions = []): OptionGroup[] {
+  const groups: OptionGroup[] = [];
+  let looseRun: OptionGroup | null = null;
+  for (const entry of options) {
+    if ("options" in entry) {
+      groups.push({ title: entry.title, options: entry.options });
+      looseRun = null;
+      continue;
+    }
+    if (looseRun) {
+      looseRun.options.push(entry);
+    } else {
+      looseRun = { options: [entry] };
+      groups.push(looseRun);
+    }
+  }
+  return groups;
 }
 
 /** Flat option list in render order. */
-export function flattenSections(sections: SelectSection[]): SelectOption[] {
-  return sections.flatMap((section) => section.options);
+export function flattenSections(groups: OptionGroup[]): SelectOption[] {
+  return groups.flatMap((group) => group.options);
 }
 
 /**
- * Filters each section's options by the search term; sections left empty
+ * Filters each group's options by the search term; groups left empty
  * disappear, so the dropdown's dividers never dangle.
  */
 export function filterSections(
-  sections: SelectSection[],
+  groups: OptionGroup[],
   inputValue: string
-): SelectSection[] {
+): OptionGroup[] {
   const searchTerm = inputValue.trim().toLowerCase();
-  if (!searchTerm) return sections.filter((s) => s.options.length > 0);
-  return sections
-    .map((section) => ({
-      ...section,
-      options: section.options.filter(
+  if (!searchTerm) return groups.filter((g) => g.options.length > 0);
+  return groups
+    .map((group) => ({
+      ...group,
+      options: group.options.filter(
         (option) =>
-          option.label.toLowerCase().includes(searchTerm) ||
+          option.title.toLowerCase().includes(searchTerm) ||
           option.value.toLowerCase().includes(searchTerm)
       ),
     }))
-    .filter((section) => section.options.length > 0);
+    .filter((group) => group.options.length > 0);
 }
 
 // =============================================================================
@@ -80,7 +101,7 @@ export function useSelectKeyboard({
   onSelect,
 }: UseSelectKeyboardProps) {
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
+    (e: React.KeyboardEvent<HTMLElement>) => {
       switch (e.key) {
         case "ArrowDown":
           e.preventDefault();

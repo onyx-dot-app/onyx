@@ -31,7 +31,7 @@ import {
   InputKeyValue as KeyValueInput,
   type KeyValue,
 } from "@opal/components";
-import { InputSingleSelect } from "@opal/components";
+import { InputSingleComboBox } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Text from "@/refresh-components/texts/Text";
@@ -235,14 +235,14 @@ function ProviderNameSelect({ disabled }: { disabled?: boolean }) {
     () =>
       (customProviderNames ?? []).map((opt) => ({
         value: opt.value,
-        label: opt.value,
+        title: opt.value,
         description: opt.label,
       })),
     [customProviderNames]
   );
 
   return (
-    <InputSingleSelect
+    <InputSingleComboBox
       mode="open"
       value={values.provider}
       onValueChange={(value) => setFieldValue("provider", value)}

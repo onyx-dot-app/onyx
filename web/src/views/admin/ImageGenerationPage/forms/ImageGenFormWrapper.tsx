@@ -56,7 +56,7 @@ export function ImageGenFormWrapper<T extends FormValues>({
       .filter((p) => p.provider === imageProvider.provider_name)
       .map((provider) => ({
         value: `existing:${provider.id}:${provider.name}`,
-        label: provider.api_key || "****",
+        title: provider.api_key || "****",
       }));
   }, [existingProviders, imageProvider.provider_name]);
 

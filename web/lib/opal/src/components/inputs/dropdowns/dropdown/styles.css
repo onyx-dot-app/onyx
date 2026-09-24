@@ -9,11 +9,67 @@
    ============================================================================ */
 
 .opal-select-dropdown {
-  @apply z-10000 overflow-hidden border bg-background-neutral-00 p-1 rounded-12 shadow-box-01 pointer-events-auto touch-auto;
+  @apply z-10000 overflow-hidden border bg-background-neutral-00 rounded-12 shadow-box-01 pointer-events-auto touch-auto;
 }
 
+/* The inner padding sits inside the ShadowDiv, so its scroll gradients span
+   the bordered box edge to edge instead of stopping at the padding. */
 .opal-select-dropdown-scroll {
-  @apply flex flex-col gap-1 overflow-x-hidden;
+  @apply flex flex-col gap-1 overflow-x-hidden p-1;
+}
+
+/* Open and close animations. floating-ui positions the root with a
+   transform, so the root only fades; the rise and settle run on the
+   ShadowDiv's non-scrolling wrapper, never on the scroller itself (a
+   transform there makes Chromium repaint it at scroll offset 0 for a
+   frame). `data-state="closed"` is the exit, kept mounted by usePresence
+   until the animation ends. */
+.opal-select-dropdown[data-state="open"] {
+  animation: opal-select-dropdown-in 120ms ease-out;
+}
+
+.opal-select-dropdown[data-state="open"] .opal-select-dropdown-content {
+  animation: opal-select-dropdown-content-in 120ms ease-out;
+}
+
+.opal-select-dropdown[data-state="closed"] {
+  animation: opal-select-dropdown-out 80ms ease-in forwards;
+  pointer-events: none;
+}
+
+.opal-select-dropdown[data-state="closed"] .opal-select-dropdown-content {
+  animation: opal-select-dropdown-content-out 80ms ease-in forwards;
+}
+
+@keyframes opal-select-dropdown-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes opal-select-dropdown-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes opal-select-dropdown-content-in {
+  from {
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+@keyframes opal-select-dropdown-content-out {
+  to {
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opal-select-dropdown[data-state],
+  .opal-select-dropdown[data-state] .opal-select-dropdown-content {
+    animation: none;
+  }
 }
 
 .opal-select-empty-set {

@@ -4,6 +4,7 @@ import "@opal/components/inputs/texts/input-type-in/styles.css";
 import { useCallback } from "react";
 import { cn } from "@opal/utils";
 import { SvgSearch, SvgX } from "@opal/icons";
+import type { IconFunctionComponent } from "@opal/types";
 import { Button } from "@opal/components";
 import type { InputVariants, WithoutStyles } from "@opal/types";
 
@@ -14,9 +15,16 @@ export interface InputTypeInProps extends WithoutStyles<
   variant?: InputVariants;
   prefixText?: string;
   searchIcon?: boolean;
+  /** Leading icon (a select's chosen option icon). Renders after `searchIcon`. */
+  icon?: IconFunctionComponent;
   rightChildren?: React.ReactNode;
   /** Show the clear (×) button when the field has a value. */
   clearButton?: boolean;
+  /**
+   * Read-only regardless of `variant`, for a field that is only a trigger
+   * (a select's button trigger). `variant="readOnly"` implies it.
+   */
+  readOnly?: boolean;
 }
 
 /**
@@ -53,15 +61,17 @@ export default function InputTypeIn({
   variant = "primary",
   prefixText,
   searchIcon,
+  icon: Icon,
   rightChildren,
   clearButton = false,
+  readOnly = false,
   value,
   onChange,
   name,
   ...props
 }: InputTypeInProps) {
   const disabled = variant === "disabled";
-  const isReadOnly = variant === "readOnly";
+  const isReadOnly = readOnly || variant === "readOnly";
 
   const handleClear = useCallback(() => {
     onChange?.({
@@ -83,6 +93,12 @@ export default function InputTypeIn({
       {searchIcon && (
         <div className="px-1">
           <SvgSearch className="w-4 h-4 stroke-text-02" />
+        </div>
+      )}
+
+      {Icon && (
+        <div className="opal-input-leading-icon">
+          <Icon className="opal-input-leading-icon-svg" />
         </div>
       )}
 

@@ -1,62 +1,58 @@
 # InputSingleSelect
 
-**Import:** `import { InputSingleSelect, type InputSingleSelectProps, type SelectOption, type SelectSection } from "@opal/components";`
+**Import:** `import { InputSingleSelect, type InputSingleSelectProps, type SelectOption, type SelectDivider, type SelectOptions } from "@opal/components";`
 
-The single-arity member of the `input-select` family: an input-shaped trigger
-over the family's unified dropdown. Typing always filters the option set;
-keyboard navigation (arrows, Enter, Escape) and ARIA combobox semantics are
-built in. `options` is required; for a plain text input use `InputTypeIn`.
+A single pick from a set, with nothing to type. The trigger is an input-shaped
+button: like a native `<select>`, a click or ArrowDown opens the full set, a
+second click closes it, and keyboard focus alone does not open it. Keyboard
+navigation (arrows, Enter, Escape) and ARIA combobox semantics are built in.
+The type-in sibling is [InputSingleComboBox](../input-single-combo-box/README.md).
 
-The set-openness axis:
+Re-picking the selected option unselects it (the value becomes `""` and the
+placeholder shows).
 
-- **`mode="closed"`** (default) — only option values are allowed. The trigger
-  shows the selected option's label at rest; a value outside the set shows a
-  validation error.
-- **`mode="open"`** — typing filters AND the raw text can be committed as a
-  value via the create row.
+## Default option
 
-Options are flat or sectioned. Sections render in order with a `Divider`
-between each and an optional muted heading; a section whose options all
-filter out disappears.
+With `defaultOption` the select never reads as empty: an empty `value` resolves
+to it, and re-picking the selected option does nothing, like a native
+`<select>`. `onValueChange` never receives `""`.
+`placeholder` stays required: it is the field's accessible name even when the
+default keeps the trigger filled.
+
+`options` is a list of loose options and dividers in any order, like
+`<option>`s beside `<optgroup>`s: a divider is `{ title?, options }` and renders
+a separator line above its rows, carrying `title` when there is one. The trigger shows the chosen option's `icon`, when it has one. A value
+outside the set shows the placeholder with the validation error.
 
 ```tsx
 <InputSingleSelect
-  value={model}
-  onValueChange={setModel}
-  placeholder="Choose a model"
+  value={strategy}
+  onValueChange={setStrategy}
+  defaultOption="reindex"
+  placeholder="Select a strategy"
   options={[
+    { options: [{ value: "none", title: "Do not re-index" }] },
     {
-      label: "OpenAI",
-      options: [{ value: "gpt", label: "GPT-5", description: "Default" }],
+      title: "Re-index options",
+      options: [
+        { value: "reindex", title: "Re-index all, then switch" },
+        { value: "instant", title: "Switch, then re-index" },
+      ],
     },
-    { label: "Anthropic", options: [{ value: "opus", label: "Claude Opus" }] },
   ]}
-/>
-
-// Open set: pick a suggestion or type a custom model name.
-<InputSingleSelect
-  mode="open"
-  value={model}
-  onValueChange={setModel}
-  options={modelOptions}
-  placeholder="Select or enter model"
 />
 ```
 
 ## Props
 
-Key props (`InputSingleSelectProps` also passes DOM input attributes through):
+| Prop            | Type                                | Default | Description                                                     |
+| --------------- | ----------------------------------- | ------- | --------------------------------------------------------------- |
+| `value`         | `string`                            | —       | Current value (controlled)                                      |
+| `onValueChange` | `(value: string) => void`           | —       | Fires on a pick, and with `""` on an unpick                     |
+| `options`       | `SelectOptions` | `[]`    | Loose options and dividers, in order                        |
+| `defaultOption` | `string`                            | —       | Option value an empty `value` resolves to; never empties then   |
+| `placeholder`   | `string`                            | —       | Shown while empty; always the accessible name (required)        |
+| `isError`       | `boolean`                           | —       | External error state (overrides internal validation)            |
+| `rightChildren` | `React.ReactNode`                   | —       | Extra trigger-side controls                                     |
 
-| Prop            | Type                                   | Default    | Description                                          |
-| --------------- | -------------------------------------- | ---------- | ---------------------------------------------------- |
-| `value`         | `string`                               | —          | Current value (controlled)                           |
-| `onValueChange` | `(value: string) => void`              | —          | Fires on option selection (and create-row commit)    |
-| `onChange`      | `(e) => void`                          | —          | Fires on every keystroke (controlled-input style)    |
-| `options`       | `SelectOption[] \| SelectSection[]`    | `[]`       | The set; sectioned options render with Dividers      |
-| `mode`          | `"closed" \| "open"`                   | `"closed"` | Set openness                                         |
-| `placeholder`   | `string`                               | —          | Trigger placeholder (required)                       |
-| `isError`       | `boolean`                              | —          | External error state (overrides internal validation) |
-| `rightChildren` | `React.ReactNode`                      | —          | Extra trigger-side controls                          |
-
-The dropdown itself (`dropdown/`) is a family-internal component — never
-consumed directly by app code.
+Formik: `InputSingleSelectField` from `@opal/form`.

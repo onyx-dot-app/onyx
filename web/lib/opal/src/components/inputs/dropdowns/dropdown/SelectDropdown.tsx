@@ -3,8 +3,10 @@ import { createPortal } from "react-dom";
 import "@opal/components/inputs/dropdowns/dropdown/styles.css";
 import { cn } from "@opal/utils";
 import { ShadowDiv } from "@opal/components/shadow-div/components";
+import usePresence from "@opal/hooks/usePresence";
 import { OptionsList } from "./OptionsList";
-import { SelectOption, SelectSection } from "../types";
+import type { SelectOption } from "../types";
+import type { OptionGroup } from "../shared";
 
 interface SelectDropdownProps {
   isOpen: boolean;
@@ -13,7 +15,7 @@ interface SelectDropdownProps {
   setFloatingRef: (node: HTMLDivElement | null) => void;
   fieldId: string;
   placeholder: string;
-  sections: SelectSection[];
+  sections: OptionGroup[];
   /** The supplied set itself is empty (options={[]}), not merely filtered out. */
   emptySet?: boolean;
   value: string;
@@ -34,6 +36,12 @@ interface SelectDropdownProps {
   showCreateOption: boolean;
   /** Max height of the dropdown in CSS units. Defaults to "15rem". */
   dropdownMaxHeight?: string;
+  /**
+   * Whether the highlight is being driven by the keyboard. Only then does
+   * the list scroll to keep the highlighted row in view; a pointer moving
+   * over rows must never scroll the list under itself.
+   */
+  keyboardNav: boolean;
 }
 
 /**
@@ -64,13 +72,20 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
       allowCreate,
       showCreateOption,
       dropdownMaxHeight,
+      keyboardNav,
     },
     ref
   ) => {
-    // Scroll highlighted option into view
+    // The listbox stays mounted one exit animation longer than `isOpen`, so
+    // it can animate out without living in the tree while closed.
+    const presence = usePresence(isOpen);
+
+    // Keyboard navigation keeps the highlighted row in view. Pointer
+    // highlights never scroll: the list must not move under the mouse.
     useEffect(() => {
       if (
         isOpen &&
+        keyboardNav &&
         ref &&
         typeof ref !== "function" &&
         ref.current &&
@@ -86,9 +101,24 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
           });
         }
       }
-    }, [highlightedIndex, isOpen, ref]);
+    }, [highlightedIndex, isOpen, keyboardNav, ref]);
 
-    if (!isOpen || disabled || typeof document === "undefined") {
+    // Opening shows the selection: the (first) selected row is centred in
+    // view, so a long list opens around the current value.
+    useEffect(() => {
+      if (!isOpen || !ref || typeof ref === "function" || !ref.current) {
+        return;
+      }
+      const selectedElement = ref.current.querySelector(
+        '[role="option"][aria-selected="true"]'
+      );
+      selectedElement?.scrollIntoView({
+        block: "center",
+        behavior: "instant",
+      });
+    }, [isOpen, ref]);
+
+    if (!presence.mounted || disabled || typeof document === "undefined") {
       return null;
     }
 
@@ -107,8 +137,12 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
         role="listbox"
         tabIndex={-1}
         aria-label={placeholder}
+        // Closed while exiting: invisible to AT and to the pointer.
+        aria-hidden={presence.state === "closed" || undefined}
+        data-state={presence.state}
         className="opal-select-dropdown"
         style={floatingStyles}
+        onAnimationEnd={presence.onAnimationEnd}
         onMouseLeave={onMouseLeave}
         onMouseDown={(e) => {
           // Clicks on padding, gaps, or dividers must not steal focus from
@@ -126,6 +160,10 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
       >
         <ShadowDiv
           shadowHeight={3}
+          // The rise-and-settle runs on this non-scrolling wrapper: a
+          // transform on the scroller itself makes Chromium repaint it at
+          // scroll offset 0 for a frame when compositing switches.
+          containerClassName="opal-select-dropdown-content"
           className={cn(
             "opal-select-dropdown-scroll",
             !dropdownMaxHeight && "max-h-60"

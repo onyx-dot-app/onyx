@@ -6,7 +6,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import {
   Card,
   type DateRange,
-  InputSingleSelect,
+  InputSingleComboBox,
   MessageCard,
   Table,
   Text,
@@ -287,15 +287,15 @@ export default function SystemUsagePanel({ timeRange }: SystemUsagePanelProps) {
       >
         {models.length > 0 && (
           <Section width={12} height="fit">
-            <InputSingleSelect
+            <InputSingleComboBox
               value={model}
               onValueChange={setModel}
               placeholder={t("filters.allModels.label")}
               options={[
-                { value: ALL_FILTER, label: t("filters.allModels.label") },
+                { value: ALL_FILTER, title: t("filters.allModels.label") },
                 ...models.map((option) => ({
                   value: option,
-                  label: option,
+                  title: option,
                 })),
               ]}
             />
@@ -303,15 +303,15 @@ export default function SystemUsagePanel({ timeRange }: SystemUsagePanelProps) {
         )}
         {providers.length > 0 && (
           <Section width={12} height="fit">
-            <InputSingleSelect
+            <InputSingleComboBox
               value={provider}
               onValueChange={setProvider}
               placeholder={t("filters.allProviders.label")}
               options={[
-                { value: ALL_FILTER, label: t("filters.allProviders.label") },
+                { value: ALL_FILTER, title: t("filters.allProviders.label") },
                 ...providers.map((option) => ({
                   value: option,
-                  label: option,
+                  title: option,
                 })),
               ]}
             />

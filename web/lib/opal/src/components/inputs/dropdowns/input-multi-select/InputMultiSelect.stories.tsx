@@ -12,33 +12,25 @@ export default meta;
 type Story = StoryObj<typeof InputMultiSelect>;
 
 const GROUP_OPTIONS = [
-  { value: "1", label: "Engineering", description: "14 members" },
-  { value: "2", label: "Design", description: "5 members" },
-  { value: "3", label: "Sales", description: "9 members" },
+  { value: "1", title: "Engineering", description: "14 members" },
+  { value: "2", title: "Design", description: "5 members" },
+  { value: "3", title: "Sales", description: "9 members" },
 ];
 
-function ControlledWithOptions({ mode }: { mode?: "closed" | "open" }) {
+function ControlledSelect() {
   const [tags, setTags] = useState<TagItem[]>([]);
-  const [text, setText] = useState("");
   return (
     <div className="w-96">
       <InputMultiSelect
         tags={tags}
-        value={text}
-        onChange={setText}
-        mode={mode}
         options={GROUP_OPTIONS}
         placeholder="Pick groups…"
         onSelectOption={(option) =>
           setTags((prev) => [
             ...prev,
-            { id: option.value, label: option.label },
+            { id: option.value, label: option.title },
           ])
         }
-        onAdd={(value) => {
-          setTags((prev) => [...prev, { id: `custom-${value}`, label: value }]);
-          setText("");
-        }}
         onRemoveTag={(id) =>
           setTags((prev) => prev.filter((tag) => tag.id !== id))
         }
@@ -47,12 +39,7 @@ function ControlledWithOptions({ mode }: { mode?: "closed" | "open" }) {
   );
 }
 
-/** Closed set: only options can be chosen; typing filters. */
-export const ClosedSet: Story = {
-  render: () => <ControlledWithOptions />,
-};
-
-/** Open set: options plus free entry via the create row. */
-export const OpenSet: Story = {
-  render: () => <ControlledWithOptions mode="open" />,
+/** Chips only, no filter text; the full set always shows. */
+export const Default: Story = {
+  render: () => <ControlledSelect />,
 };

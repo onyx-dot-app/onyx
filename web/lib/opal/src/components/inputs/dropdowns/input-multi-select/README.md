@@ -2,47 +2,38 @@
 
 **Import:** `import { InputMultiSelect, type InputMultiSelectProps } from "@opal/components";`
 
-The multi-arity member of the input-select family: [InputTypeInTag](../../texts/input-type-in-tag/README.md)'s chips-in-input chrome over the family's unified dropdown. Typing filters the option set, arrows navigate, Enter picks, and a chosen option becomes a `Tag`.
+Several picks from a set, with nothing to type. The chosen options are `Tag`
+chips that make up the whole field on the `.opal-input` chrome; a focusable
+combobox element takes the keyboard, a click toggles the list open and closed
+(focus alone does not open it), and the list always shows the full set. The
+type-in sibling is [InputMultiComboBox](../input-multi-combo-box/README.md).
 
-Free tagging with no set to pick from is `InputTypeInTag` itself. `InputMultiSelect` always has an option set, so `options` is required.
-
-## Props
-
-Every [InputTypeInTag](../../texts/input-type-in-tag/README.md) prop, plus:
-
-| Prop                | Type                                  | Default    | Description                                                                              |
-| ------------------- | ------------------------------------- | ---------- | ---------------------------------------------------------------------------------------- |
-| `options`           | `SelectOption[] \| SelectSection[]`   | **(required)** | The selectable set, flat or sectioned. Sections render with a `Divider` between them |
-| `onSelectOption`    | `(option: SelectOption) => void`      | **(required)** | Called when a dropdown option is chosen                                              |
-| `mode`              | `"closed" \| "open"`                  | `"closed"` | Set openness, see below                                                                  |
-| `dropdownMaxHeight` | `string`                              | `"15rem"`  | Max height of the dropdown in CSS units                                                  |
-
-`onAdd` is the create row's commit in `mode="open"`. In `mode="closed"` it never fires.
-
-## The option set
-
-A chosen option becomes a tag whose `id` is the option's `value` (via `onSelectOption`); choosing it again — in the dropdown or on the chip — removes it through `onRemoveTag`.
-
-- **`mode="closed"`** (default): only options can be chosen. A committed tag outside the set (a stale seed, or the options shrank) flags the chrome's error variant.
-- **`mode="open"`**: the raw text can also be committed via the create row, landing in `onAdd` like a plain tag. Free-form tags then appear at the top of the dropdown as selected rows, like the single's, and picking one again removes it through `onRemoveTag`.
-
-Closing the dropdown drops whatever was typed: the filter is transient UI state, so the component clears `value` through `onChange`.
+A chosen option becomes a tag whose `id` is the option's `value` (via
+`onSelectOption`); choosing it again, in the list or on the chip, removes it
+through `onRemoveTag`. A chip shows its option's `icon`, when it has one. A
+tag outside the set flags the chrome's error variant.
 
 ```tsx
 <InputMultiSelect
   tags={tags}
-  value={query}
-  onChange={setQuery}
-  options={groups.map((g) => ({
-    value: String(g.id),
-    label: g.name,
-    description: t("memberCount", { count: g.users.length }),
-  }))}
+  options={groupOptions}
   onSelectOption={(option) =>
-    setTags((prev) => [...prev, { id: option.value, label: option.label }])
+    setTags((prev) => [...prev, { id: option.value, label: option.title }])
   }
   onRemoveTag={(id) => setTags((prev) => prev.filter((t) => t.id !== id))}
-  onAdd={() => {}}
-  placeholder={t("search.placeholder")}
+  placeholder={t("groups.placeholder")}
 />
 ```
+
+## Props
+
+Every [InputTypeInTag](../../texts/input-type-in-tag/README.md) chrome prop (`tags`, `onRemoveTag`, `variant`, `disabled`, `icon`, `onClear`, `minRows`, `maxRows`), plus:
+
+| Prop                | Type                                | Default        | Description                                                        |
+| ------------------- | ----------------------------------- | -------------- | ------------------------------------------------------------------ |
+| `options`           | `SelectOptions` | **(required)** | Loose options and dividers, in order        |
+| `onSelectOption`    | `(option: SelectOption) => void`    | **(required)** | Called when an option is chosen                                    |
+| `placeholder`       | `string`                            | **(required)** | Names the combobox element and shows while there are no chips      |
+| `dropdownMaxHeight` | `string`                            | `"15rem"`      | Max height of the dropdown in CSS units                            |
+
+Formik: `InputMultiSelectField` from `@opal/form`, whose value is `string[]` of option values.

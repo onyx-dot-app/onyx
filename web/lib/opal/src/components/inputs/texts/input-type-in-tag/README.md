@@ -26,11 +26,12 @@ Interaction model:
 | `icon`         | `IconFunctionComponent`              | —              | Leading icon (24px container)                                                     |
 | `onClear`      | `() => void`                         | —              | Renders the clear action button                                                   |
 | `minRows`      | `number`                             | `1`            | Tag rows the field is tall enough to show before it grows. Rows pack from the top |
+| `maxRows`      | `number`                             | `2`            | Tag rows the field grows to before the chips scroll inside it. A new chip scrolls the input row into view |
 | `focusOnMount` | `boolean`                            | `false`        | Focuses the text input on mount                                                   |
 
 ### `TagItem`
 
-`TagItem` is `{ id: string; label: string; error?: boolean }`. `error` shows the warning indicator on that tag.
+`TagItem` is `{ id: string; label: string; icon?: IconFunctionComponent; error?: boolean }`. `icon` leads the tag; `error` shows the warning indicator on it.
 
 ## Usage
 

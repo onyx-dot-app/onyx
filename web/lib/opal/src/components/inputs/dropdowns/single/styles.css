@@ -10,3 +10,8 @@
 .opal-input-single-select {
   @apply relative w-full;
 }
+
+/* A button trigger has nothing to type: the whole field reads as a button. */
+.opal-input-single-select[data-trigger="button"] .opal-input-field {
+  @apply cursor-pointer caret-transparent select-none;
+}

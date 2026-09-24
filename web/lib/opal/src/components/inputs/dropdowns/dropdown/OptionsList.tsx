@@ -1,7 +1,8 @@
 import React from "react";
 import { useOpalStrings } from "@opal/strings";
 import { OptionItem } from "./OptionItem";
-import { SelectOption, SelectSection } from "../types";
+import type { SelectOption } from "../types";
+import type { OptionGroup } from "../shared";
 import { Divider } from "@opal/components/divider/components";
 import { Text } from "@opal/components/text/components";
 import { clickOnKeyDown } from "@opal/utils";
@@ -9,8 +10,8 @@ import { SvgPlus } from "@opal/icons";
 import { sanitizeOptionId } from "./aria";
 
 interface OptionsListProps {
-  /** Post-filter, non-empty sections in render order. */
-  sections: SelectSection[];
+  /** Post-filter, non-empty groups in render order. */
+  sections: OptionGroup[];
   /** The supplied set itself is empty (options={[]}), not merely filtered out. */
   emptySet?: boolean;
   value: string;
@@ -36,8 +37,9 @@ interface OptionsListProps {
 }
 
 /**
- * Renders the sectioned option list: a Divider between sections, an optional
- * muted heading per section, and the create row pinned first in open mode.
+ * Renders the grouped option list: a titled Divider above each divider
+ * group, plain rows for loose options, and the create row pinned first in
+ * open mode.
  */
 export const OptionsList: React.FC<OptionsListProps> = ({
   sections,
@@ -101,10 +103,10 @@ export const OptionsList: React.FC<OptionsListProps> = ({
           )}
           onClick={(e) => {
             e.stopPropagation();
-            onSelect({ value: createText, label: createText });
+            onSelect({ value: createText, title: createText });
           }}
           onKeyDown={clickOnKeyDown(() =>
-            onSelect({ value: createText, label: createText })
+            onSelect({ value: createText, title: createText })
           )}
           onMouseDown={(e) => {
             e.preventDefault();
@@ -119,21 +121,20 @@ export const OptionsList: React.FC<OptionsListProps> = ({
         </div>
       )}
 
-      {/* Sections: a Divider between each, an optional heading per section */}
+      {/* A line separates consecutive groups; it carries the group's title
+          when it has one. A titled first group keeps its title line. */}
       {(() => {
         let globalIndex = indexOffset;
         let exactSeen = false;
-        return sections.map((section, sectionIdx) => {
+        return sections.map((group, groupIdx) => {
           const rows = (
-            <React.Fragment key={sectionIdx}>
-              {section.label ? (
-                <Divider title={section.label} />
+            <React.Fragment key={groupIdx}>
+              {group.title !== undefined ? (
+                <Divider title={group.title} />
               ) : (
-                sectionIdx > 0 && (
-                  <Divider paddingParallel={0} paddingPerpendicular={0} />
-                )
+                groupIdx > 0 && <Divider />
               )}
-              {section.options.map((option) => {
+              {group.options.map((option) => {
                 const index = globalIndex++;
                 const isExact =
                   (markAllMatches || !exactSeen) && isExactMatch(option);

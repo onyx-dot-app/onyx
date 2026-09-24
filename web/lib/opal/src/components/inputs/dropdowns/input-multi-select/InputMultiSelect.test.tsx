@@ -14,8 +14,8 @@ jest.mock("react-dom", () => ({
 Element.prototype.scrollIntoView = jest.fn();
 
 const mockOptions = [
-  { value: "apple", label: "Apple" },
-  { value: "banana", label: "Banana" },
+  { value: "apple", title: "Apple" },
+  { value: "banana", title: "Banana" },
 ];
 
 function setupUser() {
@@ -23,77 +23,123 @@ function setupUser() {
 }
 
 describe("InputMultiSelect", () => {
-  describe("Free-form tags", () => {
-    test("open mode lists a free-form tag as a selected row", async () => {
+  describe("Rendering and picking", () => {
+    test("a chip shows its option's icon", () => {
+      function Swatch(props: React.SVGProps<SVGSVGElement>) {
+        return <svg data-testid="swatch" {...props} />;
+      }
+      render(
+        <InputMultiSelect
+          tags={[{ id: "apple", label: "Apple" }]}
+          options={[
+            { value: "apple", title: "Apple", icon: Swatch },
+            { value: "banana", title: "Banana" },
+          ]}
+          placeholder="Pick"
+          onSelectOption={jest.fn()}
+          onRemoveTag={jest.fn()}
+        />
+      );
+      expect(screen.getByTestId("swatch")).toBeInTheDocument();
+    });
+
+    test("renders no text input and opens from the combobox element", async () => {
       const user = setupUser();
       render(
         <InputMultiSelect
-          tags={[{ id: "kiwi-1", label: "Kiwi" }]}
-          value=""
-          onChange={jest.fn()}
+          tags={[]}
           options={mockOptions}
-          mode="open"
           placeholder="Pick"
           onSelectOption={jest.fn()}
-          onAdd={jest.fn()}
           onRemoveTag={jest.fn()}
         />
       );
 
-      await user.click(screen.getByPlaceholderText("Pick"));
+      expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+      const trigger = screen.getByRole("combobox", { name: "Pick" });
+      expect(trigger).toHaveTextContent("Pick");
 
-      const row = screen.getByRole("option", { name: /Kiwi/ });
-      expect(row).toHaveAttribute("aria-selected", "true");
-      // The free-form row precedes the option set.
-      expect(screen.getAllByRole("option")[0]).toBe(row);
+      await user.click(trigger);
+      expect(screen.getAllByRole("option")).toHaveLength(2);
     });
 
-    test("picking a free-form tag's row removes the tag", async () => {
-      const handleRemoveTag = jest.fn();
-      const handleAdd = jest.fn();
+    test("a second click closes it, and focus alone does not open it", async () => {
       const user = setupUser();
       render(
         <InputMultiSelect
-          tags={[{ id: "kiwi-1", label: "Kiwi" }]}
-          value=""
-          onChange={jest.fn()}
+          tags={[]}
           options={mockOptions}
-          mode="open"
           placeholder="Pick"
           onSelectOption={jest.fn()}
-          onAdd={handleAdd}
+          onRemoveTag={jest.fn()}
+        />
+      );
+      const trigger = screen.getByRole("combobox", { name: "Pick" });
+      await user.tab();
+      expect(trigger).toHaveFocus();
+      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+
+      await user.click(trigger);
+      expect(screen.getByRole("listbox")).toBeInTheDocument();
+      await user.click(trigger);
+      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    });
+
+    test("arrow keys and Enter pick an option", async () => {
+      const handleSelectOption = jest.fn();
+      const user = setupUser();
+      render(
+        <InputMultiSelect
+          tags={[]}
+          options={mockOptions}
+          placeholder="Pick"
+          onSelectOption={handleSelectOption}
+          onRemoveTag={jest.fn()}
+        />
+      );
+
+      await user.click(screen.getByRole("combobox", { name: "Pick" }));
+      await user.keyboard("{ArrowDown}{Enter}");
+      expect(handleSelectOption).toHaveBeenCalledWith(
+        expect.objectContaining({ value: "apple" })
+      );
+    });
+
+    test("picking a chosen option's row removes the tag", async () => {
+      const handleRemoveTag = jest.fn();
+      const user = setupUser();
+      render(
+        <InputMultiSelect
+          tags={[{ id: "apple", label: "Apple" }]}
+          options={mockOptions}
+          placeholder="Pick"
+          onSelectOption={jest.fn()}
           onRemoveTag={handleRemoveTag}
         />
       );
 
-      await user.click(screen.getByPlaceholderText("Pick"));
-      await user.click(screen.getByRole("option", { name: /Kiwi/ }));
-
-      expect(handleRemoveTag).toHaveBeenCalledWith("kiwi-1");
-      expect(handleAdd).not.toHaveBeenCalled();
+      await user.click(screen.getByRole("combobox", { name: "Pick" }));
+      const row = screen.getByRole("option", { name: /Apple/ });
+      expect(row).toHaveAttribute("aria-selected", "true");
+      await user.click(row);
+      expect(handleRemoveTag).toHaveBeenCalledWith("apple");
     });
 
-    test("closed mode does not list a tag outside the set as a row", async () => {
+    test("a chip's remove button still removes its tag", async () => {
+      const handleRemoveTag = jest.fn();
       const user = setupUser();
       render(
         <InputMultiSelect
-          tags={[{ id: "kiwi-1", label: "Kiwi" }]}
-          value=""
-          onChange={jest.fn()}
+          tags={[{ id: "apple", label: "Apple" }]}
           options={mockOptions}
-          mode="closed"
           placeholder="Pick"
           onSelectOption={jest.fn()}
-          onAdd={jest.fn()}
-          onRemoveTag={jest.fn()}
+          onRemoveTag={handleRemoveTag}
         />
       );
 
-      await user.click(screen.getByPlaceholderText("Pick"));
-
-      expect(
-        screen.queryByRole("option", { name: /Kiwi/ })
-      ).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: /remove/i }));
+      expect(handleRemoveTag).toHaveBeenCalledWith("apple");
     });
   });
 });
