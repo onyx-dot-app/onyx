@@ -10,7 +10,7 @@ The gradients use the translucent `shadow-01` token, so they read as a shadow on
 
 | Prop                 | Type                                | Default                        | Description                                   |
 | -------------------- | ----------------------------------- | ------------------------------ | --------------------------------------------- |
-| `shadowHeight`       | `string`                            | `"1.5rem"`                     | Height of each gradient                       |
+| `shadowHeight`       | `Spacing`                           | `6`                            | Height of each gradient, as a spacing step (`N / 4` rem) |
 | `scrollContainerRef` | `RefObject<HTMLDivElement \| null>` | —                              | External ref for programmatic scrolling       |
 | `shadowDirection`    | `ShadowDirection`                   | `"top-and-bottom"`             | `"top-and-bottom"`, `"top-only"`, or `"bottom-only"` |
 | `variant`            | `"shadow" \| "mask"`                | `"shadow"`                     | `"shadow"` paints translucent gradients over the content; `"mask"` fades the content itself, for surfaces a gradient could not match |

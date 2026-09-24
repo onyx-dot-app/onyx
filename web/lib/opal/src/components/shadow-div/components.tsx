@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { cn } from "@opal/utils";
+import { spacingToRem } from "@opal/shared";
+import type { Spacing } from "@opal/types";
 
 type ShadowDirection = "top-and-bottom" | "top-only" | "bottom-only";
 
@@ -14,10 +16,10 @@ type ShadowDivVariant = "shadow" | "mask";
 
 interface ShadowDivProps extends React.HTMLAttributes<HTMLDivElement> {
   /**
-   * Height of the shadow gradients.
-   * Defaults to 1.5rem (24px)
+   * Height of each gradient, as a spacing step (`N / 4` rem).
+   * Defaults to 6 (1.5rem).
    */
-  shadowHeight?: string;
+  shadowHeight?: Spacing;
 
   /**
    * Ref for the scrollable container (useful for programmatic scrolling)
@@ -68,7 +70,7 @@ const SHADOW_COLOR = "var(--shadow-01)";
  * </ShadowDiv>
  */
 function ShadowDiv({
-  shadowHeight = "1.5rem",
+  shadowHeight = 6,
   scrollContainerRef,
   shadowDirection = "top-and-bottom",
   variant = "shadow",
@@ -122,8 +124,9 @@ function ShadowDiv({
     };
   }, [containerRef, checkScroll]);
 
-  const topFade = showTop && showTopShadow ? shadowHeight : "0px";
-  const bottomFade = showBottom && showBottomShadow ? shadowHeight : "0px";
+  const fadeHeight = spacingToRem(shadowHeight);
+  const topFade = showTop && showTopShadow ? fadeHeight : "0px";
+  const bottomFade = showBottom && showBottomShadow ? fadeHeight : "0px";
   const maskImage = `linear-gradient(to bottom, transparent 0, black ${topFade}, black calc(100% - ${bottomFade}), transparent 100%)`;
 
   return (
@@ -149,7 +152,7 @@ function ShadowDiv({
             showTopShadow ? "opacity-100" : "opacity-0"
           )}
           style={{
-            height: shadowHeight,
+            height: fadeHeight,
             background: `linear-gradient(to bottom, ${SHADOW_COLOR}, transparent)`,
           }}
         />
@@ -163,7 +166,7 @@ function ShadowDiv({
             showBottomShadow ? "opacity-100" : "opacity-0"
           )}
           style={{
-            height: shadowHeight,
+            height: fadeHeight,
             background: `linear-gradient(to top, ${SHADOW_COLOR}, transparent)`,
           }}
         />

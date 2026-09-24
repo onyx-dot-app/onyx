@@ -47,7 +47,7 @@ export const TopOnly: Story = {
 
 export const CustomShadowHeight: Story = {
   args: {
-    shadowHeight: "3rem",
+    shadowHeight: 12,
     className: "max-h-[250px]",
     style: { width: 300 },
     children: sampleItems,

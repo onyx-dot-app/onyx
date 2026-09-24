@@ -197,7 +197,7 @@ export default function EditUserModal({
                     </LineItem>
                   ) : (
                     <ShadowDiv
-                      shadowHeight="0.75rem"
+                      shadowHeight={3}
                       className={cn("flex flex-col gap-1 max-h-60 rounded-08")}
                     >
                       {dropdownGroups.map((group) => {
@@ -224,7 +224,7 @@ export default function EditUserModal({
 
               <ShadowDiv
                 className={cn(" max-h-44 flex flex-col gap-1 rounded-08")}
-                shadowHeight="0.75rem"
+                shadowHeight={3}
               >
                 {joinedGroups.length === 0 ? (
                   <LineItem
