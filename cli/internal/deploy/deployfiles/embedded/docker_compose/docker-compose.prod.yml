@@ -469,11 +469,10 @@ services:
       - /data
 
   minio:
-    # Docker Hub dropped minio/minio when MinIO archived its community edition,
-    # so this does not go through BASE_IMAGE_REGISTRY (a Docker Hub mirror).
-    # RELEASE.2025-09-07 is the last multi-arch build; -cpuv1 also runs on
-    # x86-64-v1 CPUs. Pinned by digest.
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z-cpuv1@sha256:13582eff79c6605a2d315bdd0e70164142ea7e98fc8411e9e10d089502a6d883
+    # MinIO archived its community edition, and Docker Hub and quay.io no longer
+    # serve minio/minio, so this is our mirror of the newest multi-arch build we
+    # kept. -cpuv1 also runs on x86-64-v1 CPUs. Pinned by digest.
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/onyxdotapp/minio:RELEASE.2025-07-23T15-54-02Z-cpuv1@sha256:7330be2e7320a7a699b36f72bd06a94d8a21ec9f6f397345d9c38fc6751141f5
     restart: unless-stopped
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set a strong value in .env, not minioadmin}
