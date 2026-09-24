@@ -498,9 +498,14 @@ See `backend/AGENTS.md` for required env and secrets.
   only checks/increments when the request carries a hashed API key or PAT
   (`get_hashed_api_key_from_request`, `get_hashed_pat_from_request`); web UI
   chat traffic never touches the tenant `api_calls` counter.
-- **The invite rate limiter fails open on Redis errors by design**, so a
-  Redis outage (or a "Lite" deployment that runs without Redis) means invite
-  abuse limits silently stop applying rather than blocking invites.
+- **The invite rate limiter fails open on Redis errors by design.** It runs
+  only for cloud trial tenants (`MULTI_TENANT and is_tenant_on_trial_fn`,
+  `server/manage/users.py`); self-hosted and Lite never call it. The trial's
+  lifetime invite cap (`NUM_FREE_TRIAL_USER_INVITES`, `reserve_trial_invites`)
+  is a Postgres counter and holds during a Redis outage. What an outage loses
+  is the per-minute and per-day Redis buckets, which exist to stop the
+  invite -> remove -> invite cycle (removal releases a trial slot) from
+  sending unlimited invite emails.
 - **HTTP-level auth rate limiting is off unless both `RATE_LIMIT_MAX_REQUESTS`
   and `RATE_LIMIT_WINDOW_SECONDS` are set**; a fresh deployment has no IP
   throttle on login/signup HTTP traffic beyond the separate, `MULTI_TENANT`-
