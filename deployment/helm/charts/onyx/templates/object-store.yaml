@@ -1,0 +1,167 @@
+{{- if eq (include "onyx.objectStore.enabled" .) "true" }}
+{{- if eq (toString (dig "enabled" true (.Values.auth.objectstorage | default dict))) "false" }}
+{{- fail "objectStore needs auth.objectstorage: the object store uses its S3 keys as admin credentials." }}
+{{- end }}
+{{- $objectStore := include "onyx.objectStore.values" . | fromYaml }}
+{{- $name := include "onyx.resourceName" (list . "object-store") }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app: object-store
+  annotations:
+    # It holds every stored file, so no upgrade, rollback, uninstall or prune removes it.
+    helm.sh/resource-policy: keep
+    argocd.argoproj.io/sync-options: Prune=false
+    {{- with $objectStore.persistence.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- with $objectStore.persistence.storageClass }}
+  # "-" is the MinIO chart's way to ask for no storage class.
+  storageClassName: {{ ternary "" . (eq . "-") | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $objectStore.persistence.size | quote }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app: object-store
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "onyx.selectorLabels" . | nindent 4 }}
+    app: object-store
+  ports:
+    - name: s3
+      port: {{ $objectStore.service.port }}
+      targetPort: s3
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app: object-store
+spec:
+  replicas: 1
+  # One process owns the volume, so the old pod stops before the new one starts.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "onyx.selectorLabels" . | nindent 6 }}
+      app: object-store
+  template:
+    metadata:
+      {{- with $objectStore.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # Without the chart version, so a chart-only upgrade does not restart the store.
+      labels:
+        {{- include "onyx.selectorLabels" . | nindent 8 }}
+        app: object-store
+        {{- with $objectStore.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $objectStore.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      securityContext:
+        {{- toYaml $objectStore.podSecurityContext | nindent 8 }}
+      {{- with $objectStore.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $objectStore.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $objectStore.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: object-store
+          image: "{{ $objectStore.image.repository }}:{{ $objectStore.image.tag }}"
+          imagePullPolicy: {{ $objectStore.image.pullPolicy }}
+          # The image entrypoint needs root to chown /data, so weed runs directly.
+          # Only the S3 gateway leaves loopback: the filer, master and volume APIs
+          # take no credentials. Bucket writes get fsync once the server is up.
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              /usr/bin/weed -logtostderr=true server -dir=/data -volume.max=0 \
+                -master.volumeSizeLimitMB=1024 -s3 -s3.port=8333 \
+                -ip=127.0.0.1 -ip.bind=127.0.0.1 -s3.ip.bind=0.0.0.0 &
+              pid=$!
+              trap 'kill -TERM $pid; wait $pid' TERM INT
+              until echo 'fs.configure -locationPrefix=/buckets/ -fsync -apply' | /usr/bin/weed shell -master=127.0.0.1:9333 >/dev/null 2>&1; do
+                kill -0 $pid 2>/dev/null || exit 1
+                sleep 1
+              done
+              touch /tmp/fsync-configured
+              wait $pid
+          env:
+            {{- include "onyx.objectStore.credentialEnv" (dict "ctx" . "prefix" "AWS") | nindent 12 }}
+            # Keeps the FIPS 140-3 mode the image entrypoint sets, since weed runs directly.
+            - name: GODEBUG
+              value: fips140=on
+            # File store keys can hold a name segment longer than the 255-byte default.
+            - name: WEED_FILER_OPTIONS_MAX_FILE_NAME_LENGTH
+              value: "1024"
+            # A bucket grows one volume at a time, not seven, so it can write with
+            # as little as one volume of free disk.
+            - name: WEED_MASTER_VOLUME_GROWTH_COPY_1
+              value: "1"
+          ports:
+            - name: s3
+              containerPort: 8333
+              protocol: TCP
+          readinessProbe:
+            exec:
+              command: ["/bin/sh", "-c", "test -f /tmp/fsync-configured && wget -q -O /dev/null http://127.0.0.1:8333/healthz"]
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: s3
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            {{- toYaml $objectStore.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml $objectStore.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ $name }}
+        - name: tmp
+          emptyDir: {}
+{{- end }}

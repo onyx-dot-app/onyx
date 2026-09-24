@@ -601,3 +601,140 @@ lifecycle:
       seconds: {{ $seconds }}
 {{- end }}
 {{- end }}
+
+{{/*
+Whether the chart runs the bundled object store. Unset follows minio.enabled, so
+an install on external object storage (minio.enabled: false) is left as it is.
+*/}}
+{{- define "onyx.objectStore.enabled" -}}
+{{- $objectStore := .Values.objectStore | default dict -}}
+{{- if kindIs "bool" $objectStore.enabled -}}
+{{- $objectStore.enabled -}}
+{{- else -}}
+{{- .Values.minio.enabled | default false -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+objectStore values over the defaults below. `helm upgrade --reuse-values` swaps
+the chart's values.yaml for the old release's values, which have no objectStore,
+so the templates must not depend on values.yaml for these keys.
+*/}}
+{{- define "onyx.objectStore.values" -}}
+{{- $minioPersistence := .Values.minio.persistence | default dict -}}
+{{- $defaults := dict
+  "image" (dict "repository" "chrislusf/seaweedfs" "tag" "4.47@sha256:ce9e796f1fe6f06968f4c04bdaf8f678dad9c8acdfef3d244133d71bfa6bf882" "pullPolicy" "IfNotPresent")
+  "service" (dict "port" 8333)
+  "persistence" (dict "size" (dig "size" "30Gi" $minioPersistence) "storageClass" (dig "storageClass" "" $minioPersistence) "annotations" dict)
+  "resources" (dict "requests" (dict "cpu" "100m" "memory" "256Mi") "limits" (dict "memory" "2Gi"))
+  "podSecurityContext" (dict "runAsNonRoot" true "runAsUser" 1000 "runAsGroup" 1000 "fsGroup" 1000 "fsGroupChangePolicy" "OnRootMismatch" "seccompProfile" (dict "type" "RuntimeDefault"))
+  "securityContext" (dict "allowPrivilegeEscalation" false "readOnlyRootFilesystem" true "capabilities" (dict "drop" (list "ALL")))
+  "podAnnotations" dict
+  "podLabels" dict
+  "nodeSelector" dict
+  "tolerations" list
+  "affinity" dict
+  "priorityClassName" ""
+  "legacyCopy" (dict "enabled" true "settleSeconds" 600 "workers" 16 "backoffLimit" 20 "resources" (dict "requests" (dict "cpu" "100m" "memory" "256Mi") "limits" (dict "memory" "1Gi")) "nodeSelector" dict "tolerations" list "affinity" dict)
+-}}
+{{- $user := .Values.objectStore | default dict -}}
+{{- $merged := mergeOverwrite $defaults (deepCopy $user) -}}
+{{- /* A merge cannot clear a default, and OpenShift needs podSecurityContext: {}. */ -}}
+{{- range $key := list "podSecurityContext" "securityContext" "resources" -}}
+{{- if hasKey $user $key -}}
+{{- $_ := set $merged $key (get $user $key) -}}
+{{- end -}}
+{{- end -}}
+{{- $userCopy := $user.legacyCopy | default dict -}}
+{{- if hasKey $userCopy "resources" -}}
+{{- $_ := set $merged.legacyCopy "resources" $userCopy.resources -}}
+{{- end -}}
+{{- toYaml $merged -}}
+{{- end }}
+
+{{/* The bundled object store's Service name and S3 endpoint. */}}
+{{- define "onyx.objectStore.endpoint" -}}
+{{- $objectStore := include "onyx.objectStore.values" . | fromYaml -}}
+{{- printf "http://%s:%v" (include "onyx.resourceName" (list . "object-store")) $objectStore.service.port -}}
+{{- end }}
+
+{{/* The app's S3 key pair, which is also the object store's admin identity. */}}
+{{- define "onyx.objectStore.credentialEnv" -}}
+{{- $auth := .ctx.Values.auth.objectstorage -}}
+- name: {{ .prefix }}_ACCESS_KEY_ID
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "onyx.secretName" $auth }}
+      key: {{ $auth.secretKeys.S3_AWS_ACCESS_KEY_ID | default "s3_aws_access_key_id" }}
+- name: {{ .prefix }}_SECRET_ACCESS_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "onyx.secretName" $auth }}
+      key: {{ $auth.secretKeys.S3_AWS_SECRET_ACCESS_KEY | default "s3_aws_secret_access_key" }}
+{{- end }}
+
+{{/* The legacy-minio-copy Job's pod. Scheduling falls back to api's. */}}
+{{- define "onyx.objectStore.legacyCopyPod" -}}
+{{- $ctx := .ctx -}}
+{{- $copy := .copy -}}
+# Without the chart version, so a chart-only upgrade keeps the same Job name.
+metadata:
+  labels:
+    {{- include "onyx.selectorLabels" $ctx | nindent 4 }}
+    app: legacy-minio-copy
+spec:
+  restartPolicy: OnFailure
+  {{- with $ctx.Values.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  serviceAccountName: {{ include "onyx.serviceAccountName" $ctx }}
+  securityContext:
+    {{- toYaml $ctx.Values.api.podSecurityContext | nindent 4 }}
+  {{- with ($copy.nodeSelector | default $ctx.Values.api.nodeSelector) }}
+  nodeSelector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with ($copy.affinity | default $ctx.Values.api.affinity) }}
+  affinity:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with ($copy.tolerations | default $ctx.Values.api.tolerations) }}
+  tolerations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  containers:
+    - name: legacy-minio-copy
+      image: "{{ $ctx.Values.api.image.repository }}:{{ $ctx.Values.api.image.tag | default $ctx.Values.global.version }}"
+      imagePullPolicy: {{ $ctx.Values.global.pullPolicy }}
+      command: ["python", "-m", "onyx.file_store.legacy_copy"]
+      # The same config and secrets as the app, so the copy reaches both stores as it does.
+      envFrom:
+        - configMapRef:
+            name: {{ $ctx.Values.config.envConfigMapName }}
+        {{- with $ctx.Values.extraEnvFromSecret }}
+        - secretRef:
+            name: {{ . }}
+        {{- end }}
+      env:
+        {{- include "onyx.envSecrets" $ctx | nindent 8 }}
+        {{- with include "onyx.customCACerts.env" $ctx }}
+        {{- . | nindent 8 }}
+        {{- end }}
+        {{- with $ctx.Values.api.extraEnv }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        - name: LEGACY_COPY_SETTLE_SECONDS
+          value: {{ $copy.settleSeconds | quote }}
+        - name: LEGACY_COPY_WORKERS
+          value: {{ $copy.workers | quote }}
+      resources:
+        {{- toYaml $copy.resources | nindent 8 }}
+      securityContext:
+        {{- toYaml $ctx.Values.api.securityContext | nindent 8 }}
+      # The api's files too, such as a CA bundle its extraEnv points at.
+      {{- $tmpMount := dict "name" "tmp" "mountPath" "/tmp" }}
+      {{- include "onyx.renderVolumeMounts" (dict "ctx" $ctx "volumeMounts" (prepend ($ctx.Values.api.volumeMounts | default list) $tmpMount)) | nindent 6 }}
+  {{- $tmpVolume := dict "name" "tmp" "emptyDir" dict }}
+  {{- include "onyx.renderVolumes" (dict "ctx" $ctx "volumes" (prepend ($ctx.Values.api.volumes | default list) $tmpVolume)) | nindent 2 }}
+{{- end }}
