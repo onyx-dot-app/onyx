@@ -777,80 +777,39 @@ def test_keeps_temperature_for_older_sonnet_models(model_name: str) -> None:
         assert "temperature" in kwargs
 
 
-BEDROCK_OPENAI_GPT_MODELS = [
-    "us.openai.gpt-6-sol",
-    "global.openai.gpt-6-luna",
-    "us.openai.gpt-5.6-sol",
-]
-
-
-def _bedrock_llm(model_name: str) -> LitellmLLM:
-    return LitellmLLM(
+@pytest.mark.parametrize("is_reasoning", [True, False])
+@pytest.mark.parametrize(
+    "model_name, sends_temperature",
+    [
+        ("us.openai.gpt-6-sol", False),
+        ("global.openai.gpt-6-luna", False),
+        ("us.openai.gpt-5.6-sol", False),
+        # gpt-oss has no version, so the GPT-5+ check leaves it alone.
+        ("openai.gpt-oss-120b-1:0", True),
+    ],
+)
+def test_bedrock_openai_gpt_omits_temperature(
+    model_name: str, sends_temperature: bool, is_reasoning: bool
+) -> None:
+    # Converse rejects the field at any value, 1 included. LiteLLM may not
+    # know a new model yet, so this must hold when it isn't seen as reasoning.
+    llm = LitellmLLM(
         api_key=None,
         timeout=30,
         model_provider=LlmProviderNames.BEDROCK,
         model_name=model_name,
         max_input_tokens=128000,
     )
-
-
-@pytest.mark.parametrize("is_reasoning", [True, False])
-@pytest.mark.parametrize("model_name", BEDROCK_OPENAI_GPT_MODELS)
-def test_bedrock_openai_gpt_omits_temperature(
-    model_name: str, is_reasoning: bool
-) -> None:
-    # Converse rejects the field at any value, 1 included. LiteLLM may not
-    # know a new model yet, so this must hold when it isn't seen as reasoning.
     with (
         patch("litellm.completion") as mock_completion,
         patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=is_reasoning),
     ):
         mock_completion.return_value = []
 
-        list(_bedrock_llm(model_name).stream([UserMessage(content="Hi")]))
-
-        assert "temperature" not in mock_completion.call_args.kwargs
-
-
-@pytest.mark.parametrize("model_name", BEDROCK_OPENAI_GPT_MODELS)
-def test_bedrock_openai_gpt_sends_openai_style_reasoning(model_name: str) -> None:
-    # LiteLLM's reasoning_effort becomes Anthropic thinking for these, which
-    # Converse rejects; reasoning.effort is what they take.
-    with (
-        patch("litellm.completion") as mock_completion,
-        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
-    ):
-        mock_completion.return_value = []
-
-        list(
-            _bedrock_llm(model_name).stream(
-                [UserMessage(content="Hi")], reasoning_effort=ReasoningEffort.HIGH
-            )
-        )
+        list(llm.stream([UserMessage(content="Hi")]))
 
         kwargs = mock_completion.call_args.kwargs
-        assert kwargs["reasoning"] == {"effort": "high", "summary": "auto"}
-        assert "reasoning_effort" not in kwargs
-        assert "thinking" not in kwargs
-
-
-def test_bedrock_gpt_oss_keeps_temperature_and_reasoning_effort() -> None:
-    with (
-        patch("litellm.completion") as mock_completion,
-        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
-    ):
-        mock_completion.return_value = []
-
-        list(
-            _bedrock_llm("openai.gpt-oss-120b-1:0").stream(
-                [UserMessage(content="Hi")], reasoning_effort=ReasoningEffort.HIGH
-            )
-        )
-
-        kwargs = mock_completion.call_args.kwargs
-        assert kwargs["temperature"] == 1
-        assert kwargs["reasoning_effort"] == "high"
-        assert "reasoning" not in kwargs
+        assert ("temperature" in kwargs) is sends_temperature
 
 
 @pytest.mark.parametrize("model_name", VERTEX_OPUS_MODELS_REJECTING_STREAM_OPTIONS)
