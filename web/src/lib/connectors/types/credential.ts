@@ -12,17 +12,23 @@ export interface OAuthDetails {
   supports_manual_credentials: boolean;
   additional_kwargs: OAuthAdditionalKwargDescription[];
 }
-export interface AuthMethodOption<TFields> {
-  value: string;
+export interface AuthMethodOption<
+  TFields,
+  TAuthMethod extends string = string,
+> {
+  value: TAuthMethod;
   label: string;
   fields: TFields;
   description?: string;
   // UI-only: if true, hide/disable the "Auto Sync Permissions" access type when this auth is used
   disablePermSync?: boolean;
 }
-export interface CredentialTemplateWithAuth<TFields> {
-  authentication_method?: string;
-  authMethods?: AuthMethodOption<Partial<TFields>>[];
+export interface CredentialTemplateWithAuth<
+  TFields,
+  TAuthMethod extends string = string,
+> {
+  authentication_method?: TAuthMethod;
+  authMethods?: AuthMethodOption<Partial<TFields>, TAuthMethod>[];
 }
 
 export interface CredentialBase<T> {
