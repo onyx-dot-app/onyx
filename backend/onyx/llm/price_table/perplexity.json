@@ -1,0 +1,114 @@
+{
+  "aliases": {},
+  "models": {
+    "sonar": {
+      "attachment": false,
+      "cost": {
+        "input": 1,
+        "output": 1
+      },
+      "family": "sonar",
+      "limit": {
+        "context": 128000,
+        "output": 4096
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Sonar",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2024-01-01",
+      "temperature": true,
+      "tool_call": false
+    },
+    "sonar-deep-research": {
+      "attachment": false,
+      "cost": {
+        "input": 2,
+        "output": 8,
+        "reasoning": 3
+      },
+      "limit": {
+        "context": 128000,
+        "output": 32768
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Perplexity Sonar Deep Research",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-02-01",
+      "temperature": false,
+      "tool_call": false
+    },
+    "sonar-pro": {
+      "attachment": true,
+      "cost": {
+        "input": 3,
+        "output": 15
+      },
+      "family": "sonar-pro",
+      "limit": {
+        "context": 200000,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Sonar Pro",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2024-01-01",
+      "temperature": true,
+      "tool_call": false
+    },
+    "sonar-reasoning-pro": {
+      "attachment": true,
+      "cost": {
+        "input": 2,
+        "output": 8
+      },
+      "family": "sonar-reasoning",
+      "limit": {
+        "context": 128000,
+        "output": 4096
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Sonar Reasoning Pro",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2024-01-01",
+      "temperature": true,
+      "tool_call": false
+    }
+  },
+  "models_dev_providers": [
+    "perplexity"
+  ]
+}

@@ -1,0 +1,127 @@
+{
+  "aliases": {},
+  "models": {
+    "deepseek-flash": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.003,
+        "input": 0.15,
+        "output": 0.6,
+        "reasoning": 0.6
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1000000,
+        "output": 384000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "DeepSeek V4.1 Flash",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-09-10",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "deepseek-v4-flash": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.003,
+        "input": 0.15,
+        "output": 0.6,
+        "reasoning": 0.6
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1000000,
+        "output": 384000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "DeepSeek V4 Flash",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-09-10",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "deepseek-v4-flash-vision-exp": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.003,
+        "input": 0.15,
+        "output": 0.6,
+        "reasoning": 0.6
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1000000,
+        "output": 384000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "DeepSeek V4 Flash Vision Exp",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-09-10",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "deepseek-v4-pro": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.003625,
+        "input": 0.435,
+        "output": 0.87,
+        "reasoning": 0.87
+      },
+      "family": "deepseek-thinking",
+      "limit": {
+        "context": 1000000,
+        "output": 384000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "DeepSeek V4 Pro",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-12",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    }
+  },
+  "models_dev_providers": [
+    "deepseek"
+  ]
+}
