@@ -90,6 +90,7 @@ export const WithDefaultOption: Story = {
     return (
       <InputSingleSelect
         defaultOption="reindex"
+        placeholder="Select an option"
         value={value}
         onValueChange={setValue}
         options={strategyOptions}

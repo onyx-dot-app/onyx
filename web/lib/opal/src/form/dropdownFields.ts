@@ -49,7 +49,7 @@ export function useMultiDropdownField(
   options: SelectOptions,
   openSet: boolean
 ) {
-  const [field, , helpers] = useField<string[]>(name);
+  const [field, meta, helpers] = useField<string[]>(name);
   const selected = useMemo(() => field.value ?? [], [field.value]);
   const [filter, setFilter] = useState("");
 
@@ -94,5 +94,14 @@ export function useMultiDropdownField(
     [add]
   );
 
-  return { tags, filter, setFilter, add, remove, onSelectOption };
+  return {
+    tags,
+    filter,
+    setFilter,
+    add,
+    remove,
+    onSelectOption,
+    // A touched field with a Formik error: the chrome shows the error variant.
+    isError: meta.touched && meta.error !== undefined,
+  };
 }

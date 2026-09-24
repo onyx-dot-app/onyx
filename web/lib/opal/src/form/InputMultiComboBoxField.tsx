@@ -25,6 +25,7 @@ type InputMultiComboBoxFieldProps = Omit<
 function InputMultiComboBoxField({
   name,
   options,
+  variant,
   ...comboBoxProps
 }: InputMultiComboBoxFieldProps) {
   const bound = useMultiDropdownField(
@@ -35,6 +36,7 @@ function InputMultiComboBoxField({
   return (
     <InputMultiComboBox
       {...comboBoxProps}
+      variant={bound.isError ? "error" : variant}
       tags={bound.tags}
       options={options}
       value={bound.filter}

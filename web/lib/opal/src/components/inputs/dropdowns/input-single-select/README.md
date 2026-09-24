@@ -16,7 +16,8 @@ placeholder shows).
 With `defaultOption` the select never reads as empty: an empty `value` resolves
 to it, re-picking the default itself does nothing, and re-picking any other
 selected option falls back to the default. `onValueChange` never receives `""`.
-The trigger then always has a label, so `placeholder` becomes optional.
+`placeholder` stays required: it is the field's accessible name even when the
+default keeps the trigger filled.
 
 `options` is a list of loose options and titled dividers in any order, like
 `<option>`s beside `<optgroup>`s: a divider is `{ title, options }` and renders
@@ -28,6 +29,7 @@ placeholder with the validation error.
   value={strategy}
   onValueChange={setStrategy}
   defaultOption="reindex"
+  placeholder="Select a strategy"
   options={[
     { options: [{ value: "none", title: "Do not re-index" }] },
     {
@@ -49,7 +51,7 @@ placeholder with the validation error.
 | `onValueChange` | `(value: string) => void`           | —       | Fires on a pick, and with `""` on an unpick                     |
 | `options`       | `SelectOptions` | `[]`    | Loose options and titled dividers, in order                 |
 | `defaultOption` | `string`                            | —       | Option value an empty `value` resolves to; never empties then   |
-| `placeholder`   | `string`                            | —       | Trigger placeholder (required without `defaultOption`)          |
+| `placeholder`   | `string`                            | —       | Shown while empty; always the accessible name (required)        |
 | `isError`       | `boolean`                           | —       | External error state (overrides internal validation)            |
 | `rightChildren` | `React.ReactNode`                   | —       | Extra trigger-side controls                                     |
 

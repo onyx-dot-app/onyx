@@ -134,6 +134,7 @@ describe("InputSingleSelect", () => {
       render(
         <InputSingleSelect
           defaultOption="apple"
+          placeholder="Select an option"
           value=""
           options={mockOptions}
         />
@@ -147,6 +148,7 @@ describe("InputSingleSelect", () => {
       render(
         <InputSingleSelect
           defaultOption="apple"
+          placeholder="Select an option"
           value=""
           onValueChange={handleValueChange}
           options={mockOptions}
@@ -174,6 +176,7 @@ describe("InputSingleSelect", () => {
       render(
         <InputSingleSelect
           defaultOption="apple"
+          placeholder="Select an option"
           value="apple"
           onValueChange={handleValueChange}
           options={mockOptions}
@@ -194,6 +197,7 @@ describe("InputSingleSelect", () => {
       render(
         <InputSingleSelect
           defaultOption="apple"
+          placeholder="Select an option"
           value="banana"
           onValueChange={handleValueChange}
           options={mockOptions}

@@ -19,7 +19,8 @@
  * `defaultOption`, and then never reads as empty: an empty value resolves to
  * it, re-picking the default does nothing, and re-picking any other option
  * falls back to it. A ComboBox takes none: its text is the filter, and a
- * default would pre-fill it with a label the user never chose.
+ * default would pre-fill it with a label the user never chose. Either way
+ * `placeholder` names the field for assistive technology.
  *
  * With no options a ComboBox degrades to a plain input.
  */
@@ -60,7 +61,7 @@ import type { SelectOption, SingleDropdownProps } from "../types";
 import { ChevronIcon } from "@opal/components/buttons/chevron";
 import type { WithoutStyles } from "@opal/types";
 
-const SingleDropdown = ({
+function SingleDropdown({
   value,
   onChange,
   onValueChange,
@@ -79,7 +80,7 @@ const SingleDropdown = ({
   showOtherOptions = false,
   dropdownMaxHeight,
   ...rest
-}: WithoutStyles<SingleDropdownProps>) => {
+}: WithoutStyles<SingleDropdownProps>) {
   const typeIn = trigger === "type-in";
   // A button trigger has no text to commit, so its set is always closed.
   const strict = !typeIn || mode !== "open";
@@ -440,8 +441,13 @@ const SingleDropdown = ({
   return (
     <div
       ref={setRootRef}
+      role="presentation"
       className="opal-input-single-select"
       data-trigger={trigger}
+      // A button trigger is the whole field, padding included, so the
+      // toggle lives on the root; the input inside carries the keyboard,
+      // and the chevron and rightChildren stop propagation.
+      onClick={typeIn ? undefined : toggleDropdown}
     >
       <>
         <InputTypeIn
@@ -457,10 +463,7 @@ const SingleDropdown = ({
           // reopens it (e.g. after Escape) with the text kept for editing.
           onFocus={typeIn ? handleFocus : undefined}
           onClick={() => {
-            if (!typeIn) {
-              toggleDropdown();
-              return;
-            }
+            if (!typeIn) return;
             if (!isOpen) {
               setInputValue(selectedLabel);
               setIsOpen(true);
@@ -570,6 +573,6 @@ const SingleDropdown = ({
       )}
     </div>
   );
-};
+}
 
 export { SingleDropdown };

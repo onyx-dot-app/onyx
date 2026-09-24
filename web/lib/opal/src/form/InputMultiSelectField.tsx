@@ -21,12 +21,14 @@ type InputMultiSelectFieldProps = Omit<
 function InputMultiSelectField({
   name,
   options,
+  variant,
   ...selectProps
 }: InputMultiSelectFieldProps) {
   const bound = useMultiDropdownField(name, options, false);
   return (
     <InputMultiSelect
       {...selectProps}
+      variant={bound.isError ? "error" : variant}
       tags={bound.tags}
       options={options}
       onSelectOption={bound.onSelectOption}

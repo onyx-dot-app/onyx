@@ -94,8 +94,7 @@ export type InputSingleComboBoxProps = InputSingleBaseProps & {
  * `InputSingleSelect`: nothing to type; the trigger is pressed to open the
  * full set, like a native `<select>`. With a `defaultOption` it never reads
  * as empty: an empty `value` resolves to it, re-picking the default does
- * nothing, and re-picking any other selected option falls back to it. The
- * trigger then always has a label, so `placeholder` is optional.
+ * nothing, and re-picking any other selected option falls back to it.
  */
 export type InputSingleSelectProps = InputSingleBaseProps & {
   mode?: never;
@@ -104,19 +103,14 @@ export type InputSingleSelectProps = InputSingleBaseProps & {
   searchIcon?: never;
   separatorLabel?: never;
   showOtherOptions?: never;
-} & (
-    | {
-        /** The option value an empty `value` resolves to. Must be in the set. */
-        defaultOption: string;
-        /** Trigger placeholder. */
-        placeholder?: string;
-      }
-    | {
-        defaultOption?: undefined;
-        /** Trigger placeholder (required without a `defaultOption`). */
-        placeholder: string;
-      }
-  );
+  /** The option value an empty `value` resolves to. Must be in the set. */
+  defaultOption?: string;
+  /**
+   * Shown while empty, and always the field's accessible name, so it is
+   * required even with a `defaultOption` that keeps the trigger filled.
+   */
+  placeholder: string;
+};
 
 /** The internal single implementation: either public prop set plus its trigger. */
 export type SingleDropdownProps =
