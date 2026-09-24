@@ -1,73 +1,10 @@
-import { connectorConfigs } from "@/lib/connectors/connectors";
 import { credentialTemplates } from "@/lib/connectors/credentials";
-import {
-  createConnectorInitialValues,
-  getFileTypeDefinitionForField,
-  getSelectedTabValue,
-  getTabValueUpdates,
-} from "@/lib/connectors/utils";
-import type { TabOption } from "@/lib/connectors/types";
+import { getFileTypeDefinitionForField } from "@/lib/connectors/utils";
 import { FileTypeCategory } from "@/lib/connectors/types";
 import { getSourceMetadata } from "@/lib/sources";
 import { ValidSources, validAutoSyncSources } from "@/lib/types";
 
-function oneDriveScopeField(): TabOption {
-  const field = connectorConfigs[ValidSources.OneDrive].values[0];
-  if (field?.type !== "tab") {
-    throw new Error("OneDrive scope must use tabs");
-  }
-  return field;
-}
-
 describe("OneDrive connector metadata", () => {
-  it("submits tenant-wide scope explicitly by default", () => {
-    expect(createConnectorInitialValues(ValidSources.OneDrive)).toMatchObject({
-      all_users: true,
-      users: [],
-    });
-  });
-
-  it("restores Specific scope from an existing config", () => {
-    expect(
-      getSelectedTabValue(oneDriveScopeField(), {
-        all_users: false,
-        users: ["owner@example.com"],
-      })
-    ).toBe("specific");
-  });
-
-  it("defaults existing configs without all_users to General", () => {
-    expect(getSelectedTabValue(oneDriveScopeField(), { users: [] })).toBe(
-      "general"
-    );
-  });
-
-  it("clears users for General and submits false for Specific", () => {
-    const field = oneDriveScopeField();
-
-    expect(
-      getTabValueUpdates(field, "general", {
-        all_users: false,
-        users: ["owner@example.com"],
-      })
-    ).toEqual({ all_users: true, users: [] });
-    expect(
-      getTabValueUpdates(field, "specific", {
-        all_users: true,
-        users: [],
-      })
-    ).toEqual({ all_users: false });
-  });
-
-  it("does not add selection state to tabs that do not opt in", () => {
-    const initialValues = createConnectorInitialValues(
-      ValidSources.GoogleDrive
-    );
-
-    expect(initialValues).not.toHaveProperty("indexing_scope");
-    expect(initialValues).not.toHaveProperty("include_shared_drives");
-  });
-
   it("defines both app-only credential methods", () => {
     expect(credentialTemplates[ValidSources.OneDrive]).toMatchObject({
       authentication_method: "client_secret",

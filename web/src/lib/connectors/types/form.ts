@@ -90,28 +90,23 @@ export interface StringTabOption extends Option {
   default?: string;
 }
 
-export type ConnectorValueField =
-  | BooleanOption
-  | ListOption
-  | StringPairListOption
-  | TextOption
-  | NumberOption
-  | SelectOption
-  | MultiSelectOption
-  | FileOption
-  | StringTabOption;
-
-export type TabSelectionValue = string | number | boolean | null;
-
 export interface TabOption extends Option {
   type: "tab";
   defaultTab?: string;
-  selectionField?: string;
   tabs: {
     label: string;
     value: string;
-    selectionValue?: TabSelectionValue;
-    fields: ConnectorValueField[];
+    fields: (
+      | BooleanOption
+      | ListOption
+      | StringPairListOption
+      | TextOption
+      | NumberOption
+      | SelectOption
+      | MultiSelectOption
+      | FileOption
+      | StringTabOption
+    )[];
   }[];
   default?: [];
 }
@@ -120,8 +115,28 @@ export interface ConnectionConfiguration {
   description: string;
   subtext?: string;
   initialConnectorName?: string; // a key in the credential to prepopulate the connector name field
-  values: (ConnectorValueField | TabOption)[];
-  advanced_values: (ConnectorValueField | TabOption)[];
+  values: (
+    | BooleanOption
+    | ListOption
+    | StringPairListOption
+    | TextOption
+    | NumberOption
+    | SelectOption
+    | MultiSelectOption
+    | FileOption
+    | TabOption
+  )[];
+  advanced_values: (
+    | BooleanOption
+    | ListOption
+    | StringPairListOption
+    | TextOption
+    | NumberOption
+    | SelectOption
+    | MultiSelectOption
+    | FileOption
+    | TabOption
+  )[];
   overrideDefaultFreq?: number;
   advancedValuesVisibleCondition?: (
     values: any,
