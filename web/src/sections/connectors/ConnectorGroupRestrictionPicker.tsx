@@ -6,7 +6,7 @@ import {
   Button,
   Card,
   EmptyMessageCard,
-  InputSingleSelect,
+  InputSingleComboBox,
   InputSwitch,
 } from "@opal/components";
 import { ContentAction, InputHorizontal } from "@opal/layouts";
@@ -39,7 +39,7 @@ export function ConnectorGroupRestrictionPicker() {
     .filter((group) => !selectedIds.has(group.id))
     .map((group) => ({
       value: String(group.id),
-      label: group.name,
+      title: group.name,
       description: t("memberCount", { count: group.users.length }),
     }));
 
@@ -70,7 +70,7 @@ export function ConnectorGroupRestrictionPicker() {
 
       {restrict.value && (
         <>
-          <InputSingleSelect
+          <InputSingleComboBox
             value=""
             onValueChange={addGroup}
             options={options}
