@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field
 
-from onyx.connectors.microsoft_utils.drive_delta import DriveDeltaPage
+from onyx.connectors.microsoft_utils.drive_delta import DriveDeltaItem, DriveDeltaPage
 from onyx.connectors.microsoft_utils.graph_env import (
     DEFAULT_AUTHORITY_HOST,
     DEFAULT_GRAPH_API_HOST,
@@ -66,6 +66,13 @@ class OneDriveDeltaResult(BaseModel):
     page: DriveDeltaPage
     next_cursor: str | None = None
     resynced: bool = False
+
+
+class OneDriveDiscoveredFile(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    drive: OneDriveDrive
+    item: DriveDeltaItem
 
 
 class OneDrivePermission(BaseModel):

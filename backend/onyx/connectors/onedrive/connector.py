@@ -6,7 +6,6 @@ from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
-from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import (
     CheckpointedConnector,
     CheckpointOutput,
@@ -48,6 +47,7 @@ from onyx.connectors.models import (
 )
 from onyx.connectors.onedrive.models import (
     OneDriveCheckpoint,
+    OneDriveDiscoveredFile,
     OneDriveDrive,
     OneDriveSettings,
     OneDriveUser,
@@ -356,12 +356,14 @@ class OneDriveConnector(
         parent = item_parent_id(drive.id, item)
         return drive_item_document(drive_item, drive, content, parent)
 
-    def _read_delta_page(
+    def _discover_delta_page(
         self,
         checkpoint: OneDriveCheckpoint,
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
-    ) -> Generator[Document | HierarchyNode | ConnectorFailure, None, None]:
+    ) -> Generator[
+        OneDriveDiscoveredFile | HierarchyNode | ConnectorFailure, None, None
+    ]:
         user = checkpoint.current_user
         drive = checkpoint.current_drive
         assert user is not None and drive is not None
@@ -419,18 +421,20 @@ class OneDriveConnector(
             if item.id in checkpoint.seen_document_ids:
                 continue
             checkpoint.seen_document_ids.add(item.id)
-            output = self._file_output(item, drive)
-            if output is not None:
-                yield output
+            yield OneDriveDiscoveredFile(drive=drive, item=item)
         if result.next_cursor is None:
             self._finish_drive(checkpoint)
 
-    def load_from_checkpoint(
+    def _discover_from_checkpoint(
         self,
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: OneDriveCheckpoint,
-    ) -> CheckpointOutput[OneDriveCheckpoint]:
+    ) -> Generator[
+        OneDriveDiscoveredFile | HierarchyNode | ConnectorFailure,
+        None,
+        OneDriveCheckpoint,
+    ]:
         if checkpoint.current_user is None:
             if self.settings.indexes_all_users:
                 self._select_discovered_user(checkpoint)
@@ -440,76 +444,33 @@ class OneDriveConnector(
         if checkpoint.current_drive is None:
             yield from self._open_current_drive(checkpoint)
             return checkpoint
-        yield from self._read_delta_page(checkpoint, start, end)
+        yield from self._discover_delta_page(checkpoint, start, end)
         return checkpoint
 
-    def _users_for_full_walk(self) -> Generator[OneDriveUser, None, None]:
-        if not self.settings.indexes_all_users:
-            for identifier in self.settings.users:
-                user = self.ops.get_user(identifier=identifier)
-                if user is None:
-                    raise ConnectorValidationError(f"No user matches `{identifier}`.")
-                yield user
-            return
-        next_link: str | None = None
-        while True:
-            page = self.ops.list_users(next_link=next_link)
-            yield from page.users
-            next_link = page.next_link
-            if next_link is None:
-                return
-
-    def _retrieve_slim_drive(
+    def load_from_checkpoint(
         self,
-        user: OneDriveUser,
-        drive: OneDriveDrive,
-        callback: IndexingHeartbeatInterface | None,
-    ) -> GenerateSlimDocumentOutput:
-        yield [user_root_node(user, drive)]
-        cursor = build_delta_start_url(
-            f"{self.settings.graph_api_host}/{GRAPH_API_VERSION}",
-            drive.id,
-            page_size=self.settings.batch_size,
-            select_fields=DRIVE_DELTA_SELECT_FIELDS,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: OneDriveCheckpoint,
+    ) -> CheckpointOutput[OneDriveCheckpoint]:
+        for item in self._discover_from_checkpoint(start, end, checkpoint):
+            if not isinstance(item, OneDriveDiscoveredFile):
+                yield item
+                continue
+            output = self._file_output(item.item, item.drive)
+            if output is not None:
+                yield output
+        return checkpoint
+
+    def _slim_document(self, discovered: OneDriveDiscoveredFile) -> SlimDocument:
+        item = discovered.item
+        drive = discovered.drive
+        return SlimDocument(
+            id=item.id,
+            external_access=ExternalAccess.empty(),
+            parent_hierarchy_raw_node_id=item_parent_id(drive.id, item),
+            doc_created_at=item.created_datetime,
         )
-        seen_document_ids: set[str] = set()
-        seen_hierarchy_raw_ids: set[str] = {drive_root_id(drive.id)}
-        while cursor:
-            if callback and callback.should_stop():
-                return
-            result = self.ops.get_delta_page(
-                drive_id=drive.id,
-                page_url=cursor,
-                page_size=self.settings.batch_size,
-            )
-            batch: list[SlimDocument | HierarchyNode] = []
-            for item in result.page.items:
-                if item.is_tombstone:
-                    continue
-                if item.is_folder:
-                    raw_id = hierarchy_item_id(drive.id, item.id)
-                    if not self._path_allowed(item) or raw_id in seen_hierarchy_raw_ids:
-                        continue
-                    seen_hierarchy_raw_ids.add(raw_id)
-                    batch.append(folder_node(drive, item))
-                    continue
-                if (
-                    item.is_file
-                    and item.id not in seen_document_ids
-                    and self._item_allowed(item, None, None)
-                ):
-                    seen_document_ids.add(item.id)
-                    batch.append(
-                        SlimDocument(
-                            id=item.id,
-                            external_access=ExternalAccess.empty(),
-                            parent_hierarchy_raw_node_id=item_parent_id(drive.id, item),
-                            doc_created_at=item.created_datetime,
-                        )
-                    )
-            if batch:
-                yield batch
-            cursor = result.next_cursor
 
     def retrieve_all_slim_docs(
         self,
@@ -518,37 +479,22 @@ class OneDriveConnector(
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         del start, end
-        for user in self._users_for_full_walk():
-            try:
-                drive = self.ops.get_default_drive(user_id=user.id)
-            except OneDriveGraphError as error:
-                if (
-                    not self.settings.indexes_all_users
-                    or not error.is_permanent_refusal
-                ):
-                    raise
-                logger.info(
-                    "OneDrive: skipping inaccessible drive for %s (%s)",
-                    user.user_principal_name,
-                    error.code,
+        checkpoint = self.build_dummy_checkpoint()
+        while checkpoint.has_more:
+            if callback and callback.should_stop():
+                return
+            batch: list[SlimDocument | HierarchyNode] = []
+            for item in self._discover_from_checkpoint(0, 0, checkpoint):
+                if isinstance(item, ConnectorFailure):
+                    raise RuntimeError(
+                        f"OneDrive slim retrieval failed: {item.failure_message}"
+                    ) from item.exception
+                batch.append(
+                    self._slim_document(item)
+                    if isinstance(item, OneDriveDiscoveredFile)
+                    else item
                 )
-                continue
-            if drive is None:
-                if not self.settings.indexes_all_users:
-                    raise ConnectorValidationError(
-                        f"`{user.user_principal_name}` has no OneDrive."
-                    )
-                continue
-            try:
-                yield from self._retrieve_slim_drive(user, drive, callback)
-            except OneDriveGraphError as error:
-                if (
-                    not self.settings.indexes_all_users
-                    or not error.is_permanent_refusal
-                ):
-                    raise
-                logger.info(
-                    "OneDrive: skipping inaccessible delta for %s (%s)",
-                    user.user_principal_name,
-                    error.code,
-                )
+            if batch:
+                yield batch
+            if callback:
+                callback.progress("onedrive_slim_retrieval", 1)
