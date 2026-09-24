@@ -1,3 +1,5 @@
+from typing import Any
+
 import httpx
 
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -50,3 +52,22 @@ class ToolManager:
         )
         response.raise_for_status()
         return response
+
+    @staticmethod
+    def create_custom(
+        name: str,
+        definition: dict[str, Any],
+        user_performing_action: DATestUser,
+    ) -> int:
+        response = client.post(
+            url=f"{API_SERVER_URL}/admin/tool/custom",
+            headers=user_performing_action.headers,
+            json={
+                "name": name,
+                "definition": definition,
+                "custom_headers": [],
+                "passthrough_auth": False,
+            },
+        )
+        response.raise_for_status()
+        return int(response.json()["id"])
