@@ -57,7 +57,7 @@ export class PATManagementPage {
   async selectExpiration(optionLabel: string): Promise<void> {
     await this.page
       .getByRole("combobox")
-      .filter({ hasText: "30 days" })
+      .and(this.page.locator('[value="30 days"]'))
       .click();
     await this.page.getByRole("option", { name: optionLabel }).click();
   }
@@ -66,7 +66,7 @@ export class PATManagementPage {
   async chooseLimitedAccess(): Promise<void> {
     await this.page
       .getByRole("combobox")
-      .filter({ hasText: "Full access" })
+      .and(this.page.locator('[value="Full access"]'))
       .click();
     await this.page.getByRole("option", { name: "Limited access" }).click();
   }

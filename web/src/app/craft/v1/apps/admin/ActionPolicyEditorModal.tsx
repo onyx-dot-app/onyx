@@ -11,7 +11,7 @@ import {
   InputPasswordTypeIn,
   Text,
 } from "@opal/components";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelect } from "@opal/components";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import PolicyToggle from "@/sections/actions/PolicyToggle";
 import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
@@ -314,22 +314,17 @@ function PolicyEditor({ items, policies, onChange }: PolicyEditorProps) {
         {t("permissions.description")}
       </Text>
 
-      <InputSelect
+      <InputSingleSelect
         value={bulkValue}
         onValueChange={(value) => {
           if (value === "ALWAYS" || value === "ASK") applyBulk(value);
         }}
-      >
-        <InputSelect.Trigger placeholder={t("permissions.customOption")} />
-        <InputSelect.Content>
-          <InputSelect.Item value="ALWAYS">
-            {t("permissions.autoApproveOption")}
-          </InputSelect.Item>
-          <InputSelect.Item value="ASK">
-            {t("permissions.askOption")}
-          </InputSelect.Item>
-        </InputSelect.Content>
-      </InputSelect>
+        placeholder={t("permissions.customOption")}
+        options={[
+          { value: "ALWAYS", title: t("permissions.autoApproveOption") },
+          { value: "ASK", title: t("permissions.askOption") },
+        ]}
+      />
 
       <SimpleCollapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
         <SimpleCollapsible.Header

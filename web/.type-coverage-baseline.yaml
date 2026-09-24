@@ -22,7 +22,6 @@ packages:
   src/app/config: 100
   src/app/connector: 100
   src/app/craft: 99.2
-  src/app/dbg: 100
   src/app/ee: 95.8
   src/app/federated: 97
   src/app/mcp: 99.5
@@ -101,7 +100,7 @@ packages:
   src/refresh-components/buttons: 99.7
   src/refresh-components/cards: 98.4
   src/refresh-components/commandmenu: 99.7
-  src/refresh-components/form: 98.5
+  src/refresh-components/form: 98.6
   src/refresh-components/inputs: 100
   src/refresh-components/messages: 100
   src/refresh-components/modals: 100
@@ -127,5 +126,5 @@ packages:
   src/sections/skills: 99.8
   src/sections/usage: 99.6
   src/views: 99.4
-  src/views/admin: 98.4
+  src/views/admin: 98.3
   types: 100

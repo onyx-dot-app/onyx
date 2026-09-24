@@ -423,7 +423,7 @@ test.describe("Index Settings — switchover strategies @exclusive", () => {
     await expect(applyButton).toBeEnabled();
 
     // Dropdown should show the REINDEX option as selected
-    await expect(page.getByRole("combobox").first()).toContainText(
+    await expect(page.getByRole("combobox").first()).toHaveValue(
       /re-index all connectors/i
     );
   });
