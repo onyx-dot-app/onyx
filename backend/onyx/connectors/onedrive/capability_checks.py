@@ -62,11 +62,7 @@ def _candidate_users(
     gateway = _gateway(context)
     config = _config(context)
     configured = normalize_configured_users(config.users)
-    if not config.all_users:
-        if not configured:
-            raise ConnectorValidationError(
-                "Select all users or list at least one user."
-            )
+    if configured:
         for identifier in configured:
             try:
                 user = gateway.get_user(identifier=identifier)

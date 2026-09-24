@@ -23,9 +23,12 @@ class OneDriveConnectorConfig(BaseModel):
     model_config = ConfigDict(extra="ignore", frozen=True, strict=True)
 
     users: list[str] = Field(default_factory=list)
-    all_users: bool = True
     authority_host: str = DEFAULT_AUTHORITY_HOST
     graph_api_host: str = DEFAULT_GRAPH_API_HOST
+
+    @property
+    def indexes_all_users(self) -> bool:
+        return not self.users
 
 
 class OneDriveSettings(OneDriveConnectorConfig):

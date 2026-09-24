@@ -52,7 +52,6 @@ from onyx.connectors.onedrive.models import (
 )
 from onyx.connectors.onedrive.scope import normalize_configured_users
 from onyx.connectors.onedrive.source_operations import (
-    CONFIG_ALL_USERS,
     CONFIG_AUTHORITY_HOST,
     CONFIG_GRAPH_API_HOST,
     CONFIG_USERS,
@@ -71,15 +70,6 @@ ROOT_NODE_SUFFIX = "root"
 HIERARCHY_ID_SEPARATOR = ":"
 METADATA_DRIVE = "drive"
 METADATA_PATH = "path"
-
-
-def _validate_user_scope(settings: OneDriveSettings) -> None:
-    if settings.all_users and settings.users:
-        raise ConnectorValidationError(
-            "Do not list users when all-user indexing is selected."
-        )
-    if not settings.all_users and not settings.users:
-        raise ConnectorValidationError("Select all users or list at least one user.")
 
 
 def hierarchy_item_id(drive_id: str, item_id: str) -> str:
@@ -189,7 +179,6 @@ class OneDriveConnector(
     def __init__(
         self,
         users: list[str] | None = None,
-        all_users: bool = True,
         excluded_paths: list[str] | None = None,
         authority_host: str = DEFAULT_AUTHORITY_HOST,
         graph_api_host: str = DEFAULT_GRAPH_API_HOST,
@@ -198,7 +187,6 @@ class OneDriveConnector(
         normalized_users = normalize_configured_users(users)
         self.settings = OneDriveSettings(
             users=normalized_users,
-            all_users=all_users,
             excluded_paths=[
                 path.strip() for path in excluded_paths or [] if path.strip()
             ],
@@ -206,7 +194,6 @@ class OneDriveConnector(
             graph_api_host=graph_api_host.rstrip("/"),
             batch_size=batch_size,
         )
-        _validate_user_scope(self.settings)
         resolve_microsoft_environment(
             self.settings.graph_api_host, self.settings.authority_host
         )
@@ -234,7 +221,6 @@ class OneDriveConnector(
             connector_specific_config={
                 CONFIG_AUTHORITY_HOST: self.settings.authority_host,
                 CONFIG_GRAPH_API_HOST: self.settings.graph_api_host,
-                CONFIG_ALL_USERS: self.settings.all_users,
                 CONFIG_USERS: self.settings.users,
             },
         )
@@ -243,7 +229,6 @@ class OneDriveConnector(
         resolve_microsoft_environment(
             self.settings.graph_api_host, self.settings.authority_host
         )
-        _validate_user_scope(self.settings)
 
     def build_dummy_checkpoint(self) -> OneDriveCheckpoint:
         return OneDriveCheckpoint(has_more=True)
@@ -306,7 +291,7 @@ class OneDriveConnector(
         except OneDriveGraphError as error:
             if not error.is_permanent_refusal:
                 raise
-            if not self.settings.all_users:
+            if not self.settings.indexes_all_users:
                 yield _entity_failure(user, str(error), error)
             else:
                 logger.info(
@@ -317,7 +302,7 @@ class OneDriveConnector(
             self._clear_current_user(checkpoint)
             return
         if drive is None:
-            if not self.settings.all_users:
+            if not self.settings.indexes_all_users:
                 yield _entity_failure(
                     user, f"`{user.user_principal_name}` has no OneDrive."
                 )
@@ -396,7 +381,7 @@ class OneDriveConnector(
         except OneDriveGraphError as error:
             if not error.is_permanent_refusal:
                 raise
-            if not self.settings.all_users:
+            if not self.settings.indexes_all_users:
                 yield _entity_failure(user, str(error), error)
             else:
                 logger.info(
@@ -445,7 +430,7 @@ class OneDriveConnector(
         checkpoint: OneDriveCheckpoint,
     ) -> CheckpointOutput[OneDriveCheckpoint]:
         if checkpoint.current_user is None:
-            if self.settings.all_users:
+            if self.settings.indexes_all_users:
                 self._select_discovered_user(checkpoint)
             else:
                 yield from self._select_explicit_user(checkpoint)
@@ -457,7 +442,7 @@ class OneDriveConnector(
         return checkpoint
 
     def _users_for_full_walk(self) -> Generator[OneDriveUser, None, None]:
-        if not self.settings.all_users:
+        if not self.settings.indexes_all_users:
             for identifier in self.settings.users:
                 user = self.ops.get_user(identifier=identifier)
                 if user is None:
@@ -535,7 +520,10 @@ class OneDriveConnector(
             try:
                 drive = self.ops.get_default_drive(user_id=user.id)
             except OneDriveGraphError as error:
-                if not self.settings.all_users or not error.is_permanent_refusal:
+                if (
+                    not self.settings.indexes_all_users
+                    or not error.is_permanent_refusal
+                ):
                     raise
                 logger.info(
                     "OneDrive: skipping inaccessible drive for %s (%s)",
@@ -544,7 +532,7 @@ class OneDriveConnector(
                 )
                 continue
             if drive is None:
-                if not self.settings.all_users:
+                if not self.settings.indexes_all_users:
                     raise ConnectorValidationError(
                         f"`{user.user_principal_name}` has no OneDrive."
                     )
@@ -552,7 +540,10 @@ class OneDriveConnector(
             try:
                 yield from self._retrieve_slim_drive(user, drive, callback)
             except OneDriveGraphError as error:
-                if not self.settings.all_users or not error.is_permanent_refusal:
+                if (
+                    not self.settings.indexes_all_users
+                    or not error.is_permanent_refusal
+                ):
                     raise
                 logger.info(
                     "OneDrive: skipping inaccessible delta for %s (%s)",
