@@ -71,6 +71,7 @@ export const SWR_KEYS = {
   indexingStatus: "/api/manage/admin/connector/indexing-status",
   adminConnectorStatus: "/api/manage/admin/connector/status",
   federatedConnectors: "/api/federated",
+  connectorGroupRestrictions: "/api/manage/connector-group-restrictions",
 
   // ── Google Connectors ─────────────────────────────────────────────────────
   googleConnectorCredentials: (service: "gmail" | "google-drive") =>

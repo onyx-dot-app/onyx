@@ -246,9 +246,6 @@ export function useFederatedConnector(
   };
 }
 
-const CONNECTOR_GROUP_RESTRICTIONS_URL =
-  "/api/manage/connector-group-restrictions";
-
 interface ConnectorGroupRestrictionsStatus {
   enabled: boolean;
 }
@@ -260,7 +257,7 @@ interface ConnectorGroupRestrictionsStatus {
  */
 export function useConnectorGroupRestrictionsEnabled(): boolean {
   const { data } = useSWR<ConnectorGroupRestrictionsStatus>(
-    CONNECTOR_GROUP_RESTRICTIONS_URL,
+    SWR_KEYS.connectorGroupRestrictions,
     errorHandlingFetcher
   );
   return data?.enabled ?? false;
