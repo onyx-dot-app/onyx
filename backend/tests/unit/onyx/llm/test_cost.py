@@ -157,10 +157,26 @@ class TestComputeCostCents:
         assert input_cents == pytest.approx(1.08)
         assert output_cents == 0
 
-    def test_bedrock_model_priced_via_provider(self) -> None:
+    def test_bedrock_model_priced_via_provider(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # Bedrock names aren't self-identifying — without custom_llm_provider
-        # litellm raises and the cost silently collapses to $0. Haiku 4.5:
-        # $1/Mtok in, $5/Mtok out → 0.1c in, 0.5c out for 1000 tok.
+        # litellm raises and the cost silently collapses to $0. litellm's
+        # price map drifts upstream, so stub the lookup and assert the
+        # provider plumbing rather than live prices.
+        import litellm
+
+        def _fake_cost_per_token(
+            model: str,  # noqa: ARG001
+            custom_llm_provider: str | None,
+            prompt_tokens: int,
+            completion_tokens: int,
+            **_kw: object,
+        ) -> tuple[float, float]:
+            assert custom_llm_provider == "bedrock"
+            return prompt_tokens * 1e-6, completion_tokens * 5e-6
+
+        monkeypatch.setattr(litellm, "cost_per_token", _fake_cost_per_token)
         in_cents, out_cents = compute_cost_cents(
             model="anthropic.claude-haiku-4-5-20251001-v1:0",
             provider="bedrock",
