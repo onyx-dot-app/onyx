@@ -148,6 +148,9 @@ class CredentialSnapshot(CredentialBase):
     user_email: str | None = None
     time_created: datetime
     time_updated: datetime
+    # Deprecated shim: the flag was removed and nothing reads it. Kept so the
+    # published /manage/credential response stays additive; always false.
+    curator_public: bool = Field(default=False, deprecated=True)
 
     @classmethod
     def from_credential_db_model(

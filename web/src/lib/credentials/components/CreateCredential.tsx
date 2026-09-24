@@ -23,9 +23,9 @@ import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import {
-  GroupsMultiSelect,
-  GroupsMultiSelectFormType,
-} from "@/components/GroupsMultiSelect";
+  CredentialGroupsField,
+  CredentialGroupsFormType,
+} from "@/lib/credentials/components/CredentialGroupsField";
 import { useUser } from "@/providers/UserProvider";
 import CardSection from "@/components/admin/CardSection";
 import { CredentialFieldsRenderer } from "@/lib/credentials/components/CredentialFieldsRenderer";
@@ -59,7 +59,7 @@ const CreateButton = ({
   );
 };
 
-type CreateCredentialFormValues = GroupsMultiSelectFormType & {
+type CreateCredentialFormValues = CredentialGroupsFormType & {
   name: string;
   [key: string]: unknown;
 };
@@ -251,7 +251,10 @@ export default function CreateCredential({
                         />
                       )}
                       {(showAdvancedOptions || !isGlobalHolder) && (
-                        <GroupsMultiSelect formikProps={formikProps} />
+                        <CredentialGroupsField
+                          formikProps={formikProps}
+                          isGlobalHolder={isGlobalHolder}
+                        />
                       )}
                     </div>
                   )}
