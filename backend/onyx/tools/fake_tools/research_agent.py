@@ -707,7 +707,7 @@ def run_research_agent_calls(
             ),
         )
         for research_agent_call, parent_tool_call_id in zip(
-            research_agent_calls, parent_tool_call_ids, strict=False
+            research_agent_calls, parent_tool_call_ids, strict=True
         )
     ]
 
