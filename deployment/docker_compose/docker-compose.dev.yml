@@ -92,17 +92,17 @@ services:
     ports:
       - "${REDIS_HOST_PORT:-6379}:6379"
 
-  minio:
-    # Use different ports to avoid conflicts with model servers.
+  object-store:
+    # Host port 9004 avoids the model server on 9000. Older ods sets only the
+    # MINIO_* ports, so object-store takes the console port MinIO no longer publishes.
     # TODO(security): prefix 127.0.0.1: to bind loopback, not 0.0.0.0 (LAN-exposed).
     ports:
-      - "${MINIO_API_HOST_PORT:-9004}:9000"
-      - "${MINIO_CONSOLE_HOST_PORT:-9005}:9001"
-    healthcheck:
-      # The base healthcheck has no start_period, so one is needed here for
-      # start_interval to apply at all.
-      start_period: 30s
-      start_interval: 1s
+      - "${OBJECT_STORE_HOST_PORT:-${MINIO_CONSOLE_HOST_PORT:-9004}}:8333"
+
+  minio:
+    # TODO(security): prefix 127.0.0.1: to bind loopback, not 0.0.0.0 (LAN-exposed).
+    ports:
+      - "${MINIO_API_HOST_PORT:-9005}:9000"
 
   code-interpreter:
     ports:

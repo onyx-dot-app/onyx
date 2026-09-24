@@ -46,9 +46,12 @@ var InfraServices = []ServiceSpec{
 	{Name: "inference_model_server", Ports: []PortSpec{
 		{ContainerPort: 9000, DefaultHost: 9000, ComposeVar: "MODEL_SERVER_HOST_PORT", AppVar: "MODEL_SERVER_PORT"},
 	}},
+	{Name: "object-store", Ports: []PortSpec{
+		{ContainerPort: 8333, DefaultHost: 9004, ComposeVar: "OBJECT_STORE_HOST_PORT", AppVar: "S3_ENDPOINT_URL", AppFormat: "http://localhost:%d"},
+	}},
+	// The legacy store the app falls back to until its files are copied.
 	{Name: "minio", Ports: []PortSpec{
-		{ContainerPort: 9000, DefaultHost: 9004, ComposeVar: "MINIO_API_HOST_PORT", AppVar: "S3_ENDPOINT_URL", AppFormat: "http://localhost:%d"},
-		{ContainerPort: 9001, DefaultHost: 9005, ComposeVar: "MINIO_CONSOLE_HOST_PORT"},
+		{ContainerPort: 9000, DefaultHost: 9005, ComposeVar: "MINIO_API_HOST_PORT", AppVar: "S3_LEGACY_ENDPOINT_URL", AppFormat: "http://localhost:%d"},
 	}},
 	{Name: "indexing_model_server", Ports: []PortSpec{}},
 	{Name: "code-interpreter", Ports: []PortSpec{
@@ -155,7 +158,7 @@ func normalizeProjectName(name string) string {
 // running with a mapped host port (via `docker port`) and reuses it. Only
 // when the container is not running does it probe for a free port. A global
 // claimed set prevents cross-service collisions (e.g., inference_model_server
-// and minio both defaulting near port 9000).
+// and object-store both defaulting near port 9000).
 func FindAvailablePorts() (*ResolvedPorts, error) {
 	resolved := NewResolvedPorts()
 	claimed := make(map[int]bool)
