@@ -368,7 +368,7 @@ def run_coding_agent_call(
                         max_tokens=2048,
                     )
 
-                    rendered_text = False
+                    rendered_text: bool = False
                     while True:
                         try:
                             packet = next(step_generator)
