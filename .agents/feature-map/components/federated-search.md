@@ -58,7 +58,7 @@ everyone without per-user connection).
 | GET | `/federated/{id}/credentials/schema`, `/federated/sources/{source}/credentials/schema` | | Credential field specs. |
 | POST | `/federated/sources/{source}/credentials/validate` | `validate_credentials` | Admin only; instantiates the connector to check credentials. |
 | GET | `/federated/{id}/authorize` | `get_authorize_url` | **Any authenticated user** (`BASIC_ACCESS`). Returns the per-user OAuth URL. |
-| POST | `/federated/callback` | `handle_oauth_callback_generic` | Any authenticated user. State-verified OAuth callback; stores the per-user token. |
+| POST | `/federated/callback` | `handle_oauth_callback_generic` | Any authenticated user. State-verified OAuth callback; stores the per-user token. Returns only `source`, `expires_at`, `token_type`, `scope`, never a token. |
 | GET | `/federated/oauth-status` | `get_user_oauth_status` | Any authenticated user. Per-connector: does *this* user have a token, and if not, an authorize URL. Polled by `AccountPopover.tsx` in the account menu. |
 | DELETE | `/federated/{id}/oauth-token` | `disconnect_oauth_token` | Any authenticated user. Disconnects their own token. |
 
@@ -303,6 +303,12 @@ future source makes it non-empty) merge the same way, but arrive through
 7. **Refresh tokens are captured but never persisted or used.** Do not assume a
    background job refreshes federated tokens; there is none. An expired token
    requires the user to reauthorize through `/federated/{id}/authorize`.
+   Only a Slack app with token rotation turned on (off by default) sends a
+   refresh token and 12-hour expiry, so only those apps hit this.
+8. **The OAuth callback never returns a token to the browser.** The provider's
+   access and refresh tokens are stored encrypted and stay server side;
+   `OAuthCallbackResult` has no token fields, and the web callback page reads
+   only `source`. Do not add a token field to the response model.
 
 ---
 
