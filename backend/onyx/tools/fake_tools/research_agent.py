@@ -468,7 +468,8 @@ def run_research_agent_call(
                         )
                         msg_history.append(think_tool_response_msg)
                         think_span.span_data.output = THINK_TOOL_RESPONSE_MESSAGE
-                    reasoning_cycles += 1
+                    # The think tool token processor streams the arguments as reasoning,
+                    # so run_llm_step already counted this step in has_reasoned.
                     most_recent_reasoning = llm_step_result.reasoning
                     continue
                 else:
