@@ -118,12 +118,12 @@ def _folder_item() -> DriveDeltaItem:
 
 def test_onedrive_scope_is_ordered_normalized_and_deduplicated() -> None:
     assert normalize_configured_users(
-        [" First@Example.com ", "second@example.com", "first@example.com"]
+        [" First@Example.com ", "", "second@example.com", "first@example.com"]
     ) == ["first@example.com", "second@example.com"]
     with pytest.raises(ConnectorValidationError):
         normalize_configured_users(["not-an-email"])
-    with pytest.raises(ConnectorValidationError, match="cannot be blank"):
-        normalize_configured_users([" "])
+    with pytest.raises(ConnectorValidationError, match="at least one email"):
+        normalize_configured_users([" ", ""])
 
 
 def test_onedrive_scope_requires_consistent_all_users_setting() -> None:
@@ -570,13 +570,31 @@ def test_onedrive_capability_denial_is_actionable() -> None:
         check.run(context)
 
 
+def test_onedrive_capability_config_rejects_wrong_field_types() -> None:
+    gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
+    context = CapabilityCheckContext(
+        source=DocumentSource.ONEDRIVE,
+        credential_json={},
+        connector_specific_config={"all_users": "false"},
+        source_operations=gateway,
+    )
+    check = next(
+        check
+        for check in build_onedrive_indexing_checks()
+        if check.check_id == "onedrive_configured_users"
+    )
+
+    with pytest.raises(ConnectorValidationError, match="configuration"):
+        check.run(context)
+
+
 def test_onedrive_drive_check_skips_unavailable_discovered_users() -> None:
     gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
     gateway.list_users.return_value = OneDriveUserPage(
         users=[_user("first@example.com"), _user("second@example.com")]
     )
     gateway.get_default_drive.side_effect = [
-        OneDriveGraphError(403, "accessDenied", "not selected"),
+        OneDriveGraphError(423, "locked", "not selected"),
         _drive(),
     ]
     context = CapabilityCheckContext(

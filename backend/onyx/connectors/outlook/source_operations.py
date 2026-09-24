@@ -11,9 +11,6 @@ enumerate and resolve mailboxes.
 """
 
 import base64
-import json
-import re
-from collections.abc import Generator
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote
@@ -39,6 +36,12 @@ from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
 from onyx.connectors.microsoft_utils.graph_env import (
     DEFAULT_AUTHORITY_HOST,
     DEFAULT_GRAPH_API_HOST,
+)
+from onyx.connectors.microsoft_utils.graph_errors import (
+    is_msal_decode_error,
+    msal_http_status,
+    parse_graph_error,
+    parse_msal_error,
 )
 from onyx.connectors.outlook.models import (
     INVALID_AUTH_METHOD_CODE,
@@ -148,36 +151,9 @@ EPOCH_TIMESTAMP = "1970-01-01T00:00:00Z"
 EMPTY_PAGE_FOLLOW_LIMIT = 20
 
 
-def _exception_chain(error: BaseException) -> Generator[BaseException, None, None]:
-    """The error and what it was raised from. MSAL wraps its discovery
-    failures in a second ValueError, so the detail sits one level down."""
-    current: BaseException | None = error
-    while current is not None:
-        yield current
-        current = current.__cause__ or current.__context__
-
-
-def _is_decode_error(error: BaseException) -> bool:
-    """A discovery body MSAL cannot parse must not read as a bad directory id."""
-    return any(isinstance(e, json.JSONDecodeError) for e in _exception_chain(error))
-
-
-# MSAL reports the HTTP status of a failed discovery or token call only inside
-# the exception text: "HTTP status: 429" for a 4xx discovery answer (ValueError)
-# and "HTTP Error: 503" for any 5xx (MsalServiceError).
-_MSAL_STATUS_RE = re.compile(r"HTTP (?:status|Error): (\d{3})")
-
-
-def _msal_http_status(error: BaseException) -> int | None:
-    for wrapped in _exception_chain(error):
-        match = _MSAL_STATUS_RE.search(str(wrapped))
-        if match:
-            return int(match.group(1))
-    return None
-
-
 def _msal_error(error: BaseException) -> OutlookGraphError:
-    return OutlookGraphError(_msal_http_status(error), type(error).__name__, str(error))
+    details = parse_msal_error(error)
+    return OutlookGraphError(details.status, details.code, details.message)
 
 
 def _odata_quote(value: str) -> str:
@@ -186,25 +162,8 @@ def _odata_quote(value: str) -> str:
 
 
 def _to_graph_error(error: Exception) -> OutlookGraphError:
-    response = error.response if isinstance(error, requests.RequestException) else None
-    if response is None:
-        return OutlookGraphError(None, type(error).__name__, str(error))
-    try:
-        payload = response.json()
-    except ValueError:
-        payload = None
-    if not isinstance(payload, dict):
-        return OutlookGraphError(response.status_code, "<no code>", response.text[:500])
-    detail = payload.get("error")
-    # Graph nests code and message under "error". The OAuth token endpoint puts
-    # the code there as a bare string and the text in "error_description".
-    if isinstance(detail, dict):
-        code = detail.get("code") or "<no code>"
-        message = detail.get("message") or response.text
-    else:
-        code = detail or "<no code>"
-        message = payload.get("error_description") or response.text
-    return OutlookGraphError(response.status_code, str(code), str(message)[:500])
+    details = parse_graph_error(error)
+    return OutlookGraphError(details.status, details.code, details.message)
 
 
 def _recipient(raw: dict[str, Any] | None) -> OutlookRecipient | None:
@@ -440,7 +399,7 @@ class OutlookSourceOperations(SourceOperations):
                     ),
                 )
             except ValueError as e:
-                if _is_decode_error(e) or _msal_http_status(e) == 429:
+                if is_msal_decode_error(e) or msal_http_status(e) == 429:
                     raise _msal_error(e) from e
                 raise OutlookAuthError(INVALID_AUTHORITY_CODE, str(e)) from e
             except RuntimeError as e:

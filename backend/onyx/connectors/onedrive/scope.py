@@ -6,12 +6,13 @@ _EMAIL_ADAPTER = TypeAdapter(EmailStr)
 
 
 def normalize_configured_users(users: list[str] | None) -> list[str]:
+    raw_users = users or []
     normalized: list[str] = []
     seen: set[str] = set()
-    for raw_user in users or []:
+    for raw_user in raw_users:
         candidate = raw_user.strip()
         if not candidate:
-            raise ConnectorValidationError("OneDrive user entries cannot be blank.")
+            continue
         try:
             user = str(_EMAIL_ADAPTER.validate_python(candidate)).casefold()
         except ValidationError as error:
@@ -22,4 +23,8 @@ def normalize_configured_users(users: list[str] | None) -> list[str]:
             continue
         seen.add(user)
         normalized.append(user)
+    if raw_users and not normalized:
+        raise ConnectorValidationError(
+            "OneDrive user entries must include at least one email."
+        )
     return normalized

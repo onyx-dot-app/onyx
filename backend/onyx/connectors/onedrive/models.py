@@ -1,6 +1,10 @@
 from pydantic import BaseModel, ConfigDict, Field
 
 from onyx.connectors.microsoft_utils.drive_delta import DriveDeltaPage
+from onyx.connectors.microsoft_utils.graph_env import (
+    DEFAULT_AUTHORITY_HOST,
+    DEFAULT_GRAPH_API_HOST,
+)
 from onyx.connectors.models import ConnectorCheckpoint
 
 
@@ -15,14 +19,17 @@ class OneDriveCredentials(BaseModel):
     onedrive_certificate_password: str | None = None
 
 
-class OneDriveSettings(BaseModel):
-    model_config = ConfigDict(frozen=True)
+class OneDriveConnectorConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore", frozen=True, strict=True)
 
     users: list[str] = Field(default_factory=list)
     all_users: bool = True
+    authority_host: str = DEFAULT_AUTHORITY_HOST
+    graph_api_host: str = DEFAULT_GRAPH_API_HOST
+
+
+class OneDriveSettings(OneDriveConnectorConfig):
     excluded_paths: list[str] = Field(default_factory=list)
-    authority_host: str
-    graph_api_host: str
     batch_size: int = Field(gt=0)
 
 

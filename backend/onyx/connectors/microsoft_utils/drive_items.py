@@ -31,7 +31,6 @@ from onyx.connectors.cross_connector_utils.tabular_section_utils import (
 )
 from onyx.connectors.microsoft_utils.drive_delta import (
     DriveDeltaPage,
-    build_drive_delta_start_url,
     fetch_drive_delta_checkpoint_page,
 )
 from onyx.connectors.microsoft_utils.graph_client import (
@@ -780,19 +779,17 @@ def build_delta_start_url(
     drive_id: str,
     start: datetime | None = None,
     page_size: int = 200,
+    select_fields: str = DRIVE_ITEM_SELECT_FIELDS,
 ) -> str:
     """Build the initial delta API URL with query parameters embedded.
 
     Embeds ``$top``, ``$select``, and optionally ``token`` so the URL can be
     stored in a checkpoint without a separate params dict.
     """
-    return build_drive_delta_start_url(
-        graph_api_base,
-        drive_id,
-        start=start,
-        page_size=page_size,
-        select_fields=DRIVE_ITEM_SELECT_FIELDS,
-    )
+    params = [f"$top={page_size}", f"$select={select_fields}"]
+    if start is not None and start > _EPOCH:
+        params.append(f"token={quote(start.isoformat(timespec='seconds'))}")
+    return f"{graph_api_base}/drives/{drive_id}/root/delta?{'&'.join(params)}"
 
 
 def fetch_one_delta_page(
