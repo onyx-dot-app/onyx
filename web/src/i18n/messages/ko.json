@@ -2562,6 +2562,36 @@
       }
     },
     "connectorsList": {
+      "oneDrive": {
+        "description": "OneDrive 커넥터 구성",
+        "indexingScope": {
+          "label": "Onyx가 인덱싱할 OneDrive 파일의 소유자를 선택하세요",
+          "general": {
+            "label": "일반",
+            "description": "Microsoft 애플리케이션이 액세스할 수 있는 모든 적격 사용자를 인덱싱합니다."
+          },
+          "specific": {
+            "label": "특정",
+            "users": {
+              "label": "사용자",
+              "description": "인덱싱할 각 사용자의 사용자 계정 이름 또는 기본 이메일 주소를 추가하세요.",
+              "required": "특정 범위에 사용자를 한 명 이상 추가하세요"
+            }
+          }
+        },
+        "excludedPaths": {
+          "label": "제외 경로",
+          "description": "각 파일 경로와 파일 이름에 적용할 glob 패턴입니다(예: '*.tmp' 또는 'Archive/*')."
+        },
+        "authorityHost": {
+          "label": "기관 호스트",
+          "description": "Microsoft ID 기관 호스트입니다. GCC High 또는 DoD에는 https://login.microsoftonline.us를 사용하세요."
+        },
+        "graphApiHost": {
+          "label": "Graph API 호스트",
+          "description": "Microsoft Graph 호스트입니다. GCC High 또는 DoD에는 https://graph.microsoft.us를 사용하세요."
+        }
+      },
       "add": {
         "authorizeButton": {
           "label": "{source}(으)로 인증",

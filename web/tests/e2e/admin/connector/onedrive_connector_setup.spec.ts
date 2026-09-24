@@ -10,7 +10,7 @@ test.describe("OneDrive connector setup", () => {
     await setup.mockRoutes();
     await setup.goto();
     await setup.createClientSecretCredential();
-    await setup.continueToConfiguration();
+    await setup.expectConfigurationEnabled();
     await setup.selectSpecificScope("owner@example.com");
     await setup.selectGeneralScope();
     await setup.submitConnector("General OneDrive");
@@ -27,7 +27,6 @@ test.describe("OneDrive connector setup", () => {
     ]);
     const expectedConfig: OneDriveConfigRequest = {
       connector_specific_config: {
-        all_users: true,
         users: [],
       },
     };
@@ -39,7 +38,7 @@ test.describe("OneDrive connector setup", () => {
     await setup.mockRoutes();
     await setup.goto();
     await setup.createCertificateCredential();
-    await setup.continueToConfiguration();
+    await setup.expectConfigurationEnabled();
     await setup.selectSpecificScope("owner@example.com");
     await setup.submitConnector("Specific OneDrive");
     await setup.expectCreated();
@@ -57,30 +56,24 @@ test.describe("OneDrive connector setup", () => {
     ]);
     const expectedConfig: OneDriveConfigRequest = {
       connector_specific_config: {
-        all_users: false,
         users: ["owner@example.com"],
       },
     };
     expect(setup.connectorRequests[0]).toEqual(expectedConfig);
   });
 
-  test("sends empty Specific scope to backend validation", async ({ page }) => {
-    const validationMessage = "Select all users or list at least one user.";
+  test("requires a user for Specific scope", async ({ page }) => {
+    const validationMessage = "Add at least one user for Specific scope";
     const setup = new OneDriveConnectorSetupPage(page);
-    await setup.mockRoutes(validationMessage);
+    await setup.mockRoutes();
     await setup.goto();
     await setup.createClientSecretCredential();
-    await setup.continueToConfiguration();
+    await setup.expectConfigurationEnabled();
     await setup.selectSpecificScope();
-    await setup.submitConnector("Empty Specific OneDrive", 400);
-    await setup.expectConfigurationError(validationMessage);
-
-    const expectedConfig: OneDriveConfigRequest = {
-      connector_specific_config: {
-        all_users: false,
-        users: [],
-      },
-    };
-    expect(setup.connectorRequests[0]).toEqual(expectedConfig);
+    await setup.submitInvalidConnector(
+      "Empty Specific OneDrive",
+      validationMessage
+    );
+    expect(setup.connectorRequests).toEqual([]);
   });
 });

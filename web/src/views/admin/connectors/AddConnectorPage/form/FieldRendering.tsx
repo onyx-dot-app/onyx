@@ -35,7 +35,7 @@ const TabsField: FC<TabsFieldProps> = ({
   currentCredential,
 }) => {
   const t = useTranslations("admin.connectorsList");
-  const { setFieldValue } = useFormikContext<FormValues>();
+  const { setFieldTouched, setFieldValue } = useFormikContext<FormValues>();
 
   const resolvedLabel =
     typeof tabField.label === "function"
@@ -64,14 +64,22 @@ const TabsField: FC<TabsFieldProps> = ({
         </Text>
       ) : (
         <Tabs
-          defaultValue={tabField.defaultTab || tabField.tabs[0]?.value}
+          value={
+            values[tabField.name] ??
+            tabField.defaultTab ??
+            tabField.tabs[0]?.value
+          }
           onValueChange={(newTab) => {
+            setFieldValue(tabField.name, newTab);
+            tabField.tabs
+              .find((tab) => tab.value === newTab)
+              ?.fields.forEach((field) => setFieldTouched(field.name, true));
             // Clear values from other tabs but preserve defaults
             tabField.tabs.forEach((tab) => {
               if (tab.value !== newTab) {
                 tab.fields.forEach((field) => {
                   // Only clear if not default value
-                  if (values[field.name] !== field.default) {
+                  if (!Object.is(values[field.name], field.default)) {
                     setFieldValue(field.name, field.default);
                   }
                 });

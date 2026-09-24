@@ -1,11 +1,11 @@
 import * as Yup from "yup";
 import type { AccessTypeGroupSelectorFormType } from "@/components/admin/connectors/AccessTypeGroupSelector";
 import type { ConnectorGroupRestrictionFormValues } from "@/lib/connectors/accessType";
+import { ValidSources } from "@/lib/types";
 import type {
   ConfigurableSources,
   IndexAttemptStage,
   IndexAttemptStageMetric,
-  ValidSources,
 } from "@/lib/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { connectorConfigs } from "@/lib/connectors/connectors";
@@ -18,9 +18,11 @@ import {
 import {
   ConnectorCredentialPairStatus,
   FileTypeCategory,
+  OneDriveScope,
 } from "@/lib/connectors/types";
 import type {
   ConnectionConfiguration,
+  ConnectorValueField,
   GmailConfig,
   SortMode,
 } from "@/lib/connectors/types";
@@ -41,11 +43,28 @@ export function isLoadState(connector_name: string): boolean {
 
 type ConnectorField = ConnectionConfiguration["values"][number];
 
+interface ConnectorValidationMessages {
+  oneDriveUsersRequired?: string;
+}
+
+const flattenConnectorFields = (
+  fields: ConnectorField[]
+): ConnectorValueField[] =>
+  fields.flatMap((field) =>
+    field.type === "tab" ? field.tabs.flatMap((tab) => tab.fields) : [field]
+  );
+
 const buildInitialValuesForFields = (
   fields: ConnectorField[]
 ): Record<string, any> =>
   fields.reduce<Record<string, any>>((acc, field) => {
-    if (field.type === "select") {
+    if (field.type === "tab") {
+      acc[field.name] = field.defaultTab ?? field.tabs[0]?.value ?? "";
+      Object.assign(
+        acc,
+        buildInitialValuesForFields(field.tabs.flatMap((tab) => tab.fields))
+      );
+    } else if (field.type === "select") {
       acc[field.name] = null;
     } else if (field.type === "list") {
       acc[field.name] = field.default || [];
@@ -79,9 +98,52 @@ export function createConnectorInitialValues(
 
 export function createConnectorValidationSchema(
   connector: ConfigurableSources,
-  requireGroups: boolean = false
+  requireGroups: boolean = false,
+  messages: ConnectorValidationMessages = {}
 ): Yup.ObjectSchema<Record<string, any>> {
   const configuration = connectorConfigs[connector];
+  const fields = [...configuration.values, ...configuration.advanced_values];
+
+  const fieldSchemas = flattenConnectorFields(fields).reduce<
+    Record<string, Yup.Schema>
+  >((acc, field) => {
+    let schema: Yup.Schema =
+      field.type === "select"
+        ? Yup.string()
+        : field.type === "list"
+          ? Yup.array().of(Yup.string())
+          : field.type === "multiselect"
+            ? Yup.array().of(Yup.string())
+            : field.type === "string_pair_list"
+              ? Yup.array().of(Yup.object())
+              : field.type === "checkbox"
+                ? Yup.boolean()
+                : field.type === "file"
+                  ? Yup.mixed()
+                  : Yup.string();
+
+    if (!field.optional) {
+      schema = schema.required(`${field.label} is required`);
+    }
+
+    acc[field.name] = schema;
+    return acc;
+  }, {});
+
+  for (const field of fields) {
+    if (field.type === "tab") {
+      fieldSchemas[field.name] = Yup.string().required();
+    }
+  }
+
+  if (connector === ValidSources.OneDrive) {
+    fieldSchemas.users = Yup.array()
+      .of(Yup.string().trim().required())
+      .when("indexing_scope", {
+        is: OneDriveScope.Specific,
+        then: (schema) => schema.min(1, messages.oneDriveUsersRequired),
+      });
+  }
 
   const object = Yup.object().shape({
     access_type: Yup.string().required("Access Type is required"),
@@ -93,31 +155,7 @@ export function createConnectorValidationSchema(
           ? schema.min(1, "Select at least one group you manage")
           : schema
       ),
-    ...[...configuration.values, ...configuration.advanced_values].reduce<
-      Record<string, any>
-    >((acc, field) => {
-      let schema: any =
-        field.type === "select"
-          ? Yup.string()
-          : field.type === "list"
-            ? Yup.array().of(Yup.string())
-            : field.type === "multiselect"
-              ? Yup.array().of(Yup.string())
-              : field.type === "string_pair_list"
-                ? Yup.array().of(Yup.object())
-                : field.type === "checkbox"
-                  ? Yup.boolean()
-                  : field.type === "file"
-                    ? Yup.mixed()
-                    : Yup.string();
-
-      if (!field.optional) {
-        schema = schema.required(`${field.label} is required`);
-      }
-
-      acc[field.name] = schema;
-      return acc;
-    }, {}),
+    ...fieldSchemas,
     // These are advanced settings
     indexingStart: Yup.string().nullable(),
     pruneFreq: Yup.number().min(

@@ -2562,6 +2562,36 @@
       }
     },
     "connectorsList": {
+      "oneDrive": {
+        "description": "تهيئة موصل OneDrive",
+        "indexingScope": {
+          "label": "ملفات OneDrive الخاصة بمن يجب أن يفهرسها Onyx؟",
+          "general": {
+            "label": "عام",
+            "description": "فهرسة جميع المستخدمين المؤهلين الذين يمكن لتطبيق Microsoft الوصول إليهم."
+          },
+          "specific": {
+            "label": "محدد",
+            "users": {
+              "label": "المستخدمون",
+              "description": "أضف اسم المستخدم الأساسي أو عنوان البريد الإلكتروني الأساسي لكل مستخدم تريد فهرسته.",
+              "required": "أضف مستخدمًا واحدًا على الأقل للنطاق المحدد"
+            }
+          }
+        },
+        "excludedPaths": {
+          "label": "المسارات المستبعدة",
+          "description": "أنماط Glob المطابقة لكل مسار ملف واسم ملف، مثل '*.tmp' أو 'Archive/*'."
+        },
+        "authorityHost": {
+          "label": "مضيف المرجع",
+          "description": "مضيف مرجع هوية Microsoft. استخدم https://login.microsoftonline.us لـ GCC High أو DoD."
+        },
+        "graphApiHost": {
+          "label": "مضيف Graph API",
+          "description": "مضيف Microsoft Graph. استخدم https://graph.microsoft.us لـ GCC High أو DoD."
+        }
+      },
       "add": {
         "authorizeButton": {
           "label": "التفويض عبر {source}",
