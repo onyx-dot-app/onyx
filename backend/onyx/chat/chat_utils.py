@@ -1019,18 +1019,22 @@ def create_tool_call_failure_messages(
 
     messages: list[ChatMessageSimple] = [assistant_msg]
 
-    # Create a TOOL_CALL_RESPONSE failure message for each tool call
-    for tool_call in tool_calls:
-        failure_response_msg = ChatMessageSimple(
-            message=TOOL_CALL_FAILURE_PROMPT,
-            token_count=50,  # Tiny overestimate
-            message_type=MessageType.TOOL_CALL_RESPONSE,
-            tool_call_id=tool_call.tool_call_id,
-            image_files=None,
-        )
-        messages.append(failure_response_msg)
+    messages.extend(
+        create_tool_call_failure_response(tool_call.tool_call_id)
+        for tool_call in tool_calls
+    )
 
     return messages
+
+
+def create_tool_call_failure_response(tool_call_id: str) -> ChatMessageSimple:
+    return ChatMessageSimple(
+        message=TOOL_CALL_FAILURE_PROMPT,
+        token_count=50,  # Tiny overestimate
+        message_type=MessageType.TOOL_CALL_RESPONSE,
+        tool_call_id=tool_call_id,
+        image_files=None,
+    )
 
 
 def build_python_chat_files_from_search_docs(
