@@ -115,6 +115,31 @@ def _merge_tool_calls(tool_calls: list[ToolCallKickoff]) -> list[ToolCallKickoff
     return merged_calls
 
 
+def select_tool_calls_to_run(
+    tool_calls: list[ToolCallKickoff],
+    tools: list[Tool],
+    max_concurrent_tools: int | None = None,
+) -> list[ToolCallKickoff]:
+    """Merge mergeable calls, drop unknown tools, and apply the concurrency cap.
+
+    Returns the calls that `run_tool_calls` executes for the same inputs.
+    """
+    if max_concurrent_tools is not None and max_concurrent_tools <= 0:
+        return []
+
+    tool_names = {tool.name for tool in tools}
+    selected: list[ToolCallKickoff] = []
+    for tool_call in _merge_tool_calls(tool_calls):
+        if tool_call.tool_name not in tool_names:
+            logger.warning("Tool %s not found in tools list", tool_call.tool_name)
+            continue
+        selected.append(tool_call)
+
+    if max_concurrent_tools is not None:
+        selected = selected[:max_concurrent_tools]
+    return selected
+
+
 def _safe_run_single_tool(
     tool: Tool,
     tool_call: ToolCallKickoff,
@@ -288,35 +313,21 @@ def run_tool_calls(
           its entry will be omitted.
         - `updated_citation_mapping`: The updated citation mapping dictionary.
     """
-    # Merge tool calls for SearchTool, WebSearchTool, and OpenURLTool
     if url_snippet_map is None:
         url_snippet_map = {}
-    merged_tool_calls = _merge_tool_calls(tool_calls)
 
-    if not merged_tool_calls:
+    filtered_tool_calls = select_tool_calls_to_run(
+        tool_calls=tool_calls,
+        tools=tools,
+        max_concurrent_tools=max_concurrent_tools,
+    )
+    if not filtered_tool_calls:
         return ParallelToolCallResponse(
             tool_responses=[],
             updated_citation_mapping=citation_mapping,
         )
 
     tools_by_name = {tool.name: tool for tool in tools}
-
-    # Drop unknown tools (and don't let them count against the cap)
-    filtered_tool_calls: list[ToolCallKickoff] = []
-    for tool_call in merged_tool_calls:
-        if tool_call.tool_name not in tools_by_name:
-            logger.warning("Tool %s not found in tools list", tool_call.tool_name)
-            continue
-        filtered_tool_calls.append(tool_call)
-
-    # Apply safety cap (drop tool calls beyond the cap)
-    if max_concurrent_tools is not None:
-        if max_concurrent_tools <= 0:
-            return ParallelToolCallResponse(
-                tool_responses=[],
-                updated_citation_mapping=citation_mapping,
-            )
-        filtered_tool_calls = filtered_tool_calls[:max_concurrent_tools]
 
     # Get starting citation number from citation processor to avoid conflicts with project files
     starting_citation_num = next_citation_num
