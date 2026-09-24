@@ -17,6 +17,8 @@ interface OneDriveConfigurationText {
   usersDescription: string;
   excludedPathsLabel: string;
   excludedPathsDescription: string;
+  organizationLinksLabel: string;
+  organizationLinksDescription: string;
   authorityHostLabel: string;
   authorityHostDescription: string;
   graphApiHostLabel: string;
@@ -33,6 +35,8 @@ const ONE_DRIVE_TRANSLATION_KEYS: OneDriveConfigurationText = {
   usersDescription: "indexingScope.specific.users.description",
   excludedPathsLabel: "excludedPaths.label",
   excludedPathsDescription: "excludedPaths.description",
+  organizationLinksLabel: "organizationLinks.label",
+  organizationLinksDescription: "organizationLinks.description",
   authorityHostLabel: "authorityHost.label",
   authorityHostDescription: "authorityHost.description",
   graphApiHostLabel: "graphApiHost.label",
@@ -92,6 +96,14 @@ function buildOneDriveConfiguration(
         description: text.excludedPathsDescription,
       },
       {
+        type: "checkbox",
+        label: text.organizationLinksLabel,
+        name: "treat_organization_link_as_public",
+        optional: true,
+        default: false,
+        description: text.organizationLinksDescription,
+      },
+      {
         type: "text",
         label: text.authorityHostLabel,
         name: "authority_host",
@@ -130,6 +142,8 @@ export function useConnectorConfiguration(
     usersDescription: t("indexingScope.specific.users.description"),
     excludedPathsLabel: t("excludedPaths.label"),
     excludedPathsDescription: t("excludedPaths.description"),
+    organizationLinksLabel: t("organizationLinks.label"),
+    organizationLinksDescription: t("organizationLinks.description"),
     authorityHostLabel: t("authorityHost.label"),
     authorityHostDescription: t("authorityHost.description"),
     graphApiHostLabel: t("graphApiHost.label"),

@@ -2583,6 +2583,10 @@
           "label": "المسارات المستبعدة",
           "description": "أنماط Glob المطابقة لكل مسار ملف واسم ملف، مثل '*.tmp' أو 'Archive/*'."
         },
+        "organizationLinks": {
+          "label": "معاملة روابط المؤسسة كروابط عامة",
+          "description": "اجعل الملفات المشتركة عبر رابط على مستوى المؤسسة مرئية لجميع مستخدمي Onyx."
+        },
         "authorityHost": {
           "label": "مضيف المرجع",
           "description": "مضيف مرجع هوية Microsoft. استخدم https://login.microsoftonline.us لـ GCC High أو DoD."
