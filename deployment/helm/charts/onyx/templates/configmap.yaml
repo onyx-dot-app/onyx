@@ -38,7 +38,8 @@ data:
 {{- $skipCraftProxyKey := and $craftEnabled (or (eq $key "SANDBOX_PROXY_HOST") (eq $key "SANDBOX_PROXY_PORT")) }}
 {{- $skipPostgresTlsKey := and (eq (include "onyx.postgresTls.enabled" $) "true") (or (eq $key "POSTGRES_SSLMODE") (eq $key "POSTGRES_SSLROOTCERT")) }}
 {{- $skipRedisTlsKey := and (eq (include "onyx.redisTls.enabled" $) "true") (or (eq $key "REDIS_SSL") (eq $key "REDIS_SSL_CERT_REQS") (eq $key "REDIS_SSL_CA_CERTS") (eq $key "REDIS_SSL_CHECK_HOSTNAME")) }}
-{{- if and (not (empty $value)) (not $skipCraftProxyKey) (not $skipPostgresTlsKey) (not $skipRedisTlsKey) }}
+{{- $skipBundledS3Key := and (or (eq (include "onyx.objectStore.enabled" $) "true") $.Values.minio.enabled) (or (eq $key "S3_ENDPOINT_URL") (eq $key "S3_LEGACY_ENDPOINT_URL")) }}
+{{- if and (not (empty $value)) (not $skipCraftProxyKey) (not $skipPostgresTlsKey) (not $skipRedisTlsKey) (not $skipBundledS3Key) }}
   {{ $key }}: "{{ $value }}"
 {{- end }}
 {{- end }}
@@ -53,8 +54,15 @@ data:
   REDIS_SSL_CA_CERTS: {{ $redisTls.caMountPath | default "/etc/ssl/certs/redis-ca.crt" | quote }}
   REDIS_SSL_CHECK_HOSTNAME: {{ include "onyx.redisTls.checkHostname" . | quote }}
   {{- end }}
+  {{- $minioEndpoint := printf "http://%s-minio:%v" .Release.Name (.Values.minio.service.port | default 9000) }}
+  {{- if eq (include "onyx.objectStore.enabled" .) "true" }}
+  S3_ENDPOINT_URL: {{ include "onyx.objectStore.endpoint" . | quote }}
   {{- if .Values.minio.enabled }}
-  S3_ENDPOINT_URL: "http://{{ .Release.Name }}-minio:{{ default 9000 .Values.minio.service.port }}"
+  # While set, writes and deletes also reach MinIO, and reads that miss fall back to it.
+  S3_LEGACY_ENDPOINT_URL: {{ $minioEndpoint | quote }}
+  {{- end }}
+  {{- else if .Values.minio.enabled }}
+  S3_ENDPOINT_URL: {{ $minioEndpoint | quote }}
   {{- end }}
   {{- if .Values.codeInterpreter.enabled }}
   CODE_INTERPRETER_BASE_URL: "http://{{ .Release.Name }}-code-interpreter:{{ .Values.codeInterpreter.service.port }}"
