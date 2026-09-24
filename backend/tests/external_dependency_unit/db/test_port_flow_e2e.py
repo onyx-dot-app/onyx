@@ -390,7 +390,15 @@ def test_port_flow_end_to_end(
 
 
 def _count_doc_chunks(client: OpenSearchIndexClient, document_id: str) -> int:
-    return sum(len(page) for page in client.iter_chunks_for_doc_ids([document_id]))
+    return sum(
+        len(page)
+        for page in client.iter_chunks_for_doc_ids(
+            [document_id],
+            tenant_state=TenantState(
+                tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False
+            ),
+        )
+    )
 
 
 def test_delete_port_written_chunks_only_marked(

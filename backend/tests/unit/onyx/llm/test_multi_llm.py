@@ -1,7 +1,7 @@
 import os
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from typing import Any
 from unittest.mock import ANY, MagicMock, patch
@@ -133,7 +133,7 @@ def _accumulate_stream_to_assistant_message(
 
     return AssistantMessage(
         role="assistant",
-        content=accumulated_content if accumulated_content else None,
+        content=accumulated_content or None,
         tool_calls=tool_calls,
     )
 
@@ -572,7 +572,11 @@ def test_openai_only_in_deployment_name_uses_responses_bridge() -> None:
 )
 @pytest.mark.parametrize(
     "reasoning_effort, expected_effort",
-    [(ReasoningEffort.AUTO, "medium"), (ReasoningEffort.HIGH, "high")],
+    [
+        (ReasoningEffort.AUTO, "medium"),
+        (ReasoningEffort.LOW, "low"),
+        (ReasoningEffort.HIGH, "high"),
+    ],
 )
 def test_claude_adaptive_thinking_uses_output_config(
     model_name: str, reasoning_effort: ReasoningEffort, expected_effort: str
@@ -604,6 +608,130 @@ def test_claude_adaptive_thinking_uses_output_config(
         assert kwargs["thinking"] == {"type": "adaptive"}
         assert kwargs["output_config"] == {"effort": expected_effort}
         assert "budget_tokens" not in kwargs["thinking"]
+
+
+def test_claude_adaptive_thinking_sends_output_config_after_tool_call() -> None:
+    # No signed blocks to replay costs us `thinking`, not the effort.
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.LITELLM_PROXY,
+        model_name="claude-sonnet-5",
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.LITELLM_PROXY,
+            model_name="claude-sonnet-5",
+        ),
+    )
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
+    ):
+        mock_completion.return_value = []
+
+        list(llm.stream(_tool_cycle_prompt(), reasoning_effort=ReasoningEffort.LOW))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert "thinking" not in kwargs
+        assert kwargs["output_config"] == {"effort": "low"}
+
+
+@pytest.mark.parametrize(
+    "model_name, expected_thinking",
+    [
+        ("claude-sonnet-5", {"type": "disabled"}),
+        ("claude-opus-5", {"type": "disabled"}),
+        ("claude-opus-4-7", {"type": "disabled"}),
+        # Pre-adaptive Claude only thinks when the param asks for it.
+        ("claude-3-7-sonnet", None),
+    ],
+)
+def test_reasoning_off_disables_adaptive_thinking(
+    model_name: str, expected_thinking: dict[str, str] | None
+) -> None:
+    # The Claude 5 line thinks unless told not to, so off has to be sent.
+    # Older adaptive models take the same param, pre-adaptive ones take none.
+    kwargs = _anthropic_completion_kwargs(model_name, ReasoningEffort.OFF)
+    assert kwargs.get("thinking") == expected_thinking
+    # Opus 5 rejects disabled thinking paired with an effort above high.
+    assert "output_config" not in kwargs
+
+
+@pytest.mark.parametrize("model_name", ["claude-fable-5", "claude-mythos-5-1"])
+def test_reasoning_off_floors_always_thinking_models_at_low(model_name: str) -> None:
+    # These reject disabled thinking, so off lands on the least they accept
+    # instead of silence, which the API would fill with its high default.
+    kwargs = _anthropic_completion_kwargs(model_name, ReasoningEffort.OFF)
+    assert kwargs["thinking"] == {"type": "adaptive"}
+    assert kwargs["output_config"] == {"effort": "low"}
+
+
+def test_reasoning_off_follows_deployment_alias_over_model_name() -> None:
+    # The alias is the model that answers, and Opus accepts disabled thinking.
+    kwargs = _anthropic_completion_kwargs(
+        "claude-fable-5", ReasoningEffort.OFF, deployment_name="claude-opus-5"
+    )
+    assert kwargs["thinking"] == {"type": "disabled"}
+    assert "output_config" not in kwargs
+
+
+def _anthropic_completion_kwargs(
+    model_name: str,
+    reasoning_effort: ReasoningEffort,
+    deployment_name: str | None = None,
+) -> Mapping[str, Any]:
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.ANTHROPIC,
+        model_name=model_name,
+        deployment_name=deployment_name,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.ANTHROPIC,
+            model_name=model_name,
+        ),
+    )
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=reasoning_effort))
+        return mock_completion.call_args.kwargs
+
+
+@pytest.mark.parametrize(
+    "model_provider, model_name, expected_effort",
+    [
+        (LlmProviderNames.VERTEX_AI, "gemini-3.8-flash", "low"),
+        (LlmProviderNames.VERTEX_AI, "gemini-3.7-flash", "low"),
+        (LlmProviderNames.OPENROUTER, "google/gemini-3.8-flash", "low"),
+        (LlmProviderNames.VERTEX_AI, "gemini-3.5-flash", None),
+        (LlmProviderNames.VERTEX_AI, "gemini-3-flash-preview", None),
+        (LlmProviderNames.VERTEX_AI, "gemini-3.1-pro-preview", None),
+    ],
+)
+def test_reasoning_off_for_gemini_uses_lowest_accepted_level(
+    model_provider: str, model_name: str, expected_effort: str | None
+) -> None:
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=model_provider,
+        model_name=model_name,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=model_provider,
+            model_name=model_name,
+        ),
+    )
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
+    ):
+        mock_completion.return_value = []
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.OFF))
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs.get("reasoning_effort") == expected_effort
+        assert "reasoning" not in kwargs
 
 
 def test_keeps_temperature_for_other_models(default_multi_llm: LitellmLLM) -> None:
@@ -2978,6 +3106,29 @@ def _simple_stream_chunks(model_name: str) -> list[litellm.ModelResponse]:
     ]
 
 
+def _simple_response(model_name: str) -> litellm.ModelResponse:
+    return litellm.ModelResponse(
+        id="chatcmpl-123",
+        choices=[
+            litellm.Choices(
+                message=litellm.Message(role="assistant", content="Hi"),
+                finish_reason="stop",
+                index=0,
+            )
+        ],
+        model=model_name,
+    )
+
+
+def _simple_completion_result(
+    kwargs: Mapping[str, Any], model_name: str
+) -> litellm.ModelResponse | list[litellm.ModelResponse]:
+    """Return what litellm.completion returns for the requested stream mode."""
+    if kwargs.get("stream"):
+        return _simple_stream_chunks(model_name)
+    return _simple_response(model_name)
+
+
 def test_injection_disabled_maps_kwargs_and_never_touches_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -3002,12 +3153,16 @@ def test_injection_disabled_maps_kwargs_and_never_touches_env(
 
     env_during_call: dict[str, str | None] = {}
 
-    def fake_completion(**kwargs: Any) -> list[litellm.ModelResponse]:  # noqa: ARG001
+    def fake_completion(
+        **kwargs: Any,
+    ) -> litellm.ModelResponse | list[litellm.ModelResponse]:
         env_during_call["AWS_SECRET_ACCESS_KEY"] = os.environ.get(
             "AWS_SECRET_ACCESS_KEY"
         )
         env_during_call["ENV_ONLY_KEY"] = os.environ.get("ENV_ONLY_KEY")
-        return _simple_stream_chunks("anthropic.claude-3-sonnet-20240229-v1:0")
+        return _simple_completion_result(
+            kwargs, "anthropic.claude-3-sonnet-20240229-v1:0"
+        )
 
     from onyx.llm import multi_llm as multi_llm_module
 
@@ -3124,9 +3279,11 @@ def test_generic_custom_provider_api_key_reaches_litellm(
 
     env_during_call: dict[str, str | None] = {}
 
-    def fake_completion(**kwargs: Any) -> list[litellm.ModelResponse]:  # noqa: ARG001
+    def fake_completion(
+        **kwargs: Any,
+    ) -> litellm.ModelResponse | list[litellm.ModelResponse]:
         env_during_call["GROQ_API_KEY"] = os.environ.get("GROQ_API_KEY")
-        return _simple_stream_chunks("llama-3.3-70b-versatile")
+        return _simple_completion_result(kwargs, "llama-3.3-70b-versatile")
 
     with (
         patch("litellm.completion", side_effect=fake_completion) as mock_completion,
@@ -3164,9 +3321,13 @@ def test_ui_only_keys_never_injected_or_warned(
 
     env_during_call: dict[str, str | None] = {}
 
-    def fake_completion(**kwargs: Any) -> list[litellm.ModelResponse]:  # noqa: ARG001
+    def fake_completion(
+        **kwargs: Any,
+    ) -> litellm.ModelResponse | list[litellm.ModelResponse]:
         env_during_call["BEDROCK_AUTH_METHOD"] = os.environ.get("BEDROCK_AUTH_METHOD")
-        return _simple_stream_chunks("anthropic.claude-3-sonnet-20240229-v1:0")
+        return _simple_completion_result(
+            kwargs, "anthropic.claude-3-sonnet-20240229-v1:0"
+        )
 
     for injection_enabled in (True, False):
         with (
@@ -3180,6 +3341,90 @@ def test_ui_only_keys_never_injected_or_warned(
             llm.invoke([UserMessage(content="Hi")])
         assert env_during_call["BEDROCK_AUTH_METHOD"] is None
         mock_warn.assert_not_called()
+
+
+# ---- Tests for the invoke() stream / non-stream decision ----
+
+
+def _invoke_stream_flag(
+    llm: LitellmLLM,
+    injection_enabled: bool,
+    stream: bool = False,
+    total_timeout_override: float | None = None,
+) -> tuple[bool, ModelResponse]:
+    """Run invoke() with litellm mocked and report the stream kwarg it sent."""
+    model_name = llm.config.model_name
+
+    def fake_completion(
+        **kwargs: Any,
+    ) -> litellm.ModelResponse | list[litellm.ModelResponse]:
+        return _simple_completion_result(kwargs, model_name)
+
+    with (
+        patch("litellm.completion", side_effect=fake_completion) as mock_completion,
+        patch(
+            "onyx.llm.multi_llm._env_injection_enabled",
+            return_value=injection_enabled,
+        ) as mock_injection_setting,
+    ):
+        response = llm.invoke(
+            [UserMessage(content="Hi")],
+            total_timeout_override=total_timeout_override,
+            stream=stream,
+        )
+
+    # One snapshot drives both the stream choice and the env lock, so the two
+    # cannot diverge if an admin flips the setting mid-call.
+    assert mock_injection_setting.call_count == 1
+
+    kwargs = mock_completion.call_args.kwargs
+    if kwargs["stream"]:
+        assert kwargs["stream_options"] == {"include_usage": True}
+    else:
+        assert "stream_options" not in kwargs
+    return kwargs["stream"], response
+
+
+def test_invoke_plain_request_by_default(default_multi_llm: LitellmLLM) -> None:
+    """Cloud posture: invoke() sends one non-streamed request and takes the
+    response as one body."""
+    streamed, response = _invoke_stream_flag(default_multi_llm, injection_enabled=False)
+
+    assert streamed is False
+    assert response.choice.message.content == "Hi"
+    assert response.choice.finish_reason == "stop"
+
+
+def test_invoke_stream_true_streams(default_multi_llm: LitellmLLM) -> None:
+    """Long-answer callers ask for streaming and get the reassembled response."""
+    streamed, response = _invoke_stream_flag(
+        default_multi_llm, injection_enabled=False, stream=True
+    )
+
+    assert streamed is True
+    assert response.choice.message.content == "Hi"
+
+
+def test_invoke_streams_when_injection_enabled(
+    default_multi_llm: LitellmLLM,
+) -> None:
+    """Self-hosted posture: streaming keeps the env rwlock to connection setup."""
+    streamed, response = _invoke_stream_flag(default_multi_llm, injection_enabled=True)
+
+    assert streamed is True
+    assert response.choice.message.content == "Hi"
+
+
+def test_invoke_streams_when_total_timeout_requested(
+    default_multi_llm: LitellmLLM,
+) -> None:
+    """The wall-clock deadline is enforced between chunks, so a total timeout
+    forces streaming."""
+    streamed, _ = _invoke_stream_flag(
+        default_multi_llm, injection_enabled=False, total_timeout_override=30
+    )
+
+    assert streamed is True
 
 
 def _openai_compatible_llm(

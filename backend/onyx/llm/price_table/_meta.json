@@ -1,0 +1,8 @@
+{
+  "schema_version": 2,
+  "sources": [
+    "https://models.dev/api.json",
+    "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
+    "https://openrouter.ai/api/v1/models"
+  ]
+}

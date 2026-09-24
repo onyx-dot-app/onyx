@@ -453,7 +453,7 @@ def kg_classify_document(
             input_messages=[prompt_msg],
             content_mode=TraceContentMode.METADATA_ONLY,
         ) as span_generation:
-            response = llm.invoke(prompt_msg)
+            response = llm.invoke(prompt_msg, stream=True)
             record_llm_response(span_generation, response)
             raw_classification_result = llm_response_to_string(response)
 
@@ -529,7 +529,7 @@ def kg_deep_extract_chunks(
             input_messages=[prompt_msg],
             content_mode=TraceContentMode.METADATA_ONLY,
         ) as span_generation:
-            response = llm.invoke(prompt_msg)
+            response = llm.invoke(prompt_msg, stream=True)
             record_llm_response(span_generation, response)
             raw_extraction_result = llm_response_to_string(response)
 

@@ -219,15 +219,15 @@ def trigger_capability_check(
     try:
         client_app.send_task(
             OnyxCeleryTask.RUN_CAPABILITY_CHECKS,
-            kwargs=dict(
-                credential_id=credential_id,
-                connector_id=request.connector_id,
-                connector_specific_config=request.connector_specific_config,
-                tenant_id=get_current_tenant_id(),
+            kwargs={
+                "credential_id": credential_id,
+                "connector_id": request.connector_id,
+                "connector_specific_config": request.connector_specific_config,
+                "tenant_id": get_current_tenant_id(),
                 # The attempt's fence: the task's terminal writes land only
                 # while this id still owns the row.
-                run_id=str(run_id),
-            ),
+                "run_id": str(run_id),
+            },
             queue=OnyxCeleryQueues.CAPABILITY_CHECKS,
             priority=OnyxCeleryPriority.HIGH,
             # Queue wait is bounded by one execution ceiling; the staleness

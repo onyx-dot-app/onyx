@@ -77,18 +77,18 @@ Example usage:
 				if !release.IsCloudTag(opts.Attach) {
 					return fmt.Errorf("%q is not a cloud tag (expected vX.Y.Z-cloud.N)", opts.Attach)
 				}
-				return watchCloudRelease(opts.Attach)
+				return watchCloudRelease(defaultRunPolling(), opts.Attach)
 			}
 			tag, err := deployCloud(opts)
 			if err != nil || tag == "" {
 				return err
 			}
 			if opts.NoWatch {
-				announceDeploymentRun(tag)
+				announceDeploymentRun(defaultRunPolling(), tag)
 				return nil
 			}
 			log.Infof("Watching the release; Ctrl-C is safe, re-attach with: ods deploy cloud --attach %s", tag)
-			return watchCloudRelease(tag)
+			return watchCloudRelease(defaultRunPolling(), tag)
 		},
 	}
 

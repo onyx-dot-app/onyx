@@ -523,6 +523,22 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         """Returns True if this is the anonymous user."""
         return str(self.id) == ANONYMOUS_USER_UUID
 
+    @property
+    def live_oauth_token(self) -> str | None:
+        """Access token of the link with the latest expiry, across providers.
+
+        A row can hold several links for one provider, one per re-issued
+        subject. The relationship has no order, so row position cannot pick
+        the live one. A link with no expiry ranks lowest. Ties keep row order.
+        Needs fully loaded links: a `load_only` collection lazy-loads each row.
+        """
+        if not self.oauth_accounts:
+            return None
+        live: OAuthAccount = max(
+            self.oauth_accounts, key=lambda link: link.expires_at or 0
+        )
+        return live.access_token
+
 
 class AccessToken(SQLAlchemyBaseAccessTokenTableUUID, Base):
     pass
@@ -3798,7 +3814,7 @@ class VoiceProvider(Base):
     name: Mapped[str] = mapped_column(String, unique=True)
     provider_type: Mapped[str] = mapped_column(
         String
-    )  # "openai", "azure", "elevenlabs"
+    )  # "openai", "azure", "elevenlabs", "zoom"
     api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
         EncryptedString(), nullable=True
     )
@@ -4793,6 +4809,10 @@ class SecuritySettings(Base):
         Boolean, nullable=True, default=None
     )
     llm_custom_config_env_injection: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
+    # Lets synced connectors narrow document access to chosen user groups.
+    allow_connector_group_restrictions: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True, default=None
     )
     valid_email_domains: Mapped[list[str] | None] = mapped_column(

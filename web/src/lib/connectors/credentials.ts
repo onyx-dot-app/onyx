@@ -1,322 +1,56 @@
 import { ValidSources } from "../types";
-import { TypedFile } from "./fileTypes";
-
-export interface OAuthAdditionalKwargDescription {
-  name: string;
-  display_name: string;
-  description: string;
-}
-
-export interface OAuthDetails {
-  oauth_enabled: boolean;
-  supports_manual_credentials: boolean;
-  additional_kwargs: OAuthAdditionalKwargDescription[];
-}
-export interface AuthMethodOption<TFields> {
-  value: string;
-  label: string;
-  fields: TFields;
-  description?: string;
-  // UI-only: if true, hide/disable the "Auto Sync Permissions" access type when this auth is used
-  disablePermSync?: boolean;
-}
-export interface CredentialTemplateWithAuth<TFields> {
-  authentication_method?: string;
-  authMethods?: AuthMethodOption<Partial<TFields>>[];
-}
-
-export interface CredentialBase<T> {
-  credential_json: T;
-  admin_public: boolean;
-  source: ValidSources;
-  name?: string;
-  curator_public?: boolean;
-  groups?: number[];
-}
-
-export interface CredentialWithPrivateKey<T> extends CredentialBase<T> {
-  private_key: TypedFile;
-}
-
-export interface Credential<T> extends CredentialBase<T> {
-  id: number;
-  user_id: string | null;
-  user_email: string | null;
-  time_created: string;
-  time_updated: string;
-}
-export interface GithubCredentialJson {
-  github_access_token: string;
-  github_base_url: string | null;
-}
-
-export interface GitbookCredentialJson {
-  gitbook_api_key: string;
-}
-
-export interface GitlabCredentialJson {
-  gitlab_url: string;
-  gitlab_access_token: string;
-}
-
-export interface LumAppsCredentialJson {
-  lumapps_application_id: string;
-  lumapps_api_key: string;
-  lumapps_service_user: string;
-}
-
-export interface BitbucketCredentialJson {
-  bitbucket_email: string;
-  bitbucket_api_token: string;
-}
-
-export interface BookstackCredentialJson {
-  bookstack_base_url: string;
-  bookstack_api_token_id: string;
-  bookstack_api_token_secret: string;
-}
-
-export interface OutlineCredentialJson {
-  outline_base_url: string;
-  outline_api_token: string;
-}
-
-export interface ConfluenceCredentialJson {
-  confluence_username: string;
-  confluence_access_token: string;
-}
-
-export interface JiraCredentialJson {
-  jira_user_email: string | null;
-  jira_api_token: string;
-}
-
-export interface JiraServerCredentialJson {
-  jira_api_token: string;
-}
-
-export interface ProductboardCredentialJson {
-  productboard_access_token: string;
-}
-
-export interface SlackCredentialJson {
-  slack_bot_token: string;
-}
-
-export interface GmailCredentialJson {
-  google_tokens: string;
-  google_primary_admin: string;
-}
-
-export interface GoogleDriveCredentialJson {
-  google_tokens: string;
-  google_primary_admin: string;
-  authentication_method?: string;
-}
-
-export interface GmailServiceAccountCredentialJson {
-  google_service_account_key: string;
-  google_primary_admin: string;
-}
-
-export interface GoogleDriveServiceAccountCredentialJson {
-  google_service_account_key: string;
-  google_primary_admin: string;
-  authentication_method?: string;
-}
-
-export interface SlabCredentialJson {
-  slab_bot_token: string;
-}
-
-export interface CodaCredentialJson {
-  coda_bearer_token: string;
-}
-
-export interface NotionCredentialJson {
-  notion_integration_token: string;
-}
-
-export interface ZulipCredentialJson {
-  zuliprc_content: string;
-}
-
-export interface GuruCredentialJson {
-  guru_user: string;
-  guru_user_token: string;
-}
-
-export interface GongCredentialJson {
-  gong_access_key: string;
-  gong_access_key_secret: string;
-  gong_base_url: string | null;
-}
-
-export interface LoopioCredentialJson {
-  loopio_subdomain: string;
-  loopio_client_id: string;
-  loopio_client_token: string;
-}
-
-export interface LinearCredentialJson {
-  linear_api_key: string;
-}
-
-export interface HubSpotCredentialJson {
-  hubspot_access_token: string;
-}
-
-export interface Document360CredentialJson {
-  portal_id: string;
-  document360_api_token: string;
-}
-
-export interface ClickupCredentialJson {
-  clickup_api_token: string;
-  clickup_team_id: string;
-}
-
-export interface ZendeskCredentialJson {
-  zendesk_subdomain: string;
-  zendesk_email: string;
-  zendesk_token: string;
-}
-
-export interface BoxCredentialJson {
-  box_client_id: string;
-  box_client_secret: string;
-  box_enterprise_id: string;
-  box_user_email: string | null;
-}
-
-export interface DropboxCredentialJson {
-  dropbox_access_token: string;
-}
-
-export interface R2CredentialJson {
-  account_id: string;
-  r2_access_key_id: string;
-  r2_secret_access_key: string;
-}
-
-export interface S3CredentialJson {
-  aws_access_key_id?: string;
-  aws_secret_access_key?: string;
-  aws_role_arn?: string;
-}
-
-export interface GCSCredentialJson {
-  access_key_id: string;
-  secret_access_key: string;
-}
-
-export interface OCICredentialJson {
-  namespace: string;
-  region: string;
-  access_key_id: string;
-  secret_access_key: string;
-}
-export interface SalesforceLegacyCredentialJson {
-  authentication_method?: "password";
-  sf_username: string;
-  sf_password: string;
-  sf_security_token: string;
-  is_sandbox: boolean;
-}
-
-export interface SalesforceOAuthCredentialJson {
-  authentication_method: "oauth";
-  sf_access_token: string;
-  sf_refresh_token: string;
-  sf_instance_url: string;
-  sf_login_url: string;
-}
-
-export type SalesforceCredentialJson =
-  | SalesforceLegacyCredentialJson
-  | SalesforceOAuthCredentialJson;
-
-export interface SharepointCredentialJson {
-  sp_client_id: string;
-  sp_client_secret?: string;
-  sp_directory_id: string;
-  sp_certificate_password?: string;
-  sp_private_key?: TypedFile;
-}
-
-export interface AsanaCredentialJson {
-  asana_api_token_secret: string;
-}
-
-export interface TeamsCredentialJson {
-  teams_client_id: string;
-  teams_client_secret: string;
-  teams_directory_id: string;
-}
-
-export interface DiscourseCredentialJson {
-  discourse_api_key: string;
-  discourse_api_username: string;
-}
-
-export interface AxeroCredentialJson {
-  base_url: string;
-  axero_api_token: string;
-}
-
-export interface DiscordCredentialJson {
-  discord_bot_token: string;
-}
-
-export interface FreshdeskCredentialJson {
-  freshdesk_domain: string;
-  freshdesk_api_key: string;
-}
-
-export interface FirefliesCredentialJson {
-  fireflies_api_key: string;
-}
-
-export interface BraintrustCredentialJson {
-  braintrust_api_key: string;
-}
-
-export interface CanvasCredentialJson {
-  canvas_access_token: string;
-}
-
-export interface MediaWikiCredentialJson {}
-export interface WikipediaCredentialJson extends MediaWikiCredentialJson {}
-
-export interface EgnyteCredentialJson {
-  domain: string;
-  access_token: string;
-}
-
-export interface AirtableCredentialJson {
-  airtable_access_token: string;
-}
-
-export interface HighspotCredentialJson {
-  highspot_url: string;
-  highspot_key: string;
-  highspot_secret: string;
-}
-
-export interface DrupalWikiCredentialJson {
-  drupal_wiki_api_token: string;
-}
-
-export interface ImapCredentialJson {
-  imap_username: string;
-  imap_password: string;
-}
-
-export interface TestRailCredentialJson {
-  testrail_base_url: string;
-  testrail_username: string;
-  testrail_api_key: string;
-}
+import type {
+  AirtableCredentialJson,
+  AsanaCredentialJson,
+  AxeroCredentialJson,
+  BitbucketCredentialJson,
+  BookstackCredentialJson,
+  BoxCredentialJson,
+  BraintrustCredentialJson,
+  CanvasCredentialJson,
+  ClickupCredentialJson,
+  CodaCredentialJson,
+  ConfluenceCredentialJson,
+  CredentialTemplateWithAuth,
+  DiscordCredentialJson,
+  DiscourseCredentialJson,
+  Document360CredentialJson,
+  DropboxCredentialJson,
+  DrupalWikiCredentialJson,
+  EgnyteCredentialJson,
+  FirefliesCredentialJson,
+  FreshdeskCredentialJson,
+  GCSCredentialJson,
+  GitbookCredentialJson,
+  GithubCredentialJson,
+  GitlabCredentialJson,
+  GmailCredentialJson,
+  GongCredentialJson,
+  GoogleDriveCredentialJson,
+  GuruCredentialJson,
+  HighspotCredentialJson,
+  HubSpotCredentialJson,
+  ImapCredentialJson,
+  JiraCredentialJson,
+  LinearCredentialJson,
+  LoopioCredentialJson,
+  LumAppsCredentialJson,
+  NotionCredentialJson,
+  OCICredentialJson,
+  OutlineCredentialJson,
+  OutlookCredentialJson,
+  ProductboardCredentialJson,
+  R2CredentialJson,
+  S3CredentialJson,
+  SalesforceCredentialJson,
+  SharepointCredentialJson,
+  SlabCredentialJson,
+  SlackCredentialJson,
+  TeamsCredentialJson,
+  TestRailCredentialJson,
+  ZendeskCredentialJson,
+  ZulipCredentialJson,
+} from "./types";
 
 // Gmail and Google Drive use dedicated credential UIs, so their templates are partial.
 type CredentialTemplateMap = Record<ValidSources, object | null> & {
@@ -345,7 +79,8 @@ type CredentialTemplateMap = Record<ValidSources, object | null> & {
   salesforce: SalesforceCredentialJson;
   sharepoint: CredentialTemplateWithAuth<SharepointCredentialJson>;
   asana: AsanaCredentialJson;
-  teams: TeamsCredentialJson;
+  teams: CredentialTemplateWithAuth<TeamsCredentialJson>;
+  outlook: CredentialTemplateWithAuth<OutlookCredentialJson>;
   zendesk: ZendeskCredentialJson;
   discourse: DiscourseCredentialJson;
   axero: AxeroCredentialJson;
@@ -479,11 +214,64 @@ export const credentialTemplates: Record<ValidSources, any> = {
   asana: {
     asana_api_token_secret: "",
   },
+  // SAFETY: the certificate template seeds teams_private_key with null, which TypedFile does not allow.
   teams: {
-    teams_client_id: "",
-    teams_client_secret: "",
-    teams_directory_id: "",
-  },
+    authentication_method: "client_secret",
+    authMethods: [
+      {
+        value: "client_secret",
+        label: "Client Secret",
+        fields: {
+          teams_client_id: "",
+          teams_client_secret: "",
+          teams_directory_id: "",
+        },
+        description:
+          "The connector signs in with a client secret of the app registration. Provide the client ID, directory ID and secret. Channel messages and members only: SharePoint refuses a secret, so Include Attachments needs the certificate option.",
+      },
+      {
+        value: "certificate",
+        label: "Certificate Authentication",
+        fields: {
+          teams_client_id: "",
+          teams_directory_id: "",
+          teams_certificate_password: "",
+          teams_private_key: null,
+        },
+        description:
+          "The connector signs in with a certificate uploaded to the app registration. Provide the client ID, directory ID, the PFX bundle and its password. Required for Include Attachments, which reads channel files and their readers from SharePoint.",
+      },
+    ],
+  } as CredentialTemplateWithAuth<TeamsCredentialJson>,
+  // SAFETY: the certificate template seeds outlook_private_key with null, which TypedFile does not allow.
+  outlook: {
+    authentication_method: "client_secret",
+    authMethods: [
+      {
+        value: "client_secret",
+        label: "Client Secret",
+        fields: {
+          outlook_client_id: "",
+          outlook_client_secret: "",
+          outlook_directory_id: "",
+        },
+        description:
+          "The connector signs in with a client secret of the app registration. Provide the client ID, directory ID and secret.",
+      },
+      {
+        value: "certificate",
+        label: "Certificate Authentication",
+        fields: {
+          outlook_client_id: "",
+          outlook_directory_id: "",
+          outlook_certificate_password: "",
+          outlook_private_key: null,
+        },
+        description:
+          "The connector signs in with a certificate uploaded to the app registration. Provide the client ID, directory ID, the PFX bundle and its password.",
+      },
+    ],
+  } as CredentialTemplateWithAuth<OutlookCredentialJson>,
   zendesk: {
     zendesk_subdomain: "",
     zendesk_email: "",
@@ -754,6 +542,15 @@ export const credentialDisplayNames: Record<string, string> = {
   teams_client_id: "Microsoft Teams Client ID",
   teams_client_secret: "Microsoft Teams Client Secret",
   teams_directory_id: "Microsoft Teams Directory ID",
+  teams_certificate_password: "Microsoft Teams Certificate Password",
+  teams_private_key: "Microsoft Teams Private Key (PFX)",
+
+  // Outlook
+  outlook_client_id: "Microsoft Outlook Client ID",
+  outlook_client_secret: "Microsoft Outlook Client Secret",
+  outlook_directory_id: "Microsoft Outlook Directory ID",
+  outlook_certificate_password: "Microsoft Outlook Certificate Password",
+  outlook_private_key: "Microsoft Outlook Private Key (PFX)",
 
   // Discourse
   discourse_api_key: "Discourse API Key",
@@ -792,7 +589,3 @@ export const credentialDisplayNames: Record<string, string> = {
   bitbucket_email: "Bitbucket Account Email",
   bitbucket_api_token: "Bitbucket API Token",
 };
-
-export function getDisplayNameForCredentialKey(key: string): string {
-  return credentialDisplayNames[key] || key;
-}

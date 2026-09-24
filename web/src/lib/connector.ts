@@ -1,9 +1,9 @@
 import { ValidSources } from "./types";
-import {
+import type {
   Connector,
   ConnectorBase,
   ConnectorSnapshot,
-} from "./connectors/connectors";
+} from "@/lib/connectors/types";
 async function handleResponse(
   response: Response
 ): Promise<[string | null, any]> {

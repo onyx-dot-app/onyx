@@ -37,7 +37,7 @@ class ClickupConnector(LoadConnector, PollConnector):
         self.batch_size = batch_size
         self.api_token = api_token
         self.team_id = team_id
-        self.connector_type = connector_type if connector_type else "workspace"
+        self.connector_type = connector_type or "workspace"
         self.connector_ids = connector_ids
         self.retrieve_task_comments = retrieve_task_comments
 

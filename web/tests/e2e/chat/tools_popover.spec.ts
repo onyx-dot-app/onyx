@@ -12,8 +12,6 @@ import {
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import { sendMessage } from "@tests/e2e/utils/chatActions";
 
-const LOCAL_STORAGE_KEY = "selectedInternalSearchSources";
-
 test.describe("ToolsPopover Tool Toggles", () => {
   test.describe.configure({ mode: "serial" });
 
@@ -120,11 +118,6 @@ test.describe("ToolsPopover Tool Toggles", () => {
     await loginAs(page, "admin");
     await page.goto("/app");
     await page.waitForLoadState("networkidle");
-    // Clear source preferences for a clean slate
-    await page.evaluate(
-      (key) => localStorage.removeItem(key),
-      LOCAL_STORAGE_KEY
-    );
     // Tool configurations belong to a chat and live in session storage, so a
     // chat left behind by an earlier test would otherwise be read by this one.
     await page.evaluate(() => sessionStorage.clear());
@@ -150,9 +143,11 @@ test.describe("ToolsPopover Tool Toggles", () => {
     console.log(`[tools] web_search=${webVisible}, image_gen=${imgVisible}`);
   });
 
-  test("source preferences should persist to localStorage and survive reload", async ({
-    page,
-  }) => {
+  test("a chat keeps a source selection across a reload", async ({ page }) => {
+    // Sources belong to a chat. A composer with no chat yet keeps nothing.
+    await sendMessage(page, "hello");
+    await page.waitForURL(/chatId=/, { timeout: 30000 });
+
     await openActionManagement(page);
     await expect(toolOption(page, TOOL_NAMES.internalSearch)).toBeVisible({
       timeout: 10000,
@@ -176,15 +171,6 @@ test.describe("ToolsPopover Tool Toggles", () => {
     await firstSwitch.click();
     await expect(firstSwitch).toHaveAttribute("aria-checked", "false");
 
-    // Verify localStorage was updated
-    const stored = await page.evaluate(
-      (key) => localStorage.getItem(key),
-      LOCAL_STORAGE_KEY
-    );
-    expect(stored).toBeTruthy();
-    expect(JSON.parse(stored!).sourcePreferences).toBeDefined();
-
-    // Reload and verify persistence
     await page.reload();
     await page.waitForLoadState("networkidle");
 
@@ -197,7 +183,21 @@ test.describe("ToolsPopover Tool Toggles", () => {
     });
   });
 
-  test("disabling search tool clears sources, re-enabling restores them", async ({
+  /** Number of source switches in the open source management view. */
+  async function countEnabledSources(page: Page): Promise<number> {
+    const switches = page.locator('[role="switch"]');
+    await expect(switches.first()).toBeVisible({ timeout: 5000 });
+    const total = await switches.count();
+    let enabled = 0;
+    for (let i = 0; i < total; i++) {
+      if ((await switches.nth(i).getAttribute("aria-checked")) === "true") {
+        enabled++;
+      }
+    }
+    return enabled;
+  }
+
+  test("disabling the search tool leaves the source selection alone", async ({
     page,
   }) => {
     await openActionManagement(page);
@@ -205,56 +205,28 @@ test.describe("ToolsPopover Tool Toggles", () => {
       timeout: 10000,
     });
 
-    // Open source management and count enabled sources
     await openSourceManagement(page);
-    const switches = page.locator('[role="switch"]');
-    await expect(switches.first()).toBeVisible({ timeout: 5000 });
-
-    const totalSources = await switches.count();
-    let enabledBefore = 0;
-    for (let i = 0; i < totalSources; i++) {
-      if ((await switches.nth(i).getAttribute("aria-checked")) === "true") {
-        enabledBefore++;
-      }
-    }
+    const enabledBefore = await countEnabledSources(page);
     expect(enabledBefore).toBeGreaterThan(0);
 
-    // Go back to primary view
     await page.locator('button[aria-label="Back"]').click();
     await expect(toolOption(page, TOOL_NAMES.internalSearch)).toBeVisible();
 
-    // Disable the search tool
+    // The tool state and the source selection are separate axes: switching
+    // the tool off neither clears the sources nor parks them for later.
     await toggleToolDisabled(toolOption(page, TOOL_NAMES.internalSearch));
-
-    // Verify localStorage was written (the fix being tested)
-    const stored = await page.evaluate(
-      (key) => localStorage.getItem(key),
-      LOCAL_STORAGE_KEY
-    );
-    expect(stored).toBeTruthy();
-
-    // Re-enable the search tool
-    await toggleToolDisabled(toolOption(page, TOOL_NAMES.internalSearch));
-
-    // Verify sources were restored
     await openSourceManagement(page);
-    const switchesAfter = page.locator('[role="switch"]');
-    const totalAfter = await switchesAfter.count();
-    let enabledAfter = 0;
-    for (let i = 0; i < totalAfter; i++) {
-      if (
-        (await switchesAfter.nth(i).getAttribute("aria-checked")) === "true"
-      ) {
-        enabledAfter++;
-      }
-    }
-    expect(enabledAfter).toBe(enabledBefore);
+    expect(await countEnabledSources(page)).toBe(enabledBefore);
+
+    await page.locator('button[aria-label="Back"]').click();
+    await toggleToolDisabled(toolOption(page, TOOL_NAMES.internalSearch));
+    await openSourceManagement(page);
+    expect(await countEnabledSources(page)).toBe(enabledBefore);
   });
 
-  // Image generation rather than internal search: the search tool's state is
-  // re-derived on mount from the selected sources, which are still global in
-  // `localStorage`, so it would answer for those rather than for the chat.
-  const CONFIGURED_TOOL = TOOL_NAMES.imageGeneration;
+  // Internal search: the connector from `beforeAll` guarantees it is offered.
+  // The other tools depend on best-effort provider setup.
+  const CONFIGURED_TOOL = TOOL_NAMES.internalSearch;
 
   /** The slash button reads "Disable" while the tool is on, "Enable" once off. */
   async function expectToolDisabled(

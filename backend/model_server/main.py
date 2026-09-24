@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import shutil
@@ -69,6 +70,16 @@ def _move_files_recursively(source: Path, dest: Path, overwrite: bool = False) -
             shutil.move(str(item), str(target_path))
 
 
+def _migrate_temp_hf_cache() -> None:
+    if not TEMP_HF_CACHE_PATH.is_dir():
+        return
+
+    logger.notice("Moving contents of temp_huggingface to huggingface cache.")
+    _move_files_recursively(TEMP_HF_CACHE_PATH, HF_CACHE_PATH)
+    shutil.rmtree(TEMP_HF_CACHE_PATH, ignore_errors=True)
+    logger.notice("Moved contents of temp_huggingface to huggingface cache.")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator:
     gpu_type = get_gpu_type()
@@ -77,11 +88,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     app.state.gpu_type = gpu_type
 
     try:
-        if TEMP_HF_CACHE_PATH.is_dir():
-            logger.notice("Moving contents of temp_huggingface to huggingface cache.")
-            _move_files_recursively(TEMP_HF_CACHE_PATH, HF_CACHE_PATH)
-            shutil.rmtree(TEMP_HF_CACHE_PATH, ignore_errors=True)
-            logger.notice("Moved contents of temp_huggingface to huggingface cache.")
+        # Walking and moving the cache is blocking filesystem work, and the
+        # tree can be gigabytes. Keep it off the event loop.
+        await asyncio.to_thread(_migrate_temp_hf_cache)
     except Exception as e:
         logger.warning(
             "Error moving contents of temp_huggingface to huggingface cache: %s. This is not a critical error and the model server will continue to run.",

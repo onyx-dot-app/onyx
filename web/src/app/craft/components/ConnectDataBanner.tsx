@@ -46,7 +46,7 @@ export default function ConnectDataBanner({
   }
 
   const handleClick = () => {
-    window.location.href = "/admin/indexing/status";
+    window.location.href = "/admin/indexing-status";
   };
 
   return (

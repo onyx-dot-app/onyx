@@ -66,7 +66,7 @@ export default function Page() {
         icon={route.icon}
         title={t("sets.new.header.title")}
         divider
-        backButton
+        cancel
       />
       <SettingsLayouts.Body>
         <Main />

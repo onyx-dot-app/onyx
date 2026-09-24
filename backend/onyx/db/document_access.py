@@ -21,6 +21,7 @@ def apply_document_access_filter(
     user_email: str | None,
     external_group_ids: list[str],
     user_id: UUID | None = None,
+    prior_emails: list[str] | None = None,
 ) -> Select:
     """Filter documents by source ACL or associated connector access."""
     stmt = stmt.join(
@@ -46,6 +47,12 @@ def apply_document_access_filter(
     ]
     if user_email:
         access_filters.append(any_(Document.external_user_emails) == user_email)
+    if prior_emails:
+        access_filters.append(
+            Document.external_user_emails.overlap(
+                cast(postgresql.array(prior_emails), postgresql.ARRAY(String))
+            )
+        )
     if external_group_ids:
         access_filters.append(
             Document.external_user_group_ids.overlap(

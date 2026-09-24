@@ -1,6 +1,7 @@
 package coverage
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -108,4 +109,57 @@ func mustParse(t *testing.T, profile string) *Profile {
 		t.Fatalf("failed to parse the profile: %v", err)
 	}
 	return parsed
+}
+
+func TestParseProfile_rejectsMalformedFields(t *testing.T) {
+	for name, tc := range map[string]struct {
+		line string
+		want string
+	}{
+		"no block position":         {"example.com/m/cmd/root.go 2 1", "missing block position"},
+		"non-numeric statements":    {"example.com/m/cmd/root.go:1.1,2.2 two 1", "invalid statement count"},
+		"non-numeric execution cnt": {"example.com/m/cmd/root.go:1.1,2.2 2 once", "invalid execution count"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := ParseProfile(strings.NewReader("mode: set\n"+tc.line+"\n"), modulePath)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected %q, got %v", tc.want, err)
+			}
+		})
+	}
+}
+
+// A line longer than the scanner buffer is a read error, not a silent stop.
+func TestParseProfile_overlongLineIsAnError(t *testing.T) {
+	line := "example.com/m/" + strings.Repeat("a", 2<<20) + ".go:1.1,2.2 1 1"
+	if _, err := ParseProfile(strings.NewReader("mode: set\n"+line+"\n"), modulePath); err == nil {
+		t.Fatal("expected an error for an overlong line")
+	}
+}
+
+func TestParseProfile_keepsPathsOutsideTheModule(t *testing.T) {
+	for name, tc := range map[string]struct {
+		modulePath string
+		want       string
+	}{
+		"no module path":     {"", "example.com/m/cmd"},
+		"another module":     {"example.com/other", "example.com/m/cmd"},
+		"module path prefix": {"example.com/m", "cmd"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			profile, err := ParseProfile(strings.NewReader("mode: set\nexample.com/m/cmd/root.go:1.1,2.2 1 1\n"), tc.modulePath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := profile.Packages[0].Package; got != tc.want {
+				t.Fatalf("expected %q, got %q", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestParseProfileFile_missingFile(t *testing.T) {
+	if _, err := ParseProfileFile(filepath.Join(t.TempDir(), "missing.out"), modulePath); err == nil {
+		t.Fatal("expected an error for a missing profile")
+	}
 }

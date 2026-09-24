@@ -19,6 +19,7 @@ from office365.runtime.client_request import ClientRequestException
 from office365.runtime.queries.client_query import ClientQuery
 
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
+from onyx.connectors.cross_connector_utils.server_wait import bound_server_wait
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_after import parse_retry_after_seconds
 
@@ -52,13 +53,13 @@ def backoff_seconds(attempt: int, retry_after: str | None) -> float:
     from ``[base/2, base]`` so that many documents failing at the same instant
     (e.g. during a Graph throttling window) don't all retry on the same tick
     and re-create the thundering herd. Server-provided Retry-After values are
-    used verbatim, since those are an explicit instruction rather than a guess.
+    used verbatim (see ``bound_server_wait`` for logging and the cloud cap).
 
     ``attempt`` is 0-indexed (0 for the first retry).
     """
     parsed = parse_retry_after_seconds(retry_after)
     if parsed is not None:
-        return parsed
+        return bound_server_wait(parsed, "microsoft_graph")
     base = min(30, (2**attempt) * 5)
     return base / 2 + random.uniform(0, base / 2)
 
@@ -76,11 +77,15 @@ def graph_error_code(response: requests.Response | None) -> str:
 
 
 def log_and_raise_for_status(response: requests.Response) -> None:
-    """Log the response text and raise for status."""
+    """Log the response text and raise for status.
+
+    A warning, not an error: callers handle expected statuses themselves, such
+    as a 404 for a user without a mailbox, and raise when one is fatal.
+    """
     try:
         response.raise_for_status()
     except Exception:
-        logger.error("HTTP request failed: %s", response.text)
+        logger.warning("HTTP request failed: %s", response.text)
         raise
 
 
@@ -89,6 +94,7 @@ def sleep_and_retry(
     method_name: str,
     max_retries: int = 3,
     retryable_statuses: frozenset[int] = RETRYABLE_HTTP_STATUSES,
+    rebuild: Callable[[], ClientQuery] | None = None,
 ) -> Any:
     """
     Execute an office365 SDK query with retry logic for rate limiting and
@@ -96,8 +102,13 @@ def sleep_and_retry(
     the server or an upstream gateway closes the connection mid-response).
 
     ``retryable_statuses`` is the HTTP status set worth another attempt.
+    ``rebuild`` makes the query again for each retry. The SDK drops a query and
+    its one-time hooks once it is sent, so running the same object again sends
+    nothing and answers with an empty result.
     """
     for attempt in range(max_retries + 1):
+        if attempt and rebuild is not None:
+            query_obj = rebuild()
         try:
             return query_obj.execute_query()
         except TRANSIENT_TRANSPORT_EXCEPTIONS as e:
@@ -166,16 +177,21 @@ def graph_api_get_json(
     get_access_token: Callable[[], str],
     url: str,
     params: dict[str, str] | None = None,
+    headers: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Make an authenticated GET request to the Graph API with retry."""
+    """Make an authenticated GET request to the Graph API with retry.
+
+    ``headers`` carries request preferences such as ``Prefer``. Authorization
+    is always set here.
+    """
     for attempt in range(GRAPH_API_MAX_RETRIES + 1):
         # Tokens can expire during long traversals, so re-acquire per attempt.
         access_token = get_access_token()
-        headers = {"Authorization": f"Bearer {access_token}"}
+        request_headers = {**(headers or {}), "Authorization": f"Bearer {access_token}"}
         try:
             response = requests.get(
                 url,
-                headers=headers,
+                headers=request_headers,
                 params=params,
                 timeout=REQUEST_TIMEOUT_SECONDS,
             )
@@ -230,9 +246,12 @@ class GraphApiClient:
         self.graph_api_base = graph_api_base
 
     def get_json(
-        self, url: str, params: dict[str, str] | None = None
+        self,
+        url: str,
+        params: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        return graph_api_get_json(self.get_access_token, url, params)
+        return graph_api_get_json(self.get_access_token, url, params, headers)
 
 
 def iter_graph_collection(

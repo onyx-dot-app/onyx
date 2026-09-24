@@ -21,7 +21,7 @@ import {
 import Text from "@/refresh-components/texts/Text";
 import { AccountType, UserStatus } from "@/lib/types";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
-import type { GroupOption, StatusFilter, StatusCountMap } from "./interfaces";
+import type { GroupOption, StatusFilter, StatusCountMap } from "./types";
 
 // ---------------------------------------------------------------------------
 // Constants

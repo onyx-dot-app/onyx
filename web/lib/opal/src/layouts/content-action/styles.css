@@ -1,7 +1,7 @@
 @reference "#reference.css";
 
 .opal-content-action {
-  @apply flex flex-row w-full gap-4 items-stretch;
+  @apply flex flex-row w-full items-stretch gap-0;
 }
 
 .opal-content-action[data-centered="true"] {

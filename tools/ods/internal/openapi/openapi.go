@@ -146,4 +146,3 @@ func GenerateAll(schemaPath string, clientOutputDir string) error {
 	}
 	return RunScript(args)
 }
-

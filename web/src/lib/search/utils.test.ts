@@ -1,5 +1,5 @@
 import { ValidSources } from "../types";
-import { OnyxDocument } from "./interfaces";
+import { OnyxDocument } from "@/lib/search/types";
 import { openDocument } from "./utils";
 
 function makeDocument(overrides: Partial<OnyxDocument>): OnyxDocument {
@@ -42,7 +42,8 @@ describe("openDocument", () => {
 
     expect(windowOpen).toHaveBeenCalledWith(
       "https://example.com/doc.pdf",
-      "_blank"
+      "_blank",
+      "noopener,noreferrer"
     );
     expect(updatePresentingDocument).not.toHaveBeenCalled();
   });

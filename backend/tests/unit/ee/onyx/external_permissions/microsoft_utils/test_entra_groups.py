@@ -33,6 +33,7 @@ class _FakeGraphClient(GraphApiClient):
         self,
         url: str,
         params: dict[str, str] | None = None,  # noqa: ARG002
+        headers: dict[str, str] | None = None,  # noqa: ARG002
     ) -> dict[str, Any]:
         if "/members" in url:
             group_id = url.split("/groups/")[1].split("/members")[0]

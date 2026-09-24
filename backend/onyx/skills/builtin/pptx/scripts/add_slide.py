@@ -193,11 +193,11 @@ def parse_source(source: str) -> tuple[str, str | None]:
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print("Usage: python add_slide.py <unpacked_dir> <source>", file=sys.stderr)
-        print("", file=sys.stderr)
+        print(file=sys.stderr)
         print("Source can be:", file=sys.stderr)
         print("  slide2.xml        - duplicate an existing slide", file=sys.stderr)
         print("  slideLayout2.xml  - create from a layout template", file=sys.stderr)
-        print("", file=sys.stderr)
+        print(file=sys.stderr)
         print(
             "To see available layouts: ls <unpacked_dir>/ppt/slideLayouts/",
             file=sys.stderr,

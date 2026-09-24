@@ -1408,8 +1408,8 @@ class TestGetBifrostAvailableModels:
         return {
             "data": [
                 {
-                    "id": "anthropic/claude-3-5-sonnet",
-                    "name": "Claude 3.5 Sonnet",
+                    "id": "anthropic/claude-sonnet-4-5",
+                    "name": "Claude Sonnet 4.5",
                     "context_length": 200000,
                 },
                 {
@@ -1461,7 +1461,7 @@ class TestGetBifrostAvailableModels:
             request = BifrostModelsRequest(api_base="https://bifrost.example.com")
             results = get_bifrost_available_models(request, MagicMock(), mock_session)
 
-            claude = next(r for r in results if r.name == "anthropic/claude-3-5-sonnet")
+            claude = next(r for r in results if r.name == "anthropic/claude-sonnet-4-5")
             gpt4o = next(r for r in results if r.name == "openai/gpt-4o")
             deepseek = next(r for r in results if r.name == "deepseek/deepseek-r1")
 

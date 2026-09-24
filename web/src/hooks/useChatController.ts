@@ -16,7 +16,8 @@ import {
 } from "@/app/app/message/multiModel";
 import { getMaxSelectedDocumentTokens } from "@/lib/projects/svc";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
-import { StreamStopInfo } from "@/lib/search/interfaces";
+import { StreamStopInfo } from "@/lib/search/types";
+import type { SourceMetadata } from "@/lib/search/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";
 import {
@@ -31,7 +32,7 @@ import {
 import { MinimalAgent } from "@/lib/agents/types";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/types";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import {
   BackendMessage,
@@ -48,7 +49,7 @@ import {
   ToolCallMetadata,
   UserKnowledgeFilePacket,
 } from "@/app/app/interfaces";
-import { StreamStopReason } from "@/lib/search/interfaces";
+import { StreamStopReason } from "@/lib/search/types";
 import { createChatSession } from "@/app/app/services/lib";
 import {
   getFinalLLM,
@@ -59,7 +60,12 @@ import {
   CurrentMessageFIFO,
   updateCurrentMessageFIFO,
 } from "@/app/app/services/currentMessageFIFO";
-import { buildFilters } from "@/lib/searchFilters/utils";
+import {
+  agentDeclaresOwnSources,
+  buildFilters,
+  effectiveAvailableSourcesFor,
+  selectedSourcesFrom,
+} from "@/lib/searchFilters/utils";
 import { toast } from "@opal/layouts";
 import {
   ReadonlyURLSearchParams,
@@ -83,7 +89,8 @@ import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
-import { useSharedSearchFilters } from "@/lib/searchFilters/providers";
+import { useAvailableSources } from "@/lib/connectors/hooks";
+import { getConfiguredSources } from "@/lib/sources";
 
 const SYSTEM_MESSAGE_ID = -3;
 
@@ -148,7 +155,25 @@ export default function useChatController({
   selectedDocuments,
   resetInputBar,
 }: UseChatControllerProps) {
-  const searchFilters = useSharedSearchFilters();
+  // The chat's search filters ride the tool configuration, resolved against
+  // the sources the active agent can reach. An explicit selection resolves
+  // only against a complete roster — `settled` allows stale data (a failed
+  // revalidation must not drop a restriction) but never a partial first
+  // load, which would narrow the send wrongly. An agent declaring its own
+  // knowledge_sources carries its complete roster and never waits.
+  const { availableSources, settled: sourcesSettled } = useAvailableSources();
+  const selectedSearchSources = useMemo<SourceMetadata[] | null>(
+    () =>
+      activeAgent && (sourcesSettled || agentDeclaresOwnSources(activeAgent))
+        ? selectedSourcesFrom(
+            toolConfiguration.filters,
+            getConfiguredSources(
+              effectiveAvailableSourcesFor(activeAgent, availableSources)
+            )
+          )
+        : null,
+    [activeAgent, sourcesSettled, availableSources, toolConfiguration.filters]
+  );
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1066,10 +1091,12 @@ export default function useChatController({
           })(),
           chatSessionId: currChatSessionId,
           filters: buildFilters(
-            searchFilters.selectedSources,
-            searchFilters.selectedDocumentSets,
-            searchFilters.timeRange,
-            searchFilters.selectedTags
+            selectedSearchSources,
+            toolConfiguration.filters.documentSets,
+            toolConfiguration.filters.timeRange
+              ? { from: toolConfiguration.filters.timeRange.from }
+              : null,
+            toolConfiguration.filters.tags
           ),
           modelProvider: isMultiModel
             ? undefined
@@ -1485,10 +1512,7 @@ export default function useChatController({
     },
     [
       // Narrow to stable fields from managers to avoid re-creation
-      searchFilters.selectedSources,
-      searchFilters.selectedDocumentSets,
-      searchFilters.selectedTags,
-      searchFilters.timeRange,
+      selectedSearchSources,
       llmManager.currentLlm,
       llmManager.temperature,
       llmManager.hasTemperatureOverride,
