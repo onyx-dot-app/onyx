@@ -98,8 +98,8 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
       }
     }, [highlightedIndex, isOpen, keyboardNav, ref]);
 
-    // Opening shows the selection: the (first) selected row scrolls into
-    // view, so a long list opens where the current value is.
+    // Opening shows the selection: the (first) selected row is centred in
+    // view, so a long list opens around the current value.
     useEffect(() => {
       if (!isOpen || !ref || typeof ref === "function" || !ref.current) {
         return;
@@ -108,7 +108,7 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
         '[role="option"][aria-selected="true"]'
       );
       selectedElement?.scrollIntoView({
-        block: "nearest",
+        block: "center",
         behavior: "instant",
       });
     }, [isOpen, ref]);
