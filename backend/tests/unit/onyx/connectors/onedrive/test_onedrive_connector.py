@@ -36,6 +36,8 @@ from onyx.connectors.models import (
 )
 from onyx.connectors.onedrive.capability_checks import build_onedrive_indexing_checks
 from onyx.connectors.onedrive.connector import (
+    MAX_DRIVE_DELTA_PAGES,
+    MAX_USER_LISTING_PAGES,
     OneDriveConnector,
     drive_item_document,
     drive_root_id,
@@ -287,6 +289,28 @@ def test_onedrive_systemic_graph_errors_propagate(status: int) -> None:
 
     with pytest.raises(OneDriveGraphError):
         _run_step(connector, delta_checkpoint)
+
+
+def test_onedrive_checkpoint_bounds_external_pagination() -> None:
+    connector, gateway = _connector()
+    user_checkpoint = OneDriveCheckpoint(
+        has_more=True,
+        user_listing_pages=MAX_USER_LISTING_PAGES,
+    )
+
+    with pytest.raises(RuntimeError, match="user listing exceeded"):
+        _run_step(connector, user_checkpoint)
+    gateway.list_users.assert_not_called()
+
+    delta_checkpoint = OneDriveCheckpoint(
+        has_more=True,
+        current_user=_user(),
+        current_drive=_drive(),
+        delta_pages=MAX_DRIVE_DELTA_PAGES,
+    )
+    with pytest.raises(RuntimeError, match="delta exceeded"):
+        _run_step(connector, delta_checkpoint)
+    gateway.get_delta_page.assert_not_called()
 
 
 def test_onedrive_checkpoint_emits_later_occurrences_across_pages() -> None:
@@ -566,6 +590,25 @@ def test_onedrive_capability_denial_is_actionable() -> None:
 
     with pytest.raises(InsufficientPermissionsError):
         check.run(context)
+
+
+def test_onedrive_capability_user_probe_is_bounded_for_mock_pages() -> None:
+    gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
+    context = CapabilityCheckContext(
+        source=DocumentSource.ONEDRIVE,
+        credential_json={},
+        connector_specific_config={},
+        source_operations=gateway,
+    )
+    check = next(
+        check
+        for check in build_onedrive_indexing_checks()
+        if check.check_id == "onedrive_drive"
+    )
+
+    with pytest.raises(ConnectorValidationError, match="discovery exceeded"):
+        check.run(context)
+    assert gateway.list_users.call_count == 100
 
 
 def test_onedrive_capability_config_rejects_wrong_field_types() -> None:

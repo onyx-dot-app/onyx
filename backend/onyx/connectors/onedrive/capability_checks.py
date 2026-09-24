@@ -38,6 +38,7 @@ from onyx.connectors.onedrive.source_operations import (
 
 _DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/onedrive"
 _DELTA_PROBE_PAGE_SIZE = 1
+_CANDIDATE_PAGES = 100
 
 
 def _gateway(context: CapabilityCheckContext) -> OneDriveSourceOperations:
@@ -79,7 +80,7 @@ def _candidate_users(
         return
 
     next_link: str | None = None
-    while True:
+    for _ in range(_CANDIDATE_PAGES):
         page = gateway.list_users(
             page_size=USERS_PAGE_SIZE,
             next_link=next_link,
@@ -88,6 +89,9 @@ def _candidate_users(
         next_link = page.next_link
         if next_link is None:
             return
+    raise ConnectorValidationError(
+        f"OneDrive user discovery exceeded {_CANDIDATE_PAGES} pages."
+    )
 
 
 def _candidate_drives(

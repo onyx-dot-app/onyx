@@ -186,6 +186,10 @@ class OneDriveSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "The drive probe needs a user returned by Graph; the coverage spy "
+            "has no tenant users."
+        ),
     )
     def get_default_drive(self, *, user_id: str) -> OneDriveDrive | None:
         try:
@@ -201,6 +205,10 @@ class OneDriveSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "The delta probe needs a drive returned by Graph; the coverage spy "
+            "has no tenant users."
+        ),
     )
     def get_delta_page(
         self, *, drive_id: str, page_url: str, page_size: int

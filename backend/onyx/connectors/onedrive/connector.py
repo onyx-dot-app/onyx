@@ -72,6 +72,8 @@ ROOT_NODE_SUFFIX = "root"
 HIERARCHY_ID_SEPARATOR = ":"
 METADATA_DRIVE = "drive"
 METADATA_PATH = "path"
+MAX_USER_LISTING_PAGES = 100_000
+MAX_DRIVE_DELTA_PAGES = 100_000
 
 
 def hierarchy_item_id(drive_id: str, item_id: str) -> str:
@@ -243,6 +245,7 @@ class OneDriveConnector(
         checkpoint.current_drive = None
         checkpoint.delta_cursor = None
         checkpoint.delta_started = False
+        checkpoint.delta_pages = 0
 
     def _finish_drive(self, checkpoint: OneDriveCheckpoint) -> None:
         self._clear_current_user(checkpoint)
@@ -273,8 +276,16 @@ class OneDriveConnector(
             if checkpoint.user_listing_started and checkpoint.users_next_link is None:
                 checkpoint.has_more = False
                 return
-            page = self.ops.list_users(next_link=checkpoint.users_next_link)
+            if checkpoint.user_listing_pages >= MAX_USER_LISTING_PAGES:
+                raise RuntimeError(
+                    f"OneDrive user listing exceeded {MAX_USER_LISTING_PAGES} pages."
+                )
+            request_next_link = checkpoint.users_next_link
+            page = self.ops.list_users(next_link=request_next_link)
+            if request_next_link is not None and page.next_link == request_next_link:
+                raise RuntimeError("OneDrive user listing cursor did not advance.")
             checkpoint.user_listing_started = True
+            checkpoint.user_listing_pages += 1
             checkpoint.users_next_link = page.next_link
             checkpoint.user_page = page.users
         if checkpoint.user_page:
@@ -374,6 +385,11 @@ class OneDriveConnector(
             page_size=self.settings.batch_size,
             select_fields=DRIVE_DELTA_SELECT_FIELDS,
         )
+        if checkpoint.delta_pages >= MAX_DRIVE_DELTA_PAGES:
+            raise RuntimeError(
+                f"OneDrive delta exceeded {MAX_DRIVE_DELTA_PAGES} pages "
+                f"for drive `{drive.id}`."
+            )
         try:
             result = self.ops.get_delta_page(
                 drive_id=drive.id,
@@ -393,6 +409,11 @@ class OneDriveConnector(
                 )
             self._finish_drive(checkpoint)
             return
+        if not result.resynced and result.next_cursor == page_url:
+            raise RuntimeError(
+                f"OneDrive delta cursor did not advance for drive `{drive.id}`."
+            )
+        checkpoint.delta_pages += 1
         if not checkpoint.delta_started:
             yield user_root_node(user, drive)
         checkpoint.delta_started = True
