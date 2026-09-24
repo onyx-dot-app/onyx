@@ -412,6 +412,11 @@ class FileStoreType(str, Enum):
     AZURE = "azure"
 
 
+# Key in FileRecord.file_metadata naming the chat session that produced a
+# CHAT_IMAGE_GEN file. user_can_access_chat_file scopes the file by it.
+CHAT_SESSION_ID_FILE_METADATA_KEY = "chat_session_id"
+
+
 class FileOrigin(str, Enum):
     CHAT_UPLOAD = "chat_upload"
     CHAT_IMAGE_GEN = "chat_image_gen"
@@ -800,7 +805,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.DROPBOX: "Cloud-stored files and folders",
     DocumentSource.SHAREPOINT: "Documents and team sites",
     DocumentSource.TEAMS: "Chat messages and channels",
-    DocumentSource.OUTLOOK: "Email conversations from Microsoft 365 mailboxes",
+    DocumentSource.OUTLOOK: "Email conversations and calendar events from Microsoft 365 mailboxes",
     DocumentSource.SALESFORCE: "Sales data, accounts, and opportunities",
     DocumentSource.DISCOURSE: "Community forums and discussions",
     DocumentSource.AXERO: "Employee engagement and intranet content",

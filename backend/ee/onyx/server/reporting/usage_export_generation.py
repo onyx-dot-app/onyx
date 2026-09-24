@@ -17,6 +17,7 @@ from ee.onyx.db.usage_export import (
     write_usage_report,
 )
 from ee.onyx.server.reporting.usage_export_models import (
+    USAGE_REPORT_MEDIA_TYPE,
     UsageReportMetadata,
     UserSkeleton,
 )
@@ -255,7 +256,7 @@ def generate_usage_report_pdf(
     file_name = f"{report_id}_review_pack"
 
     # The queried bounds are half-open; only a given period gets the extra day.
-    display_start, display_end = period if period else _normalize_period(None)
+    display_start, display_end = period or _normalize_period(None)
 
     data = build_usage_report_data(
         db_session, rows, display_start, display_end, system_rows
@@ -369,7 +370,7 @@ def create_new_usage_report(
                 content=zip_buffer,
                 display_name=report_name,
                 file_origin=FileOrigin.GENERATED_REPORT,
-                file_type="application/zip",
+                file_type=USAGE_REPORT_MEDIA_TYPE,
                 file_id=report_name,
             )
     finally:

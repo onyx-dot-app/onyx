@@ -1,0 +1,541 @@
+{
+  "aliases": {},
+  "models": {
+    "glm-4.5": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.11,
+        "cache_write": 0,
+        "input": 0.6,
+        "output": 2.2
+      },
+      "family": "glm",
+      "limit": {
+        "context": 131072,
+        "output": 98304
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GLM-4.5",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-07-28",
+      "temperature": true,
+      "tool_call": true
+    },
+    "glm-4.5-air": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.03,
+        "cache_write": 0,
+        "input": 0.2,
+        "output": 1.1
+      },
+      "family": "glm-air",
+      "limit": {
+        "context": 131072,
+        "output": 98304
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GLM-4.5-Air",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-07-28",
+      "temperature": true,
+      "tool_call": true
+    },
+    "glm-4.5-flash": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0,
+        "cache_write": 0,
+        "input": 0,
+        "output": 0
+      },
+      "family": "glm-flash",
+      "limit": {
+        "context": 131072,
+        "output": 98304
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GLM-4.5-Flash",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-07-28",
+      "temperature": true,
+      "tool_call": true
+    },
+    "glm-4.5v": {
+      "attachment": true,
+      "cost": {
+        "input": 0.6,
+        "output": 1.8
+      },
+      "family": "glm",
+      "limit": {
+        "context": 64000,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GLM-4.5V",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-08-11",
+      "temperature": true,
+      "tool_call": true
+    },
+    "glm-4.6": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.11,
+        "cache_write": 0,
+        "input": 0.6,
+        "output": 2.2
+      },
+      "family": "glm",
+      "limit": {
+        "context": 204800,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GLM-4.6",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-09-30",
+      "temperature": true,
+      "tool_call": true
+    },
+    "glm-4.6v": {
+      "attachment": true,
+      "cost": {
+        "input": 0.3,
+        "output": 0.9
+      },
+      "family": "glm",
+      "limit": {
+        "context": 128000,
+        "output": 32768
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GLM-4.6V",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-12-08",
+      "temperature": true,
+      "tool_call": true
+    },
+    "glm-4.6v-flash": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0,
+        "cache_write": 0,
+        "input": 0,
+        "output": 0
+      },
+      "family": "glm-flash",
+      "limit": {
+        "context": 128000,
+        "output": 32768
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GLM-4.6V-Flash",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-12-08",
+      "temperature": true,
+      "tool_call": true
+    },
+    "glm-4.7": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.11,
+        "cache_write": 0,
+        "input": 0.6,
+        "output": 2.2
+      },
+      "family": "glm",
+      "limit": {
+        "context": 204800,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GLM-4.7",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-12-22",
+      "temperature": true,
+      "tool_call": true
+    },
+    "glm-4.7-flash": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0,
+        "cache_write": 0,
+        "input": 0,
+        "output": 0
+      },
+      "family": "glm-flash",
+      "limit": {
+        "context": 200000,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GLM-4.7-Flash",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-01-19",
+      "temperature": true,
+      "tool_call": true
+    },
+    "glm-4.7-flashx": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.01,
+        "cache_write": 0,
+        "input": 0.07,
+        "output": 0.4
+      },
+      "family": "glm-flash",
+      "limit": {
+        "context": 200000,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GLM-4.7-FlashX",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-01-19",
+      "temperature": true,
+      "tool_call": true
+    },
+    "glm-5": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.2,
+        "cache_write": 0,
+        "input": 1,
+        "output": 3.2
+      },
+      "family": "glm",
+      "limit": {
+        "context": 204800,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GLM-5",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-02-12",
+      "temperature": true,
+      "tool_call": true
+    },
+    "glm-5-turbo": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.24,
+        "cache_write": 0,
+        "input": 1.2,
+        "output": 4
+      },
+      "family": "glm",
+      "limit": {
+        "context": 200000,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GLM-5-Turbo",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-03-16",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "glm-5.1": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.26,
+        "cache_write": 0,
+        "input": 1.4,
+        "output": 4.4
+      },
+      "family": "glm",
+      "limit": {
+        "context": 200000,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GLM-5.1",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-04-07",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "glm-5.2": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.26,
+        "cache_write": 0,
+        "input": 1.4,
+        "output": 4.4
+      },
+      "family": "glm",
+      "limit": {
+        "context": 1000000,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GLM-5.2",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-06-13",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "glm-5.3": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.26,
+        "cache_write": 0,
+        "input": 1.4,
+        "output": 4.4
+      },
+      "family": "glm",
+      "limit": {
+        "context": 1000000,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GLM-5.3",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-14",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "glm-5.3-flash": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.03,
+        "cache_write": 0,
+        "input": 0.15,
+        "output": 0.5
+      },
+      "family": "glm-flash",
+      "limit": {
+        "context": 1000000,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GLM-5.3-Flash",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-26",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "glm-5.3-flashx": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.075,
+        "cache_write": 0,
+        "input": 0.37,
+        "output": 1.25
+      },
+      "family": "glm-flash",
+      "limit": {
+        "context": 1000000,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GLM-5.3-FlashX",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-09-18",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "glm-5v-turbo": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.24,
+        "cache_write": 0,
+        "input": 1.2,
+        "output": 4
+      },
+      "family": "glm",
+      "limit": {
+        "context": 200000,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GLM-5V-Turbo",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-04-01",
+      "temperature": true,
+      "tool_call": true
+    }
+  },
+  "models_dev_providers": [
+    "zai"
+  ]
+}

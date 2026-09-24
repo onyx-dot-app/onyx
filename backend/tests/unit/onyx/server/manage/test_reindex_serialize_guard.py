@@ -104,7 +104,7 @@ def test_name_reuse_guard_pulls_occupant_into_reclaim(
 
     with pytest.raises(OnyxError) as exc:
         _guard_index_name_reuse(db_session, "danswer_chunk_x")
-    assert exc.value.error_code == OnyxErrorCode.CONFLICT
+    assert exc.value.error_code == OnyxErrorCode.INDEX_NAME_RECLAIMING
     mock_mark.assert_called_once_with(occupant)
     db_session.commit.assert_called_once()
     mock_enqueue.assert_called_once()

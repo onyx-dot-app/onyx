@@ -9,6 +9,7 @@ import json
 import threading
 import time
 from collections.abc import Generator
+from queue import Empty
 from typing import Any
 from unittest.mock import MagicMock
 from uuid import UUID, uuid4
@@ -20,6 +21,8 @@ from onyx.server.features.build.packets import (
     ApprovalRequestedPacket,
     ConnectAppRequestPacket,
 )
+from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
+from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.server.features.build.session import streaming as streaming_mod
 
 
@@ -325,3 +328,51 @@ def test_pop_announcement_exception_is_swallowed(
 
     assert out == ["still-ok"]
     assert len(calls) >= 2
+
+
+def test_events_pump_stops_and_unsubscribes_when_consumer_exits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An attach stream ends on its first terminal chunk. The events pump must
+    then exit and the bus subscription must be removed."""
+    _stub_get_cache_backend(monkeypatch)
+    _stub_pop_announcement(monkeypatch, _always_none)
+    monkeypatch.setattr(streaming_mod.connect_app, "pop_announcement", _always_none)
+
+    bus = PodEventBus("http://sandbox.invalid", auth=None)
+    monkeypatch.setattr(bus, "_ensure_reader_started", lambda: None)
+    opencode_session_id = "ses_test"
+    session_id = uuid4()
+
+    def subscription() -> Generator[Any, None, None]:
+        # Mirrors subscribe_to_opencode_session: never ends on its own and
+        # yields a keepalive between bus polls.
+        sub = bus.subscribe(opencode_session_id)
+        try:
+            while True:
+                try:
+                    yield sub.queue.get(timeout=0.05)
+                except Empty:
+                    yield SSEKeepalive()
+        finally:
+            bus.unsubscribe(sub)
+
+    merged = streaming_mod.merge_events_with_announces(
+        subscription(), session_id=session_id, tenant_id="public"
+    )
+    assert isinstance(next(merged), SSEKeepalive)
+    assert len(bus._subscribers.get(opencode_session_id, [])) == 1
+    merged.close()
+
+    pump_name = f"events-pump-{session_id}"
+    deadline = time.monotonic() + 2.0
+    while time.monotonic() < deadline:
+        pump_alive = any(
+            t.name == pump_name and t.is_alive() for t in threading.enumerate()
+        )
+        if not pump_alive and opencode_session_id not in bus._subscribers:
+            break
+        time.sleep(0.05)
+
+    assert not any(t.name == pump_name for t in threading.enumerate())
+    assert opencode_session_id not in bus._subscribers

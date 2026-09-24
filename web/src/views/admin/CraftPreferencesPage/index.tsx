@@ -186,21 +186,26 @@ export default function CraftPreferencesPage() {
       icon={ADMIN_ROUTES.CRAFT_PREFERENCES.icon}
       title={t("header.title")}
       description={t("header.description")}
-      rightChildren={
-        craftAvailable && !settings.isLoading && !settings.error ? (
-          <div className="flex items-start gap-2">
-            <Button
-              href="/craft"
-              prominence="secondary"
-              rightIcon={SvgArrowUpRight}
-            >
-              {t("tryInCraftButton.label")}
-            </Button>
-            <Button disabled={!isDirty || isSaving} onClick={() => save(value)}>
-              {isSaving ? t("saveButton.savingLabel") : t("saveButton.label")}
-            </Button>
-          </div>
-        ) : undefined
+      actions={
+        craftAvailable && !settings.isLoading && !settings.error
+          ? [
+              <Button
+                key="try"
+                href="/craft"
+                prominence="secondary"
+                rightIcon={SvgArrowUpRight}
+              >
+                {t("tryInCraftButton.label")}
+              </Button>,
+              <Button
+                key="save"
+                disabled={!isDirty || isSaving}
+                onClick={() => save(value)}
+              >
+                {isSaving ? t("saveButton.savingLabel") : t("saveButton.label")}
+              </Button>,
+            ]
+          : []
       }
       divider
     />

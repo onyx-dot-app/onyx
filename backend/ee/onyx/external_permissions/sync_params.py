@@ -16,10 +16,12 @@ from ee.onyx.configs.app_configs import (
     GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY,
     JIRA_PERMISSION_DOC_SYNC_FREQUENCY,
     JIRA_PERMISSION_GROUP_SYNC_FREQUENCY,
+    OUTLOOK_PERMISSION_DOC_SYNC_FREQUENCY,
     SHAREPOINT_PERMISSION_DOC_SYNC_FREQUENCY,
     SHAREPOINT_PERMISSION_GROUP_SYNC_FREQUENCY,
     SLACK_PERMISSION_DOC_SYNC_FREQUENCY,
     TEAMS_PERMISSION_DOC_SYNC_FREQUENCY,
+    TEAMS_PERMISSION_GROUP_SYNC_FREQUENCY,
 )
 from ee.onyx.external_permissions.perm_sync_types import (
     CensoringFuncType,
@@ -147,6 +149,12 @@ def _load_jira_group_sync() -> GroupSyncFuncType:
     return jira_group_sync
 
 
+def _load_outlook_doc_sync() -> DocSyncFuncType:
+    from ee.onyx.external_permissions.outlook.doc_sync import outlook_doc_sync
+
+    return outlook_doc_sync
+
+
 def _load_censor_salesforce_chunks() -> CensoringFuncType:
     from ee.onyx.external_permissions.salesforce.postprocessing import (
         censor_salesforce_chunks,
@@ -177,6 +185,12 @@ def _load_teams_doc_sync() -> DocSyncFuncType:
     from ee.onyx.external_permissions.teams.doc_sync import teams_doc_sync
 
     return teams_doc_sync
+
+
+def _load_teams_group_sync() -> GroupSyncFuncType:
+    from ee.onyx.external_permissions.teams.group_sync import teams_group_sync
+
+    return teams_group_sync
 
 
 class DocSyncConfig(BaseModel):
@@ -327,12 +341,26 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
             initial_index_should_sync=True,
         ),
     ),
-    # Groups are not needed for Teams.
-    # All channel access is done at the individual user level.
+    # A thread names the group of its channel's members, and a channel file the
+    # SharePoint groups of its channel site.
     DocumentSource.TEAMS: SyncConfig(
         doc_sync_config=DocSyncConfig(
             doc_sync_frequency=TEAMS_PERMISSION_DOC_SYNC_FREQUENCY,
             doc_sync_func=_lazy_doc_sync(_load_teams_doc_sync),
+            initial_index_should_sync=True,
+        ),
+        group_sync_config=GroupSyncConfig(
+            group_sync_frequency=TEAMS_PERMISSION_GROUP_SYNC_FREQUENCY,
+            group_sync_func=_lazy_group_sync(_load_teams_group_sync),
+            group_sync_is_cc_pair_agnostic=False,
+        ),
+    ),
+    # A mailbox is read by its owner, and an event by its attendees as well, so
+    # the access lists are user emails and there are no groups to sync.
+    DocumentSource.OUTLOOK: SyncConfig(
+        doc_sync_config=DocSyncConfig(
+            doc_sync_frequency=OUTLOOK_PERMISSION_DOC_SYNC_FREQUENCY,
+            doc_sync_func=_lazy_doc_sync(_load_outlook_doc_sync),
             initial_index_should_sync=True,
         ),
     ),

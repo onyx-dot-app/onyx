@@ -115,10 +115,10 @@ def search_chunks(
             document_set_names=query_request.filters.document_set,
         )
 
-    federated_sources = set(
+    federated_sources = {
         federated_retrieval_info.source.to_non_federated_source()
         for federated_retrieval_info in federated_retrieval_infos
-    )
+    }
     run_queries: list[tuple[Callable, tuple]] = [
         (federated_retrieval_info.retrieval_function, (query_request,))
         for federated_retrieval_info in federated_retrieval_infos
@@ -169,7 +169,7 @@ def inference_sections_from_ids(
     document_index: DocumentIndex,
 ) -> list[InferenceSection]:
     # Currently only fetches whole docs
-    doc_ids_set = set(doc_id for doc_id, _ in doc_identifiers)
+    doc_ids_set = {doc_id for doc_id, _ in doc_identifiers}
 
     chunk_requests: list[DocumentSectionRequest] = [
         DocumentSectionRequest(document_id=doc_id) for doc_id in doc_ids_set

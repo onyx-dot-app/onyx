@@ -106,7 +106,7 @@ def parse_graph_datetime(value: str | datetime | None) -> datetime | None:
     if not value:
         return None
     if isinstance(value, str):
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(value)
     elif isinstance(value, datetime):
         parsed = value
     else:
@@ -201,7 +201,7 @@ def extract_folder_path_from_parent_reference(
     # Path format: /drives/{drive_id}/root:/folder/path
     if "root:/" in parent_reference_path:
         folder_path = parent_reference_path.split("root:/")[1]
-        return folder_path if folder_path else None
+        return folder_path or None
 
     # Item is at drive root
     return None
@@ -648,14 +648,19 @@ def iter_drive_items_paged(
     start: datetime | None = None,
     end: datetime | None = None,
     page_size: int = 200,
+    folder_id: str | None = None,
 ) -> Generator[DriveItemData, None, None]:
     """Yield DriveItemData for every file in a drive via the Graph API.
 
     Performs BFS folder traversal manually, fetching one page of children
     at a time so that memory usage stays bounded regardless of drive size.
+    The walk starts at ``folder_id`` when given (a folder Graph handed out
+    without its path, such as a Teams channel's), else at ``folder_path``.
     """
     base = f"{client.graph_api_base}/drives/{drive_id}"
-    if folder_path:
+    if folder_id:
+        start_url = f"{base}/items/{folder_id}/children"
+    elif folder_path:
         encoded_path = quote(folder_path, safe="/")
         start_url = f"{base}/root:/{encoded_path}:/children"
     else:

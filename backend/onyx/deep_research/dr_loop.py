@@ -192,7 +192,7 @@ def generate_final_report(
             # but we'd still want to capture the reasoning from the think_tool of theprevious turn.
             state_container.set_reasoning_tokens(saved_reasoning)
 
-        span.span_data.output = final_report if final_report else None
+        span.span_data.output = final_report or None
         return has_reasoned
 
 
@@ -228,7 +228,7 @@ def run_deep_research_llm_loop(
             user_id=user_identity.user_id if user_identity else None,
         ).model_dump(),
     ):
-        # Here for lazy load LiteLLM
+        # Here for lazy load LiteLLM. initialize_litellm runs once per process.
         from onyx.llm.litellm_singleton.config import initialize_litellm
 
         # An approximate limit. In extreme cases it may still fail but this should allow deep research
@@ -418,7 +418,7 @@ def run_deep_research_llm_loop(
             research_plan = llm_step_result.answer
             if research_plan is None:
                 raise RuntimeError("Deep Research failed to generate a research plan")
-            span.span_data.output = research_plan if research_plan else None
+            span.span_data.output = research_plan or None
 
         #########################################################
         # RESEARCH EXECUTION STEP

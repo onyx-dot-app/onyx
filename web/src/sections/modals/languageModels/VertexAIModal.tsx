@@ -86,7 +86,9 @@ function VertexAIModalInternals({
             <InputVertical
               withLabel={FIELD_VERTEX_AUTH_METHOD}
               title={t("vertexAi.authMethodField.title")}
-              subDescription={t("vertexAi.authMethodField.description")}
+              subDescription={t("vertexAi.authMethodField.description", {
+                appName: settings.appName,
+              })}
             >
               <InputSelectField name={FIELD_VERTEX_AUTH_METHOD}>
                 <InputSelect.Trigger />
@@ -142,7 +144,9 @@ function VertexAIModalInternals({
           <InputPadder>
             <MessageCard
               variant="info"
-              title={t("vertexAi.workloadIdentityNotice.title")}
+              title={t("vertexAi.workloadIdentityNotice.title", {
+                appName: settings.appName,
+              })}
             />
           </InputPadder>
           <Card color="background-tint-00" border="none" padding={2}>

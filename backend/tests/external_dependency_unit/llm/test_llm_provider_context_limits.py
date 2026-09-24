@@ -232,15 +232,19 @@ def test_ui_echo_of_a_stored_override_preserves_it(
 
 @pytest.mark.parametrize(
     "provider",
-    [LlmProviderNames.NEBIUS_TOKENFACTORY, LlmProviderNames.PORTKEY],
+    [
+        LlmProviderNames.NEBIUS_TOKENFACTORY,
+        LlmProviderNames.PORTKEY,
+        LlmProviderNames.VERCEL_AI_GATEWAY,
+    ],
 )
 def test_source_api_providers_keep_their_reported_limit(
     db_session: Session, provider_name: str, provider: str
 ) -> None:
-    """Nebius and Portkey read `context_length` from their own APIs and persist it.
+    """These providers read a context limit from their own APIs and persist it.
 
-    Neither is a dynamic provider, so exempting only DYNAMIC_LLM_PROVIDERS would
-    let a matching LiteLLM value discard an authoritative source-API limit.
+    None of them is a dynamic provider, so exempting only DYNAMIC_LLM_PROVIDERS
+    would let a matching LiteLLM value discard an authoritative source-API limit.
     """
     model = "unknown-model-from-source-api"
     resolved = get_max_input_tokens(model_name=model, model_provider=provider)

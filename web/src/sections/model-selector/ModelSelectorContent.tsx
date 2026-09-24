@@ -41,6 +41,7 @@ import {
   cappedReasoningStop,
   formatContextWindow,
   maxReasoningStop,
+  minReasoningStop,
   reasoningStopIndex,
 } from "@/sections/model-selector/setting-controls";
 import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
@@ -163,21 +164,26 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
   const reasoningManager = managers.reasoning;
   const temperatureEnabled = !option.supportsReasoning && !!temperatureManager;
   const capabilityStop = maxReasoningStop(option.supportedReasoningEfforts);
-  // The admin cap further limits which stops users may request.
-  const maxSupportedStop = cappedReasoningStop(
+  // Models that always reason omit "off", so the slider needs a floor as well
+  // as a ceiling.
+  const minSupportedStop = minReasoningStop(option.supportedReasoningEfforts);
+  // The admin cap further limits which stops users may request, but a stale cap
+  // below the floor still leaves the floor selectable.
+  const cappedStop = cappedReasoningStop(
     capabilityStop,
     option.reasoningEffortMax
   );
+  const maxSupportedStop =
+    capabilityStop >= 0 ? Math.max(minSupportedStop, cappedStop) : cappedStop;
   // A reasoning model with no supported levels takes no effort parameter at
   // all (e.g. o1-mini), so the row stays disabled.
   const reasoningEnabled =
     option.supportsReasoning && !!reasoningManager && maxSupportedStop >= 0;
 
   // The slider spans all stops for uniform geometry and clamps input to the
-  // max supported index. The lower bound keeps the disabled no-levels case on
-  // a valid stop.
+  // supported band, flooring even below an admin cap the model can't honor.
   const clampStop = (stop: number) =>
-    Math.max(0, Math.min(stop, maxSupportedStop));
+    Math.max(minSupportedStop, Math.min(stop, maxSupportedStop));
 
   // temperature is always concrete, so the override flag decides when the
   // admin default applies.
@@ -344,9 +350,12 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
                   style={{ insetInlineStart: `${(index / lastStop) * 100}%` }}
                 >
                   <Disabled
-                    disabled={reasoningEnabled && index > maxSupportedStop}
+                    disabled={
+                      reasoningEnabled &&
+                      (index < minSupportedStop || index > maxSupportedStop)
+                    }
                     tooltip={
-                      index > capabilityStop
+                      index < minSupportedStop || index > capabilityStop
                         ? t("unsupportedSetting.tooltip")
                         : t("adminLimitedSetting.tooltip")
                     }

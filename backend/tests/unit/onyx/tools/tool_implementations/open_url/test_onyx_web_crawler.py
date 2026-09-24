@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from functools import cached_property
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -24,6 +25,18 @@ class FakeResponse(BaseModel):
     text: str = ""
     apparent_encoding: str | None = None
     encoding: str | None = None
+
+    @cached_property
+    def raw(self) -> MagicMock:
+        raw = MagicMock()
+        raw.read1.side_effect = [self.content, b""]
+        return raw
+
+    def __enter__(self) -> FakeResponse:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
 
 
 def test_fetch_url_pdf_with_content_type(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -210,17 +223,14 @@ def _make_mock_response(
     resp.status_code = status_code
     resp.headers = {"Content-Type": content_type}
 
-    if delay:
-        original_content = content
+    chunks = [content, b""]
 
-        @property
-        def _delayed_content(_self: object) -> bytes:
+    def _read1(*_args: object, **_kwargs: object) -> bytes:
+        if delay and chunks[0]:
             time.sleep(delay)
-            return original_content
+        return chunks.pop(0)
 
-        type(resp).content = _delayed_content
-    else:
-        resp.content = content
+    resp.raw.read1.side_effect = _read1
 
     resp.apparent_encoding = None
     resp.encoding = None
@@ -259,7 +269,9 @@ class TestParallelExecution:
         num_urls = 5
         urls = [f"http://example.com/page{i}" for i in range(num_urls)]
 
-        mock_get.return_value = _make_mock_response(delay=per_url_delay)
+        mock_get.side_effect = lambda *_a, **_k: _make_mock_response(
+            delay=per_url_delay
+        )
 
         crawler = OnyxWebCrawler()
         start = time.monotonic()
@@ -301,7 +313,7 @@ class TestFailureIsolation:
             {
                 "http://a.com": good_resp,
                 "http://b.com": bad_resp,
-                "http://c.com": good_resp,
+                "http://c.com": _make_mock_response(),
             }
         )
 

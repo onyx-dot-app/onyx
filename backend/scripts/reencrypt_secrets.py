@@ -77,7 +77,7 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    old_key = args.old_key if args.old_key else None
+    old_key = args.old_key or None
 
     global_version.set_ee()
     SqlEngine.init_engine(pool_size=5, max_overflow=2)

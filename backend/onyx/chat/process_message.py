@@ -70,7 +70,7 @@ from onyx.chat.save_chat import save_chat_turn
 from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
 from onyx.chat.stop_signal_checker import reset_cancel_status
 from onyx.chat.stream_buffer import StreamBufferWriter
-from onyx.configs.app_configs import DISABLE_VECTOR_DB, INTEGRATION_TESTS_MODE
+from onyx.configs.app_configs import DEV_MODE, DISABLE_VECTOR_DB, INTEGRATION_TESTS_MODE
 from onyx.configs.chat_configs import CHAT_HEARTBEAT_INTERVAL_S
 from onyx.configs.constants import (
     DEFAULT_PERSONA_ID,
@@ -517,12 +517,20 @@ def _build_tool_metadata(user_file: UserFile) -> FileToolMetadata:
     Delegates to ``build_file_context`` so that the file ID exposed to the
     LLM is always consistent with what FileReaderTool expects.
     """
-    return build_file_context(
+    file_type = mime_type_to_chat_file_type(user_file.file_type)
+    metadata = build_file_context(
         tool_file_id=str(user_file.id),
         filename=user_file.name,
-        file_type=mime_type_to_chat_file_type(user_file.file_type),
+        file_type=file_type,
         approx_char_count=(user_file.token_count or 0) * APPROX_CHARS_PER_TOKEN,
     ).tool_metadata
+    # `_load_context_user_files_for_tools` only loads metadata-only files into
+    # `chat_files_for_tools`, so those are the only context files PythonTool
+    # ever receives. The rest are listed for the LLM but never staged — only
+    # read_file can fetch them.
+    return metadata.model_copy(
+        update={"staged_for_tools": file_type.use_metadata_only()}
+    )
 
 
 def determine_search_params(
@@ -600,7 +608,6 @@ def build_chat_turn(
     litellm_additional_headers: dict[str, str] | None = None,
     custom_tool_additional_headers: dict[str, str] | None = None,
     mcp_headers: dict[str, str] | None = None,
-    bypass_acl: bool = False,
     # Slack context for federated Slack search
     slack_context: SlackContext | None = None,
     # Additional context to include in the chat history, e.g. Slack threads where the
@@ -842,6 +849,10 @@ def build_chat_turn(
                     # We don't know the exact size without loading the file,
                     # but 0 signals "unknown" to the LLM.
                     approx_char_count=0,
+                    # These messages are filtered out of chat_history just
+                    # below, so load_all_chat_files never sees them and the
+                    # bytes never reach chat_files_for_tools.
+                    staged_for_tools=False,
                 )
         # Filter chat_history to only messages after the cutoff
         chat_history = [m for m in chat_history if m.id > cutoff_id]
@@ -1100,7 +1111,6 @@ def build_chat_turn(
         skip_clarification=skip_clarification,
         check_is_connected=check_is_connected,
         cache=cache,
-        bypass_acl=bypass_acl,
         slack_context=slack_context,
         custom_tool_additional_headers=custom_tool_additional_headers,
         mcp_headers=mcp_headers,
@@ -1343,7 +1353,6 @@ def _run_models(
                     user_selected_filters=setup.new_msg_req.internal_search_filters,
                     project_id_filter=setup.search_params.project_id_filter,
                     persona_id_filter=setup.search_params.persona_id_filter,
-                    bypass_acl=setup.bypass_acl,
                     slack_context=setup.slack_context,
                     enable_slack_search=_should_enable_slack_search(
                         setup.persona, setup.new_msg_req.internal_search_filters
@@ -1558,7 +1567,7 @@ def _run_models(
                     _publish(
                         StreamingError(
                             error=error_msg,
-                            stack_trace=stack_trace,
+                            stack_trace=stack_trace if DEV_MODE else None,
                             error_code=info.error_code,
                             is_retryable=info.is_retryable,
                             details=_model_error_details(item, model_llm, model_idx),
@@ -1647,7 +1656,6 @@ def _stream_chat_turn(
     litellm_additional_headers: dict[str, str] | None = None,
     custom_tool_additional_headers: dict[str, str] | None = None,
     mcp_headers: dict[str, str] | None = None,
-    bypass_acl: bool = False,
     additional_context: str | None = None,
     slack_context: SlackContext | None = None,
     external_state_container: ChatStateContainer | None = None,
@@ -1672,7 +1680,6 @@ def _stream_chat_turn(
         litellm_additional_headers: Extra headers forwarded to the LLM provider.
         custom_tool_additional_headers: Extra headers for custom tool HTTP calls.
         mcp_headers: Extra headers for MCP tool calls.
-        bypass_acl: If ``True``, document ACL checks are skipped (used by Slack bot).
         additional_context: Extra context prepended to the LLM's chat history, not
             stored in the DB (used for Slack thread hydration).
         slack_context: Federated Slack search context passed through to the search tool.
@@ -1699,8 +1706,7 @@ def _stream_chat_turn(
         with get_session_with_current_tenant() as setup_db_session:
             try:
                 if (
-                    not bypass_acl
-                    and not user.is_anonymous
+                    not user.is_anonymous
                     and new_msg_req.internal_search_filters is not None
                     and new_msg_req.internal_search_filters.document_set is not None
                 ):
@@ -1735,7 +1741,6 @@ def _stream_chat_turn(
                     litellm_additional_headers=litellm_additional_headers,
                     custom_tool_additional_headers=custom_tool_additional_headers,
                     mcp_headers=mcp_headers,
-                    bypass_acl=bypass_acl,
                     slack_context=slack_context,
                     additional_context=additional_context,
                 )
@@ -1826,7 +1831,7 @@ def _stream_chat_turn(
         )
         yield StreamingError(
             error=e.client_error_msg,
-            stack_trace=stack_trace,
+            stack_trace=stack_trace if DEV_MODE else None,
             error_code=e.error_code,
             is_retryable=e.is_retryable,
             details={
@@ -1850,7 +1855,7 @@ def _stream_chat_turn(
             )
             yield StreamingError(
                 error=error_info.message,
-                stack_trace=stack_trace,
+                stack_trace=stack_trace if DEV_MODE else None,
                 error_code=error_info.error_code,
                 is_retryable=error_info.is_retryable,
                 details={
@@ -1861,7 +1866,7 @@ def _stream_chat_turn(
         else:
             yield StreamingError(
                 error="Failed to initialize the chat. Please check your configuration and try again.",
-                stack_trace=stack_trace,
+                stack_trace=stack_trace if DEV_MODE else None,
                 error_code="INIT_FAILED",
                 is_retryable=True,
             )
@@ -1892,7 +1897,6 @@ def handle_stream_message_objects(
     litellm_additional_headers: dict[str, str] | None = None,
     custom_tool_additional_headers: dict[str, str] | None = None,
     mcp_headers: dict[str, str] | None = None,
-    bypass_acl: bool = False,
     additional_context: str | None = None,
     slack_context: SlackContext | None = None,
     external_state_container: ChatStateContainer | None = None,
@@ -1910,7 +1914,6 @@ def handle_stream_message_objects(
         litellm_additional_headers=litellm_additional_headers,
         custom_tool_additional_headers=custom_tool_additional_headers,
         mcp_headers=mcp_headers,
-        bypass_acl=bypass_acl,
         additional_context=additional_context,
         slack_context=slack_context,
         external_state_container=external_state_container,

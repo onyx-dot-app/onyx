@@ -23,6 +23,7 @@ from onyx.db.enums import AccessType, ChatSessionSharedStatus
 from onyx.db.models import ChatSession, Document, ToolCall
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
+from onyx.file_store.utils import chat_image_gen_metadata
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
@@ -297,15 +298,21 @@ class ImageGenSetup(NamedTuple):
     file_id: str
 
 
-def _seed_image_gen_tool_call(chat_session_id: UUID) -> str:
+def _seed_image_gen_tool_call(chat_session_id: UUID, stamp_session: bool = True) -> str:
     """Persist a fake image to the file store and link it via a ToolCall row,
-    mirroring what `ImageGenerationTool` produces at runtime."""
+    mirroring what `ImageGenerationTool` produces at runtime.
+
+    `stamp_session=False` reproduces a row written before generated files were
+    stamped with their owning session."""
     file_store = get_default_file_store()
     file_id = file_store.save_file(
         content=io.BytesIO(_IMAGE_GEN_PNG_BYTES),
         display_name="GeneratedImage",
         file_origin=FileOrigin.CHAT_IMAGE_GEN,
         file_type="image/png",
+        file_metadata=(
+            chat_image_gen_metadata(chat_session_id) if stamp_session else None
+        ),
     )
 
     with get_session_with_current_tenant() as db_session:
@@ -372,9 +379,6 @@ def test_owner_can_download_image_gen_file(
     assert response.content == _IMAGE_GEN_PNG_BYTES
 
 
-@pytest.mark.skip(
-    reason="CHAT_IMAGE_GEN files are temporarily public. See TODO in user_file.py."
-)
 def test_non_owner_cannot_download_image_gen_file_in_private_session(
     image_gen_setup: ImageGenSetup,
 ) -> None:
@@ -412,6 +416,26 @@ def test_non_owner_can_download_image_gen_file_in_public_session(
     assert response.status_code == 200, (
         f"Non-owner should be able to read image-gen file on public session, "
         f"got {response.status_code}: {response.text}"
+    )
+    assert response.content == _IMAGE_GEN_PNG_BYTES
+
+
+def test_legacy_unstamped_image_gen_file_stays_readable(
+    image_gen_setup: ImageGenSetup,
+) -> None:
+    """A generated file saved before session stamping carries no session id, so
+    access cannot be scoped. It keeps the prior behaviour, readable by any
+    authenticated user, rather than breaking previously rendered images."""
+    legacy_file_id = _seed_image_gen_tool_call(
+        UUID(str(image_gen_setup.chat_session.id)), stamp_session=False
+    )
+    response = client.get(
+        f"{API_SERVER_URL}/chat/file/{legacy_file_id}",
+        headers=image_gen_setup.intruder.headers,
+    )
+    assert response.status_code == 200, (
+        f"Legacy unstamped file should stay readable, got "
+        f"{response.status_code}: {response.text}"
     )
     assert response.content == _IMAGE_GEN_PNG_BYTES
 

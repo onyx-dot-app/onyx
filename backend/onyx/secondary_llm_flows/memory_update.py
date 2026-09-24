@@ -120,7 +120,9 @@ def process_memory_update(
             llm=llm, flow=LLMFlow.MEMORY_UPDATE, input_messages=[prompt_msg]
         ) as span_generation:
             response = llm.invoke(
-                prompt=prompt_msg, reasoning_effort=ReasoningEffort.OFF
+                prompt=prompt_msg,
+                reasoning_effort=ReasoningEffort.OFF,
+                stream=True,
             )
             record_llm_response(span_generation, response)
             content = response.choice.message.content

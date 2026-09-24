@@ -82,7 +82,7 @@ class ChatFileType(str, Enum):
     def use_metadata_only(self) -> bool:
         """File types where we can ignore the file content
         and only use the metadata."""
-        return self in (ChatFileType.TABULAR,)
+        return self == ChatFileType.TABULAR
 
 
 class FileDescriptor(TypedDict):

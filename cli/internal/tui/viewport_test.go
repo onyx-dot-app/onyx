@@ -353,3 +353,20 @@ func TestStreamMarkdownResetOnStart(t *testing.T) {
 		t.Error("expected lastRenderLen reset on startAgent")
 	}
 }
+
+func TestAgentMessageStripsControlSequences(t *testing.T) {
+	v := newViewport(80, true)
+	v.startAgent()
+	v.appendToken("safe \x1b]52;c;cm0gLXJm")
+	v.appendToken("\x07answer\x1b[2J")
+	v.finishAgent()
+
+	for _, e := range v.entries {
+		if strings.Contains(e.content, "\x1b") || strings.Contains(e.content, "\x07") {
+			t.Errorf("entry content keeps control bytes: %q", e.content)
+		}
+		if strings.Contains(e.rendered, "\x1b]") || strings.Contains(e.rendered, "\x07") {
+			t.Errorf("rendered entry keeps an OSC sequence: %q", e.rendered)
+		}
+	}
+}

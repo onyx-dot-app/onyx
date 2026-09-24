@@ -6,7 +6,7 @@ import {
   BaseFilters,
   MinimalOnyxDocument,
   SourceMetadata,
-} from "@/lib/search/interfaces";
+} from "@/lib/search/types";
 import SearchCard from "@/ee/sections/SearchCard";
 import { Divider, Pagination } from "@opal/components";
 import { EmptyMessageCard } from "@opal/components";

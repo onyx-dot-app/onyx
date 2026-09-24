@@ -119,8 +119,8 @@ def classify_section_relevance(
     prompt_text = DOCUMENT_CONTEXT_SELECTION_PROMPT.format(
         document_title=document_title,
         main_section=section_text,
-        section_above=section_above_text if section_above_text else "N/A",
-        section_below=section_below_text if section_below_text else "N/A",
+        section_above=section_above_text or "N/A",
+        section_below=section_below_text or "N/A",
         user_query=user_query,
     )
 
@@ -394,13 +394,11 @@ def select_sections_for_expansion(
             len(selected_sections),
             len(sections),
             selected_document_ids,
-            document_ids_with_exclamation if document_ids_with_exclamation else [],
+            document_ids_with_exclamation or [],
         )
 
         # Return document_ids if any sections had exclamation marks, otherwise None
-        return selected_sections, (
-            document_ids_with_exclamation if document_ids_with_exclamation else None
-        )
+        return selected_sections, (document_ids_with_exclamation or None)
 
     except Exception as e:
         logger.error("Error calling LLM for document selection: %s", e)

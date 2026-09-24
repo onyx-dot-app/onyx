@@ -1,0 +1,569 @@
+{
+  "aliases": {},
+  "models": {
+    "grok-4.20-0309-non-reasoning": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "context_over_200k": {
+          "cache_read": 0.4,
+          "input": 2.5,
+          "output": 5
+        },
+        "input": 1.25,
+        "output": 2.5,
+        "tiers": [
+          {
+            "cache_read": 0.4,
+            "input": 2.5,
+            "output": 5,
+            "tier": {
+              "size": 200000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "grok",
+      "limit": {
+        "context": 1000000,
+        "output": 30000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Grok 4.20 (Non-Reasoning)",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2026-03-09",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "grok-4.20-0309-reasoning": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "context_over_200k": {
+          "cache_read": 0.4,
+          "input": 2.5,
+          "output": 5
+        },
+        "input": 1.25,
+        "output": 2.5,
+        "tiers": [
+          {
+            "cache_read": 0.4,
+            "input": 2.5,
+            "output": 5,
+            "tier": {
+              "size": 200000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "grok",
+      "limit": {
+        "context": 1000000,
+        "output": 30000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Grok 4.20 (Reasoning)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-03-09",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "grok-4.20-multi-agent-0309": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "context_over_200k": {
+          "cache_read": 0.4,
+          "input": 2.5,
+          "output": 5
+        },
+        "input": 1.25,
+        "output": 2.5,
+        "tiers": [
+          {
+            "cache_read": 0.4,
+            "input": 2.5,
+            "output": 5,
+            "tier": {
+              "size": 200000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "grok",
+      "limit": {
+        "context": 1000000,
+        "output": 30000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "responses",
+      "name": "Grok 4.20 Multi-Agent",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-03-09",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": false
+    },
+    "grok-4.3": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "context_over_200k": {
+          "cache_read": 0.4,
+          "input": 2.5,
+          "output": 5
+        },
+        "input": 1.25,
+        "output": 2.5,
+        "tiers": [
+          {
+            "cache_read": 0.4,
+            "input": 2.5,
+            "output": 5,
+            "tier": {
+              "size": 200000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "grok",
+      "limit": {
+        "context": 1000000,
+        "output": 30000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Grok 4.3",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-04-17",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "grok-4.5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.3,
+        "context_over_200k": {
+          "cache_read": 0.6,
+          "input": 4,
+          "output": 12
+        },
+        "input": 2,
+        "output": 6,
+        "tiers": [
+          {
+            "cache_read": 0.6,
+            "input": 4,
+            "output": 12,
+            "tier": {
+              "size": 200000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "grok",
+      "limit": {
+        "context": 500000,
+        "output": 500000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Grok 4.5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-07-08",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "grok-4.6": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.5,
+        "context_over_200k": {
+          "cache_read": 1,
+          "input": 4,
+          "output": 12
+        },
+        "input": 2,
+        "output": 6,
+        "tiers": [
+          {
+            "cache_read": 1,
+            "input": 4,
+            "output": 12,
+            "tier": {
+              "size": 200000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "grok",
+      "limit": {
+        "context": 500000,
+        "output": 500000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Grok 4.6",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-08-12",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "grok-4.7": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.5,
+        "context_over_200k": {
+          "cache_read": 1,
+          "input": 4,
+          "output": 12
+        },
+        "input": 2,
+        "output": 6,
+        "tiers": [
+          {
+            "cache_read": 1,
+            "input": 4,
+            "output": 12,
+            "tier": {
+              "size": 200000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "grok",
+      "limit": {
+        "context": 500000,
+        "output": 500000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Grok 4.7",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-21",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "grok-build-0.1": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "context_over_200k": {
+          "cache_read": 0.4,
+          "input": 2,
+          "output": 4
+        },
+        "input": 1,
+        "output": 2,
+        "tiers": [
+          {
+            "cache_read": 0.4,
+            "input": 2,
+            "output": 4,
+            "tier": {
+              "size": 200000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "grok-build",
+      "limit": {
+        "context": 256000,
+        "output": 256000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Grok Build 0.1",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-04-16",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "grok-imagine-image": {
+      "attachment": true,
+      "cost": {
+        "image_input": 0.02
+      },
+      "family": "grok",
+      "limit": {
+        "context": 16000,
+        "output": 0
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "image",
+          "pdf"
+        ]
+      },
+      "mode": "image_generation",
+      "name": "Grok Imagine Image",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2026-01-28",
+      "temperature": false,
+      "tool_call": false
+    },
+    "grok-imagine-image-2.0": {
+      "cost": {
+        "image_input": 0.06
+      },
+      "mode": "image_generation",
+      "name": "grok-imagine-image-2.0"
+    },
+    "grok-imagine-image-2026-03-02": {
+      "cost": {
+        "image_input": 0.02
+      },
+      "mode": "image_generation",
+      "name": "grok-imagine-image-2026-03-02"
+    },
+    "grok-imagine-image-quality": {
+      "attachment": true,
+      "cost": {
+        "image_input": 0.05
+      },
+      "family": "grok",
+      "limit": {
+        "context": 16000,
+        "output": 0
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "image",
+          "pdf"
+        ]
+      },
+      "mode": "image_generation",
+      "name": "Grok Imagine Image Quality",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2026-04-03",
+      "temperature": false,
+      "tool_call": false
+    },
+    "grok-imagine-image-quality-20260403": {
+      "cost": {
+        "image_input": 0.05
+      },
+      "mode": "image_generation",
+      "name": "grok-imagine-image-quality-20260403"
+    },
+    "grok-imagine-image-quality-latest": {
+      "cost": {
+        "image_input": 0.05
+      },
+      "mode": "image_generation",
+      "name": "grok-imagine-image-quality-latest"
+    },
+    "grok-imagine-video": {
+      "attachment": true,
+      "cost": {
+        "image_input": 0.002,
+        "second": 0.05
+      },
+      "family": "grok",
+      "limit": {
+        "context": 1024,
+        "output": 0
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "pdf"
+        ],
+        "output": [
+          "video"
+        ]
+      },
+      "mode": "video_generation",
+      "name": "Grok Imagine Video",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2026-01-28",
+      "temperature": false,
+      "tool_call": false
+    },
+    "grok-imagine-video-1.5": {
+      "attachment": true,
+      "cost": {
+        "image_input": 0.01,
+        "second": 0.08
+      },
+      "family": "grok",
+      "limit": {
+        "context": 1024,
+        "output": 0
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "audio",
+          "pdf"
+        ],
+        "output": [
+          "video"
+        ]
+      },
+      "mode": "video_generation",
+      "name": "Grok Imagine Video 1.5",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2026-05-30",
+      "temperature": false,
+      "tool_call": false
+    },
+    "grok-imagine-video-1.5-2026-05-30": {
+      "cost": {
+        "image_input": 0.01,
+        "second": 0.08
+      },
+      "mode": "video_generation",
+      "name": "grok-imagine-video-1.5-2026-05-30"
+    },
+    "grok-imagine-video-1.5-preview": {
+      "cost": {
+        "image_input": 0.01,
+        "second": 0.08
+      },
+      "mode": "video_generation",
+      "name": "grok-imagine-video-1.5-preview"
+    },
+    "grok-voice-transcribe-1.0": {
+      "cost": {
+        "second": 0.0,
+        "second_input": 2.778e-05
+      },
+      "mode": "audio_transcription",
+      "name": "grok-voice-transcribe-1.0"
+    },
+    "grok-voice-transcribe-2.0": {
+      "cost": {
+        "second": 0.0,
+        "second_input": 2.778e-05
+      },
+      "mode": "audio_transcription",
+      "name": "grok-voice-transcribe-2.0"
+    },
+    "low/1024-x-1024/grok-imagine-image-2.0": {
+      "cost": {
+        "image_input": 0.04
+      },
+      "mode": "image_generation",
+      "name": "low/1024-x-1024/grok-imagine-image-2.0"
+    }
+  },
+  "models_dev_providers": [
+    "xai"
+  ]
+}

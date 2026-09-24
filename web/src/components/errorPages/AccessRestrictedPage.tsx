@@ -44,6 +44,7 @@ export default function AccessRestricted() {
   const [error, setError] = useState<string | null>(null);
   const { data: license } = useLicense();
   const settings = useSettings();
+  const { appName } = settings;
 
   // Lands on the held login page: with SSO as the only way in, a reload would
   // sign the user straight back in through the IdP session.
@@ -71,9 +72,9 @@ export default function AccessRestricted() {
     ? getSeatLimitMessage()
     : showRenewalMessage
       ? NEXT_PUBLIC_CLOUD_ENABLED
-        ? t("accessRestricted.subscriptionLapse.description")
-        : t("accessRestricted.licenseLapse.description")
-      : t("accessRestricted.licenseRequired.description");
+        ? t("accessRestricted.subscriptionLapse.description", { appName })
+        : t("accessRestricted.licenseLapse.description", { appName })
+      : t("accessRestricted.licenseRequired.description", { appName });
 
   const handleResubscribe = async () => {
     setIsLoading(true);
@@ -126,7 +127,9 @@ export default function AccessRestricted() {
         </>
       ) : NEXT_PUBLIC_CLOUD_ENABLED ? (
         <>
-          <Text text03>{t("accessRestricted.updatePayment.description")}</Text>
+          <Text text03>
+            {t("accessRestricted.updatePayment.description", { appName })}
+          </Text>
 
           <Text text03>
             {t("accessRestricted.manageSubscription.description")}
@@ -149,7 +152,7 @@ export default function AccessRestricted() {
         <>
           <Text text03>
             {hadPreviousLicense
-              ? t("accessRestricted.renewLicense.description")
+              ? t("accessRestricted.renewLicense.description", { appName })
               : t("accessRestricted.obtainLicense.description")}
           </Text>
 

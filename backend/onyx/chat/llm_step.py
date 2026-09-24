@@ -1513,7 +1513,7 @@ def run_llm_step_pkt_generator(
 
             assistant_msg: AssistantMessage = AssistantMessage(
                 role="assistant",
-                content=accumulated_answer if accumulated_answer else None,
+                content=accumulated_answer or None,
                 tool_calls=tool_calls_list,
             )
             span_generation.span_data.output = [assistant_msg.model_dump()]
@@ -1562,10 +1562,10 @@ def run_llm_step_pkt_generator(
 
     return (
         LlmStepResult(
-            reasoning=accumulated_reasoning if accumulated_reasoning else None,
-            answer=accumulated_answer if accumulated_answer else None,
-            tool_calls=tool_calls if tool_calls else None,
-            raw_answer=accumulated_raw_answer if accumulated_raw_answer else None,
+            reasoning=accumulated_reasoning or None,
+            answer=accumulated_answer or None,
+            tool_calls=tool_calls or None,
+            raw_answer=accumulated_raw_answer or None,
             finish_reason=terminal_finish_reason,
         ),
         has_reasoned,

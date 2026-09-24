@@ -240,40 +240,40 @@ export default function SpendByUserTable({
         <div className="flex w-full flex-col gap-2 sm:ms-auto sm:w-auto sm:flex-row">
           {models.length > 0 && (
             <div className="w-full sm:w-44">
-              <InputSingleSelect value={model} onValueChange={setModel}>
-                <InputSingleSelect.Trigger
-                  placeholder={t("spendByUser.filters.allModels.label")}
-                />
-                <InputSingleSelect.Content>
-                  <InputSingleSelect.Item value={ALL}>
-                    {t("spendByUser.filters.allModels.label")}
-                  </InputSingleSelect.Item>
-                  {models.map((option) => (
-                    <InputSingleSelect.Item key={option} value={option}>
-                      {option}
-                    </InputSingleSelect.Item>
-                  ))}
-                </InputSingleSelect.Content>
-              </InputSingleSelect>
+              <InputSingleSelect
+                value={model}
+                onValueChange={setModel}
+                placeholder={t("spendByUser.filters.allModels.label")}
+                options={[
+                  {
+                    value: ALL,
+                    label: t("spendByUser.filters.allModels.label"),
+                  },
+                  ...models.map((option) => ({
+                    value: option,
+                    label: option,
+                  })),
+                ]}
+              />
             </div>
           )}
           {flows.length > 0 && (
             <div className="w-full sm:w-40">
-              <InputSingleSelect value={flow} onValueChange={setFlow}>
-                <InputSingleSelect.Trigger
-                  placeholder={t("spendByUser.filters.allFlows.label")}
-                />
-                <InputSingleSelect.Content>
-                  <InputSingleSelect.Item value={ALL}>
-                    {t("spendByUser.filters.allFlows.label")}
-                  </InputSingleSelect.Item>
-                  {flows.map((option) => (
-                    <InputSingleSelect.Item key={option} value={option}>
-                      {option}
-                    </InputSingleSelect.Item>
-                  ))}
-                </InputSingleSelect.Content>
-              </InputSingleSelect>
+              <InputSingleSelect
+                value={flow}
+                onValueChange={setFlow}
+                placeholder={t("spendByUser.filters.allFlows.label")}
+                options={[
+                  {
+                    value: ALL,
+                    label: t("spendByUser.filters.allFlows.label"),
+                  },
+                  ...flows.map((option) => ({
+                    value: option,
+                    label: option,
+                  })),
+                ]}
+              />
             </div>
           )}
         </div>
