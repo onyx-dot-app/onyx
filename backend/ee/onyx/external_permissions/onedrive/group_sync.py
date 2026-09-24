@@ -2,8 +2,10 @@ from collections.abc import Generator
 
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.utils import credential_json
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftGraphError as OneDriveGraphError,
+)
 from onyx.connectors.onedrive.connector import OneDriveConnector
-from onyx.connectors.onedrive.errors import OneDriveGraphError
 from onyx.connectors.onedrive.models import GraphDirectoryObjectType, OneDriveGroup
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.logger import setup_logger
