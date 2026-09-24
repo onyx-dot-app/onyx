@@ -69,7 +69,7 @@ export function FoldableLogo({
 }: FoldableLogoProps) {
   const t = useTranslations("common");
   const resolvedSize = size ?? DEFAULT_LOGO_SIZE_PX;
-  const { enterprise, hide_onyx_branding } = useSettings();
+  const { enterprise, hide_onyx_branding, isLoading } = useSettings();
   const logoDisplayStyle = enterprise?.logo_display_style;
   const applicationName = enterprise?.application_name;
 
@@ -96,7 +96,8 @@ export function FoldableLogo({
             {opts.includeName && (
               <Truncated headingH3>{applicationName}</Truncated>
             )}
-            {!hide_onyx_branding && (
+            {/* Wait for settings so a hidden tagline never flashes. */}
+            {!isLoading && !hide_onyx_branding && (
               <Text
                 secondaryBody
                 text03

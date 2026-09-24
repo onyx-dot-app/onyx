@@ -66,15 +66,6 @@ admin_router = APIRouter(prefix="/admin/settings")
 basic_router = APIRouter(prefix="/settings")
 
 
-def _resolve_current_tier() -> Tier:
-    # The stored settings.tier is client-writable, so gates resolve it fresh.
-    if global_version.is_ee_version():
-        from ee.onyx.utils.tier import get_tier
-
-        return get_tier()
-    return Tier.COMMUNITY
-
-
 @admin_router.patch("")
 def admin_patch_settings(
     settings: Settings,
@@ -82,7 +73,12 @@ def admin_patch_settings(
         require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
     ),
 ) -> Settings:
-    current_tier = _resolve_current_tier()
+    if global_version.is_ee_version():
+        from ee.onyx.utils.tier import get_tier
+
+        current_tier = get_tier()
+    else:
+        current_tier = Tier.COMMUNITY
 
     # Serialize the read-modify-write so two concurrent partial patches cannot
     # each merge onto a stale snapshot and drop the other's field.
@@ -175,6 +171,11 @@ def fetch_settings(
         apply_license_status_to_settings,
     )
     general_settings = apply_fn(general_settings)
+    # The EE apply_fn resolves tier on every path. On CE the stored value is
+    # client-writable, so it never counts.
+    resolved_tier = (
+        general_settings.tier if global_version.is_ee_version() else Tier.COMMUNITY
+    )
 
     # Craft workspace instructions are visible to authenticated users (they
     # appear in sandbox AGENTS.md anyway) but not to anonymous visitors.
@@ -208,7 +209,7 @@ def fetch_settings(
         opencode_debugging_enabled=ENABLE_OPENCODE_DEBUGGING,
         vector_db_enabled=not DISABLE_VECTOR_DB,
         hide_onyx_branding=HIDE_ONYX_BRANDING
-        and tier_at_least(_resolve_current_tier(), Tier.ENTERPRISE),
+        and tier_at_least(resolved_tier, Tier.ENTERPRISE),
         hooks_enabled=not MULTI_TENANT,
         version=onyx_version,
         max_allowed_upload_size_mb=MAX_ALLOWED_UPLOAD_SIZE_MB,
