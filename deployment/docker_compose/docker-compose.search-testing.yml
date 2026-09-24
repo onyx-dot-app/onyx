@@ -102,8 +102,6 @@ services:
 
         # Enterprise Edition only
         - NEXT_PUBLIC_THEME=${NEXT_PUBLIC_THEME:-}
-        # DO NOT TURN ON unless you have EXPLICIT PERMISSION from Onyx.
-        - NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED=${NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED:-false}
     depends_on:
       - api_server
     restart: unless-stopped

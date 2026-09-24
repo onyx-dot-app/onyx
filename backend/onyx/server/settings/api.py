@@ -10,6 +10,7 @@ from onyx.auth.users import is_user_admin
 from onyx.configs.app_configs import (
     DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB,
     DISABLE_VECTOR_DB,
+    HIDE_ONYX_BRANDING,
     MAX_ALLOWED_UPLOAD_SIZE_MB,
     POSTHOG_API_KEY,
     POSTHOG_HOST,
@@ -65,6 +66,15 @@ admin_router = APIRouter(prefix="/admin/settings")
 basic_router = APIRouter(prefix="/settings")
 
 
+def _resolve_current_tier() -> Tier:
+    # The stored settings.tier is client-writable, so gates resolve it fresh.
+    if global_version.is_ee_version():
+        from ee.onyx.utils.tier import get_tier
+
+        return get_tier()
+    return Tier.COMMUNITY
+
+
 @admin_router.patch("")
 def admin_patch_settings(
     settings: Settings,
@@ -72,12 +82,7 @@ def admin_patch_settings(
         require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
     ),
 ) -> Settings:
-    if global_version.is_ee_version():
-        from ee.onyx.utils.tier import get_tier
-
-        current_tier = get_tier()
-    else:
-        current_tier = Tier.COMMUNITY
+    current_tier = _resolve_current_tier()
 
     # Serialize the read-modify-write so two concurrent partial patches cannot
     # each merge onto a stale snapshot and drop the other's field.
@@ -202,6 +207,8 @@ def fetch_settings(
         onyx_craft_available=onyx_craft_available,
         opencode_debugging_enabled=ENABLE_OPENCODE_DEBUGGING,
         vector_db_enabled=not DISABLE_VECTOR_DB,
+        hide_onyx_branding=HIDE_ONYX_BRANDING
+        and tier_at_least(_resolve_current_tier(), Tier.ENTERPRISE),
         hooks_enabled=not MULTI_TENANT,
         version=onyx_version,
         max_allowed_upload_size_mb=MAX_ALLOWED_UPLOAD_SIZE_MB,

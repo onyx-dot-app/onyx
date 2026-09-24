@@ -301,6 +301,12 @@ test.describe("Appearance Theme Settings @exclusive", () => {
   test("custom application name keeps the 'Powered by Onyx' tagline", async ({
     page,
   }) => {
+    const settings = await (await page.request.get("/api/settings")).json();
+    test.skip(
+      settings.hide_onyx_branding === true,
+      "HIDE_ONYX_BRANDING hides the tagline on this deployment"
+    );
+
     const themePage = new AppearanceThemePage(page);
 
     // With the default display style, the tagline renders only when an

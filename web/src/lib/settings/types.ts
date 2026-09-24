@@ -97,6 +97,9 @@ export interface Settings {
   // are unavailable.
   vector_db_enabled?: boolean;
 
+  // HIDE_ONYX_BRANDING env var, honored only on the Enterprise tier.
+  hide_onyx_branding?: boolean;
+
   // True when hooks are available: single-tenant deployments only.
   hooks_enabled?: boolean;
 

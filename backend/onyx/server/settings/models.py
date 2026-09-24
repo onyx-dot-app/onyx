@@ -128,6 +128,8 @@ class UserSettings(Settings):
     # False when DISABLE_VECTOR_DB is set — connectors, RAG search, and
     # document sets are unavailable.
     vector_db_enabled: bool = True
+    # HIDE_ONYX_BRANDING env var, honored only on the Enterprise tier.
+    hide_onyx_branding: bool = False
     # True when hooks are available: single-tenant EE deployments only.
     hooks_enabled: bool = False
     # Application version, read from the ONYX_VERSION env var at startup.
