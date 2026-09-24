@@ -31,8 +31,14 @@ services:
         condition: service_started
       inference_model_server:
         condition: service_started
+      # Optional, since installs on external storage never use it.
+      object-store:
+        condition: service_healthy
+        required: false
+      # Only the legacy store, so a MinIO that fails to start never blocks the app.
       minio:
         condition: service_started
+        required: false
     restart: unless-stopped
     environment:
       # Auth Settings
@@ -47,10 +53,13 @@ services:
       - AWS_REGION_NAME=${AWS_REGION_NAME-}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID-}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY-}
-      # MinIO configuration
+      # Object store configuration
+      # A .env that names no endpoint predates object-store, so it keeps MinIO.
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
       - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:?set a strong value in .env, not minioadmin}
       - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:?set a strong value in .env, not minioadmin}
+      # While set, writes and deletes also reach earlier releases' MinIO and reads that miss fall back to it.
+      - S3_LEGACY_ENDPOINT_URL=${S3_LEGACY_ENDPOINT_URL:-}
     # Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
@@ -111,6 +120,14 @@ services:
         condition: service_started
       indexing_model_server:
         condition: service_started
+      # Optional, since installs on external storage never use it.
+      object-store:
+        condition: service_healthy
+        required: false
+      # Only the legacy store, so a MinIO that fails to start never blocks the app.
+      minio:
+        condition: service_started
+        required: false
     restart: unless-stopped
     environment:
       - AUTH_TYPE=${AUTH_TYPE:-oidc}
@@ -124,10 +141,12 @@ services:
       - AWS_REGION_NAME=${AWS_REGION_NAME-}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID-}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY-}
-      # MinIO configuration
+      # Object store configuration
+      # A .env that names no endpoint predates object-store, so it keeps MinIO.
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
       - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:?set a strong value in .env, not minioadmin}
       - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:?set a strong value in .env, not minioadmin}
+      - S3_LEGACY_ENDPOINT_URL=${S3_LEGACY_ENDPOINT_URL:-}
       - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
       - DISCORD_BOT_INVOKE_CHAR=${DISCORD_BOT_INVOKE_CHAR:-!}
       # API Server connection for Discord bot message processing
@@ -468,24 +487,93 @@ services:
     tmpfs:
       - /data
 
+  object-store:
+    # SeaweedFS behind an S3 API. Only the S3 gateway listens beyond loopback,
+    # because the filer, master and volume HTTP APIs take no credentials.
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/chrislusf/seaweedfs:4.47@sha256:ce9e796f1fe6f06968f4c04bdaf8f678dad9c8acdfef3d244133d71bfa6bf882
+    restart: unless-stopped
+    environment:
+      # SeaweedFS makes this pair its admin identity.
+      AWS_ACCESS_KEY_ID: ${S3_AWS_ACCESS_KEY_ID:?set a strong value in .env, not minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${S3_AWS_SECRET_ACCESS_KEY:?set a strong value in .env, not minioadmin}
+      # File store keys can hold a name segment longer than the 255-byte default.
+      WEED_FILER_OPTIONS_MAX_FILE_NAME_LENGTH: "1024"
+    volumes:
+      - object_store_data:/data
+    # SeaweedFS does not fsync bucket writes by default, so a filer rule turns
+    # it on for /buckets/ once the server is up. The healthcheck waits for it.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        /entrypoint.sh server -s3 -ip=127.0.0.1 -ip.bind=127.0.0.1 -s3.ip.bind=0.0.0.0 &
+        pid=$$!
+        trap 'kill -TERM $$pid; wait $$pid' TERM INT
+        until echo 'fs.configure -locationPrefix=/buckets/ -fsync -apply' | weed shell -master=127.0.0.1:9333 >/dev/null 2>&1; do
+          kill -0 $$pid 2>/dev/null || exit 1
+          sleep 1
+        done
+        touch /tmp/fsync-configured
+        wait $$pid
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/fsync-configured && wget -q -O /dev/null http://127.0.0.1:8333/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
   minio:
-    # MinIO archived its community edition, and Docker Hub and quay.io no longer
-    # serve minio/minio, so this is our mirror of the newest multi-arch build we
-    # kept. -cpuv1 also runs on x86-64-v1 CPUs. Pinned by digest.
+    # Earlier releases' store, which object-store-copy moves into object-store.
+    # Our digest-pinned mirror of the newest multi-arch MinIO build we kept.
+    # -cpuv1 also runs on x86-64-v1 CPUs.
     image: ${BASE_IMAGE_REGISTRY:-docker.io}/onyxdotapp/minio:RELEASE.2025-07-23T15-54-02Z-cpuv1@sha256:7330be2e7320a7a699b36f72bd06a94d8a21ec9f6f397345d9c38fc6751141f5
     restart: unless-stopped
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set a strong value in .env, not minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set a strong value in .env, not minioadmin}
-      MINIO_DEFAULT_BUCKETS: ${S3_FILE_STORE_BUCKET_NAME:-onyx-file-store-bucket}
+      # A .env without MINIO_ROOT_* falls back to the S3_AWS_* pair.
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-${S3_AWS_ACCESS_KEY_ID:?set a strong value in .env, not minioadmin}}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-${S3_AWS_SECRET_ACCESS_KEY:?set a strong value in .env, not minioadmin}}
+    # 0 stops MinIO once it is retired, without touching the app.
+    deploy:
+      replicas: ${MINIO_REPLICAS:-1}
     volumes:
       - minio_data:/data
     command: server /data --console-address ":9001"
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
-      interval: 30s
-      timeout: 20s
-      retries: 3
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  object-store-copy:
+    # Copies the files of minio into object-store while the app keeps serving,
+    # then watches minio for files an older release writes during a rollback.
+    # A failed copy retries every 5 minutes, and its logs show why.
+    image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
+    restart: unless-stopped
+    init: true
+    depends_on:
+      object-store:
+        condition: service_healthy
+        required: false
+      minio:
+        condition: service_started
+        required: false
+    env_file:
+      - path: .env
+        required: false
+    # Takes the app's endpoints, so it copies only when S3_LEGACY_ENDPOINT_URL is set.
+    environment:
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
+      - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:?set a strong value in .env, not minioadmin}
+      - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:?set a strong value in .env, not minioadmin}
+      - S3_LEGACY_ENDPOINT_URL=${S3_LEGACY_ENDPOINT_URL:-}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        until python -m onyx.file_store.legacy_copy --watch; do
+          echo "Legacy MinIO copy failed, retrying in 5 minutes"
+          sleep 300
+        done
+        # Reached without a legacy store or once it is retired, where restarting would loop.
+        exec sleep infinity
 
   code-interpreter:
     # The sandbox ships on its own release line, so IMAGE_TAG does not cover it.
@@ -529,6 +617,7 @@ services:
 volumes:
   # Necessary for persisting data for use
   db_volume:
+  object_store_data:
   minio_data:
   # Caches to prevent re-downloading models, not strictly necessary
   model_cache_huggingface:

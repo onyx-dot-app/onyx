@@ -373,7 +373,7 @@ jobs:
         run: |
           docker pull "${ONYX_BACKEND_IMAGE}"
           docker pull "${ONYX_MODEL_SERVER_IMAGE}"
-          docker compose -f docker-compose.yml pull relational_db opensearch cache minio
+          docker compose -f docker-compose.yml pull relational_db opensearch cache object-store minio
 
       - name: Verify deployment without external network
         working-directory: deployment/docker_compose
@@ -399,7 +399,7 @@ jobs:
                 < ../../backend/tests/airgap/test_default_model_server_embeddings_are_finite.py
           }
           if ! "${compose[@]}" up -d --no-build --wait --wait-timeout 180 \
-            api_server inference_model_server minio ||
+            api_server inference_model_server object-store ||
             ! api_server_is_healthy ||
             ! default_model_embeddings_are_finite; then
             "${compose[@]}" logs --no-color > "${RUNNER_TEMP}/airgap.log"
@@ -428,7 +428,7 @@ jobs:
               [[ "$(docker inspect --format '{{.State.Health.Status}}' "${container_id}")" == "healthy" ]]
           }
           if ! "${compose[@]}" up -d --no-build --wait --wait-timeout 180 \
-            api_server inference_model_server minio ||
+            api_server inference_model_server object-store ||
             ! api_server_is_healthy; then
             "${compose[@]}" logs --no-color > "${RUNNER_TEMP}/airgap-tls.log"
             exit 1
@@ -535,6 +535,8 @@ jobs:
         run: |
           cat <<EOF > deployment/docker_compose/.env
           COMPOSE_PROFILES=s3-filestore
+          S3_ENDPOINT_URL=http://object-store:8333
+          S3_LEGACY_ENDPOINT_URL=http://minio:9000
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
           AUTH_TYPE=basic
           INTEGRATION_TESTS_MODE=true
@@ -716,6 +718,8 @@ jobs:
         run: |
           cat <<EOF > deployment/docker_compose/.env
           COMPOSE_PROFILES=s3-filestore
+          S3_ENDPOINT_URL=http://object-store:8333
+          S3_LEGACY_ENDPOINT_URL=http://minio:9000
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
           AUTH_TYPE=basic
           INTEGRATION_TESTS_MODE=true

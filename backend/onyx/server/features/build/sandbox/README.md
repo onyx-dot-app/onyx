@@ -36,7 +36,7 @@ The sandbox system provides isolated execution environments where OpenCode agent
    - Snapshots tar-streamed through api_server-owned `FileStore` — agent containers never receive S3/MinIO credentials
    - Auto-cleanup of idle sandboxes (background worker uses the same Docker socket)
    - For self-hosted `docker compose` deployments enabled by `install.sh --include-craft`
-   - Sandboxes join only the dedicated `onyx_craft_sandbox` bridge — `postgres` / `redis` / `minio` / model servers are not reachable by compose DNS
+   - Sandboxes join only the dedicated `onyx_craft_sandbox` bridge — `postgres` / `redis` / `object-store` / model servers are not reachable by compose DNS
 
 #### Kubernetes → Docker mapping
 
@@ -264,7 +264,7 @@ uv run pytest backend/tests/integration/tests/craft/k8s/test_kubernetes_sandbox.
 - **Network policies** can restrict sandbox egress traffic
 - **Resource limits** prevent resource exhaustion
 - **Docker containers** run with `--security-opt no-new-privileges`, `--cap-drop ALL`, `user=1000:1000`, no Docker socket, and a fixed env allowlist (`ONYX_PAT` + `ONYX_SERVER_URL` + `ONYX_API_PREFIX`)
-- **Docker network isolation** is enforced by joining only the dedicated `onyx_craft_sandbox` bridge — compose's default network (postgres/redis/minio/model servers) is unreachable by DNS from inside a sandbox
+- **Docker network isolation** is enforced by joining only the dedicated `onyx_craft_sandbox` bridge — compose's default network (postgres/redis/object-store/model servers) is unreachable by DNS from inside a sandbox
 - **EC2 IMDS** must be blocked at the host level (require IMDSv2 via `HttpTokens=required`, or add a `DOCKER-USER` iptables rule — the installer does not do this automatically) — there is no app-level fallback
 
 ### Credentials Management
