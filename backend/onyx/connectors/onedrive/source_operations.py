@@ -64,7 +64,6 @@ USERS_PAGE_SIZE = 999
 USER_SELECT = "id,userPrincipalName,mail,displayName,userType,accountEnabled"
 CONFIG_AUTHORITY_HOST = "authority_host"
 CONFIG_GRAPH_API_HOST = "graph_api_host"
-CONFIG_ALL_USERS = "all_users"
 CONFIG_USERS = "users"
 
 

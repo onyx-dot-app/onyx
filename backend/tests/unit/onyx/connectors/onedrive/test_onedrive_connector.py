@@ -76,7 +76,7 @@ def _drive() -> OneDriveDrive:
 
 
 def _connector(*, users: list[str] | None = None) -> tuple[OneDriveConnector, Any]:
-    connector = OneDriveConnector(users=users, all_users=users is None)
+    connector = OneDriveConnector(users=users)
     gateway = create_autospec(OneDriveSourceOperations, instance=True)
     connector._ops = gateway
     return connector, gateway
@@ -124,13 +124,6 @@ def test_onedrive_scope_is_ordered_normalized_and_deduplicated() -> None:
         normalize_configured_users(["not-an-email"])
     with pytest.raises(ConnectorValidationError, match="at least one email"):
         normalize_configured_users([" ", ""])
-
-
-def test_onedrive_scope_requires_consistent_all_users_setting() -> None:
-    with pytest.raises(ConnectorValidationError, match="Do not list users"):
-        OneDriveConnector(users=["owner@example.com"], all_users=True)
-    with pytest.raises(ConnectorValidationError, match="list at least one user"):
-        OneDriveConnector(users=[], all_users=False)
 
 
 def test_onedrive_credential_validation_error_does_not_expose_input() -> None:
@@ -540,10 +533,7 @@ def test_onedrive_named_capability_checks_pass_through_gateway() -> None:
     context = CapabilityCheckContext(
         source=DocumentSource.ONEDRIVE,
         credential_json={},
-        connector_specific_config={
-            "all_users": False,
-            "users": ["owner@example.com"],
-        },
+        connector_specific_config={"users": ["owner@example.com"]},
         source_operations=gateway,
     )
 
@@ -575,7 +565,7 @@ def test_onedrive_capability_config_rejects_wrong_field_types() -> None:
     context = CapabilityCheckContext(
         source=DocumentSource.ONEDRIVE,
         credential_json={},
-        connector_specific_config={"all_users": "false"},
+        connector_specific_config={"users": "owner@example.com"},
         source_operations=gateway,
     )
     check = next(
@@ -660,8 +650,7 @@ def test_onedrive_delta_check_finds_later_readable_configured_drive() -> None:
         source=DocumentSource.ONEDRIVE,
         credential_json={},
         connector_specific_config={
-            "all_users": False,
-            "users": ["first@example.com", "second@example.com"],
+            "users": ["first@example.com", "second@example.com"]
         },
         source_operations=gateway,
     )
