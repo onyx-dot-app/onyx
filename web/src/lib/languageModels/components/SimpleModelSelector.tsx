@@ -8,7 +8,16 @@ import {
   fromSelectValue,
   toSelectValue,
 } from "@/lib/languageModels/options";
+import { getModelIcon } from "@/lib/languageModels/utils";
 import type { ModelOptionProvider } from "@/lib/languageModels/types";
+
+/** The select value of the Global Default row; `fromSelectValue` reads it as null. */
+const GLOBAL_DEFAULT_SELECT_VALUE = "global-default";
+
+export interface GlobalDefaultRow {
+  /** The model null resolves to, shown under the row's title. */
+  description?: string | null;
+}
 
 /** What `onChange` emits: only a nullable selector can emit null. */
 type EmittedModelConfigurationId<Nullable extends boolean> =
@@ -38,6 +47,15 @@ export interface SimpleModelSelectorProps<Nullable extends boolean = false> {
    * single provider always renders flat.
    */
   grouped?: boolean;
+  /**
+   * A first row, "Global Default", that stands for null, for pickers
+   * where nothing chosen falls back to the workspace default. The row is
+   * what null shows as, so the select never reads as empty and re-picking
+   * it is a no-op; picking a model then the row emits null. Needs
+   * `nullable`.
+   */
+  globalDefault?: Nullable extends true ? GlobalDefaultRow : never;
+  disabled?: boolean;
 }
 
 /**
@@ -53,20 +71,39 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
   onChange,
   nullable,
   grouped = true,
+  globalDefault,
+  disabled,
 }: SimpleModelSelectorProps<Nullable>) {
   const t = useTranslations("common.modelSelectors");
-  const options = useMemo(
-    () => buildModelSelectOptions(providers, { grouped }),
-    [providers, grouped]
-  );
+  const options = useMemo(() => {
+    const models = buildModelSelectOptions(providers, { grouped });
+    if (!globalDefault) return models;
+    return [
+      {
+        value: GLOBAL_DEFAULT_SELECT_VALUE,
+        title: t("globalDefault.label"),
+        description: globalDefault.description ?? undefined,
+        icon: getModelIcon("", ""),
+      },
+      ...models,
+    ];
+  }, [providers, grouped, globalDefault, t]);
+
+  // The Global Default row is what null shows as; otherwise a non-nullable
+  // field's own value is its floor. Either way a re-pick is a no-op.
+  const defaultOption = globalDefault
+    ? GLOBAL_DEFAULT_SELECT_VALUE
+    : nullable || value === null
+      ? undefined
+      : String(value);
 
   return (
     <InputSingleSelect
       // Provider lists run long: the list always carries a search field.
       search
       value={toSelectValue(value)}
-      // A non-nullable field's own value is its floor: a re-pick is a no-op.
-      defaultOption={nullable || value === null ? undefined : String(value)}
+      defaultOption={defaultOption}
+      disabled={disabled}
       onValueChange={(next) => {
         const id = fromSelectValue(next);
         // SAFETY: a non-nullable select never emits an empty value, since

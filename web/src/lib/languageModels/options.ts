@@ -8,12 +8,13 @@ import type { IconProps } from "@opal/types";
 import { getModelIcon, getProvider } from "@/lib/languageModels/utils";
 import { AGGREGATOR_PROVIDERS } from "@/lib/languageModels/svc";
 import type {
+  DefaultModel,
+  FilterModelConfigurationsOptions,
   LLMOption,
   LLMOptionGroup,
   LLMProviderDescriptor,
   ModelOptionProvider,
   ReasoningEffortOverride,
-  FilterModelConfigurationsOptions,
 } from "@/lib/languageModels/types";
 
 // ---------------------------------------------------------------------------
@@ -227,6 +228,24 @@ export function findLlmOptionById(
     buildLlmOptions(llmProviders, undefined, true).find(
       (option) => option.modelConfigurationId === modelConfigurationId
     ) ?? null
+  );
+}
+
+/**
+ * Display name of a workspace default (`default_text`, `default_vision`)
+ * as the selector shows it, for a "Global Default" row's description.
+ * Keyed on provider id: names are not unique.
+ */
+export function findDefaultModelDisplayName(
+  llmProviders: ModelOptionProvider[] | undefined,
+  defaultModel: DefaultModel | null
+): string | null {
+  if (!defaultModel) return null;
+  const provider = llmProviders?.find((p) => p.id === defaultModel.provider_id);
+  return (
+    provider?.model_configurations.find(
+      (mc) => mc.name === defaultModel.model_name
+    )?.effectiveDisplayName ?? null
   );
 }
 

@@ -155,6 +155,73 @@ describe("SimpleModelSelector", () => {
     expect(screen.getAllByRole("option")).toHaveLength(2);
   });
 
+  test("globalDefault: null shows the Global Default row, which names the fallback", async () => {
+    const handleChange = jest.fn();
+    const user = setupUser();
+    render(
+      <SimpleModelSelector
+        nullable
+        globalDefault={{ description: "GPT-4o" }}
+        providers={providers}
+        value={null}
+        onChange={handleChange}
+      />
+    );
+    expect(screen.getByRole("combobox")).toHaveValue("Global Default");
+
+    await user.click(screen.getByRole("combobox"));
+    const row = screen.getByRole("option", { name: /Global Default/ });
+    expect(row).toHaveTextContent("GPT-4o");
+    // Re-picking the row is a no-op: null has nothing to clear into.
+    await user.click(row);
+    expect(handleChange).not.toHaveBeenCalled();
+  });
+
+  test("globalDefault: picking a model emits its id, picking the row emits null", async () => {
+    const handleChange = jest.fn();
+    const user = setupUser();
+    const { rerender } = render(
+      <SimpleModelSelector
+        nullable
+        globalDefault={{}}
+        providers={providers}
+        value={null}
+        onChange={handleChange}
+      />
+    );
+    await user.click(screen.getByRole("combobox"));
+    await user.click(screen.getByRole("option", { name: /GPT-4\.1/ }));
+    expect(handleChange).toHaveBeenLastCalledWith(12);
+
+    rerender(
+      <SimpleModelSelector
+        nullable
+        globalDefault={{}}
+        providers={providers}
+        value={12}
+        onChange={handleChange}
+      />
+    );
+    expect(screen.getByRole("combobox")).toHaveValue("GPT-4.1");
+    await user.click(screen.getByRole("combobox"));
+    await user.click(screen.getByRole("option", { name: /Global Default/ }));
+    expect(handleChange).toHaveBeenLastCalledWith(null);
+  });
+
+  test("disabled: the field does not open", async () => {
+    const user = setupUser();
+    render(
+      <SimpleModelSelector
+        providers={providers}
+        value={11}
+        onChange={jest.fn()}
+        disabled
+      />
+    );
+    await user.click(screen.getByRole("combobox"));
+    expect(screen.queryByRole("option")).not.toBeInTheDocument();
+  });
+
   test("renders an empty list without options", async () => {
     const user = setupUser();
     render(

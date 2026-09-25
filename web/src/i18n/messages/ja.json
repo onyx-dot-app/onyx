@@ -11495,7 +11495,10 @@
       }
     },
     "modelSelectors": {
-      "placeholder": "モデルを選択"
+      "placeholder": "モデルを選択",
+      "globalDefault": {
+        "label": "グローバルデフォルト"
+      }
     },
     "nonSelectableConnectors": {
       "unavailable": {

@@ -11495,7 +11495,10 @@
       }
     },
     "modelSelectors": {
-      "placeholder": "选择模型"
+      "placeholder": "选择模型",
+      "globalDefault": {
+        "label": "全局默认"
+      }
     },
     "nonSelectableConnectors": {
       "unavailable": {

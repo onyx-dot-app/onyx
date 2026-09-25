@@ -11495,7 +11495,10 @@
       }
     },
     "modelSelectors": {
-      "placeholder": "모델 선택"
+      "placeholder": "모델 선택",
+      "globalDefault": {
+        "label": "전역 기본값"
+      }
     },
     "nonSelectableConnectors": {
       "unavailable": {

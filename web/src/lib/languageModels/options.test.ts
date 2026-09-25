@@ -2,6 +2,7 @@ import {
   buildLlmOptions,
   buildModelSelectOptions,
   filterModelConfigurations,
+  findDefaultModelDisplayName,
   fromSelectValue,
   llmOptionKey,
   toSelectValue,
@@ -215,6 +216,33 @@ describe("model select options", () => {
       ],
     },
   ];
+
+  describe("findDefaultModelDisplayName", () => {
+    test("names the default by provider id and model name", () => {
+      expect(
+        findDefaultModelDisplayName(providers, {
+          provider_id: 2,
+          model_name: "claude-sonnet-4",
+        })
+      ).toBe("Claude Sonnet 4");
+    });
+
+    test("is null without a default, a provider, or a model", () => {
+      expect(findDefaultModelDisplayName(providers, null)).toBeNull();
+      expect(
+        findDefaultModelDisplayName(providers, {
+          provider_id: 9,
+          model_name: "gpt-4o",
+        })
+      ).toBeNull();
+      expect(
+        findDefaultModelDisplayName(undefined, {
+          provider_id: 1,
+          model_name: "gpt-4o",
+        })
+      ).toBeNull();
+    });
+  });
 
   describe("buildModelSelectOptions", () => {
     // Rows of a divider, or the entry itself when it is a loose row.

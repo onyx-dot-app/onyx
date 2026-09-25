@@ -11495,7 +11495,10 @@
       }
     },
     "modelSelectors": {
-      "placeholder": "اختر نموذجًا"
+      "placeholder": "اختر نموذجًا",
+      "globalDefault": {
+        "label": "الافتراضي العام"
+      }
     },
     "nonSelectableConnectors": {
       "unavailable": {

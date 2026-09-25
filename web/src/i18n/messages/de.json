@@ -11495,7 +11495,10 @@
       }
     },
     "modelSelectors": {
-      "placeholder": "Modell auswählen"
+      "placeholder": "Modell auswählen",
+      "globalDefault": {
+        "label": "Globaler Standard"
+      }
     },
     "nonSelectableConnectors": {
       "unavailable": {
