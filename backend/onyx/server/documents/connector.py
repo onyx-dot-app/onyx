@@ -47,7 +47,7 @@ from onyx.configs.constants import (
     OnyxCeleryPriority,
     OnyxCeleryTask,
 )
-from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import ValidationError
 from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.connectors.google_utils.google_auth import get_google_oauth_creds
 from onyx.connectors.google_utils.google_kv import (
@@ -1658,7 +1658,9 @@ def create_connector_with_mock_credential(
         )
         return response
 
-    except ConnectorValidationError as e:
+    except ValidationError as e:
+        # The base class: a transient source failure raises the unexpected
+        # variant, and it must free the name the same way.
         _discard_unpaired_creation(db_session, connector_id, credential_id)
         raise HTTPException(
             status_code=400, detail="Connector validation error: " + str(e)
@@ -1674,12 +1676,11 @@ def _discard_unpaired_creation(
     """Both rows are committed before validation runs, so a failed creation has
     to remove them or the name stays taken for the retry."""
     db_session.rollback()
-    if connector_id is not None and not discard_connector_if_unpaired(
-        db_session, connector_id
-    ):
-        # Paired by another request meanwhile, or the delete itself failed and
-        # was logged: the caller must still get the validation error.
-        return
+    if connector_id is not None:
+        # False when paired by another request meanwhile, which keeps the
+        # connector. The credential is still ours unless that pair took it, and
+        # then the delete below refuses and is logged.
+        discard_connector_if_unpaired(db_session, connector_id)
     if credential_id is not None:
         try:
             delete_credential(credential_id, db_session)

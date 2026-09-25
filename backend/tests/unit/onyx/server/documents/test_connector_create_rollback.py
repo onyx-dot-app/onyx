@@ -6,7 +6,10 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi import HTTPException
 
-from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    UnexpectedValidationError,
+)
 from onyx.db.enums import AccessType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -96,17 +99,37 @@ def test_duplicate_name_removes_nothing(
     stubbed_creation["delete_credential"].assert_not_called()
 
 
-def test_connector_paired_meanwhile_keeps_the_credential(
+def test_connector_paired_meanwhile_still_drops_the_mock_credential(
     request_data: ConnectorUpdateRequest, stubbed_creation: dict[str, MagicMock]
 ) -> None:
     stubbed_creation["discard_connector_if_unpaired"].return_value = False
+    db_session = MagicMock()
 
     with pytest.raises(HTTPException):
         connector_server.create_connector_with_mock_credential(
-            connector_data=request_data, user=MagicMock(), db_session=MagicMock()
+            connector_data=request_data, user=MagicMock(), db_session=db_session
         )
 
-    stubbed_creation["delete_credential"].assert_not_called()
+    stubbed_creation["delete_credential"].assert_called_once_with(9, db_session)
+
+
+def test_transient_validation_failure_also_frees_the_name(
+    request_data: ConnectorUpdateRequest, stubbed_creation: dict[str, MagicMock]
+) -> None:
+    stubbed_creation[
+        "validate_ccpair_for_user"
+    ].side_effect = UnexpectedValidationError("source unreachable")
+    db_session = MagicMock()
+
+    with pytest.raises(HTTPException) as raised:
+        connector_server.create_connector_with_mock_credential(
+            connector_data=request_data, user=MagicMock(), db_session=db_session
+        )
+
+    assert raised.value.status_code == 400
+    stubbed_creation["discard_connector_if_unpaired"].assert_called_once_with(
+        db_session, 7
+    )
 
 
 @pytest.fixture
