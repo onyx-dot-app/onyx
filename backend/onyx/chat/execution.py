@@ -10,7 +10,6 @@ from onyx.agents.models import RunState
 from onyx.agents.runtime import Run
 from onyx.cache.interface import CacheBackend
 from onyx.chat.agent import ChatAgent
-from onyx.chat.cancellation import clear_stop, is_stop_requested
 from onyx.chat.chat_processing_checker import (
     PROCESSING_REFRESH_INTERVAL_S,
     set_processing_status,
@@ -26,6 +25,7 @@ from onyx.chat.persistence import ChatResponsePersistence
 from onyx.chat.prepare import create_chat_agent
 from onyx.chat.presentation import ResponsePresenter
 from onyx.chat.run_store import ChatRunStore
+from onyx.chat.stop_signal_checker import clear_stop, is_stop_requested
 from onyx.chat.stream_buffer import ChatDelivery, ChatStream, StreamBufferWriter
 from onyx.chat.subagents import create_chat_agent_coordinator
 from onyx.configs.chat_configs import (

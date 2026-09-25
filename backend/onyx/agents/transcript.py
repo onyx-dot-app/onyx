@@ -2,7 +2,7 @@
 
 from enum import Enum
 
-from pydantic import BaseModel, Field, JsonValue
+from pydantic import BaseModel, Field
 
 from onyx.llm.exceptions import LLMErrorInfo
 from onyx.llm.models import AssistantMessage, Message, ToolCall, ToolResultMessage
@@ -53,11 +53,6 @@ class OperationSnapshot(BaseModel):
     message_index: int
     tool_call_id: str | None = None
     status: RunStatus
-
-
-class AgentRestorationConfig(BaseModel):
-    feature: str
-    settings: dict[str, JsonValue] = Field(default_factory=dict)
 
 
 def completed_tool_call_ids(messages: list[Message], assistant_index: int) -> set[str]:

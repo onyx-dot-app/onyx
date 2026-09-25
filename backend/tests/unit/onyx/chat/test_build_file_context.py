@@ -12,7 +12,7 @@ from onyx.chat.files import (
     CONTENT_UNAVAILABLE_NOTICE,
     build_file_context,
 )
-from onyx.context.messages import count_message_tokens, prompt_metadata
+from onyx.chat.llm_step import count_message_tokens, prompt_metadata
 from onyx.file_store.models import ChatFileType
 
 

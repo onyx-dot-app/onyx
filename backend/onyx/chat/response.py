@@ -13,6 +13,7 @@ from onyx.agents.items import (
 from onyx.agents.models import RunState
 from onyx.agents.transcript import OperationSnapshot
 from onyx.chat.models import ResponseRecord
+from onyx.deep_research.models import ResearchConfiguration
 from onyx.llm.models import ToolResultMessage
 
 
@@ -32,13 +33,18 @@ def response_record(
         info = metadata.get(node.agent_id) if node.agent_id is not None else None
         if not is_root and info is None:
             raise ValueError("Child response requires its agent registration")
+        configuration = info.restoration_config if info else None
+        if configuration is not None and not isinstance(
+            configuration, ResearchConfiguration
+        ):
+            raise ValueError("Unsupported saved child configuration")
         return ResponseRecord(
             run_id=node.run_id,
             agent_id=node.agent_id,
             agent_path=info.path if info else "/root",
             agent_description=info.description if info else "",
-            restoration_config=info.restoration_config.model_copy(deep=True)
-            if info and info.restoration_config
+            restoration_config=configuration.model_copy(deep=True)
+            if configuration
             else None,
             previous_run_id=node.previous_run_id,
             parent_run_id=node.parent_run_id,

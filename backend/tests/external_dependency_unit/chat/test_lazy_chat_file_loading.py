@@ -209,7 +209,7 @@ class TestLazyShimContract:
         per-instance ``threading.Lock`` to make check-and-set atomic."""
         import threading
 
-        from onyx.context.messages import ChatLoadedFile
+        from onyx.chat.llm_step import ChatLoadedFile
 
         call_count = {"n": 0}
         gate = threading.Event()

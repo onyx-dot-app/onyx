@@ -7,7 +7,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from onyx.agents.items import ResponseItem
 from onyx.agents.transcript import (
-    AgentRestorationConfig,
     CompactionCheckpoint,
     RunFailure,
     RunStatus,
@@ -17,6 +16,7 @@ from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.db.enums import IncognitoRecordMode
 from onyx.db.memory import UserMemoryContext
+from onyx.deep_research.models import ResearchConfiguration
 from onyx.file_store.models import (
     ExtractedContextFiles,
     FileDescriptor,
@@ -82,7 +82,7 @@ class ResponseRecord(BaseModel):
     agent_id: str | None = None
     agent_path: str = "/root"
     agent_description: str = ""
-    restoration_config: AgentRestorationConfig | None = None
+    restoration_config: ResearchConfiguration | None = None
     previous_run_id: str | None = None
     parent_run_id: str | None = None
     parent_tool_call_id: str | None = None
@@ -99,7 +99,7 @@ class SavedAgentContext(BaseModel):
     """Saved history, settings, and sources used to rebuild an agent."""
 
     agent_id: str
-    configuration: AgentRestorationConfig | None
+    configuration: ResearchConfiguration | None
     messages: list[Message]
     checkpoint: CompactionCheckpoint | None = None
     previous_run_id: str | None = None
@@ -327,7 +327,9 @@ class PersonaPromptConfig(BaseModel):
     replace_base_system_prompt: bool
 
 
-class ChatRestoreConfiguration(BaseModel):
+class ChatFeatureState(BaseModel):
+    """Chat settings and accumulated state needed to resume suspended execution."""
+
     persona: PersonaPromptConfig | None
     context_files: SavedContextFiles
     file_metadata: dict[str, FileToolMetadata] | None
@@ -340,9 +342,6 @@ class ChatRestoreConfiguration(BaseModel):
     custom_prompt: str | None
     reminders_enabled: bool
 
-
-class ChatFeatureState(BaseModel):
-    configuration: ChatRestoreConfiguration
     elapsed_seconds: float
     citation_sources: dict[int, SearchDoc]
     citation_mapping: dict[int, str]

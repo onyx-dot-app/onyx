@@ -4,6 +4,14 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from onyx.context.search.models import SearchDoc
+from onyx.llm.models import ReasoningEffort
+
+
+class ResearchConfiguration(BaseModel):
+    """Settings needed to rebuild a research agent for another run."""
+
+    language_section: str
+    reasoning_effort: ReasoningEffort
 
 
 class ResearchAgentCallResult(BaseModel):

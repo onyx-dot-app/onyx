@@ -11,14 +11,14 @@ from redis.exceptions import WatchError
 
 from onyx.agents.coordination import AgentInfo
 from onyx.agents.items import messages_from_items
-from onyx.agents.transcript import AgentRestorationConfig
 from onyx.cache.interface import CacheBackendType
 from onyx.chat.citation_processor import CitationMapping
+from onyx.chat.llm_step import PromptMetadata, prompt_metadata
 from onyx.chat.models import MAX_DISCOVERED_AGENTS, ResponseRecord, SavedAgentContext
 from onyx.chat.stream_buffer import stream_buffer_key_pattern
 from onyx.configs import app_configs
 from onyx.configs.constants import MessageType
-from onyx.context.messages import PromptMetadata, prompt_metadata
+from onyx.deep_research.models import ResearchConfiguration
 from onyx.llm.models import (
     AnyThinkingBlock,
     AssistantMessage,
@@ -380,7 +380,7 @@ class _IncognitoAgent(BaseModel):
     agent_id: str
     agent_path: str
     description: str
-    configuration: AgentRestorationConfig | None
+    configuration: ResearchConfiguration | None
     responses: list[ResponseRecord]
     sources: CitationMapping = Field(default_factory=dict)
 

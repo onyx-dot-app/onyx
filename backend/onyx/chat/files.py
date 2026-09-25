@@ -7,10 +7,10 @@ from uuid import UUID
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.chat.llm_step import PromptMetadata
 from onyx.chat.models import AvailableFiles, SearchParams
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import DEFAULT_PERSONA_ID, FileOrigin
-from onyx.context.messages import PromptMetadata
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.utils import sandbox_filename_for_document
 from onyx.db.file_record import FileRecordNotFoundError

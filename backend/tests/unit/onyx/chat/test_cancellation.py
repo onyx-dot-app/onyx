@@ -9,10 +9,15 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from onyx.cache.interface import CacheBackend, CacheLock
-from onyx.chat.cancellation import STOP_TTL, clear_stop, is_stop_requested, request_stop
 from onyx.chat.chat_processing_checker import (
     is_chat_session_processing,
     set_processing_status,
+)
+from onyx.chat.stop_signal_checker import (
+    STOP_TTL,
+    clear_stop,
+    is_stop_requested,
+    request_stop,
 )
 
 

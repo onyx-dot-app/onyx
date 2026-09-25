@@ -5,6 +5,8 @@ from collections.abc import Callable
 from concurrent.futures import Future
 from typing import TYPE_CHECKING
 
+from pydantic import JsonValue
+
 from onyx.agents.events import (
     InputRequiredEvent,
     ToolEndEvent,
@@ -133,6 +135,8 @@ class ToolBatch:
         index: int,
         approved: bool = False,
         children: list[RunState] | None = None,
+        grouped_calls: list[ToolCall] | None = None,
+        merged_arguments: dict[str, JsonValue] | None = None,
     ) -> None:
 
         def operation() -> ToolOutcome:
@@ -142,13 +146,21 @@ class ToolBatch:
                     index=index,
                     approved=approved,
                     children=children,
+                    grouped_calls=grouped_calls,
+                    merged_arguments=merged_arguments,
                 )
+                if grouped_calls and not isinstance(outcome, ToolResult):
+                    raise ValueError("Batched tools must return a completed result")
                 if isinstance(outcome, ToolResult):
-                    self._record_tool_result(outcome, call)
+                    # Checkpoint capture must not split a completed batch.
+                    with self.run._lock:
+                        for member in grouped_calls or [call]:
+                            self._record_tool_result(outcome, member)
                 return outcome
 
         future = self.scope.start(operation)
-        self.futures[call.id] = future
+        for member in grouped_calls or [call]:
+            self.futures[member.id] = future
         future.add_done_callback(self._wake)
 
     def _collect_results(self) -> None:
@@ -245,7 +257,7 @@ class ToolBatch:
                                 children=children,
                             )
                             continue
-                        self._start(call, index)
+                        self._start_compatible_calls(call, index, results)
                     if not self.futures:
                         if len(self._raw_results()) > len(results):
                             continue
@@ -258,6 +270,49 @@ class ToolBatch:
             self._wake()
             raise
 
+    def _start_compatible_calls(
+        self, call: ToolCall, index: int, results: dict[str, ToolResultMessage]
+    ) -> None:
+        group = [call]
+        arguments = call.model_copy(deep=True).arguments
+        tool = self.tools.get(call.name)
+        if (
+            tool is not None
+            and tool.merge_arguments is not None
+            and self.before_tool_call is None
+            and call.arguments_complete
+            and not call.argument_error
+            and self.message.stop_reason != "length"
+        ):
+            for candidate in self.calls[index + 1 :]:
+                eligible = (
+                    candidate.name == call.name
+                    and candidate.id not in results
+                    and candidate.id not in self.futures
+                    and candidate.id not in self.progress.pending_tool_calls
+                    and candidate.arguments_complete
+                    and not candidate.argument_error
+                )
+                if not eligible:
+                    if self.sequential:
+                        break
+                    continue
+                merged = tool.merge_arguments(
+                    arguments, candidate.model_copy(deep=True).arguments
+                )
+                if merged is None:
+                    if self.sequential:
+                        break
+                    continue
+                arguments = merged
+                group.append(candidate)
+        self._start(
+            call,
+            index,
+            grouped_calls=group if len(group) > 1 else None,
+            merged_arguments=arguments if len(group) > 1 else None,
+        )
+
     def _execute_tool(
         self,
         *,
@@ -265,33 +320,39 @@ class ToolBatch:
         index: int,
         approved: bool = False,
         children: list[RunState] | None = None,
+        grouped_calls: list[ToolCall] | None = None,
+        merged_arguments: dict[str, JsonValue] | None = None,
     ) -> ToolOutcome:
         cancellation_signal = self.signal
         context = self._context(call)
         step = context.step
         options = context.options
         tool = self.tools.get(call.name)
-        started = ToolStartEvent(
-            **self.run._ancestry, step_index=step.index, tool_call=call
-        )
         with self.run._lock:
             cancellation_signal.check()
-            first_start = not any(
-                operation.message_index == self.step_start
-                and operation.tool_call_id == call.id
-                for operation in self.run._state.operations
-            )
-            if first_start:
-                self.run._state.operations.append(
-                    OperationSnapshot(
-                        step_index=step.index,
-                        message_index=self.step_start,
-                        tool_call_id=call.id,
-                        status=RunStatus.RUNNING,
-                    )
+            for member in grouped_calls or [call]:
+                first_start = not any(
+                    operation.message_index == self.step_start
+                    and operation.tool_call_id == member.id
+                    for operation in self.run._state.operations
                 )
-                if self.run._delivery:
-                    self.run._delivery.publish(started)
+                if first_start:
+                    self.run._state.operations.append(
+                        OperationSnapshot(
+                            step_index=step.index,
+                            message_index=self.step_start,
+                            tool_call_id=member.id,
+                            status=RunStatus.RUNNING,
+                        )
+                    )
+                    if self.run._delivery:
+                        self.run._delivery.publish(
+                            ToolStartEvent(
+                                **self.run._ancestry,
+                                step_index=step.index,
+                                tool_call=member,
+                            )
+                        )
         cancellation_signal.check()
         context = ToolCallContext(
             step=step,
@@ -327,19 +388,23 @@ class ToolBatch:
                     logger.debug("Ignoring late tool progress: %s", call.id)
                     return
                 cancellation_signal.check()
-                event = ToolUpdateEvent(
-                    **self.run._ancestry,
-                    step_index=step.index,
-                    tool_call=call,
-                    progress=progress,
-                )
                 if self.run._delivery:
-                    self.run._delivery.publish(event)
+                    for member in grouped_calls or [call]:
+                        self.run._delivery.publish(
+                            ToolUpdateEvent(
+                                **self.run._ancestry,
+                                step_index=step.index,
+                                tool_call=member,
+                                progress=progress,
+                            )
+                        )
 
         invocation = ToolInvocation(
             call_id=call.id,
             call_index=index,
-            arguments=call.model_copy(deep=True).arguments,
+            arguments=merged_arguments
+            if merged_arguments is not None
+            else call.model_copy(deep=True).arguments,
             cancellation=cancellation_signal,
             update=update,
             messages=[message.model_copy(deep=True) for message in context.messages],

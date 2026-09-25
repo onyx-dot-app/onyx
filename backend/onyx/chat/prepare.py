@@ -22,6 +22,7 @@ from onyx.chat.incognito import (
     incognito_llm_request_policy,
 )
 from onyx.chat.incognito_context import append_incognito_message, load_incognito_context
+from onyx.chat.llm_step import PromptMetadata
 from onyx.chat.models import (
     AnswerStreamPart,
     AvailableFiles,
@@ -44,7 +45,6 @@ from onyx.configs.constants import (
     MessageType,
     MilestoneRecordType,
 )
-from onyx.context.messages import PromptMetadata
 from onyx.context.search.models import BaseFilters
 from onyx.db.chat import (
     create_chat_session_from_request,

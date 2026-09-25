@@ -11,10 +11,10 @@ from onyx.agents.runtime import Agent
 from onyx.chat.agent import ChatAgent
 from onyx.chat.artifacts import ChatSearchResult
 from onyx.chat.context import ChatReminders
+from onyx.chat.llm_step import PromptMetadata
 from onyx.chat.models import ChatFeatureState, ChatMessageMetadata
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.configs.constants import FileOrigin
-from onyx.context.messages import PromptMetadata
 from onyx.context.search.models import SearchDocsResponse
 from onyx.deep_research.agent import DeepResearchAgent, DeepResearchFeatureState
 from onyx.deep_research.models import (
@@ -77,24 +77,23 @@ def restore_chat_agent(
     context = checkpoint.agent_state.model_copy(deep=True)
     token_counter = get_llm_token_counter(llm)
     if isinstance(state, ChatFeatureState):
-        config = state.configuration
         chat = ChatAgent(
             messages=context.messages,
             tools=tools,
-            custom_agent_prompt=config.custom_prompt,
-            base_system_prompt=config.base_prompt,
-            context_files=config.context_files.restore(),
-            persona=config.persona,
-            user_memory_context=config.memory,
+            custom_agent_prompt=state.custom_prompt,
+            base_system_prompt=state.base_prompt,
+            context_files=state.context_files.restore(),
+            persona=state.persona,
+            user_memory_context=state.memory,
             llm=llm,
             token_counter=token_counter,
-            forced_tool_id=config.forced_tool_id,
+            forced_tool_id=state.forced_tool_id,
             user_identity=user_identity,
-            reasoning_effort=config.reasoning_effort,
-            include_citations=config.include_citations,
-            all_injected_file_metadata=config.file_metadata,
-            inject_memories_in_prompt=config.inject_memories,
-            reminders=ChatReminders(enabled=config.reminders_enabled),
+            reasoning_effort=state.reasoning_effort,
+            include_citations=state.include_citations,
+            all_injected_file_metadata=state.file_metadata,
+            inject_memories_in_prompt=state.inject_memories,
+            reminders=ChatReminders(enabled=state.reminders_enabled),
             checkpoint=context.checkpoint,
             previous_run_id=snapshot.previous_run_id,
             agent_id=snapshot.agent_id,

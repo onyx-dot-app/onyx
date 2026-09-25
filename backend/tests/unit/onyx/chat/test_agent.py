@@ -12,9 +12,9 @@ from onyx.agents.items import messages_from_items
 from onyx.agents.runtime import Run
 from onyx.chat.agent import ChatAgent
 from onyx.chat.emitter import Emitter
+from onyx.chat.llm_step import PromptMetadata
 from onyx.chat.presentation import ResponsePresenter, project_response
 from onyx.configs.constants import DocumentSource
-from onyx.context.messages import PromptMetadata
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.file_store.models import ExtractedContextFiles
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal

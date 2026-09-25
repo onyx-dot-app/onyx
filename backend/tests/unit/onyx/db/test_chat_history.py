@@ -8,8 +8,8 @@ from onyx.agents.items import (
     ResponseText,
 )
 from onyx.agents.transcript import RunStatus, messages_for_model
+from onyx.chat.llm_step import prompt_metadata
 from onyx.configs.constants import MessageType
-from onyx.context.messages import prompt_metadata
 from onyx.db.chat_history import (
     _build_tool_call_response_history_message,
     capture_chat_history,

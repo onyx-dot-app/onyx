@@ -3,12 +3,12 @@ from io import BytesIO
 
 from PIL import Image
 
+from onyx.chat.llm_step import prepare_model_messages
 from onyx.configs.app_configs import (
     IMAGE_SUMMARIZATION_SYSTEM_PROMPT,
     IMAGE_SUMMARIZATION_USER_PROMPT,
 )
 from onyx.configs.chat_configs import IMAGE_SUMMARIZATION_TIMEOUT
-from onyx.context.messages import prepare_model_messages
 from onyx.llm.interfaces import LLM, GenerationContext
 from onyx.llm.models import (
     ContentPart,

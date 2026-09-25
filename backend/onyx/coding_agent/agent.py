@@ -9,14 +9,14 @@ from onyx.agents.models import (
 )
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolExecutionMode, ToolInvocation
+from onyx.chat.llm_step import PromptMetadata
+from onyx.chat.prompt_utils import prepare_prompt
 from onyx.coding_agent.tool_definitions import (
     BASH_TOOL_DESCRIPTION,
     CODING_AGENT_THINK_TOOL_DESCRIPTION,
     GENERATE_ANSWER_TOOL_DESCRIPTION,
     GENERATE_ANSWER_TOOL_NAME,
 )
-from onyx.context.messages import PromptMetadata
-from onyx.context.prompt import prepare_prompt
 from onyx.deep_research.tool_definitions import THINK_TOOL_RESPONSE_MESSAGE
 from onyx.llm.cancellation import (
     CancellationSignal,

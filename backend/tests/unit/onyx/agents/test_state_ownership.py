@@ -22,7 +22,7 @@ from onyx.agents.models import (
 )
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation
-from onyx.context.messages import PromptMetadata, prepare_model_messages
+from onyx.chat.llm_step import PromptMetadata, prepare_model_messages
 from onyx.file_store.models import ChatFileType, ChatLoadedFile
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import GenerationContext
@@ -97,7 +97,7 @@ def test_lazy_attachments_share_resources_but_not_message_data(
     )
     llm = ScriptedLLM([Delta(content="image seen")])
     monkeypatch.setattr(
-        "onyx.context.messages.model_supports_image_input", lambda *_: True
+        "onyx.chat.llm_step.model_supports_image_input", lambda *_: True
     )
     agent = Agent(
         llm,

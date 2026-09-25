@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, JsonValue, SerializeAsAny, model_validator
 
-from onyx.agents.transcript import AgentRestorationConfig
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import Message, ToolDefinition, ToolResult
 
@@ -88,7 +87,7 @@ class AgentControl(Protocol):
         description: str,
         max_steps: int,
         messages: Sequence[Message],
-        restoration_config: AgentRestorationConfig | None = None,
+        restoration_config: BaseModel | None = None,
         lifetime: AgentLifetime = AgentLifetime.FOREGROUND,
     ) -> SpawnResult: ...
 
@@ -157,7 +156,11 @@ class ToolExecutionMode(str, Enum):
 
 
 class AgentTool:
-    """An executable SDK tool with application dependencies bound into its callbacks."""
+    """An executable SDK tool with application dependencies bound into its callbacks.
+
+    Optional merge_arguments combines compatible calls into one execution. Such tools
+    must return ToolResult; each original call receives the pooled result.
+    """
 
     def __init__(
         self,
@@ -169,6 +172,10 @@ class AgentTool:
         complete_children: Callable[[ToolInvocation, list["RunState"]], ToolResult]
         | None = None,
         execution_mode: ToolExecutionMode = ToolExecutionMode.PARALLEL,
+        merge_arguments: Callable[
+            [dict[str, JsonValue], dict[str, JsonValue]], dict[str, JsonValue] | None
+        ]
+        | None = None,
     ) -> None:
         self.definition = ToolDefinition(
             name=name, description=description, parameters=parameters
@@ -176,6 +183,7 @@ class AgentTool:
         self.execute = execute
         self.complete_children = complete_children
         self.execution_mode = execution_mode
+        self.merge_arguments = merge_arguments
 
     def snapshot(self) -> "AgentTool":
         definition = self.definition.model_copy(deep=True)
@@ -186,6 +194,7 @@ class AgentTool:
             execute=self.execute,
             complete_children=self.complete_children,
             execution_mode=self.execution_mode,
+            merge_arguments=self.merge_arguments,
         )
 
     @property

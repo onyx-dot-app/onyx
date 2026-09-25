@@ -23,11 +23,10 @@ from onyx.chat.files import build_python_chat_files_from_search_docs
 from onyx.chat.models import (
     ChatFeatureState,
     ChatMessageMetadata,
-    ChatRestoreConfiguration,
     PersonaPromptConfig,
 )
+from onyx.chat.prompt_utils import prepare_prompt
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
-from onyx.context.prompt import prepare_prompt
 from onyx.context.search.models import SearchDocsResponse
 from onyx.db.memory import UserMemoryContext
 from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
@@ -124,8 +123,8 @@ class ChatAgent(FeatureRestoration):
             after_tool_call=self._finalize_tool,
         )
 
-    def _restoration_configuration(self) -> ChatRestoreConfiguration:
-        return ChatRestoreConfiguration(
+    def capture_state(self) -> ChatFeatureState:
+        return ChatFeatureState(
             persona=self.context.persona,
             context_files=SavedContextFiles.capture(self.context_files),
             file_metadata=self.file_metadata,
@@ -137,11 +136,6 @@ class ChatAgent(FeatureRestoration):
             base_prompt=self.context.base_prompt,
             custom_prompt=self.custom_agent_prompt,
             reminders_enabled=self.context.reminders.enabled,
-        )
-
-    def capture_state(self) -> ChatFeatureState:
-        return ChatFeatureState(
-            configuration=self._restoration_configuration(),
             elapsed_seconds=max(0.0, time.monotonic() - self.started),
             citation_sources=self.artifacts.citation_processor.citation_to_doc,
             citation_mapping=self.artifacts.citation_mapping,
@@ -158,7 +152,19 @@ class ChatAgent(FeatureRestoration):
         if not isinstance(state, ChatFeatureState):
             raise ValueError("Chat restoration requires ChatFeatureState")
         saved = state.model_copy(deep=True)
-        if saved.configuration != self._restoration_configuration():
+        if (
+            saved.persona != self.context.persona
+            or saved.context_files != SavedContextFiles.capture(self.context_files)
+            or saved.file_metadata != self.file_metadata
+            or saved.memory != self.memory
+            or saved.reasoning_effort != self.reasoning_effort
+            or saved.include_citations != self.include_citations
+            or saved.inject_memories != self.inject_memories
+            or saved.forced_tool_id != self.forced_tool_id
+            or saved.base_prompt != self.context.base_prompt
+            or saved.custom_prompt != self.custom_agent_prompt
+            or saved.reminders_enabled != self.context.reminders.enabled
+        ):
             raise ValueError("Chat restoration configuration does not match")
         restore_search_state(self.tools, saved.search_tools)
         self.started = time.monotonic() - saved.elapsed_seconds

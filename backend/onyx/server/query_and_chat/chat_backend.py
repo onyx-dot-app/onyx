@@ -27,7 +27,6 @@ from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_chat_accessible_user
 from onyx.background.task_utils import enqueue_user_file_deletes
 from onyx.cache.factory import get_cache_backend
-from onyx.chat.cancellation import request_stop
 from onyx.chat.chat_processing_checker import (
     get_processing_key,
     is_chat_session_processing,
@@ -45,6 +44,7 @@ from onyx.chat.process_message import (
     handle_stream_message_objects,
 )
 from onyx.chat.prompt_utils import get_default_base_system_prompt
+from onyx.chat.stop_signal_checker import request_stop
 from onyx.chat.stream_buffer import has_stream_buffer, read_stream_chunks
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.chat_configs import (

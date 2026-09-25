@@ -551,10 +551,7 @@ def test_chat_checkpoint_preserves_lazy_file_references() -> None:
             BytesIO(payload)
         )
         assert saved.chat_files[0].restore().content == payload
-        assert (
-            saved.configuration.context_files.restore().image_files[0].content
-            == payload
-        )
+        assert saved.context_files.restore().image_files[0].content == payload
     result = restored.messages[0]
     assert isinstance(result, ToolResultMessage)
     assert isinstance(result.details, ChatSearchResult)
