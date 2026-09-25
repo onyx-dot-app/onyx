@@ -8,7 +8,7 @@ Interaction model:
 
 - Enter adds the trimmed input text via `onAdd`.
 - Backspace on an empty input arms the last tag (its dark keyboard-selection state).
-- Backspace or Delete on an armed tag removes it and focus returns to the input. Enter and Space also activate the armed remove button.
+- Backspace or Delete on an armed tag removes it and arms the tag before it, so repeated presses clear tags one by one; with none left, focus returns to the input. Enter and Space also activate the armed remove button.
 - Clicking the field focuses the input.
 
 ## Props

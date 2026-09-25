@@ -183,6 +183,30 @@ function TagField({
     tagsElement.scrollTop = tagsElement.scrollHeight;
   }, [tags.length]);
 
+  // The chips' remove buttons, in order.
+  function removeButtons(): HTMLButtonElement[] {
+    return Array.from(
+      ownRootRef.current?.querySelectorAll<HTMLButtonElement>(
+        `.${TAG_REMOVE_CLASS}`
+      ) ?? []
+    );
+  }
+
+  // Backspace with nothing to delete in the field arms the last chip: its
+  // remove button takes focus, so the next Backspace removes it.
+  function armLastTag(event: React.KeyboardEvent<HTMLElement>) {
+    if (event.key !== "Backspace" || tags.length === 0) return;
+    event.preventDefault();
+    removeButtons().at(-1)?.focus();
+  }
+
+  // The button trigger has no text: Backspace arms the last chip directly.
+  function handleTriggerKeyDown(event: React.KeyboardEvent<HTMLElement>) {
+    onInputKeyDown?.(event);
+    if (event.defaultPrevented) return;
+    armLastTag(event);
+  }
+
   function handleInputKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     // During IME composition, Enter confirms the candidate and Backspace
     // edits the composition. Neither may add or arm tags.
@@ -199,23 +223,26 @@ function TagField({
       if (trimmed) onEnter?.(trimmed);
       return;
     }
-    if (event.key === "Backspace" && value === "" && tags.length > 0) {
-      event.preventDefault();
-      const removes = ownRootRef.current?.querySelectorAll<HTMLButtonElement>(
-        `.${TAG_REMOVE_CLASS}`
-      );
-      removes?.[removes.length - 1]?.focus();
-    }
+    if (value === "") armLastTag(event);
   }
 
   // Backspace/Delete on an armed remove button deletes its tag. Enter and
   // Space already work as native button activation.
+  // Removing from the keyboard then arms the chip before the removed one,
+  // so holding Backspace clears chips one by one; with none left, focus
+  // returns to the field.
   function handleRootKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     if (event.key !== "Backspace" && event.key !== "Delete") return;
     const target = event.target as HTMLElement;
     if (!target.classList.contains(TAG_REMOVE_CLASS)) return;
     event.preventDefault();
+    const index = removeButtons().indexOf(target as HTMLButtonElement);
     target.click();
+    requestAnimationFrame(() => {
+      const previous = index > 0 ? removeButtons()[index - 1] : undefined;
+      if (previous) previous.focus();
+      else focusField();
+    });
   }
 
   return (
@@ -272,7 +299,7 @@ function TagField({
             aria-disabled={disabled || undefined}
             onFocus={disabled ? undefined : onInputFocus}
             onClick={disabled ? undefined : onInputClick}
-            onKeyDown={disabled ? undefined : onInputKeyDown}
+            onKeyDown={disabled ? undefined : handleTriggerKeyDown}
           >
             {tags.length === 0 && placeholder && (
               <Text font="main-ui-muted" color="text-02">

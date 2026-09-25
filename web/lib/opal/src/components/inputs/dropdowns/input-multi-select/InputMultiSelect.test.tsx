@@ -50,6 +50,30 @@ describe("InputMultiSelect", () => {
     });
   });
 
+  describe("Keyboard removal", () => {
+    test("Backspace on the closed field arms the last chip, then removes chips one by one", async () => {
+      const handleRemove = jest.fn();
+      const user = setupUser();
+      render(
+        <InputMultiSelect
+          tags={[
+            { id: "apple", label: "Apple" },
+            { id: "banana", label: "Banana" },
+          ]}
+          options={mockOptions}
+          placeholder="Pick"
+          onSelectOption={jest.fn()}
+          onRemoveTag={handleRemove}
+        />
+      );
+      screen.getByRole("combobox", { name: "Pick" }).focus();
+      await user.keyboard("{Backspace}");
+      expect(screen.getByRole("button", { name: /Banana/ })).toHaveFocus();
+      await user.keyboard("{Backspace}");
+      expect(handleRemove).toHaveBeenCalledWith("banana");
+    });
+  });
+
   describe("Rendering and picking", () => {
     test("a chip shows its option's icon", () => {
       function Swatch(props: React.SVGProps<SVGSVGElement>) {
