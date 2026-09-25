@@ -242,8 +242,8 @@ variable "redis_memory_size_gb" {
 
 variable "redis_transit_encryption_enabled" {
   type        = bool
-  description = "Serve TLS on 6378. Needs the server CA mounted into the pods (the chart's redisTls). Changing this replaces the instance."
-  default     = false
+  description = "Serve TLS on 6378. Onyx then needs REDIS_SSL=true; to verify the server, mount the redis_server_ca_certs output through the chart's redisTls. Changing this replaces the instance."
+  default     = true
 }
 
 # --- Cluster -----------------------------------------------------------------

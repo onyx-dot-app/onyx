@@ -30,6 +30,9 @@ output "cluster_ca_certificate" {
 output "workload_identity_pool" {
   description = "Workload identity pool of the cluster, <project>.svc.id.goog"
   value       = local.workload_pool
+
+  # The pool exists only once the cluster does; see workload_identity_principal.
+  depends_on = [google_container_cluster.this]
 }
 
 output "node_service_account_email" {
@@ -59,4 +62,9 @@ output "workload_service_account_name" {
 output "workload_identity_principal" {
   description = "IAM member for the workload service account. Use it as the member of a role binding, for example on a bucket, to grant that access to pods running as the account."
   value       = "principal://iam.googleapis.com/projects/${data.google_project.this.number}/locations/global/workloadIdentityPools/${local.workload_pool}/subject/ns/${var.workload_namespace}/sa/${var.workload_service_account_name}"
+
+  # GKE creates the identity pool with the first cluster that enables workload
+  # identity. A grant made before then fails with "Identity Pool does not
+  # exist", so consumers wait for the cluster. The value stays known at plan.
+  depends_on = [google_container_cluster.this]
 }

@@ -541,6 +541,40 @@ run "an_open_control_plane_can_be_asked_for_explicitly" {
   }
 }
 
+run "rejects_an_ipv4_network_that_admits_every_address" {
+  command = plan
+
+  variables {
+    master_authorized_networks = [{ cidr_block = "0.0.0.0/0" }]
+  }
+
+  expect_failures = [var.allow_unrestricted_api_server_access]
+}
+
+run "rejects_an_ipv6_network_that_admits_every_address" {
+  command = plan
+
+  variables {
+    master_authorized_networks = [{ cidr_block = "203.0.113.0/24" }, { cidr_block = "::/0" }]
+  }
+
+  expect_failures = [var.allow_unrestricted_api_server_access]
+}
+
+run "a_network_that_admits_every_address_can_be_asked_for_explicitly" {
+  command = plan
+
+  variables {
+    master_authorized_networks           = [{ cidr_block = "0.0.0.0/0", display_name = "anywhere" }]
+    allow_unrestricted_api_server_access = true
+  }
+
+  assert {
+    condition     = [for c in one(google_container_cluster.this.master_authorized_networks_config).cidr_blocks : c.cidr_block] == ["0.0.0.0/0"]
+    error_message = "With the opt-in set, the /0 range should be written as given."
+  }
+}
+
 run "a_private_endpoint_needs_no_networks" {
   command = plan
 

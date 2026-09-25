@@ -111,6 +111,20 @@ locals {
   }
 }
 
+# The workspace name goes into every resource name. The Memorystore ID is the
+# longest of them and has the tightest limit, 40 characters, so checking it
+# covers the cluster, database and network names too. A precondition fails the
+# plan before anything is created; a check block would only warn, and the apply
+# would then stop part-way when Memorystore rejects the name.
+resource "terraform_data" "workspace_name" {
+  lifecycle {
+    precondition {
+      condition     = can(regex("^[a-z]([a-z0-9-]*[a-z0-9])?$", local.workspace)) && length(local.redis_name) <= 40
+      error_message = "The Terraform workspace name must be lowercase letters, digits and hyphens, start with a letter and not end with a hyphen. It goes into every resource name, and \"${local.redis_name}\" must fit Memorystore's 40 characters: shorten the workspace or var.name."
+    }
+  }
+}
+
 resource "google_project_service" "this" {
   for_each = local.project_apis
 
