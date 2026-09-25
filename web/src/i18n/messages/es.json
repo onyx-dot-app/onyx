@@ -11494,6 +11494,12 @@
         "label": "Con tecnología de Onyx"
       }
     },
+    "modelSelectors": {
+      "placeholder": "Seleccionar modelo",
+      "globalDefault": {
+        "label": "Predeterminado global"
+      }
+    },
     "nonSelectableConnectors": {
       "unavailable": {
         "label": "Conectores no disponibles:"

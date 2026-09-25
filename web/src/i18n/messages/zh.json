@@ -11494,6 +11494,12 @@
         "label": "由 Onyx 提供支持"
       }
     },
+    "modelSelectors": {
+      "placeholder": "选择模型",
+      "globalDefault": {
+        "label": "全局默认"
+      }
+    },
     "nonSelectableConnectors": {
       "unavailable": {
         "label": "不可用的连接器："

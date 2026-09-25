@@ -1,6 +1,15 @@
+import type { FunctionComponent } from "react";
+import type {
+  SelectDivider,
+  SelectOption,
+  SelectOptions,
+} from "@opal/components";
+import type { IconProps } from "@opal/types";
 import { getModelIcon, getProvider } from "@/lib/languageModels/utils";
 import { AGGREGATOR_PROVIDERS } from "@/lib/languageModels/svc";
 import type {
+  DefaultModel,
+  FilterModelConfigurationsOptions,
   LLMOption,
   LLMOptionGroup,
   LLMProviderDescriptor,
@@ -203,4 +212,127 @@ export function findModelConfigId(
     if (mc?.id != null) return mc.id;
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// findLlmOptionById
+// ---------------------------------------------------------------------------
+
+/** The option behind a `model_configuration_id`, hidden models included. */
+export function findLlmOptionById(
+  llmProviders: ModelOptionProvider[] | undefined,
+  modelConfigurationId: number | null
+): LLMOption | null {
+  if (modelConfigurationId === null) return null;
+  return (
+    buildLlmOptions(llmProviders, undefined, true).find(
+      (option) => option.modelConfigurationId === modelConfigurationId
+    ) ?? null
+  );
+}
+
+/**
+ * Display name of a workspace default (`default_text`, `default_vision`)
+ * as the selector shows it, for a "Global Default" row's description.
+ * Keyed on provider id: names are not unique.
+ */
+export function findDefaultModelDisplayName(
+  llmProviders: ModelOptionProvider[] | undefined,
+  defaultModel: DefaultModel | null
+): string | null {
+  if (!defaultModel) return null;
+  const provider = llmProviders?.find((p) => p.id === defaultModel.provider_id);
+  return (
+    provider?.model_configurations.find(
+      (mc) => mc.name === defaultModel.model_name
+    )?.effectiveDisplayName ?? null
+  );
+}
+
+// ---------------------------------------------------------------------------
+// filterModelConfigurations
+// ---------------------------------------------------------------------------
+
+/**
+ * Trims each provider's model list for a picker, dropping providers left
+ * empty. The pure counterpart of the chat picker's own filtering, for a
+ * dumb select that renders whatever it is given.
+ */
+export function filterModelConfigurations<T extends ModelOptionProvider>(
+  providers: T[],
+  {
+    visibleOnly = true,
+    imageInput = false,
+    keep = null,
+  }: FilterModelConfigurationsOptions = {}
+): T[] {
+  return providers
+    .map((provider) => ({
+      ...provider,
+      model_configurations: provider.model_configurations.filter(
+        (mc) =>
+          (keep !== null && mc.id === keep) ||
+          ((!visibleOnly || mc.is_visible) &&
+            (!imageInput || mc.supports_image_input))
+      ),
+    }))
+    .filter((provider) => provider.model_configurations.length > 0);
+}
+
+// ---------------------------------------------------------------------------
+// Model select options (SimpleModelSelector)
+// ---------------------------------------------------------------------------
+
+/** A model configuration id as an `InputSingleSelect` value; null is empty. */
+export function toSelectValue(modelConfigurationId: number | null): string {
+  return modelConfigurationId === null ? "" : String(modelConfigurationId);
+}
+
+/** The inverse of `toSelectValue`; empty and junk map to null. */
+export function fromSelectValue(value: string): number | null {
+  if (value === "") return null;
+  const id = Number(value);
+  return Number.isInteger(id) ? id : null;
+}
+
+export interface BuildModelSelectOptionsOptions {
+  /**
+   * Group models under a foldable divider per provider (aggregators split
+   * per vendor, as the chat picker does). Off, or with a single group,
+   * the rows come flat: a lone header says nothing, and an admin can hide
+   * grouping workspace-wide. Defaults to true.
+   */
+  grouped?: boolean;
+}
+
+/**
+ * Every model configuration given, as Opal options, each model a row with
+ * its icon. Nothing is filtered here; callers trim the list first. A model
+ * without a configuration id cannot be chosen by id, so it is left out.
+ */
+export function buildModelSelectOptions(
+  providers: ModelOptionProvider[],
+  { grouped = true }: BuildModelSelectOptionsOptions = {}
+): SelectOptions {
+  const dividers: SelectDivider[] = groupLlmOptions(
+    buildLlmOptions(providers, undefined, true)
+  )
+    .map((group) => ({
+      title: group.displayName,
+      foldable: true,
+      options: group.options.flatMap((option): SelectOption[] =>
+        option.modelConfigurationId == null
+          ? []
+          : [
+              {
+                value: String(option.modelConfigurationId),
+                title: option.displayName,
+                icon: getModelIcon(option.provider, option.modelName),
+              },
+            ]
+      ),
+    }))
+    .filter((divider) => divider.options.length > 0);
+  if (grouped && dividers.length > 1) return dividers;
+  return dividers.flatMap((divider) => divider.options);
 }

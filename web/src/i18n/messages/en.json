@@ -11494,6 +11494,12 @@
         "label": "Powered by Onyx"
       }
     },
+    "modelSelectors": {
+      "placeholder": "Select model",
+      "globalDefault": {
+        "label": "Global Default"
+      }
+    },
     "nonSelectableConnectors": {
       "unavailable": {
         "label": "Unavailable connectors:"

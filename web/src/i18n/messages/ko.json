@@ -11494,6 +11494,12 @@
         "label": "Powered by Onyx"
       }
     },
+    "modelSelectors": {
+      "placeholder": "모델 선택",
+      "globalDefault": {
+        "label": "전역 기본값"
+      }
+    },
     "nonSelectableConnectors": {
       "unavailable": {
         "label": "사용할 수 없는 커넥터:"
