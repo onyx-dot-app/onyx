@@ -22,7 +22,7 @@ from onyx.llm.litellm_models import (
     StreamingChoice,
 )
 from onyx.llm.models import ReasoningEffort, ToolChoice
-from onyx.llm.multi_llm import LitellmLLM, LitellmTransport, ProviderOperation
+from onyx.llm.multi_llm import LitellmLLM, ProviderOperation
 
 T = TypeVar("T")
 
@@ -215,7 +215,7 @@ class MockLLMController(abc.ABC):
         raise NotImplementedError
 
 
-class MockLLM(LitellmTransport, MockLLMController):
+class MockLLM(LitellmLLM, MockLLMController):
     def __init__(self) -> None:
         super().__init__(
             model_provider="openai",
@@ -300,7 +300,7 @@ class MockLLM(LitellmTransport, MockLLMController):
             max_input_tokens=1000000000,
         )
 
-    def invoke(
+    def invoke_raw(
         self,
         prompt: LanguageModelInput,
         tools: list[dict[str, JsonValue]] | None = None,
@@ -314,7 +314,7 @@ class MockLLM(LitellmTransport, MockLLMController):
     ) -> ModelResponse:
         raise NotImplementedError("We only care about streaming atm")
 
-    def stream(
+    def stream_raw(
         self,
         prompt: LanguageModelInput,  # noqa: ARG002
         tools: list[dict[str, JsonValue]] | None = None,  # noqa: ARG002
@@ -403,7 +403,5 @@ class SyncStreamController(Generic[T]):
 def use_mock_llm() -> Generator[MockLLMController, None, None]:
     mock_llm = MockLLM()
 
-    with patch(
-        "onyx.chat.prepare.get_llm_for_persona", return_value=LitellmLLM(mock_llm)
-    ):
+    with patch("onyx.chat.prepare.get_llm_for_persona", return_value=mock_llm):
         yield mock_llm

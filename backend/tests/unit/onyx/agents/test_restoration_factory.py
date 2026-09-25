@@ -3,10 +3,10 @@
 import pytest
 
 from onyx.agents.models import (
-    AgentContext,
+    AgentState,
     ExecutionCheckpoint,
     RunProgress,
-    RunSnapshot,
+    RunState,
 )
 from onyx.agents.transcript import RunStatus
 from onyx.chat.agent import ChatAgent
@@ -23,7 +23,7 @@ from tests.unit.onyx.agents.fakes import FakeModelClient
 
 
 def feature(
-    name: str, llm: LLM, context: AgentContext
+    name: str, llm: LLM, context: AgentState
 ) -> ChatAgent | ResearchAgent | DeepResearchAgent:
     if name == "chat":
         chat = ChatAgent(
@@ -97,12 +97,12 @@ def test_factory_rebuilds_feature_and_preserves_saved_context(name: str) -> None
     llm = FakeModelClient(
         lambda _request, _signal: AssistantMessage(content=[TextContent(text="done")])
     )
-    context = AgentContext(messages=[UserMessage(content="Retained conversation")])
+    context = AgentState(messages=[UserMessage(content="Retained conversation")])
     original = feature(name, llm, context)
     state = original.capture_state()
     checkpoint = ExecutionCheckpoint(
-        context=context,
-        snapshot=RunSnapshot(
+        agent_state=context,
+        run_state=RunState(
             run_id="suspended-run",
             agent_id=original.agent.id,
             status=RunStatus.SUSPENDED,
@@ -114,7 +114,7 @@ def test_factory_rebuilds_feature_and_preserves_saved_context(name: str) -> None
     rebuilt = restore_chat_agent(checkpoint, llm=llm, tools=[], user_identity=None)
     assert rebuilt is not original.agent
     assert rebuilt.id == original.agent.id
-    assert rebuilt.context == context
+    assert rebuilt.state == context
     assert rebuilt.restoration is not None
     assert type(rebuilt.restoration) is type(original)
     assert rebuilt.restoration is not original
@@ -138,8 +138,8 @@ def test_factory_rebuilds_feature_and_preserves_saved_context(name: str) -> None
 
 def test_factory_rejects_checkpoint_without_supported_feature_state() -> None:
     checkpoint = ExecutionCheckpoint(
-        context=AgentContext(),
-        snapshot=RunSnapshot(
+        agent_state=AgentState(),
+        run_state=RunState(
             run_id="unsupported-run",
             agent_id="coding-agent",
             status=RunStatus.SUSPENDED,

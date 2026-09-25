@@ -1,4 +1,5 @@
 import json
+from collections.abc import Iterator
 from unittest.mock import patch
 
 import pytest
@@ -12,8 +13,8 @@ from onyx.llm.litellm_conversion import (
     MessageAccumulator,
     from_litellm_model_response,
     from_litellm_model_response_stream,
-    normalized_stream,
     recover_tool_calls,
+    to_assistant_message,
 )
 from onyx.llm.litellm_models import (
     ChatCompletionDeltaToolCall,
@@ -29,17 +30,19 @@ from onyx.llm.litellm_models import Message as ResponseMessage
 from onyx.llm.models import (
     AssistantMessage,
     GenerationDoneEvent,
+    GenerationEvent,
     GenerationOptions,
     GenerationRequest,
+    GenerationToolCallEvent,
     TextContent,
     ThinkingBlock,
     ToolCallEndEvent,
     ToolChoiceOptions,
     ToolDefinition,
+    Usage,
     UserMessage,
 )
-from onyx.llm.multi_llm import LitellmLLM
-from tests.unit.onyx.agents.fakes import ScriptedTransport
+from tests.unit.onyx.agents.fakes import ScriptedLLM
 
 
 def _build_tool_call_payload() -> dict[str, JsonValue]:
@@ -447,8 +450,8 @@ def test_shared_client_normalizes_schema_directed_tool_arguments(
             ]
         )
     )
-    transport = ScriptedTransport([delta])
-    client = LitellmLLM(transport)
+    transport = ScriptedLLM([delta])
+    client = transport
     request = GenerationRequest(
         messages=[UserMessage(content="Search")],
         tools=[
@@ -477,7 +480,7 @@ def test_shared_client_normalizes_schema_directed_tool_arguments(
             )
         ),
     )
-    with patch.object(transport, "invoke", return_value=response):
+    with patch.object(transport, "invoke_raw", return_value=response):
         if streaming:
             events = list(client.stream(request))
             terminal = events[-1]
@@ -519,11 +522,13 @@ def test_shared_client_normalizes_schema_directed_tool_arguments(
 def test_shared_client_classifies_only_provider_failures(
     streaming: bool, error: Exception, expected_type: type[Exception]
 ) -> None:
-    transport = ScriptedTransport([])
-    client = LitellmLLM(transport)
+    transport = ScriptedLLM([])
+    client = transport
     request = GenerationRequest(messages=[UserMessage(content="Hello")])
     with (
-        patch.object(transport, "stream" if streaming else "invoke", side_effect=error),
+        patch.object(
+            transport, "stream_raw" if streaming else "invoke_raw", side_effect=error
+        ),
         pytest.raises(expected_type) as caught,
     ):
         if streaming:
@@ -562,8 +567,7 @@ def test_xml_tool_recovery_preserves_visible_prose(
             for fragment in fragments
         )
         accumulator = MessageAccumulator(request.tools)
-        for chunk in normalized_stream(source, request):
-            accumulator.add(chunk)
+        list(accumulator.consume(source, request))
         message = accumulator.finish()
     else:
         message = recover_tool_calls(
@@ -573,3 +577,264 @@ def test_xml_tool_recovery_preserves_visible_prose(
     assert len(message.tool_calls) == 1
     assert message.tool_calls[0].name == "search"
     assert message.tool_calls[0].arguments == {"queries": ["Onyx"]}
+
+
+@pytest.mark.parametrize(
+    "arguments, expected, valid",
+    [
+        ("", {}, True),
+        ('{"query":"term"}', {"query": "term"}, True),
+        (json.dumps('{"query":"term"}'), {"query": "term"}, True),
+        ('{"query":broken', {}, False),
+        ("[]", {}, False),
+    ],
+)
+def test_complete_conversion_preserves_native_calls_and_response_metadata(
+    arguments: str, expected: dict[str, JsonValue], valid: bool
+) -> None:
+    signed = ThinkingBlock(thinking="plan", signature="provider-signature")
+    usage = Usage(
+        prompt_tokens=10,
+        completion_tokens=3,
+        total_tokens=13,
+        cache_creation_input_tokens=1,
+        cache_read_input_tokens=2,
+    )
+    fallback = '{"name":"search","arguments":{"query":"fallback"}}'
+    request = GenerationRequest(
+        tools=[ToolDefinition(name="search", description="Search", parameters={})],
+        options=GenerationOptions(tool_choice=ToolChoiceOptions.REQUIRED),
+    )
+    response = ModelResponse(
+        id="response",
+        created="1",
+        usage=usage,
+        choice=Choice(
+            finish_reason="tool_calls",
+            message=ResponseMessage(
+                content=fallback,
+                reasoning_content="plan",
+                thinking_blocks=[signed],
+                tool_calls=[
+                    WireToolCall(
+                        id="native-call",
+                        function=FunctionCall(name="search", arguments=arguments),
+                    )
+                ],
+            ),
+        ),
+    )
+    message = to_assistant_message(response, request)
+    assert message.text == fallback
+    assert message.thinking == "plan"
+    assert message.thinking_blocks == [signed]
+    assert message.usage == usage
+    assert message.stop_reason == "tool_calls"
+    assert len(message.tool_calls) == 1
+    call = message.tool_calls[0]
+    assert call.id == "native-call"
+    assert call.arguments == expected
+    assert call.arguments_complete is valid
+    assert (call.argument_error is None) is valid
+    assert call.raw_arguments == (None if valid else arguments)
+    assert response.choice.message.tool_calls is not None
+    assert response.choice.message.tool_calls[0].function.arguments == arguments
+    assert message.thinking_blocks is not None
+    thinking = message.thinking_blocks[0]
+    assert isinstance(thinking, ThinkingBlock)
+    thinking.signature = "changed-signature"
+    assert message.usage is not None
+    message.usage.prompt_tokens = 999
+    assert response.choice.message.thinking_blocks == [signed]
+    assert signed.signature == "provider-signature"
+    assert response.usage is not None and response.usage.prompt_tokens == 10
+
+
+def _stream_chunk(delta: Delta, *, usage: Usage | None = None) -> ModelResponseStream:
+    return ModelResponseStream(
+        id="response", created="1", choice=StreamingChoice(delta=delta), usage=usage
+    )
+
+
+def test_stream_keeps_native_precedence_stable_ids_and_event_snapshots() -> None:
+    fallback = '{"name":"search","arguments":{"query":"fallback"}}'
+    request = GenerationRequest(
+        tools=[ToolDefinition(name="search", description="Search", parameters={})],
+        options=GenerationOptions(tool_choice=ToolChoiceOptions.REQUIRED),
+    )
+    chunks = [
+        _stream_chunk(Delta(content=fallback)),
+        _stream_chunk(
+            Delta(
+                tool_calls=[
+                    ChatCompletionDeltaToolCall(
+                        index=0,
+                        function=FunctionCall(name="search", arguments='{"query":"fir'),
+                    )
+                ]
+            )
+        ),
+        _stream_chunk(
+            Delta(
+                tool_calls=[
+                    ChatCompletionDeltaToolCall(
+                        index=0,
+                        id="late-provider-id",
+                        function=FunctionCall(arguments='st"}'),
+                    )
+                ]
+            )
+        ),
+    ]
+    client = ScriptedLLM([])
+    with patch.object(client, "stream_raw", return_value=iter(chunks)):
+        events = list(client.stream(request))
+    assert [event.type for event in events] == [
+        "start",
+        "text_start",
+        "text_delta",
+        "text_end",
+        "tool_call_start",
+        "tool_call_delta",
+        "tool_call_delta",
+        "tool_call_end",
+        "done",
+    ]
+    calls = [
+        event.tool_call
+        for event in events
+        if isinstance(event, GenerationToolCallEvent)
+    ]
+    assert len({call.id for call in calls}) == 1
+    assert calls[0].id and calls[0].arguments == {}
+    assert calls[1].arguments == {"query": "fir"}
+    assert calls[-1].arguments == {"query": "first"}
+    assert events[0].message.content == []
+    assert events[1].message.text == ""
+    assert events[2].message.text == fallback
+    assert events[-1].message.text == fallback
+    assert len(events[-1].message.tool_calls) == 1
+    assert chunks[1].choice.delta.tool_calls[0].id is None
+    assert chunks[2].choice.delta.tool_calls[0].id == "late-provider-id"
+
+
+@pytest.mark.parametrize("ending", ["complete", "close", "error"])
+def test_stream_conversion_closes_provider_source(ending: str) -> None:
+    closed: list[bool] = []
+    failure = RuntimeError("provider failed")
+
+    def chunks() -> Iterator[ModelResponseStream]:
+        try:
+            yield _stream_chunk(Delta(content="visible"))
+            if ending == "error":
+                raise failure
+            yield _stream_chunk(Delta(content=" tail"))
+        finally:
+            closed.append(True)
+
+    accumulator = MessageAccumulator()
+    stream = accumulator.consume(chunks(), GenerationRequest())
+    if ending == "close":
+        next(stream)
+        stream.close()
+    elif ending == "error":
+        with pytest.raises(RuntimeError) as caught:
+            list(stream)
+        assert caught.value is failure
+    else:
+        list(stream)
+        assert accumulator.finish().text == "visible tail"
+    assert closed == [True]
+
+
+@pytest.mark.parametrize("reasoning", [False, True])
+def test_buffered_recovery_emits_one_call_with_usage_and_no_payload_text(
+    reasoning: bool,
+) -> None:
+    payload = '{"name":"search","arguments":{"query":"recovered"}}'
+    usage = Usage(
+        prompt_tokens=4,
+        completion_tokens=5,
+        total_tokens=9,
+        cache_creation_input_tokens=0,
+        cache_read_input_tokens=0,
+    )
+    request = GenerationRequest(
+        tools=[ToolDefinition(name="search", description="Search", parameters={})],
+        options=GenerationOptions(tool_choice=ToolChoiceOptions.REQUIRED),
+    )
+    closed: list[bool] = []
+
+    def chunks() -> Iterator[ModelResponseStream]:
+        try:
+            for fragment in [payload[:15], payload[15:]]:
+                yield _stream_chunk(
+                    Delta(reasoning_content=fragment)
+                    if reasoning
+                    else Delta(content=fragment)
+                )
+            yield ModelResponseStream(
+                id="response",
+                created="1",
+                choice=StreamingChoice(finish_reason="stop", delta=Delta()),
+                usage=usage,
+            )
+        finally:
+            closed.append(True)
+
+    client = ScriptedLLM([])
+    with patch.object(client, "stream_raw", return_value=chunks()):
+        events = list(client.stream(request))
+    assert closed == [True]
+    assert [event.type for event in events] == [
+        "start",
+        "tool_call_start",
+        "tool_call_delta",
+        "tool_call_end",
+        "done",
+    ]
+    assert all(
+        not event.message.text and not event.message.thinking for event in events
+    )
+    calls = [
+        event.tool_call
+        for event in events
+        if isinstance(event, GenerationToolCallEvent)
+    ]
+    assert len({call.id for call in calls}) == 1
+    assert calls[-1].arguments == {"query": "recovered"}
+    final = events[-1].message
+    assert final.usage == usage
+    assert final.stop_reason == "stop"
+    assert final.tool_calls == [calls[-1]]
+
+
+def test_buffered_stream_failure_keeps_unresolved_tool_payload_out_of_events() -> None:
+    payload = '{"name":"search","arguments":{"query":"unfinished'
+    failure = RuntimeError("provider failed")
+    closed: list[bool] = []
+
+    def chunks() -> Iterator[ModelResponseStream]:
+        try:
+            yield _stream_chunk(Delta(content=payload))
+            raise failure
+        finally:
+            closed.append(True)
+
+    request = GenerationRequest(
+        tools=[ToolDefinition(name="search", description="Search", parameters={})],
+        options=GenerationOptions(tool_choice=ToolChoiceOptions.REQUIRED),
+    )
+    client = ScriptedLLM([])
+    events: list[GenerationEvent] = []
+    with (
+        patch.object(client, "stream_raw", return_value=chunks()),
+        patch("onyx.llm.multi_llm.record_llm_span_output") as record,
+        pytest.raises(RuntimeError) as caught,
+    ):
+        events.extend(client.stream(request))
+    assert caught.value is failure
+    assert closed == [True]
+    assert [event.type for event in events] == ["start", "error"]
+    assert all(event.message.content == [] for event in events)
+    assert payload not in str(record.call_args)

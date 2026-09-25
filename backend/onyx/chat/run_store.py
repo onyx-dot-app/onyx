@@ -11,8 +11,13 @@ from pydantic import BaseModel
 
 from onyx.agents.checkpoint import CheckpointBinding
 from onyx.agents.concurrency import OPERATION_TIMEOUT_SECONDS
-from onyx.agents.coordination import AgentCoordinator, AgentInfo
-from onyx.agents.models import AgentContext, ExecutionCheckpoint, RunSnapshot
+from onyx.agents.coordination import (
+    AgentCoordinator,
+    AgentDirectory,
+    AgentInfo,
+    RunStore,
+)
+from onyx.agents.models import AgentState, ExecutionCheckpoint, RunState
 from onyx.agents.runtime import Agent, Run, RunNotTransferable
 from onyx.agents.transcript import RunStatus
 from onyx.cache.interface import CacheBackend
@@ -71,14 +76,13 @@ class _OwnerLease:
 
 
 class _OwnedRun:
-    def __init__(self, agent: Agent, run: Run, lease: _OwnerLease) -> None:
-        self.agent = agent
+    def __init__(self, run: Run, lease: _OwnerLease) -> None:
         self.run = run
         self.lease = lease
         self.owner = lease.owner
 
 
-class ChatRunStore:
+class ChatRunStore(RunStore):
     """Persist runs on one authorized branch. The application polls control while ownership remains."""
 
     def __init__(
@@ -89,7 +93,7 @@ class ChatRunStore:
         response_id: int,
         visible_response_ids: list[int],
         cache: CacheBackend,
-        on_root_complete: Callable[[RunSnapshot], None] | None = None,
+        root_response: RunStore | None = None,
         control_cache: CacheBackend | None = None,
     ) -> None:
         self.tenant_id = tenant_id
@@ -98,12 +102,10 @@ class ChatRunStore:
         self.visible_response_ids = set(visible_response_ids) | {response_id}
         self.cache = cache
         self.control_cache = control_cache or cache
-        self._on_root_complete = on_root_complete
+        self._root_response = root_response
         self._lock = threading.Lock()
         self._owned: dict[str, _OwnedRun] = {}
-        self._claims: dict[str, ResponseOwner] = {}
         self._leases: dict[str, _OwnerLease] = {}
-        self._draining: set[str] = set()
         self._coordinator: AgentCoordinator | None = None
         self._build_agent: Callable[[ExecutionCheckpoint], Agent] | None = None
 
@@ -152,20 +154,12 @@ class ChatRunStore:
         coordinator: AgentCoordinator,
         *,
         build_agent: Callable[[ExecutionCheckpoint], Agent],
-        resolve_agent: Callable[[str, str], Agent] | None = None,
+        directory: AgentDirectory,
     ) -> AgentCoordinator:
         if self._coordinator is not None:
             raise ValueError("Response store is already bound")
         self._build_agent = build_agent
-        self._coordinator = coordinator.view(
-            resolve_agent=resolve_agent,
-            lookup_agent=self.lookup_agent,
-            read_run=self.read_run,
-            read_run_status=self.read_run_status,
-            on_start=self.on_start,
-            on_complete=self.on_complete,
-            cancel_run=self.cancel_run,
-        )
+        self._coordinator = coordinator.view(directory=directory, store=self)
         return self._coordinator
 
     def _load_status(self, run_id: str, parent_id: str | None = None) -> ResponseStatus:
@@ -208,7 +202,7 @@ class ChatRunStore:
             lambda: lookup_session_agent(self.response_id, agent_id, parent_id)
         )
 
-    def read_run(self, run_id: str, parent_id: str) -> RunSnapshot | None:
+    def read_run(self, run_id: str, parent_id: str) -> RunState | None:
         try:
             saved = self._load(run_id, parent_id)
         except LookupError:
@@ -241,13 +235,13 @@ class ChatRunStore:
                     )
                     session.commit()
 
-    def _record(self, snapshot: RunSnapshot) -> ResponseRecord:
+    def _record(self, snapshot: RunState) -> ResponseRecord:
         registrations = self._coordinator.registrations() if self._coordinator else []
         return response_record(
             snapshot.model_copy(update={"child_runs": []}), registrations
         )
 
-    def _save_output(self, owned: _OwnedRun, snapshot: RunSnapshot) -> int:
+    def _save_output(self, owned: _OwnedRun, snapshot: RunState) -> int:
         record = self._record(snapshot)
         with self._ownership_lock(owned.run.id):
             self._require_owner(owned)
@@ -263,10 +257,11 @@ class ChatRunStore:
                 session.commit()
             return message_id
 
-    def on_start(self, agent: Agent, run: Run, _info: AgentInfo) -> Callable[[], None]:
+    def register(self, run: Run) -> None:
         snapshot = run.snapshot()
         with self._lock:
-            claimed = self._claims.pop(run.id, None)
+            lease = self._leases.get(run.id)
+            claimed = lease.owner if lease is not None else None
             parent = self._owned.get(snapshot.parent_run_id or "")
         if parent is not None:
             self._save_output(parent, parent.run.snapshot())
@@ -284,37 +279,53 @@ class ChatRunStore:
                     message_id=message_id,
                     root_message_id=self.response_id,
                 )
+                lease = _OwnerLease(claimed)
+                with self._lock:
+                    self._leases[run.id] = lease
                 self.cache.set(
                     self._owner_key(run.id),
                     claimed.model_dump_json(),
                     ex=OWNER_TTL_SECONDS,
                 )
-        with self._ownership_lock(run.id):
-            if self._owner(run.id) != claimed:
+        if lease is None:
+            raise RuntimeError("Response registration did not establish ownership")
+        with lease.lock:
+            if lease.error is not None:
                 raise RuntimeError(
-                    "Response ownership was lost before execution started"
-                )
+                    "Response ownership failed during restoration"
+                ) from lease.error
+            self._refresh_owner(run.id, lease.owner)
+            lease.refreshed = time.monotonic()
         with self._lock:
-            lease = self._leases.get(run.id)
-            if lease is None:
-                lease = _OwnerLease(claimed)
-                self._leases[run.id] = lease
-            owned = _OwnedRun(agent, run, lease)
-            self._owned[run.id] = owned
+            self._owned[run.id] = _OwnedRun(run, lease)
 
-        def abort() -> None:
-            try:
-                self._release_owner(run.id, lease)
-            finally:
-                with self._lock:
-                    self._owned.pop(run.id, None)
-
-        return abort
+    def abort_start(self, run_id: str) -> None:
+        with self._lock:
+            lease = self._leases.get(run_id)
+        if lease is None:
+            return
+        with lease.lock:
+            lease.released = True
+        try:
+            with self._ownership_lock(run_id):
+                if self._owner(run_id) != lease.owner:
+                    return
+                if lease.owner.revision is not None:
+                    with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                        release_checkpoint_claim__no_commit(
+                            session, lease.owner.message_id, lease.owner.revision
+                        )
+                        session.commit()
+                self.cache.delete(self._owner_key(run_id))
+        finally:
+            with self._lock:
+                self._leases.pop(run_id, None)
+                self._owned.pop(run_id, None)
 
     @property
     def has_owned_work(self) -> bool:
         with self._lock:
-            return bool(self._leases or self._draining)
+            return bool(self._leases)
 
     def _release_owner(self, run_id: str, lease: _OwnerLease) -> None:
         with lease.lock:
@@ -327,79 +338,39 @@ class ChatRunStore:
             with self._lock:
                 self._leases.pop(run_id, None)
 
-    def on_complete(self, snapshot: RunSnapshot) -> None:
+    def save(self, run: Run) -> None:
+        snapshot = run.snapshot()
         with self._lock:
-            owned = self._owned.get(snapshot.run_id)
+            owned = self._owned.get(run.id)
+        if owned is None:
+            raise ValueError("Run has no storage ownership")
+        if owned.owner.message_id != self.response_id or self._root_response is None:
+            self._save_output(owned, snapshot)
+            return
+        with self._ownership_lock(run.id):
+            self._require_owner(owned)
+            with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                check_checkpoint_owner__no_commit(
+                    session, owned.owner.message_id, owned.owner.revision
+                )
+            self._root_response.save(run)
+
+    def release(self, run_id: str) -> None:
+        with self._lock:
+            owned = self._owned.get(run_id)
         if owned is None:
             return
-        run_id = snapshot.run_id
-        with self._lock:
-            self._draining.add(run_id)
-
-        def drained() -> None:
-            with self._lock:
-                self._draining.discard(run_id)
-
-        owned.run.add_idle_callback(drained)
         try:
-            if (
-                owned.owner.message_id == self.response_id
-                and self._on_root_complete is not None
-            ):
-                with self._ownership_lock(snapshot.run_id):
-                    self._require_owner(owned)
-                    with get_session_with_tenant(tenant_id=self.tenant_id) as session:
-                        check_checkpoint_owner__no_commit(
-                            session, owned.owner.message_id, owned.owner.revision
-                        )
-                    self._on_root_complete(snapshot)
-            else:
-                self._save_output(owned, snapshot)
-        except BaseException:
-            try:
-                self._release_owner(snapshot.run_id, owned.lease)
-            except Exception:
-                logger.exception(
-                    "Response ownership cleanup failed after persistence failure"
-                )
-            raise
-        else:
-            self._release_owner(snapshot.run_id, owned.lease)
+            self._release_owner(run_id, owned.lease)
         finally:
             with self._lock:
-                self._owned.pop(snapshot.run_id, None)
+                self._owned.pop(run_id, None)
 
     def _refresh_owner(self, run_id: str, owner: ResponseOwner) -> None:
         if not self.control_cache.expire_if_value(
             self._owner_key(run_id), owner.model_dump_json().encode(), OWNER_TTL_SECONDS
         ):
             raise RuntimeError("Response ownership was lost")
-
-    @contextmanager
-    def _renew_during_reconstruction(
-        self, run_id: str, owner: ResponseOwner
-    ) -> Iterator[Callable[[], None]]:
-        lease = _OwnerLease(owner)
-        with self._lock:
-            self._leases[run_id] = lease
-
-        def finish() -> None:
-            with lease.lock:
-                if lease.error is not None:
-                    raise RuntimeError(
-                        "Response ownership failed during restoration"
-                    ) from lease.error
-                self._refresh_owner(run_id, owner)
-                lease.refreshed = time.monotonic()
-
-        try:
-            yield finish
-        except BaseException:
-            with lease.lock:
-                lease.released = True
-            with self._lock:
-                self._leases.pop(run_id, None)
-            raise
 
     def poll_control(self) -> None:
         """Renew leases and check Stop without waiting for persistence locks."""
@@ -428,34 +399,34 @@ class ChatRunStore:
             if stop_requested and owned is not None:
                 owned.run.cancel()
 
-    def release(self, run_id: str, *, coordinator: AgentCoordinator) -> None:
-        """Publish a safe checkpoint. Approval delivery is an application concern."""
+    def handoff(self, run_id: str) -> None:
+        """Save a paused run before releasing ownership for another API pod."""
         with self._lock:
             owned = self._owned[run_id]
         if owned.run.status != RunStatus.SUSPENDED or not owned.run.wait_for_idle(
             timeout=OPERATION_TIMEOUT_SECONDS
         ):
-            raise ValueError("Response must be suspended and idle before transfer")
-        published = False
-        try:
-            captured = owned.agent.capture()
-            progress = captured.snapshot.progress
-            if progress is None:
-                raise RunNotTransferable("Response has no saved execution progress")
-            for child_id in progress.child_run_ids:
-                if not self.read_run_status(child_id, owned.agent.id).is_terminal:
-                    raise RunNotTransferable(
-                        "Child responses must be saved before parent transfer"
-                    )
-            self._with_tenant(
-                lambda: persist_checkpoint_files(
-                    captured, session_id=self.chat_session_id
+            raise ValueError("Response must be suspended and idle before release")
+        captured = owned.run.capture()
+        progress = captured.run_state.progress
+        if progress is None:
+            raise RunNotTransferable("Response has no saved execution progress")
+        for child_id in progress.child_run_ids:
+            if not self.read_run_status(child_id, owned.run.agent_id).is_terminal:
+                raise RunNotTransferable(
+                    "Child responses must be saved before parent release"
                 )
-            )
-            record = self._record(captured.snapshot)
-            data = save_checkpoint_data(
-                captured, record, self._binding(owned.owner.message_id)
-            )
+        self._with_tenant(
+            lambda: persist_checkpoint_files(captured, session_id=self.chat_session_id)
+        )
+        record = self._record(captured.run_state)
+        data = save_checkpoint_data(
+            captured, record, self._binding(owned.owner.message_id)
+        )
+        published = False
+
+        def save(_checkpoint: ExecutionCheckpoint) -> None:
+            nonlocal published
             with self._ownership_lock(run_id):
                 self._require_owner(owned)
                 with get_session_with_tenant(tenant_id=self.tenant_id) as session:
@@ -473,27 +444,8 @@ class ChatRunStore:
                     restore_checkpoint_data(
                         data,
                         saved.response,
-                        captured.context,
+                        captured.agent_state,
                         self._binding(owned.owner.message_id),
-                    )
-                    session.commit()
-            with owned.lease.lock:
-                self._refresh_owner(run_id, owned.owner)
-                owned.lease.refreshed = time.monotonic()
-            transferred = owned.agent.handoff(
-                remote_cancel=lambda: self.cancel_run(
-                    run_id, self._load(run_id).agent.parent_id or ""
-                )
-            )
-            if transferred.snapshot.revision != captured.snapshot.revision:
-                raise RunNotTransferable(
-                    "Response changed while preparing its checkpoint"
-                )
-            with self._ownership_lock(run_id):
-                self._require_owner(owned)
-                with get_session_with_tenant(tenant_id=self.tenant_id) as session:
-                    check_checkpoint_owner__no_commit(
-                        session, owned.owner.message_id, owned.owner.revision
                     )
                     publish_checkpoint__no_commit(
                         session,
@@ -503,45 +455,18 @@ class ChatRunStore:
                     )
                     session.commit()
                     published = True
-                with owned.lease.lock:
-                    owned.lease.released = True
-                    self.cache.delete(self._owner_key(run_id))
-        except Exception:
-            if owned.run.is_remote:
-                try:
-                    if not published:
-                        with self._ownership_lock(run_id):
-                            if self._owner(run_id) == owned.owner:
-                                self.cache.delete(self._owner_key(run_id))
-                                with get_session_with_tenant(
-                                    tenant_id=self.tenant_id
-                                ) as session:
-                                    interrupt_response__no_commit(
-                                        session, owned.owner.message_id
-                                    )
-                                    session.commit()
-                except Exception:
-                    logger.exception("Failed to record interrupted checkpoint transfer")
-                finally:
-                    with owned.lease.lock:
-                        owned.lease.released = True
-                    with self._lock:
-                        self._leases.pop(run_id, None)
-                        self._owned.pop(run_id, None)
-                    coordinator.view(
-                        read_run=self.read_run, read_run_status=self.read_run_status
-                    ).transfer(owned.run)
-            raise
-        with owned.lease.lock:
-            owned.lease.released = True
-        with self._lock:
-            self._leases.pop(run_id, None)
-            self._owned.pop(run_id, None)
-        coordinator.view(
-            read_run=self.read_run, read_run_status=self.read_run_status
-        ).transfer(owned.run)
 
-    def resume(self, run_id: str, *, context: AgentContext) -> Run | None:
+        try:
+            owned.run.handoff(expected_revision=captured.run_state.revision, save=save)
+        finally:
+            if published:
+                try:
+                    self._release_owner(run_id, owned.lease)
+                finally:
+                    with self._lock:
+                        self._owned.pop(run_id, None)
+
+    def resume(self, run_id: str, *, context: AgentState) -> Run | None:
         """Resume with authorized, rehydrated history; never reconstruct a live owner."""
         build_agent = self._build_agent
         if self._coordinator is None or build_agent is None:
@@ -575,43 +500,25 @@ class ChatRunStore:
                     )
                     session.commit()
                 raise
+        with self._lock:
+            self._leases[run_id] = _OwnerLease(owner)
         try:
-            with self._renew_during_reconstruction(
-                run_id, owner
-            ) as finish_reconstruction:
-                captured = restore_checkpoint_data(
-                    checkpoint.data,
-                    saved.response,
-                    context,
-                    self._binding(saved.message_id),
-                )
-                agent = self._with_tenant(lambda: build_agent(captured))
-                self._coordinator.register(saved.agent)
-                for info in self.discovery():
-                    self._coordinator.register(info)
-                with self._lock:
-                    self._claims[run_id] = owner
-
-                def on_start(
-                    agent: Agent, run: Run, info: AgentInfo
-                ) -> Callable[[], None]:
-                    if run.id == run_id:
-                        finish_reconstruction()
-                    return self.on_start(agent, run, info)
-
-                coordinator = self._coordinator.view(on_start=on_start)
-                return self._with_tenant(
-                    lambda: agent.resume(captured.snapshot, coordinator=coordinator)
-                )
-        except Exception:
-            with self._lock:
-                self._claims.pop(run_id, None)
-            with self._ownership_lock(run_id):
-                if self._owner(run_id) == owner:
-                    with get_session_with_tenant(tenant_id=self.tenant_id) as session:
-                        release_checkpoint_claim__no_commit(
-                            session, saved.message_id, checkpoint.revision
-                        )
-                        session.commit()
-                    self.cache.delete(self._owner_key(run_id))
+            captured = restore_checkpoint_data(
+                checkpoint.data,
+                saved.response,
+                context,
+                self._binding(saved.message_id),
+            )
+            agent = self._with_tenant(lambda: build_agent(captured))
+            self._coordinator.register(saved.agent)
+            for info in self.discovery():
+                self._coordinator.register(info)
+            return self._with_tenant(
+                lambda: agent.resume(captured.run_state, coordinator=self._coordinator)
+            )
+        except BaseException:
+            try:
+                self.abort_start(run_id)
+            except Exception:
+                logger.exception("Response reconstruction rollback failed")
             raise

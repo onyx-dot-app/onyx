@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
-from onyx.agents.models import RunSnapshot
+from onyx.agents.models import RunState
 from onyx.agents.runtime import result_from_snapshot
 from onyx.agents.tools import ChildRunWait, ToolInvocation
 from onyx.coding_agent.agent import BASH_TOOL_SENTINEL_ID, CodingAgent, _setup_session
@@ -151,7 +151,7 @@ class CodingAgentTool(Tool):
         self,
         invocation: ToolInvocation,
         context: ToolContext,
-        children: list[RunSnapshot],
+        children: list[RunState],
     ) -> ToolResult:  # noqa: ARG002
         if len(children) != 1:
             raise ValueError("Coding delegation requires one child result")

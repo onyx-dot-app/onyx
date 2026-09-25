@@ -15,7 +15,7 @@ from onyx.llm.litellm_models import (
     StreamingChoice,
 )
 from onyx.llm.models import GenerationEvent, GenerationRequest, UserMessage
-from onyx.llm.multi_llm import LitellmLLM, LitellmTransport
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import generation_span, trace
 from onyx.tracing.framework.traces import TraceContentMode
@@ -29,12 +29,10 @@ def test_generation_has_one_tagged_span(
     streaming: bool, content_mode: TraceContentMode
 ) -> None:
     client = LitellmLLM(
-        LitellmTransport(
-            model_provider="openai",
-            model_name="gpt-5-mini",
-            api_key=None,
-            max_input_tokens=1000,
-        )
+        model_provider="openai",
+        model_name="gpt-5-mini",
+        api_key=None,
+        max_input_tokens=1000,
     )
     response = ModelResponse(
         id="test", created="1", choice=Choice(message=Message(content="answer"))
@@ -49,8 +47,8 @@ def test_generation_has_one_tagged_span(
     with (
         trace("client-tracing"),
         patch("onyx.tracing.llm_utils.generation_span", wraps=generation_span) as spans,
-        patch.object(client.transport, "invoke", return_value=response),
-        patch.object(client.transport, "stream", return_value=iter([chunk])),
+        patch.object(client, "invoke_raw", return_value=response),
+        patch.object(client, "stream_raw", return_value=iter([chunk])),
     ):
         if streaming:
             result = list(client.stream(request, context))[-1].message
@@ -65,28 +63,36 @@ def test_generation_has_one_tagged_span(
     assert spans.call_args.kwargs["content_mode"] == content_mode
 
 
-def test_model_information_excludes_credentials() -> None:
+def test_trace_configuration_and_errors_exclude_credentials() -> None:
     client = LitellmLLM(
-        LitellmTransport(
-            model_provider="openai",
-            model_name="gpt-5-mini",
-            api_key="test-private-key",
-            max_input_tokens=1000,
-        )
+        model_provider="openai",
+        model_name="gpt-5-mini",
+        api_key="test-private-key",
+        custom_config={"custom_api_key": "test-custom-secret"},
+        max_input_tokens=1000,
     )
-    assert "api_key" not in client.info.model_dump()
-    assert "test-private-key" not in client.info.model_dump_json()
+    from onyx.tracing.llm_utils import llm_generation_span
+
+    with (
+        trace("credential-boundary"),
+        patch("onyx.tracing.llm_utils.generation_span", wraps=generation_span) as spans,
+        llm_generation_span(client.config, LLMFlow.CHAT_RESPONSE),
+    ):
+        pass
+    assert "api_key" not in spans.call_args.kwargs["model_config"]
+    assert "custom_config" not in spans.call_args.kwargs["model_config"]
+    assert "test-custom-secret" not in str(spans.call_args)
+    assert "test-custom-secret" not in client.redact_error("failed test-custom-secret")
+    assert "test-private-key" not in str(spans.call_args)
     assert "test-private-key" not in client.redact_error("failed with test-private-key")
 
 
 def test_stream_failure_keeps_private_exception_out_of_messages_and_trace() -> None:
     client = LitellmLLM(
-        LitellmTransport(
-            model_provider="openai",
-            model_name="gpt-5-mini",
-            api_key=None,
-            max_input_tokens=1000,
-        )
+        model_provider="openai",
+        model_name="gpt-5-mini",
+        api_key=None,
+        max_input_tokens=1000,
     )
     failure = RuntimeError("synthetic-private-provider-detail")
 
@@ -100,7 +106,7 @@ def test_stream_failure_keeps_private_exception_out_of_messages_and_trace() -> N
 
     events: list[GenerationEvent] = []
     with (
-        patch.object(client.transport, "stream", return_value=chunks()),
+        patch.object(client, "stream_raw", return_value=chunks()),
         patch("onyx.llm.multi_llm.record_llm_span_output") as record,
         pytest.raises(RuntimeError) as caught,
     ):

@@ -6,7 +6,7 @@ import pytest
 from pydantic import BaseModel
 
 from onyx.agents.items import messages_from_items
-from onyx.agents.models import AgentContext, PreparedStep, RunSnapshot, ToolCallContext
+from onyx.agents.models import AgentState, PreparedStep, RunState, ToolCallContext
 from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import AgentTool
 from onyx.agents.transcript import RunStatus
@@ -121,7 +121,7 @@ def test_partial_run_keeps_input_and_replayable_output(cancelled: bool) -> None:
 
 
 def test_running_snapshot_records_unfinished_calls_without_inventing_results() -> None:
-    snapshots: list[RunSnapshot] = []
+    snapshots: list[RunState] = []
     runs: list[Run] = []
 
     def before_tool(_context: ToolCallContext) -> ToolResult:
@@ -158,7 +158,7 @@ def test_run_record_is_isolated_from_caller_and_snapshot_mutations() -> None:
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="First answer")])
         ),
-        context=AgentContext(messages=[UserMessage(content="Earlier question")]),
+        state=AgentState(messages=[UserMessage(content="Earlier question")]),
     )
     runs: list[Run] = []
     first_input = UserMessage(content="First question", metadata=ApplicationData())
@@ -182,7 +182,7 @@ def test_run_record_is_isolated_from_caller_and_snapshot_mutations() -> None:
 
 
 def test_captured_and_restored_usage_is_isolated_from_mutation() -> None:
-    snapshot = RunSnapshot(
+    snapshot = RunState(
         run_id="run",
         status=RunStatus.COMPLETE,
         messages=[

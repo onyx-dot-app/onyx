@@ -5,13 +5,13 @@ from collections.abc import Generator
 import pytest
 
 from onyx.agents.compaction import context_budget, request_tokens
-from onyx.agents.models import AgentContext, PreparedStep, StepInput
+from onyx.agents.models import AgentState, PreparedStep, StepInput
 from onyx.agents.runtime import Agent, RunFailed
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.agents.transcript import CompactionCheckpoint
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.exceptions import LLMContextLimitError
-from onyx.llm.interfaces import LLM, GenerationContext, LLMInfo, LLMUserIdentity
+from onyx.llm.interfaces import LLM, GenerationContext, LLMConfig, LLMUserIdentity
 from onyx.llm.models import (
     AssistantMessage,
     GenerationDoneEvent,
@@ -42,8 +42,8 @@ class ContextModel(LLM):
         self.contexts: list[GenerationContext] = []
 
     @property
-    def info(self) -> LLMInfo:
-        return LLMInfo(
+    def config(self) -> LLMConfig:
+        return LLMConfig(
             model_provider="openai",
             model_name="test",
             max_input_tokens=1200,
@@ -110,7 +110,7 @@ def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> N
     ]
     agent = Agent(
         model,
-        context=AgentContext(messages=[UserMessage(content=TASK)]),
+        state=AgentState(messages=[UserMessage(content=TASK)]),
         prepare_step=prepare,
     )
     run = agent.start(max_steps=6)
@@ -123,8 +123,7 @@ def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> N
     assert calls == [f"call-{i}" for i in range(1, 6)]
     assert prepared == list(range(6))
     assert (
-        len([m for m in agent.context.messages if isinstance(m, ToolResultMessage)])
-        == 5
+        len([m for m in agent.state.messages if isinstance(m, ToolResultMessage)]) == 5
     )
     for request in model.generations:
         assert any(message.text == TASK for message in request.messages)
@@ -142,9 +141,7 @@ def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> N
     assert snapshot is not None and snapshot.checkpoint is not None
     reloaded = Agent(
         model,
-        context=AgentContext(
-            messages=agent.context.messages, checkpoint=snapshot.checkpoint
-        ),
+        state=AgentState(messages=agent.state.messages, checkpoint=snapshot.checkpoint),
     )
     reloaded_run = reloaded.start(
         max_steps=1, messages=[UserMessage(content="Summarize the conclusion.")]
@@ -177,8 +174,8 @@ def test_provider_context_rejection_preserves_execution_settings(
     identity = LLMUserIdentity(user_id="user", session_id="session")
     agent = Agent(
         model,
-        context=AgentContext(messages=history),
-        execution=GenerationContext(
+        state=AgentState(messages=history),
+        generation_context=GenerationContext(
             cancellation=signal,
             timeout=23,
             total_timeout=71,
@@ -188,7 +185,7 @@ def test_provider_context_rejection_preserves_execution_settings(
         ),
         prepare_step=prepare,
     )
-    result = agent.execute(max_steps=1).result()
+    result = agent.start(background=False, max_steps=1).result()
     assert prepared == [0]
     assert [context.flow for context in model.contexts] == [
         LLMFlow.RESEARCH_AGENT,
@@ -204,21 +201,21 @@ def test_provider_context_rejection_preserves_execution_settings(
     assert len(model.generations) == 2
     assert len(model.summaries) == 1
     assert result.steps == 1
-    assert len(agent.context.messages) == len(history) + 1
+    assert len(agent.state.messages) == len(history) + 1
     assert result.output.text.endswith("[1].")
 
 
 def test_oversized_required_instruction_fails_without_losing_snapshot() -> None:
     model = ContextModel()
     agent = Agent(
-        model, context=AgentContext(messages=[UserMessage(content="mandatory " * 2000)])
+        model, state=AgentState(messages=[UserMessage(content="mandatory " * 2000)])
     )
     run = agent.start(max_steps=1)
     with pytest.raises(RunFailed):
         run.result()
     assert run.wait_for_idle(2)
     assert not model.generations
-    assert agent.context.messages[0].text == "mandatory " * 2000
+    assert agent.state.messages[0].text == "mandatory " * 2000
     snapshot = run.snapshot()
     assert snapshot is not None and snapshot.status == "error"
 
@@ -226,7 +223,7 @@ def test_oversized_required_instruction_fails_without_losing_snapshot() -> None:
 def test_checkpoint_from_another_branch_is_removed_from_context() -> None:
     agent = Agent(
         ContextModel(),
-        context=AgentContext(
+        state=AgentState(
             messages=[UserMessage(content="Current branch")],
             checkpoint=CompactionCheckpoint(
                 summary="Other branch", covered_count=1, covered_digest="different"
@@ -237,7 +234,7 @@ def test_checkpoint_from_another_branch_is_removed_from_context() -> None:
     run.result()
     assert run.wait_for_idle(2)
     assert run.snapshot().checkpoint is None
-    assert agent.context.checkpoint is None
+    assert agent.state.checkpoint is None
 
 
 @pytest.mark.parametrize("max_tokens", [None, 200])
@@ -254,7 +251,7 @@ def test_output_budget_is_recalculated_after_compaction(
     model = ContextModel(reject_first=True)
     agent = Agent(
         model,
-        context=AgentContext(
+        state=AgentState(
             messages=[
                 UserMessage(content="Old question"),
                 AssistantMessage(content=[TextContent(text="Old evidence " * 100)]),
@@ -263,7 +260,7 @@ def test_output_budget_is_recalculated_after_compaction(
         ),
         options=GenerationOptions(max_tokens=max_tokens),
     )
-    agent.execute(max_steps=1).result()
+    agent.start(background=False, max_steps=1).result()
     assert len(model.generations) == 2
     assert model.summaries
     for request in model.generations:

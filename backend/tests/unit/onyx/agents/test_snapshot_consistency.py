@@ -6,7 +6,7 @@ from types import TracebackType
 
 import pytest
 
-from onyx.agents.models import PreparedStep, RunSnapshot, StepInput, ToolCallContext
+from onyx.agents.models import PreparedStep, RunState, StepInput, ToolCallContext
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.agents.transcript import RunStatus
@@ -25,10 +25,10 @@ from tests.unit.onyx.agents.fakes import FakeModelClient
 class SnapshotLock(AbstractContextManager[None]):
     """Capture the state exposed at each release of the run lock."""
 
-    def __init__(self, record: RunSnapshot) -> None:
+    def __init__(self, record: RunState) -> None:
         self._lock = threading.RLock()
         self.record = record
-        self.snapshots: list[RunSnapshot] = []
+        self.snapshots: list[RunState] = []
 
     def __enter__(self) -> None:
         self._lock.acquire()
@@ -80,8 +80,8 @@ def test_message_and_operation_updates_are_visible_together(
     ).start(max_steps=2)
     try:
         assert preparing.wait(3)
-        lock = SnapshotLock(run._state.record)
-        monkeypatch.setattr(run._state, "lock", lock)
+        lock = SnapshotLock(run._state)
+        monkeypatch.setattr(run, "_lock", lock)
         release.set()
         run.result(timeout=3)
     finally:

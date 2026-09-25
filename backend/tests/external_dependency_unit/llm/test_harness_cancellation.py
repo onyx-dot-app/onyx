@@ -20,7 +20,7 @@ from cryptography.x509.oid import NameOID
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import GenerationRequest, TextDeltaEvent, UserMessage
-from onyx.llm.multi_llm import LitellmLLM, LitellmTransport
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.tracing.flows import LLMFlow
 
 
@@ -245,24 +245,22 @@ def test_cancel_closes_provider_connection(
         yielded = threading.Event()
         errors: list[BaseException] = []
         llm = LitellmLLM(
-            LitellmTransport(
-                api_key="local-test-key",
-                model_provider="bifrost"
-                if provider == "gateway_responses"
-                else "openai"
-                if provider == "responses"
-                else provider,
-                custom_config={"bifrost_api_mode": "responses"}
-                if provider == "gateway_responses"
-                else None,
-                model_name="claude-haiku-4-5"
-                if provider == "anthropic"
-                else "gpt-5-mini"
-                if provider == "responses"
-                else "harness-model",
-                max_input_tokens=4096,
-                api_base=url,
-            )
+            api_key="local-test-key",
+            model_provider="bifrost"
+            if provider == "gateway_responses"
+            else "openai"
+            if provider == "responses"
+            else provider,
+            custom_config={"bifrost_api_mode": "responses"}
+            if provider == "gateway_responses"
+            else None,
+            model_name="claude-haiku-4-5"
+            if provider == "anthropic"
+            else "gpt-5-mini"
+            if provider == "responses"
+            else "harness-model",
+            max_input_tokens=4096,
+            api_base=url,
         )
 
         def execute() -> None:
@@ -305,13 +303,11 @@ def test_cancel_closes_provider_connection(
 def test_cancellable_model_completes_normally(invoke: bool) -> None:
     with provider_server("openai", True, complete=True) as (url, state):
         llm = LitellmLLM(
-            LitellmTransport(
-                api_key="local-test-key",
-                model_provider="openai",
-                model_name="harness-model",
-                max_input_tokens=4096,
-                api_base=url,
-            )
+            api_key="local-test-key",
+            model_provider="openai",
+            model_name="harness-model",
+            max_input_tokens=4096,
+            api_base=url,
         )
         request = GenerationRequest(messages=[UserMessage(content="test")])
         context = GenerationContext(
@@ -338,13 +334,11 @@ def test_cancel_does_not_interrupt_another_run() -> None:
         def execute() -> None:
             try:
                 llm = LitellmLLM(
-                    LitellmTransport(
-                        api_key="local-test-key",
-                        model_provider="openai",
-                        model_name="harness-model",
-                        max_input_tokens=4096,
-                        api_base=url,
-                    )
+                    api_key="local-test-key",
+                    model_provider="openai",
+                    model_name="harness-model",
+                    max_input_tokens=4096,
+                    api_base=url,
                 )
                 list(
                     llm.stream(
@@ -384,17 +378,13 @@ def test_azure_preserves_authentication_and_endpoint(
 ) -> None:
     with provider_server("azure", send_chunk=True, complete=True) as (url, state):
         client = LitellmLLM(
-            LitellmTransport(
-                api_key=None if ad_token else "azure-test-key",
-                model_provider="azure",
-                model_name="harness-model",
-                api_base=url,
-                api_version=api_version,
-                custom_config={"AZURE_AD_TOKEN": "azure-test-token"}
-                if ad_token
-                else None,
-                max_input_tokens=4096,
-            )
+            api_key=None if ad_token else "azure-test-key",
+            model_provider="azure",
+            model_name="harness-model",
+            api_base=url,
+            api_version=api_version,
+            custom_config={"AZURE_AD_TOKEN": "azure-test-token"} if ad_token else None,
+            max_input_tokens=4096,
         )
         result = client.invoke(
             GenerationRequest(messages=[UserMessage(content="test")]),

@@ -9,7 +9,7 @@ import pytest
 from onyx.agents.coordination import AgentInfo
 from onyx.agents.events import AgentEvent, MessageEndEvent
 from onyx.agents.items import messages_from_items
-from onyx.agents.models import PreparedStep, RunSnapshot
+from onyx.agents.models import PreparedStep, RunState
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.transcript import OperationSnapshot, RunStatus
 from onyx.chat.emitter import Emitter
@@ -246,14 +246,14 @@ def test_response_projection_uses_the_selected_run_after_agent_reuse() -> None:
     )
     first_run = _run_observed(agent)
     first = project_response(first_run.snapshot(), response_id=42, tool_ids={})
-    latest = agent.execute(max_steps=1).result()
+    latest = agent.start(background=False, max_steps=1).result()
     assert project_response(first_run.snapshot(), response_id=42, tool_ids={}) == first
     assert first.answer == "First response"
     assert latest.output.text == "Second response"
 
 
 def test_projection_retains_unfinished_descendant_for_inspection() -> None:
-    snapshot = RunSnapshot(
+    snapshot = RunState(
         run_id="parent",
         status=RunStatus.ERROR,
         messages=[
@@ -266,7 +266,7 @@ def test_projection_retains_unfinished_descendant_for_inspection() -> None:
             OperationSnapshot(step_index=0, message_index=0, status=RunStatus.ERROR)
         ],
         child_runs=[
-            RunSnapshot(
+            RunState(
                 run_id="child",
                 agent_id="child-agent",
                 status=RunStatus.RUNNING,
@@ -295,7 +295,7 @@ def test_projection_retains_unfinished_descendant_for_inspection() -> None:
 
 
 def test_full_response_reads_canonical_tool_output() -> None:
-    snapshot = RunSnapshot(
+    snapshot = RunState(
         run_id="root",
         status=RunStatus.COMPLETE,
         messages=[

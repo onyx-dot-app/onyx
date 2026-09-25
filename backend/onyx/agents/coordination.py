@@ -5,7 +5,7 @@ import time
 from collections.abc import Callable, Sequence
 from concurrent.futures import Future
 from contextlib import ExitStack
-from typing import Literal, overload
+from typing import Literal, Protocol, overload
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict
@@ -16,8 +16,7 @@ from onyx.agents.concurrency import (
     ExecutionWork,
     wait_operation,
 )
-from onyx.agents.events import AgentEvent
-from onyx.agents.models import AgentContext, RunResult, RunSnapshot
+from onyx.agents.models import RunResult, RunState
 from onyx.agents.runtime import (
     Agent,
     Run,
@@ -48,6 +47,18 @@ REMOTE_POLL_SECONDS = 1.0
 CHILD_TERMINAL_TIMEOUT_SECONDS = CLEANUP_SECONDS * (MAX_CHILD_DEPTH + 1)
 
 
+class RunStore(Protocol):
+    """Register execution ownership, save terminal output, and release ownership."""
+
+    def register(self, run: Run) -> None: ...
+
+    def save(self, run: Run) -> None: ...
+
+    def release(self, run_id: str) -> None: ...
+
+    def abort_start(self, run_id: str) -> None: ...
+
+
 class AgentInfo(BaseModel):
     """Visible identity and latest run status, without conversation content."""
 
@@ -61,6 +72,20 @@ class AgentInfo(BaseModel):
     status: RunStatus | None = None
 
 
+class AgentDirectory(Protocol):
+    """Load agents and saved runs authorized for one conversation branch."""
+
+    def lookup_agent(self, agent_id: str, parent_id: str) -> AgentInfo | None: ...
+
+    def restore_agent(self, agent_id: str, parent_id: str) -> Agent: ...
+
+    def read_run(self, run_id: str, parent_id: str) -> RunState | None: ...
+
+    def read_run_status(self, run_id: str, parent_id: str) -> RunStatus: ...
+
+    def cancel_run(self, run_id: str, parent_id: str) -> None: ...
+
+
 class _CoordinatorState:
     def __init__(self) -> None:
         self.registrations: dict[str, AgentInfo] = {}
@@ -69,11 +94,11 @@ class _CoordinatorState:
         self.bindings: dict[str, RunCoordination] = {}
         self.runs: dict[str, Run] = {}
         self.archived_run_ids: set[str] = set()
-        self.completions: dict[str, Future[RunSnapshot]] = {}
+        self.completions: dict[str, Future[RunState]] = {}
         self.cleanup: dict[str, list[Future[None]]] = {}
-        self.latest: dict[str, RunSnapshot] = {}
+        self.latest: dict[str, RunState] = {}
         self.work = ExecutionWork()
-        self.remote_observers: dict[str, threading.Event] = {}
+        self.completion_observers: dict[str, threading.Event] = {}
         self.closed = False
         self.lock = threading.RLock()
 
@@ -85,28 +110,15 @@ class AgentCoordinator:
         self,
         *,
         agents: Sequence[AgentInfo] = (),
-        lookup_agent: Callable[[str, str], AgentInfo | None] | None = None,
-        resolve_agent: Callable[[str, str], Agent] | None = None,
-        read_run: Callable[[str, str], RunSnapshot | None] | None = None,
-        read_run_status: Callable[[str, str], RunStatus] | None = None,
-        on_event: Callable[[AgentEvent], None] | None = None,
-        on_complete: Callable[[RunSnapshot], None] | None = None,
-        on_start: Callable[[Agent, Run, AgentInfo], Callable[[], None] | None]
-        | None = None,
-        cancel_run: Callable[[str, str], None] | None = None,
+        directory: AgentDirectory | None = None,
+        store: RunStore | None = None,
     ) -> None:
         self._state = _CoordinatorState()
         self._view_id = uuid4()
         self._visible_agents: dict[str, AgentInfo] = {}
         self._visible_run_ids: set[str] = set()
-        self._lookup_agent = lookup_agent
-        self._resolve_agent = resolve_agent
-        self._read_run = read_run
-        self._read_run_status = read_run_status
-        self._on_event = on_event
-        self._on_complete = on_complete
-        self._on_start = on_start
-        self._cancel_run = cancel_run
+        self._directory = directory
+        self._store = store
         self._share_state(self._state)
         for info in agents:
             if info.id in self._registrations:
@@ -124,71 +136,32 @@ class AgentCoordinator:
     def view(
         self,
         *,
-        lookup_agent: Callable[[str, str], AgentInfo | None] | None = None,
-        resolve_agent: Callable[[str, str], Agent] | None = None,
-        read_run: Callable[[str, str], RunSnapshot | None] | None = None,
-        read_run_status: Callable[[str, str], RunStatus] | None = None,
+        directory: AgentDirectory | None = None,
         visible_run_ids: Sequence[str] = (),
-        on_complete: Callable[[RunSnapshot], None] | None = None,
-        on_start: Callable[[Agent, Run, AgentInfo], Callable[[], None] | None]
-        | None = None,
-        cancel_run: Callable[[str, str], None] | None = None,
+        store: RunStore | None = None,
     ) -> "AgentCoordinator":
         """Bind fresh parent resources while retaining the same execution owner."""
         self.check_open()
         view = AgentCoordinator(
-            lookup_agent=lookup_agent,
-            resolve_agent=resolve_agent,
-            read_run=read_run,
-            read_run_status=read_run_status or self._read_run_status,
-            on_event=self._on_event,
-            on_complete=on_complete if on_complete is not None else self._on_complete,
-            on_start=on_start if on_start is not None else self._on_start,
-            cancel_run=cancel_run if cancel_run is not None else self._cancel_run,
+            directory=directory if directory is not None else self._directory,
+            store=store if store is not None else self._store,
         )
         view._share_state(self._state)
         with self._lock:
-            if lookup_agent is None and read_run is None:
+            if directory is None:
                 view._visible_agents.update(self._visible_agents)
                 view._visible_run_ids.update(self._visible_run_ids)
-                view._lookup_agent = self._lookup_agent
-                view._read_run = self._read_run
-                if resolve_agent is None:
-                    view._view_id = self._view_id
-                    view._resolve_agent = self._resolve_agent
+                view._view_id = self._view_id
             view._visible_run_ids.update(visible_run_ids)
         return view
 
     def run(self, run_id: str) -> Run:
-        """Return a retained run handle; its execution can be local or remote."""
+        """Return a locally retained execution or completed result."""
         with self._lock:
             run = self._state.runs.get(run_id)
         if run is None:
             raise ValueError("Run is not owned by this coordinator")
         return run
-
-    def claim_resume(
-        self, snapshot: RunSnapshot, context: AgentContext
-    ) -> tuple[Run | None, Callable[[], None] | None]:
-        """Claim a retained handle and return rollback for failed reconstruction."""
-        with self._lock:
-            self.check_open()
-            run = self._state.runs.get(snapshot.run_id)
-        if run is None:
-            return None, None
-        restore = run.claim_resume(snapshot, context)
-        with self._lock:
-            stop = self._state.remote_observers.pop(run.id, None)
-        if stop is not None:
-            stop.set()
-
-        def rollback() -> None:
-            restore()
-            self.release_execution(run)
-            if run.is_remote:
-                self.transfer(run)
-
-        return run, rollback
 
     def bind_agent(self, agent: Agent) -> None:
         """Keep the current child implementation after a physical owner change."""
@@ -199,88 +172,101 @@ class AgentCoordinator:
                 self._state.agent_views[agent.id] = self._view_id
 
     def release_execution(self, run: Run) -> None:
-        """Drop physical event bindings after an explicit suspended handoff."""
+        """Forget local execution; dependencies retain only its ID and completion."""
+        snapshot = run.snapshot()
         with self._lock:
-            binding = self._bindings.get(run.id)
+            binding = self._bindings.pop(run.id, None)
+            self._state.runs.pop(run.id, None)
+            self._agents.pop(run.agent_id, None)
+            self._state.agent_views.pop(run.agent_id, None)
+            self._latest[run.agent_id] = snapshot
+            has_waiters = any(
+                run.id in owner.children for owner in self._bindings.values()
+            )
         if binding is not None:
-            with binding._lock:
-                if (
-                    binding.run._state.handoff is not None
-                    and not binding.run._state.segment_active
-                ):
-                    binding.detach()
-                    with self._lock:
-                        self._agents.pop(run.agent_id, None)
-                        self._state.agent_views.pop(run.agent_id, None)
+            binding._links.close()
+            binding.children.clear()
+        if has_waiters:
+            self.observe_completion(run.id)
 
-    def transfer(self, run: Run) -> None:
-        """Retain a logical handle while another process owns its execution."""
-        with run._state.lock:
-            if (
-                run._state.handoff is None
-                or run._state.segment_active
-                or not run.is_remote
-            ):
-                raise ValueError("Only a remotely released execution can be observed")
+    def observe_completion(self, run_id: str) -> None:
+        """Resolve a released dependency from storage without retaining its execution."""
         with self._lock:
-            if self._state.closed:
+            if self._state.closed or run_id in self._state.runs:
                 return
-            if run.id in self._state.remote_observers:
-                raise ValueError("Remote execution already has an observer")
+            if run_id in self._state.completion_observers:
+                return
+            if self._directory is None:
+                return
+            future = self._state.completions[run_id]
+            snapshot = next(
+                state for state in self._latest.values() if state.run_id == run_id
+            )
+            if snapshot.agent_id is None:
+                raise ValueError("Released run has no agent identity")
+            info = self._registrations[snapshot.agent_id]
             stop = threading.Event()
-            self._state.remote_observers[run.id] = stop
-            info = self._registrations[run.agent_id]
+            self._state.completion_observers[run_id] = stop
         parent_id = info.parent_id or ""
 
         def observe() -> None:
-            while not stop.is_set():
+            deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
+            while not stop.is_set() and not future.done():
                 try:
-                    status = self._remote_status(run.id, parent_id)
-                    if status.is_terminal:
-                        snapshot = (
-                            self._read_run(run.id, parent_id)
-                            if self._read_run
-                            else None
-                        )
+                    if self._remote_status(run_id, parent_id).is_terminal:
+                        directory = self._directory
+                        if directory is None:
+                            raise ValueError("Released run storage is unavailable")
+                        result = directory.read_run(run_id, parent_id)
                         if (
-                            snapshot is None
-                            or snapshot.run_id != run.id
-                            or snapshot.agent_id != run.agent_id
+                            result is None
+                            or result.run_id != run_id
+                            or result.agent_id != info.id
+                            or not result.status.is_terminal
                         ):
                             raise ValueError(
-                                "Transferred execution returned a different identity"
+                                "Released run returned an invalid terminal result"
                             )
-                        with run._state.lock:
-                            if stop.is_set() or not run.is_remote:
+                        with self._lock:
+                            if stop.is_set():
                                 return
-                            run._state.record = snapshot.model_copy(deep=True)
-                            run._state.accepting = False
-                        run._state.completed.set_result(None)
-                        run._finalize()
+                            self._latest[info.id] = result
+                        future.set_result(result)
                         return
-                    with run._state.lock:
-                        if not stop.is_set() and run._state.remote_cancel is not None:
-                            run._state.record.status = status
                 except Exception:
-                    # An unavailable reader does not establish the remote execution's outcome.
-                    logger.exception("Could not read transferred execution; retrying")
+                    logger.exception("Could not read released run result; retrying")
+                if time.monotonic() >= deadline:
+                    future.set_exception(
+                        TimeoutError("Released run did not complete in time")
+                    )
+                    return
                 stop.wait(REMOTE_POLL_SECONDS)
 
         try:
             self._state.work.start(observe)
-        except BaseException:
-            stop.set()
+        except Exception as error:
             with self._lock:
-                if self._state.remote_observers.get(run.id) is stop:
-                    self._state.remote_observers.pop(run.id)
-            raise
+                self._state.completion_observers.pop(run_id, None)
+            logger.exception("Could not start dependency observation")
+            future.set_exception(error)
+
+    def cancel_child(self, run_id: str, parent_id: str) -> None:
+        run = self.child_run(run_id, parent_id)
+        if run is not None:
+            run.cancel()
+            return
+        state = self._read_visible_run(run_id, parent_id)
+        if not state.status.is_terminal:
+            if self._directory is None:
+                raise ValueError("Remote run cancellation is unavailable")
+            self._directory.cancel_run(run_id, parent_id)
 
     def _remote_status(self, run_id: str, parent_id: str) -> RunStatus:
-        if self._read_run_status is not None:
-            return self._read_run_status(run_id, parent_id)
+        if self._directory is not None:
+            return self._directory.read_run_status(run_id, parent_id)
         return self._read_visible_run(run_id, parent_id).status
 
-    def restore_completed(self, snapshot: RunSnapshot) -> Run:
+    def restore_completed(self, snapshot: RunState) -> Run:
         """Retain an archived terminal result without executing or saving it again."""
         restored = Run.from_snapshot(snapshot)
         with self._lock:
@@ -292,7 +278,7 @@ class AgentCoordinator:
             if existing is None:
                 self._state.runs[restored.id] = restored
                 self._state.archived_run_ids.add(restored.id)
-                completion: Future[RunSnapshot] = Future()
+                completion: Future[RunState] = Future()
                 completion.set_result(snapshot.model_copy(deep=True))
                 self._state.completions[restored.id] = completion
                 self._visible_run_ids.add(restored.id)
@@ -301,11 +287,11 @@ class AgentCoordinator:
                         restored.agent_id, snapshot.model_copy(deep=True)
                     )
                 return restored
-        if not existing._state.completed.done() or existing.snapshot() != snapshot:
+        if not existing._completed.done() or existing.snapshot() != snapshot:
             raise RuntimeError("Run identity already has an execution owner")
         return existing
 
-    def completion(self, run_id: str) -> Future[RunSnapshot]:
+    def completion(self, run_id: str) -> Future[RunState]:
         """Observe terminal handling, including application persistence failures."""
         with self._lock:
             future = self._state.completions.get(run_id)
@@ -316,14 +302,13 @@ class AgentCoordinator:
     def _check_physical_owner(self, run_id: str) -> None:
         with self._lock:
             archived = run_id in self._state.archived_run_ids
-            run = self._state.runs[run_id]
-        if archived or run.is_remote:
+        if archived:
             raise ValueError("Physical cleanup requires a locally owned execution")
 
     def add_completion_cleanup(
         self, run_id: str, callback: Callable[[], None]
     ) -> Future[None]:
-        """Run resource cleanup after terminal output and the final segment drains."""
+        """Clean up local resources after completion or release, once workers drain."""
         run = self.run(run_id)
         self._check_physical_owner(run_id)
         completion: Future[None] = Future()
@@ -349,35 +334,40 @@ class AgentCoordinator:
                 )
                 clean()
 
-        run.add_done_callback(lambda _snapshot: run.add_idle_callback(start))
+        run._completed.add_done_callback(lambda _future: run.add_idle_callback(start))
         return completion
 
     def _cleanup_for(self, run_id: str) -> list[Future[None]]:
         with self._lock:
             return list(self._state.cleanup.get(run_id, ()))
 
-    def _complete(self, snapshot: RunSnapshot) -> None:
-        run = self.run(snapshot.run_id)
-        with run._state.lock:
-            ownerless = run._state.restart is None and not run._state.segment_active
-        if ownerless:
-            run.add_idle_callback(lambda: self.release(run))
-        future = self.completion(snapshot.run_id)
-        callback = None if run.is_remote else self._on_complete
-        if callback is None:
-            future.set_result(snapshot.model_copy(deep=True))
-            return
+    def complete(self, run: Run) -> None:
+        """Save terminal output before resolving child completion."""
+        future = self.completion(run.id)
+        try:
+            if self._store is not None:
+                self._store.save(run)
+        except BaseException as error:
+            future.set_exception(error)
+            raise
+        else:
+            future.set_result(run.snapshot())
 
-        def complete() -> None:
-            try:
-                callback(snapshot.model_copy(deep=True))
-            except BaseException as error:
-                logger.exception("Agent completion handling failed")
-                future.set_exception(error)
-            else:
-                future.set_result(snapshot.model_copy(deep=True))
+    def begin(self, run: Run) -> None:
+        if self._store is not None:
+            self._store.register(run)
 
-        complete()
+    def abort_start(self, run: Run) -> None:
+        if self._store is not None:
+            self._store.abort_start(run.id)
+
+    def finish(self, run: Run) -> None:
+        """Release ownership after execution and event workers drain."""
+        try:
+            if self._store is not None:
+                self._store.release(run.id)
+        finally:
+            self.release(run)
 
     def register(self, info: AgentInfo) -> None:
         with self._lock:
@@ -433,13 +423,7 @@ class AgentCoordinator:
                 result.append(info)
         return result
 
-    def bind(
-        self,
-        run: Run,
-        work: ExecutionWork,
-        publish: Callable[[AgentEvent], None],
-        cancellation: CancellationSignal,
-    ) -> "RunCoordination":
+    def bind(self, run: Run) -> "RunCoordination":
         with self._lock:
             if self._state.closed:
                 raise RuntimeError("Agent coordination is closed")
@@ -453,71 +437,54 @@ class AgentCoordinator:
                         restoration_config=None,
                     )
                 )
-            existing = self._bindings.get(run.id)
-            if existing is not None:
-                if existing.run is not run:
-                    raise RuntimeError("Run already has an execution owner")
-                binding = existing
-            else:
-                if any(
-                    binding.run.agent_id == run.agent_id
-                    for binding in self._bindings.values()
-                ):
-                    raise RuntimeError("Agent is already running or draining")
-                if run.id in self._state.runs:
-                    raise RuntimeError("Run identity was already used")
-                binding = RunCoordination(self, run, work, publish, cancellation)
-                self._bindings[run.id] = binding
-                self._state.runs[run.id] = run
-                completion: Future[RunSnapshot] = Future()
+            if any(
+                binding.run.agent_id == run.agent_id
+                for binding in self._bindings.values()
+            ):
+                raise RuntimeError("Agent is already running or draining")
+            if run.id in self._state.runs:
+                raise RuntimeError("Run identity was already used")
+            previous = self._latest.get(run.agent_id)
+            if (
+                previous is not None
+                and previous.run_id == run.id
+                and previous.status.is_terminal
+            ):
+                raise RuntimeError("Run is already complete")
+            binding = RunCoordination(self, run)
+            self._bindings[run.id] = binding
+            self._state.runs[run.id] = run
+            completion = self._state.completions.get(run.id)
+            if completion is None:
+                completion = Future()
                 completion.set_running_or_notify_cancel()
                 self._state.completions[run.id] = completion
+            stop = self._state.completion_observers.pop(run.id, None)
+            if stop is not None:
+                stop.set()
             self._visible_run_ids.add(run.id)
-        if existing is not None:
-            existing.rebind(work, publish, cancellation, coordinator=self)
-            return existing
-        if self._on_event is not None:
-            listener = self._on_event
-            run.subscribe(
-                lambda event: listener(event) if event.run_id == run.id else None
-            )
-        run._add_terminal_callback(
-            lambda completed: binding.coordinator._complete(completed.snapshot())
-        )
         return binding
-
-    def notify_start(self, agent: Agent, run: Run) -> Callable[[], None] | None:
-        """Register application ownership before execution starts."""
-        if self._on_start is not None:
-            with self._lock:
-                info = self._registrations[agent.id].model_copy(deep=True)
-            return self._on_start(agent, run, info)
-        return None
 
     def close(self, timeout: float = DEFAULT_AGENT_WAIT_SECONDS) -> bool:
         if not 0 <= timeout <= OPERATION_TIMEOUT_SECONDS:
             raise ValueError("Close timeout is outside its allowed bounds")
         with self._lock:
             self._state.closed = True
-            runs = list(self._state.runs.values())
-            for stop in self._state.remote_observers.values():
+            for stop in self._state.completion_observers.values():
                 stop.set()
             bindings = list(self._bindings.values())
-        remote_ids = {run.id for run in runs if run.is_remote}
-        local_bindings: list[RunCoordination] = []
+        with self._lock:
+            released_ids = set(self._state.completions) - set(self._state.runs)
         for binding in bindings:
             with binding._lock:
                 binding._links.close()
-                for run_id in remote_ids:
+                for run_id in released_ids:
                     binding.children.pop(run_id, None)
-            if binding.run._cancel_if_local():
-                local_bindings.append(binding)
-            else:
-                remote_ids.add(binding.run.id)
+            binding.run.cancel()
         deadline = time.monotonic() + timeout
-        for binding in local_bindings:
+        for binding in bindings:
             try:
-                binding.run._state.completed.result(
+                binding.run._completed.result(
                     timeout=max(0, deadline - time.monotonic())
                 )
             except TimeoutError:
@@ -530,12 +497,12 @@ class AgentCoordinator:
             completions = [
                 future
                 for run_id, future in self._state.completions.items()
-                if run_id not in remote_ids
+                if run_id not in released_ids
             ]
             cleanup = [
                 future
                 for run_id, futures in self._state.cleanup.items()
-                if run_id not in remote_ids
+                if run_id not in released_ids
                 for future in futures
             ]
         for completion in completions:
@@ -621,7 +588,7 @@ class AgentCoordinator:
             agent = self._agents.get(agent_id)
             if self._state.agent_views.get(agent_id) != self._view_id:
                 agent = None
-            if agent is None and self._resolve_agent is None:
+            if agent is None and self._directory is None:
                 raise ValueError("Agent restoration is unavailable")
             return agent
 
@@ -654,7 +621,9 @@ class AgentCoordinator:
         with self._lock:
             if snapshot.status == RunStatus.RUNNING:
                 self._state.runs.pop(run.id, None)
-                self._state.completions.pop(run.id, None)
+                previous = self._latest.get(run.agent_id)
+                if previous is None or previous.run_id != run.id:
+                    self._state.completions.pop(run.id, None)
             if (
                 self._registrations[run.agent_id].parent_id is not None
                 and snapshot.status != RunStatus.RUNNING
@@ -673,8 +642,8 @@ class AgentCoordinator:
     def _lookup(self, agent_id: str, parent_id: str) -> AgentInfo | None:
         with self._lock:
             info = self._visible_agents.get(agent_id)
-        if self._lookup_agent is not None and info is None:
-            info = self._lookup_agent(agent_id, parent_id)
+        if self._directory is not None and info is None:
+            info = self._directory.lookup_agent(agent_id, parent_id)
             if info is not None:
                 if info.id != agent_id:
                     raise ValueError("Archive returned a different agent")
@@ -692,9 +661,9 @@ class AgentCoordinator:
                     return agent
             if agent_id not in self._agents and len(self._agents) >= MAX_LOADED_AGENTS:
                 raise ValueError("Loaded agent limit exceeded")
-        if self._resolve_agent is None:
+        if self._directory is None:
             raise ValueError("Agent restoration is unavailable")
-        restored = self._resolve_agent(agent_id, parent_id)
+        restored = self._directory.restore_agent(agent_id, parent_id)
         if restored.id != agent_id:
             raise ValueError("Restoration returned a different agent")
         with self._lock:
@@ -714,10 +683,12 @@ class AgentCoordinator:
 
     def _read_visible_run(
         self, run_id: str, parent_id: str, *, agent_id: str | None = None
-    ) -> RunSnapshot:
+    ) -> RunState:
         """Authorize a specific run through this view's selected history."""
         record = (
-            self._read_run(run_id, parent_id) if self._read_run is not None else None
+            self._directory.read_run(run_id, parent_id)
+            if self._directory is not None
+            else None
         )
         if record is None:
             raise ValueError("Run is not available to this parent")
@@ -731,19 +702,25 @@ class AgentCoordinator:
             self._visible_run_ids.add(run_id)
         return record
 
+    def run_state(self, run_id: str, parent_id: str) -> RunState:
+        local = self.child_run(run_id, parent_id)
+        if local is not None:
+            return local.snapshot()
+        return self.saved_run(run_id, parent_id)
+
     @overload
     def saved_run(
         self, run_id: str, parent_id: str, *, load_archive: Literal[True] = True
-    ) -> RunSnapshot: ...
+    ) -> RunState: ...
 
     @overload
     def saved_run(
         self, run_id: str, parent_id: str, *, load_archive: Literal[False]
-    ) -> RunSnapshot | None: ...
+    ) -> RunState | None: ...
 
     def saved_run(
         self, run_id: str, parent_id: str, *, load_archive: bool = True
-    ) -> RunSnapshot | None:
+    ) -> RunState | None:
         with self._lock:
             saved = next(
                 (item for item in self._latest.values() if item.run_id == run_id), None
@@ -763,10 +740,9 @@ class AgentCoordinator:
         )
 
 
-class _ChildExecution:
-    def __init__(self, run: Run) -> None:
-        self.run = run
-        self.observed = False
+class _ChildDependency(BaseModel):
+    run_id: str
+    observed: bool = False
 
 
 class RunCoordination:
@@ -776,19 +752,13 @@ class RunCoordination:
         self,
         coordinator: AgentCoordinator,
         run: Run,
-        work: ExecutionWork,
-        publish: Callable[[AgentEvent], None],
-        cancellation: CancellationSignal,
     ) -> None:
         self.coordinator = coordinator
         self.run = run
-        self.work = work
-        self.publish = publish
-        self.cancellation = cancellation
-        self.children: dict[str, _ChildExecution] = {}
+        self.children: dict[str, _ChildDependency] = {}
         self._links = ExitStack()
         self._finished = False
-        self._lock = run._state.lock
+        self._lock = run._lock
 
     def for_tool(
         self, call_id: str, parent_message_id: str, active: threading.Event
@@ -813,19 +783,16 @@ class RunCoordination:
             parent_run_id=self.run.id,
             parent_tool_call_id=call_id,
             parent_message_id=message_id,
-            inherited_event_sink=self.forward_event
+            _event_parent=self.run._delivery
             if lifetime == AgentLifetime.FOREGROUND
-            else None,
-            event_dispatcher=self.run._state.delivery.dispatcher
-            if lifetime == AgentLifetime.FOREGROUND and self.run._state.delivery
             else None,
         )
         if lifetime == AgentLifetime.FOREGROUND:
             with self._lock:
                 if self._finished:
                     run.cancel()
-                    self.work.tracker.started()
-                    run.add_idle_callback(self.work.tracker.finished)
+                    self.run._work.tracker.started()
+                    run.add_idle_callback(self.run._work.tracker.finished)
                 else:
                     self._include_predecessors(run)
                     self._attach(run)
@@ -849,13 +816,18 @@ class RunCoordination:
             predecessors.append(previous)
             previous_id = snapshot.previous_run_id
         for previous in reversed(predecessors):
-            child = _ChildExecution(previous)
+            child = _ChildDependency(run_id=previous.id)
             child.observed = True
             self.children[previous.id] = child
 
     def _attach(self, run: Run) -> None:
-        self.children[run.id] = _ChildExecution(run)
-        self._links.enter_context(self.cancellation.on_cancel(run.cancel))
+        run_id = run.id
+        self.children[run_id] = _ChildDependency(run_id=run_id)
+        self._links.enter_context(
+            self.run._cancellation_signal.on_cancel(
+                lambda: self.coordinator.cancel_child(run_id, self.run.agent_id)
+            )
+        )
 
     def attach_children(self, run_ids: Sequence[str]) -> None:
         """Reconnect foreground dependencies from live or archived terminal runs."""
@@ -888,96 +860,65 @@ class RunCoordination:
             runs.append(run)
         return runs
 
-    def pending_children(self) -> list[Run]:
+    def pending_children(self) -> list[str]:
         with self._lock:
             return [
-                child.run
-                for child in self.children.values()
-                if not child.run._state.completed.done()
+                run_id
+                for run_id in self.children
+                if not self.coordinator.completion(run_id).done()
             ]
 
     def validate_handoff(self) -> None:
+        try:
+            self.coordinator.check_open()
+        except RuntimeError as error:
+            raise RunNotTransferable("Coordinator is closing") from error
         if self.pending_children():
             raise RunNotTransferable(
                 "Foreground child runs must finish before parent transfer"
             )
 
-    def forward_event(self, event: AgentEvent) -> None:
-        with self._lock:
-            publish = self.publish
-        publish(event)
-
-    def _publish_detached(self, event: AgentEvent) -> None:
-        with self._lock:
-            if self.run._state.accepting and self.run._state.delivery is not None:
-                self.run._state.delivery.publish(event)
-
-    def detach(self) -> None:
-        with self._lock:
-            if (
-                self.run._state.handoff is not None
-                and not self.run._state.segment_active
-            ):
-                self.publish = self._publish_detached
-
-    def rebind(
-        self,
-        work: ExecutionWork,
-        publish: Callable[[AgentEvent], None],
-        cancellation: CancellationSignal,
-        *,
-        coordinator: AgentCoordinator | None = None,
-    ) -> None:
-        """Refresh a resumed parent's physical work without replacing its dependencies."""
-        with self._lock:
-            if coordinator is not None:
-                self.coordinator = coordinator
-            self.work = work
-            self.publish = publish
-            self.cancellation = cancellation
-            self._finished = False
-            self._links.close()
-            for child in self.children.values():
-                self._links.enter_context(cancellation.on_cancel(child.run.cancel))
-
-    def finish(self, cancel: bool) -> list[RunSnapshot]:
+    def finish(self, cancel: bool) -> list[RunState]:
         with self._lock:
             self._finished = True
             children = list(self.children.values())
         if cancel:
-            if self.run._state.shutdown_requested:
-                children = [child for child in children if child.run._cancel_if_local()]
-            else:
-                for child in children:
-                    child.run.cancel()
+            for child in children:
+                self.coordinator.cancel_child(child.run_id, self.run.agent_id)
         for child in children:
-            self.work.tracker.started()
-            child.run.add_idle_callback(self.work.tracker.finished)
-            for cleanup in self.coordinator._cleanup_for(child.run.id):
-                self.work.track_operation(cleanup)
+            local = self.coordinator.child_run(child.run_id, self.run.agent_id)
+            if local is not None:
+                self.run._work.tracker.started()
+                local.add_idle_callback(self.run._work.tracker.finished)
+            for cleanup in self.coordinator._cleanup_for(child.run_id):
+                self.run._work.track_operation(cleanup)
         deadline = time.monotonic() + (
             CHILD_TERMINAL_TIMEOUT_SECONDS if cancel else OPERATION_TIMEOUT_SECONDS
         )
         failure: RunFailed | None = None
+        records: list[RunState] = []
         try:
             for child in children:
                 try:
+                    future = self.coordinator.completion(child.run_id)
                     if not cancel:
                         wait_operation(
-                            child.run._state.completed,
-                            self.cancellation,
+                            future,
+                            self.run._cancellation_signal,
                             max(0, deadline - time.monotonic()),
                         )
-                    child.run.result(timeout=max(0, deadline - time.monotonic()))
+                    state = future.result(timeout=max(0, deadline - time.monotonic()))
+                    records.append(state)
+                    result_from_snapshot(state)
                 except RunFailed as error:
                     if not child.observed and not cancel and failure is None:
                         failure = error
                 except AgentCancelled:
                     if not cancel:
-                        self.cancellation.check()
-                    logger.debug("Child execution was cancelled: %s", child.run.id)
+                        self.run._cancellation_signal.check()
+                    logger.debug("Child execution was cancelled: %s", child.run_id)
                 except TimeoutError as error:
-                    child.run.cancel()
+                    self.coordinator.cancel_child(child.run_id, self.run.agent_id)
                     if not cancel:
                         raise
                     raise TimeoutError(
@@ -985,10 +926,14 @@ class RunCoordination:
                     ) from error
         finally:
             self._links.close()
-        records = [child.run.snapshot() for child in children]
         if failure is not None:
             raise failure
         return records
+
+    def child_states(self, run_ids: Sequence[str]) -> list[RunState]:
+        return [
+            self.coordinator.run_state(run_id, self.run.agent_id) for run_id in run_ids
+        ]
 
     def release(self) -> None:
         self.coordinator.release(self.run)
@@ -1010,11 +955,11 @@ class _ToolControl(AgentControl):
         self.active = active
 
     def _check(self) -> None:
-        self.owner.cancellation.check()
+        self.owner.run._cancellation_signal.check()
         if (
             not self.active.is_set()
             or self.owner._finished
-            or not self.owner.run._state.accepting
+            or not self.owner.run._accepting
         ):
             raise RuntimeError("Coordination requires an active tool invocation")
         self.owner.coordinator.check_open()
@@ -1069,16 +1014,16 @@ class _ToolControl(AgentControl):
         coordinator = self.owner.coordinator
         agent = coordinator.loaded_child(agent_id, self.owner.run.agent_id)
         if agent is None:
-            agent = self.owner.work.blocking(
+            agent = self.owner.run._work.blocking(
                 lambda: coordinator.resolve_child(agent_id, self.owner.run.agent_id),
-                self.owner.cancellation,
+                self.owner.run._cancellation_signal,
             )
         self._check()
         previous = coordinator.active_run(agent_id)
         if previous is not None and previous.status.is_terminal:
-            idle = self.owner.work.blocking(
+            idle = self.owner.run._work.blocking(
                 lambda: previous.wait_for_idle(timeout=OPERATION_TIMEOUT_SECONDS),
-                self.owner.cancellation,
+                self.owner.run._cancellation_signal,
             )
             if not idle:
                 raise TimeoutError("Previous agent execution is still draining")
@@ -1100,15 +1045,11 @@ class _ToolControl(AgentControl):
             raise ValueError("Wait timeout is outside its allowed bounds")
         with self.owner._lock:
             child = self.owner.children.get(run_id)
-        run = (
-            child.run
-            if child
-            else self.owner.coordinator.child_run(run_id, self.owner.run.agent_id)
-        )
+        run = self.owner.coordinator.child_run(run_id, self.owner.run.agent_id)
         if run is not None:
             try:
                 result = wait_operation(
-                    run._state.completed, self.owner.cancellation, timeout
+                    run._completed, self.owner.run._cancellation_signal, timeout
                 )
                 result = run.result(timeout=0)
             except TimeoutError:
@@ -1135,7 +1076,7 @@ class _ToolControl(AgentControl):
         def wait_remote() -> RunResult | None:
             deadline = time.monotonic() + timeout
             while True:
-                self.owner.cancellation.check()
+                self.owner.run._cancellation_signal.check()
                 if coordinator._remote_status(
                     run_id, self.owner.run.agent_id
                 ).is_terminal:
@@ -1148,28 +1089,22 @@ class _ToolControl(AgentControl):
                 try:
                     wait_operation(
                         Future(),
-                        self.owner.cancellation,
+                        self.owner.run._cancellation_signal,
                         min(REMOTE_POLL_SECONDS, remaining),
                     )
                 except TimeoutError:
                     continue
 
         try:
-            return self.owner.work.blocking(
-                wait_remote, self.owner.cancellation, timeout=timeout
+            return self.owner.run._work.blocking(
+                wait_remote, self.owner.run._cancellation_signal, timeout=timeout
             )
         except TimeoutError:
             return None
 
     def cancel_run(self, run_id: str) -> None:
         self._check()
-        with self.owner._lock:
-            child = self.owner.children.get(run_id)
-        run = (
-            child.run
-            if child
-            else self.owner.coordinator.child_run(run_id, self.owner.run.agent_id)
-        )
+        run = self.owner.coordinator.child_run(run_id, self.owner.run.agent_id)
         if run is not None:
             run.cancel()
             return
@@ -1179,28 +1114,13 @@ class _ToolControl(AgentControl):
             record = coordinator._read_visible_run(run_id, self.owner.run.agent_id)
             if record.status.is_terminal:
                 return
-            if coordinator._cancel_run is None:
+            if coordinator._directory is None:
                 raise ValueError("Remote run cancellation is unavailable")
-            coordinator._cancel_run(run_id, self.owner.run.agent_id)
+            coordinator._directory.cancel_run(run_id, self.owner.run.agent_id)
 
-        self.owner.work.blocking(cancel_remote, self.owner.cancellation)
-
-    def wait_for_idle(
-        self, run_id: str, *, timeout: float = OPERATION_TIMEOUT_SECONDS
-    ) -> bool:
-        """Wait for owned child cleanup even after the invocation is cancelled."""
-        with self.owner._lock:
-            child = self.owner.children.get(run_id)
-        run = (
-            child.run
-            if child
-            else self.owner.coordinator.child_run(run_id, self.owner.run.agent_id)
+        self.owner.run._work.blocking(
+            cancel_remote, self.owner.run._cancellation_signal
         )
-        if run is not None:
-            self.owner.coordinator._check_physical_owner(run_id)
-            return run.wait_for_idle(timeout)
-        self.owner.coordinator.saved_run(run_id, self.owner.run.agent_id)
-        raise ValueError("Physical cleanup cannot be observed for a remote run")
 
     def add_completion_cleanup(
         self, run_id: str, callback: Callable[[], None]
@@ -1216,21 +1136,5 @@ class _ToolControl(AgentControl):
         future = self.owner.coordinator.add_completion_cleanup(run_id, callback)
         with self.owner._lock:
             if self.owner._finished and run_id in self.owner.children:
-                self.owner.work.track_operation(future)
+                self.owner.run._work.track_operation(future)
         return future
-
-    def add_idle_callback(self, run_id: str, callback: Callable[[], None]) -> None:
-        """Retain cleanup until an owned child is idle, including after cancellation."""
-        with self.owner._lock:
-            child = self.owner.children.get(run_id)
-        run = (
-            child.run
-            if child
-            else self.owner.coordinator.child_run(run_id, self.owner.run.agent_id)
-        )
-        if run is not None:
-            self.owner.coordinator._check_physical_owner(run_id)
-            run.add_idle_callback(callback)
-            return
-        self.owner.coordinator.saved_run(run_id, self.owner.run.agent_id)
-        raise ValueError("Physical cleanup cannot be observed for a remote run")

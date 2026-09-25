@@ -2,7 +2,6 @@
 
 import json
 from collections.abc import Generator, Iterator, Sequence
-from contextlib import closing
 from typing import TYPE_CHECKING, Protocol, overload, runtime_checkable
 from uuid import uuid4
 
@@ -20,7 +19,6 @@ from onyx.llm.litellm_models import (
     ModelResponseStream,
     StreamingChoice,
 )
-from onyx.llm.litellm_models import FunctionCall as DeltaFunctionCall
 from onyx.llm.litellm_models import Message as ResponseMessage
 from onyx.llm.litellm_models import SystemMessage as WireSystemMessage
 from onyx.llm.litellm_models import ToolCall as ProviderToolCall
@@ -253,10 +251,11 @@ def serialize_request(
                 break
     if cacheable_prefix:
         prepared, _ = process_with_prompt_cache(
-            llm_info=config,
+            llm_config=config,
             cacheable_prefix=messages[:cacheable_prefix],
             suffix=messages[cacheable_prefix:],
             continuation=False,
+            with_metadata=False,
         )
         if not isinstance(prepared, list):
             raise TypeError("Prompt caching must preserve the message list")
@@ -365,14 +364,65 @@ def _normalize_arguments(
     return normalized
 
 
+def _finish_tool_call(
+    call: ToolCall, arguments: str, definition: ToolDefinition | None
+) -> None:
+    try:
+        decoded = _ENCODED_ARGUMENTS.validate_json(sanitize_string(arguments or "{}"))
+        if isinstance(decoded, str):
+            decoded = _ARGUMENTS.validate_json(decoded)
+        call.arguments = _normalize_arguments(decoded, definition)
+        call.arguments_complete = True
+        call.raw_arguments = None
+    except ValidationError:
+        logger.debug("Tool arguments are not a JSON object", exc_info=True)
+        call.arguments = {}
+        call.argument_error = "Tool arguments are not a valid JSON object."
+
+
+def to_assistant_message(
+    response: ModelResponse, request: GenerationRequest
+) -> AssistantMessage:
+    """Convert a complete provider response without creating stream events."""
+    source = response.choice.message
+    message = AssistantMessage(
+        stop_reason=response.choice.finish_reason, usage=response.usage
+    )
+    if source.reasoning_content or source.thinking_blocks:
+        message.content.append(
+            ThinkingContent(
+                text=source.reasoning_content or "", blocks=source.thinking_blocks
+            )
+        )
+    if source.content:
+        message.content.append(TextContent(text=source.content))
+    definitions = {tool.name: tool for tool in request.tools}
+    for source_call in source.tool_calls or []:
+        arguments = source_call.function.arguments or ""
+        call = ToolCall(
+            id=source_call.id or str(uuid4()),
+            name=source_call.function.name or "",
+            arguments={},
+            raw_arguments=arguments,
+            arguments_complete=False,
+        )
+        _finish_tool_call(call, arguments, definitions.get(call.name))
+        message.content.append(call)
+    if request.tools:
+        message = recover_tool_calls(message, request)
+    return message.model_copy(deep=True)
+
+
 class _PendingToolCall:
     def __init__(self, content_index: int, call: ToolCall) -> None:
         self.content_index = content_index
         self.call = call
-        self.arguments = ""
+        self.arguments: str | None = ""
         self.parser: Parser | None = Parser()
+        self.finalized = False
 
     def update(self, delta: ChatCompletionDeltaToolCall) -> dict[str, str]:
+        self.finalized = False
         if delta.id:
             self.call.id = delta.id
         if delta.function is None:
@@ -380,7 +430,7 @@ class _PendingToolCall:
         if delta.function.name:
             self.call.name = delta.function.name
         text = delta.function.arguments or ""
-        self.arguments += text
+        self.arguments = (self.arguments or "") + text
         self.call.raw_arguments = self.arguments
         if self.parser is None or not text:
             return {}
@@ -515,25 +565,139 @@ class MessageAccumulator:
             self.message.usage = chunk.usage
         return events
 
+    def _add_recovered_calls(self, calls: Sequence[ToolCall]) -> list[GenerationEvent]:
+        events = self.close_text()
+        for call in calls:
+            block = ToolCall(
+                id=call.id, name=call.name, arguments={}, arguments_complete=False
+            )
+            pending = _PendingToolCall(len(self.message.content), block)
+            # Recovery already parsed and normalized these arguments.
+            pending.arguments = None
+            self.calls[len(self.calls)] = pending
+            self.message.content.append(block)
+            events.append(
+                ToolCallStartEvent(
+                    message=self.message.model_copy(deep=True),
+                    content_index=pending.content_index,
+                    tool_call=block.model_copy(deep=True),
+                )
+            )
+            block.arguments = call.arguments.copy()
+            events.append(
+                ToolCallDeltaEvent(
+                    message=self.message.model_copy(deep=True),
+                    content_index=pending.content_index,
+                    tool_call=block.model_copy(deep=True),
+                    argument_deltas={
+                        name: value
+                        for name, value in call.arguments.items()
+                        if isinstance(value, str)
+                    },
+                )
+            )
+        return events
+
+    def consume(
+        self, stream: Iterator[ModelResponseStream], request: GenerationRequest
+    ) -> Generator[GenerationEvent, None, None]:
+        """Filter provider text and recover calls before producing shared events."""
+        ids: dict[int, str] = {}
+        buffered: list[ModelResponseStream] = []
+        recover = (
+            bool(request.tools)
+            and request.options.tool_choice != ToolChoiceOptions.NONE
+        )
+        buffering = recover
+        raw_text: list[str] = []
+        raw_thinking: list[str] = []
+        content_filter = XmlToolCallContentFilter()
+        usage: Usage | None = None
+        stop_reason: str | None = None
+
+        def add_filtered(chunk: ModelResponseStream) -> list[GenerationEvent]:
+            chunk = chunk.model_copy(deep=True)
+            for call in chunk.choice.delta.tool_calls:
+                call.id = ids.setdefault(call.index, call.id or str(uuid4()))
+            if chunk.choice.delta.content:
+                chunk.choice.delta.content = content_filter.process(
+                    chunk.choice.delta.content
+                )
+            return self.add(chunk)
+
+        try:
+            for chunk in stream:
+                delta = chunk.choice.delta
+                if delta.tool_calls:
+                    recover = False
+                    raw_text.clear()
+                    raw_thinking.clear()
+                if recover:
+                    raw_text.append(delta.content or "")
+                    raw_thinking.append(delta.reasoning_content or "")
+                if chunk.usage is not None:
+                    usage = chunk.usage
+                if chunk.choice.finish_reason:
+                    stop_reason = chunk.choice.finish_reason
+                if not buffering:
+                    yield from add_filtered(chunk)
+                    continue
+                buffered.append(chunk)
+                text = "".join(raw_text).lstrip()
+                prose = (
+                    request.options.tool_choice != ToolChoiceOptions.REQUIRED
+                    and bool(text)
+                    and not text.startswith(("<", "`", "{"))
+                )
+                if delta.tool_calls or prose:
+                    for pending_chunk in buffered:
+                        yield from add_filtered(pending_chunk)
+                    buffered.clear()
+                    buffering = False
+
+            recovered: AssistantMessage | None = None
+            if recover and not self.calls:
+                recovered = recover_tool_calls(
+                    AssistantMessage(
+                        content=[
+                            TextContent(text="".join(raw_text)),
+                            ThinkingContent(text="".join(raw_thinking)),
+                        ]
+                    ),
+                    request,
+                )
+            if buffered:
+                if recovered is not None and recovered.tool_calls:
+                    if recovered.text:
+                        yield from self._add_text(
+                            TextContent(text=content_filter.process(recovered.text))
+                        )
+                    yield from self._add_recovered_calls(recovered.tool_calls)
+                else:
+                    for pending_chunk in buffered:
+                        yield from add_filtered(pending_chunk)
+            tail = content_filter.flush()
+            if tail:
+                yield from self._add_text(TextContent(text=tail))
+            if not self.calls and recovered is not None and recovered.tool_calls:
+                yield from self._add_recovered_calls(recovered.tool_calls)
+            self.message.usage = usage
+            self.message.stop_reason = stop_reason
+        finally:
+            if isinstance(stream, Closable):
+                stream.close()
+
     def finish(self) -> AssistantMessage:
         for pending in self.calls.values():
-            try:
-                arguments = _ENCODED_ARGUMENTS.validate_json(
-                    sanitize_string(pending.arguments or "{}")
-                )
-                if isinstance(arguments, str):
-                    arguments = _ARGUMENTS.validate_json(arguments)
-                pending.call.arguments = _normalize_arguments(
-                    arguments, self.tools.get(pending.call.name)
-                )
+            if pending.finalized:
+                continue
+            if pending.arguments is None:
                 pending.call.arguments_complete = True
-                pending.call.raw_arguments = None
-            except ValidationError:
-                logger.debug("Tool arguments are not a JSON object", exc_info=True)
-                pending.call.arguments = {}
-                pending.call.argument_error = (
-                    "Tool arguments are not a valid JSON object."
+            else:
+                _finish_tool_call(
+                    pending.call, pending.arguments, self.tools.get(pending.call.name)
                 )
+            pending.finalized = True
         return self.message.model_copy(deep=True)
 
     def end(self) -> list[GenerationEvent]:
@@ -582,131 +746,3 @@ def recover_tool_calls(
             content.append(TextContent(text=visible_text))
     content.extend(calls)
     return message.model_copy(update={"content": content})
-
-
-def _normalized_stream(
-    stream: Iterator[ModelResponseStream],
-    request: GenerationRequest,
-    accumulator: MessageAccumulator,
-) -> Generator[ModelResponseStream, None, None]:
-    """Normalize IDs and resolve text compatibility before events or rendering."""
-    ids: dict[int, str] = {}
-    buffered: list[ModelResponseStream] = []
-    buffering = (
-        bool(request.tools) and request.options.tool_choice != ToolChoiceOptions.NONE
-    )
-    try:
-        for chunk in stream:
-            chunk = chunk.model_copy(deep=True)
-            for call in chunk.choice.delta.tool_calls:
-                call.id = ids.setdefault(call.index, call.id or str(uuid4()))
-            accumulator.add(chunk)
-            if not buffering:
-                yield chunk
-                continue
-            buffered.append(chunk)
-            # Native calls and ordinary prose can stream immediately. Ambiguous payloads wait for parsing.
-            text = accumulator.message.text.lstrip()
-            native = bool(accumulator.calls)
-            prose = (
-                request.options.tool_choice != ToolChoiceOptions.REQUIRED
-                and bool(text)
-                and not text.startswith(("<", "`", "{"))
-            )
-            if native or prose:
-                yield from buffered
-                buffered.clear()
-                buffering = False
-        if buffered:
-            message = recover_tool_calls(accumulator.finish(), request)
-            if message.tool_calls:
-                last = buffered[-1]
-                yield ModelResponseStream(
-                    id=last.id,
-                    created=last.created,
-                    usage=message.usage,
-                    choice=StreamingChoice(
-                        finish_reason=message.stop_reason,
-                        delta=Delta(
-                            content=message.text or None,
-                            tool_calls=[
-                                ChatCompletionDeltaToolCall(
-                                    index=index,
-                                    id=call.id,
-                                    function=DeltaFunctionCall(
-                                        name=call.name,
-                                        arguments=json.dumps(call.arguments),
-                                    ),
-                                )
-                                for index, call in enumerate(message.tool_calls)
-                            ],
-                        ),
-                    ),
-                )
-            else:
-                yield from buffered
-    finally:
-        if isinstance(stream, Closable):
-            stream.close()
-
-
-def normalized_stream(
-    stream: Iterator[ModelResponseStream], request: GenerationRequest
-) -> Generator[ModelResponseStream, None, None]:
-    """Keep tool payload markup out of visible prose while preserving recovery input."""
-    raw = MessageAccumulator(request.tools)
-    content_filter = XmlToolCallContentFilter()
-    last: ModelResponseStream | None = None
-    emitted_calls = False
-
-    def record() -> Generator[ModelResponseStream, None, None]:
-        nonlocal last
-        try:
-            for chunk in stream:
-                last = chunk
-                yield chunk
-        finally:
-            if isinstance(stream, Closable):
-                stream.close()
-
-    with closing(_normalized_stream(record(), request, raw)) as normalized:
-        for chunk in normalized:
-            chunk = chunk.model_copy(deep=True)
-            emitted_calls = emitted_calls or bool(chunk.choice.delta.tool_calls)
-            if chunk.choice.delta.content:
-                chunk.choice.delta.content = content_filter.process(
-                    chunk.choice.delta.content
-                )
-            yield chunk
-    if last is None:
-        return
-    tail = content_filter.flush()
-    if tail:
-        yield ModelResponseStream(
-            id=last.id,
-            created=last.created,
-            choice=StreamingChoice(delta=Delta(content=tail)),
-        )
-    if emitted_calls or not request.tools:
-        return
-    recovered = recover_tool_calls(raw.finish(), request)
-    if recovered.tool_calls:
-        yield ModelResponseStream(
-            id=last.id,
-            created=last.created,
-            choice=StreamingChoice(
-                finish_reason=last.choice.finish_reason,
-                delta=Delta(
-                    tool_calls=[
-                        ChatCompletionDeltaToolCall(
-                            index=index,
-                            id=call.id,
-                            function=DeltaFunctionCall(
-                                name=call.name, arguments=json.dumps(call.arguments)
-                            ),
-                        )
-                        for index, call in enumerate(recovered.tool_calls)
-                    ]
-                ),
-            ),
-        )

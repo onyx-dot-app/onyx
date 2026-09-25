@@ -5,12 +5,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, JsonValue, TypeAdapter
 
-from onyx.agents.models import AgentContext, RunProgress, RunSnapshot
-from onyx.agents.tools import InputDecision, ToolAnswer
+from onyx.agents.models import AgentState, RunProgress, RunState
+from onyx.agents.tools import HumanToolAnswer, InputDecision
 from onyx.llm.models import (
     Message,
     ToolResult,
-    UserMessage,
 )
 
 _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
@@ -28,8 +27,8 @@ class CheckpointBinding(BaseModel):
 
 class RestoredCheckpoint(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    snapshot: RunSnapshot
-    context: AgentContext
+    run_state: RunState
+    agent_state: AgentState
     binding: CheckpointBinding
 
 
@@ -128,15 +127,15 @@ class SnapshotCodec:
             raise ValueError("Checkpoint messages must be a list")
         return [self.decode_message(item) for item in value]
 
-    def encode_answer(self, answer: ToolAnswer) -> dict[str, JsonValue]:
+    def encode_answer(self, answer: HumanToolAnswer) -> dict[str, JsonValue]:
         data = _dump(answer)
         if answer.result is not None:
             data["result"] = self.encode_message(answer.result)
         return data
 
-    def decode_answer(self, value: JsonValue) -> ToolAnswer:
+    def decode_answer(self, value: JsonValue) -> HumanToolAnswer:
         encoded = _EncodedAnswer.model_validate(value)
-        return ToolAnswer(
+        return HumanToolAnswer(
             request_id=encoded.request_id,
             decision=encoded.decision,
             result=self._decode_tool_result(encoded.result)
@@ -144,20 +143,20 @@ class SnapshotCodec:
             else None,
         )
 
-    def _encode_snapshot(self, snapshot: RunSnapshot) -> dict[str, JsonValue]:
-        data = _dump(snapshot)
+    def _encode_run_state(self, run_state: RunState) -> dict[str, JsonValue]:
+        data = _dump(run_state)
         data["input_messages"] = [
-            self.encode_message(item) for item in snapshot.input_messages
+            self.encode_message(item) for item in run_state.input_messages
         ]
-        data["messages"] = [self.encode_message(item) for item in snapshot.messages]
+        data["messages"] = [self.encode_message(item) for item in run_state.messages]
         data["child_runs"] = [
-            self._encode_snapshot(child) for child in snapshot.child_runs
+            self._encode_run_state(child) for child in run_state.child_runs
         ]
-        if snapshot.progress is not None:
-            data["progress"] = self.encode_progress(snapshot.progress)
+        if run_state.progress is not None:
+            data["progress"] = self.encode_progress(run_state.progress)
         return data
 
-    def _decode_snapshot(self, raw: dict[str, JsonValue]) -> RunSnapshot:
+    def _decode_run_state(self, raw: dict[str, JsonValue]) -> RunState:
         data = dict(raw)
         input_messages = data.pop("input_messages", [])
         messages = data.pop("messages", [])
@@ -166,54 +165,53 @@ class SnapshotCodec:
         if not isinstance(children, list):
             raise ValueError("Checkpoint children must be a list")
         data["messages"] = []
-        snapshot = RunSnapshot.model_validate(data)
-        snapshot.input_messages = self._decode_messages(input_messages)
-        snapshot.messages = self._decode_messages(messages)
-        snapshot.child_runs = [
-            self._decode_snapshot(_object(child)) for child in children
+        run_state = RunState.model_validate(data)
+        run_state.input_messages = self._decode_messages(input_messages)
+        run_state.messages = self._decode_messages(messages)
+        run_state.child_runs = [
+            self._decode_run_state(_object(child)) for child in children
         ]
         if progress is not None:
-            snapshot.progress = self.decode_progress(progress)
-        return snapshot
+            run_state.progress = self.decode_progress(progress)
+        return run_state
 
     def encode_progress(self, progress: RunProgress) -> dict[str, JsonValue]:
         data = _dump(progress)
+        # Keep checkpoint wire keys independent of Python field names.
+        data["pending"] = data.pop("pending_tool_calls")
+        data.pop("human_tool_answers")
         data["feature_state"] = self.encode_payload(progress.feature_state)
         data["answers"] = {
-            key: self.encode_answer(answer) for key, answer in progress.answers.items()
+            key: self.encode_answer(answer)
+            for key, answer in progress.human_tool_answers.items()
         }
-        data["steering"] = [self.encode_message(item) for item in progress.steering]
         return data
 
     def decode_progress(self, value: JsonValue) -> RunProgress:
         raw = _object(value)
         feature_state = raw.pop("feature_state", None)
         answers = raw.pop("answers", {})
-        steering = raw.pop("steering", [])
+        raw["pending_tool_calls"] = raw.pop("pending", {})
         progress = RunProgress.model_validate(raw)
         progress.feature_state = self.decode_payload(feature_state)
-        progress.answers = {
+        progress.human_tool_answers = {
             key: self.decode_answer(answer) for key, answer in _object(answers).items()
         }
-        for message in self._decode_messages(steering):
-            if not isinstance(message, UserMessage):
-                raise ValueError("Steering requires user messages")
-            progress.steering.append(message)
         return progress
 
     def encode(
         self,
-        snapshot: RunSnapshot,
-        context: AgentContext,
+        run_state: RunState,
+        agent_state: AgentState,
         binding: CheckpointBinding,
     ) -> str:
-        context_data = _dump(context)
-        context_data["messages"] = [
-            self.encode_message(item) for item in context.messages
+        agent_state_data = _dump(agent_state)
+        agent_state_data["messages"] = [
+            self.encode_message(item) for item in agent_state.messages
         ]
         return _Envelope(
-            snapshot=self._encode_snapshot(snapshot),
-            context=context_data,
+            snapshot=self._encode_run_state(run_state),
+            context=agent_state_data,
             binding=binding,
         ).model_dump_json()
 
@@ -226,12 +224,12 @@ class SnapshotCodec:
         envelope = _Envelope.model_validate_json(serialized)
         if expected_binding is not None and envelope.binding != expected_binding:
             raise ValueError("Checkpoint does not match the selected context")
-        context_data = dict(envelope.context)
-        messages = context_data.pop("messages", [])
-        context = AgentContext.model_validate(context_data)
-        context.messages = self._decode_messages(messages)
+        agent_state_data = dict(envelope.context)
+        messages = agent_state_data.pop("messages", [])
+        agent_state = AgentState.model_validate(agent_state_data)
+        agent_state.messages = self._decode_messages(messages)
         return RestoredCheckpoint(
-            snapshot=self._decode_snapshot(envelope.snapshot),
-            context=context,
+            run_state=self._decode_run_state(envelope.snapshot),
+            agent_state=agent_state,
             binding=envelope.binding,
         )

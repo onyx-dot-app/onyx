@@ -1045,7 +1045,7 @@ def add_chunk_summaries(
         context_prompt2 = CONTEXTUAL_RAG_PROMPT2.format(chunk=chunk.content)
         try:
             processed_prompt = cached_user_message(
-                llm.info, prefix=context_prompt1, suffix=context_prompt2
+                llm.config, prefix=context_prompt1, suffix=context_prompt2
             )
 
             response = llm.invoke(
@@ -1094,7 +1094,7 @@ def add_contextual_summaries(
         doc2chunks[chunk.source_document.id].append(chunk)
 
     # The number of tokens allowed for the document when computing a document summary
-    trunc_doc_summary_tokens = llm.info.max_input_tokens - len(
+    trunc_doc_summary_tokens = llm.config.max_input_tokens - len(
         tokenizer.encode(DOCUMENT_SUMMARY_PROMPT)
     )
 
@@ -1104,7 +1104,7 @@ def add_contextual_summaries(
     # The number of tokens allowed for the document when computing a
     # "chunk in context of document" summary
     trunc_doc_chunk_tokens = (
-        llm.info.max_input_tokens - prompt_tokens - chunk_token_limit
+        llm.config.max_input_tokens - prompt_tokens - chunk_token_limit
     )
     for chunks_by_doc in doc2chunks.values():
         doc_tokens = None
@@ -1471,8 +1471,8 @@ def index_doc_batch(
         if llm is None:
             raise ValueError("Contextual RAG requires a language model client")
         llm_tokenizer = get_tokenizer(
-            model_name=llm.info.model_name,
-            provider_type=llm.info.model_provider,
+            model_name=llm.config.model_name,
+            provider_type=llm.config.model_provider,
         )
 
         # Because the chunker's tokens are different from the LLM's tokens,

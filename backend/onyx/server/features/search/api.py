@@ -137,7 +137,7 @@ def search(
     check_llm_cost_limit_for_provider(
         db_session=db_session,
         tenant_id=get_current_tenant_id(),
-        llm_provider_api_key=llm.transport.config.api_key,
+        llm_provider_api_key=llm.config.api_key,
     )
 
     # 3. Build filters. The public time_cutoff maps onto the internal

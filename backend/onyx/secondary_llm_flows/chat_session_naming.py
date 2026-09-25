@@ -55,7 +55,7 @@ def generate_chat_session_name(
 
     response = llm.invoke(
         GenerationRequest(
-            messages=prepare_model_messages(complete_message_history, llm.info),
+            messages=prepare_model_messages(complete_message_history, llm.config),
             options=GenerationOptions(reasoning_effort=ReasoningEffort.OFF),
         ),
         context=GenerationContext(flow=LLMFlow.CHAT_SESSION_NAMING),

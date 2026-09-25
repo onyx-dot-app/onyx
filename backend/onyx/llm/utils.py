@@ -237,15 +237,15 @@ def get_llm_contextual_cost(
         from onyx.llm.cost import compute_cost_cents
 
         input_cents, output_cents = compute_cost_cents(
-            llm.info.model_name,
-            llm.info.model_provider,
+            llm.config.model_name,
+            llm.config.model_provider,
             num_input_tokens,
             num_output_tokens,
         )
     except Exception:
         logger.exception(
             "An unexpected error occurred while calculating cost for model %s (potentially due to malformed name). Assuming cost is 0.",
-            llm.info.model_name,
+            llm.config.model_name,
         )
         return 0
 

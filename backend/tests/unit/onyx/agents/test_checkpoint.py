@@ -15,19 +15,19 @@ from onyx.agents.checkpoint import (
     SnapshotCodec,
 )
 from onyx.agents.models import (
-    AgentContext,
+    AgentState,
     RunAction,
     RunProgress,
-    RunSnapshot,
+    RunState,
     ToolCallContext,
 )
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import (
     AgentTool,
+    HumanToolAnswer,
     InputDecision,
     InputMode,
     PendingToolInput,
-    ToolAnswer,
     ToolInvocation,
 )
 from onyx.agents.transcript import RunStatus
@@ -81,7 +81,7 @@ def checkpoint() -> RestoredCheckpoint:
         metadata=CitationMetadata(citations={1: "source"}),
         details=SearchDetails(documents=["source"]),
     )
-    snapshot = RunSnapshot(
+    snapshot = RunState(
         run_id="run",
         agent_id="agent",
         revision=4,
@@ -105,13 +105,13 @@ def checkpoint() -> RestoredCheckpoint:
             previous_options=GenerationOptions(),
             feature_state=FeatureState(next_citation=2),
             finalized_tools=1,
-            pending={
+            pending_tool_calls={
                 "send": PendingToolInput(
                     request_id="approve-send", prompt="Send?", mode=InputMode.EXECUTE
                 )
             },
-            answers={
-                "question": ToolAnswer(
+            human_tool_answers={
+                "question": HumanToolAnswer(
                     request_id="question",
                     decision=InputDecision.RESULT,
                     result=ToolResult(
@@ -121,13 +121,12 @@ def checkpoint() -> RestoredCheckpoint:
                     ),
                 )
             },
-            steering=[instruction],
         ),
     )
     snapshot.child_runs = [snapshot.model_copy(deep=True, update={"run_id": "child"})]
     return RestoredCheckpoint(
-        snapshot=snapshot,
-        context=AgentContext(messages=[instruction, result]),
+        run_state=snapshot,
+        agent_state=AgentState(messages=[instruction, result]),
         binding=CheckpointBinding(
             tenant_id="tenant", branch_id="branch", context_version="history-7"
         ),
@@ -136,22 +135,28 @@ def checkpoint() -> RestoredCheckpoint:
 
 def test_json_round_trip_preserves_typed_payloads_at_every_execution_location() -> None:
     captured = checkpoint()
-    serialized = codec().encode(captured.snapshot, captured.context, captured.binding)
+    serialized = codec().encode(
+        captured.run_state, captured.agent_state, captured.binding
+    )
     restored = codec().decode(serialized)
     assert restored == captured
-    assert isinstance(restored.context.messages[0].metadata, CitationMetadata)
-    result = restored.context.messages[1]
+    assert isinstance(restored.agent_state.messages[0].metadata, CitationMetadata)
+    result = restored.agent_state.messages[1]
     assert isinstance(result, ToolResultMessage)
     assert isinstance(result.details, SearchDetails)
     assert result.cacheable
-    assert restored.context.messages[0] is not captured.context.messages[0]
+    assert restored.agent_state.messages[0] is not captured.agent_state.messages[0]
 
 
 def test_unknown_payload_types_and_versions_fail_before_execution() -> None:
     captured = checkpoint()
     with pytest.raises(ValueError, match="unregistered"):
-        SnapshotCodec({}).encode(captured.snapshot, captured.context, captured.binding)
-    serialized = codec().encode(captured.snapshot, captured.context, captured.binding)
+        SnapshotCodec({}).encode(
+            captured.run_state, captured.agent_state, captured.binding
+        )
+    serialized = codec().encode(
+        captured.run_state, captured.agent_state, captured.binding
+    )
     with pytest.raises(ValueError, match="Unknown checkpoint payload"):
         SnapshotCodec({}).decode(serialized)
     payload = json.loads(serialized)
@@ -167,7 +172,7 @@ def test_unknown_payload_types_and_versions_fail_before_execution() -> None:
         )
 
 
-def _make_executable_agent(counts: dict[str, int], context: AgentContext) -> Agent:
+def _make_executable_agent(counts: dict[str, int], context: AgentState) -> Agent:
     def generate(
         request: GenerationRequest, _signal: CancellationSignal
     ) -> AssistantMessage:
@@ -208,7 +213,7 @@ def _make_executable_agent(counts: dict[str, int], context: AgentContext) -> Age
     return Agent(
         FakeModelClient(generate),
         agent_id="agent",
-        context=context,
+        state=context,
         tools=[
             AgentTool(name="search", description="", parameters={}, execute=search),
             AgentTool(name="send", description="", parameters={}, execute=send),
@@ -257,7 +262,7 @@ def test_answer_resumes_in_the_execution_owners_context() -> None:
         assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
         tenant.set("answer-sender")
         run.submit(
-            ToolAnswer(
+            HumanToolAnswer(
                 request_id="answer",
                 decision=InputDecision.RESULT,
                 result=ToolResult(content="yes"),
@@ -278,19 +283,19 @@ def test_fresh_objects_resume_json_checkpoint_without_repeating_tools(
     counts = dict.fromkeys(
         ["generation", "search", "send", "gate", "finalize-search", "finalize-send"], 0
     )
-    agent = _make_executable_agent(counts, AgentContext())
+    agent = _make_executable_agent(counts, AgentState())
     run = agent.start(max_steps=3, messages=[UserMessage(content="Search then send")])
     assert run.wait_until_settled(timeout=3).status == RunStatus.SUSPENDED
     assert run.wait_for_idle(3)
-    captured = agent.capture()
-    assert captured.context.messages == []
-    assert len(captured.snapshot.input_messages) == 1
+    captured = run.capture()
+    assert captured.agent_state.messages == []
+    assert len(captured.run_state.input_messages) == 1
     run_id = run.id
     path = tmp_path / "run.json"
     path.write_text(
         codec().encode(
-            captured.snapshot,
-            captured.context,
+            captured.run_state,
+            captured.agent_state,
             CheckpointBinding(
                 tenant_id="tenant", branch_id="branch", context_version="history"
             ),
@@ -304,10 +309,10 @@ def test_fresh_objects_resume_json_checkpoint_without_repeating_tools(
     assert old_run() is None
 
     restored = codec().decode(path.read_text())
-    agent = _make_executable_agent(counts, restored.context)
-    resumed = agent.resume(restored.snapshot)
+    agent = _make_executable_agent(counts, restored.agent_state)
+    resumed = agent.resume(restored.run_state)
     resumed.submit(
-        ToolAnswer(request_id="approve-send", decision=InputDecision.APPROVE)
+        HumanToolAnswer(request_id="approve-send", decision=InputDecision.APPROVE)
     )
     assert resumed.result(timeout=3).output.text == "done"
     assert resumed.wait_for_idle(3)

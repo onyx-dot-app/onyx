@@ -13,7 +13,7 @@ from onyx.llm.models import Message, ToolDefinition, ToolResult
 
 if TYPE_CHECKING:
     from onyx.agents.coordination import AgentInfo
-    from onyx.agents.models import RunResult, RunSnapshot
+    from onyx.agents.models import RunResult, RunState
     from onyx.agents.runtime import Agent
 
 
@@ -45,13 +45,15 @@ class PendingToolInput(BaseModel):
     mode: InputMode
 
 
-class ToolAnswer(BaseModel):
+class HumanToolAnswer(BaseModel):
+    """A human approval, denial, or supplied result for a pending tool input request."""
+
     request_id: str
     decision: InputDecision
     result: ToolResult | None = None
 
     @model_validator(mode="after")
-    def validate_result(self) -> "ToolAnswer":
+    def validate_result(self) -> "HumanToolAnswer":
         if (self.decision == InputDecision.RESULT) != (self.result is not None):
             raise ValueError("Only a result answer requires a tool result")
         return self
@@ -104,10 +106,6 @@ class AgentControl(Protocol):
     ) -> "RunResult | None": ...
 
     def cancel_run(self, run_id: str) -> None: ...
-
-    def wait_for_idle(self, run_id: str, *, timeout: float = 1800.0) -> bool: ...
-
-    def add_idle_callback(self, run_id: str, callback: Callable[[], None]) -> None: ...
 
     def add_completion_cleanup(
         self, run_id: str, callback: Callable[[], None]
@@ -168,7 +166,7 @@ class AgentTool:
         description: str,
         parameters: dict[str, JsonValue],
         execute: Callable[[ToolInvocation], ToolOutcome],
-        complete_children: Callable[[ToolInvocation, list["RunSnapshot"]], ToolResult]
+        complete_children: Callable[[ToolInvocation, list["RunState"]], ToolResult]
         | None = None,
         execution_mode: ToolExecutionMode = ToolExecutionMode.PARALLEL,
     ) -> None:

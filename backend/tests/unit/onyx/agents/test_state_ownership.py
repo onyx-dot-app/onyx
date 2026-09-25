@@ -8,12 +8,13 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from pydantic import BaseModel
 
+from onyx.agents.concurrency import EventDelivery
 from onyx.agents.events import (
     AgentEvent,
 )
 from onyx.agents.items import messages_from_items
 from onyx.agents.models import (
-    AgentContext,
+    AgentState,
     PreparedStep,
     StepInput,
     StepResult,
@@ -96,7 +97,7 @@ def test_lazy_attachments_share_resources_but_not_message_data(
     )
     agent = Agent(
         llm,
-        context=AgentContext(
+        state=AgentState(
             messages=[
                 UserMessage(
                     content="describe",
@@ -106,9 +107,9 @@ def test_lazy_attachments_share_resources_but_not_message_data(
         ),
     )
     agent.prepare_step = lambda _input: PreparedStep(
-        assemble_messages=lambda messages: prepare_model_messages(messages, llm.info)
+        assemble_messages=lambda messages: prepare_model_messages(messages, llm.config)
     )
-    copies = [agent.context, agent.context]
+    copies = [agent.state, agent.state]
     for context in copies:
         context.model_dump_json()
     assert loads == 0
@@ -116,7 +117,7 @@ def test_lazy_attachments_share_resources_but_not_message_data(
     assert isinstance(metadata, PromptMetadata) and metadata.image_files
     metadata.image_files[0].filename = "changed.png"
     assert attachment.filename == "original.png"
-    agent.execute(max_steps=1).result()
+    agent.start(background=False, max_steps=1).result()
     assert loads == 1
     with ThreadPoolExecutor(max_workers=2) as executor:
         contents = list(executor.map(lambda _: attachment.content, range(2)))
@@ -158,7 +159,7 @@ def test_default_model_accepts_application_metadata_without_chat_policy() -> Non
                     )
                 ]
             ),
-            llm.transport.config,
+            llm.config,
         )
 
 
@@ -197,7 +198,7 @@ def test_tool_finalization_has_one_commit_point(replace: bool) -> None:
     assert result.output.text == "accepted"
     assert (
         requests[1][-1].text
-        == agent.context.messages[1].text
+        == agent.state.messages[1].text
         == snapshot.messages[1].text
         == "accepted"
     )
@@ -227,25 +228,30 @@ def test_listeners_cannot_edit_history_or_each_others_events(inherited: bool) ->
 
     agent = Agent(FakeModelClient(generate), tools=[_tool()])
     observed: list[AgentEvent] = []
+    parent = EventDelivery() if inherited else None
+    if parent is not None:
+        parent.subscribe(corrupt)
     run = agent.start(
         max_steps=2,
         on_event=None if inherited else corrupt,
-        inherited_event_sink=corrupt if inherited else None,
+        _event_parent=parent,
     )
     run.subscribe(observed.append)
     ready.set()
     result = run.result()
     assert run.wait_for_idle(2)
     assert result.output.text == "original"
-    assert agent.context.messages[-1].text == "original"
+    assert agent.state.messages[-1].text == "original"
     assert (
         next(event for event in observed if event.type == "message_end").message.text
         == "Searching"
     )
     result.output.content.clear()
     run.snapshot().messages.clear()
-    agent.context.messages.clear()
+    agent.state.messages.clear()
     assert run.snapshot().messages[-1].text == "original"
+    if parent is not None:
+        parent.close()
 
 
 def test_after_step_cannot_rewrite_accepted_output() -> None:
@@ -320,7 +326,7 @@ def test_completed_tools_survive_sibling_cancellation() -> None:
     assert [
         operation.status for operation in snapshot.operations if operation.tool_call_id
     ] == ["complete", "cancelled"]
-    assert snapshot.messages == agent.context.messages
+    assert snapshot.messages == agent.state.messages
 
 
 def test_request_assembly_keeps_logical_tool_context_and_metadata() -> None:
@@ -347,7 +353,7 @@ def test_request_assembly_keeps_logical_tool_context_and_metadata() -> None:
 
     agent = Agent(
         FakeModelClient(generate),
-        context=AgentContext(messages=[UserMessage(content="original task")]),
+        state=AgentState(messages=[UserMessage(content="original task")]),
         prepare_step=prepare,
     )
     events: list[AgentEvent] = []
@@ -361,3 +367,44 @@ def test_request_assembly_keeps_logical_tool_context_and_metadata() -> None:
     assert messages_from_items(run.snapshot().items)[0].metadata is None
     starts = [event for event in events if event.type == "message_start"]
     assert len(starts) == 1 and starts[0].metadata == metadata
+
+
+def test_live_and_completed_history_match_and_are_isolated() -> None:
+    step_ready = threading.Event()
+    finish_step = threading.Event()
+
+    def after_step(_step: StepResult) -> bool:
+        step_ready.set()
+        assert finish_step.wait(5)
+        return False
+
+    agent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(content=[TextContent(text="answer")])
+        ),
+        state=AgentState(messages=[UserMessage(content="earlier")]),
+        after_step=after_step,
+    )
+    run = agent.start(messages=[UserMessage(content="question")], max_steps=1)
+    try:
+        assert step_ready.wait(5)
+        live_state = agent.state
+        assert [message.text for message in live_state.messages] == [
+            "earlier",
+            "question",
+            "answer",
+        ]
+        detached = agent.state
+        first, last = detached.messages[0], detached.messages[-1]
+        assert isinstance(first, UserMessage)
+        assert isinstance(last, AssistantMessage)
+        first.content = "changed"
+        last.content.clear()
+        assert agent.state == live_state
+    finally:
+        finish_step.set()
+        run.result(timeout=5)
+        assert run.wait_for_idle(5)
+    assert agent.state == live_state
+    live_state.messages.clear()
+    assert len(agent.state.messages) == 3

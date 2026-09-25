@@ -244,7 +244,8 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
         )
         assert root.id == root_id
         assert (
-            root.execute(
+            root.start(
+                background=False,
                 max_steps=2,
                 messages=[UserMessage(content="Continue")],
                 coordinator=coordinator,

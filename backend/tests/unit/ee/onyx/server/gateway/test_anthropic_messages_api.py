@@ -41,7 +41,7 @@ from onyx.llm.models import (
     ToolChoiceOptions,
     Usage,
 )
-from onyx.llm.multi_llm import LitellmLLM, LitellmTransport
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.server.gateway.models import (
     AnthropicCountTokensRequest,
     AnthropicMessageResponse,
@@ -391,9 +391,9 @@ class _RecordingInvokeLLM(_InvokeLLM):
         super().__init__(response)
         self.received_tool_choice: ToolChoice | None = None
 
-    def invoke(self, *args: object, **kwargs: object) -> ModelResponse:
+    def invoke_raw(self, *args: object, **kwargs: object) -> ModelResponse:
         self.received_tool_choice = cast("ToolChoice | None", kwargs.get("tool_choice"))
-        return super().invoke(*args, **kwargs)
+        return super().invoke_raw(*args, **kwargs)
 
 
 def test_handle_anthropic_messages_forwards_named_tool_choice() -> None:
@@ -414,9 +414,7 @@ def test_handle_anthropic_messages_forwards_named_tool_choice() -> None:
         tool_choice={"type": "tool", "name": "get_weather"},
     )
 
-    with patch.object(
-        gateway_api, "llm_from_provider", return_value=LitellmLLM(fake_llm)
-    ):
+    with patch.object(gateway_api, "llm_from_provider", return_value=fake_llm):
         _handle_anthropic_call(request)
 
     assert fake_llm.received_tool_choice == NamedToolChoice(name="get_weather")
@@ -448,7 +446,7 @@ def test_handle_anthropic_messages_happy_path_serializes_response() -> None:
     )
 
     with patch.object(
-        gateway_api, "llm_from_provider", return_value=LitellmLLM(_InvokeLLM(response))
+        gateway_api, "llm_from_provider", return_value=_InvokeLLM(response)
     ):
         result = _handle_anthropic_call(_anthropic_request())
 
@@ -492,7 +490,7 @@ def test_handle_anthropic_messages_rejects_invalid_upstream_tool_arguments() -> 
         patch.object(
             gateway_api,
             "llm_from_provider",
-            return_value=LitellmLLM(_InvokeLLM(response)),
+            return_value=_InvokeLLM(response),
         ),
         pytest.raises(OnyxError) as exc_info,
     ):
@@ -515,7 +513,7 @@ def test_handle_anthropic_messages_maps_provider_errors_to_onyx_codes(
         patch.object(
             gateway_api,
             "llm_from_provider",
-            return_value=LitellmLLM(_RaisingInvokeLLM(exc)),
+            return_value=_RaisingInvokeLLM(exc),
         ),
         pytest.raises(OnyxError) as exc_info,
     ):
@@ -529,9 +527,7 @@ def test_handle_anthropic_messages_sanitizes_generic_invoke_failure() -> None:
         patch.object(
             gateway_api,
             "llm_from_provider",
-            return_value=LitellmLLM(
-                _RaisingInvokeLLM(ValueError("secret-url?key=abc"))
-            ),
+            return_value=_RaisingInvokeLLM(ValueError("secret-url?key=abc")),
         ),
         pytest.raises(OnyxError) as exc_info,
     ):
@@ -543,7 +539,7 @@ def test_handle_anthropic_messages_sanitizes_generic_invoke_failure() -> None:
 
 
 def _anthropic_stream_events(
-    llm: LitellmTransport,
+    llm: LitellmLLM,
     *,
     tools: list[dict[str, Any]] | None = None,
     model: str = "1/test",
@@ -948,7 +944,7 @@ def test_handle_anthropic_messages_prepends_thinking_blocks() -> None:
     )
 
     with patch.object(
-        gateway_api, "llm_from_provider", return_value=LitellmLLM(_InvokeLLM(response))
+        gateway_api, "llm_from_provider", return_value=_InvokeLLM(response)
     ):
         result = _handle_anthropic_call(_anthropic_request())
 
@@ -974,7 +970,7 @@ def test_handle_anthropic_messages_reasoning_content_becomes_unsigned_thinking()
     )
 
     with patch.object(
-        gateway_api, "llm_from_provider", return_value=LitellmLLM(_InvokeLLM(response))
+        gateway_api, "llm_from_provider", return_value=_InvokeLLM(response)
     ):
         result = _handle_anthropic_call(_anthropic_request())
 

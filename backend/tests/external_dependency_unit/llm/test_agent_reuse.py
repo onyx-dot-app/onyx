@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.agents.coordination import AgentCoordinator
-from onyx.agents.models import RunSnapshot
+from onyx.agents.models import RunState
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.db.llm import fetch_existing_llm_providers
@@ -42,7 +42,7 @@ def test_child_reuse_preserves_context_with_a_fresh_budget(db_session: Session) 
         options=GenerationOptions(
             reasoning_effort=ReasoningEffort.LOW, max_tokens=1024
         ),
-        execution=GenerationContext(flow=LLMFlow.DEEP_RESEARCH),
+        generation_context=GenerationContext(flow=LLMFlow.DEEP_RESEARCH),
     )
 
     def coordinate(invocation: ToolInvocation) -> ToolResult:
@@ -98,7 +98,7 @@ def test_child_reuse_preserves_context_with_a_fresh_budget(db_session: Session) 
     )
     coordinator = AgentCoordinator()
 
-    def run_parent() -> RunSnapshot:
+    def run_parent() -> RunState:
         run = parent.start(max_steps=2, coordinator=coordinator)
         run.result()
         assert run.wait_for_idle(timeout=90)

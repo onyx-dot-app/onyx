@@ -10,19 +10,19 @@ from onyx.agents.items import (
     answer_message_index,
     messages_from_items,
 )
-from onyx.agents.models import RunSnapshot
+from onyx.agents.models import RunState
 from onyx.agents.transcript import OperationSnapshot
 from onyx.chat.models import ResponseRecord
 from onyx.llm.models import ToolResultMessage
 
 
 def response_record(
-    snapshot: RunSnapshot, registrations: Sequence[AgentInfo] = ()
+    snapshot: RunState, registrations: Sequence[AgentInfo] = ()
 ) -> ResponseRecord:
     """Detach accepted content before optional artifact and display processing."""
     metadata = {info.id: info for info in registrations}
 
-    def capture(node: RunSnapshot, *, is_root: bool = False) -> ResponseRecord:
+    def capture(node: RunState, *, is_root: bool = False) -> ResponseRecord:
         inputs = [message.model_copy(deep=True) for message in node.input_messages]
         for message in inputs:
             message.metadata = None
@@ -57,7 +57,7 @@ def response_record(
     return capture(snapshot, is_root=True)
 
 
-def response_snapshot(record: ResponseRecord) -> RunSnapshot:
+def response_snapshot(record: ResponseRecord) -> RunState:
     """Reconstruct SDK output and operation outcomes from saved response content."""
     operations: list[OperationSnapshot] = []
     message_index = -1
@@ -85,7 +85,7 @@ def response_snapshot(record: ResponseRecord) -> RunSnapshot:
                     status=content.status,
                 )
             )
-    return RunSnapshot(
+    return RunState(
         run_id=record.run_id,
         agent_id=record.agent_id,
         previous_run_id=record.previous_run_id,

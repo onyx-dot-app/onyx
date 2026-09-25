@@ -2,7 +2,7 @@
 
 Application calls and agent loops use `LLM` for generation.
 The factory selects a model and returns its configured client.
-`client.info` describes the selected model, image support, and token limits.
+`client.config` describes the selected model, image support, and token limits.
 
 This interface generates assistant messages from conversational input, including supported images and tool results.
 Embeddings, reranking, image generation, and speech use operation-specific interfaces.
@@ -112,7 +112,7 @@ def make_agent(client: LLM, flow: LLMFlow) -> Agent:
     )
 ```
 
-Call `agent.execute(messages=[UserMessage(content="Echo hello")], max_steps=2)` to generate, execute tools, and continue.
+Call `agent.start(background=False, messages=[UserMessage(content="Echo hello")], max_steps=2)` to generate, execute tools, and continue.
 It returns a `Run` handle at completion or suspension. Call `run.result()` to wait for the final answer.
 Use `agent.start(...)` to receive a `Run` handle; call `run.cancel()` to cancel that execution.
 Tools receive the same cancellation signal and must cooperate with interruption.
@@ -149,17 +149,21 @@ The helper returns shared messages. Ordinary text calls can construct messages d
 `LitellmLLM` implements the client contract.
 `LLM` is an abstract base class. Provider implementations inherit it and implement its abstract members.
 `LitellmLLM` serializes shared requests and normalizes responses.
-Its `LitellmTransport` owns credentials, provider requests, retries, usage accounting, and connection cleanup.
-The existing factory constructs both objects.
+It also owns credentials, provider requests, retries, usage accounting, and connection cleanup.
+The factory constructs one configured `LitellmLLM`.
+Complete responses convert directly into assistant messages.
+Streaming uses one accumulator to filter text, parse tool arguments, and produce events.
 Native tool calls take precedence over compatible tool calls recovered from text.
 Recovery applies to requests with tools and keeps its state within that generation.
 
 Provider wire messages remain internal to adapters and protocol gateways.
-API proxy endpoints use `LitellmTransport.invoke` and `stream` to preserve their external protocol.
+Typed request messages support gateway validation and provider cache controls before serialization to wire dictionaries.
+API proxy endpoints use `LitellmLLM.invoke_raw` and `stream_raw` to preserve their external protocol.
 They own their generation spans.
 `LitellmLLM.stream` runs in an isolated context so interleaved streams retain their own cancellation and tracing state.
 Application error handling uses `client.redact_error` to remove credential values from diagnostics.
-Model information exposes descriptive settings; provider credentials stay with the configured adapter.
+`client.config` contains model settings, resolved capabilities, and provider credentials.
+Tracing selects explicit descriptive fields from this configuration and does not serialize the complete configuration.
 
 Prompt preparation selects content and attachments. Provider serialization applies wire encoding and provider cache controls.
 Signed thinking blocks survive replay. Message copies preserve shared lazy file resources without loading attachment bytes.

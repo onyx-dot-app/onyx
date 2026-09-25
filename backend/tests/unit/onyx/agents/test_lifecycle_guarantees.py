@@ -290,7 +290,7 @@ def test_late_tool_completion_cannot_change_a_closed_run() -> None:
     assert run.wait_for_idle(2)
     assert run.snapshot() == frozen
     assert all(
-        not isinstance(message, ToolResultMessage) for message in agent.context.messages
+        not isinstance(message, ToolResultMessage) for message in agent.state.messages
     )
 
 
@@ -433,8 +433,8 @@ def test_tool_argument_mutation_does_not_change_recorded_model_call() -> None:
             AgentTool(name="lookup", description="", parameters={}, execute=execute)
         ],
     )
-    result = agent.execute(max_steps=1).result()
-    message = agent.context.messages[0]
+    result = agent.start(background=False, max_steps=1).result()
+    message = agent.state.messages[0]
     assert isinstance(message, AssistantMessage)
     assert message.tool_calls[0].arguments == {"query": "original"}
     assert result.output.tool_calls[0].arguments == {"query": "original"}

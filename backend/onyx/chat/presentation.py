@@ -17,7 +17,7 @@ from onyx.agents.events import (
     ToolUpdateEvent,
 )
 from onyx.agents.items import ResponseText, TextPurpose, group_response_items_by_step
-from onyx.agents.models import RunSnapshot
+from onyx.agents.models import RunState
 from onyx.agents.transcript import RunStatus
 from onyx.chat.artifacts import project_tool_artifacts
 from onyx.chat.citation_processor import CitationMapping
@@ -120,7 +120,7 @@ def message_documents(metadata: BaseModel | None) -> dict[str, SearchDoc]:
 
 
 def project_response(
-    snapshot: RunSnapshot,
+    snapshot: RunState,
     *,
     response_id: int,
     tool_ids: Mapping[str, int],
@@ -174,10 +174,10 @@ def project_response(
 
 
 def _project_response_display(
-    snapshot: RunSnapshot, response_id: int, response: ChatResponseSnapshot
+    snapshot: RunState, response_id: int, response: ChatResponseSnapshot
 ) -> ChatResponseSnapshot:
     presentation: dict[str, MessageRendering] = {}
-    pending: list[tuple[RunSnapshot, str | None]] = [(snapshot, None)]
+    pending: list[tuple[RunState, str | None]] = [(snapshot, None)]
     while pending:
         node, parent_tool_name = pending.pop()
         call_names: dict[tuple[str, str], str] = {}

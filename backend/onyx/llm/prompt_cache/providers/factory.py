@@ -3,7 +3,7 @@
 import logging
 
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.interfaces import LLMInfo
+from onyx.llm.interfaces import LLMConfig
 from onyx.llm.prompt_cache.providers.anthropic import AnthropicPromptCacheProvider
 from onyx.llm.prompt_cache.providers.base import PromptCacheProvider
 from onyx.llm.prompt_cache.providers.noop import NoOpPromptCacheProvider
@@ -21,7 +21,7 @@ OPENROUTER_GOOGLE_PREFIX = "google/"
 OPENROUTER_OPENAI_PREFIX = "openai/"
 
 
-def get_provider_adapter(llm_config: LLMInfo) -> PromptCacheProvider:
+def get_provider_adapter(llm_config: LLMConfig) -> PromptCacheProvider:
     """Get the appropriate prompt cache provider adapter for a given provider.
 
     Args:

@@ -15,7 +15,7 @@ from onyx.llm.cancellation import (
 from onyx.llm.exceptions import LLMTimeoutError
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import GenerationRequest
-from onyx.llm.multi_llm import LitellmLLM, LitellmTransport
+from onyx.llm.multi_llm import LitellmLLM
 
 
 @pytest.mark.parametrize("streaming", [False, True])
@@ -24,12 +24,10 @@ def test_deadline_interrupts_pending_provider_call(streaming: bool) -> None:
     parent = CancellationSignal()
     operations: list[Future[None]] = []
     client = LitellmLLM(
-        LitellmTransport(
-            api_key="test-key",
-            model_provider="openai",
-            model_name="gpt-5-mini",
-            max_input_tokens=1000,
-        )
+        api_key="test-key",
+        model_provider="openai",
+        model_name="gpt-5-mini",
+        max_input_tokens=1000,
     )
 
     def pending_response(**_kwargs: object) -> None:
@@ -65,12 +63,10 @@ def test_parent_cancellation_keeps_cancellation_semantics(streaming: bool) -> No
     parent = CancellationSignal()
     parent.cancel()
     client = LitellmLLM(
-        LitellmTransport(
-            api_key="test-key",
-            model_provider="openai",
-            model_name="gpt-5-mini",
-            max_input_tokens=1000,
-        )
+        api_key="test-key",
+        model_provider="openai",
+        model_name="gpt-5-mini",
+        max_input_tokens=1000,
     )
     context = GenerationContext(cancellation=parent, total_timeout=0.05)
     with pytest.raises(AgentCancelled):
@@ -90,20 +86,18 @@ def test_public_calls_normalize_provider_failures(
     from onyx.llm.exceptions import LLMRateLimitError
 
     client = LitellmLLM(
-        LitellmTransport(
-            api_key="test-key",
-            model_provider="openai",
-            model_name="gpt-5-mini",
-            max_input_tokens=1000,
-        )
+        api_key="test-key",
+        model_provider="openai",
+        model_name="gpt-5-mini",
+        max_input_tokens=1000,
     )
     error_type = RateLimitError if rate_limit else Timeout
     expected = LLMRateLimitError if rate_limit else LLMTimeoutError
     failure = error_type(
         message="provider error", model="gpt-5-mini", llm_provider="openai"
     )
-    method = "stream" if streaming else "invoke"
-    with patch.object(client.transport, method, side_effect=failure):
+    method = "stream_raw" if streaming else "invoke_raw"
+    with patch.object(client, method, side_effect=failure):
         with pytest.raises(expected, match="provider error"):
             if streaming:
                 list(client.stream(GenerationRequest()))

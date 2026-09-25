@@ -355,7 +355,7 @@ def test_event_delivery_and_cache_writes_share_worker(
         channel.publish(AgentStartEvent(run_id="first"))
         assert writing.wait(2)
         assert next(output.reader) == Packet(obj=OverallStop(stop_reason="first"))
-        assert channel.tracker.idle
+        assert channel.tracker.wait_idle(timeout=0)
         # Cache I/O must not hold the publication lock used by execution/control.
         with ContextThreadPoolExecutor(max_workers=1) as executor:
             executor.submit(

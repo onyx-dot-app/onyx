@@ -28,7 +28,7 @@ from onyx.llm.constants import LlmProviderNames
 from onyx.llm.factory import llm_from_provider
 from onyx.llm.model_capabilities import is_true_openai_model
 from onyx.llm.models import Usage
-from onyx.llm.multi_llm import LitellmTransport
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.server.gateway.configs import (
     OPENAI_GATEWAY_PASSTHROUGH_ENABLED,
     OPENAI_PASSTHROUGH_CONNECT_TIMEOUT_SECONDS,
@@ -278,10 +278,8 @@ def handle_openai_responses_passthrough(
     headers = _build_upstream_headers(provider)
     url = _responses_url(provider)
     # llm is built only for tracing config (model/provider metadata); the
-    # actual call goes straight over httpx, never through llm.invoke/stream.
-    llm = llm_from_provider(
-        model_name=model_config.name, llm_provider=provider
-    ).transport
+    # actual call goes straight over httpx, never through llm.invoke_raw/stream_raw.
+    llm = llm_from_provider(model_name=model_config.name, llm_provider=provider)
 
     if request.stream:
         return _sse_response(
@@ -301,7 +299,7 @@ def handle_openai_responses_passthrough(
     with (
         _gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
-            llm.info, flow=flow, input_messages=request.input, tools=request.tools
+            llm.config, flow=flow, input_messages=request.input, tools=request.tools
         ) as span,
     ):
         try:
@@ -365,7 +363,7 @@ def handle_openai_responses_passthrough(
         converted_usage = _usage_from_openai_wire(usage) if usage else None
         if converted_usage is not None:
             # Managed-key cost accounting normally happens inside
-            # LitellmTransport.invoke/stream, which this path bypasses.
+            # LitellmLLM.invoke_raw/stream_raw, which this path bypasses.
             llm._track_llm_cost(converted_usage)
         if span is not None:
             record_llm_span_output(
@@ -391,7 +389,7 @@ def _openai_passthrough_stream_worker(
     url: str,
     headers: dict[str, str],
     body: dict[str, Any],
-    llm: LitellmTransport,
+    llm: LitellmLLM,
     flow: LLMFlow,
     input_messages: Any,
     tools: list[dict[str, Any]] | None,
@@ -428,7 +426,7 @@ def _openai_passthrough_stream_worker(
     with (
         _gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
-            llm.info, flow=flow, input_messages=input_messages, tools=tools
+            llm.config, flow=flow, input_messages=input_messages, tools=tools
         ) as span,
     ):
         state = _StreamAccumulator()
@@ -560,6 +558,6 @@ def _openai_passthrough_stream_worker(
                     if frame_next_sequence is not None:
                         next_sequence_number = frame_next_sequence
             # Managed-key cost accounting normally happens inside
-            # LitellmTransport.invoke/stream, which this path bypasses.
+            # LitellmLLM.invoke_raw/stream_raw, which this path bypasses.
             if state.usage is not None:
                 llm._track_llm_cost(state.usage)

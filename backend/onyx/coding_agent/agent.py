@@ -59,8 +59,7 @@ CODING_AGENT_SESSION_TTL_SECONDS = 60 * 60
 CODING_AGENT_SETUP_TIMEOUT_MS = 60 * 1000
 # Tarball is staged at this path inside the session workspace
 REPO_TARBALL_PATH = "repo.tar.gz"
-# Sentinel tool_id used when constructing the in-memory BashTool. Bash sub-tool
-# calls are not persisted to the DB through this loop, so the id is unused.
+# The SDK identifies this sandbox tool by name; it needs no database tool row.
 BASH_TOOL_SENTINEL_ID = 0
 MAX_FINAL_ANSWER_TOKENS = 4000
 MAX_INVESTIGATION_TOKENS = 2048
@@ -147,14 +146,14 @@ class CodingAgent:
         self.bash_tool = bash_tool
         self.is_sandbox_available = True
         self.is_reasoning_model = model_is_reasoning_model(
-            llm.info.model_name, llm.info.model_provider
+            llm.config.model_name, llm.config.model_provider
         )
         self.agent = Agent(
             llm,
             tools=self._build_tools(),
             prepare_step=self.prepare_step,
             after_step=self.after_step,
-            execution=GenerationContext(
+            generation_context=GenerationContext(
                 flow=LLMFlow.CODING_AGENT, user_identity=user_identity
             ),
         )
@@ -229,7 +228,7 @@ class CodingAgent:
                 else None,
                 context_files=None,
                 token_counter=self.token_counter,
-                llm_info=self.llm.info,
+                llm_config=self.llm.config,
             ),
         )
 

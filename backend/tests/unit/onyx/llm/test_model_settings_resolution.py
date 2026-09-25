@@ -8,7 +8,7 @@ import pytest
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.litellm_models import UserMessage
 from onyx.llm.models import ReasoningEffort, resolve_reasoning_effort
-from onyx.llm.multi_llm import LitellmTransport
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.server.manage.llm.models import (
     ModelConfigurationUpsertRequest,
     ensure_default_within_max,
@@ -23,8 +23,8 @@ def _make_llm(
     temperature: float | None = None,
     model_name: str = "gpt-5.1",
     model_provider: str = "openai",
-) -> LitellmTransport:
-    return LitellmTransport(
+) -> LitellmLLM:
+    return LitellmLLM(
         api_key="test-key",
         model_provider=model_provider,
         model_name=model_name,
@@ -35,7 +35,7 @@ def _make_llm(
     )
 
 
-def _sent_kwargs(llm: LitellmTransport, effort: ReasoningEffort) -> dict[str, Any]:
+def _sent_kwargs(llm: LitellmLLM, effort: ReasoningEffort) -> dict[str, Any]:
     """Run one completion and return the kwargs that reached the provider."""
     calls: list[dict[str, Any]] = []
 

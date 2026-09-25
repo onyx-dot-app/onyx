@@ -4,7 +4,7 @@ from onyx.configs.model_configs import (
     GEN_AI_INPUT_TOKEN_SAFETY_MARGIN,
     GEN_AI_NUM_RESERVED_OUTPUT_TOKENS,
 )
-from onyx.llm.interfaces import LLMInfo
+from onyx.llm.interfaces import LLMConfig
 from onyx.llm.model_capabilities import (
     find_model_obj,
     get_model_map,
@@ -43,7 +43,7 @@ def _positive_int(value: object) -> int | None:
     return None
 
 
-def resolve_token_budget(config: LLMInfo) -> TokenBudget:
+def resolve_token_budget(config: LLMConfig) -> TokenBudget:
     raw_input_tokens = max(0, config.max_input_tokens)
     input_tokens = max(
         0, int(raw_input_tokens * (1 - GEN_AI_INPUT_TOKEN_SAFETY_MARGIN))

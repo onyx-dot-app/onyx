@@ -1,4 +1,4 @@
-"""Unit tests for Bifrost's two API-mode routing in LitellmTransport.
+"""Unit tests for Bifrost's two API-mode routing in LitellmLLM.
 
 The surface is selected via a `bifrost_api_mode` value persisted in
 custom_config; the routing difference is the model= string, which drives
@@ -11,7 +11,7 @@ from onyx.llm.api_surfaces import LlmApiSurface
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.custom_config_mapping import UI_ONLY_CONFIG_KEYS
 from onyx.llm.litellm_models import LanguageModelInput, UserMessage
-from onyx.llm.multi_llm import LitellmTransport
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.well_known_providers.constants import BIFROST_API_MODE_CONFIG_KEY
 
 
@@ -19,9 +19,9 @@ def _make_bifrost_llm(
     mode: str | None,
     api_base: str = "https://bifrost.example.com/v1",
     model_name: str = "openai.gpt-5.6-sol",
-) -> LitellmTransport:
+) -> LitellmLLM:
     custom_config = {BIFROST_API_MODE_CONFIG_KEY: mode} if mode is not None else None
-    return LitellmTransport(
+    return LitellmLLM(
         api_key="bf-test-key",
         model_provider=LlmProviderNames.BIFROST,
         model_name=model_name,
@@ -31,11 +31,11 @@ def _make_bifrost_llm(
     )
 
 
-def _completion_kwargs(llm: LitellmTransport) -> dict:
+def _completion_kwargs(llm: LitellmLLM) -> dict:
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
         messages: LanguageModelInput = [UserMessage(content="Hi")]
-        list(llm.stream(messages))
+        list(llm.stream_raw(messages))
         return dict(mock_completion.call_args.kwargs)
 
 

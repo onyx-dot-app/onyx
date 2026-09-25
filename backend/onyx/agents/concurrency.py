@@ -50,11 +50,6 @@ class WorkTracker:
             except Exception:
                 logger.exception("Agent idle callback failed")
 
-    @property
-    def idle(self) -> bool:
-        with self._lock:
-            return self._count == 0
-
     def on_idle(self, listener: Callable[[], None]) -> Callable[[], None]:
         """Notify once when current work drains; callers must stop admitting new work."""
         with self._lock:
@@ -180,35 +175,50 @@ class EventDispatcher:
         self._flush = flush
         self._context = copy_context()
         self._condition = threading.Condition()
-        self._queue: deque[tuple[EventDelivery, AgentEvent, int]] = deque()
+        self._queue: deque[tuple[tuple[EventDelivery, ...], AgentEvent, int]] = deque()
         self._bytes = 0
         self._closed = False
         self._release_when_idle = False
         self._worker: threading.Thread | None = None
 
-    def publish(self, delivery: "EventDelivery", event: AgentEvent) -> bool:
-        size = len(to_json(event.model_dump(mode="python"), bytes_mode="base64"))
-        with self._condition:
-            if self._closed:
-                logger.warning("Agent event dispatcher is closed")
-                return False
-            if (
-                len(self._queue) >= EVENT_QUEUE_CAPACITY
-                or self._bytes + size > AGENT_EVENT_BUFFER_MAX_BYTES
-            ):
-                logger.error("Agent observer backlog exceeded its bound")
-                return False
-            owned_event = event.model_copy(deep=True)
-            try:
+    def publish(self, delivery: "EventDelivery", event: AgentEvent) -> None:
+        channels: list[EventDelivery] = []
+        try:
+            with self._condition:
+                has_listeners = False
+                current: EventDelivery | None = delivery
+                while current is not None:
+                    with current._lock:
+                        if not current._closing and not current.failed.is_set():
+                            current.tracker.started()
+                            channels.append(current)
+                            has_listeners |= bool(current._listeners)
+                        current = current._parent
+                if not has_listeners:
+                    return
+                size = len(
+                    to_json(event.model_dump(mode="python"), bytes_mode="base64")
+                )
+                if self._closed:
+                    raise RuntimeError("Agent event dispatcher is closed")
+                if (
+                    len(self._queue) >= EVENT_QUEUE_CAPACITY
+                    or self._bytes + size > AGENT_EVENT_BUFFER_MAX_BYTES
+                ):
+                    raise RuntimeError("Agent observer backlog exceeded its bound")
+                owned_event = event.model_copy(deep=True)
                 self.start()
-            except Exception:
-                logger.exception("Agent observer delivery could not start")
-                return False
-            delivery.tracker.started()
-            self._bytes += size
-            self._queue.append((delivery, owned_event, size))
-            self._condition.notify()
-            return True
+                self._bytes += size
+                self._queue.append((tuple(channels), owned_event, size))
+                self._condition.notify()
+                channels = []
+        except Exception:
+            for channel in channels:
+                channel.failed.set()
+            logger.exception("Agent event delivery could not queue an event")
+        finally:
+            for channel in channels:
+                channel.tracker.finished()
 
     def start(self) -> None:
         with self._condition:
@@ -233,13 +243,20 @@ class EventDispatcher:
                 )
                 final_flush = exiting and self._closed
             if item is not None:
-                delivery, event, size = item
+                channels, event, size = item
                 try:
-                    delivery._context.run(delivery._send, event)
+                    for index, channel in enumerate(channels):
+                        channel._context.run(
+                            channel._send,
+                            event
+                            if index == len(channels) - 1
+                            else event.model_copy(deep=True),
+                        )
                 finally:
                     with self._condition:
                         self._bytes -= size
-                    delivery._context.run(delivery.tracker.finished)
+                    for channel in channels:
+                        channel._context.run(channel.tracker.finished)
             if self._flush is not None and (
                 exiting or time.monotonic() - last_flush >= EVENT_FLUSH_INTERVAL_SECONDS
             ):
@@ -289,9 +306,19 @@ class EventDispatcher:
 
 
 class EventDelivery:
-    """Deliver a run's events independently of other channels on its dispatcher."""
+    """Deliver run events and route foreground child events to ancestor listeners."""
 
-    def __init__(self, dispatcher: EventDispatcher | None = None) -> None:
+    def __init__(
+        self,
+        dispatcher: EventDispatcher | None = None,
+        *,
+        parent: "EventDelivery | None" = None,
+    ) -> None:
+        if parent is not None:
+            if dispatcher is not None and dispatcher is not parent.dispatcher:
+                raise ValueError("Related event deliveries must share a dispatcher")
+            dispatcher = parent.dispatcher
+        self._parent = parent
         self._lock = threading.Lock()
         self._listeners: list[Callable[[AgentEvent], None]] = []
         self._closing = False
@@ -314,11 +341,7 @@ class EventDelivery:
         return unsubscribe
 
     def publish(self, event: AgentEvent) -> None:
-        with self._lock:
-            if self._closing or self.failed.is_set() or not self._listeners:
-                return
-            if not self.dispatcher.publish(self, event):
-                self.failed.set()
+        self.dispatcher.publish(self, event)
 
     @property
     def is_dispatch_thread(self) -> bool:
@@ -350,7 +373,7 @@ class EventDelivery:
             self.dispatcher.resume()
 
     def pause(self) -> None:
-        """Drain accepted events while retaining subscriptions for later segments."""
+        """Drain accepted events while retaining subscriptions for resumed execution."""
         if self._owns_dispatcher:
             self.dispatcher.pause()
 

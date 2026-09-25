@@ -137,7 +137,7 @@ def _build_model_display_name(override: LLMOverride | None, llm: LLM) -> str:
         chosen = override.display_name or override.model_version
         if chosen:
             return chosen
-    return llm.info.model_name
+    return llm.config.model_name
 
 
 def _load_session(
@@ -232,7 +232,7 @@ def _select_models(
         check_llm_cost_limit_for_provider(
             db_session=db_session,
             tenant_id=get_current_tenant_id(),
-            llm_provider_api_key=llm.transport.config.api_key,
+            llm_provider_api_key=llm.config.api_key,
         )
         selected_models.append((llm, _build_model_display_name(override, llm)))
     return selected_models
@@ -539,7 +539,7 @@ def prepare_chat_turn(
     extracted_files = extract_context_files(
         user_files=prepared.context_user_files,
         llm_max_context_window=min(
-            llm.info.max_input_tokens for llm, _ in prepared.selected_models
+            llm.config.max_input_tokens for llm, _ in prepared.selected_models
         ),
         reserved_token_count=prepared.reserved_token_count,
     )
@@ -715,7 +715,7 @@ def create_chat_agent(
                 raise RuntimeError("Deep research is not supported for projects")
             if setup.research_tool_id is None:
                 raise ValueError("Deep research tool configuration is missing")
-            if llm.info.max_input_tokens < MIN_RESEARCH_CONTEXT_TOKENS:
+            if llm.config.max_input_tokens < MIN_RESEARCH_CONTEXT_TOKENS:
                 raise ValueError(
                     "Deep research requires a model with at least 50,000 input tokens"
                 )
