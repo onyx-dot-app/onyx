@@ -852,6 +852,9 @@
         "jira": {
           "description": "Atlassian issue tracker"
         },
+        "jira_service_management": {
+          "description": "Jira Service Management tickets and customer requests"
+        },
         "productboard": {
           "description": "Product management"
         },

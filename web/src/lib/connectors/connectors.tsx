@@ -707,6 +707,56 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  jira_service_management: {
+    description: "Configure Jira Service Management connector",
+    subtext: "Index tickets from one Jira Service Management project.",
+    values: [
+      {
+        type: "text",
+        query: "Enter the Jira base URL:",
+        label: "Jira Base URL",
+        name: "jira_base_url",
+        optional: false,
+        description:
+          "The base URL of your Jira instance (e.g., https://your-domain.atlassian.net)",
+      },
+      {
+        type: "text",
+        query: "Enter the service desk project key:",
+        label: "Project Key",
+        name: "project_key",
+        optional: false,
+        description:
+          "The key of the Jira Service Management project to index (e.g., SUP).",
+      },
+      {
+        type: "checkbox",
+        query: "Using scoped token?",
+        label: "Using scoped token",
+        name: "scoped_token",
+        optional: true,
+        default: false,
+      },
+      {
+        type: "text",
+        query: "Enter an optional JQL filter:",
+        label: "JQL Filter",
+        name: "jql_query",
+        optional: true,
+        description:
+          "Add conditions to limit tickets. The selected project remains in scope.",
+      },
+      {
+        type: "list",
+        query: "Enter email addresses to skip in comments:",
+        label: "Comment Email Blacklist",
+        name: "comment_email_blacklist",
+        optional: true,
+        description: "Comments from these addresses will not be indexed.",
+      },
+    ],
+    advanced_values: [],
+  },
   salesforce: {
     description: "Configure Salesforce connector",
     values: [
