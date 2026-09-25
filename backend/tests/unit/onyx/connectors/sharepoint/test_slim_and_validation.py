@@ -6,6 +6,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
+from requests import HTTPError
 
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
@@ -427,7 +428,9 @@ def test_probe_group_members_raises_on_401_or_403(
 ) -> None:
     """probe raises ConnectorValidationError naming GroupMember.Read.All when Graph rejects."""
     mock_token.return_value = "tok"
-    mock_get.return_value = MagicMock(status_code=status_code)
+    response = MagicMock(status_code=status_code)
+    response.raise_for_status.side_effect = HTTPError(response=response)
+    mock_get.return_value = response
 
     connector = _make_connector()
 
@@ -445,7 +448,9 @@ def test_probe_group_members_passes_on_200(
 ) -> None:
     """A 200 response means the app has the required Graph permission."""
     mock_token.return_value = "tok"
-    mock_get.return_value = MagicMock(status_code=200)
+    response = MagicMock(status_code=200)
+    response.json.return_value = {"value": []}
+    mock_get.return_value = response
 
     connector = _make_connector()
     connector.probe_group_members_permission()  # should not raise

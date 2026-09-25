@@ -16,6 +16,7 @@ from onyx.connectors.microsoft_utils.drive_delta import (
     DriveDeltaItem,
     build_delta_start_url,
 )
+from onyx.connectors.microsoft_utils.entra import EntraGroup
 from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftAuthError as OneDriveAuthError,
 )
@@ -29,7 +30,6 @@ from onyx.connectors.microsoft_utils.graph_errors import (
 from onyx.connectors.onedrive.models import (
     OneDriveConnectorConfig,
     OneDriveDrive,
-    OneDriveGroup,
     OneDriveUser,
     OneDriveUserPage,
 )
@@ -191,7 +191,7 @@ def _probe_item_permissions(
 
 def _group_membership_probe_group(
     gateway: OneDriveSourceOperations,
-) -> OneDriveGroup | None:
+) -> EntraGroup | None:
     next_link: str | None = None
     for _ in range(_MAX_DISCOVERY_PAGES):
         page = gateway.list_groups(

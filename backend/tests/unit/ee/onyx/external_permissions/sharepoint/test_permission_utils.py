@@ -4,7 +4,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 from office365.runtime.client_request import ClientRequestException
 
-from ee.onyx.external_permissions.microsoft_utils.entra_groups import EntraGroup
+from ee.onyx.external_permissions.microsoft_utils.entra_groups import (
+    ResolvedEntraGroup,
+)
 from ee.onyx.external_permissions.sharepoint.permission_utils import (
     AZURE_AD_GROUP_PRINCIPAL_TYPE,
     SHAREPOINT_GROUP_PRINCIPAL_TYPE,
@@ -233,7 +235,7 @@ def test_document_group_cycles_are_resolved_once(mock_get_group: MagicMock) -> N
 def test_azuread_groups_wrap_shared_expansion(mock_expand: MagicMock) -> None:
     """Shared Entra results come back as SharePoint principals for the cache."""
     mock_expand.return_value = (
-        {EntraGroup(id="g2", name="Nested_g2")},
+        {ResolvedEntraGroup(id="g2", name="Nested_g2")},
         {"alice@contoso.com"},
     )
 
