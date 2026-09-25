@@ -580,4 +580,50 @@ describe("InputSingleSelect", () => {
       expect(handleValueChange).toHaveBeenCalledWith("");
     });
   });
+
+  describe("Inside a wrapping label", () => {
+    // A <label> forwards a click on anything but the input to the input,
+    // as InputHorizontal's `withLabel` wraps a row.
+    function renderLabelled() {
+      render(
+        <label htmlFor="fruit">
+          <span>Fruit</span>
+          <InputSingleSelect
+            id="fruit"
+            placeholder="Select a fruit"
+            value=""
+            options={mockOptions}
+          />
+        </label>
+      );
+    }
+
+    test("a click on the label text opens, a second closes, and one outside dismisses", async () => {
+      const user = setupUser();
+      renderLabelled();
+      await user.click(screen.getByText("Fruit"));
+      expect(screen.getAllByRole("option")).toHaveLength(3);
+
+      await user.click(screen.getByText("Fruit"));
+      expect(screen.queryByRole("option")).not.toBeInTheDocument();
+
+      await user.click(screen.getByText("Fruit"));
+      expect(screen.getAllByRole("option")).toHaveLength(3);
+      await user.click(document.body);
+      expect(screen.queryByRole("option")).not.toBeInTheDocument();
+    });
+
+    test("a click on the field's padding toggles once each way", async () => {
+      const user = setupUser();
+      renderLabelled();
+      const padding = screen.getByRole("combobox").closest(".opal-input");
+      if (!padding) throw new Error("no field chrome");
+
+      await user.click(padding);
+      expect(screen.getAllByRole("option")).toHaveLength(3);
+
+      await user.click(padding);
+      expect(screen.queryByRole("option")).not.toBeInTheDocument();
+    });
+  });
 });
