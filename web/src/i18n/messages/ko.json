@@ -2050,7 +2050,7 @@
       },
       "errorsModal": {
         "columns": {
-          "documentId": "문서 ID",
+          "documentId": "실패 ID",
           "errorMessage": "오류 메시지",
           "status": "상태",
           "time": "시간"

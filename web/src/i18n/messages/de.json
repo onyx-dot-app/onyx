@@ -2050,7 +2050,7 @@
       },
       "errorsModal": {
         "columns": {
-          "documentId": "Dokument-ID",
+          "documentId": "Fehler-ID",
           "errorMessage": "Fehlermeldung",
           "status": "Status",
           "time": "Zeit"
