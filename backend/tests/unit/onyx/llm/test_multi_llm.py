@@ -3042,7 +3042,7 @@ def test_bifrost_claude_includes_allowed_openai_params() -> None:
         llm.invoke(messages, tools=tools)
 
         kwargs = mock_completion.call_args.kwargs
-        assert kwargs["model"] == "anthropic/claude-sonnet-4-6"
+        assert kwargs["model"] == "openai/anthropic/claude-sonnet-4-6"
         assert kwargs["base_url"] == "https://bifrost.example.com/v1"
         assert kwargs["custom_llm_provider"] == "openai"
         assert kwargs["allowed_openai_params"] == ["tool_choice"]

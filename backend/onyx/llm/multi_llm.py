@@ -767,11 +767,14 @@ class LitellmLLM(LLM):
             api_version = None
 
         model_bare = self.config.deployment_name or self.config.model_name
-        if self._api_surface is LlmApiSurface.OPENAI_RESPONSES:
-            # Drives LiteLLM's completions -> responses bridge.
-            model = f"responses/{model_bare}"
-        elif self._api_surface is not None:
-            model = model_bare
+        if self._api_surface is not None:
+            # LiteLLM strips one leading provider prefix before the wire call.
+            # Name the provider explicitly so an id that starts with it (e.g.
+            # Groq's "openai/gpt-oss-120b") reaches the endpoint intact.
+            model = f"{self._custom_llm_provider}/{model_bare}"
+            if self._api_surface is LlmApiSurface.OPENAI_RESPONSES:
+                # Drives LiteLLM's completions -> responses bridge.
+                model = f"responses/{model}"
         else:
             model = f"{model_provider}/{model_bare}"
 

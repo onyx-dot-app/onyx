@@ -48,8 +48,8 @@ def test_chat_completions_mode_routes_via_openai_with_v1_base() -> None:
     kwargs = _completion_kwargs(llm)
     assert kwargs["custom_llm_provider"] == "openai"
     assert kwargs["base_url"] == "https://api.portkey.ai/v1"
-    # OpenAI-compatible proxies send a bare model name.
-    assert kwargs["model"] == "gpt-4o"
+    # LiteLLM strips the provider prefix before the wire call.
+    assert kwargs["model"] == "openai/gpt-4o"
 
 
 def test_chat_completions_mode_coerces_bare_base_to_v1() -> None:
@@ -73,7 +73,7 @@ def test_responses_mode_prefixes_model_and_keeps_v1_base() -> None:
     assert kwargs["custom_llm_provider"] == "openai"
     assert kwargs["base_url"] == "https://api.portkey.ai/v1"
     # Responses mode drives litellm's completions->responses bridge via the prefix.
-    assert kwargs["model"] == "responses/gpt-4o"
+    assert kwargs["model"] == "responses/openai/gpt-4o"
 
 
 def test_messages_mode_routes_via_anthropic_with_bare_base() -> None:
@@ -87,8 +87,8 @@ def test_messages_mode_routes_via_anthropic_with_bare_base() -> None:
     kwargs = _completion_kwargs(llm)
     assert kwargs["custom_llm_provider"] == "anthropic"
     assert kwargs["base_url"] == "https://api.portkey.ai"
-    # Anthropic path uses a bare model name (no responses/ or provider prefix).
-    assert kwargs["model"] == "claude-sonnet-5"
+    # Anthropic path names the provider (no responses/ prefix); LiteLLM strips it.
+    assert kwargs["model"] == "anthropic/claude-sonnet-5"
 
 
 def test_messages_mode_strips_trailing_slash_but_keeps_bare_host() -> None:
