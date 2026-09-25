@@ -5,7 +5,8 @@ import time
 from concurrent.futures import Future
 
 from onyx.agents.agent_coordination import AgentCoordinator, RunStore
-from onyx.agents.runtime import Run
+from onyx.agents.models import RunState
+from onyx.agents.runtime import Run, result_from_snapshot
 from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.errors import chat_error
 from onyx.chat.models import (
@@ -51,14 +52,15 @@ class ChatResponsePersistence(RunStore):
         self._pending_save: PendingChatResponseSave | None = None
 
     def save(self, run: Run) -> None:
-        if run.snapshot().parent_run_id is not None:
+        snapshot = run.snapshot()
+        if snapshot.parent_run_id is not None:
             return
         error: BaseException | None = None
         try:
-            run.result(timeout=0)
+            result_from_snapshot(snapshot)
         except BaseException as failure:
             error = failure
-        self._save(run, error)
+        self._save(snapshot, error, delivery_failed=run.delivery_failed)
 
     def save_failure(self, error: BaseException) -> None:
         self._save(None, error)
@@ -68,7 +70,9 @@ class ChatResponsePersistence(RunStore):
         if self.outcome.done():
             return
         try:
-            response = self._project(run, None)
+            response = self._project(
+                run.snapshot(), None, delivery_failed=run.delivery_failed
+            )
         except Exception as error:
             logger.exception("Failed to project rejected response save")
             with self._lock:
@@ -126,9 +130,15 @@ class ChatResponsePersistence(RunStore):
                 )
             )
 
-    def _save(self, run: Run | None, error: BaseException | None) -> None:
+    def _save(
+        self,
+        snapshot: RunState | None,
+        error: BaseException | None,
+        *,
+        delivery_failed: bool = False,
+    ) -> None:
         try:
-            response = self._project(run, error)
+            response = self._project(snapshot, error, delivery_failed=delivery_failed)
             if error is not None and not isinstance(error, AgentCancelled):
                 failure = (
                     error
@@ -180,9 +190,13 @@ class ChatResponsePersistence(RunStore):
             raise
 
     def _project(
-        self, run: Run | None, error: BaseException | None
+        self,
+        snapshot: RunState | None,
+        error: BaseException | None,
+        *,
+        delivery_failed: bool = False,
     ) -> ChatResponseSnapshot:
-        if run is None:
+        if snapshot is None:
             return ChatResponseSnapshot(
                 answer=None,
                 reasoning=None,
@@ -196,9 +210,9 @@ class ChatResponsePersistence(RunStore):
                 cancelled=isinstance(error, AgentCancelled),
             )
         return project_response(
-            run.snapshot(),
+            snapshot,
             response_id=self.message_id,
             tool_ids=self.tool_ids,
             initial_citations=self.initial_citations,
             registrations=self.coordinator.registrations() if self.coordinator else (),
-        ).model_copy(update={"delivery_failed": run.delivery_failed})
+        ).model_copy(update={"delivery_failed": delivery_failed})

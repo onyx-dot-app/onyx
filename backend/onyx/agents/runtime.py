@@ -11,8 +11,8 @@ from uuid import uuid4
 from pydantic import BaseModel
 
 from onyx.agents.compaction import (
+    CheckpointMismatchError,
     ContextLimitError,
-    checkpoint_matches,
     compact_history,
     context_budget,
     request_tokens,
@@ -448,9 +448,13 @@ class Run:
         delivery = self._delivery
         return delivery.failed.is_set() if delivery else self._delivery_failed
 
-    def snapshot(self) -> RunState:
+    def snapshot(self, *, include_children: bool = True) -> RunState:
+        """Copy run state, optionally omitting independently persisted child runs."""
         with self._lock:
-            return self._state.model_copy(deep=True)
+            state = self._state
+            if not include_children:
+                state = state.model_copy(update={"child_runs": []})
+            return state.model_copy(deep=True)
 
     def cancel(self) -> None:
         with self._lock:
@@ -1011,35 +1015,34 @@ def _advance_steps(
         if progress.action == RunAction.PREPARE:
             if not run._begin_work_cycle():
                 return RunStatus.SUSPENDED
-            previous = (
-                _step_result(
-                    run,
-                    progress.previous_message_index,
-                    progress.previous_options,
-                    progress.step_index - 1,
-                )
-                if progress.previous_message_index is not None
-                else None
-            )
-            decision = StepInput(
-                history=[m.model_copy(deep=True) for m in run._history.messages],
-                input_messages=[
-                    m.model_copy(deep=True) for m in run._state.input_messages
-                ],
-                messages=[m.model_copy(deep=True) for m in run._state.messages],
-                step=AgentStep(index=progress.step_index, limit=max_steps),
-                previous=previous,
-            )
+            step = AgentStep(index=progress.step_index, limit=max_steps)
             prepare = run._prepare_step
-            prepared = (
-                run._work.blocking(
+            prepared = run._defaults
+            if prepare is not None:
+                previous = (
+                    _step_result(
+                        run,
+                        progress.previous_message_index,
+                        progress.previous_options,
+                        progress.step_index - 1,
+                    )
+                    if progress.previous_message_index is not None
+                    else None
+                )
+                decision = StepInput(
+                    history=[m.model_copy(deep=True) for m in run._history.messages],
+                    input_messages=[
+                        m.model_copy(deep=True) for m in run._state.input_messages
+                    ],
+                    messages=[m.model_copy(deep=True) for m in run._state.messages],
+                    step=step,
+                    previous=previous,
+                )
+                prepared = run._work.blocking(
                     lambda prepare=prepare, decision=decision: prepare(decision),
                     cancellation_signal,
                 )
-                if prepare
-                else run._defaults
-            )
-            _generate_step(run, llm, prepared, decision.step)
+            _generate_step(run, llm, prepared, step)
         if progress.action == RunAction.TOOLS:
             if not _execute_tools(run):
                 return RunStatus.SUSPENDED
@@ -1180,19 +1183,22 @@ def _fit_context(
 ) -> GenerationRequest:
     cancellation_signal = run._cancellation_signal
     previous = run._state.checkpoint
-    if previous and not checkpoint_matches(source, previous):
+    try:
+        messages = working_messages(source, previous)
+    except CheckpointMismatchError:
         logger.info("Ignoring checkpoint from another history branch")
         previous = None
+        messages = list(source)
         with run._lock:
             run._state.checkpoint = None
     request = run._work.blocking(
-        lambda: prepared.generation_request(working_messages(source, previous)),
+        lambda: prepared.generation_request(messages),
         cancellation_signal,
     )
     budget = context_budget(llm)
     size = request_tokens(request)
     if not force and size <= budget.trigger:
-        return _limit_output(llm, request)
+        return _limit_output(llm, request, size)
     try:
         checkpoint = run._work.blocking(
             lambda: compact_history(llm, source, previous, generation_context),
@@ -1204,24 +1210,27 @@ def _fit_context(
                 "Proactive compaction failed while request still fits",
                 exc_info=True,
             )
-            return _limit_output(llm, request)
+            return _limit_output(llm, request, size)
         raise
     request = run._work.blocking(
         lambda: prepared.generation_request(working_messages(source, checkpoint)),
         cancellation_signal,
     )
-    if request_tokens(request) > budget.input_limit:
+    size = request_tokens(request)
+    if size > budget.input_limit:
         raise ContextLimitError(
             "Required instructions and recent context exceed model input limit"
         )
     with run._lock:
         cancellation_signal.check()
         run._state.checkpoint = checkpoint
-    return _limit_output(llm, request)
+    return _limit_output(llm, request, size)
 
 
-def _limit_output(llm: LLM, request: GenerationRequest) -> GenerationRequest:
-    allowance = resolve_token_budget(llm).output_allowance(request_tokens(request))
+def _limit_output(
+    llm: LLM, request: GenerationRequest, input_tokens: int
+) -> GenerationRequest:
+    allowance = resolve_token_budget(llm).output_allowance(input_tokens)
     if allowance is not None:
         request.options.max_tokens = (
             min(request.options.max_tokens, allowance)

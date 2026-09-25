@@ -24,11 +24,14 @@ def response_record(
     metadata = {info.id: info for info in registrations}
 
     def capture(node: RunState, *, is_root: bool = False) -> ResponseRecord:
-        inputs = [message.model_copy(deep=True) for message in node.input_messages]
-        for message in inputs:
-            message.metadata = None
-            if isinstance(message, ToolResultMessage):
-                message.details = None
+        inputs = [
+            message.model_copy(
+                update={"metadata": None, "details": None}
+                if isinstance(message, ToolResultMessage)
+                else {"metadata": None}
+            ).model_copy(deep=True)
+            for message in node.input_messages
+        ]
         items = build_response_items(
             node.run_id,
             node.messages,

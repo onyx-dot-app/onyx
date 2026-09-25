@@ -3,6 +3,7 @@
 import threading
 from collections.abc import Callable, Generator
 from concurrent.futures import Future
+from unittest.mock import patch
 
 import pytest
 
@@ -15,8 +16,10 @@ from onyx.chat.models import (
     AnswerStreamPart,
     ChatMessageMetadata,
     ChatResponseOutcome,
+    ChatResponseSnapshot,
     PersistenceStatus,
 )
+from onyx.chat.persistence import ChatResponsePersistence
 from onyx.chat.presentation import ResponsePresenter, project_response
 from onyx.chat.process_message import gather_stream_full
 from onyx.chat.response_items import messages_from_items
@@ -336,3 +339,47 @@ def test_full_response_reads_canonical_tool_output() -> None:
         future,
     )
     assert response.tool_calls[0].tool_result == "tool output"
+
+
+def test_response_save_captures_run_once() -> None:
+    run = Run.from_snapshot(
+        RunState(
+            run_id="run",
+            agent_id="agent",
+            status=RunStatus.COMPLETE,
+            messages=[AssistantMessage(content=[TextContent(text="answer")])],
+            operations=[
+                OperationSnapshot(
+                    step_index=0, message_index=0, status=RunStatus.COMPLETE
+                )
+            ],
+            answer_message_index=0,
+        )
+    )
+    outcome: Future[ChatResponseOutcome] = Future()
+    delivery = ChatDelivery(None)
+    persistence = ChatResponsePersistence(
+        message_id=42,
+        model_index=0,
+        llm=FakeModelClient(lambda *_: AssistantMessage()),
+        delivery=delivery,
+        outcome=outcome,
+    )
+    saved: list[ChatResponseSnapshot] = []
+
+    def save(*, message_id: int, response: ChatResponseSnapshot) -> None:
+        assert message_id == 42
+        saved.append(response)
+
+    try:
+        with (
+            patch.object(run, "snapshot", wraps=run.snapshot) as snapshot,
+            patch("onyx.chat.persistence.save_chat_response", side_effect=save),
+        ):
+            persistence.save(run)
+        snapshot.assert_called_once_with()
+        assert len(saved) == 1
+        assert saved[0].answer == "answer"
+        assert outcome.result(0).persistence_status == PersistenceStatus.SAVED
+    finally:
+        delivery.finish()

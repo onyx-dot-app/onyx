@@ -40,8 +40,8 @@ class _EncodedAnswer(BaseModel):
     result: dict[str, JsonValue] | None = None
 
 
-def _dump(model: BaseModel) -> dict[str, JsonValue]:
-    return _JSON_OBJECT.validate_python(model.model_dump(mode="json"))
+def _dump(model: BaseModel, *, exclude: set[str] | None = None) -> dict[str, JsonValue]:
+    return _JSON_OBJECT.validate_python(model.model_dump(mode="json", exclude=exclude))
 
 
 def _object(value: JsonValue) -> dict[str, JsonValue]:
@@ -80,7 +80,7 @@ class CheckpointPayloadCodec:
 
     def encode_message(self, message: Message | ToolResult) -> dict[str, JsonValue]:
         """Encode a message or answer result with registered feature payloads."""
-        data = _dump(message)
+        data = _dump(message, exclude={"metadata", "details", "cacheable"})
         data["metadata"] = self.encode_payload(message.metadata)
         data["cacheable"] = message.cacheable
         if isinstance(message, ToolResult):
@@ -97,7 +97,8 @@ class CheckpointPayloadCodec:
         return result
 
     def encode_answer(self, answer: HumanToolAnswer) -> dict[str, JsonValue]:
-        data = _dump(answer)
+        data = _dump(answer, exclude={"result"})
+        data["result"] = None
         if answer.result is not None:
             data["result"] = self.encode_message(answer.result)
         return data
@@ -113,10 +114,9 @@ class CheckpointPayloadCodec:
         )
 
     def encode_progress(self, progress: RunProgress) -> dict[str, JsonValue]:
-        data = _dump(progress)
+        data = _dump(progress, exclude={"human_tool_answers", "feature_state"})
         # Keep checkpoint wire keys independent of Python field names.
         data["pending"] = data.pop("pending_tool_calls")
-        data.pop("human_tool_answers")
         data["feature_state"] = self.encode_payload(progress.feature_state)
         data["answers"] = {
             key: self.encode_answer(answer)
@@ -189,13 +189,14 @@ def _response_digest(response: ResponseRecord) -> str:
 def _serialized_run_state(
     state: RunState, codec: CheckpointPayloadCodec
 ) -> dict[str, JsonValue]:
-    data = _dump(state)
+    data = _dump(state, exclude={"input_messages", "messages", "progress"})
     data["input_messages"] = [
         codec.encode_message(item) for item in state.input_messages
     ]
     data["messages"] = [codec.encode_message(item) for item in state.messages]
-    if state.progress is not None:
-        data["progress"] = codec.encode_progress(state.progress)
+    data["progress"] = (
+        codec.encode_progress(state.progress) if state.progress is not None else None
+    )
     return data
 
 
@@ -233,7 +234,7 @@ def save_checkpoint_data(
         message_payloads=[payload(message) for message in snapshot.messages],
         input_payloads=[payload(message) for message in snapshot.input_messages],
     )
-    restored = restore_checkpoint_data(data, response, checkpoint.agent_state, binding)
+    restored = _restore_checkpoint_state(data, response, checkpoint.agent_state, codec)
     if _serialized_run_state(restored.run_state, codec) != _serialized_run_state(
         snapshot, codec
     ):
@@ -254,6 +255,15 @@ def restore_checkpoint_data(
         raise ValueError("Checkpoint response changed")
     if data.binding != binding:
         raise ValueError("Checkpoint does not match the selected context")
+    return _restore_checkpoint_state(data, response, context, codec)
+
+
+def _restore_checkpoint_state(
+    data: ResponseCheckpoint,
+    response: ResponseRecord,
+    context: AgentState,
+    codec: CheckpointPayloadCodec,
+) -> ExecutionCheckpoint:
     snapshot = response_snapshot(response)
     snapshot.status = RunStatus.SUSPENDED
     snapshot.revision = data.revision

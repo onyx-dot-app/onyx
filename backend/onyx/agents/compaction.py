@@ -41,6 +41,10 @@ class ContextLimitError(ValueError):
     """Required input cannot fit the configured model input limit."""
 
 
+class CheckpointMismatchError(ValueError):
+    """The compaction checkpoint belongs to different source history."""
+
+
 class ContextBudget(BaseModel):
     input_limit: int = Field(gt=0)
     trigger: int = Field(gt=0)
@@ -121,7 +125,9 @@ def working_messages(
     if checkpoint is None:
         return list(messages)
     if not checkpoint_matches(messages, checkpoint):
-        raise ValueError("Compaction checkpoint does not match its source history")
+        raise CheckpointMismatchError(
+            "Compaction checkpoint does not match its source history"
+        )
     prefix = messages[: checkpoint.covered_count]
     retained: list[Message] = [m for m in prefix if isinstance(m, SystemMessage)]
     retained.append(

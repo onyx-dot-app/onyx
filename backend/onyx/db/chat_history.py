@@ -269,7 +269,8 @@ def capture_chat_history(
                 message.chat_session.incognito_record_mode
             ):
                 response_messages = messages_for_model(
-                    messages_from_items(read_response_items(message))
+                    messages_from_items(read_response_items(message)),
+                    copy_messages=False,
                 )
                 for response_message in response_messages:
                     if isinstance(response_message, ToolResultMessage):

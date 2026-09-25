@@ -1,6 +1,7 @@
 """Response capture preserves accepted output and excludes live application objects."""
 
 from collections.abc import Generator
+from unittest.mock import patch
 
 import pytest
 from pydantic import BaseModel
@@ -19,6 +20,7 @@ from onyx.llm.models import (
     GenerationEvent,
     GenerationRequest,
     TextContent,
+    TextContentPart,
     TextDeltaEvent,
     ToolCall,
     ToolResult,
@@ -216,3 +218,50 @@ def test_captured_and_restored_usage_is_isolated_from_mutation() -> None:
         isinstance(saved_message, AssistantMessage) and saved_message.usage is not None
     )
     assert saved_message.usage.total_tokens == 10
+
+
+def test_capture_omits_private_data_and_detaches_content() -> None:
+    private = ApplicationData()
+    result = ToolResultMessage(
+        tool_call_id="call",
+        tool_name="search",
+        content=[TextContentPart(text="passage", cache_control={"type": "ephemeral"})],
+        details=private,
+        metadata=private,
+        cacheable=True,
+        is_error=True,
+        terminate=True,
+    )
+    state = RunState(
+        run_id="run",
+        status=RunStatus.COMPLETE,
+        input_messages=[UserMessage(content="question", metadata=private), result],
+        messages=[
+            AssistantMessage(
+                content=[ToolCall(id="call", name="search", arguments={})]
+            ),
+            result,
+        ],
+    )
+    with patch.object(
+        ApplicationData,
+        "__deepcopy__",
+        side_effect=AssertionError("Private data copied"),
+    ):
+        record = response_record(state)
+    restored = response_snapshot(record)
+    for retained in (restored.input_messages[1], restored.messages[1]):
+        assert isinstance(retained, ToolResultMessage)
+        assert retained.details is None and retained.metadata is None
+        assert retained.cacheable and retained.is_error and retained.terminate
+        assert isinstance(retained.content, list)
+        part = retained.content[0]
+        assert isinstance(part, TextContentPart)
+        part.text = "changed"
+        assert part.cache_control is not None
+        part.cache_control["type"] = "changed"
+    assert restored.input_messages[0].metadata is None
+    assert result.content == [
+        TextContentPart(text="passage", cache_control={"type": "ephemeral"})
+    ]
+    assert result.details is private and result.metadata is private
