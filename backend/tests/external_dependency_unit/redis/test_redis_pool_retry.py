@@ -1,8 +1,8 @@
-"""Pooled Redis clients retry connection errors, but not timeouts."""
+"""Pooled Redis clients retry only errors where the command did not run."""
 
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, cast
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -48,28 +48,41 @@ def key() -> Iterator[str]:
     redis.Redis(connection_pool=RedisPool.create_pool()).delete(key)
 
 
+def test_default_pool_retries_busy_loading(key: str) -> None:
+    client = _connected_client()
+    with _fail_first_send(BusyLoadingError("loading")):
+        client.incr(key)
+    assert client.get(key) == b"1"
+
+
 @pytest.mark.parametrize(
-    "error", [RedisConnectionError("reset"), BusyLoadingError("loading")]
+    "error", [RedisConnectionError("reset"), RedisTimeoutError("slow")]
 )
-def test_default_pool_retries_connection_errors(error: Exception, key: str) -> None:
+def test_default_pool_does_not_replay_commands_that_may_have_run(
+    error: Exception, key: str
+) -> None:
     client = _connected_client()
-    with _fail_first_send(error):
-        client.set(key, b"value")
-    assert client.get(key) == b"value"
+    with _fail_first_send(error) as calls, pytest.raises(type(error)):
+        client.incr(key)
+    assert len(calls) == 1
 
 
-def test_default_pool_does_not_retry_timeouts(key: str) -> None:
+def test_default_pool_reconnects_a_connection_closed_by_the_server(key: str) -> None:
     client = _connected_client()
-    with _fail_first_send(RedisTimeoutError("slow")), pytest.raises(RedisTimeoutError):
-        client.set(key, b"value")
-    assert client.get(key) is None
+    client_id = cast(int, client.client_id())
+    redis.Redis(connection_pool=RedisPool.create_pool()).client_kill_filter(
+        _id=str(client_id)
+    )
+    client.incr(key)
+    assert client.get(key) == b"1"
+    assert client.client_id() != client_id
 
 
 def test_timeout_pool_does_not_retry(key: str) -> None:
     client = _connected_client(operation_timeout=1)
     with (
-        _fail_first_send(RedisConnectionError("reset")) as calls,
-        pytest.raises(RedisConnectionError),
+        _fail_first_send(BusyLoadingError("loading")) as calls,
+        pytest.raises(BusyLoadingError),
     ):
-        client.set(key, b"value")
+        client.incr(key)
     assert len(calls) == 1

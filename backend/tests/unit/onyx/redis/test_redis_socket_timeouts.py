@@ -107,7 +107,7 @@ def test_sentinel_retries_apply_to_data_connections_only() -> None:
     ):
         redis_pool.RedisPool.create_pool()
         kwargs = sentinel_cls.call_args.kwargs
-        assert kwargs["retry_on_error"] == [redis_pool.RedisConnectionError]
+        assert kwargs["retry_on_error"] == [redis_pool.BusyLoadingError]
         assert "retry" not in kwargs["sentinel_kwargs"]
 
         redis_pool.RedisPool.create_pool(operation_timeout=1)

@@ -11,6 +11,7 @@ from redis import asyncio as aioredis
 from redis.asyncio.sentinel import Sentinel as AsyncSentinel
 from redis.backoff import ExponentialBackoff
 from redis.client import Redis
+from redis.exceptions import BusyLoadingError
 from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.lock import Lock as RedisLock
 from redis.retry import Retry
@@ -65,10 +66,14 @@ def _pool_retry_kwargs() -> dict[str, Any]:
     """Connection retry settings for a pool.
 
     redis-py reads retries from the pool's connections and ignores ``retry``
-    passed to ``redis.Redis(connection_pool=...)``. Retry only ConnectionError,
-    which includes BusyLoadingError (raised while Redis loads its snapshot
-    after a restart or failover). Do not retry TimeoutError: the command may
-    have run, and each retry waits a full socket timeout again.
+    passed to ``redis.Redis(connection_pool=...)``.
+
+    Commands retry only BusyLoadingError, which Redis returns without running
+    the command while it loads its snapshot after a restart or failover. Other
+    connection errors and timeouts can arrive after the command ran, so a
+    retry could apply a write twice. ``supported_errors`` also lets health
+    check PINGs and Sentinel reconnects retry ConnectionError; they send no
+    command. The pool itself reconnects stale connections before use.
     """
     return {
         "retry": Retry(
@@ -76,7 +81,7 @@ def _pool_retry_kwargs() -> dict[str, Any]:
             retries=3,
             supported_errors=(RedisConnectionError,),
         ),
-        "retry_on_error": [RedisConnectionError],
+        "retry_on_error": [BusyLoadingError],
     }
 
 
