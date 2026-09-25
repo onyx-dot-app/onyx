@@ -1,5 +1,4 @@
 import copy
-import re
 from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING, Any
 
@@ -22,8 +21,9 @@ from onyx.llm.model_capabilities import (
     get_max_input_tokens,
     model_identity_names,
 )
+from onyx.llm.model_request import UserMessage
 from onyx.llm.model_response import ModelResponse
-from onyx.llm.models import LLMErrorInfo, UserMessage
+from onyx.llm.models import LLMErrorInfo
 from onyx.prompts.contextual_retrieval import (
     CONTEXTUAL_RAG_TOKEN_ESTIMATE,
     DOCUMENT_SUMMARY_TOKEN_ESTIMATE,
@@ -584,28 +584,5 @@ def model_supports_image_input(
     # identity only in the deployment alias.
     return any(
         catalog_model_supports_image_input(name, model_provider)
-        for name in model_identity_names(model_name, deployment_name)
-    )
-
-
-def model_needs_formatting_reenabled(
-    model_name: str, deployment_name: str | None = None
-) -> bool:
-    # See https://simonwillison.net/tags/markdown/ for context on why this is needed
-    # for OpenAI reasoning models to have correct markdown generation
-
-    # Models that need formatting re-enabled
-    model_names = ["gpt-5.1", "gpt-5", "o3", "o1"]
-
-    # Pattern matches if any of these model names appear with word boundaries
-    # Word boundaries include: start/end of string, space, hyphen, or forward slash
-    pattern = (
-        r"(?:^|[\s\-/])("
-        + "|".join(re.escape(name) for name in model_names)
-        + r")(?:$|[\s\-/])"
-    )
-
-    return any(
-        re.search(pattern, name)
         for name in model_identity_names(model_name, deployment_name)
     )

@@ -6,9 +6,9 @@ import pytest
 
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
-    FunctionCall,
     ModelResponse,
     ModelResponseStream,
+    ResponseFunctionCall,
     from_litellm_model_response,
     from_litellm_model_response_stream,
 )
@@ -251,7 +251,7 @@ def test_from_litellm_model_response_stream_parses_tool_calls() -> None:
         id=None,
         index=0,
         type="function",
-        function=FunctionCall(arguments='{"', name=None),
+        function=ResponseFunctionCall(arguments='{"', name=None),
     )
 
 
@@ -297,7 +297,7 @@ def test_from_litellm_model_response_stream_parses_multiple_tool_calls() -> None
         id="call_130bec4755e544ea95f4b1bafd81",
         index=0,
         type="function",
-        function=FunctionCall(
+        function=ResponseFunctionCall(
             arguments='{"queries": ["new agent framework"]}',
             name="internal_search",
         ),
@@ -306,7 +306,7 @@ def test_from_litellm_model_response_stream_parses_multiple_tool_calls() -> None
         id="call_42273e8ee5ac4c0a97237d6d25a6",
         index=1,
         type="function",
-        function=FunctionCall(
+        function=ResponseFunctionCall(
             arguments='{"queries": ["cheese"]}',
             name="web_search",
         ),

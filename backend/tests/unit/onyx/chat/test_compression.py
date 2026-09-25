@@ -14,7 +14,7 @@ from onyx.chat.compression import (
     get_summary_parent_message_id,
 )
 from onyx.configs.constants import MessageType
-from onyx.llm.models import AssistantMessage, SystemMessage, UserMessage
+from onyx.llm.model_request import AssistantMessage, SystemMessage, UserMessage
 from onyx.prompts.compression_prompts import (
     PROGRESSIVE_SUMMARY_SYSTEM_PROMPT_BLOCK,
     PROGRESSIVE_USER_REMINDER,

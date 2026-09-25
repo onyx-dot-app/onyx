@@ -8,7 +8,8 @@ from onyx.context.search.models import (
     InferenceSection,
 )
 from onyx.llm.interfaces import LLM
-from onyx.llm.models import ReasoningEffort, UserMessage
+from onyx.llm.model_request import UserMessage
+from onyx.llm.models import ReasoningEffort
 from onyx.prompts.search_prompts import (
     DOCUMENT_CONTEXT_SELECTION_PROMPT,
     DOCUMENT_SELECTION_PROMPT,

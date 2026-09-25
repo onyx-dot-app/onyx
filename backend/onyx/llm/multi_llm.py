@@ -34,14 +34,7 @@ from onyx.llm.custom_config_mapping import (
     UI_ONLY_CONFIG_KEYS,
     map_custom_config_to_model_kwargs,
 )
-from onyx.llm.interfaces import (
-    LLM,
-    LanguageModelInput,
-    LLMConfig,
-    LLMUserIdentity,
-    ReasoningEffort,
-    ToolChoice,
-)
+from onyx.llm.interfaces import LLM, LLMConfig, LLMUserIdentity
 from onyx.llm.model_capabilities import (
     OPENAI_API_PROVIDERS,
     ReasoningParamStyle,
@@ -61,13 +54,14 @@ from onyx.llm.model_capabilities import (
 from onyx.llm.model_capabilities import (
     model_identity_names as resolve_model_identity_names,
 )
-from onyx.llm.model_response import ModelResponse, ModelResponseStream, Usage
+from onyx.llm.model_request import LanguageModelInput
+from onyx.llm.model_response import ModelResponse, ModelResponseStream
 from onyx.llm.models import (
-    ANTHROPIC_ADAPTIVE_REASONING_EFFORT,
-    ANTHROPIC_REASONING_EFFORT_BUDGET,
-    OPENAI_REASONING_EFFORT,
     NamedToolChoice,
+    ReasoningEffort,
+    ToolChoice,
     ToolChoiceOptions,
+    Usage,
     resolve_reasoning_effort,
 )
 from onyx.llm.request_context import get_llm_mock_response, set_llm_request_params
@@ -76,6 +70,37 @@ from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.tracing.llm_utils import record_llm_request_params
 from onyx.utils.encryption import mask_env_value_for_logging, mask_string
 from onyx.utils.logger import setup_logger
+
+# OpenAI reasoning effort mapping
+# Note: OpenAI API does not support "auto" - valid values are: none, minimal, low, medium, high, xhigh
+OPENAI_REASONING_EFFORT: dict[ReasoningEffort, str] = {
+    ReasoningEffort.AUTO: "medium",  # Default to medium when auto is requested
+    ReasoningEffort.OFF: "none",
+    ReasoningEffort.LOW: "low",
+    ReasoningEffort.MEDIUM: "medium",
+    ReasoningEffort.HIGH: "high",
+    ReasoningEffort.XHIGH: "xhigh",
+}
+
+# Anthropic reasoning effort to budget tokens mapping
+# Loosely based on budgets from LiteLLM but this ensures it's not updated without our knowing from a version bump.
+ANTHROPIC_REASONING_EFFORT_BUDGET: dict[ReasoningEffort, int] = {
+    ReasoningEffort.AUTO: 2048,
+    ReasoningEffort.LOW: 1024,
+    ReasoningEffort.MEDIUM: 2048,
+    ReasoningEffort.HIGH: 4096,
+    ReasoningEffort.XHIGH: 4096,
+}
+
+# Newer Anthropic models (Claude Opus 4.7+) use adaptive thinking with
+# output_config.effort instead of thinking.type.enabled + budget_tokens.
+ANTHROPIC_ADAPTIVE_REASONING_EFFORT: dict[ReasoningEffort, str] = {
+    ReasoningEffort.AUTO: "medium",
+    ReasoningEffort.LOW: "low",
+    ReasoningEffort.MEDIUM: "medium",
+    ReasoningEffort.HIGH: "high",
+    ReasoningEffort.XHIGH: "xhigh",
+}
 
 logger = setup_logger()
 
@@ -422,7 +447,7 @@ def _prompt_contains_tool_call_history(prompt: LanguageModelInput) -> bool:
     cryptographic signatures that can't be reconstructed), we must skip
     the thinking param whenever history contains prior tool-calling turns.
     """
-    from onyx.llm.models import AssistantMessage
+    from onyx.llm.model_request import AssistantMessage
 
     msgs = prompt if isinstance(prompt, list) else [prompt]
     return any(isinstance(msg, AssistantMessage) and msg.tool_calls for msg in msgs)

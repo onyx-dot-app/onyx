@@ -31,7 +31,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.factory import llm_from_provider
 from onyx.llm.interfaces import LLM
-from onyx.llm.model_response import Usage
+from onyx.llm.models import Usage
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.server.gateway.configs import (
     ANTHROPIC_GATEWAY_PASSTHROUGH_ENABLED,

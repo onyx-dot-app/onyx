@@ -42,20 +42,22 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.factory import llm_from_provider
 from onyx.llm.interfaces import LLM
+from onyx.llm.model_request import (
+    AssistantMessage,
+    ChatCompletionMessage,
+    ToolCall,
+    UserMessage,
+)
 from onyx.llm.model_response import ChatCompletionMessageToolCall
 from onyx.llm.models import (
     AnyThinkingBlock,
-    AssistantMessage,
-    ChatCompletionMessage,
     NamedToolChoice,
     ReasoningEffort,
     RedactedThinkingBlock,
     TextContentPart,
     ThinkingBlock,
-    ToolCall,
     ToolChoice,
     ToolChoiceOptions,
-    UserMessage,
 )
 from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache

@@ -4,13 +4,18 @@ from typing import TYPE_CHECKING, Any, List
 
 from pydantic import BaseModel, Field
 
-from onyx.llm.models import AnyThinkingBlock, RedactedThinkingBlock, ThinkingBlock
+from onyx.llm.models import (
+    AnyThinkingBlock,
+    RedactedThinkingBlock,
+    ThinkingBlock,
+    Usage,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
-class FunctionCall(BaseModel):
+class ResponseFunctionCall(BaseModel):
     arguments: str | None = None
     name: str | None = None
 
@@ -18,14 +23,14 @@ class FunctionCall(BaseModel):
 class ChatCompletionMessageToolCall(BaseModel):
     id: str
     type: str = "function"
-    function: FunctionCall
+    function: ResponseFunctionCall
 
 
 class ChatCompletionDeltaToolCall(BaseModel):
     id: str | None = None
     index: int = 0
     type: str = "function"
-    function: FunctionCall | None = None
+    function: ResponseFunctionCall | None = None
 
 
 class Delta(BaseModel):
@@ -39,14 +44,6 @@ class StreamingChoice(BaseModel):
     finish_reason: str | None = None
     index: int = 0
     delta: Delta = Field(default_factory=Delta)
-
-
-class Usage(BaseModel):
-    completion_tokens: int
-    prompt_tokens: int
-    total_tokens: int
-    cache_creation_input_tokens: int
-    cache_read_input_tokens: int
 
 
 class ModelResponseStream(BaseModel):
@@ -88,11 +85,11 @@ if TYPE_CHECKING:
 
 def _parse_function_call(
     function_payload: dict[str, Any] | None,
-) -> FunctionCall | None:
-    """Parse a function call payload into a FunctionCall object."""
+) -> ResponseFunctionCall | None:
+    """Parse a function call payload into a ResponseFunctionCall object."""
     if not function_payload or not isinstance(function_payload, dict):
         return None
-    return FunctionCall(
+    return ResponseFunctionCall(
         arguments=function_payload.get("arguments"),
         name=function_payload.get("name"),
     )

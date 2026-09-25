@@ -27,7 +27,8 @@ from onyx.chat.models import (
 )
 from onyx.configs.constants import MessageType
 from onyx.file_store.models import ChatFileType
-from onyx.llm.interfaces import LLMConfig, ToolChoiceOptions
+from onyx.llm.interfaces import LLMConfig
+from onyx.llm.models import ToolChoiceOptions
 from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER, OPEN_URL_REMINDER
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.constants import FILE_READER_TOOL_NAME

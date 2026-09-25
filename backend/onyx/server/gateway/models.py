@@ -3,7 +3,8 @@ from typing import Any, Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from onyx.llm.model_response import ModelResponse, ModelResponseStream, Usage
+from onyx.llm.model_response import ModelResponse, ModelResponseStream
+from onyx.llm.models import Usage
 
 GatewayModality: TypeAlias = Literal["text", "audio", "image", "video", "pdf"]
 

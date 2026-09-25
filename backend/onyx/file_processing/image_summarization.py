@@ -9,14 +9,12 @@ from onyx.configs.app_configs import (
 )
 from onyx.configs.chat_configs import IMAGE_SUMMARIZATION_TIMEOUT
 from onyx.llm.interfaces import LLM
+from onyx.llm.model_request import ChatCompletionMessage, SystemMessage, UserMessage
 from onyx.llm.models import (
-    ChatCompletionMessage,
     ContentPart,
     ImageContentPart,
     ImageUrlDetail,
-    SystemMessage,
     TextContentPart,
-    UserMessage,
 )
 from onyx.llm.utils import llm_response_to_string
 from onyx.server.metrics.image_processing import track_image_summarization

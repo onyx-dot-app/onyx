@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from onyx.configs.model_configs import ENABLE_PROMPT_CACHING
 from onyx.llm.interfaces import LLMConfig
-from onyx.llm.models import LanguageModelInput
+from onyx.llm.model_request import LanguageModelInput
 from onyx.llm.prompt_cache.cache_manager import generate_cache_key_hash
 from onyx.llm.prompt_cache.models import CacheMetadata
 from onyx.llm.prompt_cache.providers.factory import get_provider_adapter

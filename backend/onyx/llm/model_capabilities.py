@@ -776,3 +776,26 @@ def supported_reasoning_efforts(
     if style in _XHIGH_REASONING_STYLES:
         efforts.append(ReasoningEffort.XHIGH)
     return efforts
+
+
+def model_needs_formatting_reenabled(
+    model_name: str, deployment_name: str | None = None
+) -> bool:
+    # See https://simonwillison.net/tags/markdown/ for context on why this is needed
+    # for OpenAI reasoning models to have correct markdown generation
+
+    # Models that need formatting re-enabled
+    model_names = ["gpt-5.1", "gpt-5", "o3", "o1"]
+
+    # Pattern matches if any of these model names appear with word boundaries
+    # Word boundaries include: start/end of string, space, hyphen, or forward slash
+    pattern = (
+        r"(?:^|[\s\-/])("
+        + "|".join(re.escape(name) for name in model_names)
+        + r")(?:$|[\s\-/])"
+    )
+
+    return any(
+        re.search(pattern, name)
+        for name in model_identity_names(model_name, deployment_name)
+    )

@@ -22,35 +22,31 @@ from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import ChatFileType
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.interfaces import (
-    LLM,
-    LanguageModelInput,
-    LLMConfig,
-    LLMUserIdentity,
-    ToolChoiceOptions,
-)
-from onyx.llm.model_response import Delta
-from onyx.llm.models import (
+from onyx.llm.interfaces import LLM, LLMConfig, LLMUserIdentity
+from onyx.llm.model_capabilities import model_needs_formatting_reenabled
+from onyx.llm.model_request import (
+    CODE_BLOCK_MARKDOWN,
     AssistantMessage,
     ChatCompletionMessage,
-    FunctionCall,
-    ImageContentPart,
-    ImageUrlDetail,
-    ReasoningEffort,
+    LanguageModelInput,
+    RequestFunctionCall,
     SystemMessage,
-    TextContentPart,
     ToolCall,
     ToolMessage,
     UserMessage,
 )
+from onyx.llm.model_response import Delta
+from onyx.llm.models import (
+    ImageContentPart,
+    ImageUrlDetail,
+    ReasoningEffort,
+    TextContentPart,
+    ToolChoiceOptions,
+)
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.llm.request_context import get_llm_request_params
-from onyx.llm.utils import model_needs_formatting_reenabled, model_supports_image_input
-from onyx.prompts.chat_prompts import (
-    CODE_BLOCK_MARKDOWN,
-    IMAGE_DROP_REMINDER,
-    NON_VISION_IMAGE_MARKER,
-)
+from onyx.llm.utils import model_supports_image_input
+from onyx.prompts.chat_prompts import IMAGE_DROP_REMINDER, NON_VISION_IMAGE_MARKER
 from onyx.prompts.constants import SYSTEM_REMINDER_TAG_CLOSE, SYSTEM_REMINDER_TAG_OPEN
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
@@ -683,7 +679,7 @@ def _build_structured_assistant_message(msg: ChatMessageSimple) -> AssistantMess
             ToolCall(
                 id=tc.tool_call_id,
                 type="function",
-                function=FunctionCall(
+                function=RequestFunctionCall(
                     name=sanitize_tool_name(tc.tool_name),
                     arguments=json.dumps(tc.tool_arguments),
                 ),
@@ -1479,7 +1475,7 @@ def run_llm_step_pkt_generator(
                 ToolCall(
                     id=kickoff.tool_call_id,
                     type="function",
-                    function=FunctionCall(
+                    function=RequestFunctionCall(
                         name=kickoff.tool_name,
                         arguments=json.dumps(kickoff.tool_args),
                     ),

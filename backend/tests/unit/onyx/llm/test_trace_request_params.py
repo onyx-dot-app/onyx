@@ -5,7 +5,8 @@ from unittest.mock import patch
 
 from litellm.exceptions import BadRequestError
 
-from onyx.llm.models import ReasoningEffort, UserMessage
+from onyx.llm.model_request import UserMessage
+from onyx.llm.models import ReasoningEffort
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.tracing.framework.create import generation_span, trace
 
