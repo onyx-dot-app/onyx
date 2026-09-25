@@ -35,22 +35,22 @@ def llm() -> Mock:
     [
         (
             (922_000, 128_000, 1_050_000),
-            (922_000, 0.05, 875_900, 46_100),
+            (922_000, 0.05, 46_100),
             {875_900: 128_000, 900_000: 103_900},
         ),
         (
             (200_000, 64_000, None),
-            (200_000, 0.05, 190_000, 10_000),
+            (200_000, 0.05, 10_000),
             {120_000: 64_000, 180_000: 10_000},
         ),
-        ((200_000, 64_000, None), (8_000, 0.05, 7_600, 400), {7_600: 64_000}),
-        ((100_000, 10_000, "100000"), (1_000_000, 0, 1_000_000, 0), {98_000: 2_000}),
+        ((200_000, 64_000, None), (8_000, 0.05, 400), {7_600: 64_000}),
+        ((100_000, 10_000, "100000"), (1_000_000, 0, 0), {98_000: 2_000}),
         (
             (100_000, 10_000, 50_000),
-            (1_000_000, 0, 1_000_000, 0),
+            (1_000_000, 0, 0),
             {40_000: 10_000, 48_000: 2_000},
         ),
-        ((4_000, 4_000, None), (4_000, 0.05, 3_800, 200), {2_000: 1_800}),
+        ((4_000, 4_000, None), (4_000, 0.05, 200), {2_000: 1_800}),
     ],
     ids=[
         "separate-limits",
@@ -66,7 +66,7 @@ def test_model_budget(
     llm: Mock,
     monkeypatch: pytest.MonkeyPatch,
     limits: tuple[object, object, object],
-    input_config: tuple[int, float, int, int],
+    input_config: tuple[int, float, int],
     outputs: dict[int, int],
 ) -> None:
     model_map["openai/model"] = {
@@ -74,16 +74,13 @@ def test_model_budget(
         "max_output_tokens": limits[1],
         "max_context_tokens": limits[2],
     }
-    input_cap, margin, expected_input, expected_safety = input_config
+    input_cap, margin, expected_safety = input_config
     llm.config = llm.config.model_copy(update={"max_input_tokens": input_cap})
     monkeypatch.setattr(
         "onyx.llm.token_budget.GEN_AI_INPUT_TOKEN_SAFETY_MARGIN", margin
     )
     budget = resolve_token_budget(llm)
-    assert (budget.input_tokens, budget.safety_tokens) == (
-        expected_input,
-        expected_safety,
-    )
+    assert budget.safety_tokens == expected_safety
     for input_tokens, output_tokens in outputs.items():
         assert budget.output_allowance(input_tokens) == output_tokens
 
@@ -111,7 +108,6 @@ def test_missing_or_invalid_limits_keep_legacy_fallback(
     )
     budget = resolve_token_budget(llm)
     assert budget == TokenBudget(
-        input_tokens=30_400,
         max_output_tokens=None,
         context_tokens=None,
         safety_tokens=1_600,
@@ -127,7 +123,6 @@ def test_deployment_alias(model_map: ModelMap, llm: Mock) -> None:
         "max_output_tokens": 16_000,
     }
     assert resolve_token_budget(llm) == TokenBudget(
-        input_tokens=950_000,
         max_output_tokens=16_000,
         context_tokens=128_000,
         safety_tokens=50_000,
@@ -149,7 +144,6 @@ def test_provider_precedes_bare_model(
         }
     )
     assert resolve_token_budget(llm) == TokenBudget(
-        input_tokens=1_000_000,
         max_output_tokens=10_000,
         context_tokens=100_000,
         safety_tokens=0,
@@ -171,7 +165,6 @@ def test_partial_metadata_uses_complete_alias(
         }
     )
     assert resolve_token_budget(llm) == TokenBudget(
-        input_tokens=100_000,
         max_output_tokens=20_000,
         context_tokens=200_000,
         safety_tokens=0,
@@ -185,7 +178,7 @@ def test_exhausted_context_keeps_legacy_fallback(
 ) -> None:
     assert (
         TokenBudget(
-            input_tokens=95, max_output_tokens=10, context_tokens=100, safety_tokens=5
+            max_output_tokens=10, context_tokens=100, safety_tokens=5
         ).output_allowance(estimated_input_tokens)
         is None
     )

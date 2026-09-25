@@ -47,23 +47,22 @@ class LlmRequestPolicy(BaseModel):
 class LLMConfig(BaseModel):
     """Provider settings and resolved capabilities, including credentials."""
 
-    model_config = ConfigDict(frozen=True, protected_namespaces=())
-
     model_provider: str
     model_name: str
-    max_input_tokens: int
-    max_output_tokens: int | None = None
-    supports_images: bool | None = None
     temperature: float
+    api_key: str | None = None
     api_base: str | None = None
+    api_version: str | None = None
     deployment_name: str | None = None
+    custom_config: dict[str, str] | None = None
+    max_input_tokens: int
+    supports_images: bool | None = None
+    # Here rather than in the chat loop, so every invoke path gets it.
     reasoning_effort_default: ReasoningEffort | None = None
     reasoning_effort_user_default: ReasoningEffort | None = None
     reasoning_effort_max: ReasoningEffort | None = None
-
-    api_key: str | None = None
-    api_version: str | None = None
-    custom_config: dict[str, str] | None = None
+    # This disables the "model_" protected namespace for pydantic.
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class LLM(abc.ABC):
@@ -79,9 +78,22 @@ class LLM(abc.ABC):
     @abc.abstractmethod
     def invoke(
         self, request: GenerationRequest, context: GenerationContext | None = None
-    ) -> AssistantMessage: ...
+    ) -> AssistantMessage:
+        """Return one complete response, or raise LLMTimeoutError at the total deadline.
+
+        context.total_timeout_s defaults to LLM_INVOKE_TIMEOUT_S when unset.
+        The deadline is always finite so a stalled call cannot hold a worker forever.
+        """
+        raise NotImplementedError
 
     @abc.abstractmethod
     def stream(
         self, request: GenerationRequest, context: GenerationContext | None = None
-    ) -> Generator[GenerationEvent, None, None]: ...
+    ) -> Generator[GenerationEvent, None, None]:
+        """Yield generation events as output arrives.
+
+        context.stall_timeout_s limits idle reads and defaults to LLM_SOCKET_READ_TIMEOUT.
+        Streams have no total deadline unless context.total_timeout_s is set.
+        Close the generator when stopping early to release provider resources.
+        """
+        raise NotImplementedError

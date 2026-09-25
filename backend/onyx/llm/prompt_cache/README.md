@@ -9,7 +9,7 @@ The prompt caching framework provides a unified interface for enabling prompt ca
 ## Features
 
 - **Provider Support**: OpenAI (implicit), Anthropic (explicit), Vertex AI (explicit)
-- **Message Input**: Accepts `list[ChatCompletionMessage]` for the prefix and suffix
+- **Flexible Input**: Supports both `str` and `Sequence[ChatCompletionMessage]` inputs
 - **Continuation Handling**: Smart merging of cacheable prefix and suffix messages
 - **Best-Effort**: Gracefully degrades if caching fails
 - **Tenant-Aware**: Automatic tenant isolation for multi-tenant deployments
@@ -21,7 +21,7 @@ The prompt caching framework provides a unified interface for enabling prompt ca
 
 ```python
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
-from onyx.llm.model_request import SystemMessage, UserMessage
+from onyx.llm.litellm_models import SystemMessage, UserMessage
 
 # Assume you have an LLM instance with a config property
 # llm = get_your_llm_instance()
@@ -42,9 +42,24 @@ processed_prompt, cache_metadata = process_with_prompt_cache(
     suffix=suffix,
     continuation=False,
 )
+```
 
-# Make the provider call with the processed prompt
-response = llm.invoke_raw(processed_prompt)
+`processed_prompt` contains provider messages for the raw client interface.
+Application generation uses shared messages; see [Language model client](../README.md).
+
+### Using String Inputs
+
+```python
+# Both prefix and suffix can be strings
+cacheable_prefix = "You are a helpful assistant. Context: ..."
+suffix = "What is the weather?"
+
+processed_prompt, cache_metadata = process_with_prompt_cache(
+    llm_config=llm.config,
+    cacheable_prefix=cacheable_prefix,
+    suffix=suffix,
+    continuation=False,
+)
 ```
 
 ### Continuation Flag

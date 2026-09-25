@@ -363,9 +363,7 @@ def test_client_config_resolves_capabilities() -> None:
 
     with patch(
         "onyx.llm.multi_llm.get_model_map",
-        return_value={
-            "custom-model": {"supports_vision": True, "max_output_tokens": 321}
-        },
+        return_value={"custom-model": {"supports_vision": True}},
     ):
         client = LitellmLLM(
             api_key="secret-key",
@@ -377,7 +375,6 @@ def test_client_config_resolves_capabilities() -> None:
     assert client.config == metadata
     assert client.config is not metadata
     assert metadata.supports_images is True
-    assert metadata.max_output_tokens == 321
     assert metadata.api_key == "secret-key"
 
 

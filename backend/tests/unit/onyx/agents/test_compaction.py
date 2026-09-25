@@ -272,7 +272,6 @@ def test_output_budget_is_recalculated_after_compaction(
     monkeypatch: pytest.MonkeyPatch, max_tokens: int | None
 ) -> None:
     budget = TokenBudget(
-        input_tokens=1080,
         max_output_tokens=4096,
         context_tokens=4300,
         safety_tokens=120,

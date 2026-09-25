@@ -18,6 +18,7 @@ from onyx.llm.models import (
     Message,
     TextContent,
     TextContentPart,
+    ToolDefinition,
     ToolResultMessage,
     UserMessage,
 )
@@ -79,24 +80,19 @@ class TestSanitizeLlmOutput:
 
 
 class TestExtractToolCallsFromResponseText:
-    def _tool_defs(self) -> list[dict]:
+    def _tool_defs(self) -> list[ToolDefinition]:
         return [
-            {
-                "type": "function",
-                "function": {
-                    "name": "internal_search",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "queries": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                            }
-                        },
-                        "required": ["queries"],
+            ToolDefinition(
+                name="internal_search",
+                description="Search internal documents",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "queries": {"type": "array", "items": {"type": "string"}}
                     },
+                    "required": ["queries"],
                 },
-            }
+            )
         ]
 
     def test_collapses_nested_arguments_duplicate(self) -> None:

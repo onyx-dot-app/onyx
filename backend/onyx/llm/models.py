@@ -54,6 +54,8 @@ class ImageContentPart(BaseModel):
 ContentPart = TextContentPart | ImageContentPart
 
 
+# The signature is minted by the provider and must be round-tripped unmodified
+# for replay to be accepted.
 class ThinkingBlock(BaseModel):
     type: Literal[ContentType.THINKING] = ContentType.THINKING
     thinking: str = ""
@@ -190,7 +192,14 @@ def content_text(content: str | list[TextContentPart | ImageContentPart]) -> str
 
 
 class ReasoningEffort(str, Enum):
-    """Reasoning effort levels mapped by each provider."""
+    """Reasoning effort levels for models that support extended thinking.
+
+    Different providers map these values differently:
+    - OpenAI: Uses "low", "medium", "high" directly for reasoning_effort. Recently added "none" for 5 series
+              which is like "minimal"
+    - Claude: Uses budget_tokens with different values for each level
+    - Gemini: Uses "none", "low", "medium", "high" for thinking_budget (via litellm mapping)
+    """
 
     AUTO = "auto"
     OFF = "off"
@@ -202,6 +211,8 @@ class ReasoningEffort(str, Enum):
     XHIGH = "xhigh"
 
 
+# Reasoning-effort values a user may pin per chat session. AUTO is excluded
+# because a cleared override (NULL) already resolves to AUTO.
 USER_SELECTABLE_REASONING_EFFORTS: frozenset[ReasoningEffort] = frozenset(
     {
         ReasoningEffort.OFF,
@@ -222,6 +233,7 @@ def parse_user_selectable_reasoning_effort(value: str) -> ReasoningEffort:
     return effort
 
 
+# AUTO has no rank: it defers a choice rather than naming an amount.
 _REASONING_EFFORT_RANK: dict[ReasoningEffort, int] = {
     ReasoningEffort.OFF: 0,
     ReasoningEffort.LOW: 1,
@@ -243,9 +255,14 @@ def resolve_reasoning_effort(
     user_default: ReasoningEffort | None,
     maximum: ReasoningEffort | None,
 ) -> ReasoningEffort:
-    """Apply admin and user defaults, then cap the effective reasoning effort.
+    """Settle a request against the admin's per-model default, the user's own
+    default, and the cap.
 
-    AUTO resolves before clamping because providers interpret it as medium.
+    Ordered chain, first concrete source wins. The cap applies last and
+    unconditionally.
+
+    AUTO is concretized before clamping because it maps to medium downstream,
+    which would quietly exceed a cap of LOW.
     """
     if requested != ReasoningEffort.AUTO:
         effort = requested
@@ -314,17 +331,6 @@ class GenerationRequestParams(BaseModel):
     sent_kwargs: dict[str, JsonValue]
 
 
-class GenerationEventType(str, Enum):
-    START = "start"
-    DONE = "done"
-    ERROR = "error"
-    TEXT_DELTA = "text_delta"
-    THINKING_DELTA = "thinking_delta"
-    TOOL_CALL_START = "tool_call_start"
-    TOOL_CALL_DELTA = "tool_call_delta"
-    TOOL_CALL_END = "tool_call_end"
-
-
 class _Event(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     request_params: GenerationRequestParams | None = None
@@ -335,15 +341,15 @@ class GenerationLifecycleEvent(_Event):
 
 
 class GenerationStartEvent(GenerationLifecycleEvent):
-    type: Literal[GenerationEventType.START] = GenerationEventType.START
+    type: Literal["start"] = "start"
 
 
 class GenerationDoneEvent(GenerationLifecycleEvent):
-    type: Literal[GenerationEventType.DONE] = GenerationEventType.DONE
+    type: Literal["done"] = "done"
 
 
 class GenerationErrorEvent(GenerationLifecycleEvent):
-    type: Literal[GenerationEventType.ERROR] = GenerationEventType.ERROR
+    type: Literal["error"] = "error"
 
 
 class GenerationTextEvent(_Event):
@@ -352,14 +358,12 @@ class GenerationTextEvent(_Event):
 
 
 class TextDeltaEvent(GenerationTextEvent):
-    type: Literal[GenerationEventType.TEXT_DELTA] = GenerationEventType.TEXT_DELTA
+    type: Literal["text_delta"] = "text_delta"
 
 
 class ThinkingDeltaEvent(GenerationTextEvent):
     blocks: list[AnyThinkingBlock] | None = None
-    type: Literal[GenerationEventType.THINKING_DELTA] = (
-        GenerationEventType.THINKING_DELTA
-    )
+    type: Literal["thinking_delta"] = "thinking_delta"
 
 
 class GenerationToolCallEvent(_Event):
@@ -369,19 +373,15 @@ class GenerationToolCallEvent(_Event):
 
 
 class ToolCallStartEvent(GenerationToolCallEvent):
-    type: Literal[GenerationEventType.TOOL_CALL_START] = (
-        GenerationEventType.TOOL_CALL_START
-    )
+    type: Literal["tool_call_start"] = "tool_call_start"
 
 
 class ToolCallDeltaEvent(GenerationToolCallEvent):
-    type: Literal[GenerationEventType.TOOL_CALL_DELTA] = (
-        GenerationEventType.TOOL_CALL_DELTA
-    )
+    type: Literal["tool_call_delta"] = "tool_call_delta"
 
 
 class ToolCallEndEvent(GenerationToolCallEvent):
-    type: Literal[GenerationEventType.TOOL_CALL_END] = GenerationEventType.TOOL_CALL_END
+    type: Literal["tool_call_end"] = "tool_call_end"
 
 
 GenerationEvent = Annotated[
