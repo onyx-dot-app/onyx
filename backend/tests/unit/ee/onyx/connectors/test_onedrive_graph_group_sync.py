@@ -6,14 +6,16 @@ from ee.onyx.external_permissions.onedrive.group_sync import (
     _group_members,
     onedrive_group_sync,
 )
+from onyx.connectors.microsoft_utils.entra import (
+    EntraDirectoryObject as OneDriveGroupMember,
+)
+from onyx.connectors.microsoft_utils.entra import (
+    EntraDirectoryObjectPage as OneDriveGroupMemberPage,
+)
+from onyx.connectors.microsoft_utils.entra import EntraGroup as OneDriveGroup
+from onyx.connectors.microsoft_utils.entra import EntraGroupPage as OneDriveGroupPage
 from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftGraphError as OneDriveGraphError,
-)
-from onyx.connectors.onedrive.models import (
-    OneDriveGroup,
-    OneDriveGroupMember,
-    OneDriveGroupMemberPage,
-    OneDriveGroupPage,
 )
 
 
@@ -136,7 +138,7 @@ def test_group_sync_rejects_group_page_limit(
 ) -> None:
     connector = _connector()
     monkeypatch.setattr(
-        "ee.onyx.external_permissions.onedrive.group_sync.MAX_GROUP_LISTING_PAGES",
+        "onyx.connectors.microsoft_utils.entra.MAX_ENTRA_COLLECTION_PAGES",
         2,
     )
     connector.ops.list_groups.side_effect = [
@@ -155,7 +157,7 @@ def test_group_sync_rejects_group_page_limit(
             "ee.onyx.external_permissions.onedrive.group_sync.credential_json",
             return_value={},
         ),
-        pytest.raises(ValueError, match="group listing exceeds the page limit"),
+        pytest.raises(RuntimeError, match="group listing exceeds the page limit"),
     ):
         list(onedrive_group_sync("tenant", cc_pair))
 
@@ -169,7 +171,7 @@ def test_group_members_reject_repeated_cursor() -> None:
     )
     connector.ops.list_transitive_group_members.side_effect = None
 
-    with pytest.raises(ValueError, match="repeated member cursor"):
+    with pytest.raises(RuntimeError, match="repeated member cursor"):
         _group_members(connector, OneDriveGroup(id="group"))
 
     assert connector.ops.list_transitive_group_members.call_count == 2

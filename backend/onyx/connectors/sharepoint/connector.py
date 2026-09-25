@@ -52,6 +52,7 @@ from onyx.connectors.microsoft_utils.drive_items import (
     parse_graph_datetime,
     timestamp_in_window,
 )
+from onyx.connectors.microsoft_utils.entra import EntraClient
 from onyx.connectors.microsoft_utils.graph_auth import (
     MicrosoftAuthMethod,
     acquire_graph_token,
@@ -799,21 +800,23 @@ class SharepointConnector(
         if not self.msal_app:
             return
         try:
-            access_token = self._get_graph_access_token()
-            probe_url = f"{self.graph_api_base}/groups"
-            resp = requests.get(
-                probe_url,
-                headers={"Authorization": f"Bearer {access_token}"},
-                params={"$top": "1", "$select": "id"},
-                timeout=10,
+            entra = EntraClient(
+                self.graph_api.get_json,
+                self.graph_api_base,
             )
-            if resp.status_code in (401, 403):
+            entra.list_group_ids_page(page_size=1)
+        except requests.HTTPError as error:
+            status = error.response.status_code if error.response is not None else None
+            if status in (401, 403):
                 raise ConnectorValidationError(
                     "The Azure AD app registration is missing the required Microsoft Graph "
                     "permission to enumerate Azure AD group members. Please grant "
                     "'GroupMember.Read.All' (application permission) in the Azure portal "
                     "and re-run admin consent."
-                )
+                ) from error
+            logger.warning(
+                "Group members permission probe failed (non-blocking): %s", error
+            )
         except ConnectorValidationError:
             raise
         except Exception as e:
