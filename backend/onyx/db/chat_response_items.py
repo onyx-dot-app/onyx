@@ -200,8 +200,7 @@ def write_response_items(
                 operation_status=content.status,
             )
             db_session.add(tool)
-            db_session.flush()
-            row.tool_call_id = tool.id
+            row.tool_call = tool
             tool.operation_status = content.status
             tools[key] = tool
         else:
@@ -209,7 +208,7 @@ def write_response_items(
             if tool is None:
                 raise ValueError("Tool result has no call in its generation")
             tool.result = content.result
-            row.tool_call_id = tool.id
+            row.tool_call = tool
         if item.id not in existing:
             response.response_items.append(row)
     db_session.flush()

@@ -113,7 +113,7 @@ class ToolBatch:
     def _context(self, call: ToolCall) -> ToolCallContext:
         return ToolCallContext(
             step=self.step,
-            call=call,
+            call=call.model_copy(deep=True),
             options=self.options.model_copy(deep=True),
             messages=[item.model_copy(deep=True) for item in self.context_messages],
         )
@@ -189,7 +189,7 @@ class ToolBatch:
                 is_error=result_message.is_error,
                 terminate=result_message.terminate,
             )
-            self._finish_tool(result, self._context(call))
+            self._finish_tool(result, call)
 
     def execute(self) -> StepResult | None:
         try:
@@ -324,9 +324,8 @@ class ToolBatch:
         merged_arguments: dict[str, JsonValue] | None = None,
     ) -> ToolOutcome:
         cancellation_signal = self.signal
-        context = self._context(call)
-        step = context.step
-        options = context.options
+        step = self.step
+        options = self.options
         tool = self.tools.get(call.name)
         with self.run._lock:
             cancellation_signal.check()
@@ -354,12 +353,6 @@ class ToolBatch:
                             )
                         )
         cancellation_signal.check()
-        context = ToolCallContext(
-            step=step,
-            call=call.model_copy(deep=True),
-            options=options.model_copy(deep=True),
-            messages=[message.model_copy(deep=True) for message in context.messages],
-        )
         if tool is None or options.tool_choice == ToolChoiceOptions.NONE:
             return ToolResult(
                 content=f"Tool {call.name} is unavailable for this step.",
@@ -374,8 +367,10 @@ class ToolBatch:
                 content=call.argument_error or "Tool arguments were truncated.",
                 is_error=True,
             )
+        context: ToolCallContext | None = None
         before_tool_call = self.before_tool_call
         if before_tool_call and not approved and children is None:
+            context = self._context(call)
             result = before_tool_call(context)
             if result is not None:
                 return result
@@ -407,7 +402,10 @@ class ToolBatch:
             else call.model_copy(deep=True).arguments,
             cancellation=cancellation_signal,
             update=update,
-            messages=[message.model_copy(deep=True) for message in context.messages],
+            messages=[
+                message.model_copy(deep=True)
+                for message in (context.messages if context else self.context_messages)
+            ],
             agents=self.run._coordination.for_tool(
                 call.id, f"{self.run._state.run_id}:{step.index}", active
             )
@@ -511,16 +509,17 @@ class ToolBatch:
             if event is not None and self.run._accepting and self.run._delivery:
                 self.run._delivery.publish(event)
 
-    def _finish_tool(self, result: ToolResult, context: ToolCallContext) -> None:
+    def _finish_tool(self, result: ToolResult, call: ToolCall) -> None:
         try:
             after = self.after_tool_call
             if after:
+                context = self._context(call)
                 result = self.run._work.blocking(
                     lambda: after(context, result.model_copy(deep=True)),
                     self.run._cancellation_signal,
                 )
         finally:
-            self._finalize_tool_result(result, context.call)
+            self._finalize_tool_result(result, call)
         with self.run._lock:
             self.progress.finalized_tools += 1
             self.run._state.revision += 1

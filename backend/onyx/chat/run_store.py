@@ -279,13 +279,13 @@ class ChatRunStore(RunStore, RunOwnership):
             return message_id
 
     def register(self, run: Run) -> None:
-        snapshot = run.snapshot()
+        snapshot = run.snapshot(include_children=False)
         with self._lock:
             lease = self._leases.get(run.id)
             claimed = lease.owner if lease is not None else None
             parent = self._owned.get(snapshot.parent_run_id or "")
         if parent is not None:
-            self._save_output(parent, parent.run.snapshot())
+            self._save_output(parent, parent.run.snapshot(include_children=False))
         if claimed is None:
             with self._ownership_lock(run.id):
                 if self._owner(run.id) is not None:
@@ -366,13 +366,12 @@ class ChatRunStore(RunStore, RunOwnership):
                 self._leases.pop(run_id, None)
 
     def save(self, run: Run) -> None:
-        snapshot = run.snapshot()
         with self._lock:
             owned = self._owned.get(run.id)
         if owned is None:
             raise ValueError("Run has no storage ownership")
         if owned.owner.message_id != self.response_id or self._root_response is None:
-            self._save_output(owned, snapshot)
+            self._save_output(owned, run.snapshot(include_children=False))
             return
         with self._ownership_lock(run.id):
             self._require_owner(owned)

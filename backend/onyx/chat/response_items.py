@@ -146,9 +146,9 @@ def build_response_items(
         elif isinstance(message, ToolResultMessage):
             if generation_id is None:
                 raise ValueError("Tool output has no preceding generation")
-            result = message.model_copy(deep=True)
-            result.details = None
-            result.metadata = None
+            result = message.model_copy(
+                update={"details": None, "metadata": None}
+            ).model_copy(deep=True)
             items.append(
                 ResponseItem(
                     id=f"{generation_id}:result:{message.tool_call_id}",

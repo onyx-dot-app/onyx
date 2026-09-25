@@ -65,15 +65,20 @@ def completed_tool_call_ids(messages: list[Message], assistant_index: int) -> se
     return result_ids
 
 
-def messages_for_model(messages: list[Message]) -> list[Message]:
-    """Exclude unfinished tool calls while preserving recorded partial output."""
+def messages_for_model(
+    messages: list[Message], *, copy_messages: bool = True
+) -> list[Message]:
+    """Exclude unfinished tool calls while preserving recorded partial output.
+
+    Set copy_messages=False only when the caller owns the detached input messages.
+    """
     result: list[Message] = []
     accepted: set[str] = set()
     for index, message in enumerate(messages):
         if isinstance(message, AssistantMessage):
             result_ids = completed_tool_call_ids(messages, index)
             accepted = {call.id for call in message.tool_calls if call.id in result_ids}
-            copy = message.model_copy(deep=True)
+            copy = message.model_copy(deep=copy_messages)
             copy.content = [
                 part
                 for part in copy.content
@@ -87,7 +92,9 @@ def messages_for_model(messages: list[Message]) -> list[Message]:
                 )
         elif isinstance(message, ToolResultMessage):
             if message.tool_call_id in accepted:
-                result.append(message.model_copy(deep=True))
+                result.append(
+                    message.model_copy(deep=True) if copy_messages else message
+                )
                 accepted.remove(message.tool_call_id)
             else:
                 logger.debug(
@@ -96,5 +103,5 @@ def messages_for_model(messages: list[Message]) -> list[Message]:
                 )
         else:
             accepted.clear()
-            result.append(message.model_copy(deep=True))
+            result.append(message.model_copy(deep=True) if copy_messages else message)
     return result

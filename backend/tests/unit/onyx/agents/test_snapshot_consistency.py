@@ -3,12 +3,13 @@
 import threading
 from contextlib import AbstractContextManager
 from types import TracebackType
+from unittest.mock import patch
 
 import pytest
 
 from onyx.agents.execution_records import RunStatus
 from onyx.agents.models import PreparedStep, RunState, StepInput, ToolCallContext
-from onyx.agents.runtime import Agent
+from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import (
@@ -20,6 +21,38 @@ from onyx.llm.models import (
     ToolResultMessage,
 )
 from tests.unit.onyx.agents.fakes import FakeModelClient
+
+
+def test_snapshot_can_omit_children_before_copying() -> None:
+    run = Run.from_snapshot(
+        RunState(
+            run_id="parent",
+            agent_id="agent",
+            status=RunStatus.COMPLETE,
+            messages=[
+                AssistantMessage(
+                    content=[ToolCall(id="call", name="lookup", arguments={"q": "old"})]
+                )
+            ],
+            child_runs=[
+                RunState(run_id="child", status=RunStatus.COMPLETE, messages=[])
+            ],
+        )
+    )
+    with patch.object(
+        RunState, "__deepcopy__", autospec=True, side_effect=RunState.__deepcopy__
+    ) as copy:
+        snapshot = run.snapshot(include_children=False)
+    assert [call.args[0].run_id for call in copy.call_args_list] == ["parent"]
+    assert snapshot.child_runs == []
+    message = snapshot.messages[0]
+    assert isinstance(message, AssistantMessage)
+    message.tool_calls[0].arguments["q"] = "new"
+    full = run.snapshot()
+    assert [child.run_id for child in full.child_runs] == ["child"]
+    original = full.messages[0]
+    assert isinstance(original, AssistantMessage)
+    assert original.tool_calls[0].arguments == {"q": "old"}
 
 
 class SnapshotLock(AbstractContextManager[None]):

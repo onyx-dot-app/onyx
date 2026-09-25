@@ -1,13 +1,14 @@
 """Context pressure preserves the task, tool effects, and recorded history."""
 
 from collections.abc import Generator
+from unittest.mock import patch
 
 import pytest
 
-from onyx.agents.compaction import context_budget, request_tokens
-from onyx.agents.execution_records import CompactionCheckpoint
-from onyx.agents.models import AgentState, PreparedStep, StepInput
-from onyx.agents.runtime import Agent, RunFailed
+from onyx.agents.compaction import context_budget, history_digest, request_tokens
+from onyx.agents.execution_records import CompactionCheckpoint, RunStatus
+from onyx.agents.models import AgentState, PreparedStep, RunState, StepInput
+from onyx.agents.runtime import Agent, Run, RunFailed, _fit_context
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.exceptions import LLMContextLimitError
@@ -218,6 +219,35 @@ def test_oversized_required_instruction_fails_without_losing_snapshot() -> None:
     assert agent.state.messages[0].text == "mandatory " * 2000
     snapshot = run.snapshot()
     assert snapshot is not None and snapshot.status == "error"
+
+
+def test_context_fitting_validates_checkpoint_once() -> None:
+    source: list[Message] = [UserMessage(content="Current branch")]
+    checkpoint = CompactionCheckpoint(
+        summary="Summary", covered_count=1, covered_digest=history_digest(source)
+    )
+    run = Run.from_snapshot(
+        RunState(
+            run_id="run",
+            agent_id="agent",
+            status=RunStatus.COMPLETE,
+            checkpoint=checkpoint,
+            messages=[],
+        )
+    )
+    with patch("onyx.agents.compaction.history_digest", wraps=history_digest) as digest:
+        request = _fit_context(
+            run,
+            ContextModel(),
+            source,
+            PreparedStep(),
+            GenerationContext(flow=LLMFlow.UNTAGGED_INVOKE),
+        )
+    digest.assert_called_once_with(source)
+    assert any(
+        message.text == "Conversation summary:\nSummary" for message in request.messages
+    )
+    assert run.snapshot().checkpoint == checkpoint
 
 
 def test_checkpoint_from_another_branch_is_removed_from_context() -> None:

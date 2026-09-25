@@ -59,7 +59,7 @@ from onyx.db.chat_response import (
     save_chat_response,
     save_response_content,
 )
-from onyx.db.chat_response_items import read_response_items
+from onyx.db.chat_response_items import read_response_items, write_response_items
 from onyx.db.chat_subagents import (
     ChatBranch,
     _load_history,
@@ -235,6 +235,45 @@ def _child_record(
     )
     parent.child_runs.append(child)
     return child
+
+
+def test_response_tools_flush_together_and_keep_result_links(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation)
+    calls = [ToolCall(id=f"call-{i}", name="search", arguments={}) for i in range(4)]
+    messages: list[Message] = [AssistantMessage(content=list(calls))]
+    messages.extend(
+        ToolResultMessage(tool_call_id=call.id, tool_name=call.name, content=call.id)
+        for call in calls
+    )
+    items = build_response_items(str(uuid4()), messages, [])
+    flushes = 0
+
+    def count_flush(**_event: object) -> None:
+        nonlocal flushes
+        flushes += 1
+
+    # Repeat the write to cover both new and existing tool relationships.
+    for _ in range(2):
+        flushes = 0
+        event.listen(db_session, "before_flush", count_flush, named=True)
+        try:
+            tools = write_response_items(db_session, response, items, {})
+        finally:
+            event.remove(db_session, "before_flush", count_flush)
+        assert flushes == 1
+        assert len({tool.id for tool in tools.values()}) == len(calls)
+        db_session.expire_all()
+        assert read_response_items(response) == items
+        for call in calls:
+            linked = [
+                row.tool_call_id
+                for row in response.response_items
+                if row.tool_call is not None and row.tool_call.tool_call_id == call.id
+            ]
+            assert len(linked) == 2
+            assert linked[0] == linked[1]
 
 
 def test_response_items_preserve_order_provider_metadata_and_tool_identity(
@@ -1114,6 +1153,7 @@ def test_history_loads_items_only_for_selected_ancestry(
     assert sum("FROM chat_response_item" in query for query in executed_sql) == 1
 
 
+@pytest.mark.parametrize("save_progress", [False, True])
 @pytest.mark.parametrize("invalid_character", ["\x00", "\ud800"])
 def test_response_storage_sanitizes_postgres_text_without_mutating_input(
     db_session: Session,
