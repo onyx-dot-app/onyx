@@ -168,16 +168,12 @@ export const OptionsList: React.FC<OptionsListProps> = ({
             return (
               <div
                 key={groupIdx}
+                // Plumbing only: the id for aria-activedescendant and the
+                // index for scroll-into-view. Hover and press styling are
+                // the Divider's own Interactive.
                 id={`${fieldId}-group-${sanitizeOptionId(group.title)}`}
                 role="presentation"
-                className="opal-select-group"
                 data-index={index}
-                data-highlighted={index === highlightedIndex || undefined}
-                // The title has Interactive's own hover; the pointer clears
-                // the keyboard highlight here rather than setting one, so
-                // a toggle under a still pointer leaves nothing stale.
-                onMouseEnter={() => onMouseEnter(-1)}
-                onMouseMove={onMouseMove}
               >
                 <Divider
                   title={group.title}

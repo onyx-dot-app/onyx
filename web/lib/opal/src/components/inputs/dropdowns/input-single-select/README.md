@@ -53,7 +53,11 @@ row. Enter picks the highlighted row or toggles the highlighted title;
 Escape closes and returns focus to the trigger. Physical focus stays on the
 trigger or the search field, and `aria-activedescendant` follows the
 highlight. Typing in the search field never highlights a row; only walking
-the list does.
+the list does. A title stop has no highlight of its own yet: its hover and
+press come from the Divider's `Interactive`.
+
+Foldable groups start closed, except the one holding the selection; with
+nothing selected, every group starts closed.
 
 ## Search
 
