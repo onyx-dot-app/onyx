@@ -1,6 +1,5 @@
 import asyncio
 import json
-import math
 import threading
 import time
 import uuid
@@ -149,13 +148,17 @@ class RedisPool:
     def get_client(
         self, tenant_id: str, *, operation_timeout_s: float | None = None
     ) -> TenantRedisClient:
-        if operation_timeout_s is None:
-            return TenantRedisClient(
-                tenant_id,
-                redis.Redis(connection_pool=self._pool, **_client_retry_kwargs()),
-            )
-        if not math.isfinite(operation_timeout_s) or operation_timeout_s <= 0:
-            raise ValueError("operation_timeout_s must be finite and positive")
+        pool = (
+            self._pool
+            if operation_timeout_s is None
+            else self._get_timeout_pool(operation_timeout_s)
+        )
+        return TenantRedisClient(
+            tenant_id, redis.Redis(connection_pool=pool, **_client_retry_kwargs())
+        )
+
+    def _get_timeout_pool(self, operation_timeout_s: float) -> redis.ConnectionPool:
+        """One pool per timeout value, since socket timeouts are set per connection."""
         with self._timeout_pool_lock:
             pool = self._timeout_pools.get(operation_timeout_s)
             if pool is None:
@@ -163,13 +166,7 @@ class RedisPool:
                     ssl=REDIS_SSL, operation_timeout=operation_timeout_s
                 )
                 self._timeout_pools[operation_timeout_s] = pool
-        return TenantRedisClient(
-            tenant_id,
-            redis.Redis(
-                connection_pool=pool,
-                retry=Retry(ExponentialBackoff(), retries=0),
-            ),
-        )
+            return pool
 
     def get_replica_client(self, tenant_id: str) -> TenantRedisClient:
         return TenantRedisClient(
@@ -312,7 +309,6 @@ class RedisPool:
             for kwargs in (connection_kwargs, sentinel_kwargs):
                 kwargs["socket_timeout"] = operation_timeout
                 kwargs["socket_connect_timeout"] = operation_timeout
-                kwargs["retry"] = Retry(ExponentialBackoff(), retries=0)
         sentinel = Sentinel(
             REDIS_SENTINEL_HOSTS,
             sentinel_kwargs=sentinel_kwargs,

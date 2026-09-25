@@ -46,9 +46,10 @@ def get_cache_backend(
 
     If *tenant_id* is ``None``, the current tenant is read from the
     thread-local context variable (same behaviour as ``get_redis_client``).
-    An explicit timeout limits Redis I/O and pool waits where supported, or
-    PostgreSQL statements and lock waits. None preserves backend defaults.
-    This is not a total deadline; PostgreSQL connection acquisition is not covered.
+    *operation_timeout_s* limits each Redis socket operation and pool wait, or
+    each PostgreSQL statement and lock wait. It is not a total deadline, and
+    PostgreSQL connection acquisition is not covered. ``None`` keeps backend
+    defaults. Pass a fixed constant: each distinct Redis value gets its own pool.
     """
     if operation_timeout_s is not None and (
         not math.isfinite(operation_timeout_s) or operation_timeout_s <= 0
