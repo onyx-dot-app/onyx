@@ -299,7 +299,7 @@ def handle_openai_responses_passthrough(
     with (
         _gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
-            llm.config, flow=flow, input_messages=request.input, tools=request.tools
+            llm, flow=flow, input_messages=request.input, tools=request.tools
         ) as span,
     ):
         try:
@@ -426,7 +426,7 @@ def _openai_passthrough_stream_worker(
     with (
         _gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
-            llm.config, flow=flow, input_messages=input_messages, tools=tools
+            llm, flow=flow, input_messages=input_messages, tools=tools
         ) as span,
     ):
         state = _StreamAccumulator()

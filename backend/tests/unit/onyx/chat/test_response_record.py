@@ -83,7 +83,6 @@ def test_partial_run_keeps_input_and_replayable_output(cancelled: bool) -> None:
         ) -> Generator[GenerationEvent, None, None]:
             del request, context
             yield TextDeltaEvent(
-                message=AssistantMessage(content=[TextContent(text="partial")]),
                 content_index=0,
                 text="partial",
             )

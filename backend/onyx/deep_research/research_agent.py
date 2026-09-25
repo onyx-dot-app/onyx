@@ -276,7 +276,7 @@ class ResearchAgent(FeatureRestoration):
         return PreparedStep(
             tools=tools,
             options=options,
-            timeout=DR_REPORT_LLM_TIMEOUT_S if is_final_step else None,
+            stall_timeout_s=DR_REPORT_LLM_TIMEOUT_S if is_final_step else None,
             output_metadata=output_metadata,
             assemble_messages=partial(
                 prepare_prompt,

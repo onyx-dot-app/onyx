@@ -165,7 +165,7 @@ def test_llm(llm: LLM, total_timeout_s: float = LLM_PROBE_TIMEOUT_S) -> str | No
                     options=GenerationOptions(max_tokens=50),
                 ),
                 context=GenerationContext(
-                    flow=LLMFlow.MODEL_VALIDATION, total_timeout=total_timeout_s
+                    flow=LLMFlow.MODEL_VALIDATION, total_timeout_s=total_timeout_s
                 ),
             )
             return None

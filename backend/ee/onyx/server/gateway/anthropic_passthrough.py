@@ -294,7 +294,7 @@ def handle_anthropic_passthrough(
     with (
         _gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
-            llm.config, flow=flow, input_messages=request.messages, tools=request.tools
+            llm, flow=flow, input_messages=request.messages, tools=request.tools
         ) as span,
     ):
         try:
@@ -391,7 +391,7 @@ def _passthrough_stream_worker(
     with (
         _gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
-            llm.config, flow=flow, input_messages=input_messages, tools=tools
+            llm, flow=flow, input_messages=input_messages, tools=tools
         ) as span,
     ):
         state = _StreamAccumulator()

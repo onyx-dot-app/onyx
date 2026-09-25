@@ -351,9 +351,7 @@ def test_incomplete_model_stream_cannot_complete_an_agent_turn() -> None:
         ) -> Generator[GenerationEvent, None, None]:
             del request, context
             try:
-                yield TextDeltaEvent(
-                    message=answer("partial"), content_index=0, text="partial"
-                )
+                yield TextDeltaEvent(content_index=0, text="partial")
             finally:
                 closed.append(True)
 
@@ -384,9 +382,7 @@ def test_cancellation_closes_active_client_stream() -> None:
             del request
             assert context is not None and context.cancellation is signal
             try:
-                yield TextDeltaEvent(
-                    message=answer("partial"), content_index=0, text="partial"
-                )
+                yield TextDeltaEvent(content_index=0, text="partial")
                 with signal.on_cancel(cancelled.set):
                     assert cancelled.wait(2)
                 signal.check()

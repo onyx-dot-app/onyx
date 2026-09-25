@@ -138,7 +138,7 @@ def _summarize_image(
             context=GenerationContext(
                 flow=LLMFlow.IMAGE_SUMMARIZATION,
                 content_mode=TraceContentMode.METADATA_ONLY,
-                total_timeout=IMAGE_SUMMARIZATION_TIMEOUT,
+                total_timeout_s=IMAGE_SUMMARIZATION_TIMEOUT,
             ),
         )
         summary = response.text

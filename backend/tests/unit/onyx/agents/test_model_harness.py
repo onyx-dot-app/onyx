@@ -70,6 +70,13 @@ def test_model_and_agent_share_transcript_and_stream_events() -> None:
     assert isinstance(llm.requests[-1]["prompt"][-1], ToolMessage)
     assert llm.requests[-1]["prompt"][-1].content == "3"
     assert len([event for event in events if event.type == "message_update"]) >= 2
+    assert len([event for event in events if event.type == "message_start"]) == 2
+    assert len([event for event in events if event.type == "message_end"]) == 2
+    assert all(
+        event.generation_event.type not in {"start", "done"}
+        for event in events
+        if event.type == "message_update"
+    )
 
 
 def test_tool_recovery_happens_before_events() -> None:

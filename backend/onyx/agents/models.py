@@ -51,7 +51,7 @@ class PreparedStep(BaseModel):
     system_prompt: str = ""
     tools: list[AgentTool] = Field(default_factory=list)
     options: GenerationOptions = Field(default_factory=GenerationOptions)
-    timeout: int | None = Field(default=None, gt=0)
+    stall_timeout_s: int | None = Field(default=None, gt=0)
     output_metadata: SerializeAsAny[BaseModel] | None = None
     assemble_messages: Callable[[list[Message]], list[Message]] | None = None
 

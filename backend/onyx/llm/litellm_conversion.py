@@ -35,12 +35,8 @@ from onyx.llm.models import (
     SystemMessage,
     TextContent,
     TextDeltaEvent,
-    TextEndEvent,
-    TextStartEvent,
     ThinkingContent,
     ThinkingDeltaEvent,
-    ThinkingEndEvent,
-    ThinkingStartEvent,
     ToolCall,
     ToolCallDeltaEvent,
     ToolCallEndEvent,
@@ -50,6 +46,7 @@ from onyx.llm.models import (
     ToolResultMessage,
     Usage,
     UserMessage,
+    apply_generation_event,
 )
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.llm.tool_parsing import (
@@ -462,60 +459,26 @@ class MessageAccumulator:
         self.calls: dict[int, _PendingToolCall] = {}
         self.active_text: int | None = None
 
-    def close_text(self) -> list[GenerationEvent]:
-        if self.active_text is None:
-            return []
-        index, self.active_text = self.active_text, None
-        block = self.message.content[index]
-        message = self.message.model_copy(deep=True)
-        if isinstance(block, ThinkingContent):
-            return [ThinkingEndEvent(message=message, content_index=index)]
-        return [TextEndEvent(message=message, content_index=index)]
-
     def _add_text(
         self, content: TextContent | ThinkingContent
     ) -> list[GenerationEvent]:
-        events: list[GenerationEvent] = []
         if self.active_text is None or type(
             self.message.content[self.active_text]
         ) is not type(content):
-            events.extend(self.close_text())
             self.active_text = len(self.message.content)
-            block = content.model_copy(deep=True)
-            block.text = ""
-            if isinstance(block, ThinkingContent):
-                block.blocks = None
-            self.message.content.append(block)
-            start = (
-                ThinkingStartEvent
-                if isinstance(content, ThinkingContent)
-                else TextStartEvent
-            )
-            events.append(
-                start(
-                    message=self.message.model_copy(deep=True),
-                    content_index=self.active_text,
-                )
-            )
-        block = self.message.content[self.active_text]
-        if not isinstance(block, (TextContent, ThinkingContent)):
-            raise RuntimeError("Active text block must contain text or thinking")
-        block.text += content.text
-        if isinstance(block, ThinkingContent) and isinstance(content, ThinkingContent):
-            block.blocks = (block.blocks or []) + (content.blocks or []) or None
-        delta = (
-            ThinkingDeltaEvent
-            if isinstance(content, ThinkingContent)
-            else TextDeltaEvent
-        )
-        events.append(
-            delta(
-                message=self.message.model_copy(deep=True),
+        event = (
+            ThinkingDeltaEvent(
                 content_index=self.active_text,
                 text=content.text,
+                blocks=[block.model_copy(deep=True) for block in content.blocks]
+                if content.blocks
+                else None,
             )
+            if isinstance(content, ThinkingContent)
+            else TextDeltaEvent(content_index=self.active_text, text=content.text)
         )
-        return events
+        apply_generation_event(self.message, event)
+        return [event]
 
     def add(self, chunk: ModelResponseStream) -> list[GenerationEvent]:
         delta = chunk.choice.delta
@@ -531,7 +494,7 @@ class MessageAccumulator:
         if delta.content:
             events.extend(self._add_text(TextContent(text=delta.content)))
         for call in delta.tool_calls:
-            events.extend(self.close_text())
+            self.active_text = None
             pending = self.calls.get(call.index)
             if pending is None:
                 block = ToolCall(
@@ -545,7 +508,6 @@ class MessageAccumulator:
                 self.message.content.append(block)
                 events.append(
                     ToolCallStartEvent(
-                        message=self.message.model_copy(deep=True),
                         content_index=pending.content_index,
                         tool_call=block.model_copy(deep=True),
                     )
@@ -553,7 +515,6 @@ class MessageAccumulator:
             fragments = pending.update(call)
             events.append(
                 ToolCallDeltaEvent(
-                    message=self.message.model_copy(deep=True),
                     content_index=pending.content_index,
                     tool_call=pending.call.model_copy(deep=True),
                     argument_deltas=fragments,
@@ -566,7 +527,8 @@ class MessageAccumulator:
         return events
 
     def _add_recovered_calls(self, calls: Sequence[ToolCall]) -> list[GenerationEvent]:
-        events = self.close_text()
+        self.active_text = None
+        events: list[GenerationEvent] = []
         for call in calls:
             block = ToolCall(
                 id=call.id, name=call.name, arguments={}, arguments_complete=False
@@ -578,7 +540,6 @@ class MessageAccumulator:
             self.message.content.append(block)
             events.append(
                 ToolCallStartEvent(
-                    message=self.message.model_copy(deep=True),
                     content_index=pending.content_index,
                     tool_call=block.model_copy(deep=True),
                 )
@@ -586,7 +547,6 @@ class MessageAccumulator:
             block.arguments = call.arguments.copy()
             events.append(
                 ToolCallDeltaEvent(
-                    message=self.message.model_copy(deep=True),
                     content_index=pending.content_index,
                     tool_call=block.model_copy(deep=True),
                     argument_deltas={
@@ -701,16 +661,15 @@ class MessageAccumulator:
         return self.message.model_copy(deep=True)
 
     def end(self) -> list[GenerationEvent]:
-        events = self.close_text()
+        self.active_text = None
         self.finish()
-        for pending in self.calls.values():
-            events.append(
-                ToolCallEndEvent(
-                    message=self.message.model_copy(deep=True),
-                    content_index=pending.content_index,
-                    tool_call=pending.call.model_copy(deep=True),
-                )
+        events: list[GenerationEvent] = [
+            ToolCallEndEvent(
+                content_index=pending.content_index,
+                tool_call=pending.call.model_copy(deep=True),
             )
+            for pending in self.calls.values()
+        ]
         events.append(GenerationDoneEvent(message=self.message.model_copy(deep=True)))
         return events
 

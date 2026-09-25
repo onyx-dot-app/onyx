@@ -30,11 +30,15 @@ from onyx.llm.litellm_conversion import serialize_request
 from onyx.llm.litellm_models import Delta
 from onyx.llm.models import (
     AssistantMessage,
+    GenerationDoneEvent,
+    GenerationLifecycleEvent,
     GenerationRequest,
+    GenerationToolCallEvent,
     ImageContentPart,
     ImageUrlDetail,
     Message,
     TextContent,
+    ThinkingDeltaEvent,
     ToolCall,
     ToolResult,
     ToolResultMessage,
@@ -139,6 +143,7 @@ def test_default_model_accepts_application_metadata_without_chat_policy() -> Non
             GenerationContext(cancellation=CancellationSignal()),
         )
     )[-1]
+    assert isinstance(output, GenerationDoneEvent)
     assert output.message.text == "done"
     assert llm.requests[0]["prompt"][0].content == "plain input"
     assert "private metadata" not in str(llm.requests)
@@ -169,7 +174,7 @@ def test_stream_consumer_cannot_mutate_later_events() -> None:
     for event in model.stream(GenerationRequest()):
         if event.type == "done":
             terminal = event.message
-        else:
+        elif isinstance(event, GenerationLifecycleEvent):
             event.message.content.clear()
     assert terminal is not None and terminal.text == "answer"
 
@@ -213,7 +218,13 @@ def test_listeners_cannot_edit_history_or_each_others_events(inherited: bool) ->
         if event.type == "message_end":
             event.message.content.clear()
         elif event.type == "message_update":
-            event.generation_event.message.content.clear()
+            update = event.generation_event
+            if isinstance(update, GenerationToolCallEvent):
+                update.tool_call.arguments.clear()
+            elif isinstance(update, ThinkingDeltaEvent) and update.blocks:
+                update.blocks.clear()
+            elif isinstance(update, GenerationLifecycleEvent):
+                update.message.content.clear()
         elif event.type == "tool_end":
             event.result.content = "corrupted"
             event.tool_call.arguments["bad"] = True

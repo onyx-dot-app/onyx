@@ -332,7 +332,6 @@ def test_provider_receives_acceptance_before_reading_next_chunk() -> None:
             for _ in range(30):
                 text += "x"
                 yield TextDeltaEvent(
-                    message=AssistantMessage(content=[TextContent(text=text)]),
                     content_index=0,
                     text="x",
                 )

@@ -286,7 +286,7 @@ def test_deep_research_composes_plan_child_and_report() -> None:
         all_injected_file_metadata=None,
         skip_clarification=True,
     )
-    feature.agent.generation_context.timeout = 11
+    feature.agent.generation_context.stall_timeout_s = 11
     coordinator = AgentCoordinator()
     project = partial(
         project_response,
@@ -315,7 +315,7 @@ def test_deep_research_composes_plan_child_and_report() -> None:
         LLMFlow.DEEP_RESEARCH,
     ]
     assert all(context.user_identity == identity for context in contexts)
-    assert [context.timeout for context in contexts] == [
+    assert [context.stall_timeout_s for context in contexts] == [
         11,
         11,
         None,

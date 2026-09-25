@@ -271,8 +271,8 @@ def compact_history(
             execution.model_copy(
                 update={
                     "flow": LLMFlow.CHAT_HISTORY_SUMMARIZATION,
-                    "total_timeout": min(
-                        execution.total_timeout or SUMMARY_TIMEOUT_SECONDS,
+                    "total_timeout_s": min(
+                        execution.total_timeout_s or SUMMARY_TIMEOUT_SECONDS,
                         SUMMARY_TIMEOUT_SECONDS,
                     ),
                 }

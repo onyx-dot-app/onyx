@@ -43,6 +43,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.exceptions import LLMRateLimitError, LLMTimeoutError
 from onyx.llm.factory import llm_from_provider
+from onyx.llm.interfaces import LLM
 from onyx.llm.litellm_models import (
     AssistantMessage,
     ChatCompletionMessage,
@@ -238,7 +239,7 @@ def _drop_empty_text(message: ChatCompletionMessage) -> ChatCompletionMessage | 
 
 
 def _prepare_messages(
-    llm: LitellmLLM, raw_messages: list[dict[str, Any]]
+    llm: LLM, raw_messages: list[dict[str, Any]]
 ) -> list[ChatCompletionMessage]:
     try:
         messages = _MESSAGES_ADAPTER.validate_python(raw_messages)
@@ -328,7 +329,7 @@ def _stream_worker(
     with (
         _gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
-            llm.config, flow=flow, input_messages=messages, tools=tools
+            llm, flow=flow, input_messages=messages, tools=tools
         ) as span,
     ):
         state = _StreamAccumulator()
@@ -402,7 +403,7 @@ def handle_chat_completion(
     with (
         _gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
-            llm.config,
+            llm,
             flow=flow,
             input_messages=messages,
             tools=request.tools,
@@ -627,7 +628,7 @@ def _responses_stream_worker(
     with (
         _gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
-            llm.config, flow=flow, input_messages=messages, tools=tools
+            llm, flow=flow, input_messages=messages, tools=tools
         ) as span,
     ):
         with _stream_worker_guard(
@@ -782,7 +783,7 @@ def handle_responses_request(
     with (
         _gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
-            llm.config,
+            llm,
             flow=flow,
             input_messages=messages,
             tools=tools,
@@ -1129,7 +1130,7 @@ def _anthropic_stream_worker(
     with (
         _gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
-            llm.config, flow=flow, input_messages=messages, tools=tools
+            llm, flow=flow, input_messages=messages, tools=tools
         ) as span,
     ):
         state = _StreamAccumulator()
@@ -1335,7 +1336,7 @@ def handle_anthropic_messages(
     with (
         _gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
-            llm.config,
+            llm,
             flow=flow,
             input_messages=messages,
             tools=tools,

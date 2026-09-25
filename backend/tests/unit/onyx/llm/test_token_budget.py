@@ -79,7 +79,7 @@ def test_model_budget(
     monkeypatch.setattr(
         "onyx.llm.token_budget.GEN_AI_INPUT_TOKEN_SAFETY_MARGIN", margin
     )
-    budget = resolve_token_budget(llm.config)
+    budget = resolve_token_budget(llm)
     assert (budget.input_tokens, budget.safety_tokens) == (
         expected_input,
         expected_safety,
@@ -109,7 +109,7 @@ def test_missing_or_invalid_limits_keep_legacy_fallback(
     llm.config = llm.config.model_copy(
         update={"max_input_tokens": GEN_AI_MODEL_FALLBACK_MAX_TOKENS}
     )
-    budget = resolve_token_budget(llm.config)
+    budget = resolve_token_budget(llm)
     assert budget == TokenBudget(
         input_tokens=30_400,
         max_output_tokens=None,
@@ -126,7 +126,7 @@ def test_deployment_alias(model_map: ModelMap, llm: Mock) -> None:
         "max_input_tokens": 128_000,
         "max_output_tokens": 16_000,
     }
-    assert resolve_token_budget(llm.config) == TokenBudget(
+    assert resolve_token_budget(llm) == TokenBudget(
         input_tokens=950_000,
         max_output_tokens=16_000,
         context_tokens=128_000,
@@ -148,7 +148,7 @@ def test_provider_precedes_bare_model(
             "model": {"max_input_tokens": 200_000, "max_output_tokens": 20_000},
         }
     )
-    assert resolve_token_budget(llm.config) == TokenBudget(
+    assert resolve_token_budget(llm) == TokenBudget(
         input_tokens=1_000_000,
         max_output_tokens=10_000,
         context_tokens=100_000,
@@ -170,7 +170,7 @@ def test_partial_metadata_uses_complete_alias(
             "openai/alias": {"max_input_tokens": 200_000, "max_output_tokens": 20_000},
         }
     )
-    assert resolve_token_budget(llm.config) == TokenBudget(
+    assert resolve_token_budget(llm) == TokenBudget(
         input_tokens=100_000,
         max_output_tokens=20_000,
         context_tokens=200_000,
