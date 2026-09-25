@@ -5,8 +5,8 @@ tests. Additive to the root `AGENTS.md`.
 
 ## Key Rules
 
-- Put ALL db operations under the `backend/onyx/db` / `backend/ee/onyx/db` directories. Don't run
-  queries outside of those directories.
+- Put ALL db operations under the `backend/onyx/db` / `backend/ee/onyx/db` directories. Feature-local
+  `build/db` directories are also valid. Don't run queries outside of those directories.
 - When creating new FastAPI APIs, do NOT use the `response_model` field. Instead, just type the
   function.
 - OpenSearch is the current document index backend for search and indexing. Some legacy modules,
