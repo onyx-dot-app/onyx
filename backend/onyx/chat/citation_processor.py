@@ -183,6 +183,7 @@ class DynamicCitationProcessor:
             SearchDoc
         ] = []  # SearchDocs in citation order
         self.cited_document_ids: set[str] = set()  # all cited document_ids
+        self.document_id_to_citation_number: dict[str, int] = {}
         self.recent_cited_documents: set[str] = (
             set()
         )  # recently cited (for deduplication)
@@ -504,8 +505,11 @@ class DynamicCitationProcessor:
             if self.citation_mode != CitationMode.HYPERLINK:
                 continue
 
-            # Format the citation text as [[n]](link)
-            formatted_citation_parts.append(f"[[{num}]]({link})")
+            # Reuse the first number emitted in CitationInfo for this document.
+            citation_number = self.document_id_to_citation_number.setdefault(
+                doc_id, num
+            )
+            formatted_citation_parts.append(f"[[{citation_number}]]({link})")
 
             # Skip creating CitationInfo for citations of the same work if cited recently (deduplication)
             if doc_id in self.recent_cited_documents:
