@@ -7,11 +7,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_valid
 
 from onyx.agents.execution_records import (
     CompactionCheckpoint,
+    OperationSnapshot,
     RunFailure,
     RunStatus,
 )
 from onyx.cache.interface import CacheBackend
-from onyx.chat.response_items import ResponseItem
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.db.enums import IncognitoRecordMode
@@ -76,7 +76,7 @@ class MessageRendering(BaseModel):
 
 
 class ResponseRecord(BaseModel):
-    """Accepted response items and lineage, without live application objects."""
+    """Accepted messages and execution outcomes, without live application objects."""
 
     run_id: str
     agent_id: str | None = None
@@ -88,7 +88,9 @@ class ResponseRecord(BaseModel):
     parent_tool_call_id: str | None = None
     parent_message_id: str | None = None
     input_messages: list[Message] = Field(default_factory=list)
-    items: list[ResponseItem] = Field(default_factory=list)
+    messages: list[Message] = Field(default_factory=list)
+    operations: list[OperationSnapshot] = Field(default_factory=list)
+    answer_message_index: int | None = None
     child_runs: list["ResponseRecord"] = Field(default_factory=list)
     status: RunStatus
     failure: RunFailure | None = None

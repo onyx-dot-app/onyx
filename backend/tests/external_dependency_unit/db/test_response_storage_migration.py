@@ -1,4 +1,4 @@
-"""The response-item migration preserves main's public response records."""
+"""The response-message migration preserves main's public response records."""
 
 from pathlib import Path
 from uuid import uuid4
@@ -172,7 +172,7 @@ def test_response_storage_upgrade_downgrade_upgrade(db_session: Session) -> None
                     "chat_session", schema=schema
                 )
             }
-            assert "chat_response_item" in inspect(connection).get_table_names(
+            assert "chat_response_message" in inspect(connection).get_table_names(
                 schema=schema
             )
             assert "agent_run" not in inspect(connection).get_table_names(schema=schema)
@@ -210,8 +210,8 @@ def test_response_storage_upgrade_downgrade_upgrade(db_session: Session) -> None
                     (11, :root, 42, 1, '', '{"content": [{"type": "text", "text": "Saved result"}]}');
                 INSERT INTO chat_message (id, chat_session_id, parent_message_id, message, message_type, summary_covered_count, summary_covered_digest) VALUES
                     (44, :root, 42, 'SDK summary', 'SUMMARY', 2, 'coverage');
-                INSERT INTO chat_response_item (id, chat_message_id, position, step_index, kind, content) VALUES
-                    ('leaf-text', 202, 0, 0, 'text', '{"type": "text", "text": "Grandchild output"}');
+                INSERT INTO chat_response_message (id, chat_message_id, position, step_index, operation_status, content) VALUES
+                    ('leaf-message', 202, 0, 0, 'complete', '{"role": "assistant", "id": "leaf-message", "content": [{"type": "text", "text": "Grandchild output"}]}');
                 INSERT INTO chat_feedback (id, chat_message_id) VALUES (1, 202);
                 INSERT INTO search_doc (id) VALUES (1);
                 INSERT INTO tool_call__search_doc VALUES (9, 1);
@@ -286,7 +286,7 @@ def test_response_storage_upgrade_downgrade_upgrade(db_session: Session) -> None
                     "chat_session", schema=schema
                 )
             }
-            assert "chat_response_item" in inspect(connection).get_table_names(
+            assert "chat_response_message" in inspect(connection).get_table_names(
                 schema=schema
             )
     finally:

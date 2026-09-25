@@ -33,11 +33,6 @@ from onyx.chat.models import (
 )
 from onyx.chat.renderer import MessageRenderer, build_tool_item, tool_metadata
 from onyx.chat.response import response_record
-from onyx.chat.response_items import (
-    ResponseText,
-    TextPurpose,
-    group_response_items_by_step,
-)
 from onyx.coding_agent.tool_definitions import CODING_AGENT_TOOL_NAME
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.deep_research.models import (
@@ -277,12 +272,9 @@ def project_response(
     """
     record = response_record(snapshot, registrations)
     response = ChatResponseSnapshot(
-        answer="".join(
-            item.content.text
-            for item in record.items
-            if isinstance(item.content, ResponseText)
-            and item.content.purpose == TextPurpose.ANSWER
-        ),
+        answer=record.messages[record.answer_message_index].text
+        if record.answer_message_index is not None
+        else "",
         reasoning=None,
         request_params=snapshot.request_params,
         citation_to_doc={},
@@ -323,7 +315,6 @@ def _project_response_display(
     record = response.response
     if record is None:
         raise ValueError("Saved response content is required for display projection")
-    items_by_step = group_response_items_by_step(record.items)
     pending: list[tuple[RunState, str | None]] = [(snapshot, None)]
     while pending:
         node, parent_tool_name = pending.pop()
@@ -354,13 +345,8 @@ def _project_response_display(
                     message_id=message_id,
                 ),
             )
-            generation_items = items_by_step[operation.step_index]
-            renderer.saved(generation_items)
-            is_answer = any(
-                isinstance(item.content, ResponseText)
-                and item.content.purpose == TextPurpose.ANSWER
-                for item in generation_items
-            )
+            is_answer = operation.message_index == node.answer_message_index
+            renderer.saved(message, operation.status, is_answer=is_answer)
             if not is_answer and snapshot.status == RunStatus.COMPLETE:
                 continue
             response = response.model_copy(
@@ -405,7 +391,7 @@ class ResponsePresenter:
         self.renderers: dict[str, MessageRenderer] = {}
         self.call_names: dict[tuple[str, str], str] = {}
 
-    def _identity(self, event: AgentEvent, step_index: int) -> PacketIdentity:
+    def _identity(self, event: AgentEvent, message_id: str) -> PacketIdentity:
         registration = (
             self.coordinator.registration(event.agent_id)
             if self.coordinator and event.agent_id is not None
@@ -416,7 +402,7 @@ class ResponsePresenter:
             run_id=event.run_id,
             agent_id=event.agent_id,
             agent_path=registration.path if registration else None,
-            message_id=f"{event.run_id}:{step_index}",
+            message_id=message_id,
             parent_run_id=event.parent_run_id,
             parent_message_id=event.parent_message_id,
             parent_tool_call_id=event.parent_tool_call_id,
@@ -446,16 +432,18 @@ class ResponsePresenter:
             self.renderers[event.run_id] = MessageRenderer(
                 setting,
                 message_documents(event.metadata),
-                self._identity(event, event.step_index),
+                self._identity(event, event.message_id),
             )
         elif isinstance(event, MessageUpdateEvent):
             for packet in self.renderers[event.run_id].consume(event.generation_event):
                 self.emitter.emit(packet)
         elif isinstance(event, MessageEndEvent):
-            for packet in self.renderers[event.run_id].complete(event.message):
+            for packet in self.renderers[event.run_id].complete(
+                event.message, event.status
+            ):
                 self.emitter.emit(packet)
         elif isinstance(event, (ToolStartEvent, ToolUpdateEvent, ToolEndEvent)):
-            identity = self._identity(event, event.step_index).model_copy(
+            identity = self._identity(event, event.message_id).model_copy(
                 update={"tool_call_id": event.tool_call.id, "part_id": "tool"}
             )
             key = (identity.message_id, event.tool_call.id)
@@ -504,7 +492,9 @@ class ResponsePresenter:
                     )
                 )
         elif isinstance(event, (AgentStartEvent, AgentEndEvent)):
-            identity = self._identity(event, 0).model_copy(update={"part_id": "run"})
+            identity = self._identity(event, f"{event.run_id}:0").model_copy(
+                update={"part_id": "run"}
+            )
             status = (
                 event.outcome if isinstance(event, AgentEndEvent) else RunStatus.RUNNING
             )

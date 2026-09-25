@@ -14,7 +14,6 @@ from onyx.cache.interface import CacheBackendType
 from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.llm_step import PromptMetadata, prompt_metadata
 from onyx.chat.models import MAX_DISCOVERED_AGENTS, ResponseRecord, SavedAgentContext
-from onyx.chat.response_items import messages_from_items
 from onyx.chat.stream_buffer import stream_buffer_key_pattern
 from onyx.configs import app_configs
 from onyx.configs.constants import MessageType
@@ -492,7 +491,7 @@ def load_incognito_agent_history(
             for response in reversed(selected)
             for message in [
                 *response.input_messages,
-                *messages_from_items(response.items),
+                *response.messages,
             ]
         ],
         checkpoint=selected[0].checkpoint if selected else None,

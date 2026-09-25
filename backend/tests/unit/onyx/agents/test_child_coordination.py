@@ -32,7 +32,6 @@ from onyx.agents.tools import (
 )
 from onyx.chat.checkpoint import CheckpointBinding
 from onyx.chat.presentation import project_response
-from onyx.chat.response_items import messages_from_items
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.exceptions import LLMTimeoutError
 from onyx.llm.interfaces import GenerationContext
@@ -591,12 +590,9 @@ def test_failed_child_settlement_retains_accepted_partial_output(
             registrations=coordinator.registrations(),
         )
         assert projected.response is not None
+        assert projected.response.messages[-1].text == "first finished"
         assert (
-            messages_from_items(projected.response.items)[-1].text == "first finished"
-        )
-        assert (
-            messages_from_items(projected.response.child_runs[0].items)[0].text
-            == "Child partial output"
+            projected.response.child_runs[0].messages[0].text == "Child partial output"
         )
     finally:
         release.set()

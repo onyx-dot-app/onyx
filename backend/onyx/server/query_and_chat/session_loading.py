@@ -14,12 +14,6 @@ from onyx.chat.models import (
     ResponseRecord,
 )
 from onyx.chat.renderer import MessageRenderer, build_tool_item
-from onyx.chat.response_items import (
-    ResponseGeneration,
-    ResponseToolCall,
-    ResponseToolResult,
-    group_response_items_by_step,
-)
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import (
@@ -33,7 +27,7 @@ from onyx.db.tools import (
     get_tools_by_ids,
     restore_tool_result,
 )
-from onyx.llm.models import ToolResultMessage
+from onyx.llm.models import AssistantMessage, ToolResultMessage
 from onyx.server.query_and_chat.streaming_models import (
     CitationInfo,
     ItemUpdate,
@@ -261,26 +255,40 @@ def _response_packets(
         parent_tool_call_id=response.parent_tool_call_id,
     )
     packets: list[Packet] = []
-    for items in group_response_items_by_step(response.items).values():
-        generation = items[0]
-        if not isinstance(generation.content, ResponseGeneration):
-            raise ValueError("Response step has no generation boundary")
-        identity = base.model_copy(update={"message_id": generation.id})
+    tool_statuses = {
+        (operation.message_index, operation.tool_call_id): operation.status
+        for operation in response.operations
+        if operation.tool_call_id is not None
+    }
+    for operation in response.operations:
+        if operation.tool_call_id is not None:
+            continue
+        message = response.messages[operation.message_index]
+        if not isinstance(message, AssistantMessage):
+            raise ValueError(
+                "Message operation does not reference an assistant message"
+            )
+        message_id = message.id or f"{response.run_id}:{operation.step_index}"
+        identity = base.model_copy(update={"message_id": message_id})
         renderer = MessageRenderer(
-            settings.get(generation.id, MessageRendering(mode=default_mode)),
+            settings.get(message_id, MessageRendering(mode=default_mode)),
             documents,
             identity,
         )
-        packets.extend(renderer.saved(items))
-        results = {
-            item.content.result.tool_call_id: item.content.result
-            for item in items
-            if isinstance(item.content, ResponseToolResult)
-        }
-        for item in items:
-            if not isinstance(item.content, ResponseToolCall):
-                continue
-            call = item.content.call
+        packets.extend(
+            renderer.saved(
+                message,
+                operation.status,
+                is_answer=operation.message_index == response.answer_message_index,
+            )
+        )
+        results: dict[str, ToolResultMessage] = {}
+        for result_message in response.messages[operation.message_index + 1 :]:
+            if isinstance(result_message, AssistantMessage):
+                break
+            if isinstance(result_message, ToolResultMessage):
+                results[result_message.tool_call_id] = result_message
+        for call in message.tool_calls:
             call_identity = identity.model_copy(
                 update={"tool_call_id": call.id, "part_id": "tool"}
             )
@@ -299,7 +307,9 @@ def _response_packets(
                             arguments=call.arguments,
                             result=result,
                             status=ToolStatus(
-                                (item.content.status or response.status).value
+                                tool_statuses.get(
+                                    (operation.message_index, call.id), response.status
+                                ).value
                             ),
                         )
                     ),

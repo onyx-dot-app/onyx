@@ -21,7 +21,6 @@ from onyx.chat.incognito_context import (
     save_incognito_response,
 )
 from onyx.chat.models import ChatResponseSnapshot, ResponseRecord, SavedAgentContext
-from onyx.chat.response_items import messages_from_items
 from onyx.db.chat_response import save_chat_response_to_db
 from onyx.db.chat_subagents import (
     load_agent_history,
@@ -158,8 +157,8 @@ class RedisChatHistoryStore(ChatHistoryStore):
             response=response,
         )
         messages = (
-            messages_from_items(response.response.items)
-            if response.response and response.response.items
+            response.response.messages
+            if response.response and response.response.messages
             else [AssistantMessage(content=[TextContent(text=answer)])]
         )
         sources_by_run: dict[str, CitationMapping] = {}
@@ -172,8 +171,10 @@ class RedisChatHistoryStore(ChatHistoryStore):
             while pending:
                 record = pending.pop()
                 sources = sources_by_run.setdefault(record.run_id, {})
-                for item in record.items:
-                    setting = response.presentation.get(item.id)
+                for message in record.messages:
+                    if not isinstance(message, AssistantMessage) or message.id is None:
+                        continue
+                    setting = response.presentation.get(message.id)
                     if setting is None:
                         continue
                     for number, document_id in setting.citation_documents.items():

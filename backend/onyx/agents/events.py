@@ -9,7 +9,7 @@ from onyx.agents.execution_records import RunStatus
 from onyx.agents.tools import PendingToolInput, ToolProgress
 from onyx.llm.models import (
     AssistantMessage,
-    GenerationEvent,
+    GenerationContentEvent,
     ToolCall,
     ToolResult,
 )
@@ -62,40 +62,40 @@ class AgentEndEvent(_AgentEvent):
     ]
 
 
-class MessageStartEvent(_AgentEvent):
-    type: Literal[AgentEventType.MESSAGE_START] = AgentEventType.MESSAGE_START
+class _MessageEvent(_AgentEvent):
+    message_id: str
     step_index: int = Field(ge=0)
+
+
+class MessageStartEvent(_MessageEvent):
+    type: Literal[AgentEventType.MESSAGE_START] = AgentEventType.MESSAGE_START
     metadata: SerializeAsAny[BaseModel] | None = None
 
 
-class MessageUpdateEvent(_AgentEvent):
+class MessageUpdateEvent(_MessageEvent):
     type: Literal[AgentEventType.MESSAGE_UPDATE] = AgentEventType.MESSAGE_UPDATE
-    step_index: int = Field(ge=0)
-    generation_event: GenerationEvent
+    generation_event: GenerationContentEvent
 
 
-class MessageEndEvent(_AgentEvent):
+class MessageEndEvent(_MessageEvent):
     type: Literal[AgentEventType.MESSAGE_END] = AgentEventType.MESSAGE_END
-    step_index: int = Field(ge=0)
     message: AssistantMessage
+    status: RunStatus
 
 
-class ToolStartEvent(_AgentEvent):
+class ToolStartEvent(_MessageEvent):
     type: Literal[AgentEventType.TOOL_START] = AgentEventType.TOOL_START
-    step_index: int = Field(ge=0)
     tool_call: ToolCall
 
 
-class ToolUpdateEvent(_AgentEvent):
+class ToolUpdateEvent(_MessageEvent):
     type: Literal[AgentEventType.TOOL_UPDATE] = AgentEventType.TOOL_UPDATE
-    step_index: int = Field(ge=0)
     tool_call: ToolCall
     progress: ToolProgress
 
 
-class ToolEndEvent(_AgentEvent):
+class ToolEndEvent(_MessageEvent):
     type: Literal[AgentEventType.TOOL_END] = AgentEventType.TOOL_END
-    step_index: int = Field(ge=0)
     tool_call: ToolCall
     result: ToolResult
 

@@ -12,11 +12,6 @@ from onyx.chat.models import (
     ResponseRecord,
     ToolRecordReference,
 )
-from onyx.chat.response_items import (
-    ResponseItemKind,
-    ResponseText,
-    TextPurpose,
-)
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import (
@@ -25,10 +20,10 @@ from onyx.db.chat import (
     create_db_search_doc,
 )
 from onyx.db.chat_history import checkpoint_from_summary, find_summary_for_ancestry
-from onyx.db.chat_response_items import (
+from onyx.db.chat_response_messages import (
     finish_checkpoint__no_commit,
     read_response_record,
-    write_response_items,
+    write_response_messages,
 )
 from onyx.db.chat_subagents import (
     MAX_AGENT_DEPTH,
@@ -42,7 +37,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import record_mode_persists_content
 from onyx.db.models import (
     ChatMessage,
-    ChatResponseItem,
+    ChatResponseMessage,
     ChatSession,
     ToolCall,
 )
@@ -395,9 +390,13 @@ def _child_responses(db_session: Session, response_ids: list[int]) -> list[ChatM
             select(ChatMessage)
             .join(question, ChatMessage.parent_message_id == question.id)
             .join(ToolCall, question.invoking_tool_call_id == ToolCall.id)
-            .join(ChatResponseItem, ChatResponseItem.tool_call_id == ToolCall.id)
+            .join(
+                ChatResponseMessage,
+                (ChatResponseMessage.chat_message_id == ToolCall.parent_chat_message_id)
+                & (ChatResponseMessage.step_index == ToolCall.turn_number),
+            )
             .where(
-                ChatResponseItem.kind == ResponseItemKind.TOOL_CALL,
+                ChatResponseMessage.content.is_not(None),
                 ToolCall.parent_chat_message_id.in_(response_ids),
                 ChatMessage.response_status.is_not(None),
             )
@@ -409,10 +408,11 @@ def _child_responses(db_session: Session, response_ids: list[int]) -> list[ChatM
                 joinedload(ChatMessage.parent_message).joinedload(
                     ChatMessage.parent_message
                 ),
-                selectinload(ChatMessage.response_items),
+                selectinload(ChatMessage.response_messages),
+                selectinload(ChatMessage.tool_calls),
             )
             # Stable display order; predecessor links determine child history.
-            .order_by(ChatResponseItem.position, ChatMessage.id)
+            .order_by(ChatResponseMessage.position, ChatMessage.id)
             .limit(MAX_AGENT_HISTORY_RUNS + 1)
         )
     )
@@ -464,29 +464,30 @@ def read_chat_execution(message: ChatMessage) -> ChatExecutionRecord | None:
     def read(
         response: ChatMessage,
         agent_path: str,
-        invoking_generation_id: str | None = None,
+        invoking_message_id: str | None = None,
     ) -> ResponseRecord:
         record = read_response_record(
-            response, agent_path, invoking_generation_id=invoking_generation_id
+            response, agent_path, invoking_message_id=invoking_message_id
         )
-        generation_ids = {
-            item.step_index: item.id
-            for item in response.response_items
-            if item.kind == ResponseItemKind.GENERATION
+        message_ids_by_step = {
+            row.step_index: row.id
+            for row in response.response_messages
+            if row.content is not None
         }
-        generation_by_tool: dict[int, str] = {}
-        for item in response.response_items:
-            if item.rendering:
-                presentation[item.id] = MessageRendering.model_validate(item.rendering)
-            if item.kind == ResponseItemKind.TOOL_CALL and item.tool_call is not None:
-                generation_by_tool[item.tool_call.id] = generation_ids[item.step_index]
-                tool_records.append(
-                    ToolRecordReference(
-                        message_id=generation_ids[item.step_index],
-                        tool_call_id=item.tool_call.tool_call_id,
-                        record_id=item.tool_call.id,
-                    )
+        message_ids_by_tool: dict[int, str] = {}
+        for row in response.response_messages:
+            if row.rendering:
+                presentation[row.id] = MessageRendering.model_validate(row.rendering)
+        for tool in response.tool_calls or []:
+            assistant_message_id = message_ids_by_step[tool.turn_number]
+            message_ids_by_tool[tool.id] = assistant_message_id
+            tool_records.append(
+                ToolRecordReference(
+                    message_id=assistant_message_id,
+                    tool_call_id=tool.tool_call_id,
+                    record_id=tool.id,
                 )
+            )
         for child in children.get(response.id, []):
             question = child.parent_message
             name = child.chat_session.agent_name
@@ -500,7 +501,7 @@ def read_chat_execution(message: ChatMessage) -> ChatExecutionRecord | None:
                 read(
                     child,
                     f"{agent_path}/{name}",
-                    generation_by_tool[question.invoking_tool_call_id],
+                    message_ids_by_tool[question.invoking_tool_call_id],
                 )
             )
         return record
@@ -549,7 +550,7 @@ def save_response_content(
     writer = _ResponseWriter(db_session, message, presentation or {})
     writer.store(record, None)
     if writer.presentation:
-        raise ValueError("Display settings do not match response generations")
+        raise ValueError("Display settings do not match response messages")
     db_session.flush()
     return [
         ToolRecordReference(message_id=key[0], tool_call_id=key[1], record_id=tool.id)
@@ -579,7 +580,7 @@ class _ResponseWriter:
             raise ValueError("Response hierarchy exceeds its limit")
         if record.agent_id is None or record.run_id in self.responses:
             raise ValueError("Execution identity is missing or repeated")
-        if len(record.items) > MAX_CONVERSATION_MESSAGES:
+        if len(record.messages) > MAX_CONVERSATION_MESSAGES:
             raise ValueError("Response exceeds its content limit")
         if len(record.input_messages) != 1 or not isinstance(
             record.input_messages[0], UserMessage
@@ -600,20 +601,18 @@ class _ResponseWriter:
         response.response_failure = record.failure
         self.responses[record.run_id] = response
         self.tools.update(
-            write_response_items(
+            write_response_messages(
                 self.db_session,
                 response,
-                record.items,
+                record,
                 self.presentation,
             )
         )
         if parent is not None:
-            response.message = "".join(
-                item.content.value.text
-                for item in response.response_items
-                if item.content is not None
-                and isinstance(item.content.value, ResponseText)
-                and item.content.value.purpose == TextPurpose.ANSWER
+            response.message = (
+                record.messages[record.answer_message_index].text
+                if record.answer_message_index is not None
+                else ""
             )
             response.token_count = count_tokens(response.message)
         if record.checkpoint is not None:

@@ -13,7 +13,6 @@ from onyx.chat.agent import ChatAgent
 from onyx.chat.emitter import Emitter
 from onyx.chat.llm_step import PromptMetadata
 from onyx.chat.presentation import ResponsePresenter, project_response
-from onyx.chat.response_items import messages_from_items
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.file_store.models import ExtractedContextFiles
@@ -128,14 +127,14 @@ def test_chat_preserves_parallel_tool_history_forcing_and_packets(
     assert snapshot.answer == "Final answer"
     assert snapshot.reasoning == "Compare the evidence"
     assert snapshot.response is not None
-    assert messages_from_items(snapshot.response.items)[-1].text == "Final answer"
+    assert snapshot.response.messages[-1].text == "Final answer"
     assert [call.tool_call_response for call in snapshot.tool_calls] == [
         "hello",
         "hello",
     ]
     assert [
         message.text
-        for message in messages_from_items(snapshot.response.items)
+        for message in snapshot.response.messages
         if message.role == "tool_result"
     ] == ["hello", "hello"]
     if observer_fails:

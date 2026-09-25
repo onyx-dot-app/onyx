@@ -39,7 +39,7 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
-from tests.unit.onyx.agents.checkpoint_storage import CheckpointStorage
+from tests.unit.onyx.agents.checkpoint_storage import CheckpointStorage, SavedCheckpoint
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
 
@@ -335,3 +335,43 @@ def test_fresh_objects_resume_json_checkpoint_without_repeating_tools(
         "finalize-search": 1,
         "finalize-send": 1,
     }
+
+
+def test_checkpoint_restores_when_parallel_outcomes_load_in_call_order() -> None:
+    captured = checkpoint()
+    captured.run_state.operations.extend(
+        [
+            OperationSnapshot(
+                step_index=0,
+                message_index=0,
+                tool_call_id="send",
+                status=RunStatus.SUSPENDED,
+            ),
+            OperationSnapshot(
+                step_index=0,
+                message_index=0,
+                tool_call_id="search",
+                status=RunStatus.COMPLETE,
+            ),
+        ]
+    )
+    storage = codec()
+    serialized = storage.save(
+        captured.run_state,
+        captured.agent_state,
+        CheckpointBinding(
+            tenant_id="tenant", branch_id="branch", context_version="history"
+        ),
+    )
+    saved = SavedCheckpoint.model_validate_json(serialized)
+    generation, send, search = saved.response.operations
+    saved.response.operations = [generation, search, send]
+    restored = storage.load(saved.model_dump_json())
+    assert restored.run_state.messages == captured.run_state.messages
+    assert restored.run_state.progress == captured.run_state.progress
+    assert restored.run_state.operations == [generation, search, send]
+    assert captured.run_state.operations == [generation, send, search]
+
+    saved.response.operations[1].status = RunStatus.ERROR
+    with pytest.raises(ValueError, match="Checkpoint response changed"):
+        storage.load(saved.model_dump_json())

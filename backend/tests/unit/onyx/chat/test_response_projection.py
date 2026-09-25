@@ -24,7 +24,6 @@ from onyx.chat.models import (
 from onyx.chat.persistence import ChatResponsePersistence
 from onyx.chat.presentation import ResponsePresenter, project_response
 from onyx.chat.process_message import gather_stream_full
-from onyx.chat.response_items import messages_from_items
 from onyx.chat.stream_buffer import ChatDelivery
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc
@@ -156,7 +155,7 @@ def test_snapshot_does_not_wait_for_slow_stream_observer() -> None:
             result = saving.result(timeout=0.5)
             assert result.answer == "answer"
             assert result.response is not None
-            assert messages_from_items(result.response.items)[-1].text == "answer"
+            assert result.response.messages[-1].text == "answer"
         finally:
             finish_update.set()
         running.result(timeout=2)

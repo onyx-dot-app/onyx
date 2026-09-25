@@ -12,7 +12,6 @@ from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import AgentTool
 from onyx.chat.models import ResponseRecord
 from onyx.chat.response import response_record, response_snapshot
-from onyx.chat.response_items import messages_from_items
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
@@ -114,7 +113,7 @@ def test_partial_run_keeps_input_and_replayable_output(cancelled: bool) -> None:
     assert [message.text for message in snapshot.input_messages] == ["Question"]
     assert response_record(snapshot).input_messages[0].metadata is None
     assert snapshot.messages[0].metadata == ApplicationData()
-    message = messages_from_items(response_record(snapshot).items)[0]
+    message = response_record(snapshot).messages[0]
     assert message.metadata is None
     assert isinstance(message, AssistantMessage)
     assert message.text == "partial"
@@ -213,7 +212,7 @@ def test_captured_and_restored_usage_is_isolated_from_mutation() -> None:
     )
     source_message.usage.total_tokens = 999
     restored_message.usage.total_tokens = 888
-    saved_message = messages_from_items(record.items)[0]
+    saved_message = record.messages[0]
     assert (
         isinstance(saved_message, AssistantMessage) and saved_message.usage is not None
     )

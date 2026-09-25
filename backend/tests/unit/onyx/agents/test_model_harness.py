@@ -1,14 +1,16 @@
 """The normalized model adapter works without Onyx chat types."""
 
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 
 import pytest
 
 from onyx.agents.events import AgentEvent
+from onyx.agents.execution_records import RunStatus
 from onyx.agents.models import PreparedStep
-from onyx.agents.runtime import Agent
+from onyx.agents.runtime import Agent, RunFailed
 from onyx.agents.tools import AgentTool
-from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.cancellation import AgentCancelled, CancellationSignal
+from onyx.llm.interfaces import GenerationContext
 from onyx.llm.litellm_conversion import MessageAccumulator, recover_tool_calls
 from onyx.llm.litellm_models import (
     ChatCompletionDeltaToolCall,
@@ -19,15 +21,18 @@ from onyx.llm.litellm_models import (
     ToolMessage,
 )
 from onyx.llm.models import (
+    AssistantMessage,
+    GenerationEvent,
     GenerationOptions,
     GenerationRequest,
     GenerationToolCallEvent,
+    TextDeltaEvent,
     ToolChoiceOptions,
     ToolResult,
     ToolResultMessage,
     UserMessage,
 )
-from tests.unit.onyx.agents.fakes import ScriptedLLM
+from tests.unit.onyx.agents.fakes import FakeModelClient, ScriptedLLM
 
 
 def tool() -> AgentTool:
@@ -73,9 +78,45 @@ def test_model_and_agent_share_transcript_and_stream_events() -> None:
     assert len([event for event in events if event.type == "message_start"]) == 2
     assert len([event for event in events if event.type == "message_end"]) == 2
     assert all(
-        event.generation_event.type not in {"start", "done"}
+        event.generation_event.type not in {"start", "done", "error"}
         for event in events
         if event.type == "message_update"
+    )
+
+
+@pytest.mark.parametrize("cancelled", [False, True])
+def test_partial_message_closes_before_run_completion(cancelled: bool) -> None:
+    signal = CancellationSignal()
+
+    class InterruptedModel(FakeModelClient):
+        def stream(
+            self, request: GenerationRequest, context: GenerationContext | None = None
+        ) -> Generator[GenerationEvent, None, None]:
+            assert not request.messages
+            assert context is not None and context.cancellation is signal
+            yield TextDeltaEvent(content_index=0, text="Partial output")
+            if cancelled:
+                signal.cancel()
+                signal.check()
+            raise ValueError("Provider disconnected")
+
+    events: list[AgentEvent] = []
+    run = Agent(InterruptedModel(lambda _request, _signal: AssistantMessage())).start(
+        max_steps=1, cancellation=signal, on_event=events.append
+    )
+    with pytest.raises(AgentCancelled if cancelled else RunFailed):
+        run.result()
+    assert run.wait_for_idle(2)
+    ends = [event for event in events if event.type == "message_end"]
+    assert len(ends) == 1
+    terminal = ends[0]
+    assert terminal.status == (RunStatus.CANCELLED if cancelled else RunStatus.ERROR)
+    saved_message = run.snapshot().messages[0]
+    assert isinstance(saved_message, AssistantMessage)
+    assert terminal.message.text == saved_message.text == "Partial output"
+    assert terminal.message_id == saved_message.id
+    assert events.index(terminal) < next(
+        index for index, event in enumerate(events) if event.type == "agent_end"
     )
 
 
@@ -152,8 +193,6 @@ def test_model_honors_cancelled_signal() -> None:
     signal = CancellationSignal()
     signal.cancel()
     llm = ScriptedLLM([])
-
-    from onyx.llm.cancellation import AgentCancelled
 
     with pytest.raises(AgentCancelled):
         Agent(llm).start(background=False, max_steps=1, cancellation=signal).result()

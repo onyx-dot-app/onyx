@@ -2,19 +2,10 @@
 
 from collections.abc import Sequence
 
-from onyx.agents.execution_records import OperationSnapshot
 from onyx.agents.models import AgentInfo, RunState
 from onyx.chat.models import ResponseRecord
-from onyx.chat.response_items import (
-    ResponseGeneration,
-    ResponseToolCall,
-    ResponseToolResult,
-    answer_message_index,
-    build_response_items,
-    messages_from_items,
-)
 from onyx.deep_research.models import ResearchConfiguration
-from onyx.llm.models import ToolResultMessage
+from onyx.llm.models import Message, ToolResultMessage
 
 
 def response_record(
@@ -24,20 +15,6 @@ def response_record(
     metadata = {info.id: info for info in registrations}
 
     def capture(node: RunState, *, is_root: bool = False) -> ResponseRecord:
-        inputs = [
-            message.model_copy(
-                update={"metadata": None, "details": None}
-                if isinstance(message, ToolResultMessage)
-                else {"metadata": None}
-            ).model_copy(deep=True)
-            for message in node.input_messages
-        ]
-        items = build_response_items(
-            node.run_id,
-            node.messages,
-            node.operations,
-            answer_message_index=node.answer_message_index,
-        )
         info = metadata.get(node.agent_id) if node.agent_id is not None else None
         if not is_root and info is None:
             raise ValueError("Child response requires its agent registration")
@@ -58,8 +35,12 @@ def response_record(
             parent_run_id=node.parent_run_id,
             parent_tool_call_id=node.parent_tool_call_id,
             parent_message_id=node.parent_message_id,
-            input_messages=inputs,
-            items=items,
+            input_messages=[_saved_message(message) for message in node.input_messages],
+            messages=[_saved_message(message) for message in node.messages],
+            operations=[
+                operation.model_copy(deep=True) for operation in node.operations
+            ],
+            answer_message_index=node.answer_message_index,
             child_runs=[capture(child) for child in node.child_runs],
             status=node.status,
             failure=node.failure.model_copy(deep=True) if node.failure else None,
@@ -72,33 +53,7 @@ def response_record(
 
 
 def response_snapshot(record: ResponseRecord) -> RunState:
-    """Reconstruct SDK output and operation outcomes from saved response content."""
-    operations: list[OperationSnapshot] = []
-    message_index = -1
-    generation_index = -1
-    for item in record.items:
-        content = item.content
-        if isinstance(content, ResponseGeneration):
-            message_index += 1
-            generation_index = message_index
-            operations.append(
-                OperationSnapshot(
-                    step_index=item.step_index,
-                    message_index=generation_index,
-                    status=content.outcome.status,
-                )
-            )
-        elif isinstance(content, ResponseToolResult):
-            message_index += 1
-        elif isinstance(content, ResponseToolCall) and content.status is not None:
-            operations.append(
-                OperationSnapshot(
-                    step_index=item.step_index,
-                    message_index=generation_index,
-                    tool_call_id=content.call.id,
-                    status=content.status,
-                )
-            )
+    """Restore detached execution state from accepted response content."""
     return RunState(
         run_id=record.run_id,
         agent_id=record.agent_id,
@@ -109,9 +64,9 @@ def response_snapshot(record: ResponseRecord) -> RunState:
         input_messages=[
             message.model_copy(deep=True) for message in record.input_messages
         ],
-        messages=messages_from_items(record.items),
-        operations=operations,
-        answer_message_index=answer_message_index(record.items),
+        messages=[message.model_copy(deep=True) for message in record.messages],
+        operations=[operation.model_copy(deep=True) for operation in record.operations],
+        answer_message_index=record.answer_message_index,
         child_runs=[response_snapshot(child) for child in record.child_runs],
         status=record.status,
         failure=record.failure.model_copy(deep=True) if record.failure else None,
@@ -119,3 +74,12 @@ def response_snapshot(record: ResponseRecord) -> RunState:
         if record.checkpoint
         else None,
     )
+
+
+def _saved_message(message: Message) -> Message:
+    # Drop application payloads before copying potentially large tool results.
+    return message.model_copy(
+        update={"metadata": None, "details": None}
+        if isinstance(message, ToolResultMessage)
+        else {"metadata": None}
+    ).model_copy(deep=True)
