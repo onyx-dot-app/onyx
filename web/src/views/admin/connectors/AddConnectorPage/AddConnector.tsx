@@ -538,7 +538,10 @@ export default function AddConnector({
             );
 
             if (connectorIdRef.current) {
-              await deleteConnector(connectorIdRef.current);
+              // The link may still land after the timeout. Never cascade it.
+              await deleteConnector(connectorIdRef.current, {
+                onlyUnpaired: true,
+              });
               connectorIdRef.current = null;
             }
           }
