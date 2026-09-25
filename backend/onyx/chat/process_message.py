@@ -6,7 +6,6 @@ from contextvars import Token
 from functools import partial
 from uuid import UUID
 
-from onyx.cache.factory import get_control_cache_backend
 from onyx.chat.errors import chat_error
 from onyx.chat.execution import (
     ActiveChatTurns,
@@ -116,7 +115,6 @@ def _stream_chat_turn(
             response_future,
             stream_buffer,
             active_chat_turns=active_chat_turns,
-            control_cache=get_control_cache_backend(),
         )
         yield from setup.initial_packets
         yield from stream

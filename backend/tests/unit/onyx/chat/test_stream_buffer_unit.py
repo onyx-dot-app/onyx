@@ -15,7 +15,6 @@ from onyx.agents.events import AgentEvent, AgentStartEvent
 from onyx.chat import stream_buffer
 from onyx.chat.chat_processing_checker import (
     FENCE_TTL,
-    PROCESSING_STALE_AFTER_S,
     get_processing_stream_id,
     is_chat_session_processing,
     set_processing_status,
@@ -307,21 +306,16 @@ def test_concurrent_delivery_keeps_reader_and_cache_order(
     )
 
 
-def test_stale_worker_retains_buffer_identity_without_reporting_live() -> None:
-    class ProcessingCache(FakeCache):
-        def ttl(self, key: str) -> int:
-            return self.expiries.get(key, -2)
-
-    cache = ProcessingCache()
+def test_delayed_refresh_does_not_mark_stream_inactive() -> None:
+    cache = FakeCache()
     session_id = uuid4()
     set_processing_status(session_id, cache, True, stream_id=_STREAM_ID)
-    assert is_chat_session_processing(session_id, cache)
     for key in cache.expiries:
-        cache.expiries[key] = int(FENCE_TTL - PROCESSING_STALE_AFTER_S)
-    assert not is_chat_session_processing(session_id, cache)
-    assert get_processing_stream_id(session_id, cache) == _STREAM_ID
-    set_processing_status(session_id, cache, True, stream_id=_STREAM_ID)
+        cache.expiries[key] = FENCE_TTL - 120
     assert is_chat_session_processing(session_id, cache)
+    assert get_processing_stream_id(session_id, cache) == _STREAM_ID
+    set_processing_status(session_id, cache, False)
+    assert not is_chat_session_processing(session_id, cache)
 
 
 def test_event_delivery_and_cache_writes_share_worker(

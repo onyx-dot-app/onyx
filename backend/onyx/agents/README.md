@@ -483,7 +483,12 @@ A response's `run_id` connects live SDK handles to that same history.
 Chat uses one execution worker per active agent, one turn control worker, and one event-delivery worker.
 The event worker also writes replay batches to the configured cache. Slow cache writes delay later events, but control polling remains independent.
 The execution worker saves terminal output. Suspension releases the worker; new input can start another worker to resume execution.
-The control worker polls all registered `ChatRunStore` instances and renews their ownership while saves run.
+The control worker checks ownership deadlines while cache operations run separately.
+Only lease renewal uses short cache timeouts. Stop checks and stream-status updates use the ordinary cache client.
+Transient renewal failures retry within the last confirmed lease. Owner mismatch cancels immediately.
+Without confirmation, cancellation starts five seconds before the 60-second lease expires.
+Renewal timing starts before the cache request, so response latency does not extend local ownership.
+Stream-status failures log and retry. The processing marker uses its 30-minute expiry, as on main.
 It remains active while background children or unfinished finalization retain ownership.
 
 `AgentDirectory` resolves agents and saved runs within an authorized conversation branch.

@@ -4,6 +4,7 @@ import os
 import threading
 import time
 from collections.abc import Callable, Iterator
+from concurrent.futures import Future
 from contextlib import contextmanager
 from uuid import UUID, uuid4
 
@@ -19,6 +20,7 @@ from onyx.agents.coordination import (
 from onyx.agents.models import AgentState, ExecutionCheckpoint, RunState
 from onyx.agents.runtime import Agent, Run, RunNotTransferable
 from onyx.agents.transcript import RunStatus
+from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.chat.checkpoint import (
     CheckpointBinding,
@@ -48,12 +50,16 @@ from onyx.db.chat_subagents import (
 )
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import start_thread_future
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
+LEASE_CACHE_TIMEOUT_S = 1.0
 OWNER_TTL_SECONDS = 60
 OWNER_POLL_SECONDS = 0.25
 OWNER_REFRESH_SECONDS = 10
+OWNER_RETRY_SECONDS = 1.0
+OWNER_EXPIRY_MARGIN_SECONDS = 5.0
 OWNER_LOCK_SECONDS = 30
 OWNER_LOCK_WAIT_SECONDS = 10
 STOP_TTL_SECONDS = 600
@@ -69,12 +75,19 @@ class ResponseOwner(BaseModel):
     revision: int | None = None
 
 
+class _OwnershipLost(RuntimeError):
+    pass
+
+
 class _OwnerLease:
     def __init__(self, owner: ResponseOwner) -> None:
         self.owner = owner
         self.lock = threading.Lock()
         self.released = False
         self.refreshed = time.monotonic()
+        self.renewal: Future[None] | None = None
+        self.renewal_started = self.refreshed
+        self.retry_at = self.refreshed
         self.error: Exception | None = None
 
 
@@ -104,7 +117,10 @@ class ChatRunStore(RunStore):
         self.response_id = response_id
         self.visible_response_ids = set(visible_response_ids) | {response_id}
         self.cache = cache
-        self.control_cache = control_cache or cache
+        self.control_cache = control_cache or get_cache_backend(
+            tenant_id=tenant_id, operation_timeout_s=LEASE_CACHE_TIMEOUT_S
+        )
+        self._stop_check: Future[list[str]] | None = None
         self._root_response = root_response
         self._lock = threading.Lock()
         self._owned: dict[str, _OwnedRun] = {}
@@ -297,8 +313,14 @@ class ChatRunStore(RunStore):
                 raise RuntimeError(
                     "Response ownership failed during restoration"
                 ) from lease.error
+            started = time.monotonic()
             self._refresh_owner(run.id, lease.owner)
-            lease.refreshed = time.monotonic()
+            if (
+                time.monotonic() - started
+                >= OWNER_TTL_SECONDS - OWNER_EXPIRY_MARGIN_SECONDS
+            ):
+                raise TimeoutError("Response ownership renewal took too long")
+            lease.refreshed = started
         with self._lock:
             self._owned[run.id] = _OwnedRun(run, lease)
 
@@ -373,33 +395,82 @@ class ChatRunStore(RunStore):
         if not self.control_cache.expire_if_value(
             self._owner_key(run_id), owner.model_dump_json().encode(), OWNER_TTL_SECONDS
         ):
-            raise RuntimeError("Response ownership was lost")
+            raise _OwnershipLost("Response ownership was lost")
+
+    def _read_stop_requests(self, run_ids: list[str]) -> list[str]:
+        return [
+            run_id for run_id in run_ids if self.cache.exists(self._stop_key(run_id))
+        ]
 
     def poll_control(self) -> None:
-        """Renew leases and check Stop without waiting for persistence locks."""
+        """Enforce ownership deadlines independently of pending cache operations."""
         with self._lock:
             leases = list(self._leases.items())
+        stopped: set[str] = set()
+        if self._stop_check is not None and self._stop_check.done():
+            try:
+                stopped.update(self._stop_check.result())
+            except Exception:
+                logger.exception("Failed to read agent Stop requests; will retry")
+            self._stop_check = None
+        if self._stop_check is None and leases:
+            self._stop_check = start_thread_future(
+                lambda: self._read_stop_requests([run_id for run_id, _ in leases]),
+                name="agent-stop-check",
+            )
         for run_id, lease in leases:
             if not lease.lock.acquire(blocking=False):
                 continue
             try:
-                if lease.released or lease.error is not None:
+                if lease.released:
                     continue
-                try:
-                    stop_requested = self.control_cache.exists(self._stop_key(run_id))
-                    now = time.monotonic()
-                    if now - lease.refreshed >= OWNER_REFRESH_SECONDS:
-                        self._refresh_owner(run_id, lease.owner)
-                        lease.refreshed = now
-                except Exception as error:
-                    lease.error = error
-                    stop_requested = True
-                    logger.exception("Response ownership control failed")
+                now = time.monotonic()
+                if lease.error is None and (
+                    now
+                    >= lease.refreshed + OWNER_TTL_SECONDS - OWNER_EXPIRY_MARGIN_SECONDS
+                ):
+                    lease.error = TimeoutError(
+                        "Response ownership renewal deadline expired"
+                    )
+                if (
+                    lease.error is None
+                    and lease.renewal is not None
+                    and lease.renewal.done()
+                ):
+                    try:
+                        lease.renewal.result()
+                    except _OwnershipLost as error:
+                        lease.error = error
+                    except Exception:
+                        lease.retry_at = now + OWNER_RETRY_SECONDS
+                        logger.exception(
+                            "Response ownership renewal failed; will retry"
+                        )
+                    else:
+                        # The request start is a conservative bound on the server's TTL.
+                        lease.refreshed = lease.renewal_started
+                    lease.renewal = None
+                if (
+                    lease.error is None
+                    and lease.renewal is None
+                    and now >= lease.retry_at
+                    and now - lease.refreshed >= OWNER_REFRESH_SECONDS
+                ):
+                    lease.renewal_started = now
+                    lease.renewal = start_thread_future(
+                        lambda run_id=run_id, owner=lease.owner: self._refresh_owner(
+                            run_id, owner
+                        ),
+                        name="agent-lease-renewal",
+                    )
+                if lease.error is not None:
+                    stopped.add(run_id)
             finally:
                 lease.lock.release()
+        for run_id in stopped:
             with self._lock:
                 owned = self._owned.get(run_id)
-            if stop_requested and owned is not None:
+            if owned is not None:
                 owned.run.cancel()
 
     def handoff(self, run_id: str) -> None:
@@ -490,6 +561,7 @@ class ChatRunStore(RunStore):
                 root_message_id=saved.root_message_id,
                 revision=checkpoint.revision,
             )
+            lease = _OwnerLease(owner)
             try:
                 self.cache.set(
                     self._owner_key(run_id),
@@ -504,7 +576,7 @@ class ChatRunStore(RunStore):
                     session.commit()
                 raise
         with self._lock:
-            self._leases[run_id] = _OwnerLease(owner)
+            self._leases[run_id] = lease
         try:
             captured = restore_checkpoint_data(
                 checkpoint.data,
