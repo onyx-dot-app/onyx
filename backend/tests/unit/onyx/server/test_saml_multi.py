@@ -1,21 +1,25 @@
 """Unit coverage for the DB-backed SAML router: the OneLogin settings built from
 a provider row (fixed ACS), fail-closed resolution by name and by issuer, the
 issuer extraction that routes the single callback, the per-provider email-domain
-gate, and email extraction from SAML attributes. No DB or live IdP."""
+gate, email extraction from SAML attributes, and the post-login redirect. No DB
+or live IdP."""
 
 import base64
 from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
+from fastapi.responses import RedirectResponse
 from onelogin.saml2.auth import OneLogin_Saml2_Auth
 from sqlalchemy.orm import Session
+from starlette.responses import Response as StarletteResponse
 
 from onyx.db.enums import SSOProviderType
 from onyx.db.models import SSOProvider
 from onyx.db.sso_provider import SAMLProviderConfig
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server import saml_multi
+from onyx.server.saml import _sanitize_relay_state
 from onyx.utils.sensitive import make_mock_sensitive_value
 
 _IDP = {
@@ -53,6 +57,16 @@ def test_build_saml_settings_optional_sp_defaults_empty() -> None:
     settings = saml_multi.build_saml_settings(_config())
     assert settings["sp"]["x509cert"] == ""
     assert settings["sp"]["privateKey"] == ""
+
+
+def test_build_saml_settings_requested_authn_context_defaults_true() -> None:
+    settings = saml_multi.build_saml_settings(_config())
+    assert settings["security"]["requestedAuthnContext"] is True
+
+
+def test_build_saml_settings_requested_authn_context_can_be_disabled() -> None:
+    settings = saml_multi.build_saml_settings(_config(request_authn_context=False))
+    assert settings["security"]["requestedAuthnContext"] is False
 
 
 def _provider(**overrides: object) -> SSOProvider:
@@ -203,3 +217,180 @@ def test_extract_email_missing_raises() -> None:
     auth = _fake_auth({"displayName": ["Alice"]})
     with pytest.raises(OnyxError):
         saml_multi._extract_user_email(auth, _config())
+
+
+# ---------------------------------------------------------------------------
+# Post-login redirect: the IdP posts SAMLResponse via a real top-level
+# navigation, so the callback must wrap auth_backend.login()'s bare 204 in a
+# redirect the same way onyx.auth.users.complete_login_flow does for OIDC/OAuth,
+# or the browser is left stuck on the IdP's blank auto-submit page.
+# ---------------------------------------------------------------------------
+
+
+class _FakeCallbackAuth:
+    def __init__(self, _req: dict[str, Any], old_settings: Any) -> None:
+        del old_settings
+
+    def process_response(self) -> None:
+        pass
+
+    def get_errors(self) -> list[str]:
+        return []
+
+    def get_last_error_reason(self) -> str:
+        return ""
+
+    def is_authenticated(self) -> bool:
+        return True
+
+    def get_attribute(self, key: str) -> list[str] | None:
+        return {"email": ["user@example.com"]}.get(key)
+
+    def get_attributes(self) -> dict[str, list[str]]:
+        return {"email": ["user@example.com"]}
+
+
+def _stub_callback_dependencies(
+    monkeypatch: pytest.MonkeyPatch, *, relay_state: str | None
+) -> StarletteResponse:
+    xml = _RESPONSE.format(body=f"<saml:Issuer>{_IDP['idp_entity_id']}</saml:Issuer>")
+    post_data: dict[str, Any] = {"SAMLResponse": _encode(xml)}
+    if relay_state is not None:
+        post_data["RelayState"] = relay_state
+
+    async def _fake_prepare(_request: Any) -> dict[str, Any]:
+        return {"post_data": post_data, "get_data": {}}
+
+    monkeypatch.setattr(saml_multi, "prepare_from_fastapi_request", _fake_prepare)
+    monkeypatch.setattr(
+        saml_multi, "fetch_sso_providers", lambda **_kw: [_provider(name="saml")]
+    )
+    monkeypatch.setattr(saml_multi, "OneLogin_Saml2_Auth", _FakeCallbackAuth)
+
+    async def _fake_upsert(email: str) -> Any:
+        del email
+        return SimpleNamespace(is_active=True)
+
+    monkeypatch.setattr(saml_multi, "upsert_saml_user", _fake_upsert)
+
+    async def _fake_capture(*_args: Any, **_kwargs: Any) -> None:
+        pass
+
+    monkeypatch.setattr(saml_multi, "capture_saml_login_claims", _fake_capture)
+
+    login_response = StarletteResponse(status_code=204)
+    login_response.headers["set-cookie"] = "onyxauth=abc; Path=/; HttpOnly"
+
+    async def _fake_login(_strategy: Any, _user: Any) -> StarletteResponse:
+        return login_response
+
+    monkeypatch.setattr(saml_multi.auth_backend, "login", _fake_login)
+    return login_response
+
+
+@pytest.mark.asyncio
+async def test_process_saml_callback_redirects_and_carries_cookie(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_callback_dependencies(monkeypatch, relay_state="/settings")
+
+    async def _fake_on_after_login(*_args: Any, **_kwargs: Any) -> None:
+        pass
+
+    user_manager = cast(Any, SimpleNamespace(on_after_login=_fake_on_after_login))
+    response = await saml_multi._process_saml_callback(
+        cast(Any, SimpleNamespace()), _DB, cast(Any, None), user_manager
+    )
+
+    assert isinstance(response, RedirectResponse)
+    assert response.status_code == 302
+    assert response.headers["location"] == "/settings"
+    assert response.headers["set-cookie"] == "onyxauth=abc; Path=/; HttpOnly"
+
+
+@pytest.mark.asyncio
+async def test_process_saml_callback_falls_back_to_app_without_relay_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_callback_dependencies(monkeypatch, relay_state=None)
+
+    async def _fake_on_after_login(*_args: Any, **_kwargs: Any) -> None:
+        pass
+
+    user_manager = cast(Any, SimpleNamespace(on_after_login=_fake_on_after_login))
+    response = await saml_multi._process_saml_callback(
+        cast(Any, SimpleNamespace()), _DB, cast(Any, None), user_manager
+    )
+
+    assert response.headers["location"] == "/app"
+
+
+@pytest.mark.asyncio
+async def test_process_saml_callback_rejects_external_relay_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_callback_dependencies(
+        monkeypatch, relay_state="https://evil.example.com/steal"
+    )
+
+    async def _fake_on_after_login(*_args: Any, **_kwargs: Any) -> None:
+        pass
+
+    user_manager = cast(Any, SimpleNamespace(on_after_login=_fake_on_after_login))
+    response = await saml_multi._process_saml_callback(
+        cast(Any, SimpleNamespace()), _DB, cast(Any, None), user_manager
+    )
+
+    assert response.headers["location"] == "/app"
+
+
+@pytest.mark.asyncio
+async def test_process_saml_callback_rejects_protocol_relative_relay_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # "///evil.example" has no netloc under urlparse, but some browsers still
+    # resolve it as scheme-relative navigation to evil.example.
+    _stub_callback_dependencies(monkeypatch, relay_state="///evil.example")
+
+    async def _fake_on_after_login(*_args: Any, **_kwargs: Any) -> None:
+        pass
+
+    user_manager = cast(Any, SimpleNamespace(on_after_login=_fake_on_after_login))
+    response = await saml_multi._process_saml_callback(
+        cast(Any, SimpleNamespace()), _DB, cast(Any, None), user_manager
+    )
+
+    assert response.headers["location"] == "/app"
+
+
+# ---------------------------------------------------------------------------
+# _sanitize_relay_state: internal-path guard shared by the /authorize `next`
+# param and the callback's RelayState handling.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "candidate",
+    [
+        None,
+        "",
+        "relative/no-leading-slash",
+        "//evil.example",
+        "///evil.example",
+        "////evil.example",
+        "/\\evil.example",
+        "/path:with-colon",
+        "https://evil.example/steal",
+        "javascript:alert(1)",
+    ],
+)
+def test_sanitize_relay_state_rejects_unsafe_values(candidate: str | None) -> None:
+    assert _sanitize_relay_state(candidate) is None
+
+
+@pytest.mark.parametrize(
+    "candidate",
+    ["/app", "/settings?x=1", "/path#fragment"],
+)
+def test_sanitize_relay_state_accepts_internal_paths(candidate: str) -> None:
+    assert _sanitize_relay_state(candidate) == candidate
