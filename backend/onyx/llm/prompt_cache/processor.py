@@ -4,8 +4,8 @@ from datetime import datetime, timezone
 
 from onyx.configs.model_configs import ENABLE_PROMPT_CACHING
 from onyx.llm.interfaces import LLMConfig
-from onyx.llm.litellm_models import ChatCompletionMessage
-from onyx.llm.litellm_models import UserMessage as ProviderUserMessage
+from onyx.llm.model_request import ChatCompletionMessage
+from onyx.llm.model_request import UserMessage as ProviderUserMessage
 from onyx.llm.models import TextContentPart, UserMessage
 from onyx.llm.prompt_cache.cache_manager import generate_cache_key_hash
 from onyx.llm.prompt_cache.models import CacheMetadata

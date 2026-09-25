@@ -5,7 +5,12 @@ from enum import Enum
 from pydantic import BaseModel, Field
 
 from onyx.llm.exceptions import LLMErrorInfo
-from onyx.llm.models import AssistantMessage, Message, ToolCall, ToolResultMessage
+from onyx.llm.models import (
+    AssistantMessage,
+    Message,
+    ToolCall,
+    ToolResultMessage,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

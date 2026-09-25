@@ -9,24 +9,22 @@ from litellm.types.utils import ModelResponseStream as LiteLLMModelResponseStrea
 from pydantic import BaseModel, JsonValue
 
 from onyx.llm.exceptions import ClassifiedLLMError
-from onyx.llm.litellm_conversion import (
+from onyx.llm.model_response import (
+    ChatCompletionDeltaToolCall,
+    Choice,
+    Delta,
     MessageAccumulator,
+    ModelResponse,
+    ModelResponseStream,
+    ResponseFunctionCall,
+    StreamingChoice,
     from_litellm_model_response,
     from_litellm_model_response_stream,
     recover_tool_calls,
     to_assistant_message,
 )
-from onyx.llm.litellm_models import (
-    ChatCompletionDeltaToolCall,
-    Choice,
-    Delta,
-    ModelResponse,
-    ModelResponseStream,
-    ResponseFunctionCall,
-    StreamingChoice,
-)
-from onyx.llm.litellm_models import ChatCompletionMessageToolCall as WireToolCall
-from onyx.llm.litellm_models import Message as ResponseMessage
+from onyx.llm.model_response import ChatCompletionMessageToolCall as WireToolCall
+from onyx.llm.model_response import Message as ResponseMessage
 from onyx.llm.models import (
     AssistantMessage,
     GenerationDoneEvent,

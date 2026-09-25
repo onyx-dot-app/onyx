@@ -16,12 +16,8 @@ from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import ToolInvocation
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import LLM, GenerationContext, LLMConfig
-from onyx.llm.litellm_models import (
-    ChatCompletionMessage,
-    Delta,
-    ModelResponseStream,
-    StreamingChoice,
-)
+from onyx.llm.model_request import ChatCompletionMessage
+from onyx.llm.model_response import Delta, ModelResponseStream, StreamingChoice
 from onyx.llm.models import (
     AssistantMessage,
     GenerationDoneEvent,

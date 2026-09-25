@@ -10,7 +10,7 @@ from unittest.mock import patch
 from onyx.llm.api_surfaces import LlmApiSurface
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.custom_config_mapping import UI_ONLY_CONFIG_KEYS
-from onyx.llm.litellm_models import ChatCompletionMessage, UserMessage
+from onyx.llm.model_request import ChatCompletionMessage, UserMessage
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.well_known_providers.constants import BIFROST_API_MODE_CONFIG_KEY
 

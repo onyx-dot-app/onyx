@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 
-from onyx.llm.litellm_models import ChatCompletionMessage
+from onyx.llm.model_request import ChatCompletionMessage
 from onyx.llm.prompt_cache.models import CacheMetadata
 
 

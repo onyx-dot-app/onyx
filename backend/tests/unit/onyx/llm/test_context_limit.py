@@ -7,7 +7,7 @@ import pytest
 from litellm.exceptions import ContextWindowExceededError
 
 from onyx.llm.exceptions import LLMContextLimitError, litellm_exception_to_safe_error
-from onyx.llm.litellm_models import Delta, ModelResponseStream, StreamingChoice
+from onyx.llm.model_response import Delta, ModelResponseStream, StreamingChoice
 from onyx.llm.models import GenerationRequest
 from onyx.llm.multi_llm import LitellmLLM
 

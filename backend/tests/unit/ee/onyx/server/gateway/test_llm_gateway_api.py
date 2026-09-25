@@ -23,22 +23,24 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.exceptions import LLMRateLimitError, LLMTimeoutError
 from onyx.llm.interfaces import LLMConfig
-from onyx.llm.litellm_models import (
+from onyx.llm.model_request import (
     AssistantMessage,
-    ChatCompletionDeltaToolCall,
     ChatCompletionMessage,
+    RequestFunctionCall,
+    SystemMessage,
+    ToolCall,
+    UserMessage,
+)
+from onyx.llm.model_response import (
+    ChatCompletionDeltaToolCall,
     ChatCompletionMessageToolCall,
     Choice,
     Delta,
     Message,
     ModelResponse,
     ModelResponseStream,
-    RequestFunctionCall,
     ResponseFunctionCall,
     StreamingChoice,
-    SystemMessage,
-    ToolCall,
-    UserMessage,
 )
 from onyx.llm.models import (
     ImageContentPart,

@@ -17,8 +17,8 @@ A generation tool-call event contains the generated name and arguments. Agent to
 | `models.py` | Shared messages, requests, generation options, and stream events. |
 | `factory.py` | Select a configured model and construct its client. |
 | `multi_llm.py` | LiteLLM transport and shared generation implementation. |
-| `litellm_models.py` | Provider request messages, responses, and stream chunks. |
-| `litellm_conversion.py` | Convert between provider data and shared generation types. |
+| `model_request.py` | Provider request messages and serialization from application messages. |
+| `model_response.py` | Provider responses, parsing, and streamed message accumulation. |
 | `cancellation.py` | Cancellation signals, isolated execution, and interruptible streaming. |
 
 ## One generation

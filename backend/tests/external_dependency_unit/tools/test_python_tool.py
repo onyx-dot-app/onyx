@@ -21,7 +21,7 @@ from onyx.chat.process_message import handle_stream_message_objects
 from onyx.db.models import Persona
 from onyx.db.tools import get_builtin_tool
 from onyx.file_store.models import ChatFileType, FileDescriptor
-from onyx.llm.litellm_models import (
+from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
     ResponseFunctionCall,

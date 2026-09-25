@@ -23,7 +23,11 @@ from onyx.file_store.models import (
     FileToolMetadata,
 )
 from onyx.llm.interfaces import LLM, LLMUserIdentity
-from onyx.llm.models import GenerationRequestParams, Message, ReasoningEffort
+from onyx.llm.models import (
+    GenerationRequestParams,
+    Message,
+    ReasoningEffort,
+)
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.server.query_and_chat.models import (
     MessageResponseIDInfo,

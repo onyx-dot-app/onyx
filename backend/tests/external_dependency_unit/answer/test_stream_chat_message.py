@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from onyx.chat.models import CreateChatSessionID
 from onyx.configs.constants import DocumentSource
-from onyx.llm.litellm_models import (
+from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
     ResponseFunctionCall,

@@ -12,8 +12,12 @@ import pytest
 
 from onyx.chat.llm_step import PromptMetadata, prepare_model_messages
 from onyx.llm.interfaces import LLMConfig
-from onyx.llm.litellm_conversion import CODE_BLOCK_MARKDOWN, serialize_request
-from onyx.llm.litellm_models import SystemMessage, UserMessage
+from onyx.llm.model_request import (
+    CODE_BLOCK_MARKDOWN,
+    SystemMessage,
+    UserMessage,
+    serialize_request,
+)
 from onyx.llm.models import AssistantMessage as CanonicalAssistantMessage
 from onyx.llm.models import GenerationRequest, TextContent
 from onyx.llm.models import SystemMessage as CanonicalSystemMessage
@@ -48,7 +52,7 @@ class TestUserReminderMessageType:
             )
         ]
 
-        result = serialize_request(
+        result, _ = serialize_request(
             GenerationRequest(
                 messages=prepare_model_messages(history, mock_llm_config)
             ),
@@ -76,7 +80,7 @@ class TestUserReminderMessageType:
             )
         ]
 
-        result = serialize_request(
+        result, _ = serialize_request(
             GenerationRequest(
                 messages=prepare_model_messages(history, mock_llm_config)
             ),
@@ -102,7 +106,7 @@ class TestUserReminderMessageType:
             )
         ]
 
-        result = serialize_request(
+        result, _ = serialize_request(
             GenerationRequest(
                 messages=prepare_model_messages(history, mock_llm_config)
             ),
@@ -134,7 +138,7 @@ class TestUserReminderMessageType:
             ),
         ]
 
-        result = serialize_request(
+        result, _ = serialize_request(
             GenerationRequest(
                 messages=prepare_model_messages(history, mock_llm_config)
             ),
@@ -164,7 +168,7 @@ class TestUserReminderMessageType:
             )
         ]
 
-        result = serialize_request(
+        result, _ = serialize_request(
             GenerationRequest(
                 messages=prepare_model_messages(history, mock_llm_config)
             ),
@@ -211,7 +215,7 @@ class TestCodeBlockMarkdownFormatting:
             )
         ]
 
-        result = serialize_request(
+        result, _ = serialize_request(
             GenerationRequest(messages=prepare_model_messages(history, llm_config)),
             llm_config,
         )
@@ -231,7 +235,7 @@ class TestCodeBlockMarkdownFormatting:
             )
         ]
 
-        result = serialize_request(
+        result, _ = serialize_request(
             GenerationRequest(messages=prepare_model_messages(history, llm_config)),
             llm_config,
         )
@@ -251,7 +255,7 @@ class TestCodeBlockMarkdownFormatting:
             )
         ]
 
-        result = serialize_request(
+        result, _ = serialize_request(
             GenerationRequest(messages=prepare_model_messages(history, llm_config)),
             llm_config,
         )
@@ -272,7 +276,7 @@ class TestCodeBlockMarkdownFormatting:
             )
         ]
 
-        result = serialize_request(
+        result, _ = serialize_request(
             GenerationRequest(messages=prepare_model_messages(history, llm_config)),
             llm_config,
         )
@@ -294,7 +298,7 @@ class TestCodeBlockMarkdownFormatting:
             )
         ]
 
-        result = serialize_request(
+        result, _ = serialize_request(
             GenerationRequest(messages=prepare_model_messages(history, llm_config)),
             llm_config,
         )
@@ -319,7 +323,7 @@ class TestCodeBlockMarkdownFormatting:
             ),
         ]
 
-        result = serialize_request(
+        result, _ = serialize_request(
             GenerationRequest(messages=prepare_model_messages(history, llm_config)),
             llm_config,
         )

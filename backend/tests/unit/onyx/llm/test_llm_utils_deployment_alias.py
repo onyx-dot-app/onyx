@@ -4,7 +4,10 @@ model identity (e.g. Azure AI Foundry, where the alias is the string
 actually sent to LiteLLM).
 """
 
-from onyx.llm.utils import model_needs_formatting_reenabled, model_supports_image_input
+from onyx.llm.model_capabilities import (
+    model_needs_formatting_reenabled,
+)
+from onyx.llm.utils import model_supports_image_input
 
 
 def test_model_supports_image_input_via_deployment_alias() -> None:

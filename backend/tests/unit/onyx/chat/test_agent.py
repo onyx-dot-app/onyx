@@ -17,7 +17,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.file_store.models import ExtractedContextFiles
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
-from onyx.llm.litellm_models import (
+from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
     ResponseFunctionCall,

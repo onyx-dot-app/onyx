@@ -5,7 +5,8 @@ from contextlib import contextmanager
 from typing import Any, cast
 
 from onyx.llm.interfaces import LLM
-from onyx.llm.litellm_models import ModelResponse, ToolCall
+from onyx.llm.model_request import ToolCall
+from onyx.llm.model_response import ModelResponse
 from onyx.llm.models import GenerationRequestParams
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import generation_span, get_current_span

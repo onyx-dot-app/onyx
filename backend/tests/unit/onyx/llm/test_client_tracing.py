@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 
 from onyx.llm.interfaces import GenerationContext
-from onyx.llm.litellm_models import (
+from onyx.llm.model_response import (
     Choice,
     Delta,
     Message,

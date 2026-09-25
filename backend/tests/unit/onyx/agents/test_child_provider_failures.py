@@ -14,7 +14,7 @@ from onyx.deep_research.tool_definitions import (
     GENERATE_REPORT_TOOL_NAME,
     RESEARCH_AGENT_TOOL_NAME,
 )
-from onyx.llm.litellm_models import (
+from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
     ResponseFunctionCall,

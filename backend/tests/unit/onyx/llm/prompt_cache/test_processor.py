@@ -3,7 +3,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from onyx.llm.interfaces import LLMConfig
-from onyx.llm.litellm_models import ChatCompletionMessage, SystemMessage, UserMessage
+from onyx.llm.model_request import ChatCompletionMessage, SystemMessage, UserMessage
 from onyx.llm.prompt_cache import processor as processor_module
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 
@@ -96,7 +96,11 @@ def test_canonical_cached_prompt_preserves_continuation_and_cache_boundary() -> 
 
 
 def test_multimodal_continuation_preserves_input_and_cache_control() -> None:
-    from onyx.llm.models import ImageContentPart, ImageUrlDetail, TextContentPart
+    from onyx.llm.models import (
+        ImageContentPart,
+        ImageUrlDetail,
+        TextContentPart,
+    )
 
     prefix = UserMessage(
         content=[

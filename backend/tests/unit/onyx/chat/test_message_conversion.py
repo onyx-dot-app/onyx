@@ -7,9 +7,8 @@ from onyx.chat.llm_step import PromptMetadata, prepare_model_messages
 from onyx.file_store.models import ChatFileType, ChatLoadedFile
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLMConfig
-from onyx.llm.litellm_conversion import serialize_request
-from onyx.llm.litellm_models import AssistantMessage, ToolMessage
-from onyx.llm.litellm_models import UserMessage as WireUserMessage
+from onyx.llm.model_request import AssistantMessage, ToolMessage, serialize_request
+from onyx.llm.model_request import UserMessage as WireUserMessage
 from onyx.llm.models import AssistantMessage as CanonicalAssistantMessage
 from onyx.llm.models import (
     GenerationRequest,
@@ -244,7 +243,7 @@ class TestTranslateHistoryToLlmFormat:
         ]
 
     def test_preserves_structured_tool_history_for_non_ollama(self) -> None:
-        translated = serialize_request(
+        translated, _ = serialize_request(
             GenerationRequest(messages=self._tool_history()),
             self._llm_config(LlmProviderNames.OPENAI),
         )
@@ -285,7 +284,7 @@ class TestTranslateHistoryToLlmFormat:
                 metadata=PromptMetadata(token_count=5),
             ),
         ]
-        translated = serialize_request(
+        translated, _ = serialize_request(
             GenerationRequest(messages=history),
             self._llm_config(LlmProviderNames.BEDROCK),
         )
@@ -295,7 +294,7 @@ class TestTranslateHistoryToLlmFormat:
         assert translated[0].tool_calls[0].function.name == "ServiceNow_API"
 
     def test_flattens_tool_history_for_ollama(self) -> None:
-        translated = serialize_request(
+        translated, _ = serialize_request(
             GenerationRequest(messages=self._tool_history()),
             self._llm_config(LlmProviderNames.OLLAMA_CHAT),
         )
@@ -334,7 +333,7 @@ class TestTranslateHistoryToLlmFormat:
                 metadata=PromptMetadata(token_count=5),
             )
         ]
-        translated = serialize_request(
+        translated, _ = serialize_request(
             GenerationRequest(messages=history),
             self._llm_config(LlmProviderNames.OLLAMA_CHAT),
         )

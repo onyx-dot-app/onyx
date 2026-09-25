@@ -130,7 +130,11 @@ from onyx.deep_research.models import ResearchConfiguration
 from onyx.external_apps.url_glob import UrlGlob
 from onyx.file_store.models import FileDescriptor
 from onyx.kg.models import KGEntityTypeAttributes, KGStage
-from onyx.llm.models import AssistantMessage, ReasoningEffort, ToolResultMessage
+from onyx.llm.models import (
+    AssistantMessage,
+    ReasoningEffort,
+    ToolResultMessage,
+)
 from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.server.security.models import IncognitoAvailability, SSRFProtectionLevel
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig

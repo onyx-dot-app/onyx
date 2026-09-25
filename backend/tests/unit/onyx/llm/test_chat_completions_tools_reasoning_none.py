@@ -8,7 +8,7 @@ from unittest.mock import patch
 from litellm.exceptions import BadRequestError
 
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.litellm_models import UserMessage
+from onyx.llm.model_request import UserMessage
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.well_known_providers.constants import (

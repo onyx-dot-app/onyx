@@ -15,7 +15,7 @@ import pytest
 from litellm import completion_cost
 from sqlalchemy.orm import Session
 
-from onyx.llm.litellm_models import (
+from onyx.llm.model_request import (
     AssistantMessage,
     ChatCompletionMessage,
     SystemMessage,

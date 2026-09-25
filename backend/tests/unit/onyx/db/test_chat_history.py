@@ -17,7 +17,12 @@ from onyx.db.models import (
     ChatSession,
 )
 from onyx.file_store.models import ChatFileType, ChatLoadedFile
-from onyx.llm.models import AssistantMessage, TextContent, ToolCall, ToolResultMessage
+from onyx.llm.models import (
+    AssistantMessage,
+    TextContent,
+    ToolCall,
+    ToolResultMessage,
+)
 from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
 
 

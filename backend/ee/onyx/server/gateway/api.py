@@ -44,13 +44,13 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.exceptions import LLMRateLimitError, LLMTimeoutError
 from onyx.llm.factory import llm_from_provider
 from onyx.llm.interfaces import LLM
-from onyx.llm.litellm_models import (
+from onyx.llm.model_request import (
     AssistantMessage,
     ChatCompletionMessage,
-    ChatCompletionMessageToolCall,
     ToolCall,
     UserMessage,
 )
+from onyx.llm.model_response import ChatCompletionMessageToolCall
 from onyx.llm.models import (
     AnyThinkingBlock,
     NamedToolChoice,

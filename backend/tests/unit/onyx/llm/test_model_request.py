@@ -10,7 +10,7 @@ import pytest
 from onyx.configs.chat_configs import LLM_INVOKE_TIMEOUT_S, LLM_SOCKET_READ_TIMEOUT
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import GenerationContext, LLMConfig
-from onyx.llm.litellm_models import (
+from onyx.llm.model_response import (
     ChatCompletionMessageToolCall,
     Choice,
     Delta,
@@ -120,6 +120,36 @@ def test_invoke_preserves_options_and_returns_canonical_content() -> None:
     ]
 
 
+def test_client_applies_prompt_cache_to_contiguous_prefix() -> None:
+    provider = RecordingProvider()
+    request = GenerationRequest(
+        system_prompt="instructions",
+        messages=[
+            UserMessage(content="cached context", cacheable=True),
+            UserMessage(content="question"),
+            UserMessage(content="later context", cacheable=True),
+        ],
+    )
+    with patch(
+        "onyx.llm.multi_llm.process_with_prompt_cache", return_value=([], None)
+    ) as prepare_cache:
+        provider.invoke(request)
+
+    prepare_cache.assert_called_once()
+    args = prepare_cache.call_args.kwargs
+    assert [message.content for message in args["cacheable_prefix"]] == [
+        "instructions",
+        "cached context",
+    ]
+    assert [message.content for message in args["suffix"]] == [
+        "question",
+        "later context",
+    ]
+    assert args["continuation"] is False
+    assert args["with_metadata"] is False
+    assert provider.calls[0]["prompt"] == []
+
+
 def test_invoke_checks_cancellation_before_provider_call() -> None:
     provider = RecordingProvider()
     signal = CancellationSignal()
@@ -212,7 +242,7 @@ def test_interleaved_streams_isolate_cancellation_and_trace_context() -> None:
     from contextlib import closing
 
     from onyx.llm.cancellation import cancellation_scope, current_cancellation
-    from onyx.llm.litellm_models import Delta, StreamingChoice
+    from onyx.llm.model_response import Delta, StreamingChoice
     from onyx.tracing.framework.create import trace
     from onyx.tracing.framework.scope import Scope
     from onyx.tracing.framework.spans import Span

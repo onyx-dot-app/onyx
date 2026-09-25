@@ -22,9 +22,9 @@ from onyx.chat.presentation import ResponsePresenter, project_response
 from onyx.chat.renderer import MessageRenderer, ResponseLayout
 from onyx.context.search.models import SearchDoc
 from onyx.llm.cancellation import CancellationSignal
-from onyx.llm.litellm_conversion import MessageAccumulator
-from onyx.llm.litellm_models import (
+from onyx.llm.model_response import (
     Delta,
+    MessageAccumulator,
     ModelResponseStream,
     StreamingChoice,
 )

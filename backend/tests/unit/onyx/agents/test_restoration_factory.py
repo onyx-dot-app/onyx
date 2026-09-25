@@ -18,7 +18,12 @@ from onyx.deep_research.agent import DeepResearchAgent
 from onyx.deep_research.research_agent import ResearchAgent
 from onyx.file_store.models import ExtractedContextFiles
 from onyx.llm.interfaces import LLM
-from onyx.llm.models import AssistantMessage, ReasoningEffort, TextContent, UserMessage
+from onyx.llm.models import (
+    AssistantMessage,
+    ReasoningEffort,
+    TextContent,
+    UserMessage,
+)
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
 
