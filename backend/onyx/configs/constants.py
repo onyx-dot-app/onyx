@@ -557,7 +557,7 @@ class OnyxRedisLocks:
     CHAT_TTL_CHAIN_ACTIVE = "da_lock:chat_ttl_chain_active"
     CHECK_AVAILABLE_TENANTS_LOCK = "da_lock:check_available_tenants"
     CLOUD_PRE_PROVISION_TENANT_LOCK = "da_lock:pre_provision_tenant"
-    # One provisioning run per signing-up user; the suffix is a hash of the email.
+    # One provisioning run per signing-up user. The suffix is a hash of the email.
     CLOUD_PROVISION_TENANT_FOR_USER_LOCK_PREFIX = "da_lock:provision_tenant_for_user"
 
     CONNECTOR_DOC_PERMISSIONS_SYNC_LOCK_PREFIX = (
@@ -631,6 +631,9 @@ ONYX_CLOUD_CELERY_TASK_PREFIX = "cloud"
 
 # the tenant id we use for system level redis operations
 ONYX_CLOUD_TENANT_ID = "cloud"
+
+# marks a signup whose worker-side tenant provisioning failed
+ONYX_CLOUD_PROVISION_FAILURE_KEY_PREFIX = "cloud_provision_failed"
 
 # the redis namespace for runtime variables
 ONYX_CLOUD_REDIS_RUNTIME = "runtime"

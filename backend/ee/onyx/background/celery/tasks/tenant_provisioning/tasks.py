@@ -11,7 +11,10 @@ from celery import Task, shared_task
 from redis.lock import Lock as RedisLock
 
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.configs.app_configs import TARGET_AVAILABLE_TENANTS
+from onyx.configs.app_configs import (
+    TARGET_AVAILABLE_TENANTS,
+    TENANT_PROVISIONING_WAIT_SECONDS,
+)
 from onyx.configs.constants import (
     ONYX_CLOUD_TENANT_ID,
     OnyxCeleryQueues,
@@ -64,6 +67,7 @@ def provision_tenant_for_user(
     # Imported here: provisioning reaches every tool implementation (~75 MB).
     from ee.onyx.server.tenants.provisioning import (
         provision_user_tenant,
+        user_provision_failure_key,
         user_provision_lock_name,
     )
 
@@ -82,8 +86,14 @@ def provision_tenant_for_user(
         task_logger.info("Provisioned tenant %s for a signup", tenant_id)
         return True
     except Exception:
-        task_logger.exception("provision_tenant_for_user failed")
-        return False
+        # The request polling for the mapping reads this marker and fails now
+        # instead of at its deadline. The task itself fails loudly.
+        r.set(
+            user_provision_failure_key(email),
+            "1",
+            ex=TENANT_PROVISIONING_WAIT_SECONDS,
+        )
+        raise
     finally:
         try:
             lock.release()

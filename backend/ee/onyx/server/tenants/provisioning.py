@@ -43,6 +43,7 @@ from onyx.configs.app_configs import (
     VERTEXAI_DEFAULT_LOCATION,
 )
 from onyx.configs.constants import (
+    ONYX_CLOUD_PROVISION_FAILURE_KEY_PREFIX,
     ONYX_CLOUD_TENANT_ID,
     OnyxCeleryPriority,
     OnyxCeleryQueues,
@@ -173,9 +174,18 @@ async def get_or_provision_tenant(
     return await _wait_for_tenant(email, oauth_name, account_id)
 
 
+def _email_digest(email: str) -> str:
+    return hashlib.sha256(email.strip().lower().encode()).hexdigest()
+
+
 def user_provision_lock_name(email: str) -> str:
-    digest = hashlib.sha256(email.strip().lower().encode()).hexdigest()
-    return f"{OnyxRedisLocks.CLOUD_PROVISION_TENANT_FOR_USER_LOCK_PREFIX}:{digest}"
+    return f"{OnyxRedisLocks.CLOUD_PROVISION_TENANT_FOR_USER_LOCK_PREFIX}:{_email_digest(email)}"
+
+
+def user_provision_failure_key(email: str) -> str:
+    """Set by the worker when a signup's provisioning fails, so the waiting
+    request fails now instead of polling until its deadline."""
+    return f"{ONYX_CLOUD_PROVISION_FAILURE_KEY_PREFIX}:{_email_digest(email)}"
 
 
 async def finish_tenant_assignment(
@@ -183,14 +193,24 @@ async def finish_tenant_assignment(
 ) -> None:
     """Tell the control plane, then write the mapping that makes the tenant
     visible to the user. In this order a failed notification never leaves a
-    workspace the user can log in to but billing has never heard of. The
-    tenant is rolled back on failure, since it is already out of the pool."""
+    workspace the user can log in to but billing has never heard of. On
+    failure both planes are rolled back, since the tenant is already out of
+    the pool."""
+    control_plane_notified = False
     try:
         if not DEV_MODE:
             await notify_control_plane(tenant_id, email, referral_source)
+            control_plane_notified = True
         await assign_tenant_to_user(tenant_id, email, referral_source)
     except Exception:
-        logger.exception("Failed to assign tenant %s; rolling it back", tenant_id)
+        logger.exception("Failed to assign tenant %s, rolling it back", tenant_id)
+        if control_plane_notified:
+            try:
+                await delete_user_from_control_plane(tenant_id, email)
+            except Exception:
+                logger.exception(
+                    "Failed to remove tenant %s from the control plane", tenant_id
+                )
         try:
             await rollback_tenant_provisioning(tenant_id)
         except Exception:
@@ -200,6 +220,10 @@ async def finish_tenant_assignment(
 
 
 def _enqueue_user_provisioning(email: str, referral_source: str | None) -> None:
+    # A retry after a failed attempt starts from a clean marker.
+    get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID).delete(
+        user_provision_failure_key(email)
+    )
     client_app.send_task(
         OnyxCeleryTask.CLOUD_PROVISION_TENANT_FOR_USER,
         kwargs={"email": email, "referral_source": referral_source},
@@ -214,11 +238,18 @@ def _enqueue_user_provisioning(email: str, referral_source: str | None) -> None:
 async def _wait_for_tenant(
     email: str, oauth_name: str | None, account_id: str | None
 ) -> str:
+    redis_client = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+    failure_key = user_provision_failure_key(email)
     deadline = time.monotonic() + TENANT_PROVISIONING_WAIT_SECONDS
     while time.monotonic() < deadline:
         tenant_id = resolve_tenant_id(email, oauth_name, account_id)
         if tenant_id:
             return tenant_id
+        if redis_client.get(failure_key) is not None:
+            raise OnyxError(
+                OnyxErrorCode.INTERNAL_ERROR,
+                "Failed to provision tenant. Please try again later.",
+            )
         await asyncio.sleep(_PROVISIONING_POLL_INTERVAL_S)
     logger.warning("Timed out waiting for tenant provisioning for user %s", email)
     raise OnyxError(

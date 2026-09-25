@@ -222,6 +222,30 @@ async def test_request_fails_when_the_worker_never_answers(
 
 
 @pytest.mark.asyncio
+async def test_request_fails_fast_when_the_worker_reports_failure(
+    email: str,
+    no_alembic: MagicMock,
+) -> None:
+    def worker_fails(*_args: object, **_kwargs: object) -> None:
+        with patch.object(
+            provisioning, "provision_user_tenant", side_effect=RuntimeError("boom")
+        ):
+            with pytest.raises(RuntimeError):
+                _run_worker_task(email)
+
+    with (
+        patch.object(provisioning, "TENANT_PROVISIONING_WAIT_SECONDS", 30),
+        patch.object(provisioning.client_app, "send_task", side_effect=worker_fails),
+        pytest.raises(provisioning.OnyxError) as excinfo,
+    ):
+        await provisioning.get_or_provision_tenant(email)
+
+    # Far inside the 30s deadline: the worker's failure marker ended the wait.
+    assert excinfo.value.error_code == provisioning.OnyxErrorCode.INTERNAL_ERROR
+    no_alembic.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_a_failed_control_plane_call_leaves_no_mapping(
     email: str,
     pool_tenant_id: str,
@@ -239,6 +263,31 @@ async def test_a_failed_control_plane_call_leaves_no_mapping(
 
     assert _mapped_tenant(email) is None
     # Rolled back rather than left orphaned outside the pool.
+    assert not _pool_has(pool_tenant_id)
+
+
+@pytest.mark.asyncio
+async def test_a_failed_assignment_undoes_the_control_plane_record(
+    email: str,
+    pool_tenant_id: str,
+    no_alembic: MagicMock,  # noqa: ARG001
+    control_plane: MagicMock,
+) -> None:
+    _add_pool_tenant(pool_tenant_id, get_alembic_head_revision())
+
+    with (
+        patch.object(provisioning.client_app, "send_task"),
+        patch.object(
+            provisioning, "assign_tenant_to_user", side_effect=RuntimeError("seats")
+        ),
+        patch.object(provisioning, "delete_user_from_control_plane") as undo,
+        pytest.raises(provisioning.OnyxError),
+    ):
+        await provisioning.get_or_provision_tenant(email)
+
+    control_plane.assert_called_once()
+    undo.assert_called_once_with(pool_tenant_id, email)
+    assert _mapped_tenant(email) is None
     assert not _pool_has(pool_tenant_id)
 
 
