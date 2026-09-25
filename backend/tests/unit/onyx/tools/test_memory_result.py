@@ -5,14 +5,18 @@ from uuid import uuid4
 
 import pytest
 
-from onyx.agents.execution_records import OperationSnapshot, RunStatus
-from onyx.agents.models import RunState
+from onyx.agents.execution_records import ExecutionStatus, RunStatus
+from onyx.agents.models import (
+    RunState,
+    StepRecord,
+    ToolExecutionRecord,
+)
 from onyx.agents.tools import ToolInvocation
 from onyx.chat.presentation import _collect_tool_history
 from onyx.db.memory import UserInfo, UserMemoryContext
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import LLM
-from onyx.llm.models import AssistantMessage, Message, ToolCall, ToolResultMessage
+from onyx.llm.models import AssistantMessage, ToolCall, ToolResultMessage
 from onyx.tools.interface import ToolContext
 from onyx.tools.models import MemoryUpdated
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
@@ -72,24 +76,24 @@ def test_memory_outcome_is_final_before_serialization(
         details=result.details,
         is_error=result.is_error,
     )
-    messages: list[Message] = [
-        AssistantMessage(
-            content=[ToolCall(id="memory-1", name="memory", arguments={})]
-        ),
-        committed,
-    ]
     snapshot = RunState(
         run_id="memory-run",
         status=RunStatus.COMPLETE,
-        messages=messages,
-        operations=[
-            OperationSnapshot(step_index=0, message_index=0, status=RunStatus.COMPLETE),
-            OperationSnapshot(
-                step_index=0,
-                message_index=0,
-                tool_call_id="memory-1",
-                status=RunStatus.COMPLETE,
-            ),
+        steps=[
+            StepRecord(
+                message=AssistantMessage(
+                    content=[ToolCall(id="memory-1", name="memory", arguments={})]
+                ),
+                generation_status=ExecutionStatus.COMPLETE,
+                tools={
+                    "memory-1": ToolExecutionRecord(
+                        status=ExecutionStatus.ERROR
+                        if result.is_error
+                        else ExecutionStatus.COMPLETE,
+                        result=committed,
+                    )
+                },
+            )
         ],
     )
     projected = _collect_tool_history(snapshot, {"memory": 1})

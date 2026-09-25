@@ -7,8 +7,8 @@ from pydantic import BaseModel, Field, JsonValue
 from onyx.llm.models import AnyThinkingBlock, ContentPart, MessageRole, Usage
 
 
-class ToolFunctionCall(BaseModel):
-    """Function name and JSON arguments in an outgoing tool call."""
+class RequestFunctionCall(BaseModel):
+    """Complete function call sent in conversation history."""
 
     name: str
     arguments: str
@@ -17,7 +17,7 @@ class ToolFunctionCall(BaseModel):
 class ToolCall(BaseModel):
     type: Literal["function"] = "function"
     id: str
-    function: ToolFunctionCall
+    function: RequestFunctionCall
 
 
 class CacheableMessage(BaseModel):
@@ -50,11 +50,9 @@ class ToolMessage(CacheableMessage):
 
 ChatCompletionMessage = SystemMessage | UserMessage | AssistantMessage | ToolMessage
 
-LanguageModelInput = list[ChatCompletionMessage] | ChatCompletionMessage
 
-
-class FunctionCall(BaseModel):
-    """Function fields received in a response or partial stream chunk."""
+class ResponseFunctionCall(BaseModel):
+    """Function fields received from the provider; streaming fields may be absent."""
 
     arguments: str | None = None
     name: str | None = None
@@ -63,14 +61,14 @@ class FunctionCall(BaseModel):
 class ChatCompletionMessageToolCall(BaseModel):
     id: str
     type: Literal["function"] = "function"
-    function: FunctionCall
+    function: ResponseFunctionCall
 
 
 class ChatCompletionDeltaToolCall(BaseModel):
     id: str | None = None
     index: int = 0
     type: Literal["function"] = "function"
-    function: FunctionCall | None = None
+    function: ResponseFunctionCall | None = None
 
 
 class Delta(BaseModel):

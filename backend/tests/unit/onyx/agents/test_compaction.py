@@ -7,7 +7,11 @@ import pytest
 
 from onyx.agents.compaction import context_budget, history_digest, request_tokens
 from onyx.agents.events import AgentEvent
-from onyx.agents.execution_records import CompactionCheckpoint, RunStatus
+from onyx.agents.execution_records import (
+    CompactionCheckpoint,
+    ExecutionStatus,
+    RunStatus,
+)
 from onyx.agents.models import AgentState, PreparedStep, RunState, StepInput
 from onyx.agents.runtime import Agent, Run, RunFailed, _fit_context
 from onyx.agents.tools import AgentTool, ToolInvocation
@@ -203,7 +207,7 @@ def test_provider_context_rejection_preserves_execution_settings(
     ends = [event for event in events if event.type == "message_end"]
     assert len(starts) == len(ends) == 1
     assert starts[0].message_id == ends[0].message_id == result.output.id
-    assert ends[0].status == RunStatus.COMPLETE
+    assert ends[0].status == ExecutionStatus.COMPLETE
     assert ends[0].message.error_message is None
     assert prepared == [0]
     assert [context.flow for context in model.contexts] == [
@@ -250,7 +254,7 @@ def test_context_fitting_validates_checkpoint_once() -> None:
             agent_id="agent",
             status=RunStatus.COMPLETE,
             checkpoint=checkpoint,
-            messages=[],
+            steps=[],
         )
     )
     with patch("onyx.agents.compaction.history_digest", wraps=history_digest) as digest:

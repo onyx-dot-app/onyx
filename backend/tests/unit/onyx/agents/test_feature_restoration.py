@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from onyx.agents.agent_coordination import AgentCoordinator
-from onyx.agents.execution_records import OperationSnapshot, RunStatus
+from onyx.agents.execution_records import ExecutionStatus, RunStatus
 from onyx.agents.models import (
     AgentState,
     AgentStep,
@@ -17,6 +17,8 @@ from onyx.agents.models import (
     RunProgress,
     RunState,
     StepInput,
+    StepRecord,
+    ToolExecutionRecord,
 )
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import (
@@ -128,7 +130,7 @@ def test_chat_json_restores_tool_context_from_feature_state() -> None:
         run_id="run",
         agent_id="agent",
         status=RunStatus.SUSPENDED,
-        messages=[],
+        steps=[],
         progress=RunProgress(
             step_limit=3,
             feature_state=original.capture_state(),
@@ -515,24 +517,31 @@ def test_chat_checkpoint_preserves_lazy_file_references() -> None:
         run_id="binary",
         agent_id="agent",
         status=RunStatus.SUSPENDED,
-        operations=[
-            OperationSnapshot(step_index=0, message_index=0, status=RunStatus.COMPLETE)
-        ],
-        messages=[
-            AssistantMessage(
-                id="generation",
-                content=[ToolCall(id="search", name="search", arguments={})],
-            ),
-            ToolResultMessage(
-                tool_call_id="search",
-                tool_name="search",
-                content="files",
-                details=ChatSearchResult(
-                    search_docs=[],
-                    citation_mapping={},
-                    staged_files=[ChatFile(filename="result.bin", content=payload)],
+        steps=[
+            StepRecord(
+                message=AssistantMessage(
+                    id="generation",
+                    content=[ToolCall(id="search", name="search", arguments={})],
                 ),
-            ),
+                generation_status=ExecutionStatus.COMPLETE,
+                tools={
+                    "search": ToolExecutionRecord(
+                        status=ExecutionStatus.COMPLETE,
+                        result=ToolResultMessage(
+                            tool_call_id="search",
+                            tool_name="search",
+                            content="files",
+                            details=ChatSearchResult(
+                                search_docs=[],
+                                citation_mapping={},
+                                staged_files=[
+                                    ChatFile(filename="result.bin", content=payload)
+                                ],
+                            ),
+                        ),
+                    )
+                },
+            )
         ],
         progress=RunProgress(step_limit=2, feature_state=original.capture_state()),
     )

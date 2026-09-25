@@ -6,8 +6,8 @@ from litellm.exceptions import MidStreamFallbackError, RateLimitError
 from litellm.exceptions import Timeout as LiteLLMTimeout
 
 from onyx.llm.litellm_models import (
+    ChatCompletionMessage,
     Delta,
-    LanguageModelInput,
     ModelResponseStream,
     StreamingChoice,
     UserMessage,
@@ -23,7 +23,7 @@ def _make_fake_llm() -> MagicMock:
     return llm
 
 
-def _make_prompt() -> LanguageModelInput:
+def _make_prompt() -> list[ChatCompletionMessage]:
     return [UserMessage(content="hello")]
 
 

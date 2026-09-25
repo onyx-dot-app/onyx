@@ -4,7 +4,7 @@ from collections.abc import Mapping
 
 from pydantic import BaseModel, JsonValue, TypeAdapter
 
-from onyx.agents.execution_records import RunStatus
+from onyx.agents.execution_records import ExecutionStatus, RunStatus
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.models import MessageRendering, PresentationMode
 from onyx.context.search.models import SearchDoc
@@ -224,7 +224,7 @@ class MessageRenderer:
     def complete(
         self,
         message: AssistantMessage,
-        status: RunStatus = RunStatus.COMPLETE,
+        status: ExecutionStatus = ExecutionStatus.COMPLETE,
         *,
         purpose: TextPurpose | None = None,
     ) -> list[Packet]:
@@ -249,7 +249,7 @@ class MessageRenderer:
         complete._started.update(self._started)
         packets = [
             packet
-            for packet in complete.finish(status)
+            for packet in complete.finish(RunStatus(status.value))
             if isinstance(packet.obj, ItemUpdate)
         ]
         self.text = complete.text
@@ -266,7 +266,7 @@ class MessageRenderer:
                             name=call.name,
                             arguments=call.arguments,
                             status=ToolStatus.PENDING
-                            if status == RunStatus.COMPLETE
+                            if status == ExecutionStatus.COMPLETE
                             else ToolStatus(status),
                         )
                     ),
@@ -279,7 +279,7 @@ class MessageRenderer:
     def saved(
         self,
         message: AssistantMessage,
-        status: RunStatus,
+        status: ExecutionStatus,
         *,
         is_answer: bool,
     ) -> list[Packet]:
@@ -290,7 +290,7 @@ class MessageRenderer:
                 TextPurpose.ANSWER
                 if is_answer
                 or (
-                    status in {RunStatus.CANCELLED, RunStatus.ERROR}
+                    status in {ExecutionStatus.CANCELLED, ExecutionStatus.ERROR}
                     and not message.tool_calls
                 )
                 else TextPurpose.COMMENTARY

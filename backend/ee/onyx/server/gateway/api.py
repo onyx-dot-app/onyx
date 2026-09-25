@@ -267,8 +267,6 @@ def _prepare_messages(
         continuation=False,
         with_metadata=False,
     )
-    if not isinstance(processed_messages, list):
-        raise RuntimeError("LLM gateway message processing returned non-list input")
     return processed_messages
 
 

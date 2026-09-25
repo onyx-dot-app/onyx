@@ -13,7 +13,7 @@ from onyx.agents.events import (
     ToolStartEvent,
     ToolUpdateEvent,
 )
-from onyx.agents.execution_records import OperationSnapshot, RunStatus
+from onyx.agents.execution_records import ExecutionStatus
 from onyx.agents.models import (
     ExecutionRequest,
     PreparedStep,
@@ -21,6 +21,7 @@ from onyx.agents.models import (
     RunState,
     StepResult,
     ToolCallContext,
+    ToolExecutionRecord,
 )
 from onyx.agents.tools import (
     ChildRunWait,
@@ -94,17 +95,9 @@ class ToolBatch:
                 if (tool := self.tools.get(call.name)) is not None
             )
         )
-        message_index = self.progress.message_index
-        if message_index is None:
-            raise RuntimeError("Tool phase requires a generation")
-        self.step_start = message_index
-        self.result_start = message_index + 1
+        self.record = run._state.steps[self.step.index]
         self.call_indices = {call.id: index for index, call in enumerate(self.calls)}
         self.futures: dict[str, Future[ToolOutcome]] = {}
-
-    @property
-    def messages(self) -> list[Message]:
-        return self.run._state.messages
 
     @property
     def progress(self) -> RunProgress:
@@ -126,11 +119,12 @@ class ToolBatch:
             self.run._execution_condition.notify_all()
 
     def _raw_results(self) -> dict[str, ToolResultMessage]:
-        return {
-            item.tool_call_id: item
-            for item in self.messages[self.result_start :]
-            if isinstance(item, ToolResultMessage)
-        }
+        with self.run._lock:
+            return {
+                call_id: execution.result
+                for call_id, execution in self.record.tools.items()
+                if execution.result is not None
+            }
 
     def _start(
         self,
@@ -332,19 +326,9 @@ class ToolBatch:
         with self.run._lock:
             cancellation_signal.check()
             for member in grouped_calls or [call]:
-                first_start = not any(
-                    operation.message_index == self.step_start
-                    and operation.tool_call_id == member.id
-                    for operation in self.run._state.operations
-                )
-                if first_start:
-                    self.run._state.operations.append(
-                        OperationSnapshot(
-                            step_index=step.index,
-                            message_index=self.step_start,
-                            tool_call_id=member.id,
-                            status=RunStatus.RUNNING,
-                        )
+                if member.id not in self.record.tools:
+                    self.record.tools[member.id] = ToolExecutionRecord(
+                        status=ExecutionStatus.RUNNING,
                     )
                     if self.run._delivery:
                         self.run._delivery.publish(
@@ -465,21 +449,10 @@ class ToolBatch:
             if not self.run._accepting:
                 logger.warning("Tool completed after its run closed: %s", call.id)
                 raise AgentCancelled()
-            # Accept outcomes on completion; keep model history in call order.
-            offset = sum(
-                self.call_indices[previous.tool_call_id] < self.call_indices[call.id]
-                for previous in self.messages[self.result_start :]
-                if isinstance(previous, ToolResultMessage)
-            )
-            operation = next(
-                operation
-                for operation in self.run._state.operations
-                if operation.message_index == self.step_start
-                and operation.tool_call_id == call.id
-            )
-            self.messages.insert(self.result_start + offset, item.model_copy(deep=True))
-            operation.status = (
-                RunStatus.ERROR if result.is_error else RunStatus.COMPLETE
+            execution = self.record.tools[call.id]
+            execution.result = item.model_copy(deep=True)
+            execution.status = (
+                ExecutionStatus.ERROR if result.is_error else ExecutionStatus.COMPLETE
             )
             if self.run._delivery:
                 self.run._delivery.publish(event)
@@ -555,28 +528,12 @@ class ToolBatch:
             if not self.run._accepting or self.run._cancellation_signal.cancelled:
                 logger.debug("Ignoring late tool finalization: %s", call.id)
                 return item
-            offset = next(
-                (
-                    offset
-                    for offset, stored in enumerate(
-                        self.messages[self.result_start :], start=self.result_start
-                    )
-                    if isinstance(stored, ToolResultMessage)
-                    and stored.tool_call_id == call.id
-                ),
-                None,
-            )
-            if offset is None:
+            execution = self.record.tools[call.id]
+            if execution.result is None:
                 raise RuntimeError("Completed tool result is missing from history")
-            operation = next(
-                operation
-                for operation in self.run._state.operations
-                if operation.message_index == self.step_start
-                and operation.tool_call_id == call.id
-            )
-            self.messages[offset] = item.model_copy(deep=True)
-            operation.status = (
-                RunStatus.ERROR if result.is_error else RunStatus.COMPLETE
+            execution.result = item.model_copy(deep=True)
+            execution.status = (
+                ExecutionStatus.ERROR if result.is_error else ExecutionStatus.COMPLETE
             )
             if self.run._delivery:
                 self.run._delivery.publish(event)

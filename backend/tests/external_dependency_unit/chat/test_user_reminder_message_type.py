@@ -13,21 +13,12 @@ import pytest
 from onyx.chat.llm_step import PromptMetadata, prepare_model_messages
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.litellm_conversion import CODE_BLOCK_MARKDOWN, serialize_request
-from onyx.llm.litellm_models import ChatCompletionMessage, SystemMessage, UserMessage
+from onyx.llm.litellm_models import SystemMessage, UserMessage
 from onyx.llm.models import AssistantMessage as CanonicalAssistantMessage
 from onyx.llm.models import GenerationRequest, TextContent
 from onyx.llm.models import SystemMessage as CanonicalSystemMessage
 from onyx.llm.models import UserMessage as CanonicalUserMessage
 from onyx.prompts.constants import SYSTEM_REMINDER_TAG_CLOSE, SYSTEM_REMINDER_TAG_OPEN
-
-
-def _ensure_list(
-    result: list[ChatCompletionMessage] | ChatCompletionMessage,
-) -> list[ChatCompletionMessage]:
-    """Convert LanguageModelInput to a list for easier testing."""
-    if isinstance(result, list):
-        return result
-    return [result]
 
 
 @pytest.fixture
@@ -57,13 +48,12 @@ class TestUserReminderMessageType:
             )
         ]
 
-        raw_result = serialize_request(
+        result = serialize_request(
             GenerationRequest(
                 messages=prepare_model_messages(history, mock_llm_config)
             ),
             mock_llm_config,
         )
-        result = _ensure_list(raw_result)
 
         assert len(result) == 1
         msg = result[0]
@@ -86,13 +76,12 @@ class TestUserReminderMessageType:
             )
         ]
 
-        raw_result = serialize_request(
+        result = serialize_request(
             GenerationRequest(
                 messages=prepare_model_messages(history, mock_llm_config)
             ),
             mock_llm_config,
         )
-        result = _ensure_list(raw_result)
 
         assert len(result) == 1
         msg = result[0]
@@ -113,13 +102,12 @@ class TestUserReminderMessageType:
             )
         ]
 
-        raw_result = serialize_request(
+        result = serialize_request(
             GenerationRequest(
                 messages=prepare_model_messages(history, mock_llm_config)
             ),
             mock_llm_config,
         )
-        result = _ensure_list(raw_result)
 
         assert len(result) == 1
         # Should be a UserMessage since LLM APIs don't have a native reminder type
@@ -146,13 +134,12 @@ class TestUserReminderMessageType:
             ),
         ]
 
-        raw_result = serialize_request(
+        result = serialize_request(
             GenerationRequest(
                 messages=prepare_model_messages(history, mock_llm_config)
             ),
             mock_llm_config,
         )
-        result = _ensure_list(raw_result)
 
         assert len(result) == 4
         # Check the reminder message (last one)
@@ -177,13 +164,12 @@ class TestUserReminderMessageType:
             )
         ]
 
-        raw_result = serialize_request(
+        result = serialize_request(
             GenerationRequest(
                 messages=prepare_model_messages(history, mock_llm_config)
             ),
             mock_llm_config,
         )
-        result = _ensure_list(raw_result)
 
         assert len(result) == 1
         msg = result[0]
@@ -225,11 +211,10 @@ class TestCodeBlockMarkdownFormatting:
             )
         ]
 
-        raw_result = serialize_request(
+        result = serialize_request(
             GenerationRequest(messages=prepare_model_messages(history, llm_config)),
             llm_config,
         )
-        result = _ensure_list(raw_result)
 
         assert len(result) == 1
         msg = result[0]
@@ -246,11 +231,10 @@ class TestCodeBlockMarkdownFormatting:
             )
         ]
 
-        raw_result = serialize_request(
+        result = serialize_request(
             GenerationRequest(messages=prepare_model_messages(history, llm_config)),
             llm_config,
         )
-        result = _ensure_list(raw_result)
 
         assert len(result) == 1
         msg = result[0]
@@ -267,11 +251,10 @@ class TestCodeBlockMarkdownFormatting:
             )
         ]
 
-        raw_result = serialize_request(
+        result = serialize_request(
             GenerationRequest(messages=prepare_model_messages(history, llm_config)),
             llm_config,
         )
-        result = _ensure_list(raw_result)
 
         assert len(result) == 1
         msg = result[0]
@@ -289,11 +272,10 @@ class TestCodeBlockMarkdownFormatting:
             )
         ]
 
-        raw_result = serialize_request(
+        result = serialize_request(
             GenerationRequest(messages=prepare_model_messages(history, llm_config)),
             llm_config,
         )
-        result = _ensure_list(raw_result)
 
         assert len(result) == 1
         msg = result[0]
@@ -312,11 +294,10 @@ class TestCodeBlockMarkdownFormatting:
             )
         ]
 
-        raw_result = serialize_request(
+        result = serialize_request(
             GenerationRequest(messages=prepare_model_messages(history, llm_config)),
             llm_config,
         )
-        result = _ensure_list(raw_result)
 
         assert len(result) == 1
         msg = result[0]
@@ -338,11 +319,10 @@ class TestCodeBlockMarkdownFormatting:
             ),
         ]
 
-        raw_result = serialize_request(
+        result = serialize_request(
             GenerationRequest(messages=prepare_model_messages(history, llm_config)),
             llm_config,
         )
-        result = _ensure_list(raw_result)
 
         assert len(result) == 3
         # First system message should have prefix

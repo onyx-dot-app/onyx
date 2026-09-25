@@ -15,6 +15,8 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.agents.execution_records import ExecutionStatus
+from onyx.agents.models import StepRecord
 from onyx.chat.incognito import delete_incognito_generated_files
 from onyx.chat.incognito_context import (
     append_incognito_message,
@@ -309,13 +311,19 @@ def test_temporary_agent_history_sources_and_lifetime() -> None:
         run_id=str(uuid4()),
         status=RunStatus.COMPLETE,
         input_messages=[UserMessage(content="private question")],
-        messages=[AssistantMessage(content=[TextContent(text="private answer")])],
+        steps=[
+            StepRecord(
+                message=AssistantMessage(content=[TextContent(text="private answer")]),
+                generation_status=ExecutionStatus.COMPLETE,
+                tools={},
+            )
+        ],
     )
     root = ResponseRecord(
         agent_id=root_id,
         run_id=str(uuid4()),
         status=RunStatus.COMPLETE,
-        messages=[],
+        steps=[],
         child_runs=[child],
     )
     key = f"incognito_ctx:{session_id}:agents"
@@ -654,7 +662,13 @@ def test_incognito_sibling_responses_keep_independent_agents_and_history(
         agent_id=root_id,
         run_id=str(uuid4()),
         status=RunStatus.COMPLETE,
-        messages=[AssistantMessage(content=[TextContent(text="shared ancestor")])],
+        steps=[
+            StepRecord(
+                message=AssistantMessage(content=[TextContent(text="shared ancestor")]),
+                generation_status=ExecutionStatus.COMPLETE,
+                tools={},
+            )
+        ],
     )
     barrier = Barrier(2)
 
@@ -669,8 +683,14 @@ def test_incognito_sibling_responses_keep_independent_agents_and_history(
             agent_path="/root/research",
             run_id=child_run_id,
             status=RunStatus.COMPLETE,
-            messages=[
-                AssistantMessage(content=[TextContent(text=f"answer {message_id}")])
+            steps=[
+                StepRecord(
+                    message=AssistantMessage(
+                        content=[TextContent(text=f"answer {message_id}")]
+                    ),
+                    generation_status=ExecutionStatus.COMPLETE,
+                    tools={},
+                )
             ],
         )
         result = ResponseRecord(
@@ -678,7 +698,7 @@ def test_incognito_sibling_responses_keep_independent_agents_and_history(
             run_id=root_run_id,
             previous_run_id=ancestor_run.run_id if ancestor_finishes_first else None,
             status=RunStatus.COMPLETE,
-            messages=[],
+            steps=[],
             child_runs=[child],
         )
         save_incognito_response(

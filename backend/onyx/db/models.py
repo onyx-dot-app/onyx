@@ -51,7 +51,7 @@ from sqlalchemy.orm import (
 from sqlalchemy.types import LargeBinary, TypeDecorator
 from typing_extensions import TypedDict  # noreorder
 
-from onyx.agents.execution_records import RunFailure, RunStatus
+from onyx.agents.execution_records import ExecutionStatus, RunFailure, RunStatus
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import (
     ANONYMOUS_USER_UUID,
@@ -3507,9 +3507,9 @@ class ChatResponseMessage(Base):
     content: Mapped[AssistantMessage | None] = mapped_column(
         PydanticType(AssistantMessage, none_as_null=True), nullable=True
     )
-    operation_status: Mapped[RunStatus | None] = mapped_column(
+    operation_status: Mapped[ExecutionStatus | None] = mapped_column(
         Enum(
-            RunStatus,
+            ExecutionStatus,
             native_enum=False,
             values_callable=lambda values: [v.value for v in values],
         ),
@@ -3547,9 +3547,9 @@ class ToolCall(Base):
     arguments_complete: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default="true"
     )
-    operation_status: Mapped[RunStatus | None] = mapped_column(
+    operation_status: Mapped[ExecutionStatus | None] = mapped_column(
         Enum(
-            RunStatus,
+            ExecutionStatus,
             native_enum=False,
             values_callable=lambda values: [v.value for v in values],
         ),

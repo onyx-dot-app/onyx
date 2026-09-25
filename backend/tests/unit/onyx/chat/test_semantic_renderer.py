@@ -15,8 +15,8 @@ from onyx.agents.events import (
     ToolStartEvent,
     ToolUpdateEvent,
 )
-from onyx.agents.execution_records import OperationSnapshot, RunStatus
-from onyx.agents.models import RunState
+from onyx.agents.execution_records import ExecutionStatus, RunStatus
+from onyx.agents.models import RunState, StepRecord
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation, ToolProgress
 from onyx.chat.emitter import Emitter
@@ -174,15 +174,16 @@ def test_snapshot_projects_partial_output_before_observers_receive_it() -> None:
     snapshot = RunState(
         run_id="run",
         status=RunStatus.CANCELLED,
-        messages=[
-            AssistantMessage(
-                content=[TextContent(text="partial")],
-                stop_reason="aborted",
-                metadata=ChatMessageMetadata(),
+        steps=[
+            StepRecord(
+                message=AssistantMessage(
+                    content=[TextContent(text="partial")],
+                    stop_reason="aborted",
+                    metadata=ChatMessageMetadata(),
+                ),
+                generation_status=ExecutionStatus.CANCELLED,
+                tools={},
             )
-        ],
-        operations=[
-            OperationSnapshot(step_index=0, message_index=0, status=RunStatus.CANCELLED)
         ],
     )
     snapshot.request_params = GenerationRequestParams(
@@ -326,7 +327,7 @@ def test_interrupted_item_stream_flushes_buffered_citation_like_reload(
     saved = MessageRenderer(
         MessageRendering(citation_mode=CitationMode.HYPERLINK), {}, identity
     )
-    saved_packets = saved.saved(message, status, is_answer=False)
+    saved_packets = saved.saved(message, ExecutionStatus(status.value), is_answer=False)
     assert live.answer == saved.answer == "See [1"
     assert [
         p
@@ -408,7 +409,7 @@ def test_interrupted_message_identity_and_content_match_reload(
             message_id="accepted-message",
             step_index=3,
             message=message,
-            status=status,
+            status=ExecutionStatus(status.value),
         )
     )
     live = [
@@ -420,7 +421,7 @@ def test_interrupted_message_identity_and_content_match_reload(
         MessageRendering(),
         {},
         PacketIdentity(response_id=42, run_id="run", message_id="accepted-message"),
-    ).saved(message, status, is_answer=False)
+    ).saved(message, ExecutionStatus(status.value), is_answer=False)
     assert [(packet.identity, packet.obj) for packet in live] == [
         (packet.identity, packet.obj) for packet in saved
     ]

@@ -17,8 +17,8 @@ from onyx.llm.exceptions import LLMRateLimitError, LLMTimeoutError
 from onyx.llm.litellm_models import (
     ChatCompletionDeltaToolCall,
     ModelResponseStream,
+    RequestFunctionCall,
     ToolCall,
-    ToolFunctionCall,
 )
 from onyx.llm.models import Usage
 from onyx.tracing.framework.span_data import GenerationSpanData
@@ -258,7 +258,7 @@ def finalize_tool_calls(
     calls = [
         ToolCall(
             id=delta.id,
-            function=ToolFunctionCall(
+            function=RequestFunctionCall(
                 name=delta.function.name,
                 arguments=delta.function.arguments or "",
             ),

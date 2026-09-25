@@ -124,9 +124,7 @@ def test_tool_execution_survives_enrichment_failure() -> None:
     snapshot = run.snapshot()
     assert snapshot.status == "error"
     assert snapshot.messages[-1].text == "saved"
-    assert (
-        next(op for op in snapshot.operations if op.tool_call_id).status == "complete"
-    )
+    assert next(iter(snapshot.steps[0].tools.values())).status == "complete"
 
 
 def test_failed_handle_releases_agent_and_preserves_error_classification(

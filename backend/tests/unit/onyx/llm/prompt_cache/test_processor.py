@@ -111,8 +111,8 @@ def test_multimodal_continuation_preserves_input_and_cache_control() -> None:
     with patch.object(processor_module, "ENABLE_PROMPT_CACHING", True):
         processed, _ = process_with_prompt_cache(
             llm_config=_anthropic_config(),
-            cacheable_prefix=prefix,
-            suffix=suffix,
+            cacheable_prefix=[prefix],
+            suffix=[suffix],
             continuation=True,
             with_metadata=False,
         )

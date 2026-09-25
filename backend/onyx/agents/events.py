@@ -5,7 +5,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny
 
-from onyx.agents.execution_records import RunStatus
+from onyx.agents.execution_records import ExecutionStatus, RunStatus
 from onyx.agents.tools import PendingToolInput, ToolProgress
 from onyx.llm.models import (
     AssistantMessage,
@@ -80,7 +80,7 @@ class MessageUpdateEvent(_MessageEvent):
 class MessageEndEvent(_MessageEvent):
     type: Literal[AgentEventType.MESSAGE_END] = AgentEventType.MESSAGE_END
     message: AssistantMessage
-    status: RunStatus
+    status: ExecutionStatus
 
 
 class ToolStartEvent(_MessageEvent):

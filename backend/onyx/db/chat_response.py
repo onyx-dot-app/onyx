@@ -610,8 +610,8 @@ class _ResponseWriter:
         )
         if parent is not None:
             response.message = (
-                record.messages[record.answer_message_index].text
-                if record.answer_message_index is not None
+                record.steps[record.answer_step_index].message.text
+                if record.answer_step_index is not None
                 else ""
             )
             response.token_count = count_tokens(response.message)

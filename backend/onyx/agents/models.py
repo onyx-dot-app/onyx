@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny
 
 from onyx.agents.execution_records import (
     CompactionCheckpoint,
-    OperationSnapshot,
+    ExecutionStatus,
     RunFailure,
     RunStatus,
     messages_for_model,
@@ -128,16 +128,47 @@ class RunAction(str, Enum):
     FINISH = "finish"
 
 
+class ToolExecutionRecord(BaseModel):
+    """A tool invocation and its optional result; RunProgress tracks waits and finalizers."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: ExecutionStatus
+    result: ToolResultMessage | None = None
+
+
+class StepRecord(BaseModel):
+    """One model generation and the executions of its tool calls."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    message: AssistantMessage
+    generation_status: ExecutionStatus
+    tools: dict[str, ToolExecutionRecord] = Field(default_factory=dict)
+
+
+def messages_from_steps(steps: list[StepRecord]) -> list[Message]:
+    """Return message references in model order, regardless of tool completion order."""
+    messages: list[Message] = []
+    for step in steps:
+        messages.append(step.message)
+        for call in step.message.tool_calls:
+            execution = step.tools.get(call.id)
+            if execution is not None and execution.result is not None:
+                messages.append(execution.result)
+    return messages
+
+
 class RunProgress(BaseModel):
-    """Saved execution position; message indices refer to the run's recorded output."""
+    """Saved execution position and unfinished work within the current step."""
+
+    model_config = ConfigDict(extra="forbid")
 
     step_index: int = 0
     step_limit: int = Field(gt=0)
     action: RunAction = RunAction.PREPARE
-    message_index: int | None = None
     options: GenerationOptions | None = None
     tools: list[ToolDefinition] = Field(default_factory=list)
-    previous_message_index: int | None = None
     previous_options: GenerationOptions | None = None
     finalized_tools: int = 0
     feature_state: SerializeAsAny[BaseModel] | None = None
@@ -151,10 +182,9 @@ class RunProgress(BaseModel):
 
 
 class RunState(BaseModel):
-    """One run's input, output, and progress; Run.snapshot() returns an isolated copy.
+    """One run's input, recorded steps, and resumable progress."""
 
-    Operation indices address messages; input_messages is a separate prefix.
-    """
+    model_config = ConfigDict(extra="forbid")
 
     revision: int = 0
     progress: RunProgress | None = None
@@ -166,13 +196,17 @@ class RunState(BaseModel):
     parent_tool_call_id: str | None = None
     parent_message_id: str | None = None
     status: RunStatus
-    messages: list[Message]
-    operations: list[OperationSnapshot] = Field(default_factory=list)
-    answer_message_index: int | None = None
+    steps: list[StepRecord] = Field(default_factory=list)
+    answer_step_index: int | None = None
     child_runs: list["RunState"] = Field(default_factory=list)
     request_params: GenerationRequestParams | None = None
     failure: RunFailure | None = None
     checkpoint: CompactionCheckpoint | None = None
+
+    @property
+    def messages(self) -> list[Message]:
+        """Derive model order from steps; the returned messages belong to this state."""
+        return messages_from_steps(self.steps)
 
 
 class ExecutionCheckpoint(BaseModel):

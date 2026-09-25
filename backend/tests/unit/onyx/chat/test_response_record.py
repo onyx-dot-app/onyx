@@ -6,8 +6,15 @@ from unittest.mock import patch
 import pytest
 from pydantic import BaseModel
 
-from onyx.agents.execution_records import RunStatus
-from onyx.agents.models import AgentState, PreparedStep, RunState, ToolCallContext
+from onyx.agents.execution_records import ExecutionStatus, RunStatus
+from onyx.agents.models import (
+    AgentState,
+    PreparedStep,
+    RunState,
+    StepRecord,
+    ToolCallContext,
+    ToolExecutionRecord,
+)
 from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import AgentTool
 from onyx.chat.models import ResponseRecord
@@ -150,7 +157,7 @@ def test_running_snapshot_records_unfinished_calls_without_inventing_results() -
     assert len(snapshot.messages) == 1
     assert isinstance(snapshot.messages[0], AssistantMessage)
     assert snapshot.messages[0].tool_calls[0].id == "a"
-    assert any(operation.tool_call_id == "a" for operation in snapshot.operations)
+    assert any("a" in step.tools for step in snapshot.steps)
 
 
 def test_run_record_is_isolated_from_caller_and_snapshot_mutations() -> None:
@@ -185,16 +192,20 @@ def test_captured_and_restored_usage_is_isolated_from_mutation() -> None:
     snapshot = RunState(
         run_id="run",
         status=RunStatus.COMPLETE,
-        messages=[
-            AssistantMessage(
-                content=[TextContent(text="Answer")],
-                usage=Usage(
-                    completion_tokens=3,
-                    prompt_tokens=7,
-                    total_tokens=10,
-                    cache_creation_input_tokens=0,
-                    cache_read_input_tokens=0,
+        steps=[
+            StepRecord(
+                message=AssistantMessage(
+                    content=[TextContent(text="Answer")],
+                    usage=Usage(
+                        completion_tokens=3,
+                        prompt_tokens=7,
+                        total_tokens=10,
+                        cache_creation_input_tokens=0,
+                        cache_read_input_tokens=0,
+                    ),
                 ),
+                generation_status=ExecutionStatus.COMPLETE,
+                tools={},
             )
         ],
     )
@@ -235,11 +246,18 @@ def test_capture_omits_private_data_and_detaches_content() -> None:
         run_id="run",
         status=RunStatus.COMPLETE,
         input_messages=[UserMessage(content="question", metadata=private), result],
-        messages=[
-            AssistantMessage(
-                content=[ToolCall(id="call", name="search", arguments={})]
-            ),
-            result,
+        steps=[
+            StepRecord(
+                message=AssistantMessage(
+                    content=[ToolCall(id="call", name="search", arguments={})]
+                ),
+                generation_status=ExecutionStatus.COMPLETE,
+                tools={
+                    "call": ToolExecutionRecord(
+                        status=ExecutionStatus.ERROR, result=result
+                    )
+                },
+            )
         ],
     )
     with patch.object(

@@ -14,10 +14,10 @@ from onyx.llm.litellm_models import (
     ChatCompletionMessageToolCall,
     Choice,
     Delta,
-    FunctionCall,
     Message,
     ModelResponse,
     ModelResponseStream,
+    ResponseFunctionCall,
     StreamingChoice,
 )
 from onyx.llm.models import (
@@ -63,7 +63,7 @@ class RecordingProvider(LitellmLLM):
                     tool_calls=[
                         ChatCompletionMessageToolCall(
                             id="call",
-                            function=FunctionCall(
+                            function=ResponseFunctionCall(
                                 name="lookup", arguments='{"q":"term"}'
                             ),
                         )

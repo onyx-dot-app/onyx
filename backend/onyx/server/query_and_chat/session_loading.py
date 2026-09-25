@@ -27,7 +27,7 @@ from onyx.db.tools import (
     get_tools_by_ids,
     restore_tool_result,
 )
-from onyx.llm.models import AssistantMessage, ToolResultMessage
+from onyx.llm.models import ToolResultMessage
 from onyx.server.query_and_chat.streaming_models import (
     CitationInfo,
     ItemUpdate,
@@ -255,20 +255,9 @@ def _response_packets(
         parent_tool_call_id=response.parent_tool_call_id,
     )
     packets: list[Packet] = []
-    tool_statuses = {
-        (operation.message_index, operation.tool_call_id): operation.status
-        for operation in response.operations
-        if operation.tool_call_id is not None
-    }
-    for operation in response.operations:
-        if operation.tool_call_id is not None:
-            continue
-        message = response.messages[operation.message_index]
-        if not isinstance(message, AssistantMessage):
-            raise ValueError(
-                "Message operation does not reference an assistant message"
-            )
-        message_id = message.id or f"{response.run_id}:{operation.step_index}"
+    for step_index, step in enumerate(response.steps):
+        message = step.message
+        message_id = message.id or f"{response.run_id}:{step_index}"
         identity = base.model_copy(update={"message_id": message_id})
         renderer = MessageRenderer(
             settings.get(message_id, MessageRendering(mode=default_mode)),
@@ -278,23 +267,18 @@ def _response_packets(
         packets.extend(
             renderer.saved(
                 message,
-                operation.status,
-                is_answer=operation.message_index == response.answer_message_index,
+                step.generation_status,
+                is_answer=step_index == response.answer_step_index,
             )
         )
-        results: dict[str, ToolResultMessage] = {}
-        for result_message in response.messages[operation.message_index + 1 :]:
-            if isinstance(result_message, AssistantMessage):
-                break
-            if isinstance(result_message, ToolResultMessage):
-                results[result_message.tool_call_id] = result_message
         for call in message.tool_calls:
             call_identity = identity.model_copy(
                 update={"tool_call_id": call.id, "part_id": "tool"}
             )
             record = records.get((identity.message_id, call.id))
             tool = tools.get(record.tool_id) if record is not None else None
-            result = results.get(call.id)
+            execution = step.tools.get(call.id)
+            result = execution.result if execution is not None else None
             if result is not None and record is not None:
                 result = restore_tool_result(result, record, tool)
             packets.append(
@@ -307,8 +291,10 @@ def _response_packets(
                             arguments=call.arguments,
                             result=result,
                             status=ToolStatus(
-                                tool_statuses.get(
-                                    (operation.message_index, call.id), response.status
+                                (
+                                    execution.status
+                                    if execution is not None
+                                    else response.status
                                 ).value
                             ),
                         )

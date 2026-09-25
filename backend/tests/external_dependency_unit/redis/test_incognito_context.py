@@ -13,7 +13,8 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from onyx.agents.execution_records import RunStatus
+from onyx.agents.execution_records import ExecutionStatus, RunStatus
+from onyx.agents.models import StepRecord
 from onyx.cache.interface import CacheBackendType
 from onyx.chat.incognito_context import (
     INCOGNITO_CONTEXT_TTL_SECONDS,
@@ -295,7 +296,13 @@ def _terminal_record(
         run_id=str(uuid4()),
         status=RunStatus.COMPLETE,
         previous_run_id=previous_run_id,
-        messages=[AssistantMessage(content=[TextContent(text=text)])],
+        steps=[
+            StepRecord(
+                message=AssistantMessage(content=[TextContent(text=text)]),
+                generation_status=ExecutionStatus.COMPLETE,
+                tools={},
+            )
+        ],
     )
 
 

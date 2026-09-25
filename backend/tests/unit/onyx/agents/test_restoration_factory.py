@@ -106,7 +106,7 @@ def test_factory_rebuilds_feature_and_preserves_saved_context(name: str) -> None
             run_id="suspended-run",
             agent_id=original.agent.id,
             status=RunStatus.SUSPENDED,
-            messages=[],
+            steps=[],
             progress=RunProgress(step_limit=3, feature_state=state),
         ),
     )
@@ -147,7 +147,7 @@ def test_factory_rejects_checkpoint_without_supported_feature_state() -> None:
             run_id="unsupported-run",
             agent_id="coding-agent",
             status=RunStatus.SUSPENDED,
-            messages=[],
+            steps=[],
             progress=RunProgress(step_limit=3),
         ),
     )

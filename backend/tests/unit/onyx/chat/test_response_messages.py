@@ -31,16 +31,16 @@ def test_harness_selects_answer_and_message_ids_survive_restore() -> None:
     run_agent(agent, max_steps=2, runs=runs, listener=events.append)
     snapshot = runs[0].snapshot()
     record = response_record(snapshot)
-    assert record.answer_message_index == 1
+    assert record.answer_step_index == 1
     terminal = next(event for event in events if isinstance(event, AgentEndEvent))
     answer = snapshot.messages[1]
     assert isinstance(answer, AssistantMessage)
     assert terminal.answer_message_id == answer.id
     restored = response_snapshot(record)
     assert restored.messages == snapshot.messages
-    assert restored.operations == snapshot.operations
-    assert restored.answer_message_index == snapshot.answer_message_index
-    assert snapshot.answer_message_index == 1
+    assert restored.steps == snapshot.steps
+    assert restored.answer_step_index == snapshot.answer_step_index
+    assert snapshot.answer_step_index == 1
 
 
 def test_empty_cancelled_generation_survives_storage_round_trip() -> None:
@@ -54,7 +54,7 @@ def test_empty_cancelled_generation_survives_storage_round_trip() -> None:
         run_agent(Agent(FakeModelClient(cancel)), max_steps=1, runs=runs)
     snapshot = runs[0].snapshot()
     record = response_record(snapshot)
-    assert record.answer_message_index is None
+    assert record.answer_step_index is None
     assert len(record.messages) == 1
-    assert record.operations[0].status == RunStatus.CANCELLED
+    assert record.steps[0].generation_status == RunStatus.CANCELLED
     assert response_snapshot(record).messages == snapshot.messages

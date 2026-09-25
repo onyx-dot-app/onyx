@@ -326,14 +326,22 @@ Provider-only fields, such as reasoning signatures, remain outside the public st
 
 A `RunState` is available at any moment — mid-run, after failure, after cancellation.
 `run.snapshot()` returns an isolated record for that execution.
-It holds the run's input messages, everything produced since (including partial assistant
-output), and per-operation status records that index into those messages.
-Message and operation changes are recorded together. Event listeners cannot change recorded data.
-Child records are collected when the parent finishes; a parent snapshot is not a live view of every child.
+It holds the run's input messages and recorded steps, including partial output.
+Each `StepRecord` contains an assistant `message`, its `generation_status`, and tool executions keyed by tool-call ID.
+Each `ToolExecutionRecord` contains a status and an optional result. An unfinished tool can have no result.
+A call without an execution entry has not started.
+`ExecutionStatus` describes a generation or tool: running, complete, cancelled, or error.
+`RunStatus` also describes run-level outcomes such as suspension and the step limit.
 
-Chat captures shared messages, operation outcomes, and answer selection in a detached `ResponseRecord`.
-It removes application metadata and tool details before persistence.
-Saved rendering reads these messages directly. Model-context loading excludes unfinished tool calls without changing saved output.
+`RunState.messages` derives a flat view: each assistant message followed by available results in tool-call order.
+Changing this list does not add or remove recorded messages. Its message objects belong to the state.
+Use `run.snapshot()` to inspect an isolated copy while execution continues.
+`AgentStep` supplies the current index and limit to callbacks; `StepRecord` stores what happened during that step.
+
+Message content and execution status change under the run lock. Event listeners cannot change recorded data.
+Child records are collected when the parent finishes; a parent snapshot is not a live view of every child.
+Chat saves the same step structure in a detached `ResponseRecord`, after removing application metadata and tool details.
+Saved rendering reads the recorded steps. Model-context loading excludes unfinished tool calls without changing saved output.
 
 Archived child restoration rebuilds a conversation from messages, a compaction checkpoint, and the previous run identity.
 Resuming a suspended execution instead requires its saved execution position and feature state.

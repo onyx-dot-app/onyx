@@ -39,7 +39,11 @@ from onyx.deep_research.tool_definitions import (
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.exceptions import LLMTimeoutError
 from onyx.llm.interfaces import GenerationContext, LLMUserIdentity
-from onyx.llm.litellm_models import ChatCompletionDeltaToolCall, Delta, FunctionCall
+from onyx.llm.litellm_models import (
+    ChatCompletionDeltaToolCall,
+    Delta,
+    ResponseFunctionCall,
+)
 from onyx.llm.models import (
     AssistantMessage,
     GenerationEvent,
@@ -78,7 +82,7 @@ def tool_delta(name: str, arguments: str = "{}", count: int = 1) -> Delta:
             ChatCompletionDeltaToolCall(
                 index=i,
                 id=f"call-{i}",
-                function=FunctionCall(name=name, arguments=arguments),
+                function=ResponseFunctionCall(name=name, arguments=arguments),
             )
             for i in range(count)
         ]
@@ -712,7 +716,7 @@ def test_coding_rejects_run_after_sandbox_cleanup() -> None:
     assert failed.previous_run_id == previous.run_id
     assert [message.text for message in failed.input_messages] == ["Continue"]
     assert failed.messages == []
-    assert failed.operations == []
+    assert failed.steps == []
     assert feature.agent.state.messages[:-1] == [
         *previous.input_messages,
         *previous.messages,

@@ -34,7 +34,7 @@ from onyx.agents.events import (
     MessageUpdateEvent,
 )
 from onyx.agents.execution_records import (
-    OperationSnapshot,
+    ExecutionStatus,
     RunFailure,
     RunFailureKind,
     RunStatus,
@@ -50,8 +50,10 @@ from onyx.agents.models import (
     RunResult,
     RunState,
     StepInput,
+    StepRecord,
     StepResult,
     ToolCallContext,
+    messages_from_steps,
 )
 from onyx.agents.tool_execution import ToolBatch
 from onyx.agents.tools import (
@@ -84,7 +86,6 @@ from onyx.llm.models import (
     GenerationRequest,
     Message,
     ToolResult,
-    ToolResultMessage,
     apply_generation_event,
 )
 from onyx.llm.token_budget import resolve_token_budget
@@ -151,22 +152,16 @@ def validate_run_completion(record: RunState) -> None:
         raise RunFailed(record.failure)
     if record.status not in (RunStatus.COMPLETE, RunStatus.LIMIT):
         raise ValueError("Run is not terminal")
-    if not record.operations or not any(
-        isinstance(message, AssistantMessage) for message in record.messages
-    ):
+    if not record.steps:
         raise ValueError("Completed run is missing output or steps")
 
 
 def result_from_snapshot(record: RunState) -> RunResult:
     validate_run_completion(record)
-    output = next(
-        message
-        for message in reversed(record.messages)
-        if isinstance(message, AssistantMessage)
-    )
+    output = record.steps[-1].message
     return RunResult(
         run_id=record.run_id,
-        steps=max(operation.step_index for operation in record.operations) + 1,
+        steps=len(record.steps),
         # validate_run_completion restricts successful outcomes to these statuses.
         stop_reason=cast(Literal[RunStatus.COMPLETE, RunStatus.LIMIT], record.status),
         output=output.model_copy(deep=True),
@@ -187,9 +182,12 @@ def _capture_unsettled_child(state: RunState) -> RunState:
             kind=RunFailureKind.EXECUTION,
             message="Child execution did not settle before its parent ended.",
         )
-        for operation in record.operations:
-            if operation.status == RunStatus.RUNNING:
-                operation.status = RunStatus.ERROR
+        for step in record.steps:
+            if step.generation_status == ExecutionStatus.RUNNING:
+                step.generation_status = ExecutionStatus.ERROR
+            for execution in step.tools.values():
+                if execution.status == ExecutionStatus.RUNNING:
+                    execution.status = ExecutionStatus.ERROR
     return snapshot
 
 
@@ -321,7 +319,6 @@ class Agent:
                     input_messages=[
                         message.model_copy(deep=True) for message in messages
                     ],
-                    messages=[],
                     checkpoint=history.checkpoint,
                 ),
                 cancellation_signal,
@@ -742,7 +739,7 @@ class Run:
                 self._cancellation_signal.on_operation(self._work.track_operation),
             ):
                 self._cancellation_signal.check()
-                if not self._state.messages:
+                if not self._state.steps:
                     self._publish_event(AgentStartEvent(**self._ancestry))
                 boundary = _advance_steps(self, llm)
                 if boundary == RunStatus.SUSPENDED or self._await_children():
@@ -862,29 +859,25 @@ class Run:
             with self._lock:
                 self._state.child_runs = children
         with self._lock:
-            for operation in self._state.operations:
-                if (
-                    operation.tool_call_id is not None
-                    or operation.status != RunStatus.RUNNING
-                ):
+            for index, step in enumerate(self._state.steps):
+                if step.generation_status != ExecutionStatus.RUNNING:
                     continue
-                partial = self._state.messages[operation.message_index]
-                if isinstance(partial, AssistantMessage):
-                    partial.stop_reason = (
-                        "aborted" if outcome == RunStatus.CANCELLED else "error"
-                    )
-                    if partial.id is None:
-                        raise RuntimeError("Recorded generation has no message ID")
-                    if self._delivery:
-                        self._delivery.publish(
-                            MessageEndEvent(
-                                **self._ancestry,
-                                message_id=partial.id,
-                                step_index=operation.step_index,
-                                message=partial.model_copy(deep=True),
-                                status=outcome,
-                            )
+                partial = step.message
+                partial.stop_reason = (
+                    "aborted" if outcome == RunStatus.CANCELLED else "error"
+                )
+                if partial.id is None:
+                    raise RuntimeError("Recorded generation has no message ID")
+                if self._delivery:
+                    self._delivery.publish(
+                        MessageEndEvent(
+                            **self._ancestry,
+                            message_id=partial.id,
+                            step_index=index,
+                            message=partial,
+                            status=ExecutionStatus(outcome.value),
                         )
+                    )
             self._record_terminal_outcome(outcome)
         self._completed.set_result(None)
         if not self._settled.done():
@@ -908,19 +901,21 @@ class Run:
         with self._lock:
             self._state.status = outcome
             answer_message_id = None
-            if self._state.answer_message_index is not None:
-                answer = self._state.messages[self._state.answer_message_index]
-                if not isinstance(answer, AssistantMessage):
-                    raise RuntimeError("Selected answer is not an assistant message")
-                answer_message_id = answer.id
+            if self._state.answer_step_index is not None:
+                answer_message_id = self._state.steps[
+                    self._state.answer_step_index
+                ].message.id
             terminal = AgentEndEvent(
                 **self._ancestry,
                 outcome=outcome,
                 answer_message_id=answer_message_id,
             )
-            for operation in self._state.operations:
-                if operation.status == RunStatus.RUNNING:
-                    operation.status = outcome
+            for step in self._state.steps:
+                if step.generation_status == ExecutionStatus.RUNNING:
+                    step.generation_status = ExecutionStatus(outcome.value)
+                for execution in step.tools.values():
+                    if execution.status == ExecutionStatus.RUNNING:
+                        execution.status = ExecutionStatus(outcome.value)
             if self._delivery:
                 self._delivery.publish(terminal)
             self._state.revision += 1
@@ -1050,11 +1045,10 @@ def _advance_steps(
                 previous = (
                     _step_result(
                         run,
-                        progress.previous_message_index,
                         progress.previous_options,
                         progress.step_index - 1,
                     )
-                    if progress.previous_message_index is not None
+                    if progress.step_index > 0
                     else None
                 )
                 decision = StepInput(
@@ -1077,7 +1071,6 @@ def _advance_steps(
         if progress.action == RunAction.AFTER_STEP:
             completed = _step_result(
                 run,
-                progress.message_index,
                 progress.options,
                 progress.step_index,
             )
@@ -1117,26 +1110,21 @@ def _generate_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) 
     )
     with run._lock:
         cancellation_signal.check()
-        start = len(run._state.messages)
-        run._state.messages.append(
-            AssistantMessage(
+        recorded_step = StepRecord(
+            message=AssistantMessage(
                 id=message_id,
                 metadata=prepared.output_metadata.model_copy(deep=True)
                 if prepared.output_metadata
                 else None,
-            )
+            ),
+            generation_status=ExecutionStatus.RUNNING,
         )
-        generation = OperationSnapshot(
-            step_index=step.index,
-            message_index=start,
-            status=RunStatus.RUNNING,
-        )
-        run._state.operations.append(generation)
+        run._state.steps.append(recorded_step)
         if run._delivery:
             run._delivery.publish(started)
 
-    def generate() -> AssistantMessage:
-        final: AssistantMessage | None = None
+    def generate() -> None:
+        completed = False
         try:
             with closing(llm.stream(request, generation_context)) as events:
                 for event in events:
@@ -1148,11 +1136,7 @@ def _generate_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) 
                             run._state.request_params = event.request_params.model_copy(
                                 deep=True
                             )
-                        message = run._state.messages[start]
-                        if not isinstance(message, AssistantMessage):
-                            raise RuntimeError(
-                                "Generation must update an assistant message"
-                            )
+                        message = recorded_step.message
                         apply_generation_event(message, event)
                         if run._delivery and not isinstance(
                             event, GenerationLifecycleEvent
@@ -1166,43 +1150,37 @@ def _generate_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) 
                                 )
                             )
                         if isinstance(event, GenerationDoneEvent):
-                            final = message.model_copy(deep=True)
+                            completed = True
         except Exception:
             cancellation_signal.check()
             raise
         cancellation_signal.check()
-        if final is None:
+        if not completed:
             raise RuntimeError("Model stream ended without completed output")
-        return final
 
     try:
-        message = generate()
+        generate()
     except LLMContextLimitError:
-        partial = run._state.messages[start]
-        if partial.text or (
-            isinstance(partial, AssistantMessage) and partial.tool_calls
-        ):
+        partial = recorded_step.message
+        if partial.text or partial.tool_calls:
             raise
         request = _fit_context(
             run, llm, source, prepared, generation_context, force=True
         )
-        message = generate()
+        generate()
     with run._lock:
         cancellation_signal.check()
-        message.id = message_id
-        run._state.messages[start] = message.model_copy(deep=True)
-        generation.status = RunStatus.COMPLETE
+        recorded_step.generation_status = ExecutionStatus.COMPLETE
         ended = MessageEndEvent(
             **run._ancestry,
             message_id=message_id,
             step_index=step.index,
-            message=message,
-            status=RunStatus.COMPLETE,
+            message=recorded_step.message,
+            status=ExecutionStatus.COMPLETE,
         )
         if run._delivery:
             run._delivery.publish(ended)
     with run._lock:
-        run._progress.message_index = start
         run._progress.options = request.options.model_copy(deep=True)
         run._progress.tools = [tool.model_copy(deep=True) for tool in request.tools]
         run._progress.action = RunAction.TOOLS
@@ -1279,9 +1257,7 @@ def _limit_output(
 
 def _execute_tools(run: Run) -> bool:
     progress = run._progress
-    completed = _step_result(
-        run, progress.message_index, progress.options, progress.step_index
-    )
+    completed = _step_result(run, progress.options, progress.step_index)
     if run._prepared_step is None:
         available = {tool.name: tool for tool in run._defaults.tools}
         tools: list[AgentTool] = []
@@ -1291,8 +1267,6 @@ def _execute_tools(run: Run) -> bool:
                 raise ValueError("Restored tools do not match the saved step")
             tools.append(tool)
         run._prepared_step = PreparedStep(tools=tools, options=completed.options)
-    if progress.message_index is None:
-        raise ValueError("Tool phase requires a message index")
     result = ToolBatch(
         run,
         run._prepared_step,
@@ -1301,7 +1275,7 @@ def _execute_tools(run: Run) -> bool:
             [
                 *run._history.messages,
                 *run._state.input_messages,
-                *run._state.messages[: progress.message_index],
+                *messages_from_steps(run._state.steps[: progress.step_index]),
             ],
             run._state.checkpoint,
         ),
@@ -1334,7 +1308,6 @@ def _complete_step(run: Run, completed: StepResult) -> None:
     cancellation_signal.check()
     with run._lock:
         progress = run._progress
-        progress.previous_message_index = progress.message_index
         progress.previous_options = progress.options
         if not should_continue or progress.step_index + 1 >= progress.step_limit:
             progress.outcome = (
@@ -1342,7 +1315,7 @@ def _complete_step(run: Run, completed: StepResult) -> None:
             )
             progress.action = RunAction.FINISH
             if not should_continue:
-                run._state.answer_message_index = progress.message_index
+                run._state.answer_step_index = progress.step_index
         else:
             progress.step_index += 1
             progress.action = RunAction.PREPARE
@@ -1350,26 +1323,23 @@ def _complete_step(run: Run, completed: StepResult) -> None:
             progress.pending_tool_calls = {}
             progress.options = None
             progress.tools = []
-            progress.message_index = None
         run._state.revision += 1
 
 
 def _step_result(
-    run: Run, index: int | None, options: GenerationOptions | None, step_index: int
+    run: Run, options: GenerationOptions | None, step_index: int
 ) -> StepResult:
-    if index is None or options is None:
-        raise ValueError("Saved step is missing its message or generation options")
-    message = run._state.messages[index]
-    if not isinstance(message, AssistantMessage):
-        raise ValueError("Saved step does not point to an assistant message")
-    results: list[ToolResultMessage] = []
-    for item in run._state.messages[index + 1 :]:
-        if not isinstance(item, ToolResultMessage):
-            break
-        results.append(item.model_copy(deep=True))
+    if options is None:
+        raise ValueError("Saved step is missing generation options")
+    step = run._state.steps[step_index]
     return StepResult(
         step=AgentStep(index=step_index, limit=run._progress.step_limit),
-        message=message.model_copy(deep=True),
-        tool_results=results,
+        message=step.message.model_copy(deep=True),
+        tool_results=[
+            execution.result.model_copy(deep=True)
+            for call in step.message.tool_calls
+            if (execution := step.tools.get(call.id)) is not None
+            and execution.result is not None
+        ],
         options=options.model_copy(deep=True),
     )

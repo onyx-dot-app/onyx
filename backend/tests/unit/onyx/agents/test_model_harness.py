@@ -15,8 +15,8 @@ from onyx.llm.litellm_conversion import MessageAccumulator, recover_tool_calls
 from onyx.llm.litellm_models import (
     ChatCompletionDeltaToolCall,
     Delta,
-    FunctionCall,
     ModelResponseStream,
+    ResponseFunctionCall,
     StreamingChoice,
     ToolMessage,
 )
@@ -54,7 +54,9 @@ def test_model_and_agent_share_transcript_and_stream_events() -> None:
                     ChatCompletionDeltaToolCall(
                         index=0,
                         id="call",
-                        function=FunctionCall(name="echo", arguments='{"value":3}'),
+                        function=ResponseFunctionCall(
+                            name="echo", arguments='{"value":3}'
+                        ),
                     )
                 ]
             ),
@@ -163,7 +165,7 @@ def test_native_calls_keep_precedence_and_missing_id_is_stable() -> None:
                         tool_calls=[
                             ChatCompletionDeltaToolCall(
                                 index=0,
-                                function=FunctionCall(
+                                function=ResponseFunctionCall(
                                     name="echo" if arguments.startswith("{") else None,
                                     arguments=arguments,
                                 ),
@@ -186,7 +188,8 @@ def test_native_calls_keep_precedence_and_missing_id_is_stable() -> None:
     ]
     assert calls and calls[0].id
     assert {call.id for call in calls} == {calls[0].id}
-    assert accumulator.finish().tool_calls[0].arguments == {"value": 3}
+    accumulator.finalize()
+    assert accumulator.message.tool_calls[0].arguments == {"value": 3}
 
 
 def test_model_honors_cancelled_signal() -> None:

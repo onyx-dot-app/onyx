@@ -223,5 +223,5 @@ For the execution loop, tool calls, and cancellation contracts, see the [agent S
     **ChatResponseMessage** stores an assistant message or references a tool result within that response. Both live in [database models](../db/models.py).
   - **Message** is the SDK conversation type, defined in [LLM models](../llm/models.py).
     Storage retains these shared types; history loading filters unfinished tool calls before agent execution.
-  - **LanguageModelInput** is the LiteLLM request wire type in [provider models](../llm/litellm_models.py).
+  - **ChatCompletionMessage** is the LiteLLM request message type in [provider models](../llm/litellm_models.py).
     The LLM adapter converts SDK messages into this provider format.

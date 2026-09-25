@@ -9,7 +9,11 @@ from sqlalchemy.orm import Session
 from onyx.chat.models import CreateChatSessionID
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDocsResponse
-from onyx.llm.litellm_models import ChatCompletionDeltaToolCall, Delta, FunctionCall
+from onyx.llm.litellm_models import (
+    ChatCompletionDeltaToolCall,
+    Delta,
+    ResponseFunctionCall,
+)
 from onyx.server.query_and_chat.models import MessageResponseIDInfo
 from onyx.server.query_and_chat.streaming_models import (
     ItemUpdate,
@@ -50,7 +54,9 @@ def tool_call(
     name: str, call_id: str, arguments: str, index: int = 0
 ) -> ChatCompletionDeltaToolCall:
     return ChatCompletionDeltaToolCall(
-        id=call_id, index=index, function=FunctionCall(name=name, arguments=arguments)
+        id=call_id,
+        index=index,
+        function=ResponseFunctionCall(name=name, arguments=arguments),
     )
 
 

@@ -2,7 +2,12 @@
 
 from collections.abc import Sequence
 
-from onyx.agents.models import AgentInfo, RunState
+from onyx.agents.models import (
+    AgentInfo,
+    RunState,
+    StepRecord,
+    ToolExecutionRecord,
+)
 from onyx.chat.models import ResponseRecord
 from onyx.deep_research.models import ResearchConfiguration
 from onyx.llm.models import Message, ToolResultMessage
@@ -36,11 +41,8 @@ def response_record(
             parent_tool_call_id=node.parent_tool_call_id,
             parent_message_id=node.parent_message_id,
             input_messages=[_saved_message(message) for message in node.input_messages],
-            messages=[_saved_message(message) for message in node.messages],
-            operations=[
-                operation.model_copy(deep=True) for operation in node.operations
-            ],
-            answer_message_index=node.answer_message_index,
+            steps=[_saved_step(step) for step in node.steps],
+            answer_step_index=node.answer_step_index,
             child_runs=[capture(child) for child in node.child_runs],
             status=node.status,
             failure=node.failure.model_copy(deep=True) if node.failure else None,
@@ -64,9 +66,8 @@ def response_snapshot(record: ResponseRecord) -> RunState:
         input_messages=[
             message.model_copy(deep=True) for message in record.input_messages
         ],
-        messages=[message.model_copy(deep=True) for message in record.messages],
-        operations=[operation.model_copy(deep=True) for operation in record.operations],
-        answer_message_index=record.answer_message_index,
+        steps=[step.model_copy(deep=True) for step in record.steps],
+        answer_step_index=record.answer_step_index,
         child_runs=[response_snapshot(child) for child in record.child_runs],
         status=record.status,
         failure=record.failure.model_copy(deep=True) if record.failure else None,
@@ -76,10 +77,26 @@ def response_snapshot(record: ResponseRecord) -> RunState:
     )
 
 
-def _saved_message(message: Message) -> Message:
+def _saved_message[T: Message](message: T) -> T:
     # Drop application payloads before copying potentially large tool results.
     return message.model_copy(
         update={"metadata": None, "details": None}
         if isinstance(message, ToolResultMessage)
         else {"metadata": None}
     ).model_copy(deep=True)
+
+
+def _saved_step(step: StepRecord) -> StepRecord:
+    return StepRecord(
+        message=_saved_message(step.message),
+        generation_status=step.generation_status,
+        tools={
+            call_id: ToolExecutionRecord(
+                status=execution.status,
+                result=_saved_message(execution.result)
+                if execution.result is not None
+                else None,
+            )
+            for call_id, execution in step.tools.items()
+        },
+    )

@@ -580,8 +580,9 @@ def test_failed_child_settlement_retains_accepted_partial_output(
             == "Child execution did not settle before its parent ended."
         )
         assert all(
-            operation.status != RunStatus.RUNNING
-            for operation in captured_child.operations
+            step.generation_status != "running"
+            and all(tool.status != "running" for tool in step.tools.values())
+            for step in captured_child.steps
         )
         projected = project_response(
             snapshot,
@@ -1970,8 +1971,7 @@ def test_restoring_history_preserves_branch_latest_run(
         run_id="old",
         agent_id="child",
         status=RunStatus.COMPLETE,
-        messages=[],
-        operations=[],
+        steps=[],
     )
     current = AgentInfo(
         id="child",

@@ -7,10 +7,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_valid
 
 from onyx.agents.execution_records import (
     CompactionCheckpoint,
-    OperationSnapshot,
     RunFailure,
     RunStatus,
 )
+from onyx.agents.models import StepRecord, messages_from_steps
 from onyx.cache.interface import CacheBackend
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
@@ -76,7 +76,9 @@ class MessageRendering(BaseModel):
 
 
 class ResponseRecord(BaseModel):
-    """Accepted messages and execution outcomes, without live application objects."""
+    """Accepted steps and execution outcomes, without live application objects."""
+
+    model_config = ConfigDict(extra="forbid")
 
     run_id: str
     agent_id: str | None = None
@@ -88,13 +90,16 @@ class ResponseRecord(BaseModel):
     parent_tool_call_id: str | None = None
     parent_message_id: str | None = None
     input_messages: list[Message] = Field(default_factory=list)
-    messages: list[Message] = Field(default_factory=list)
-    operations: list[OperationSnapshot] = Field(default_factory=list)
-    answer_message_index: int | None = None
+    steps: list[StepRecord] = Field(default_factory=list)
+    answer_step_index: int | None = None
     child_runs: list["ResponseRecord"] = Field(default_factory=list)
     status: RunStatus
     failure: RunFailure | None = None
     checkpoint: CompactionCheckpoint | None = None
+
+    @property
+    def messages(self) -> list[Message]:
+        return messages_from_steps(self.steps)
 
 
 class SavedAgentContext(BaseModel):

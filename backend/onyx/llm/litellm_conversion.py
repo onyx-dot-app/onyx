@@ -24,12 +24,12 @@ from onyx.llm.litellm_models import (
     Delta,
     ModelResponse,
     ModelResponseStream,
+    RequestFunctionCall,
     StreamingChoice,
 )
 from onyx.llm.litellm_models import Message as ResponseMessage
 from onyx.llm.litellm_models import SystemMessage as WireSystemMessage
 from onyx.llm.litellm_models import ToolCall as ProviderToolCall
-from onyx.llm.litellm_models import ToolFunctionCall as ProviderFunctionCall
 from onyx.llm.litellm_models import ToolMessage as ProviderToolMessage
 from onyx.llm.litellm_models import UserMessage as WireUserMessage
 from onyx.llm.models import (
@@ -293,8 +293,6 @@ def serialize_request(
             continuation=False,
             with_metadata=False,
         )
-        if not isinstance(prepared, list):
-            raise TypeError("Prompt caching must preserve the message list")
         messages = prepared
     return messages
 
@@ -312,7 +310,7 @@ def format_provider_message(message: Message) -> ChatCompletionMessage:
             tool_calls=[
                 ProviderToolCall(
                     id=call.id,
-                    function=ProviderFunctionCall(
+                    function=RequestFunctionCall(
                         name=call.name, arguments=json.dumps(call.arguments)
                     ),
                 )
@@ -670,7 +668,8 @@ class MessageAccumulator:
             if isinstance(stream, Closable):
                 stream.close()
 
-    def finish(self) -> AssistantMessage:
+    def finalize(self) -> None:
+        """Finalize owned tool arguments without making a message snapshot."""
         for pending in self.calls.values():
             if pending.finalized:
                 continue
@@ -681,11 +680,10 @@ class MessageAccumulator:
                     pending.call, pending.arguments, self.tools.get(pending.call.name)
                 )
             pending.finalized = True
-        return self.message.model_copy(deep=True)
 
     def end(self) -> list[GenerationEvent]:
         self.active_text = None
-        message = self.finish()
+        self.finalize()
         events: list[GenerationEvent] = [
             ToolCallEndEvent(
                 content_index=pending.content_index,
@@ -693,7 +691,7 @@ class MessageAccumulator:
             )
             for pending in self.calls.values()
         ]
-        events.append(GenerationDoneEvent(message=message))
+        events.append(GenerationDoneEvent(message=self.message.model_copy(deep=True)))
         return events
 
 

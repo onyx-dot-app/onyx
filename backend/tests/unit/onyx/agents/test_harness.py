@@ -461,7 +461,7 @@ def test_failed_tool_status_survives_successful_agent_completion() -> None:
     snapshot = runs[-1].snapshot()
     assert snapshot is not None and snapshot.status == "complete"
     operations = [
-        operation for operation in snapshot.operations if operation.tool_call_id
+        execution for step in snapshot.steps for execution in step.tools.values()
     ]
     assert operations and all(operation.status == "error" for operation in operations)
     ends = [event for event in events if event.type == "tool_end"]
