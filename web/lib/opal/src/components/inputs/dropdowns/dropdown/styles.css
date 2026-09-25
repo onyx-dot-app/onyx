@@ -12,6 +12,14 @@
   @apply z-10000 overflow-hidden border bg-background-neutral-00 rounded-12 shadow-box-01 pointer-events-auto touch-auto;
 }
 
+/* A foldable group's title as a keyboard stop: highlighted like a row. */
+.opal-select-group {
+  @apply rounded-08 transition-colors;
+}
+.opal-select-group[data-highlighted] {
+  @apply bg-background-tint-02;
+}
+
 /* The search field pinned above the rows: a borderless input on its own
    row, with the same 4px inset as the rows below it. */
 .opal-select-search {

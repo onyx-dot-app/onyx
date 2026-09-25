@@ -43,6 +43,7 @@ import { FieldMessage } from "@opal/form";
 
 // Hooks
 import {
+  buildNavItems,
   useFoldedGroups,
   useSelectKeyboard,
   useSelectOverlay,
@@ -236,17 +237,15 @@ function SingleDropdown({
     searching: hasSearchTerm,
   });
 
-  // Combined list for keyboard navigation (includes create option when shown)
-  // Only show matched options when searching (hide unmatched)
-  const allVisibleOptions = useMemo(() => {
-    const baseOptions = flattenSections(foldedSections);
-    if (showCreateOption) {
-      // Prepend a synthetic option for the "create new" item. Trimmed to
-      // match what the rendered create row commits.
-      const createText = filterText.trim();
-      return [{ value: createText, title: createText }, ...baseOptions];
-    }
-    return baseOptions;
+  // The keyboard's stops in render order: the create row when shown, then
+  // each group's title (when foldable) and its rows.
+  const navItems = useMemo(() => {
+    // Trimmed to match what the rendered create row commits.
+    const createText = filterText.trim();
+    return buildNavItems(
+      foldedSections,
+      showCreateOption ? { value: createText, title: createText } : undefined
+    );
   }, [foldedSections, showCreateOption, filterText]);
 
   // Check if an option is an exact match
@@ -274,24 +273,27 @@ function SingleDropdown({
     onValidationError,
   });
 
-  // Sync highlightedIndex with exact match when typing (not keyboard nav)
+  // A ComboBox highlights the row its typed text matches exactly. A
+  // Select's search field never highlights on its own: only walking the
+  // list does.
   useEffect(() => {
-    // Skip if keyboard navigating or dropdown closed
-    if (isKeyboardNav || !isOpen) return;
+    if (!typeIn || isKeyboardNav || !isOpen) return;
     if (!filterText.trim()) return;
 
-    const exactMatchIndex = allVisibleOptions.findIndex(
-      (opt) =>
-        opt.value.toLowerCase() === filterText.trim().toLowerCase() ||
-        opt.title.toLowerCase() === filterText.trim().toLowerCase()
+    const exactMatchIndex = navItems.findIndex(
+      (item) =>
+        item.kind === "option" &&
+        (item.option.value.toLowerCase() === filterText.trim().toLowerCase() ||
+          item.option.title.toLowerCase() === filterText.trim().toLowerCase())
     );
 
     if (exactMatchIndex >= 0) {
       setHighlightedIndex(exactMatchIndex);
     }
   }, [
+    typeIn,
     filterText,
-    allVisibleOptions,
+    navItems,
     isKeyboardNav,
     isOpen,
     setHighlightedIndex,
@@ -401,8 +403,11 @@ function SingleDropdown({
     highlightedIndex,
     setHighlightedIndex,
     setIsKeyboardNav,
-    allVisibleOptions,
+    items: navItems,
     onSelect: handleOptionSelect,
+    onToggleGroup: toggleGroup,
+    mode: typeIn ? "combobox" : "select",
+    hasSearch: search,
   });
 
   const handleFocus = useCallback(() => {
@@ -447,7 +452,7 @@ function SingleDropdown({
     isValid,
     highlightedIndex,
     fieldId,
-    allVisibleOptions,
+    items: navItems,
     placeholder,
     typeIn,
   });
@@ -580,16 +585,15 @@ function SingleDropdown({
                   value: searchText,
                   onChange: (next) => {
                     setSearchText(next);
-                    setHighlightedIndex(next.trim() ? 0 : -1);
+                    // Typing never highlights; only walking the list does.
+                    setHighlightedIndex(-1);
                     setIsKeyboardNav(false);
                   },
                   onKeyDown: (event) => {
                     handleKeyDown(event);
-                    // Escape and Tab close the list; focus goes back to
-                    // the trigger so the field is not left orphaned.
-                    if (event.key === "Escape" || event.key === "Tab") {
-                      inputRef.current?.focus();
-                    }
+                    // Escape closes the list; focus goes back to the
+                    // trigger so the field is not left orphaned.
+                    if (event.key === "Escape") inputRef.current?.focus();
                   },
                   placeholder: strings.selectSearchPlaceholder,
                 }

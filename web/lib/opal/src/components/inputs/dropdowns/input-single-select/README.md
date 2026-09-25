@@ -43,6 +43,18 @@ outside the set shows the placeholder with the validation error.
 />
 ```
 
+## Keyboard
+
+The trigger is a button: a click, Enter or ArrowDown opens the list,
+and a second click closes it. Open, the arrows and Tab walk the stops in
+order and wrap around: a foldable divider's title is a stop of its own, then
+its rows, and with `search` the search field is the stop before the first
+row. Enter picks the highlighted row or toggles the highlighted title;
+Escape closes and returns focus to the trigger. Physical focus stays on the
+trigger or the search field, and `aria-activedescendant` follows the
+highlight. Typing in the search field never highlights a row; only walking
+the list does.
+
 ## Search
 
 With `search` a search field sits at the top of the list and filters the

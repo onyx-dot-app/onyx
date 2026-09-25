@@ -1,4 +1,4 @@
-import { SelectOption } from "../types";
+import type { NavItem } from "../shared";
 
 /**
  * Sanitizes a value for use in HTML element IDs.
@@ -13,7 +13,7 @@ interface BuildAriaAttributesProps {
   isValid: boolean;
   highlightedIndex: number;
   fieldId: string;
-  allVisibleOptions: SelectOption[];
+  items: NavItem[];
   placeholder?: string;
   /**
    * Whether the trigger is a text input that filters the list. A button
@@ -31,14 +31,18 @@ export function buildAriaAttributes({
   isValid,
   highlightedIndex,
   fieldId,
-  allVisibleOptions,
+  items,
   placeholder,
   typeIn = true,
 }: BuildAriaAttributesProps) {
-  const activeOption =
-    isOpen && highlightedIndex >= 0
-      ? allVisibleOptions[highlightedIndex]
-      : undefined;
+  const active =
+    isOpen && highlightedIndex >= 0 ? items[highlightedIndex] : undefined;
+  const activeId =
+    active?.kind === "option"
+      ? `${fieldId}-option-${sanitizeOptionId(active.option.value)}`
+      : active?.kind === "group" && active.group.title !== undefined
+        ? `${fieldId}-group-${sanitizeOptionId(active.group.title)}`
+        : undefined;
 
   return {
     "aria-label": placeholder,
@@ -47,9 +51,7 @@ export function buildAriaAttributes({
     "aria-expanded": isOpen,
     "aria-haspopup": "listbox" as const,
     "aria-controls": `${fieldId}-listbox`,
-    "aria-activedescendant": activeOption
-      ? `${fieldId}-option-${sanitizeOptionId(activeOption.value)}`
-      : undefined,
+    "aria-activedescendant": activeId,
     "aria-autocomplete": typeIn ? ("list" as const) : undefined,
     role: "combobox" as const,
   };

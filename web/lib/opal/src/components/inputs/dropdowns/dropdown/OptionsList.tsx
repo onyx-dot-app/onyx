@@ -130,6 +130,9 @@ export const OptionsList: React.FC<OptionsListProps> = ({
         let globalIndex = indexOffset;
         let exactSeen = false;
         return sections.map((group, groupIdx) => {
+          const isFoldable = group.foldable && group.title !== undefined;
+          // The title claims its stop before the rows claim theirs.
+          const headerIndex = isFoldable ? globalIndex++ : -1;
           const rows = group.options.map((option) => {
             const index = globalIndex++;
             const isExact =
@@ -155,19 +158,30 @@ export const OptionsList: React.FC<OptionsListProps> = ({
               />
             );
           });
-          // A foldable group's title is its fold control and its rows are
-          // its children; a folded group renders the title alone.
-          if (group.foldable && group.title !== undefined) {
+          // A foldable group's title is its fold control and a keyboard stop
+          // of its own; its rows are its children, withheld while folded.
+          if (isFoldable && group.title !== undefined) {
+            const index = headerIndex;
             return (
-              <Divider
+              <div
                 key={groupIdx}
-                title={group.title}
-                foldable
-                open={!group.folded}
-                onOpenChange={() => onToggleGroup?.(group)}
+                id={`${fieldId}-group-${sanitizeOptionId(group.title)}`}
+                role="presentation"
+                className="opal-select-group"
+                data-index={index}
+                data-highlighted={index === highlightedIndex || undefined}
+                onMouseEnter={() => onMouseEnter(index)}
+                onMouseMove={onMouseMove}
               >
-                {rows}
-              </Divider>
+                <Divider
+                  title={group.title}
+                  foldable
+                  open={!group.folded}
+                  onOpenChange={() => onToggleGroup?.(group)}
+                >
+                  {rows}
+                </Divider>
+              </div>
             );
           }
           return (

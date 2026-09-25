@@ -60,6 +60,30 @@ export function flattenSections(groups: OptionGroup[]): SelectOption[] {
 }
 
 /**
+ * What the keyboard walks: a foldable group's title is a stop of its own
+ * (Enter toggles it), then its rows. The list renders in this exact order,
+ * so `highlightedIndex` addresses the same stop in both.
+ */
+export type NavItem =
+  | { kind: "group"; group: OptionGroup }
+  | { kind: "option"; option: SelectOption };
+
+export function buildNavItems(
+  groups: OptionGroup[],
+  createOption?: SelectOption
+): NavItem[] {
+  const items: NavItem[] = [];
+  if (createOption) items.push({ kind: "option", option: createOption });
+  for (const group of groups) {
+    if (group.foldable && group.title !== undefined) {
+      items.push({ kind: "group", group });
+    }
+    for (const option of group.options) items.push({ kind: "option", option });
+  }
+  return items;
+}
+
+/**
  * Filters each group's options by the search term, matched against a
  * row's title or value. A term that matches a divider's title keeps the
  * whole section. Groups left empty disappear, so the dropdown's dividers
@@ -163,13 +187,25 @@ interface UseSelectKeyboardProps {
   highlightedIndex: number;
   setHighlightedIndex: (index: number | ((prev: number) => number)) => void;
   setIsKeyboardNav: (isKeyboard: boolean) => void;
-  allVisibleOptions: SelectOption[];
+  /** The stops in render order. */
+  items: NavItem[];
   onSelect: (option: SelectOption) => void;
+  onToggleGroup?: (group: OptionGroup) => void;
+  /**
+   * A Select walks its list: Enter opens it, Tab and Shift+Tab move like
+   * the arrows, and both wrap around; with a search field, that field is
+   * the stop before the first row (index -1). A ComboBox keeps the text
+   * field's own Tab, which closes the list and moves on.
+   */
+  mode: "select" | "combobox";
+  /** A search field sits above the rows and is a stop in the cycle. */
+  hasSearch?: boolean;
 }
 
 /**
- * Manages keyboard navigation for the ComboBox
- * Handles arrow keys, Enter, Escape, and Tab
+ * Keyboard navigation for the family's listbox: arrows, Enter, Escape and
+ * Tab. Physical focus stays on the trigger or the search field; the
+ * highlight moves and `aria-activedescendant` follows it.
  */
 export function useSelectKeyboard({
   isOpen,
@@ -177,58 +213,92 @@ export function useSelectKeyboard({
   highlightedIndex,
   setHighlightedIndex,
   setIsKeyboardNav,
-  allVisibleOptions,
+  items,
   onSelect,
+  onToggleGroup,
+  mode,
+  hasSearch = false,
 }: UseSelectKeyboardProps) {
+  const cycles = mode === "select";
+  const count = items.length;
+
+  // The stop after `prev`. A Select wraps: past the last row comes the
+  // search field when there is one, else the first row.
+  const next = useCallback(
+    (prev: number) => {
+      if (count === 0) return -1;
+      if (prev < count - 1) return prev + 1;
+      return cycles ? (hasSearch ? -1 : 0) : prev;
+    },
+    [count, cycles, hasSearch]
+  );
+  const previous = useCallback(
+    (prev: number) => {
+      if (count === 0) return -1;
+      if (prev > 0) return prev - 1;
+      if (prev === 0) return cycles && !hasSearch ? count - 1 : -1;
+      // Nothing highlighted (the search field, when there is one).
+      return cycles ? count - 1 : -1;
+    },
+    [count, cycles, hasSearch]
+  );
+
+  const activate = useCallback(() => {
+    const item = items[highlightedIndex];
+    if (!item) return;
+    if (item.kind === "option") onSelect(item.option);
+    else onToggleGroup?.(item.group);
+  }, [items, highlightedIndex, onSelect, onToggleGroup]);
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLElement>) => {
       switch (e.key) {
         case "ArrowDown":
           e.preventDefault();
-          setIsKeyboardNav(true); // Mark as keyboard navigation
+          setIsKeyboardNav(true);
           if (!isOpen) {
+            // Opening lands on the first stop: the search field when there
+            // is one, else the first row.
             setIsOpen(true);
-            setHighlightedIndex(0);
+            setHighlightedIndex(cycles && hasSearch ? -1 : 0);
           } else {
-            setHighlightedIndex((prev) => {
-              // If no item highlighted yet (-1), start at 0
-              if (prev === -1) return 0;
-              // Otherwise move down if not at end
-              return prev < allVisibleOptions.length - 1 ? prev + 1 : prev;
-            });
+            setHighlightedIndex(next);
           }
           break;
         case "ArrowUp":
           e.preventDefault();
-          setIsKeyboardNav(true); // Mark as keyboard navigation
-          if (isOpen) {
-            setHighlightedIndex((prev) => {
-              // If at first item or no highlight, don't go further up
-              if (prev <= 0) return -1;
-              return prev - 1;
-            });
+          setIsKeyboardNav(true);
+          if (isOpen) setHighlightedIndex(previous);
+          break;
+        case "Tab":
+          if (!isOpen) break;
+          if (!cycles) {
+            setIsOpen(false);
+            setIsKeyboardNav(false);
+            break;
           }
+          // Inside the list Tab walks the stops, both ways, wrapping.
+          e.preventDefault();
+          setIsKeyboardNav(true);
+          setHighlightedIndex(e.shiftKey ? previous : next);
           break;
         case "Enter":
-          // Always prevent default and stop propagation when dropdown is open
-          // to avoid bubbling to parent forms
-          if (isOpen) {
-            e.preventDefault();
-            e.stopPropagation();
-            if (highlightedIndex >= 0) {
-              const option = allVisibleOptions[highlightedIndex];
-              if (option) {
-                onSelect(option);
-              }
+          if (!isOpen) {
+            if (cycles) {
+              e.preventDefault();
+              setIsOpen(true);
+              setHighlightedIndex(-1);
             }
+            break;
           }
+          // Always prevent default and stop propagation when the list is
+          // open, so the key never reaches an enclosing form.
+          e.preventDefault();
+          e.stopPropagation();
+          activate();
           break;
         case "Escape":
           e.preventDefault();
-          setIsOpen(false);
-          setIsKeyboardNav(false);
-          break;
-        case "Tab":
           setIsOpen(false);
           setIsKeyboardNav(false);
           break;
@@ -236,9 +306,10 @@ export function useSelectKeyboard({
     },
     [
       isOpen,
-      allVisibleOptions,
-      highlightedIndex,
-      onSelect,
+      cycles,
+      next,
+      previous,
+      activate,
       setIsOpen,
       setHighlightedIndex,
       setIsKeyboardNav,

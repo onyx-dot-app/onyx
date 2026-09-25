@@ -87,6 +87,96 @@ describe("InputSingleSelect", () => {
       expect(trigger).toHaveFocus();
     });
 
+    test("Enter on the closed trigger opens the list", async () => {
+      const user = setupUser();
+      render(
+        <InputSingleSelect placeholder="Model" value="" options={mockOptions} />
+      );
+      screen.getByRole("combobox", { name: "Model" }).focus();
+      await user.keyboard("{Enter}");
+      expect(screen.getByRole("listbox")).toBeInTheDocument();
+    });
+
+    test("Tab and the arrows walk the stops and wrap around", async () => {
+      const handleValueChange = jest.fn();
+      const user = setupUser();
+      render(
+        <InputSingleSelect
+          placeholder="Model"
+          value=""
+          onValueChange={handleValueChange}
+          options={mockOptions}
+        />
+      );
+      screen.getByRole("combobox", { name: "Model" }).focus();
+      await user.keyboard("{Enter}");
+      // Nothing highlighted yet; Tab lands on the first row.
+      await user.keyboard("{Tab}");
+      expect(screen.getByRole("option", { name: /Apple/ })).toHaveAttribute(
+        "data-highlighted"
+      );
+      // Shift+Tab from the first row wraps to the last.
+      await user.keyboard("{Shift>}{Tab}{/Shift}");
+      expect(screen.getByRole("option", { name: /Cherry/ })).toHaveAttribute(
+        "data-highlighted"
+      );
+      // ArrowDown from the last wraps to the first; Enter picks it.
+      await user.keyboard("{ArrowDown}{Enter}");
+      expect(handleValueChange).toHaveBeenCalledWith("apple");
+    });
+
+    test("with a search field, the cycle passes through it and typing never highlights", async () => {
+      const user = setupUser();
+      render(
+        <InputSingleSelect
+          search
+          placeholder="Model"
+          value=""
+          options={mockOptions}
+        />
+      );
+      await user.click(screen.getByRole("combobox", { name: "Model" }));
+      const searchField = screen.getByRole("textbox", { name: "Search" });
+      await user.type(searchField, "a");
+      expect(
+        screen
+          .queryAllByRole("option")
+          .filter((o) => o.hasAttribute("data-highlighted"))
+      ).toHaveLength(0);
+      // Shift+Tab from the search field wraps to the last visible row.
+      await user.keyboard("{Shift>}{Tab}{/Shift}");
+      expect(screen.getByRole("option", { name: /Banana/ })).toHaveAttribute(
+        "data-highlighted"
+      );
+      // Tab from the last row returns to the search field: no row highlighted.
+      await user.keyboard("{Tab}");
+      expect(
+        screen
+          .queryAllByRole("option")
+          .filter((o) => o.hasAttribute("data-highlighted"))
+      ).toHaveLength(0);
+      expect(searchField).toHaveFocus();
+    });
+
+    test("Enter on a foldable divider's title toggles it", async () => {
+      const user = setupUser();
+      render(
+        <InputSingleSelect
+          placeholder="Model"
+          value=""
+          options={providerOptions}
+        />
+      );
+      screen.getByRole("combobox", { name: "Model" }).focus();
+      await user.keyboard("{Enter}");
+      expect(screen.queryAllByRole("option")).toHaveLength(0);
+      // The first stop is the OpenAI title; Enter opens it.
+      await user.keyboard("{Tab}{Enter}");
+      expect(screen.getAllByRole("option")).toHaveLength(2);
+      await user.keyboard("{Enter}");
+      expect(screen.queryAllByRole("option")).toHaveLength(0);
+    });
+
     test("a foldable divider starts folded unless it holds the selection", async () => {
       const user = setupUser();
       render(

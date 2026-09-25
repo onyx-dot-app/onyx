@@ -14,6 +14,7 @@ import {
   type TagItem,
 } from "@opal/components/inputs/texts/input-type-in-tag/TagField";
 import {
+  buildNavItems,
   filterSections,
   flattenSections,
   normalizeSections,
@@ -177,15 +178,15 @@ function MultiDropdown(props: MultiDropdownProps) {
     isSelected: isSelectedOption,
     searching: hasSearchTerm,
   });
-  const allVisibleOptions = useMemo(() => {
-    const baseOptions = flattenSections(foldedSections);
-    if (showCreateOption) {
-      // Trimmed, like the create row's own element id, so the keyboard's
-      // aria-activedescendant resolves.
-      const trimmed = value.trim();
-      return [{ value: trimmed, title: trimmed }, ...baseOptions];
-    }
-    return baseOptions;
+  // The keyboard's stops in render order: the create row when shown, then
+  // each group's title (when foldable) and its rows. Trimmed, like the
+  // create row's own element id, so aria-activedescendant resolves.
+  const navItems = useMemo(() => {
+    const trimmed = value.trim();
+    return buildNavItems(
+      foldedSections,
+      showCreateOption ? { value: trimmed, title: trimmed } : undefined
+    );
   }, [foldedSections, showCreateOption, value]);
 
   const handleOptionSelect = useCallback(
@@ -229,8 +230,11 @@ function MultiDropdown(props: MultiDropdownProps) {
     highlightedIndex,
     setHighlightedIndex,
     setIsKeyboardNav,
-    allVisibleOptions,
+    items: navItems,
     onSelect: handleOptionSelect,
+    onToggleGroup: toggleGroup,
+    mode: typeIn ? "combobox" : "select",
+    hasSearch: search,
   });
 
   const autoId = useId();
@@ -241,7 +245,7 @@ function MultiDropdown(props: MultiDropdownProps) {
       isValid: !hasInvalidTag,
       highlightedIndex,
       fieldId,
-      allVisibleOptions,
+      items: navItems,
       placeholder: placeholder ?? "",
       typeIn,
     }),
@@ -330,14 +334,13 @@ function MultiDropdown(props: MultiDropdownProps) {
                 value: searchText,
                 onChange: (next) => {
                   setSearchText(next);
-                  setHighlightedIndex(next.trim() ? 0 : -1);
+                  // Typing never highlights; only walking the list does.
+                  setHighlightedIndex(-1);
                   setIsKeyboardNav(false);
                 },
                 onKeyDown: (event) => {
                   handleDropdownKeyDown(event);
-                  if (event.key === "Escape" || event.key === "Tab") {
-                    focusField();
-                  }
+                  if (event.key === "Escape") focusField();
                 },
                 placeholder: strings.selectSearchPlaceholder,
               }
