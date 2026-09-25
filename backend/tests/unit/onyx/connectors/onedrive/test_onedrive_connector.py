@@ -23,6 +23,11 @@ from onyx.connectors.microsoft_utils.drive_delta import (
     DriveDeltaPage,
 )
 from onyx.connectors.microsoft_utils.drive_items import DriveItemContent, DriveItemData
+from onyx.connectors.microsoft_utils.entra import (
+    EntraDirectoryObjectPage as OneDriveGroupMemberPage,
+)
+from onyx.connectors.microsoft_utils.entra import EntraGroup as OneDriveGroup
+from onyx.connectors.microsoft_utils.entra import EntraGroupPage as OneDriveGroupPage
 from onyx.connectors.microsoft_utils.graph_errors import (
     MISSING_CREDENTIAL_CODE,
     raise_for_auth_error,
@@ -58,9 +63,6 @@ from onyx.connectors.onedrive.models import (
     OneDriveCheckpoint,
     OneDriveDeltaResult,
     OneDriveDrive,
-    OneDriveGroup,
-    OneDriveGroupMemberPage,
-    OneDriveGroupPage,
     OneDrivePermissionPage,
     OneDriveUser,
     OneDriveUserPage,

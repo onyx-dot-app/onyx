@@ -88,11 +88,6 @@ class GraphModel(BaseModel):
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
 
-class GraphDirectoryObjectType(str, Enum):
-    USER = "#microsoft.graph.user"
-    GROUP = "#microsoft.graph.group"
-
-
 class GraphLinkScope(str, Enum):
     ANONYMOUS = "anonymous"
     ORGANIZATION = "organization"
@@ -141,32 +136,6 @@ class OneDrivePermission(GraphModel):
 
 class OneDrivePermissionPage(BaseModel):
     permissions: list[OneDrivePermission]
-    next_link: str | None = None
-
-
-class OneDriveGroupMember(GraphModel):
-    id: str
-    odata_type: GraphDirectoryObjectType | str | None = Field(
-        default=None, alias="@odata.type"
-    )
-    display_name: str | None = Field(default=None, alias="displayName")
-    mail: str | None = None
-    user_principal_name: str | None = Field(default=None, alias="userPrincipalName")
-
-
-class OneDriveGroupMemberPage(BaseModel):
-    members: list[OneDriveGroupMember]
-    next_link: str | None = None
-
-
-class OneDriveGroup(GraphModel):
-    id: str
-    display_name: str | None = Field(default=None, alias="displayName")
-    visibility: str | None = None
-
-
-class OneDriveGroupPage(BaseModel):
-    groups: list[OneDriveGroup]
     next_link: str | None = None
 
 

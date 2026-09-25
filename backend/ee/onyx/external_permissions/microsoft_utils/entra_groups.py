@@ -10,8 +10,8 @@ The external group name is ``{displayName}_{groupId}``, built only through
 group, so the shape here only has to be stable within a source.
 
 This module knows nothing about SharePoint principal types or any other
-source-specific shape. Callers adapt :class:`EntraGroup` into their own models
-where they need extra fields.
+source-specific shape. Callers adapt :class:`ResolvedEntraGroup` into their own
+models where they need extra fields.
 
 It sits on the MIT Graph package, ``onyx.connectors.microsoft_utils``, which is
 shared transport rather than a connector. Like that package it imports no
@@ -26,9 +26,9 @@ from office365.graph_client import GraphClient
 from pydantic import BaseModel
 
 from ee.onyx.db.external_perm import ExternalUserGroup
+from onyx.connectors.microsoft_utils.entra import EntraClient
 from onyx.connectors.microsoft_utils.graph_client import (
     GraphApiClient,
-    iter_graph_collection,
     sleep_and_retry,
 )
 from onyx.utils.logger import setup_logger
@@ -41,11 +41,12 @@ MICROSOFT_DOMAIN = ".onmicrosoft"
 # groups the run is not worth the memory or the Graph budget, so it stops and
 # leaves the rest to be resolved from the source's own references.
 ENTRA_GROUP_ENUMERATION_THRESHOLD = 100_000
+ENTRA_GROUP_MEMBER_THRESHOLD = 1_000_000
 
 _GUID_RE = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 
 
-class EntraGroup(BaseModel):
+class ResolvedEntraGroup(BaseModel):
     """An Entra group as a caller needs it: the id and its external group name."""
 
     model_config = {"frozen": True}
@@ -127,14 +128,14 @@ def resolve_entra_group_name(
 
 def expand_entra_group(
     graph_client: GraphClient, identifier: str
-) -> tuple[set[EntraGroup], set[str]]:
+) -> tuple[set[ResolvedEntraGroup], set[str]]:
     """Return one group's nested groups and its direct member emails."""
     group_id = resolve_group_id(graph_client, identifier)
     if not group_id:
         logger.error("Failed to get Entra group id for %s", identifier)
         return set(), set()
     group = graph_client.groups[group_id]
-    groups: set[EntraGroup] = set()
+    groups: set[ResolvedEntraGroup] = set()
     user_emails: set[str] = set()
 
     def process_members(members: DirectoryObjectCollection) -> None:
@@ -188,7 +189,7 @@ def expand_entra_group(
                     continue
                 member_id = member_data.get("id", "")
                 name = resolve_entra_group_name(graph_client, member_id, display_name)
-                groups.add(EntraGroup(id=member_id, name=name))
+                groups.add(ResolvedEntraGroup(id=member_id, name=name))
                 logger.info("Added group: %s", name)
             else:
                 logger.warning("Could not identify member type for: %s", member_data)
@@ -210,13 +211,12 @@ def enumerate_entra_groups(
     Skips groups whose name is already in ``already_resolved``. Stops once
     ``threshold`` groups have been seen.
     """
-    groups_url = f"{client.graph_api_base}/groups"
-    groups_params: dict[str, str] = {"$select": "id,displayName", "$top": "999"}
+    entra = EntraClient(client.get_json, client.graph_api_base)
     total_groups = 0
 
-    for group_json in iter_graph_collection(client, groups_url, groups_params):
-        group_id: str = group_json.get("id", "")
-        display_name: str = group_json.get("displayName", "")
+    for group in entra.iter_groups():
+        group_id = group.id
+        display_name = group.display_name
         if not group_id or not display_name:
             continue
 
@@ -233,15 +233,14 @@ def enumerate_entra_groups(
             continue
 
         member_emails: list[str] = []
-        members_url = f"{client.graph_api_base}/groups/{group_id}/members"
-        members_params: dict[str, str] = {
-            "$select": "userPrincipalName,mail",
-            "$top": "999",
-        }
-        for member_json in iter_graph_collection(client, members_url, members_params):
-            email = member_json.get("userPrincipalName") or member_json.get("mail")
+        for member in entra.iter_group_members(group_id):
+            email = member.user_principal_name or member.mail
             if email:
                 member_emails.append(normalize_email(email))
+            if len(member_emails) > ENTRA_GROUP_MEMBER_THRESHOLD:
+                raise RuntimeError(
+                    f"Entra group `{group_id}` exceeds the member count limit."
+                )
 
         yield ExternalUserGroup(id=name, user_emails=member_emails)
 
