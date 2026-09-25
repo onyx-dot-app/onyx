@@ -288,6 +288,22 @@ class TestCEUngatedPermissions:
     def test_ce_ungated_set_contains_add_agents(self) -> None:
         assert Permission.ADD_AGENTS in CE_UNGATED_PERMISSIONS
 
+    def test_ce_ungated_set_contains_create_user_api_keys(self) -> None:
+        assert Permission.CREATE_USER_API_KEYS in CE_UNGATED_PERMISSIONS
+
+    def test_basic_user_gets_create_user_api_keys_in_ce(self) -> None:
+        user = MagicMock()
+        user.effective_permissions = ["basic"]
+        result = get_effective_permissions(user)
+        assert Permission.CREATE_USER_API_KEYS in result
+
+    def test_basic_user_does_not_get_create_user_api_keys_in_ee(self) -> None:
+        global_version.set_ee()
+        user = MagicMock()
+        user.effective_permissions = ["basic"]
+        result = get_effective_permissions(user)
+        assert Permission.CREATE_USER_API_KEYS not in result
+
 
 # ---------------------------------------------------------------------------
 # require_permission (FastAPI dependency)
