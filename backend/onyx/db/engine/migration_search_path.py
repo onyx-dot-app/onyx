@@ -22,10 +22,11 @@ _REAPPLY_PENDING_INFO_KEY = "onyx_migration_search_path_pending"
 
 def pin_search_path_to_schema(connection: Connection, schema_name: str) -> None:
     """Set the schema now and record it for the engine's re-apply listeners."""
-    connection.info[SEARCH_PATH_SCHEMA_INFO_KEY] = schema_name
     # Schema names come from the tenant registry or the migration CLI, never
-    # from end users.
+    # from end users. The marker is set after the SET so the listeners only
+    # re-issue it for the transactions that follow.
     connection.exec_driver_sql(f'SET search_path TO "{schema_name}"')
+    connection.info[SEARCH_PATH_SCHEMA_INFO_KEY] = schema_name
 
 
 def install_search_path_reapply(sync_engine: Engine) -> None:
