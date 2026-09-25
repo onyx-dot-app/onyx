@@ -430,9 +430,10 @@ class OutlookSourceOperations(SourceOperations):
         Needs ``User.Read.All``. Whether a user actually has a mailbox is only
         known once :meth:`probe_mailbox` is called for it.
         """
-        page = self._entra().list_enabled_users_page(
+        page = self._entra().list_users_page(
             next_link=next_link,
             page_size=page_size,
+            enabled_only=True,
         )
         mailboxes = [
             mailbox
