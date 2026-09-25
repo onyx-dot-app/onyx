@@ -160,6 +160,9 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
       >
         <ShadowDiv
           shadowHeight={3}
+          // Fade the rows themselves at the scroll edges. A painted shadow
+          // sat on top of the rows and read as a smudge on the light surface.
+          variant="mask"
           // The rise-and-settle runs on this non-scrolling wrapper: a
           // transform on the scroller itself makes Chromium repaint it at
           // scroll offset 0 for a frame when compositing switches.

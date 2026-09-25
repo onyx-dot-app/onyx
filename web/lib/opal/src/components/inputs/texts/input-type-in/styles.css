@@ -15,7 +15,8 @@
 }
 
 .opal-input-leading-icon-svg {
-  @apply h-4 w-4 stroke-text-02;
+  /* Colour, not stroke: a CSS stroke would outline fill-only logos. */
+  @apply h-4 w-4 text-text-02;
 }
 
 .opal-input[data-variant="primary"] .opal-input-field,

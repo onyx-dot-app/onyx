@@ -112,12 +112,14 @@
   @apply font-medium;
 }
 
+/* Colour, not stroke: Opal icons draw with stroke="currentColor", while a
+   CSS stroke on the <svg> would also outline the fill-only provider logos. */
 .opal-select-option-icon {
   @apply h-4 w-4 shrink-0;
-  stroke: var(--text-03);
+  color: var(--text-03);
 }
 .opal-select-option[data-exact] .opal-select-option-icon {
-  stroke: var(--action-selection-05);
+  color: var(--action-selection-05);
 }
 
 /* The highlight splits the label into segments; they must stay inline —
