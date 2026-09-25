@@ -46,7 +46,7 @@ from onyx.db.chat import (
 from onyx.db.chat_checkpoint import (
     check_checkpoint_owner__no_commit,
     read_response__no_commit,
-    save_response_progress__no_commit,
+    save_response_record__no_commit,
 )
 from onyx.db.chat_history import (
     capture_chat_history,
@@ -1210,7 +1210,7 @@ def test_lifecycle_and_display_saves_share_response_content(
     initial = record.model_copy(
         update={"items": [], "child_runs": [], "status": RunStatus.RUNNING}
     )
-    save_response_progress__no_commit(db_session, root_id, initial)
+    save_response_record__no_commit(db_session, root_id, initial)
     db_session.commit()
     try:
         display = ChatResponseSnapshot(
@@ -1233,10 +1233,10 @@ def test_lifecycle_and_display_saves_share_response_content(
                 barrier.wait(timeout=10)
             with Session(engine) as session:
                 check_checkpoint_owner__no_commit(session, root_id, None)
-                save_response_progress__no_commit(
+                save_response_record__no_commit(
                     session, root_id, record.model_copy(update={"child_runs": []})
                 )
-                save_response_progress__no_commit(session, root_id, child)
+                save_response_record__no_commit(session, root_id, child)
                 session.commit()
 
         def save_display() -> None:

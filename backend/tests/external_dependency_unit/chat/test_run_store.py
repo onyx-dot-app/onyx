@@ -32,10 +32,10 @@ from onyx.agents.tools import (
 )
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.agent import ChatAgent
-from onyx.chat.checkpoint import CheckpointBinding
+from onyx.chat.checkpoint import CheckpointBinding, _checkpoint_model_types
 from onyx.chat.models import ChatFeatureState
 from onyx.chat.presentation import project_response
-from onyx.chat.restoration import feature_payload_types, persist_checkpoint_files
+from onyx.chat.restoration import persist_checkpoint_files
 from onyx.chat.run_store import ChatRunStore
 from onyx.configs.constants import FileOrigin, MessageType
 from onyx.db.chat import delete_messages_and_files_from_chat_session
@@ -328,10 +328,10 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
         db_session.expire_all()
         row = db_session.get(ChatResponseCheckpoint, branch[1])
         assert row is not None
-        assert "recorded search result" not in str(row.progress)
+        assert "recorded search result" not in str(row.state)
         assert (
             not {"execution", "operations", "status", "messages", "failure"}
-            & row.progress.keys()
+            & row.state.keys()
         )
         assert (
             db_session.scalar(
@@ -687,7 +687,7 @@ def test_checkpoint_files_use_durable_references_and_session_cleanup(
             persist_checkpoint_files(captured, session_id=branch[0])
             reads.assert_not_called()
             assert saves.call_count == 1
-            codec = CheckpointStorage(feature_payload_types())
+            codec = CheckpointStorage(_checkpoint_model_types())
             encoded = codec.save(
                 captured.run_state,
                 captured.agent_state,

@@ -3301,7 +3301,7 @@ class ChatSession(Base):
 
 
 class ChatResponseCheckpoint(Base):
-    """Supplemental progress for resuming an intentionally paused response."""
+    """Saved execution state for resuming an intentionally paused response."""
 
     __tablename__ = "chat_response_checkpoint"
 
@@ -3309,7 +3309,7 @@ class ChatResponseCheckpoint(Base):
         ForeignKey("chat_message.id", ondelete="CASCADE"), primary_key=True
     )
     revision: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
-    progress: Mapped[dict[str, JsonValue]] = mapped_column(PGJSONB)
+    state: Mapped[dict[str, JsonValue]] = mapped_column(PGJSONB)
 
 
 class ChatMessage(Base):

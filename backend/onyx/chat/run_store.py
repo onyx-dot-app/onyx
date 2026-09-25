@@ -24,8 +24,8 @@ from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.chat.checkpoint import (
     CheckpointBinding,
-    restore_checkpoint_data,
-    save_checkpoint_data,
+    deserialize_checkpoint,
+    serialize_checkpoint,
 )
 from onyx.chat.models import ResponseRecord, SavedAgentContext
 from onyx.chat.response import response_record, response_snapshot
@@ -40,7 +40,7 @@ from onyx.db.chat_checkpoint import (
     read_response__no_commit,
     read_response_status__no_commit,
     release_checkpoint_claim__no_commit,
-    save_response_progress__no_commit,
+    save_response_record__no_commit,
 )
 from onyx.db.chat_response_items import finish_checkpoint__no_commit
 from onyx.db.chat_subagents import (
@@ -270,7 +270,7 @@ class ChatRunStore(RunStore, RunOwnership):
                 check_checkpoint_owner__no_commit(
                     session, owned.owner.message_id, owned.owner.revision
                 )
-                message_id = save_response_progress__no_commit(
+                message_id = save_response_record__no_commit(
                     session, owned.owner.root_message_id, record
                 )
                 if snapshot.status.is_terminal:
@@ -291,7 +291,7 @@ class ChatRunStore(RunStore, RunOwnership):
                 if self._owner(run.id) is not None:
                     raise ValueError("Response already has an owner")
                 with get_session_with_tenant(tenant_id=self.tenant_id) as session:
-                    message_id = save_response_progress__no_commit(
+                    message_id = save_response_record__no_commit(
                         session, self.response_id, self._record(snapshot)
                     )
                     session.commit()
@@ -495,7 +495,7 @@ class ChatRunStore(RunStore, RunOwnership):
             lambda: persist_checkpoint_files(captured, session_id=self.chat_session_id)
         )
         record = self._record(captured.run_state)
-        data = save_checkpoint_data(
+        data = serialize_checkpoint(
             captured, record, self._binding(owned.owner.message_id)
         )
         published = False
@@ -508,7 +508,7 @@ class ChatRunStore(RunStore, RunOwnership):
                     check_checkpoint_owner__no_commit(
                         session, owned.owner.message_id, owned.owner.revision
                     )
-                    save_response_progress__no_commit(
+                    save_response_record__no_commit(
                         session,
                         owned.owner.root_message_id,
                         record.model_copy(update={"status": RunStatus.RUNNING}),
@@ -516,7 +516,7 @@ class ChatRunStore(RunStore, RunOwnership):
                     saved = read_response__no_commit(session, run_id)
                     if saved is None:
                         raise ValueError("Response is unavailable")
-                    restore_checkpoint_data(
+                    deserialize_checkpoint(
                         data,
                         saved.response,
                         captured.agent_state,
@@ -579,7 +579,7 @@ class ChatRunStore(RunStore, RunOwnership):
         with self._lock:
             self._leases[run_id] = lease
         try:
-            captured = restore_checkpoint_data(
+            captured = deserialize_checkpoint(
                 checkpoint.data,
                 saved.response,
                 context,

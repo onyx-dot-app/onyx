@@ -188,7 +188,7 @@ def read_response__no_commit(session: Session, run_id: str) -> SavedResponse | N
     )
 
 
-def save_response_progress__no_commit(
+def save_response_record__no_commit(
     session: Session,
     root_message_id: int,
     record: ResponseRecord,
@@ -248,9 +248,7 @@ def publish_checkpoint__no_commit(
     if row is None:
         if expected_revision is not None:
             raise ValueError("Checkpoint was removed")
-        row = ChatResponseCheckpoint(
-            chat_message_id=message_id, revision=1, progress={}
-        )
+        row = ChatResponseCheckpoint(chat_message_id=message_id, revision=1, state={})
         session.add(row)
     else:
         if (
@@ -259,7 +257,7 @@ def publish_checkpoint__no_commit(
         ):
             raise ValueError("Checkpoint ownership changed")
         row.revision += 1
-    row.progress = _JSON_OBJECT.validate_python(data.model_dump(mode="json"))
+    row.state = _JSON_OBJECT.validate_python(data.model_dump(mode="json"))
     response.response_status = RunStatus.SUSPENDED
     session.flush()
     return row.revision
@@ -276,7 +274,7 @@ def claim_checkpoint__no_commit(
     response.response_status = RunStatus.RUNNING
     session.flush()
     return SavedCheckpoint(
-        revision=row.revision, data=ResponseCheckpoint.model_validate(row.progress)
+        revision=row.revision, data=ResponseCheckpoint.model_validate(row.state)
     )
 
 
