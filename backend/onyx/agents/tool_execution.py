@@ -201,7 +201,6 @@ class ToolBatch:
                     self._finalize_ready()
                     results = self._raw_results()
                     if self.progress.finalized_tools == len(self.calls):
-                        results = self._raw_results()
                         return self.completed.model_copy(
                             update={
                                 "tool_results": [

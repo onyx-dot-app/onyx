@@ -73,7 +73,7 @@ def restore_chat_agent(
     if snapshot.progress is None:
         raise ValueError("Agent restoration requires saved execution progress")
     state = snapshot.progress.feature_state
-    context = checkpoint.agent_state.model_copy(deep=True)
+    context = checkpoint.agent_state
     token_counter = get_llm_token_counter(llm)
     if isinstance(state, ChatFeatureState):
         chat = ChatAgent(

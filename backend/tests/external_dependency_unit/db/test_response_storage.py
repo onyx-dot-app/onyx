@@ -35,6 +35,7 @@ from onyx.chat.response_items import (
 )
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.configs.constants import MessageType
+from onyx.db import chat_subagents
 from onyx.db.chat import (
     delete_chat_session,
     delete_messages_and_files_from_chat_session,
@@ -1153,7 +1154,6 @@ def test_history_loads_items_only_for_selected_ancestry(
     assert sum("FROM chat_response_item" in query for query in executed_sql) == 1
 
 
-@pytest.mark.parametrize("save_progress", [False, True])
 @pytest.mark.parametrize("invalid_character", ["\x00", "\ud800"])
 def test_response_storage_sanitizes_postgres_text_without_mutating_input(
     db_session: Session,
@@ -1296,3 +1296,41 @@ def test_lifecycle_and_display_saves_share_response_content(
         db_session.rollback()
         delete_messages_and_files_from_chat_session(root_session_id, db_session)
         db_session.commit()
+
+
+@pytest.mark.parametrize("large_field", ["question", "item", "tool"])
+def test_history_size_checks_all_payloads_in_one_query(
+    db_session: Session,
+    conversation: ChatSession,
+    executed_sql: list[str],
+    monkeypatch: pytest.MonkeyPatch,
+    large_field: str,
+) -> None:
+    response = _response(
+        db_session, conversation, text="x" * 2000 if large_field == "question" else ""
+    )
+    record = _record(response)
+    messages: list[Message] = [
+        AssistantMessage(
+            content=[
+                TextContent(text="x" * 2000 if large_field == "item" else ""),
+                ToolCall(id="call", name="search", arguments={}),
+            ]
+        ),
+        ToolResultMessage(
+            tool_call_id="call",
+            tool_name="search",
+            content="x" * 2000 if large_field == "tool" else "",
+        ),
+    ]
+    record.items = build_response_items(record.run_id, messages, [])
+    _save(db_session, response, record)
+    response_id = response.id
+    monkeypatch.setattr(chat_subagents, "MAX_AGENT_HISTORY_BYTES", 1000)
+    executed_sql.clear()
+    with pytest.raises(ValueError, match="history exceeds its content limit"):
+        chat_subagents._check_history_size(db_session, [response_id])
+    assert len(executed_sql) == 1
+    monkeypatch.setattr(chat_subagents, "MAX_AGENT_HISTORY_BYTES", 10000)
+    chat_subagents._check_history_size(db_session, [response_id])
+    chat_subagents._check_history_size(db_session, [])

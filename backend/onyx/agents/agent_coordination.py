@@ -24,6 +24,7 @@ from onyx.agents.runtime import (
     RunFailed,
     RunNotTransferable,
     result_from_snapshot,
+    validate_run_completion,
 )
 from onyx.agents.tools import (
     DEFAULT_AGENT_WAIT_SECONDS,
@@ -795,7 +796,7 @@ class RunCoordination:
 
     def _include_predecessors(self, run: Run) -> None:
         """Retain completed background history consumed by this foreground child."""
-        previous_id = run.snapshot().previous_run_id
+        previous_id = run.previous_run_id
         predecessors: list[Run] = []
         seen: set[str] = set()
         while (
@@ -805,11 +806,10 @@ class RunCoordination:
             previous = self.coordinator.child_run(previous_id, self.run.agent_id)
             if previous is None:
                 break
-            snapshot = previous.snapshot()
-            if snapshot.parent_run_id != self.run.id or not snapshot.status.is_terminal:
+            if previous.parent_run_id != self.run.id or not previous.status.is_terminal:
                 break
             predecessors.append(previous)
-            previous_id = snapshot.previous_run_id
+            previous_id = previous.previous_run_id
         for previous in reversed(predecessors):
             child = _ChildDependency(run_id=previous.id)
             child.observed = True
@@ -904,7 +904,7 @@ class RunCoordination:
                         )
                     state = future.result(timeout=max(0, deadline - time.monotonic()))
                     records.append(state)
-                    result_from_snapshot(state)
+                    validate_run_completion(state)
                 except RunFailed as error:
                     if not child.observed and not cancel and failure is None:
                         failure = error

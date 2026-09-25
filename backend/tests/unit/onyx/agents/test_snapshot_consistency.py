@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from onyx.agents.execution_records import RunStatus
+from onyx.agents.execution_records import OperationSnapshot, RunStatus
 from onyx.agents.models import PreparedStep, RunState, StepInput, ToolCallContext
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import AgentTool, ToolInvocation
@@ -200,3 +200,30 @@ def test_tool_result_is_retained_while_finalization_blocks_the_next_step() -> No
         assert run.wait_for_idle(3)
     assert next_generation.is_set()
     assert run.snapshot().messages[1].text == "final"
+
+
+def test_result_copies_output_without_copying_run_history() -> None:
+    run = Run.from_snapshot(
+        RunState(
+            run_id="parent",
+            agent_id="agent",
+            status=RunStatus.COMPLETE,
+            messages=[AssistantMessage(content=[TextContent(text="Answer")])],
+            operations=[
+                OperationSnapshot(
+                    step_index=0, message_index=0, status=RunStatus.COMPLETE
+                )
+            ],
+            child_runs=[
+                RunState(run_id="child", status=RunStatus.COMPLETE, messages=[])
+            ],
+        )
+    )
+    with patch.object(
+        RunState, "__deepcopy__", side_effect=AssertionError("Copied run history")
+    ):
+        result = run.result()
+        result.output.content.clear()
+        assert run.result().output.text == "Answer"
+    assert result.steps == 1
+    assert result.stop_reason == RunStatus.COMPLETE

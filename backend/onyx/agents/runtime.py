@@ -5,7 +5,7 @@ from collections.abc import Callable, Sequence
 from concurrent.futures import Future
 from contextlib import ExitStack, closing
 from contextvars import copy_context
-from typing import TYPE_CHECKING, Literal, Protocol, TypedDict
+from typing import TYPE_CHECKING, Literal, Protocol, TypedDict, cast
 from uuid import uuid4
 
 from pydantic import BaseModel
@@ -141,7 +141,8 @@ def _failure(error: Exception, llm: LLM) -> RunFailure:
     return RunFailure(kind=kind, message=info.message, llm_error=info)
 
 
-def result_from_snapshot(record: RunState) -> RunResult:
+def validate_run_completion(record: RunState) -> None:
+    """Raise for failed, unfinished, or incomplete terminal records."""
     if record.status == RunStatus.CANCELLED:
         raise AgentCancelled()
     if record.status == RunStatus.ERROR:
@@ -150,20 +151,24 @@ def result_from_snapshot(record: RunState) -> RunResult:
         raise RunFailed(record.failure)
     if record.status not in (RunStatus.COMPLETE, RunStatus.LIMIT):
         raise ValueError("Run is not terminal")
-    output = next(
-        (
-            message
-            for message in reversed(record.messages)
-            if isinstance(message, AssistantMessage)
-        ),
-        None,
-    )
-    if output is None or not record.operations:
+    if not record.operations or not any(
+        isinstance(message, AssistantMessage) for message in record.messages
+    ):
         raise ValueError("Completed run is missing output or steps")
+
+
+def result_from_snapshot(record: RunState) -> RunResult:
+    validate_run_completion(record)
+    output = next(
+        message
+        for message in reversed(record.messages)
+        if isinstance(message, AssistantMessage)
+    )
     return RunResult(
         run_id=record.run_id,
         steps=max(operation.step_index for operation in record.operations) + 1,
-        stop_reason=record.status,
+        # validate_run_completion restricts successful outcomes to these statuses.
+        stop_reason=cast(Literal[RunStatus.COMPLETE, RunStatus.LIMIT], record.status),
         output=output.model_copy(deep=True),
     )
 
@@ -424,6 +429,16 @@ class Run:
         return run
 
     @property
+    def previous_run_id(self) -> str | None:
+        with self._lock:
+            return self._state.previous_run_id
+
+    @property
+    def parent_run_id(self) -> str | None:
+        with self._lock:
+            return self._state.parent_run_id
+
+    @property
     def status(self) -> RunStatus:
         with self._lock:
             return self._state.status
@@ -524,7 +539,8 @@ class Run:
     def result(self, timeout: float = OPERATION_TIMEOUT_SECONDS) -> RunResult:
         """Wait for terminal output; cleanup can still be in progress."""
         self._completed.result(timeout=timeout)
-        return result_from_snapshot(self.snapshot())
+        with self._lock:
+            return result_from_snapshot(self._state)
 
     def wait_until_settled(
         self, timeout: float = OPERATION_TIMEOUT_SECONDS
