@@ -61,7 +61,7 @@
     "copy-to-clipboard": "^3.3.3",
     "date-fns": "^4.1.0",
     "docx-preview": "^0.3.7",
-    "dompurify": "3.4.12",
+    "dompurify": "3.4.15",
     "formik": "^2.2.9",
     "highlight.js": "^11.12.0",
     "highlightjs-sap-abap": "^0.3.0",
