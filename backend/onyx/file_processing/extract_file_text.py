@@ -7,6 +7,8 @@ import re
 import tempfile
 import zipfile
 from collections.abc import Callable, Iterator, Sequence
+from email.header import decode_header
+from email.header import make_header
 from email.message import Message
 from email.parser import Parser as EmailParser
 from io import BytesIO
@@ -824,6 +826,33 @@ def _extract_email_attachments(message: Message) -> Iterator[tuple[str, str]]:
             yield name, attachment_text
 
 
+EML_ENVELOPE_FIELDS = ("From", "To", "Cc", "Date", "Subject")
+
+
+def _envelope_headers(message: Message) -> str:
+    """The message's own headers, decoded, one field per line.
+
+    Without these the only ``From:`` an extracted email can contain is body text: the quoted
+    header block of an earlier message in the thread. The nearest sender to a sentence is then
+    the wrong one, which is worse than having no sender at all.
+    """
+    lines: list[str] = []
+    for field in EML_ENVELOPE_FIELDS:
+        raw = message.get(field)
+        if not raw:
+            continue
+        try:
+            # RFC 2047 encoded-words are common in real mail and index as mojibake undecoded.
+            value = str(make_header(decode_header(raw)))
+        except Exception:
+            value = str(raw)
+        # Folded headers arrive with embedded newlines, which would break one field per line.
+        value = " ".join(value.split())
+        if value:
+            lines.append(f"{field}: {value}")
+    return "\n".join(lines)
+
+
 def eml_to_text(file: IO[Any]) -> str:
     encoding = detect_encoding(file)
     text_file = io.TextIOWrapper(file, encoding=encoding)
@@ -870,6 +899,16 @@ def eml_to_text(file: IO[Any]) -> str:
 
     for name, attachment_text in _extract_email_attachments(message):
         text_content.append(f"[attachment: {name}]\n{attachment_text}")
+
+    # The envelope leads the document, so a message's own sender is the nearest attribution to
+    # its own content rather than the quoted headers of the mail it replies to.
+    #
+    # Prepended HERE, after the HTML fallback, not before it: that fallback fires on
+    # `not text_content`, so an envelope added earlier would make an HTML-only message look like
+    # it already had a body and its actual content would be dropped.
+    envelope = _envelope_headers(message)
+    if envelope:
+        text_content = [envelope] + text_content
 
     return TEXT_SECTION_SEPARATOR.join(text_content)
 
