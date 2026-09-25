@@ -74,11 +74,9 @@ def with_transcript(
 ) -> MagicMock:
     if client is None:
         client = mock_zoom_client()
-    # An empty topic makes the caller fall back to the details endpoint, which
-    # is what most of these tests are about.
-    client.get_meeting_transcript.return_value = transcript(
-        download_url=TRANSCRIPT_URL, meeting_topic=""
-    )
+    # No topic makes the caller fall back to the details endpoint, which is
+    # what most of these tests are about.
+    client.get_transcript.return_value = transcript(download_url=TRANSCRIPT_URL)
     client.download_transcript_vtt.return_value = vtt
     return client
 
