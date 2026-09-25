@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from onyx.connectors.microsoft_utils.drive_delta import DriveDeltaItem, DriveDeltaPage
 from onyx.connectors.microsoft_utils.graph_env import (
@@ -9,12 +9,17 @@ from onyx.connectors.models import ConnectorCheckpoint
 
 
 class OneDriveCredentials(BaseModel):
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
 
     onedrive_client_id: str
     onedrive_directory_id: str
     onedrive_client_secret: str | None = None
-    onedrive_authentication_method: str | None = None
+    onedrive_authentication_method: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "onedrive_authentication_method", "authentication_method"
+        ),
+    )
     onedrive_private_key: str | None = None
     onedrive_certificate_password: str | None = None
 

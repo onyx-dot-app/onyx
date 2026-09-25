@@ -1,11 +1,11 @@
 import * as Yup from "yup";
 import type { AccessTypeGroupSelectorFormType } from "@/components/admin/connectors/AccessTypeGroupSelector";
 import type { ConnectorGroupRestrictionFormValues } from "@/lib/connectors/accessType";
+import { ValidSources } from "@/lib/types";
 import type {
   ConfigurableSources,
   IndexAttemptStage,
   IndexAttemptStageMetric,
-  ValidSources,
 } from "@/lib/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { connectorConfigs } from "@/lib/connectors/connectors";
@@ -18,6 +18,7 @@ import {
 import {
   ConnectorCredentialPairStatus,
   FileTypeCategory,
+  OneDriveScope,
 } from "@/lib/connectors/types";
 import type {
   ConnectionConfiguration,
@@ -41,11 +42,21 @@ export function isLoadState(connector_name: string): boolean {
 
 type ConnectorField = ConnectionConfiguration["values"][number];
 
+interface ConnectorValidationMessages {
+  oneDriveUsersRequired?: string;
+}
+
 const buildInitialValuesForFields = (
   fields: ConnectorField[]
 ): Record<string, any> =>
   fields.reduce<Record<string, any>>((acc, field) => {
-    if (field.type === "select") {
+    if (field.type === "tab") {
+      acc[field.name] = field.defaultTab ?? field.tabs[0]?.value ?? "";
+      Object.assign(
+        acc,
+        buildInitialValuesForFields(field.tabs.flatMap((tab) => tab.fields))
+      );
+    } else if (field.type === "select") {
       acc[field.name] = null;
     } else if (field.type === "list") {
       acc[field.name] = field.default || [];
@@ -79,24 +90,15 @@ export function createConnectorInitialValues(
 
 export function createConnectorValidationSchema(
   connector: ConfigurableSources,
-  requireGroups: boolean = false
+  requireGroups: boolean = false,
+  messages: ConnectorValidationMessages = {}
 ): Yup.ObjectSchema<Record<string, any>> {
   const configuration = connectorConfigs[connector];
+  const fields = [...configuration.values, ...configuration.advanced_values];
 
-  const object = Yup.object().shape({
-    access_type: Yup.string().required("Access Type is required"),
-    name: Yup.string().required("Connector Name is required"),
-    groups: Yup.array()
-      .of(Yup.number())
-      .when("access_type", ([accessType], schema) =>
-        requireGroups && accessType !== "sync"
-          ? schema.min(1, "Select at least one group you manage")
-          : schema
-      ),
-    ...[...configuration.values, ...configuration.advanced_values].reduce<
-      Record<string, any>
-    >((acc, field) => {
-      let schema: any =
+  const fieldSchemas = fields.reduce<Record<string, Yup.Schema>>(
+    (acc, field) => {
+      let schema: Yup.Schema =
         field.type === "select"
           ? Yup.string()
           : field.type === "list"
@@ -117,7 +119,30 @@ export function createConnectorValidationSchema(
 
       acc[field.name] = schema;
       return acc;
-    }, {}),
+    },
+    {}
+  );
+
+  if (connector === ValidSources.OneDrive) {
+    fieldSchemas.users = Yup.array()
+      .of(Yup.string().trim().required())
+      .when("indexing_scope", {
+        is: OneDriveScope.Specific,
+        then: (schema) => schema.min(1, messages.oneDriveUsersRequired),
+      });
+  }
+
+  const object = Yup.object().shape({
+    access_type: Yup.string().required("Access Type is required"),
+    name: Yup.string().required("Connector Name is required"),
+    groups: Yup.array()
+      .of(Yup.number())
+      .when("access_type", ([accessType], schema) =>
+        requireGroups && accessType !== "sync"
+          ? schema.min(1, "Select at least one group you manage")
+          : schema
+      ),
+    ...fieldSchemas,
     // These are advanced settings
     indexingStart: Yup.string().nullable(),
     pruneFreq: Yup.number().min(
@@ -162,6 +187,7 @@ export function isTypedFileField(fieldKey: string): boolean {
   // Define which fields should be typed files
   const typedFileFields = new Set([
     "sp_private_key",
+    "onedrive_private_key",
     "outlook_private_key",
     "teams_private_key",
   ]);
@@ -174,6 +200,7 @@ export function getFileTypeDefinitionForField(
 ): FileTypeCategory | null {
   const fieldToTypeMap: Record<string, FileTypeCategory> = {
     sp_private_key: FileTypeCategory.SHAREPOINT_PFX_FILE,
+    onedrive_private_key: FileTypeCategory.ONEDRIVE_PFX_FILE,
     // The same PFX bundle rules apply to every Microsoft app registration.
     outlook_private_key: FileTypeCategory.SHAREPOINT_PFX_FILE,
     teams_private_key: FileTypeCategory.SHAREPOINT_PFX_FILE,

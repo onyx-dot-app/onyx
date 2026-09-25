@@ -1,5 +1,6 @@
 import { credentialTemplates } from "@/lib/connectors/credentials";
 import type { Credential } from "@/lib/connectors/types";
+import type { CredentialFieldValues } from "@/lib/credentials/types";
 import { ValidSources } from "@/lib/types";
 
 import {
@@ -10,8 +11,8 @@ import {
 } from "@/lib/credentials/utils";
 
 function buildCredential(
-  credential: Partial<Credential<Record<string, unknown>>>
-): Credential<Record<string, unknown>> {
+  credential: Partial<Credential<CredentialFieldValues>>
+): Credential<CredentialFieldValues> {
   return {
     id: 1,
     credential_json: {},
@@ -67,6 +68,28 @@ describe("credential edit helpers", () => {
     expect(editableFields).toEqual({
       authentication_method: "iam_role",
       aws_role_arn: "",
+    });
+  });
+
+  it("restores the legacy OneDrive certificate auth method", () => {
+    const credential = buildCredential({
+      credential_json: {
+        onedrive_authentication_method: "certificate",
+        onedrive_client_id: "client-id",
+        onedrive_directory_id: "directory-id",
+        onedrive_private_key: "masked-certificate",
+      },
+      source: ValidSources.OneDrive,
+    });
+
+    expect(
+      getEditableCredentialFields(credential, ValidSources.OneDrive)
+    ).toEqual({
+      authentication_method: "certificate",
+      onedrive_client_id: "client-id",
+      onedrive_directory_id: "directory-id",
+      onedrive_certificate_password: "",
+      onedrive_private_key: "masked-certificate",
     });
   });
 
