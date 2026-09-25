@@ -1,5 +1,6 @@
 import { credentialTemplates } from "@/lib/connectors/credentials";
 import type { Credential } from "@/lib/connectors/types";
+import type { CredentialFieldValues } from "@/lib/credentials/types";
 import { ValidSources } from "@/lib/types";
 
 import {
@@ -10,8 +11,8 @@ import {
 } from "@/lib/credentials/utils";
 
 function buildCredential(
-  credential: Partial<Credential<Record<string, unknown>>>
-): Credential<Record<string, unknown>> {
+  credential: Partial<Credential<CredentialFieldValues>>
+): Credential<CredentialFieldValues> {
   return {
     id: 1,
     credential_json: {},

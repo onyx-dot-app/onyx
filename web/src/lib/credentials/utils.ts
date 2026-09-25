@@ -157,7 +157,7 @@ function getAuthMethodFieldsForCredential(
 
 function getStoredAuthMethod(
   credentialJson: CredentialFieldValues,
-  sourceType: Credential<any>["source"]
+  sourceType: ValidSources
 ): string | undefined {
   const standardMethod = credentialJson[AUTHENTICATION_METHOD_KEY];
   if (typeof standardMethod === "string") {
@@ -190,8 +190,8 @@ function isOAuthManagedCredentialJson(
 }
 
 export function getEditableCredentialFields(
-  credential: Credential<any>,
-  sourceType: Credential<any>["source"] = credential.source
+  credential: Credential<CredentialFieldValues>,
+  sourceType: ValidSources = credential.source
 ): CredentialFieldValues {
   const credentialJson = credential.credential_json ?? {};
   if (isOAuthManagedCredentialJson(credentialJson)) {
