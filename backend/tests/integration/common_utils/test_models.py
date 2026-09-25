@@ -84,7 +84,6 @@ class DATestCredential(BaseModel):
     credential_json: dict[str, Any]
     admin_public: bool
     source: DocumentSource
-    curator_public: bool
     groups: list[int]
 
 

@@ -163,7 +163,7 @@ def _assert_credential_share_within_scope(
     can't differ by transport. Only sharing needs bounding: an unshared credential is
     private to its creator. CREDENTIAL_PERMISSIONS_TO_IGNORE sources (file, web, wiki)
     carry no real secret and stay exempt."""
-    is_shared = bool(credential_info.groups) or credential_info.curator_public
+    is_shared = bool(credential_info.groups)
     if is_shared and credential_info.source not in CREDENTIAL_PERMISSIONS_TO_IGNORE:
         assert_within_scope(
             user,
@@ -171,7 +171,8 @@ def _assert_credential_share_within_scope(
             permission=Permission.MANAGE_CONNECTORS,
             current_group_ids=[],
             requested_group_ids=credential_info.groups,
-            is_non_public=not credential_info.curator_public,
+            # Credentials are shared by group only, so a shared one is never public.
+            is_non_public=True,
         )
 
 
@@ -207,7 +208,6 @@ def create_credential_from_model(
 def create_credential_with_private_key(
     credential_json: str = Form(...),
     admin_public: bool = Form(False),
-    curator_public: bool = Form(False),
     groups: list[int] = Form([]),
     name: str | None = Form(None),
     source: str = Form(...),
@@ -242,7 +242,6 @@ def create_credential_with_private_key(
     credential_info = CredentialBase(
         credential_json=credential_data,
         admin_public=admin_public,
-        curator_public=curator_public,
         groups=groups,
         name=name,
         source=DocumentSource(source),
@@ -425,7 +424,6 @@ def update_credential_from_model(
         admin_public=updated_credential.admin_public,
         time_created=updated_credential.time_created,
         time_updated=updated_credential.time_updated,
-        curator_public=updated_credential.curator_public,
     )
 
 

@@ -80,7 +80,6 @@ class CCPairManager:
             credential_json=credential_json,
             name=name,
             source=source,
-            curator_public=(access_type == AccessType.PUBLIC),
             groups=groups,
         )
         cc_pair = _cc_pair_creator(

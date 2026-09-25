@@ -31,7 +31,6 @@ resource "onyx_credential" "test" {
 					resource.TestCheckResourceAttr("onyx_credential.test", "source", "confluence"),
 					resource.TestCheckResourceAttr("onyx_credential.test", "name", "tf-acc-credential"),
 					resource.TestCheckResourceAttr("onyx_credential.test", "admin_public", "true"),
-					resource.TestCheckResourceAttr("onyx_credential.test", "curator_public", "false"),
 					resource.TestCheckResourceAttrSet("onyx_credential.test", "id"),
 				),
 			},

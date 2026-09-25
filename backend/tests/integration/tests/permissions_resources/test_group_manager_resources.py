@@ -127,9 +127,7 @@ def env(module_reset: None) -> _ScopedEnv:  # noqa: ARG001
 
 def _build_connector_and_credential(user: DATestUser) -> tuple[int, int]:
     connector = ConnectorManager.create(user_performing_action=user)
-    credential = CredentialManager.create(
-        user_performing_action=user, curator_public=False
-    )
+    credential = CredentialManager.create(user_performing_action=user)
     return connector.id, credential.id
 
 
@@ -995,9 +993,7 @@ def test_manager_cannot_attach_credential_to_foreign_connector(
     foreign_pair = CCPairManager.create_from_scratch(
         user_performing_action=env.admin, access_type=AccessType.PUBLIC, groups=[]
     )
-    credential = CredentialManager.create(
-        user_performing_action=env.manager, curator_public=False
-    )
+    credential = CredentialManager.create(user_performing_action=env.manager)
     path = f"/manage/connector/{foreign_pair.connector_id}/credential/{credential.id}"
     resp = call_endpoint(
         "PUT",
@@ -1018,9 +1014,7 @@ def test_manager_attaches_second_credential_to_own_connector(
         access_type=AccessType.PRIVATE,
         groups=[env.managed_group.id],
     )
-    credential = CredentialManager.create(
-        user_performing_action=env.manager, curator_public=False
-    )
+    credential = CredentialManager.create(user_performing_action=env.manager)
     path = f"/manage/connector/{own_pair.connector_id}/credential/{credential.id}"
     resp = call_endpoint(
         "PUT",
@@ -1040,9 +1034,7 @@ def test_manager_cannot_set_property_on_shared_connector(env: _ScopedEnv) -> Non
         access_type=AccessType.PRIVATE,
         groups=[env.managed_group.id],
     )
-    foreign_credential = CredentialManager.create(
-        user_performing_action=env.admin, curator_public=False
-    )
+    foreign_credential = CredentialManager.create(user_performing_action=env.admin)
     CCPairManager.create(
         connector_id=own_pair.connector_id,
         credential_id=foreign_credential.id,

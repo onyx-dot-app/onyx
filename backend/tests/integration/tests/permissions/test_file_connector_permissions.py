@@ -87,7 +87,6 @@ def test_manage_connectors_user_can_edit_public_file_connector() -> None:
     credential = CredentialManager.create(
         user_performing_action=admin_user,
         source=DocumentSource.FILE,
-        curator_public=True,
         groups=[],
         name="public_file_connector_credential",
     )

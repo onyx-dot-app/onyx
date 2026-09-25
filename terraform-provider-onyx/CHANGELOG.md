@@ -5,6 +5,14 @@ block for the tag being released and uses it as the GitHub release body, which i
 what the Terraform Registry shows. A release whose version has no section here
 fails rather than publishing empty notes.
 
+## 0.4.0 (Unreleased)
+
+BREAKING CHANGES:
+
+* resource/onyx_credential: removed `curator_public`. Onyx no longer reads it on any
+  access path, so it never affected who could use a credential. Delete the argument
+  from your configuration; no state migration is required.
+
 ## 0.3.0 (September 8, 2026)
 
 BREAKING CHANGES:

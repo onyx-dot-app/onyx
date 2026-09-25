@@ -409,7 +409,6 @@ export class OnyxApiClient {
     const response = await this.post("/manage/credential", {
       credential_json: credentialJson,
       admin_public: true,
-      curator_public: true,
       groups: [],
       source,
       name,

@@ -29,10 +29,6 @@ export async function createCredentialWithPrivateKey(
   const formData = new FormData();
   formData.append(CREDENTIAL_JSON, JSON.stringify(credential.credential_json));
   formData.append("admin_public", credential.admin_public.toString());
-  formData.append(
-    "curator_public",
-    credential.curator_public?.toString() || "false"
-  );
   if (credential.groups && credential.groups.length > 0) {
     credential.groups.forEach((group) => {
       formData.append("groups", String(group));

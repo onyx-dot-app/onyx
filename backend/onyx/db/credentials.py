@@ -209,7 +209,6 @@ def create_credential(
         admin_public=credential_data.admin_public,
         source=credential_data.source,
         name=credential_data.name,
-        curator_public=credential_data.curator_public,
     )
     db_session.add(credential)
     db_session.flush()  # This ensures the credential gets an ID
