@@ -1,7 +1,6 @@
 from onyx.access.models import ExternalAccess
 from onyx.connectors.onedrive.access import prefix_onedrive_external_groups
 from onyx.connectors.onedrive.models import (
-    GraphIdentity,
     GraphLinkScope,
     GraphSharePointIdentitySet,
     OneDrivePermission,
@@ -16,16 +15,10 @@ def _check_principal_limit(user_emails: set[str], group_ids: set[str]) -> None:
 
 
 def _user_email(identity_set: GraphSharePointIdentitySet) -> str | None:
-    user = identity_set.user
-    site_user = identity_set.site_user
-    email = _identity_email(user) or _identity_email(site_user)
-    return email.lower() if email else None
-
-
-def _identity_email(identity: GraphIdentity | None) -> str | None:
-    if identity is None:
-        return None
-    return identity.email or identity.user_principal_name
+    for identity in (identity_set.user, identity_set.site_user):
+        if identity and (email := identity.email or identity.user_principal_name):
+            return email.lower()
+    return None
 
 
 def _site_user_login_email(identity_set: GraphSharePointIdentitySet) -> str | None:
@@ -38,15 +31,6 @@ def _site_user_login_email(identity_set: GraphSharePointIdentitySet) -> str | No
     if not normalized.startswith(MEMBERSHIP_LOGIN_PREFIX):
         return None
     return normalized.removeprefix(MEMBERSHIP_LOGIN_PREFIX)
-
-
-def _identity_sets(
-    permission: OneDrivePermission,
-) -> list[GraphSharePointIdentitySet]:
-    identities = list(permission.granted_to_identities_v2)
-    if permission.granted_to_v2 is not None:
-        identities.append(permission.granted_to_v2)
-    return identities
 
 
 def map_onedrive_permissions(
@@ -69,7 +53,10 @@ def map_onedrive_permissions(
             ):
                 is_public = True
 
-        for identity_set in _identity_sets(permission):
+        identity_sets = list(permission.granted_to_identities_v2)
+        if permission.granted_to_v2:
+            identity_sets.append(permission.granted_to_v2)
+        for identity_set in identity_sets:
             email: str | None = _user_email(identity_set) or _site_user_login_email(
                 identity_set
             )

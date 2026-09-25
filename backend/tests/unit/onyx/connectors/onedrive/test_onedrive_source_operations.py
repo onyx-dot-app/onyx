@@ -174,9 +174,9 @@ def test_onedrive_group_operations_use_graph_pagination_links() -> None:
     members = gateway.list_transitive_group_members(group_id="group")
 
     assert groups.next_link == "groups-next"
-    assert groups.groups[0].visibility == "HiddenMembership"
+    assert groups.items[0].visibility == "HiddenMembership"
     assert members.next_link == "members-next"
-    assert members.members[0].user_principal_name == "user@example.com"
+    assert members.items[0].user_principal_name == "user@example.com"
     assert client.get_json.call_args_list[0].args[1]["$top"] == "17"
     assert client.get_json.call_args_list[1].args[1]["$top"] == "999"
 

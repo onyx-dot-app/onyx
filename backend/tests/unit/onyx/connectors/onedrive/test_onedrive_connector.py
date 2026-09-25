@@ -23,11 +23,8 @@ from onyx.connectors.microsoft_utils.drive_delta import (
     DriveDeltaPage,
 )
 from onyx.connectors.microsoft_utils.drive_items import DriveItemContent, DriveItemData
-from onyx.connectors.microsoft_utils.entra import (
-    EntraDirectoryObjectPage as OneDriveGroupMemberPage,
-)
+from onyx.connectors.microsoft_utils.entra import EntraDirectoryObject, EntraPage
 from onyx.connectors.microsoft_utils.entra import EntraGroup as OneDriveGroup
-from onyx.connectors.microsoft_utils.entra import EntraGroupPage as OneDriveGroupPage
 from onyx.connectors.microsoft_utils.graph_errors import (
     MISSING_CREDENTIAL_CODE,
     raise_for_auth_error,
@@ -71,6 +68,8 @@ from onyx.connectors.onedrive.scope import normalize_configured_users
 from onyx.connectors.onedrive.source_operations import OneDriveSourceOperations
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 
+OneDriveGroupPage = EntraPage[OneDriveGroup]
+OneDriveGroupMemberPage = EntraPage[EntraDirectoryObject]
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "tenant_spike.json"
 
 
@@ -1152,10 +1151,10 @@ def test_onedrive_permission_and_group_checks_use_gateway() -> None:
     )
     gateway.list_permissions.return_value = OneDrivePermissionPage(permissions=[])
     gateway.list_groups.return_value = OneDriveGroupPage(
-        groups=[OneDriveGroup(id="group", displayName="Visible")]
+        items=[OneDriveGroup(id="group", displayName="Visible")]
     )
     gateway.list_transitive_group_members.return_value = OneDriveGroupMemberPage(
-        members=[]
+        items=[]
     )
     context = CapabilityCheckContext(
         source=DocumentSource.ONEDRIVE,
@@ -1284,7 +1283,7 @@ def test_onedrive_permission_check_bounds_empty_delta_pages() -> None:
 def test_onedrive_hidden_group_check_does_not_require_optional_scope() -> None:
     gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
     gateway.list_groups.return_value = OneDriveGroupPage(
-        groups=[
+        items=[
             OneDriveGroup(
                 id="hidden", displayName="Hidden", visibility="HiddenMembership"
             )
@@ -1310,7 +1309,7 @@ def test_onedrive_group_check_skips_hidden_group_for_later_visible_group() -> No
     gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
     gateway.list_groups.side_effect = [
         OneDriveGroupPage(
-            groups=[
+            items=[
                 OneDriveGroup(
                     id="hidden",
                     displayName="Hidden",
@@ -1319,10 +1318,10 @@ def test_onedrive_group_check_skips_hidden_group_for_later_visible_group() -> No
             ],
             next_link="next-groups",
         ),
-        OneDriveGroupPage(groups=[OneDriveGroup(id="visible", displayName="Visible")]),
+        OneDriveGroupPage(items=[OneDriveGroup(id="visible", displayName="Visible")]),
     ]
     gateway.list_transitive_group_members.return_value = OneDriveGroupMemberPage(
-        members=[]
+        items=[]
     )
     context = CapabilityCheckContext(
         source=DocumentSource.ONEDRIVE,
@@ -1345,13 +1344,13 @@ def test_onedrive_group_check_uses_first_visible_group() -> None:
     gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
     gateway.list_groups.side_effect = [
         OneDriveGroupPage(
-            groups=[OneDriveGroup(id="visible", displayName="Visible")],
+            items=[OneDriveGroup(id="visible", displayName="Visible")],
             next_link="next-groups",
         ),
-        OneDriveGroupPage(groups=[]),
+        OneDriveGroupPage(items=[]),
     ]
     gateway.list_transitive_group_members.return_value = OneDriveGroupMemberPage(
-        members=[]
+        items=[]
     )
     context = CapabilityCheckContext(
         source=DocumentSource.ONEDRIVE,
@@ -1373,7 +1372,7 @@ def test_onedrive_group_check_uses_first_visible_group() -> None:
 def test_onedrive_group_check_bounds_hidden_group_discovery() -> None:
     gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
     gateway.list_groups.return_value = OneDriveGroupPage(
-        groups=[
+        items=[
             OneDriveGroup(
                 id="hidden",
                 displayName="Hidden",
@@ -1383,7 +1382,7 @@ def test_onedrive_group_check_bounds_hidden_group_discovery() -> None:
         next_link="another-group-page",
     )
     gateway.list_transitive_group_members.return_value = OneDriveGroupMemberPage(
-        members=[]
+        items=[]
     )
     context = CapabilityCheckContext(
         source=DocumentSource.ONEDRIVE,
