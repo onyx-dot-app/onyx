@@ -12,10 +12,22 @@
   @apply z-10000 overflow-hidden border bg-background-neutral-00 rounded-12 shadow-box-01 pointer-events-auto touch-auto;
 }
 
+/* The search field pinned above the rows: a borderless input on its own
+   row, separated from the list by a line. */
+.opal-select-search {
+  @apply border-b border-border-01 p-1;
+}
+
 /* The inner padding sits inside the ShadowDiv, so its scroll gradients span
-   the bordered box edge to edge instead of stopping at the padding. */
+   the bordered box edge to edge instead of stopping at the padding. The
+   list scrolls without a visible scrollbar: the mask fade at each edge
+   already says there is more. */
 .opal-select-dropdown-scroll {
   @apply flex flex-col gap-1 overflow-x-hidden p-1;
+  scrollbar-width: none;
+}
+.opal-select-dropdown-scroll::-webkit-scrollbar {
+  display: none;
 }
 
 /* Open and close animations. floating-ui positions the root with a

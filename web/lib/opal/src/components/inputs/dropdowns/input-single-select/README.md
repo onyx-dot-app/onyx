@@ -43,6 +43,37 @@ outside the set shows the placeholder with the validation error.
 />
 ```
 
+## Search
+
+With `search` a search field sits at the top of the list and filters the
+rows by title or value; a term that matches a divider's title keeps that
+whole section. It takes focus when the list opens, so typing starts at once;
+arrows, Enter, Escape and Tab work from it as from the trigger. Escape closes
+the list and returns focus to the trigger; Tab closes it and moves on to the
+next field, as it would from the trigger.
+
+## Foldable dividers
+
+A titled divider with `foldable: true` folds its rows behind the title. It
+opens when it holds the selection and while a search is on (folding is off
+then, so a match can never hide); otherwise it starts closed and a click on
+the title toggles it until the list closes. Folded rows leave the keyboard
+order.
+
+```tsx
+<InputSingleSelect
+  search
+  placeholder="Select a model"
+  value={model}
+  onValueChange={setModel}
+  options={providers.map((provider) => ({
+    title: provider.name,
+    foldable: true,
+    options: provider.models,
+  }))}
+/>
+```
+
 ## Props
 
 | Prop            | Type                                | Default | Description                                                     |
@@ -50,6 +81,7 @@ outside the set shows the placeholder with the validation error.
 | `value`         | `string`                            | —       | Current value (controlled)                                      |
 | `onValueChange` | `(value: string) => void`           | —       | Fires on a pick, and with `""` on an unpick                     |
 | `options`       | `SelectOptions` | `[]`    | Loose options and dividers, in order                        |
+| `search`    | `boolean`                           | `false` | A search field at the top of the list filters the rows          |
 | `defaultOption` | `string`                            | —       | Option value an empty `value` resolves to; never empties then   |
 | `placeholder`   | `string`                            | —       | Shown while empty; always the accessible name (required)        |
 | `isError`       | `boolean`                           | —       | External error state (overrides internal validation)            |

@@ -11,7 +11,8 @@ type-in sibling is [InputMultiComboBox](../input-multi-combo-box/README.md).
 A chosen option becomes a tag whose `id` is the option's `value` (via
 `onSelectOption`); choosing it again, in the list or on the chip, removes it
 through `onRemoveTag`. A chip shows its option's `icon`, when it has one. A
-tag outside the set flags the chrome's error variant.
+tag outside the set flags the chrome's error variant. `search` and
+foldable dividers work as on [InputSingleSelect](../input-single-select/README.md#search).
 
 ```tsx
 <InputMultiSelect
@@ -34,6 +35,7 @@ Every [InputTypeInTag](../../texts/input-type-in-tag/README.md) chrome prop (`ta
 | `options`           | `SelectOptions` | **(required)** | Loose options and dividers, in order        |
 | `onSelectOption`    | `(option: SelectOption) => void`    | **(required)** | Called when an option is chosen                                    |
 | `placeholder`       | `string`                            | **(required)** | Names the combobox element and shows while there are no chips      |
+| `search`        | `boolean`                           | `false`        | A search field at the top of the list filters the rows; see [InputSingleSelect](../input-single-select/README.md#search) |
 | `dropdownMaxHeight` | `string`                            | `"15rem"`      | Max height of the dropdown in CSS units                            |
 
 Formik: `InputMultiSelectField` from `@opal/form`, whose value is `string[]` of option values.

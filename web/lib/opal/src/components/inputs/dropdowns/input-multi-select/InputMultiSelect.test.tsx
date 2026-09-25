@@ -23,6 +23,33 @@ function setupUser() {
 }
 
 describe("InputMultiSelect", () => {
+  describe("Search", () => {
+    test("search: the search field filters the rows and a pick keeps the list open", async () => {
+      const handleSelect = jest.fn();
+      const user = setupUser();
+      render(
+        <InputMultiSelect
+          search
+          tags={[]}
+          options={mockOptions}
+          placeholder="Pick"
+          onSelectOption={handleSelect}
+          onRemoveTag={jest.fn()}
+        />
+      );
+      await user.click(screen.getByRole("combobox", { name: "Pick" }));
+      const search = screen.getByRole("textbox", { name: "Search" });
+      expect(search).toHaveFocus();
+      await user.type(search, "ban");
+      expect(screen.getAllByRole("option")).toHaveLength(1);
+      await user.click(screen.getByRole("option", { name: /Banana/ }));
+      expect(handleSelect).toHaveBeenCalledWith(
+        expect.objectContaining({ value: "banana" })
+      );
+      expect(screen.getByRole("listbox")).toBeInTheDocument();
+    });
+  });
+
   describe("Rendering and picking", () => {
     test("a chip shows its option's icon", () => {
       function Swatch(props: React.SVGProps<SVGSVGElement>) {

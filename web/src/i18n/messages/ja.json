@@ -13083,7 +13083,8 @@
     },
     "select": {
       "emptySet": "項目が見つかりません",
-      "invalidOption": "リストから有効なオプションを選択してください"
+      "invalidOption": "リストから有効なオプションを選択してください",
+      "searchPlaceholder": "検索"
     },
     "settingsHeader": {
       "cancel": "キャンセル"

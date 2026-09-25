@@ -24,6 +24,10 @@ import { SelectOption, SelectOptions } from "./types";
 export interface OptionGroup {
   title?: string;
   options: SelectOption[];
+  /** The rows fold behind the title (see `SelectDivider`). */
+  foldable?: boolean;
+  /** Render-only: the group is folded, so its rows are withheld. */
+  folded?: boolean;
 }
 
 /** Groups the set for rendering: each divider is a group, each run of loose options one too. */
@@ -32,7 +36,11 @@ export function normalizeSections(options: SelectOptions = []): OptionGroup[] {
   let looseRun: OptionGroup | null = null;
   for (const entry of options) {
     if ("options" in entry) {
-      groups.push({ title: entry.title, options: entry.options });
+      groups.push({
+        title: entry.title,
+        options: entry.options,
+        foldable: entry.foldable,
+      });
       looseRun = null;
       continue;
     }
@@ -52,8 +60,10 @@ export function flattenSections(groups: OptionGroup[]): SelectOption[] {
 }
 
 /**
- * Filters each group's options by the search term; groups left empty
- * disappear, so the dropdown's dividers never dangle.
+ * Filters each group's options by the search term, matched against a
+ * row's title or value. A term that matches a divider's title keeps the
+ * whole section. Groups left empty disappear, so the dropdown's dividers
+ * never dangle.
  */
 export function filterSections(
   groups: OptionGroup[],
@@ -62,15 +72,85 @@ export function filterSections(
   const searchTerm = inputValue.trim().toLowerCase();
   if (!searchTerm) return groups.filter((g) => g.options.length > 0);
   return groups
-    .map((group) => ({
-      ...group,
-      options: group.options.filter(
-        (option) =>
-          option.title.toLowerCase().includes(searchTerm) ||
-          option.value.toLowerCase().includes(searchTerm)
-      ),
-    }))
+    .map((group) =>
+      group.title?.toLowerCase().includes(searchTerm)
+        ? group
+        : {
+            ...group,
+            options: group.options.filter(
+              (option) =>
+                option.title.toLowerCase().includes(searchTerm) ||
+                option.value.toLowerCase().includes(searchTerm)
+            ),
+          }
+    )
     .filter((group) => group.options.length > 0);
+}
+
+// =============================================================================
+// HOOK: useFoldedGroups
+// =============================================================================
+
+interface UseFoldedGroupsProps {
+  isOpen: boolean;
+  /** Post-filter groups in render order. */
+  sections: OptionGroup[];
+  isSelected: (option: SelectOption) => boolean;
+  /** A search is on: every group shows its matches and folding is off. */
+  searching: boolean;
+}
+
+/**
+ * Fold state for foldable groups, per open session. A group opens when it
+ * holds the selection or while searching; otherwise it starts closed, and
+ * a click on its title toggles it until the list closes. Returns the
+ * groups with folded rows withheld, so rendering and the keyboard order
+ * agree.
+ */
+export function useFoldedGroups({
+  isOpen,
+  sections,
+  isSelected,
+  searching,
+}: UseFoldedGroupsProps) {
+  const [toggled, setToggled] = useState<ReadonlyMap<string, boolean>>(
+    new Map()
+  );
+  useEffect(() => {
+    if (!isOpen) setToggled(new Map());
+  }, [isOpen]);
+
+  const isGroupOpen = useCallback(
+    (group: OptionGroup) => {
+      if (!group.foldable || group.title === undefined || searching) {
+        return true;
+      }
+      const choice = toggled.get(group.title);
+      if (choice !== undefined) return choice;
+      return group.options.some(isSelected);
+    },
+    [toggled, searching, isSelected]
+  );
+
+  const toggleGroup = useCallback(
+    (group: OptionGroup) => {
+      if (searching || group.title === undefined) return;
+      const title = group.title;
+      const open = isGroupOpen(group);
+      setToggled((prev) => new Map(prev).set(title, !open));
+    },
+    [searching, isGroupOpen]
+  );
+
+  const foldedSections = useMemo(
+    () =>
+      sections.map((group) =>
+        isGroupOpen(group) ? group : { ...group, options: [], folded: true }
+      ),
+    [sections, isGroupOpen]
+  );
+
+  return { foldedSections, toggleGroup };
 }
 
 // =============================================================================

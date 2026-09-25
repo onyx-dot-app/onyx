@@ -13083,7 +13083,8 @@
     },
     "select": {
       "emptySet": "No items found",
-      "invalidOption": "Please select a valid option from the list"
+      "invalidOption": "Please select a valid option from the list",
+      "searchPlaceholder": "Search"
     },
     "settingsHeader": {
       "cancel": "Cancel"

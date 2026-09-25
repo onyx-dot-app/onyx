@@ -13,13 +13,16 @@ export type SelectOption = {
 /**
  * A divider with the rows under it, like an `<optgroup>`. A separator line
  * sits above it, carrying `title` when there is one. Dividers render in
- * order; on a ComboBox a divider whose options all filter out disappears
- * with its line, so nothing dangles.
+ * order; a divider whose options all filter out disappears with its line,
+ * so nothing dangles.
+ *
+ * A titled divider may be `foldable`: its rows fold behind the title. It
+ * opens when it holds the selection and while a search is on; otherwise it
+ * starts closed and a click on the title toggles it.
  */
-export type SelectDivider = {
-  title?: string;
-  options: SelectOption[];
-};
+export type SelectDivider =
+  | { title: string; options: SelectOption[]; foldable?: boolean }
+  | { title?: undefined; options: SelectOption[]; foldable?: never };
 
 /**
  * The set: loose options and dividers in any order, like `<option>`s beside
@@ -87,6 +90,7 @@ export type InputSingleComboBoxProps = InputSingleBaseProps & {
    */
   showOtherOptions?: boolean;
   defaultOption?: never;
+  search?: never;
   /** Trigger placeholder. */
   placeholder: string;
 };
@@ -106,6 +110,12 @@ export type InputSingleSelectProps = InputSingleBaseProps & {
   showOtherOptions?: never;
   /** The option value an empty `value` resolves to. Must be in the set. */
   defaultOption?: string;
+  /**
+   * A search field at the top of the list filters the rows by title or
+   * value. It takes focus when the list opens; Escape and Tab hand focus
+   * back to the trigger.
+   */
+  search?: boolean;
   /**
    * Shown while empty, and always the field's accessible name, so it is
    * required even with a `defaultOption` that keeps the trigger filled.
@@ -143,6 +153,7 @@ type InputMultiBaseProps = Omit<
 
 /** `InputMultiComboBox`: chips beside a text input whose text filters the set. */
 export type InputMultiComboBoxProps = InputMultiBaseProps & {
+  search?: never;
   /**
    * Set openness:
    * - "closed" (default): only options can be chosen; typing filters.
@@ -163,6 +174,8 @@ export type InputMultiComboBoxProps = InputMultiBaseProps & {
 export type InputMultiSelectProps = InputMultiBaseProps & {
   /** Names the combobox element, which has no text input to inherit one. */
   placeholder: string;
+  /** A search field at the top of the list filters the rows. */
+  search?: boolean;
   mode?: never;
   value?: never;
   onChange?: never;

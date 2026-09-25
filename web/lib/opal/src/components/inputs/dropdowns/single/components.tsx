@@ -43,6 +43,7 @@ import { FieldMessage } from "@opal/form";
 
 // Hooks
 import {
+  useFoldedGroups,
   useSelectKeyboard,
   useSelectOverlay,
   filterSections,
@@ -79,6 +80,7 @@ function SingleDropdown({
   separatorLabel,
   showOtherOptions = false,
   dropdownMaxHeight,
+  search = false,
   ...rest
 }: WithoutStyles<SingleDropdownProps>) {
   const typeIn = trigger === "type-in";
@@ -154,9 +156,15 @@ function SingleDropdown({
     return { value: effectiveValue, title: effectiveValue };
   }, [strict, effectiveValue, options]);
 
-  // What filters the list. A button trigger never filters: its text is
-  // only ever the selection's label.
-  const filterText = typeIn ? inputValue : "";
+  // What filters the list: a ComboBox's typed text, or a Select's search
+  // field when it has one. Otherwise nothing: a button trigger's text is
+  // only ever the selection's label. The search is transient and clears
+  // with the list.
+  const [searchText, setSearchText] = useState("");
+  useEffect(() => {
+    if (!isOpen) setSearchText("");
+  }, [isOpen]);
+  const filterText = typeIn ? inputValue : search ? searchText : "";
 
   // Filtering: each section filters independently; empty ones disappear.
   const hasSearchTerm = filterText.trim() !== "";
@@ -215,10 +223,23 @@ function SingleDropdown({
   }, [customSelected, options, trimmedInput]);
   const showCreateOption = !strict && hasSearchTerm && !exactVisibleMatch;
 
+  // Foldable groups withhold their rows while folded, for rendering and
+  // for the keyboard order alike.
+  const isSelectedOption = useCallback(
+    (option: SelectOption) => option.value === effectiveValue,
+    [effectiveValue]
+  );
+  const { foldedSections, toggleGroup } = useFoldedGroups({
+    isOpen,
+    sections: visibleSections,
+    isSelected: isSelectedOption,
+    searching: hasSearchTerm,
+  });
+
   // Combined list for keyboard navigation (includes create option when shown)
   // Only show matched options when searching (hide unmatched)
   const allVisibleOptions = useMemo(() => {
-    const baseOptions = flattenSections(visibleSections);
+    const baseOptions = flattenSections(foldedSections);
     if (showCreateOption) {
       // Prepend a synthetic option for the "create new" item. Trimmed to
       // match what the rendered create row commits.
@@ -226,7 +247,7 @@ function SingleDropdown({
       return [{ value: createText, title: createText }, ...baseOptions];
     }
     return baseOptions;
-  }, [visibleSections, showCreateOption, filterText]);
+  }, [foldedSections, showCreateOption, filterText]);
 
   // Check if an option is an exact match
   const isExactMatch = useCallback(
@@ -529,7 +550,7 @@ function SingleDropdown({
           setFloatingRef={setFloatingRef}
           fieldId={fieldId}
           placeholder={placeholder ?? ""}
-          sections={visibleSections}
+          sections={foldedSections}
           emptySet={options.length === 0}
           value={effectiveValue}
           highlightedIndex={highlightedIndex}
@@ -552,6 +573,28 @@ function SingleDropdown({
           showCreateOption={showCreateOption}
           dropdownMaxHeight={dropdownMaxHeight}
           keyboardNav={isKeyboardNav}
+          onToggleGroup={toggleGroup}
+          searchField={
+            search
+              ? {
+                  value: searchText,
+                  onChange: (next) => {
+                    setSearchText(next);
+                    setHighlightedIndex(next.trim() ? 0 : -1);
+                    setIsKeyboardNav(false);
+                  },
+                  onKeyDown: (event) => {
+                    handleKeyDown(event);
+                    // Escape and Tab close the list; focus goes back to
+                    // the trigger so the field is not left orphaned.
+                    if (event.key === "Escape" || event.key === "Tab") {
+                      inputRef.current?.focus();
+                    }
+                  },
+                  placeholder: strings.selectSearchPlaceholder,
+                }
+              : undefined
+          }
         />
       </>
 

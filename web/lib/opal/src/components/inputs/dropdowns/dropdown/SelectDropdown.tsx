@@ -1,8 +1,9 @@
-import React, { useEffect, forwardRef } from "react";
+import React, { useEffect, useRef, forwardRef } from "react";
 import { createPortal } from "react-dom";
 import "@opal/components/inputs/dropdowns/dropdown/styles.css";
 import { cn } from "@opal/utils";
 import { ShadowDiv } from "@opal/components/shadow-div/components";
+import InputTypeIn from "@opal/components/inputs/texts/input-type-in/components";
 import usePresence from "@opal/hooks/usePresence";
 import { OptionsList } from "./OptionsList";
 import type { SelectOption } from "../types";
@@ -42,6 +43,19 @@ interface SelectDropdownProps {
    * over rows must never scroll the list under itself.
    */
   keyboardNav: boolean;
+  /**
+   * A search field pinned above the rows. It takes focus when the list
+   * opens; the key handler is the trigger's, so arrows, Enter, Escape and
+   * Tab behave the same from either.
+   */
+  searchField?: {
+    value: string;
+    onChange: (value: string) => void;
+    onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
+    placeholder: string;
+  };
+  /** A click on a foldable group's title. */
+  onToggleGroup?: (group: OptionGroup) => void;
 }
 
 /**
@@ -73,12 +87,23 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
       showCreateOption,
       dropdownMaxHeight,
       keyboardNav,
+      searchField,
+      onToggleGroup,
     },
     ref
   ) => {
     // The listbox stays mounted one exit animation longer than `isOpen`, so
     // it can animate out without living in the tree while closed.
     const presence = usePresence(isOpen);
+
+    // The search field takes focus when the list opens, so typing starts
+    // at once. An effect rather than autoFocus: the field mounts with the
+    // list, and focus must follow every open, not only the first mount.
+    const searchRef = useRef<HTMLInputElement>(null);
+    const hasSearch = searchField !== undefined;
+    useEffect(() => {
+      if (isOpen && hasSearch) searchRef.current?.focus();
+    }, [isOpen, hasSearch]);
 
     // Keyboard navigation keeps the highlighted row in view. Pointer
     // highlights never scroll: the list must not move under the mouse.
@@ -158,6 +183,26 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
           e.stopPropagation();
         }}
       >
+        {searchField && (
+          <div
+            role="presentation"
+            className="opal-select-search"
+            // The listbox root cancels mousedown to keep focus on the
+            // trigger; a click into the search field must focus it.
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <InputTypeIn
+              ref={searchRef}
+              searchIcon
+              variant="internal"
+              placeholder={searchField.placeholder}
+              aria-label={searchField.placeholder}
+              value={searchField.value}
+              onChange={(e) => searchField.onChange(e.target.value)}
+              onKeyDown={searchField.onKeyDown}
+            />
+          </div>
+        )}
         <ShadowDiv
           shadowHeight={3}
           // Fade the rows themselves at the scroll edges. A painted shadow
@@ -192,6 +237,7 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
             inputValue={inputValue}
             allowCreate={allowCreate}
             showCreateOption={showCreateOption}
+            onToggleGroup={onToggleGroup}
           />
         </ShadowDiv>
       </div>,

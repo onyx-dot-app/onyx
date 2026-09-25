@@ -34,6 +34,8 @@ interface OptionsListProps {
   allowCreate: boolean;
   /** Whether to show create option (pre-computed by parent) */
   showCreateOption: boolean;
+  /** A click on a foldable group's title. */
+  onToggleGroup?: (group: OptionGroup) => void;
 }
 
 /**
@@ -56,6 +58,7 @@ export const OptionsList: React.FC<OptionsListProps> = ({
   inputValue,
   allowCreate,
   showCreateOption,
+  onToggleGroup,
 }) => {
   const strings = useOpalStrings();
   // Index offset for other options when create option is shown
@@ -127,41 +130,56 @@ export const OptionsList: React.FC<OptionsListProps> = ({
         let globalIndex = indexOffset;
         let exactSeen = false;
         return sections.map((group, groupIdx) => {
-          const rows = (
+          const rows = group.options.map((option) => {
+            const index = globalIndex++;
+            const isExact =
+              (markAllMatches || !exactSeen) && isExactMatch(option);
+            if (isExact) exactSeen = true;
+            return (
+              <OptionItem
+                key={option.value}
+                option={option}
+                index={index}
+                fieldId={fieldId}
+                isHighlighted={index === highlightedIndex}
+                isSelected={
+                  selectedValues
+                    ? selectedValues.has(option.value)
+                    : value === option.value
+                }
+                isExact={isExact}
+                onSelect={onSelect}
+                onMouseEnter={onMouseEnter}
+                onMouseMove={onMouseMove}
+                searchTerm={inputValue}
+              />
+            );
+          });
+          // A foldable group's title is its fold control and its rows are
+          // its children; a folded group renders the title alone.
+          if (group.foldable && group.title !== undefined) {
+            return (
+              <Divider
+                key={groupIdx}
+                title={group.title}
+                foldable
+                open={!group.folded}
+                onOpenChange={() => onToggleGroup?.(group)}
+              >
+                {rows}
+              </Divider>
+            );
+          }
+          return (
             <React.Fragment key={groupIdx}>
               {group.title !== undefined ? (
                 <Divider title={group.title} />
               ) : (
                 groupIdx > 0 && <Divider />
               )}
-              {group.options.map((option) => {
-                const index = globalIndex++;
-                const isExact =
-                  (markAllMatches || !exactSeen) && isExactMatch(option);
-                if (isExact) exactSeen = true;
-                return (
-                  <OptionItem
-                    key={option.value}
-                    option={option}
-                    index={index}
-                    fieldId={fieldId}
-                    isHighlighted={index === highlightedIndex}
-                    isSelected={
-                      selectedValues
-                        ? selectedValues.has(option.value)
-                        : value === option.value
-                    }
-                    isExact={isExact}
-                    onSelect={onSelect}
-                    onMouseEnter={onMouseEnter}
-                    onMouseMove={onMouseMove}
-                    searchTerm={inputValue}
-                  />
-                );
-              })}
+              {rows}
             </React.Fragment>
           );
-          return rows;
         });
       })()}
     </>

@@ -83,6 +83,63 @@ export const WithSections: Story = {
   },
 };
 
+const providerOptions: SelectOptions = [
+  {
+    title: "OpenAI",
+    foldable: true,
+    options: [
+      { value: "gpt-4o", title: "GPT-4o" },
+      { value: "gpt-4.1", title: "GPT-4.1" },
+      { value: "o3", title: "o3" },
+    ],
+  },
+  {
+    title: "Anthropic",
+    foldable: true,
+    options: [
+      { value: "sonnet", title: "Claude Sonnet 4" },
+      { value: "opus", title: "Claude Opus 4" },
+    ],
+  },
+  {
+    title: "Google",
+    foldable: true,
+    options: [{ value: "gemini", title: "Gemini 2.5 Pro" }],
+  },
+];
+
+/** A search field at the top of the list filters the rows. */
+export const Searchable: Story = {
+  render: function SearchableStory() {
+    const [value, setValue] = React.useState("");
+    return (
+      <InputSingleSelect
+        search
+        placeholder="Select a fruit"
+        value={value}
+        onValueChange={setValue}
+        options={fruitOptions}
+      />
+    );
+  },
+};
+
+/** Foldable dividers: the group holding the selection opens, the rest fold. */
+export const FoldableDividers: Story = {
+  render: function FoldableDividersStory() {
+    const [value, setValue] = React.useState("sonnet");
+    return (
+      <InputSingleSelect
+        search
+        placeholder="Select a model"
+        value={value}
+        onValueChange={setValue}
+        options={providerOptions}
+      />
+    );
+  },
+};
+
 /** With a default the select never empties: a re-pick does nothing. */
 export const WithDefaultOption: Story = {
   render: function WithDefaultOptionStory() {

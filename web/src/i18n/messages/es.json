@@ -13083,7 +13083,8 @@
     },
     "select": {
       "emptySet": "No se encontraron elementos",
-      "invalidOption": "Selecciona una opción válida de la lista"
+      "invalidOption": "Selecciona una opción válida de la lista",
+      "searchPlaceholder": "Buscar"
     },
     "settingsHeader": {
       "cancel": "Cancelar"

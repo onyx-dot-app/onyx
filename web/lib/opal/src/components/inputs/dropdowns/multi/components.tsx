@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useOpalStrings } from "@opal/strings";
 import {
   TagField,
   type TagItem,
@@ -11,6 +19,7 @@ import {
   normalizeSections,
   useSelectKeyboard,
   useSelectOverlay,
+  useFoldedGroups,
 } from "../shared";
 import { SelectDropdown } from "../dropdown/SelectDropdown";
 import { SelectChevron } from "../dropdown/SelectChevron";
@@ -48,7 +57,9 @@ function MultiDropdown(props: MultiDropdownProps) {
     focusOnMount,
     dropdownMaxHeight,
   } = props;
+  const strings = useOpalStrings();
   const typeIn = props.trigger !== "button";
+  const search = props.trigger === "button" && (props.search ?? false);
   // A button trigger has no text: an empty filter, and nothing to commit.
   const value = props.value ?? "";
   const onChange = props.onChange;
@@ -125,13 +136,20 @@ function MultiDropdown(props: MultiDropdownProps) {
     wasOpenRef.current = isOpen;
   }, [typeIn, isOpen, value, onChange]);
 
-  const hasSearchTerm = value.trim() !== "";
+  // A Select with a search field filters through it instead of
+  // the typed text; it is transient and clears with the list.
+  const [searchText, setSearchText] = useState("");
+  useEffect(() => {
+    if (!isOpen) setSearchText("");
+  }, [isOpen]);
+  const filterText = typeIn ? value : search ? searchText : "";
+  const hasSearchTerm = filterText.trim() !== "";
   const visibleSections = useMemo(
     () => [
-      ...filterSections([{ options: customSelected }], value),
-      ...filterSections(sections, value),
+      ...filterSections([{ options: customSelected }], filterText),
+      ...filterSections(sections, filterText),
     ],
-    [customSelected, sections, value]
+    [customSelected, sections, filterText]
   );
   const trimmedValue = value.trim().toLowerCase();
   // An exact match means Enter should pick the option — or nothing, when
@@ -149,8 +167,18 @@ function MultiDropdown(props: MultiDropdownProps) {
     );
   const showCreateOption = freeEntry && hasSearchTerm && !exactOptionMatch;
 
+  const isSelectedOption = useCallback(
+    (option: SelectOption) => selectedValues.has(option.value),
+    [selectedValues]
+  );
+  const { foldedSections, toggleGroup } = useFoldedGroups({
+    isOpen,
+    sections: visibleSections,
+    isSelected: isSelectedOption,
+    searching: hasSearchTerm,
+  });
   const allVisibleOptions = useMemo(() => {
-    const baseOptions = flattenSections(visibleSections);
+    const baseOptions = flattenSections(foldedSections);
     if (showCreateOption) {
       // Trimmed, like the create row's own element id, so the keyboard's
       // aria-activedescendant resolves.
@@ -158,7 +186,7 @@ function MultiDropdown(props: MultiDropdownProps) {
       return [{ value: trimmed, title: trimmed }, ...baseOptions];
     }
     return baseOptions;
-  }, [visibleSections, showCreateOption, value]);
+  }, [foldedSections, showCreateOption, value]);
 
   const handleOptionSelect = useCallback(
     (option: SelectOption) => {
@@ -272,7 +300,7 @@ function MultiDropdown(props: MultiDropdownProps) {
         setFloatingRef={setFloatingRef}
         fieldId={fieldId}
         placeholder={placeholder ?? ""}
-        sections={visibleSections}
+        sections={foldedSections}
         emptySet={flatOptions.length === 0}
         value=""
         selectedValues={selectedValues}
@@ -290,11 +318,31 @@ function MultiDropdown(props: MultiDropdownProps) {
         }}
         isExactMatch={(option) => selectedValues.has(option.value)}
         markAllMatches
-        inputValue={value}
+        inputValue={filterText}
         allowCreate={freeEntry}
         showCreateOption={showCreateOption}
         dropdownMaxHeight={dropdownMaxHeight}
         keyboardNav={isKeyboardNav}
+        onToggleGroup={toggleGroup}
+        searchField={
+          search
+            ? {
+                value: searchText,
+                onChange: (next) => {
+                  setSearchText(next);
+                  setHighlightedIndex(next.trim() ? 0 : -1);
+                  setIsKeyboardNav(false);
+                },
+                onKeyDown: (event) => {
+                  handleDropdownKeyDown(event);
+                  if (event.key === "Escape" || event.key === "Tab") {
+                    focusField();
+                  }
+                },
+                placeholder: strings.selectSearchPlaceholder,
+              }
+            : undefined
+        }
       />
     </TagField>
   );

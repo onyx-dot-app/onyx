@@ -29,6 +29,137 @@ function setupUser() {
 }
 
 describe("InputSingleSelect", () => {
+  describe("Search and foldable dividers", () => {
+    const providerOptions = [
+      {
+        title: "OpenAI",
+        foldable: true,
+        options: [
+          { value: "gpt-4o", title: "GPT-4o" },
+          { value: "gpt-4.1", title: "GPT-4.1" },
+        ],
+      },
+      {
+        title: "Anthropic",
+        foldable: true,
+        options: [{ value: "claude", title: "Claude Sonnet" }],
+      },
+    ];
+
+    test("search: the search field takes focus and filters the rows", async () => {
+      const user = setupUser();
+      render(
+        <InputSingleSelect
+          search
+          placeholder="Model"
+          value=""
+          options={mockOptions}
+        />
+      );
+      await user.click(screen.getByRole("combobox", { name: "Model" }));
+      const search = screen.getByRole("textbox", { name: "Search" });
+      expect(search).toHaveFocus();
+      expect(screen.getAllByRole("option")).toHaveLength(3);
+
+      await user.type(search, "ban");
+      expect(screen.getAllByRole("option")).toHaveLength(1);
+      expect(
+        screen.getByRole("option", { name: /Banana/ })
+      ).toBeInTheDocument();
+    });
+
+    test("search: Escape closes the list and returns focus to the trigger", async () => {
+      const user = setupUser();
+      render(
+        <InputSingleSelect
+          search
+          placeholder="Model"
+          value=""
+          options={mockOptions}
+        />
+      );
+      const trigger = screen.getByRole("combobox", { name: "Model" });
+      await user.click(trigger);
+      await user.keyboard("{Escape}");
+      await waitFor(() => {
+        expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+      });
+      expect(trigger).toHaveFocus();
+    });
+
+    test("a foldable divider starts folded unless it holds the selection", async () => {
+      const user = setupUser();
+      render(
+        <InputSingleSelect
+          placeholder="Model"
+          value="claude"
+          options={providerOptions}
+        />
+      );
+      await user.click(screen.getByRole("combobox", { name: "Model" }));
+      expect(
+        screen.getByRole("option", { name: /Claude/ })
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("option", { name: /GPT-4o/ })
+      ).not.toBeInTheDocument();
+      expect(screen.getByText("OpenAI")).toBeInTheDocument();
+    });
+
+    test("clicking a foldable divider's title toggles its rows", async () => {
+      const user = setupUser();
+      render(
+        <InputSingleSelect
+          placeholder="Model"
+          value=""
+          options={providerOptions}
+        />
+      );
+      await user.click(screen.getByRole("combobox", { name: "Model" }));
+      expect(screen.queryAllByRole("option")).toHaveLength(0);
+      await user.click(screen.getByText("OpenAI"));
+      expect(screen.getAllByRole("option")).toHaveLength(2);
+      await user.click(screen.getByText("OpenAI"));
+      expect(screen.queryAllByRole("option")).toHaveLength(0);
+    });
+
+    test("a term matching a divider's title keeps its whole section", async () => {
+      const user = setupUser();
+      render(
+        <InputSingleSelect
+          search
+          placeholder="Model"
+          value=""
+          options={providerOptions}
+        />
+      );
+      await user.click(screen.getByRole("combobox", { name: "Model" }));
+      await user.type(screen.getByRole("textbox", { name: "Search" }), "open");
+      expect(screen.getAllByRole("option")).toHaveLength(2);
+      expect(screen.queryByText("Anthropic")).not.toBeInTheDocument();
+    });
+
+    test("searching opens folded groups to show their matches", async () => {
+      const user = setupUser();
+      render(
+        <InputSingleSelect
+          search
+          placeholder="Model"
+          value=""
+          options={providerOptions}
+        />
+      );
+      await user.click(screen.getByRole("combobox", { name: "Model" }));
+      expect(screen.queryAllByRole("option")).toHaveLength(0);
+      await user.type(
+        screen.getByRole("textbox", { name: "Search" }),
+        "claude"
+      );
+      expect(screen.getAllByRole("option")).toHaveLength(1);
+      expect(screen.queryByText("OpenAI")).not.toBeInTheDocument();
+    });
+  });
+
   describe("Rendering and picking", () => {
     const dividedOptions = [
       { value: "none", title: "Do not re-index" },
