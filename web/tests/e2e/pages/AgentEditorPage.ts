@@ -9,7 +9,7 @@ export class AgentEditorPage {
   readonly descriptionInput: Locator;
   readonly createButton: Locator;
   readonly defaultModelTrigger: Locator;
-  readonly defaultModelDialog: Locator;
+  readonly defaultModelListbox: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -17,8 +17,16 @@ export class AgentEditorPage {
     this.instructionsInput = page.locator('textarea[name="instructions"]');
     this.descriptionInput = page.locator('textarea[name="description"]');
     this.createButton = page.getByRole("button", { name: "Create" });
-    this.defaultModelTrigger = page.getByTestId("llm-popover-trigger").first();
-    this.defaultModelDialog = page.getByRole("dialog").first();
+    // The Default Model picker is a select inside its labelled row; its
+    // list is portalled, so the listbox is found from the page.
+    this.defaultModelTrigger = page
+      .locator("label")
+      .filter({ hasText: "Default Model" })
+      .first()
+      .getByRole("combobox", { name: "Select model" });
+    this.defaultModelListbox = page.getByRole("listbox", {
+      name: "Select model",
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -73,19 +81,20 @@ export class AgentEditorPage {
     visible: Array<string | RegExp>;
     hidden?: Array<string | RegExp>;
   }): Promise<void> {
-    await this.page.getByText("Default Model").first().scrollIntoViewIfNeeded();
+    await this.defaultModelTrigger.scrollIntoViewIfNeeded();
     await this.defaultModelTrigger.click();
-    await expect(this.defaultModelDialog).toBeVisible();
+    await expect(this.defaultModelListbox).toBeVisible();
 
+    // Providers are foldable groups; a folded group still shows its title.
     for (const option of expected.visible) {
-      await expect(this.defaultModelDialog).toContainText(option);
+      await expect(this.defaultModelListbox).toContainText(option);
     }
     for (const option of expected.hidden ?? []) {
-      await expect(this.defaultModelDialog).not.toContainText(option);
+      await expect(this.defaultModelListbox).not.toContainText(option);
     }
 
     await this.page.keyboard.press("Escape");
-    await expect(this.defaultModelDialog).toBeHidden();
+    await expect(this.defaultModelListbox).toBeHidden();
   }
 
   mcpServerSwitch(serverId: number): Locator {

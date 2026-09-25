@@ -25,7 +25,11 @@ import {
   InputTypeIn,
   type SelectOption,
 } from "@opal/components";
-import ModelSelector from "@/sections/model-selector/ModelSelector";
+import { SimpleModelSelector } from "@/lib/languageModels/components";
+import {
+  filterModelConfigurations,
+  findLlmOptionById,
+} from "@/lib/languageModels/options";
 import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
 import { findProviderOwningModelConfig } from "@/lib/languageModels/utils";
 import {
@@ -745,7 +749,7 @@ export default function ChatPreferencesPage() {
   } = useAdminLanguageModels();
 
   // Resolve defaultChatNaming (id + name based) to a model_configuration_id
-  // for ModelSelector.
+  // for the select.
   const chatNamingModelConfigId = useMemo(() => {
     if (!defaultChatNaming || !llmProviders) return null;
     for (const p of llmProviders) {
@@ -1133,14 +1137,23 @@ export default function ChatPreferencesPage() {
                       {t("chatNaming.resetButton.label")}
                     </Button>
                   )}
-                  <ModelSelector
+                  <SimpleModelSelector
+                    providers={filterModelConfigurations(llmProviders ?? [], {
+                      keep: chatNamingModelConfigId,
+                    })}
                     value={chatNamingModelConfigId}
-                    onChange={(opt) =>
+                    grouped={!settings.hide_provider_grouping}
+                    onChange={(modelConfigurationId) => {
+                      const opt = findLlmOptionById(
+                        llmProviders,
+                        modelConfigurationId
+                      );
+                      if (!opt) return;
                       void handleChatNamingModelChange({
                         modelName: opt.modelName,
-                        modelConfigurationId: opt.modelConfigurationId,
-                      })
-                    }
+                        modelConfigurationId,
+                      });
+                    }}
                   />
                 </div>
               </InputHorizontal>

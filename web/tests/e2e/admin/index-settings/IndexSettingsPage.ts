@@ -165,11 +165,11 @@ export class IndexSettingsPage {
       .locator("label")
       .filter({ hasText: "Contextual Retrieval LLM" });
     await contextualModelField
-      .getByTestId("llm-popover-trigger")
-      .getByRole("button")
+      .getByRole("combobox", { name: "Select model" })
       .click();
-    await this.page.getByPlaceholder("Search models...").fill(displayName);
-    await this.page.getByText(displayName, { exact: true }).click();
+    // The list is portalled; searching unfolds every provider group.
+    await this.page.getByRole("textbox", { name: "Search" }).fill(displayName);
+    await this.page.getByRole("option", { name: displayName }).click();
   }
 
   async expectContextualModelActions(): Promise<void> {

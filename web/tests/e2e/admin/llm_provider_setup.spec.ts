@@ -372,21 +372,25 @@ test.describe("LLM Provider Setup @exclusive", () => {
       await page.reload();
       await page.waitForLoadState("networkidle");
 
-      // Open the Default Model dropdown
-      await page.locator('[data-testid="llm-popover-trigger"]').click();
-      const dialog = page.locator('[role="dialog"]').first();
-      await dialog.waitFor({ state: "visible", timeout: 10000 });
+      // Open the Default Model select; its list is portalled.
+      await page
+        .locator("label")
+        .filter({ hasText: "Default Model" })
+        .first()
+        .getByRole("combobox", { name: "Select model" })
+        .click();
+      const listbox = page.getByRole("listbox", { name: "Select model" });
+      await listbox.waitFor({ state: "visible", timeout: 10000 });
 
       // Search for the target model to filter the list to just its entry
-      await dialog.getByPlaceholder("Search models...").fill(secondModelName);
+      await page.getByRole("textbox", { name: "Search" }).fill(secondModelName);
 
       const defaultResponsePromise = page.waitForResponse(
         (response) =>
           response.url().includes("/api/admin/llm/default") &&
           response.request().method() === "POST"
       );
-      // After filtering, only the matching model button(s) remain — click the first
-      await dialog.getByRole("button").first().click();
+      await page.getByRole("option", { name: secondModelName }).click();
       await defaultResponsePromise;
 
       // Verify the default switched to the second provider
