@@ -21,11 +21,7 @@ import {
   SvgVercel,
 } from "@opal/logos";
 import { ZAIIcon } from "@/components/icons/icons";
-import {
-  LLMProviderFormProps,
-  LLMProviderName,
-} from "@/lib/languageModels/types";
-import type { LLMProviderView } from "@/lib/languageModels/types";
+import { LLMProviderName } from "@/lib/languageModels/types";
 import OpenAIModal from "@/sections/modals/languageModels/OpenAIModal";
 import AnthropicModal from "@/sections/modals/languageModels/AnthropicModal";
 import OllamaModal from "@/sections/modals/languageModels/OllamaModal";
@@ -45,7 +41,7 @@ import type { ProviderEntry } from "@/lib/languageModels/types";
 
 // ─── Text (LLM) providers ────────────────────────────────────────────────────
 
-const PROVIDERS: Record<string, ProviderEntry> = {
+export const PROVIDERS: Record<string, ProviderEntry> = {
   [LLMProviderName.OPENAI]: {
     icon: SvgOpenai,
     productName: "GPT",
@@ -144,7 +140,7 @@ const PROVIDERS: Record<string, ProviderEntry> = {
   },
 };
 
-const DEFAULT_ENTRY: ProviderEntry = {
+export const DEFAULT_ENTRY: ProviderEntry = {
   icon: SvgCpu,
   productName: "",
   companyName: "",
@@ -153,36 +149,12 @@ const DEFAULT_ENTRY: ProviderEntry = {
 
 // Providers that don't use custom_config themselves, so a non-empty
 // custom_config means the provider was originally created via CustomModal.
-const CUSTOM_CONFIG_OVERRIDES = new Set<string>([
+export const CUSTOM_CONFIG_OVERRIDES = new Set<string>([
   LLMProviderName.OPENAI,
   LLMProviderName.ANTHROPIC,
   LLMProviderName.AZURE,
   LLMProviderName.OPENROUTER,
 ]);
-
-export function getProvider(
-  providerName: string,
-  existingProvider?: LLMProviderView
-): ProviderEntry {
-  const entry = PROVIDERS[providerName] ?? {
-    ...DEFAULT_ENTRY,
-    productName: providerName,
-    companyName: providerName,
-  };
-
-  // An empty custom_config carries no signal of origin. Only a non-empty map
-  // marks a provider created via the custom form.
-  const customConfig = existingProvider?.custom_config;
-  if (
-    customConfig != null &&
-    Object.keys(customConfig).length > 0 &&
-    CUSTOM_CONFIG_OVERRIDES.has(providerName)
-  ) {
-    return { ...entry, Modal: CustomModal };
-  }
-
-  return entry;
-}
 
 // ─── Aggregator providers ────────────────────────────────────────────────────
 // Providers that host models from multiple vendors (e.g. Bedrock hosts Claude,
@@ -203,9 +175,9 @@ export const AGGREGATOR_PROVIDERS = new Set([
   LLMProviderName.VERTEX_AI,
 ]);
 
-// ─── Model-aware icon resolver ───────────────────────────────────────────────
+// ─── Model icons ─────────────────────────────────────────────────────────────
 
-const MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
+export const MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
   [LLMProviderName.OPENAI]: SvgOpenai,
   [LLMProviderName.ANTHROPIC]: SvgClaude,
   [LLMProviderName.OLLAMA_CHAT]: SvgOllama,
@@ -239,45 +211,3 @@ const MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
   zai: ZAIIcon,
   bedrock_converse: SvgAws,
 };
-
-/**
- * Model-aware icon resolver that checks both provider name and model name
- * to pick the most specific icon (e.g. Claude icon for a Bedrock Claude model).
- */
-export function getModelIcon(
-  providerName: string,
-  modelName?: string
-): IconFunctionComponent {
-  const lowerProviderName = providerName.toLowerCase();
-
-  // For aggregator providers, prioritise showing the vendor icon based on model name
-  if (AGGREGATOR_PROVIDERS.has(lowerProviderName) && modelName) {
-    const lowerModelName = modelName.toLowerCase();
-    for (const [key, icon] of Object.entries(MODEL_ICON_MAP)) {
-      if (lowerModelName.includes(key)) {
-        return icon;
-      }
-    }
-  }
-
-  // Check if provider name directly matches an icon
-  if (lowerProviderName in MODEL_ICON_MAP) {
-    const icon = MODEL_ICON_MAP[lowerProviderName];
-    if (icon) {
-      return icon;
-    }
-  }
-
-  // For non-aggregator providers, check if model name contains any of the keys
-  if (modelName) {
-    const lowerModelName = modelName.toLowerCase();
-    for (const [key, icon] of Object.entries(MODEL_ICON_MAP)) {
-      if (lowerModelName.includes(key)) {
-        return icon;
-      }
-    }
-  }
-
-  // Fallback to CPU icon if no matches
-  return SvgCpu;
-}

@@ -1,6 +1,4 @@
-import type { FunctionComponent } from "react";
-import type { IconProps } from "@opal/types";
-import { getModelIcon, getProvider } from "@/lib/languageModels";
+import { getModelIcon, getProvider } from "@/lib/languageModels/utils";
 import { AGGREGATOR_PROVIDERS } from "@/lib/languageModels/svc";
 import type {
   LLMOption,

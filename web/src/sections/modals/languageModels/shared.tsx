@@ -41,7 +41,7 @@ import {
   type ModelSettingsPatch,
 } from "@/sections/modals/languageModels/ModelSettingsPopover";
 import { setDefaultLlmModelAndRefresh } from "@/lib/languageModels/cache";
-import { modelDisplayName } from "@/lib/languageModels/utils";
+import { getProvider, modelDisplayName } from "@/lib/languageModels/utils";
 import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
 import { useSWRConfig } from "swr";
 import {
@@ -65,7 +65,6 @@ import { SvgEdit } from "@opal/icons";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import useUsers from "@/hooks/useUsers";
 import { Modal } from "@opal/components";
-import { getProvider } from "@/lib/languageModels";
 import { useSettings } from "@/lib/settings/hooks";
 
 // ─── DisplayNameField ────────────────────────────────────────────────────────

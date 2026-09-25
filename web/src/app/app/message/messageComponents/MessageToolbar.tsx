@@ -35,7 +35,7 @@ import TTSButton from "@/app/app/message/messageComponents/TTSButton";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { useVoiceStatus } from "@/hooks/useVoiceStatus";
 import { findModelConfigId } from "@/lib/languageModels/options";
-import { getModelIcon } from "@/lib/languageModels";
+import { getModelIcon } from "@/lib/languageModels/utils";
 
 interface SouurcesTagWrapperProps {
   citations: StreamingCitation[];

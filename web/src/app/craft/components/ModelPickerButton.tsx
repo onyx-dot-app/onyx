@@ -5,7 +5,7 @@ import { SelectButton } from "@opal/components";
 import { cn } from "@opal/utils";
 import { BuildLLMPopover } from "@/app/craft/components/BuildLLMPopover";
 import { useLanguageModels } from "@/lib/languageModels/hooks";
-import { getModelIcon } from "@/lib/languageModels";
+import { getModelIcon } from "@/lib/languageModels/utils";
 import { BuildLlmSelection } from "@/app/craft/onboarding/constants";
 import { getPreferredLlmSelection } from "@/app/craft/utils/llmPreferences";
 import { useUser } from "@/providers/UserProvider";

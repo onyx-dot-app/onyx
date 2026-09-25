@@ -16,7 +16,7 @@ import { Hoverable } from "@opal/core";
 import { SvgCheck, SvgEdit, SvgPlus, SvgTrash, SvgX } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
-import { getProvider } from "@/lib/languageModels";
+import { getProvider } from "@/lib/languageModels/utils";
 import type { LLMOption } from "@/lib/languageModels/types";
 import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
 import * as GeneralLayouts from "@/layouts/general-layouts";

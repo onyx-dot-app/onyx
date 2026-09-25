@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef } from "react";
 import { useTranslations } from "next-intl";
-import { getModelIcon } from "@/lib/languageModels";
+import { getModelIcon } from "@/lib/languageModels/utils";
 import {
   Button,
   SelectButton,

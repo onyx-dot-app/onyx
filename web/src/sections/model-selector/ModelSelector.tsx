@@ -3,7 +3,7 @@
 import React, { useState, useCallback, useMemo, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { Popover, OpenButton } from "@opal/components";
-import { getModelIcon } from "@/lib/languageModels";
+import { getModelIcon } from "@/lib/languageModels/utils";
 import { GLOBAL_DEFAULT_LLM_OPTION } from "@/lib/languageModels/options";
 import {
   useLanguageModels,

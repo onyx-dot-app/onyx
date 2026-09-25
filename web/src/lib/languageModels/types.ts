@@ -422,8 +422,3 @@ export interface ProviderEntry {
   companyName: string;
   Modal: React.ComponentType<LLMProviderFormProps>;
 }
-
-export interface ModelIconProps extends IconProps {
-  provider: string;
-  modelName?: string;
-}
