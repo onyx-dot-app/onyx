@@ -524,6 +524,7 @@ class ExternalAppType(str, PyEnum):
     GITHUB = "GITHUB"
     HUBSPOT = "HUBSPOT"
     NOTION = "NOTION"
+    JIRA = "JIRA"
     CUSTOM = "CUSTOM"
 
     @property
