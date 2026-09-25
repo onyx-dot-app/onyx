@@ -63,11 +63,11 @@ from onyx.connectors.google_utils.shared_constants import (
 from onyx.db.connector import (
     create_connector,
     delete_connector,
+    delete_connector_if_unpaired,
     fetch_connector_by_id,
     fetch_connectors,
     fetch_unique_document_sources,
     get_connector_credential_ids,
-    lock_connector_for_delete,
     mark_ccpair_with_indexing_trigger,
     update_connector,
 )
@@ -1676,11 +1676,9 @@ def _discard_unpaired_creation(
     db_session.rollback()
     if connector_id is not None:
         with db_session.begin():
-            _, cc_pair_ids = lock_connector_for_delete(db_session, connector_id)
-            if cc_pair_ids:
+            if not delete_connector_if_unpaired(db_session, connector_id):
                 # Paired by another request meanwhile: the pair owns both rows now.
                 return
-            delete_connector(db_session, connector_id)
     if credential_id is not None:
         try:
             delete_credential(credential_id, db_session)
@@ -1743,19 +1741,11 @@ def update_connector_from_model(
 )
 def delete_connector_by_id(
     connector_id: int,
-    only_unpaired: bool = False,
     user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
-    """``only_unpaired`` is for cleaning up a connector whose credential link
-    failed: it refuses, instead of cascading, if a pair landed meanwhile."""
     try:
         with db_session.begin():
-            _, cc_pair_ids = lock_connector_for_delete(db_session, connector_id)
-            if cc_pair_ids and only_unpaired:
-                raise OnyxError(
-                    OnyxErrorCode.CONFLICT, "Connector is paired, nothing removed"
-                )
             result = delete_connector(
                 db_session=db_session,
                 connector_id=connector_id,

@@ -82,25 +82,23 @@ def fetch_connector_by_id(connector_id: int, db_session: Session) -> Connector |
     return connector
 
 
-def lock_connector_for_delete(
-    db_session: Session, connector_id: int
-) -> tuple[Connector | None, set[int]]:
-    """Lock the row inside the caller's transaction, so a pair being inserted
-    concurrently either shows up in the returned ids or waits behind the delete
-    and fails on the missing connector."""
+def delete_connector_if_unpaired(db_session: Session, connector_id: int) -> bool:
+    """Remove a connector nobody has paired, inside the caller's transaction.
+    The row lock makes a pair being inserted concurrently either show up here
+    or wait behind the delete and fail on the missing connector. Returns
+    whether the row is gone."""
     connector = db_session.execute(
         select(Connector).where(Connector.id == connector_id).with_for_update()
     ).scalar_one_or_none()
     if connector is None:
-        return None, set()
-    cc_pair_ids = set(
-        db_session.scalars(
-            select(ConnectorCredentialPair.id).where(
-                ConnectorCredentialPair.connector_id == connector_id
-            )
-        )
+        return True
+    paired = db_session.scalar(
+        select(exists().where(ConnectorCredentialPair.connector_id == connector_id))
     )
-    return connector, cc_pair_ids
+    if paired:
+        return False
+    db_session.delete(connector)
+    return True
 
 
 def fetch_ingestion_connector_by_name(

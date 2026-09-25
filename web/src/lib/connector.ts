@@ -86,41 +86,15 @@ export async function updateConnector<T>(
   return await response.json();
 }
 
-// The backend commits the connector row before it validates the credential, so
-// a link the server rejected (4xx) leaves an unpaired row that keeps the name
-// taken. A 409 means the pair already exists and a 5xx may have paired it.
-// Returns whether the row is gone.
-export async function discardConnectorAfterFailedLink(
-  connectorId: number,
-  linkStatus: number
-): Promise<boolean> {
-  if (linkStatus < 400 || linkStatus >= 500 || linkStatus === 409) {
-    return false;
-  }
-  try {
-    return (
-      (await deleteConnector(connectorId, { onlyUnpaired: true })) === null
-    );
-  } catch {
-    // The link error is what the user needs to see, not a failed cleanup.
-    return false;
-  }
-}
-
 export async function deleteConnector(
-  connectorId: number,
-  { onlyUnpaired = false }: { onlyUnpaired?: boolean } = {}
+  connectorId: number
 ): Promise<string | null> {
-  const query = onlyUnpaired ? "?only_unpaired=true" : "";
-  const response = await fetch(
-    `/api/manage/admin/connector/${connectorId}${query}`,
-    {
-      method: "DELETE",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    }
-  );
+  const response = await fetch(`/api/manage/admin/connector/${connectorId}`, {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
   if (response.ok) {
     return null;
   }

@@ -62,10 +62,7 @@ import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
 import { useOAuthDetails } from "@/lib/connectors/hooks";
 import { Button, Text as OpalText } from "@opal/components";
 import { Content, Section, SettingsLayouts, toast } from "@opal/layouts";
-import {
-  deleteConnector,
-  discardConnectorAfterFailedLink,
-} from "@/lib/connector";
+import { deleteConnector } from "@/lib/connector";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
 import { SvgArrowExchange, SvgKey, SvgSimpleLoader } from "@opal/icons";
 import { useTranslations } from "next-intl";
@@ -499,13 +496,6 @@ export default function AddConnector({
                 onSuccess();
               } else {
                 const errorData = await linkCredentialResponse.json();
-                const discarded = await discardConnectorAfterFailedLink(
-                  response.id,
-                  linkCredentialResponse.status
-                );
-                if (discarded && connectorIdRef.current === response.id) {
-                  connectorIdRef.current = null;
-                }
 
                 if (!timeoutErrorHappenedRef.current) {
                   // Only show error if timeout didn't happen
@@ -538,10 +528,7 @@ export default function AddConnector({
             );
 
             if (connectorIdRef.current) {
-              // The link may still land after the timeout. Never cascade it.
-              await deleteConnector(connectorIdRef.current, {
-                onlyUnpaired: true,
-              });
+              await deleteConnector(connectorIdRef.current);
               connectorIdRef.current = null;
             }
           }
