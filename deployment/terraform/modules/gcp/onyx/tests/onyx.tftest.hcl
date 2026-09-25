@@ -170,8 +170,8 @@ run "deletion_protection_is_on_everywhere_by_default" {
   command = plan
 
   assert {
-    condition     = alltrue(values(local.deletion_protection)) && length(local.deletion_protection) == 5
-    error_message = "The cluster, database, cache, bucket and policy must all be protected by default."
+    condition     = alltrue(values(local.deletion_protection)) && length(local.deletion_protection) == 6
+    error_message = "The cluster, database, cache, bucket, policy and L7 address must all be protected by default."
   }
 }
 
@@ -317,6 +317,90 @@ run "turning_off_redis_and_cloud_armor_drops_them" {
     ])
     error_message = "With nothing created there is nothing to publish."
   }
+}
+
+run "l7_ingress_is_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(module.l7_ingress) == 0
+    error_message = "The L7 load balancer resources must be opt-in, because the chart's LoadBalancer serves until DNS moves."
+  }
+
+  assert {
+    condition     = !contains(keys(google_project_service.this), "certificatemanager.googleapis.com")
+    error_message = "Certificate Manager is only needed with the L7 load balancer."
+  }
+
+  assert {
+    condition = alltrue([
+      output.l7_ip_address == null,
+      output.l7_address_name == null,
+      output.l7_certificate_map_name == null,
+      output.l7_dns_authorization_records == null,
+      output.l7_certificate_names == null,
+    ])
+    error_message = "With nothing created there is nothing to publish."
+  }
+}
+
+run "l7_ingress_builds_the_gateway_resources_behind_the_apis" {
+  command = plan
+
+  variables {
+    enable_l7_ingress = true
+    l7_domains        = ["onyx.example.com"]
+  }
+
+  assert {
+    condition     = length(module.l7_ingress) == 1
+    error_message = "enable_l7_ingress should create the module."
+  }
+
+  assert {
+    condition     = contains(keys(google_project_service.this), "certificatemanager.googleapis.com") && length(google_project_service.this) == 11
+    error_message = "The L7 load balancer needs Certificate Manager on top of the default APIs."
+  }
+
+  assert {
+    condition     = output.l7_address_name == "onyx-default-l7" && output.l7_certificate_map_name == "onyx-default-l7"
+    error_message = "The outputs should name the address and map the Gateway references."
+  }
+
+  assert {
+    condition     = keys(output.l7_certificate_names) == ["onyx.example.com"]
+    error_message = "Each l7_domains entry should get a certificate."
+  }
+
+  assert {
+    condition     = output.cloud_armor_policy_name == "onyx-default-waf"
+    error_message = "The GCPBackendPolicy needs the Cloud Armor policy name next to the L7 outputs."
+  }
+}
+
+run "l7_ingress_with_apis_managed_elsewhere_enables_nothing" {
+  command = plan
+
+  variables {
+    enable_project_apis = false
+    enable_l7_ingress   = true
+    l7_domains          = ["onyx.example.com"]
+  }
+
+  assert {
+    condition     = length(google_project_service.this) == 0 && length(module.l7_ingress) == 1
+    error_message = "enable_project_apis = false must enable nothing, even with the L7 load balancer on."
+  }
+}
+
+run "rejects_l7_ingress_without_a_domain" {
+  command = plan
+
+  variables {
+    enable_l7_ingress = true
+  }
+
+  expect_failures = [var.l7_domains]
 }
 
 run "the_project_apis_are_enabled_by_default" {
