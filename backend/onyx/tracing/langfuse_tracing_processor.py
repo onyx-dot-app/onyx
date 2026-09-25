@@ -350,9 +350,11 @@ class LangfuseTracingProcessor(TracingProcessor):
                     update_kwargs["cost_details"] = {"total": cost}
                 generation_metadata: dict[str, Any] = {}
                 if data.reasoning:
-                    generation_metadata["reasoning"] = data.reasoning
+                    generation_metadata["reasoning"] = self._mask_if_enabled(
+                        data.reasoning
+                    )
                 if data.tools:
-                    generation_metadata["tools"] = data.tools
+                    generation_metadata["tools"] = self._mask_if_enabled(data.tools)
                 if generation_metadata:
                     update_kwargs["metadata"] = generation_metadata
                 if data.time_to_first_action_seconds is not None:
