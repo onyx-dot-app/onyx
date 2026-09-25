@@ -74,6 +74,7 @@ METADATA_DRIVE = "drive"
 METADATA_PATH = "path"
 MAX_USER_LISTING_PAGES = 100_000
 MAX_DRIVE_DELTA_PAGES = 100_000
+DRIVE_ENTITY_PREFIX = "drive:"
 
 
 def hierarchy_item_id(drive_id: str, item_id: str) -> str:
@@ -159,7 +160,7 @@ def _entity_failure(
 ) -> ConnectorFailure:
     identifier = user.user_principal_name if isinstance(user, OneDriveUser) else user
     return ConnectorFailure(
-        failed_entity=EntityFailure(entity_id=identifier),
+        failed_entity=EntityFailure(entity_id=f"{DRIVE_ENTITY_PREFIX}{identifier}"),
         failure_message=message,
         exception=error,
     )

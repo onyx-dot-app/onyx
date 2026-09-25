@@ -212,6 +212,8 @@ def test_onedrive_explicit_user_failure_is_reported() -> None:
 
     assert len(output) == 1
     assert isinstance(output[0], ConnectorFailure)
+    assert output[0].failed_entity is not None
+    assert output[0].failed_entity.entity_id == "drive:missing@example.com"
     assert checkpoint.configured_user_index == 1
 
 

@@ -2050,7 +2050,7 @@
       },
       "errorsModal": {
         "columns": {
-          "documentId": "文档 ID",
+          "documentId": "失败 ID",
           "errorMessage": "错误信息",
           "status": "状态",
           "time": "时间"
