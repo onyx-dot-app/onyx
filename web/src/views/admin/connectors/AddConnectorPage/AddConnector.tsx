@@ -499,11 +499,11 @@ export default function AddConnector({
                 onSuccess();
               } else {
                 const errorData = await linkCredentialResponse.json();
-                await discardConnectorAfterFailedLink(
+                const discarded = await discardConnectorAfterFailedLink(
                   response.id,
                   linkCredentialResponse.status
                 );
-                if (connectorIdRef.current === response.id) {
+                if (discarded && connectorIdRef.current === response.id) {
                   connectorIdRef.current = null;
                 }
 
