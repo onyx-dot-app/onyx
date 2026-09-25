@@ -156,6 +156,7 @@ export function useFoldedGroups({
     latest.current = { sections, defaultOpen };
   });
   useEffect(() => {
+    if (!isOpen) return;
     const snapshot = new Map<string, boolean>();
     for (const group of latest.current.sections) {
       if (!group.foldable || group.title === undefined) continue;
