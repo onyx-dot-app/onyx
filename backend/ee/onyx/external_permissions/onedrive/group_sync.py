@@ -1,6 +1,7 @@
 from collections.abc import Generator
 
 from ee.onyx.db.external_perm import ExternalUserGroup
+from ee.onyx.external_permissions.microsoft_utils.entra_groups import normalize_email
 from ee.onyx.external_permissions.utils import credential_json
 from onyx.connectors.microsoft_utils.entra import (
     EntraDirectoryObjectPage,
@@ -59,7 +60,7 @@ def _group_members(connector: OneDriveConnector, group: EntraGroup) -> list[str]
                 continue
             email: str | None = member.user_principal_name or member.mail
             if email:
-                emails.add(email.lower())
+                emails.add(normalize_email(email).lower())
             if len(emails) > MAX_GROUP_MEMBERS:
                 raise ValueError(
                     f"Entra group `{group.id}` exceeds the member count limit."

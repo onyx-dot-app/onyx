@@ -35,7 +35,7 @@ def _connector() -> MagicMock:
                     id="user-1",
                     **{
                         "@odata.type": "#microsoft.graph.user",
-                        "userPrincipalName": "FIRST@EXAMPLE.COM",
+                        "userPrincipalName": "FIRST@EXAMPLE.onmicrosoft.COM",
                     },
                 )
             ],
