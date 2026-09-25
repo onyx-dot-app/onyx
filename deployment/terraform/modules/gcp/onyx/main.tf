@@ -111,6 +111,19 @@ locals {
   }
 }
 
+# The workspace name goes into every resource name, and "<name>-redis-<workspace>"
+# must fit Memorystore's 40 characters with a name of up to 24. A precondition
+# fails the plan before anything is created; a check block would only warn, and
+# the apply would then stop part-way when Memorystore rejects the name.
+resource "terraform_data" "workspace_name" {
+  lifecycle {
+    precondition {
+      condition     = can(regex("^[a-z]([a-z0-9-]{0,7}[a-z0-9])?$", local.workspace))
+      error_message = "The Terraform workspace name must be 1-9 characters of lowercase letters, digits and hyphens, start with a letter and not end with a hyphen. It goes into every resource name, and Memorystore caps \"<name>-redis-<workspace>\" at 40 characters."
+    }
+  }
+}
+
 resource "google_project_service" "this" {
   for_each = local.project_apis
 

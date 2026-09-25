@@ -241,8 +241,56 @@ run "redis_and_cloud_armor_are_on_by_default" {
   }
 
   assert {
-    condition     = output.redis_url_scheme == "redis"
-    error_message = "The cache is plaintext by default, so the scheme is redis."
+    condition     = output.redis_url_scheme == "rediss"
+    error_message = "The cache serves TLS by default, so the scheme is rediss."
+  }
+
+  assert {
+    condition     = one(module.redis[*].redis_url_scheme) == "rediss"
+    error_message = "The composition must turn on transit encryption in the redis module by default."
+  }
+}
+
+run "the_server_ca_certificates_are_published" {
+  command = plan
+
+  override_module {
+    target = module.redis
+    outputs = {
+      instance_id         = "projects/example-project/locations/us-east1/instances/onyx-redis-default"
+      host                = "10.0.0.3"
+      port                = 6378
+      auth_string         = "not-a-real-auth-string"
+      server_ca_certs     = ["redis-ca-pem"]
+      current_location_id = "us-east1-b"
+      redis_url_scheme    = "rediss"
+    }
+  }
+
+  override_module {
+    target = module.postgres
+    outputs = {
+      server_ca_cert = "postgres-ca-pem"
+    }
+  }
+
+  assert {
+    condition     = output.redis_server_ca_certs == ["redis-ca-pem"]
+    error_message = "The chart's redisTls needs the cache's CA certificates."
+  }
+
+  assert {
+    condition     = output.postgres_server_ca_cert == "postgres-ca-pem"
+    error_message = "The chart's postgresTls needs the database's CA certificate."
+  }
+}
+
+run "the_default_workspace_name_is_accepted" {
+  command = plan
+
+  assert {
+    condition     = local.redis_name == "onyx-redis-default"
+    error_message = "The workspace guard must not reject the default workspace."
   }
 }
 
@@ -264,6 +312,7 @@ run "turning_off_redis_and_cloud_armor_drops_them" {
       output.redis_host == null,
       output.redis_port == null,
       output.redis_url_scheme == null,
+      output.redis_server_ca_certs == null,
       output.cloud_armor_policy_name == null,
     ])
     error_message = "With nothing created there is nothing to publish."

@@ -108,6 +108,17 @@ output "redis_url_scheme" {
   value       = one(module.redis[*].redis_url_scheme)
 }
 
+# Public CA certificates, not secrets, so neither output is sensitive.
+output "redis_server_ca_certs" {
+  description = "PEM server CA certificates of the cache, null when enable_redis is false. Mount them through the chart's redisTls to verify the server."
+  value       = one(module.redis[*].server_ca_certs)
+}
+
+output "postgres_server_ca_cert" {
+  description = "PEM CA certificate of the database. Mount it through the chart's postgresTls to verify the server (verify-ca)."
+  value       = module.postgres.server_ca_cert
+}
+
 output "cloud_armor_policy_name" {
   description = "Cloud Armor policy to name in a BackendConfig or GCPBackendPolicy, null when disabled"
   value       = try(module.cloud_armor[0].policy_name, null)
