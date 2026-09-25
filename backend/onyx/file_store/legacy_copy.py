@@ -11,6 +11,7 @@ Usage: python -m onyx.file_store.legacy_copy [--watch | --retire]
 import argparse
 import tempfile
 import time
+from collections import defaultdict
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
@@ -192,17 +193,33 @@ def _put_new_object(
         raise
 
 
-# A file record is what makes an object live, in any tenant.
-def _keys_with_records(bucket: str, keys: list[str]) -> set[str]:
+# A file record is what makes an object live. A key names its tenant right
+# after the prefix, so a page costs one query per tenant it holds. A key that
+# names no known tenant is looked up everywhere.
+def _keys_with_records(bucket: str, keys: list[str], tenants: list[str]) -> set[str]:
+    known = set(tenants)
+    by_tenant: dict[str, list[str]] = defaultdict(list)
+    unplaced: list[str] = []
+    for key in keys:
+        parts = key.split("/")
+        if len(parts) > 2 and parts[1] in known:
+            by_tenant[parts[1]].append(key)
+        else:
+            unplaced.append(key)
     found: set[str] = set()
-    for tenant_id in get_all_tenant_ids():
+    for tenant_id in tenants:
+        wanted = by_tenant.get(tenant_id, []) + unplaced
+        if not wanted:
+            continue
         with get_session_with_tenant(tenant_id=tenant_id) as db_session:
-            found |= get_object_keys_with_records(bucket, keys, db_session)
+            found |= get_object_keys_with_records(bucket, wanted, db_session)
     return found
 
 
-def _key_has_record(bucket: str, key: str) -> bool:
-    return key in _keys_with_records(bucket, [key])
+def _key_has_record(bucket: str, key: str, tenants: list[str] | None = None) -> bool:
+    if tenants is None:
+        tenants = get_all_tenant_ids()
+    return key in _keys_with_records(bucket, [key], tenants)
 
 
 def copy_object(
@@ -268,10 +285,14 @@ def copy_object(
 
 
 def _copy_object_logged(
-    source: "S3Client", target: "S3Client", bucket: str, key: str
+    source: "S3Client",
+    target: "S3Client",
+    bucket: str,
+    key: str,
+    has_record: Callable[[str, str], bool],
 ) -> tuple[CopyOutcome, int]:
     try:
-        return copy_object(source, target, bucket, key)
+        return copy_object(source, target, bucket, key, has_record)
     except Exception:
         logger.exception("Failed to copy %s/%s", bucket, key)
         return CopyOutcome.FAILED, 0
@@ -342,18 +363,25 @@ def run_pass(
     """Copy the objects of the given buckets that a file record points at, or
     only those modified since the given time."""
     stats = PassStats()
+    tenants = get_all_tenant_ids()
     paginator = source.get_paginator("list_objects_v2")
     with ThreadPoolExecutor(max_workers=workers) as pool:
         for bucket in buckets:
             stats.failed += _resync_out_of_sync(source, target, bucket)
-            copy_key = partial(_copy_object_logged, source, target, bucket)
+            copy_key = partial(
+                _copy_object_logged,
+                source,
+                target,
+                bucket,
+                has_record=partial(_key_has_record, tenants=tenants),
+            )
             for page in paginator.paginate(Bucket=bucket):
                 listed = [
                     obj["Key"]
                     for obj in page.get("Contents", [])
                     if modified_since is None or obj["LastModified"] >= modified_since
                 ]
-                with_records = _keys_with_records(bucket, listed)
+                with_records = _keys_with_records(bucket, listed, tenants)
                 keys = [key for key in listed if key in with_records]
                 stats.unreferenced += len(listed) - len(keys)
                 if not keys:
