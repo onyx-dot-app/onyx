@@ -97,68 +97,11 @@ Call `signal.cancel()` from the request's Stop handler to interrupt generation.
 Cancellation raises `AgentCancelled`. The operation remains tracked until transport cleanup finishes.
 Each generation owns its stream accumulator, parsing state, and deadline.
 
-## Agent with tools
+## Agents
 
 An agent adds history, tool execution, and iteration to the same client.
 Tool definitions reach the model. Executable callbacks belong to the agent.
-
-```python
-from onyx.agents.runtime import Agent
-from onyx.agents.tools import AgentTool
-from onyx.llm.models import ToolResult
-
-
-def make_agent(client: LLM, flow: LLMFlow) -> Agent:
-    echo = AgentTool(
-        name="echo",
-        description="Return the supplied text.",
-        parameters={
-            "type": "object",
-            "properties": {"text": {"type": "string"}},
-            "required": ["text"],
-        },
-        execute=lambda invocation: ToolResult(
-            content=str(invocation.arguments["text"])
-        ),
-    )
-    return Agent(
-        client,
-        tools=[echo],
-        execution=GenerationContext(flow=flow),
-    )
-```
-
-Call `agent.start(background=False, messages=[UserMessage(content="Echo hello")], max_steps=2)` to generate, execute tools, and continue.
-It returns a `Run` handle at completion or suspension. Call `run.result()` to wait for the final answer.
-Use `agent.start(...)` to receive a `Run` handle; call `run.cancel()` to cancel that execution.
-Tools receive the same cancellation signal and must cooperate with interruption.
-See [Agent execution](../agents/README.md) for snapshots, child execution, and lifecycle behavior.
-
-## Context hooks
-
-A step hook prepares messages and generation settings for the next model call.
-It receives an isolated `StepInput` and returns a `PreparedStep`.
-
-```python
-from onyx.agents.models import PreparedStep, StepInput
-from onyx.llm.models import GenerationOptions
-
-
-def prepare_step(state: StepInput) -> PreparedStep:
-    return PreparedStep(
-        tools=[] if state.step.is_last else [echo],
-        options=GenerationOptions(max_tokens=1000),
-    )
-
-
-agent = Agent(client, prepare_step=prepare_step)
-```
-
-The example uses an existing client and executable `echo` tool.
-Onyx feature hooks use `chat/llm_step.py` for attachments, reminders, and cache hints.
-`chat/prompt_utils.py` assembles instructions and file context. Agent owns compaction and the input budget.
-Chat citation mapping stays in `chat/citation_utils.py`.
-The helper returns shared messages. Ordinary text calls can construct messages directly.
+See [Agent execution](../agents/README.md) for tools, context hooks, cancellation, and run lifecycle.
 
 ## Provider boundary
 

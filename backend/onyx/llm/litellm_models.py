@@ -1,15 +1,10 @@
 """LiteLLM request messages, response envelopes, and streaming chunks."""
 
-from enum import Enum
 from typing import Literal
 
 from pydantic import BaseModel, Field, JsonValue
 
 from onyx.llm.models import AnyThinkingBlock, ContentPart, MessageRole, Usage
-
-
-class ToolType(str, Enum):
-    FUNCTION = "function"
 
 
 class ToolFunctionCall(BaseModel):
@@ -20,7 +15,7 @@ class ToolFunctionCall(BaseModel):
 
 
 class ToolCall(BaseModel):
-    type: Literal[ToolType.FUNCTION] = ToolType.FUNCTION
+    type: Literal["function"] = "function"
     id: str
     function: ToolFunctionCall
 
@@ -67,14 +62,14 @@ class FunctionCall(BaseModel):
 
 class ChatCompletionMessageToolCall(BaseModel):
     id: str
-    type: Literal[ToolType.FUNCTION] = ToolType.FUNCTION
+    type: Literal["function"] = "function"
     function: FunctionCall
 
 
 class ChatCompletionDeltaToolCall(BaseModel):
     id: str | None = None
     index: int = 0
-    type: Literal[ToolType.FUNCTION] = ToolType.FUNCTION
+    type: Literal["function"] = "function"
     function: FunctionCall | None = None
 
 

@@ -952,3 +952,51 @@ def test_text_update_payload_does_not_grow_with_accumulated_output() -> None:
     assert len({event.model_dump_json() for event in updates}) == 1
     assert len(updates[0].model_dump_json()) < 200
     assert accumulator.message.text == "x" * 100_000 + "next" * 10
+
+
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize(
+    "payload, expected_blocks",
+    [
+        (None, None),
+        (
+            {
+                "thinking_blocks": [
+                    "malformed",
+                    None,
+                    {"thinking": None, "signature": "signed"},
+                    {"type": "redacted_thinking", "data": None},
+                ]
+            },
+            [
+                {"type": "thinking", "thinking": "", "signature": "signed"},
+                {"type": "redacted_thinking", "data": ""},
+            ],
+        ),
+    ],
+)
+def test_provider_payload_tolerance(
+    stream: bool,
+    payload: dict[str, JsonValue] | None,
+    expected_blocks: list[dict[str, JsonValue]] | None,
+) -> None:
+    data = {
+        "id": "response",
+        "created": 123,
+        "choices": [{"delta" if stream else "message": payload}],
+    }
+    # Exercise the adapter with the payload before LiteLLM normalizes it.
+    if stream:
+        with patch.object(LiteLLMModelResponseStream, "model_dump", return_value=data):
+            result = from_litellm_model_response_stream(LiteLLMModelResponseStream())
+        content = result.choice.delta.content
+        blocks = result.choice.delta.thinking_blocks
+    else:
+        with patch.object(LiteLLMModelResponse, "model_dump", return_value=data):
+            response = from_litellm_model_response(LiteLLMModelResponse())
+        content = response.choice.message.content
+        blocks = response.choice.message.thinking_blocks
+    assert content is None
+    assert (
+        [block.model_dump() for block in blocks] if blocks else None
+    ) == expected_blocks

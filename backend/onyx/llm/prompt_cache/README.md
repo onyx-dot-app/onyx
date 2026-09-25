@@ -20,8 +20,8 @@ The prompt caching framework provides a unified interface for enabling prompt ca
 ### Basic Usage
 
 ```python
-from onyx.llm.prompt_cache import process_with_prompt_cache
-from onyx.llm.models import SystemMessage, UserMessage
+from onyx.llm.prompt_cache.processor import process_with_prompt_cache
+from onyx.llm.litellm_models import SystemMessage, UserMessage
 
 # Assume you have an LLM instance with a config property
 # llm = get_your_llm_instance()
@@ -42,10 +42,10 @@ processed_prompt, cache_metadata = process_with_prompt_cache(
     suffix=suffix,
     continuation=False,
 )
-
-# Make LLM call with processed prompt
-response = llm.invoke(processed_prompt)
 ```
+
+`processed_prompt` contains provider messages for the raw client interface.
+Application generation uses shared messages; see [Language model client](../README.md).
 
 ### Using String Inputs
 
@@ -60,8 +60,6 @@ processed_prompt, cache_metadata = process_with_prompt_cache(
     suffix=suffix,
     continuation=False,
 )
-
-response = llm.invoke(processed_prompt)
 ```
 
 ### Continuation Flag

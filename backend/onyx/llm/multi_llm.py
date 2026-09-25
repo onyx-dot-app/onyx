@@ -83,7 +83,6 @@ from onyx.llm.model_capabilities import (
     anthropic_uses_adaptive_thinking,
     find_model_obj,
     gemini_lowest_thinking_level_is_low,
-    get_llm_max_output_tokens,
     get_model_map,
     is_true_openai_model,
     model_is_reasoning_model,
@@ -640,11 +639,6 @@ class LitellmLLM(LLM):
         reasoning_effort_max: ReasoningEffort | None = None,
         supports_images: bool | None = None,
     ) -> None:
-        # Bound idle socket reads. Active generation may continue while chunks arrive.
-        self._timeout = LLM_SOCKET_READ_TIMEOUT
-        if self._timeout <= 0:
-            raise ValueError("Provider socket timeout must be positive")
-
         self._temperature = GEN_AI_TEMPERATURE if temperature is None else temperature
 
         self._model_provider = model_provider
@@ -748,11 +742,7 @@ class LitellmLLM(LLM):
             value is not None for value in vision_values
         ):
             supports_images = any(vision_values)
-        output_identity = next((name for name, entry in known if entry), model_name)
         self._supports_images = supports_images
-        self._max_output_tokens = get_llm_max_output_tokens(
-            model_map, output_identity, model_provider
-        )
 
     def _track_llm_cost(self, usage: Usage) -> None:
         """
@@ -1354,9 +1344,8 @@ class LitellmLLM(LLM):
             api_base=self._api_base,
             api_version=self._api_version,
             deployment_name=self._deployment_name,
-            custom_config=copy.deepcopy(self._custom_config),
+            custom_config=self._custom_config,
             supports_images=self._supports_images,
-            max_output_tokens=self._max_output_tokens,
             max_input_tokens=self._max_input_tokens,
             reasoning_effort_default=self._reasoning_effort_default,
             reasoning_effort_user_default=self._reasoning_effort_user_default,

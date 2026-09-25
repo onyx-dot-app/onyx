@@ -3,10 +3,11 @@
 import json
 import re
 import uuid
+from collections.abc import Sequence
 from html import unescape
 from typing import Any
 
-from onyx.llm.models import ToolCall
+from onyx.llm.models import ToolCall, ToolDefinition
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
 from onyx.utils.text_processing import find_all_json_objects
@@ -114,7 +115,7 @@ def _looks_like_xml_tool_call_payload(text: str | None) -> bool:
 
 def extract_tool_calls_from_response_text(
     response_text: str | None,
-    tool_definitions: list[dict],
+    tool_definitions: Sequence[ToolDefinition],
 ) -> list[ToolCall]:
     """Extract tool calls from LLM response text by matching JSON against tool definitions.
 
@@ -133,17 +134,7 @@ def extract_tool_calls_from_response_text(
     if not response_text or not tool_definitions:
         return []
 
-    # Build a map of tool names to their definitions
-    tool_name_to_def: dict[str, dict] = {}
-    for tool_def in tool_definitions:
-        if tool_def.get("type") == "function" and "function" in tool_def:
-            func_def = tool_def["function"]
-            tool_name = func_def.get("name")
-            if tool_name:
-                tool_name_to_def[tool_name] = func_def
-
-    if not tool_name_to_def:
-        return []
+    tool_name_to_def = {tool.name: tool for tool in tool_definitions}
 
     matched_tool_calls: list[tuple[str, dict[str, Any]]] = []
     # Find all JSON objects in the response text
@@ -191,7 +182,7 @@ def extract_tool_calls_from_response_text(
 
 def _extract_xml_tool_calls_from_response_text(
     response_text: str,
-    tool_name_to_def: dict[str, dict],
+    tool_name_to_def: dict[str, ToolDefinition],
 ) -> list[tuple[str, dict[str, Any]]]:
     """Extract XML-style tool calls from response text.
 
@@ -274,7 +265,7 @@ def _resolve_tool_arguments(obj: dict[str, Any]) -> dict[str, Any] | None:
 
 def _try_match_json_to_tool(
     json_obj: dict[str, Any],
-    tool_name_to_def: dict[str, dict],
+    tool_name_to_def: dict[str, ToolDefinition],
 ) -> tuple[str, dict[str, Any]] | None:
     """Try to match a JSON object to a tool definition.
 
@@ -316,15 +307,17 @@ def _try_match_json_to_tool(
 
     # Format 4: Check if the JSON object matches a tool's parameter schema
     for tool_name, func_def in tool_name_to_def.items():
-        params = func_def.get("parameters", {})
+        params = func_def.parameters
         properties = params.get("properties", {})
         required = params.get("required", [])
 
+        if not isinstance(properties, dict) or not isinstance(required, list):
+            continue
         if not properties:
             continue
 
         # Check if all required parameters are present (empty required = all optional)
-        if all(req in json_obj for req in required):
+        if all(isinstance(req, str) and req in json_obj for req in required):
             # Check if any of the tool's properties are in the JSON object
             matching_props = [prop for prop in properties if prop in json_obj]
             if matching_props:
@@ -338,7 +331,7 @@ def _try_match_json_to_tool(
 def _is_nested_arguments_duplicate(
     previous_json_obj: dict[str, Any],
     current_json_obj: dict[str, Any],
-    tool_name_to_def: dict[str, dict],
+    tool_name_to_def: dict[str, ToolDefinition],
 ) -> bool:
     """Detect when current object is the nested args object from previous tool call."""
     extracted_args = _extract_nested_arguments_obj(previous_json_obj, tool_name_to_def)
@@ -347,7 +340,7 @@ def _is_nested_arguments_duplicate(
 
 def _extract_nested_arguments_obj(
     json_obj: dict[str, Any],
-    tool_name_to_def: dict[str, dict],
+    tool_name_to_def: dict[str, ToolDefinition],
 ) -> dict[str, Any] | None:
     # Format 1: {"name": "...", "arguments": {...}} or {"name": "...", "parameters": {...}}
     if "name" in json_obj and json_obj["name"] in tool_name_to_def:

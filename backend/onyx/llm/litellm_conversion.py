@@ -2,10 +2,17 @@
 
 import json
 from collections.abc import Generator, Iterator, Sequence
-from typing import TYPE_CHECKING, Protocol, overload, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, JsonValue, TypeAdapter, ValidationError
+from pydantic import (
+    BaseModel,
+    Field,
+    JsonValue,
+    TypeAdapter,
+    ValidationError,
+    field_validator,
+)
 
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLMConfig
@@ -116,6 +123,38 @@ class _ProviderChoice(BaseModel):
     index: int = 0
     delta: _ProviderDelta = Field(default_factory=_ProviderDelta)
     message: ResponseMessage = Field(default_factory=ResponseMessage)
+
+    @field_validator("delta", "message", mode="before")
+    @classmethod
+    def normalize_payload(cls, value: object) -> object:
+        if value is None:
+            return {}
+        if not isinstance(value, dict):
+            return value
+        thinking_blocks = value.get("thinking_blocks")
+        if not isinstance(thinking_blocks, list) or not thinking_blocks:
+            return value
+        # Providers can return incomplete thinking blocks.
+        blocks: list[dict[str, object]] = []
+        for block in thinking_blocks:
+            if not isinstance(block, dict):
+                logger.warning(
+                    "Dropping malformed thinking block of type %s", type(block).__name__
+                )
+                continue
+            if block.get("type") == "redacted_thinking":
+                blocks.append(
+                    {"type": "redacted_thinking", "data": block.get("data") or ""}
+                )
+            else:
+                blocks.append(
+                    {
+                        "type": "thinking",
+                        "thinking": block.get("thinking") or "",
+                        "signature": block.get("signature"),
+                    }
+                )
+        return {**value, "thinking_blocks": blocks or None}
 
 
 class _ProviderResponse(BaseModel):
@@ -258,22 +297,6 @@ def serialize_request(
             raise TypeError("Prompt caching must preserve the message list")
         messages = prepared
     return messages
-
-
-@overload
-def format_provider_message(message: SystemMessage) -> WireSystemMessage: ...
-
-
-@overload
-def format_provider_message(message: UserMessage) -> WireUserMessage: ...
-
-
-@overload
-def format_provider_message(message: AssistantMessage) -> WireAssistantMessage: ...
-
-
-@overload
-def format_provider_message(message: ToolResultMessage) -> ProviderToolMessage: ...
 
 
 def format_provider_message(message: Message) -> ChatCompletionMessage:
@@ -662,7 +685,7 @@ class MessageAccumulator:
 
     def end(self) -> list[GenerationEvent]:
         self.active_text = None
-        self.finish()
+        message = self.finish()
         events: list[GenerationEvent] = [
             ToolCallEndEvent(
                 content_index=pending.content_index,
@@ -670,7 +693,7 @@ class MessageAccumulator:
             )
             for pending in self.calls.values()
         ]
-        events.append(GenerationDoneEvent(message=self.message.model_copy(deep=True)))
+        events.append(GenerationDoneEvent(message=message))
         return events
 
 
@@ -688,10 +711,9 @@ def recover_tool_calls(
     )
     if not should_try:
         return message
-    definitions = serialize_tools(request.tools)
     calls = extract_tool_calls_from_response_text(
-        message.text, definitions
-    ) or extract_tool_calls_from_response_text(message.thinking, definitions)
+        message.text, request.tools
+    ) or extract_tool_calls_from_response_text(message.thinking, request.tools)
     if not calls:
         return message
     tools = {tool.name: tool for tool in request.tools}
