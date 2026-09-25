@@ -87,7 +87,8 @@ module "onyx" {
 
   # Required. A public API server with no authorized networks is open to every
   # address on the internet. The module refuses to build one unless you
-  # restrict it, make it private, or say the exposure is intended.
+  # restrict it, make it private, or say the exposure is intended. Include the
+  # address of the machine that runs terraform apply.
   master_authorized_networks = [
     { cidr_block = "203.0.113.0/24", display_name = "office" },
   ]
@@ -116,6 +117,33 @@ output "postgres_host" {
 output "redis_host" {
   value = module.onyx.redis_host
 }
+
+# The get-credentials command after the apply reads these two.
+output "cluster_name" {
+  value = module.onyx.cluster_name
+}
+
+output "location" {
+  value = module.onyx.location
+}
+
+# Public CA certificates for the chart's redisTls and postgresTls.
+output "redis_server_ca_certs" {
+  value = module.onyx.redis_server_ca_certs
+}
+
+output "postgres_server_ca_cert" {
+  value = module.onyx.postgres_server_ca_cert
+}
+```
+
+On a new project, enable two APIs before the first plan. The `gke` module
+reads the project at plan time, and that read needs Resource Manager. The
+composition enables Resource Manager too, but only at apply, which is too late:
+
+```bash
+gcloud services enable cloudresourcemanager.googleapis.com serviceusage.googleapis.com \
+  --project my-project
 ```
 
 Then:
@@ -124,6 +152,11 @@ Then:
 terraform init
 terraform apply
 ```
+
+Run the apply from a machine inside `master_authorized_networks`, or inside the
+VPC when `private_endpoint_enabled` is set. The `gke` module creates the `onyx`
+namespace and service account through the API server. From any other address
+the apply stops at those two resources.
 
 Configure the `kubernetes` provider from the module outputs, as above. Do not
 use a `data "google_container_cluster"` keyed on the cluster name: on the first
@@ -213,7 +246,7 @@ password of the `postgres` user that Cloud SQL ships.
 ### `redis`
 
 A Memorystore for Redis instance on the Private Service Access range. AUTH is
-always on. The eviction policy is `volatile-lru`, because Celery broker keys
+always on, and TLS is on by default. The eviction policy is `volatile-lru`, because Celery broker keys
 carry no TTL and an `allkeys-*` policy would drop queued tasks. RDB snapshots
 are on.
 
@@ -268,6 +301,11 @@ controller sits behind a Service of type `LoadBalancer`, which is an L4
 passthrough load balancer. That load balancer cannot carry the policy. The
 policy then protects nothing, and nothing reports it. This is the same trap as
 the Azure WAF policy without an Application Gateway.
+
+**Cloud Armor counts an API request against the API limit only.** Cloud
+Armor stops at the first rule that matches. A request under the path prefix
+matches the API rate limit rule and does not reach the global one. On AWS, WAF
+counts an API request against both limits.
 
 **Flow logs are on by default.** GCP writes them to Cloud Logging and needs no
 extra infrastructure. Azure needs a Network Watcher and a storage account, so
@@ -351,7 +389,7 @@ configMap:
   POSTGRES_PORT: "5432"
   POSTGRES_DB: "onyx"            # postgres_db_name output
   REDIS_HOST: "<redis_host output>"
-  REDIS_PORT: "6379"             # redis_port output
+  REDIS_PORT: "6378"             # redis_port output; 6378 is the TLS port
 
 auth:
   postgresql:
@@ -364,11 +402,44 @@ Set `POSTGRES_DB`. Without it, Onyx uses the `postgres` database that Cloud SQL
 ships, and the `onyx` database stays empty.
 
 Create the two secrets in the `onyx` namespace from the Terraform outputs.
-Do not put the passwords in `values.yaml`. Cloud SQL accepts only encrypted
-connections, and Onyx encrypts by default, so no TLS setting is necessary. With
-`redis_transit_encryption_enabled = true`, also set `REDIS_PORT: "6378"` and
-the chart's `redisTls` values, with the CA from the redis module's
-`server_ca_certs` output.
+Do not put the passwords in `values.yaml`.
+
+**Redis uses TLS by default.** `redis_transit_encryption_enabled` is `true`, so
+Memorystore serves TLS on port 6378 only. Turn on the chart's `redisTls`. It
+sets `REDIS_SSL=true` and makes Onyx verify the server against the CA:
+
+```bash
+terraform output -json redis_server_ca_certs | jq -r '.[]' > redis-ca.crt
+kubectl -n onyx create configmap onyx-redis-ca --from-file=ca.crt=redis-ca.crt
+```
+
+```yaml
+redisTls:
+  enabled: true
+  caConfigMapName: onyx-redis-ca
+  caKey: ca.crt
+```
+
+The file holds every CA in the output, so a Memorystore CA rotation does not
+break the connection. Without `redisTls`, set `REDIS_SSL: "true"` in
+`configMap`. Onyx then encrypts, but does not verify the server.
+
+Cloud SQL accepts only encrypted connections, and Onyx encrypts by default, so
+Postgres needs no TLS setting. To also verify the server, turn on the chart's
+`postgresTls` with the `postgres_server_ca_cert` output:
+
+```bash
+terraform output -raw postgres_server_ca_cert > postgres-ca.crt
+kubectl -n onyx create configmap onyx-postgres-ca --from-file=ca.crt=postgres-ca.crt
+```
+
+```yaml
+postgresTls:
+  enabled: true
+  sslMode: verify-ca
+  caConfigMapName: onyx-postgres-ca
+  caKey: ca.crt
+```
 
 ### 4. Send the document index to its own node pool
 
@@ -390,6 +461,45 @@ opensearch:
 Set `index_node_pool_enabled = false` to run the index on the main pool and
 skip this.
 
+### 5. Optional: run the model servers on the GPU pool
+
+`enable_gpu_node_pool = true` only adds the pool. It does not move a model
+server. The pool is tainted `nvidia.com/gpu=present:NoSchedule` and labelled
+`onyx.app/gpu=true`, so a pod lands there only when it asks. GKE installs the
+driver and the device plugin. The model server image already carries CUDA:
+
+```yaml
+inferenceCapability:
+  nodeSelector:
+    onyx.app/gpu: "true"
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Equal
+      value: present
+      effect: NoSchedule
+  resources:
+    limits:
+      nvidia.com/gpu: 1
+
+indexCapability:
+  nodeSelector:
+    onyx.app/gpu: "true"
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Equal
+      value: present
+      effect: NoSchedule
+  resources:
+    limits:
+      nvidia.com/gpu: 1
+```
+
+Each GPU goes to one pod. The composition's GPU pool is one node with one GPU,
+so these values need two GPUs and one pod stays pending. Give the GPU to one
+model server only, or use the `gke` module with `gpu_accelerator_count = 2`.
+Keep the CPU and memory requests and limits from the chart defaults when you
+set `resources`, because the chart replaces the whole block.
+
 ## Testing
 
 Every module has a `terraform test` suite that plans it against a mocked
@@ -410,7 +520,8 @@ modules work against GCP. Only an apply does that.
 - The bucket has uniform access and enforced public access prevention, so no
   object can become public.
 - The database and cache have private IPs only. The database refuses
-  unencrypted connections. The cache always requires AUTH.
+  unencrypted connections. The cache always requires AUTH and serves TLS by
+  default.
 - Nodes have no public IPs, run as a dedicated service account with the
   minimum roles, and use shielded VMs. Pods see only their own identity through
   the GKE metadata server.
@@ -420,3 +531,6 @@ modules work against GCP. Only an apply does that.
 - The database will not be built without a password of at least 8 characters.
 - `deletion_protection` is on by default for the cluster, database, cache,
   bucket and Cloud Armor policy. Set it to `false` and apply before a destroy.
+- For a record of who reads the bucket, turn on Cloud Audit Logs Data Access
+  for `storage.googleapis.com` on the project or organization. The module does
+  not configure it.
