@@ -121,7 +121,7 @@ variable "master_authorized_networks" {
     cidr_block   = string
     display_name = optional(string)
   }))
-  description = "CIDR ranges allowed to reach the API server. This is the analogue of the AWS module's cluster_endpoint_public_access_cidrs and the Azure module's api_server_authorized_ip_ranges."
+  description = "CIDR ranges allowed to reach the API server. This is the analogue of the AWS module's cluster_endpoint_public_access_cidrs and the Azure module's api_server_authorized_ip_ranges. The machine that runs terraform apply must be inside these ranges, or inside the VPC when private_endpoint_enabled is set, because the module creates the workload namespace and service account through the API server."
   default     = []
 
   validation {
@@ -142,6 +142,14 @@ variable "allow_unrestricted_api_server_access" {
   validation {
     condition     = var.allow_unrestricted_api_server_access || var.private_endpoint_enabled || length(var.master_authorized_networks) > 0
     error_message = "A public API server with no authorized networks is reachable from every address on the internet. Set master_authorized_networks, or private_endpoint_enabled, or allow_unrestricted_api_server_access to record that the exposure is intended."
+  }
+
+  # A /0 entry opens the API server as wide as an empty list does.
+  validation {
+    condition = var.allow_unrestricted_api_server_access || !anytrue([
+      for n in var.master_authorized_networks : try(split("/", n.cidr_block)[1] == "0", false)
+    ])
+    error_message = "A /0 entry in master_authorized_networks, such as 0.0.0.0/0 or ::/0, admits every address. List narrower ranges, or set allow_unrestricted_api_server_access to record that the exposure is intended."
   }
 }
 
@@ -240,7 +248,7 @@ variable "index_node_pool_enabled" {
 # from changing how upgrades behave without anyone asking.
 variable "node_pool_max_surge" {
   type        = number
-  description = "Extra nodes GKE may add while upgrading a pool. The machine family's CPU quota has to cover the pool and the surge."
+  description = "Extra nodes GKE may add in each zone while upgrading a pool. On a regional cluster a pool in three zones can surge three times this. The machine family's CPU quota has to cover the pool and that surge."
   default     = 1
 
   validation {
