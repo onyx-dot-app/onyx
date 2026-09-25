@@ -656,7 +656,9 @@ def test_reasoning_off_disables_adaptive_thinking(
     assert "output_config" not in kwargs
 
 
-@pytest.mark.parametrize("model_name", ["claude-fable-5", "claude-mythos-5-1"])
+@pytest.mark.parametrize(
+    "model_name", ["claude-fable-5", "claude-mythos-5-1", "claude-opus-5-5"]
+)
 def test_reasoning_off_floors_always_thinking_models_at_low(model_name: str) -> None:
     # These reject disabled thinking, so off lands on the least they accept
     # instead of silence, which the API would fill with its high default.
