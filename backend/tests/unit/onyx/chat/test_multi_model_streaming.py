@@ -432,7 +432,7 @@ class TestRunModels:
         with (
             patch_execution(side_effect=emit_stop),
             patch("onyx.chat.prepare.construct_tools", return_value={}),
-            patch("onyx.chat.persistence.save_chat_response"),
+            patch("onyx.chat.history_store.save_chat_response_to_db"),
             patch(
                 "onyx.chat.prepare.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -465,7 +465,7 @@ class TestRunModels:
                 side_effect=sleep_then_return,
             ),
             patch("onyx.chat.prepare.construct_tools", return_value={}),
-            patch("onyx.chat.persistence.save_chat_response"),
+            patch("onyx.chat.history_store.save_chat_response_to_db"),
             patch(
                 "onyx.chat.prepare.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -493,7 +493,7 @@ class TestRunModels:
         with (
             patch_execution(side_effect=emit_one),
             patch("onyx.chat.prepare.construct_tools", return_value={}),
-            patch("onyx.chat.persistence.save_chat_response"),
+            patch("onyx.chat.history_store.save_chat_response_to_db"),
             patch(
                 "onyx.chat.prepare.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -526,7 +526,7 @@ class TestRunModels:
         with (
             patch_execution(side_effect=emit_one),
             patch("onyx.chat.prepare.construct_tools", return_value={}),
-            patch("onyx.chat.persistence.save_chat_response"),
+            patch("onyx.chat.history_store.save_chat_response_to_db"),
             patch(
                 "onyx.chat.prepare.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -554,7 +554,7 @@ class TestRunModels:
                 side_effect=RuntimeError("intentional test failure"),
             ),
             patch("onyx.chat.prepare.construct_tools", return_value={}),
-            patch("onyx.chat.persistence.save_chat_response"),
+            patch("onyx.chat.history_store.save_chat_response_to_db"),
             patch(
                 "onyx.chat.prepare.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -582,7 +582,7 @@ class TestRunModels:
         with (
             patch_execution(side_effect=overflow),
             patch("onyx.chat.prepare.construct_tools", return_value={}),
-            patch("onyx.chat.persistence.save_chat_response"),
+            patch("onyx.chat.history_store.save_chat_response_to_db"),
             patch(
                 "onyx.chat.prepare.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -610,7 +610,7 @@ class TestRunModels:
         with (
             patch("onyx.chat.execution.create_chat_agent", side_effect=refusal),
             patch("onyx.chat.prepare.construct_tools", return_value={}),
-            patch("onyx.chat.persistence.save_chat_response"),
+            patch("onyx.chat.history_store.save_chat_response_to_db"),
             patch(
                 "onyx.chat.prepare.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -644,7 +644,7 @@ class TestRunModels:
                 side_effect=fail_model_0_succeed_model_1,
             ),
             patch("onyx.chat.prepare.construct_tools", return_value={}),
-            patch("onyx.chat.persistence.save_chat_response"),
+            patch("onyx.chat.history_store.save_chat_response_to_db"),
             patch(
                 "onyx.chat.prepare.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -679,7 +679,7 @@ class TestRunModels:
             patch_execution(side_effect=slow_llm),
             patch("onyx.chat.prepare.construct_tools", return_value={}),
             patch(
-                "onyx.chat.persistence.save_chat_response",
+                "onyx.chat.history_store.save_chat_response_to_db",
                 side_effect=lambda *_, **__: completion_called.set(),
             ),
             patch(
@@ -738,7 +738,7 @@ class TestRunModels:
                 side_effect=emit_until_cancelled,
             ),
             patch("onyx.chat.prepare.construct_tools", return_value={}),
-            patch("onyx.chat.persistence.save_chat_response") as persist,
+            patch("onyx.chat.history_store.save_chat_response_to_db") as persist,
             patch(
                 "onyx.chat.prepare.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -776,7 +776,7 @@ class TestRunModels:
             patch_execution(side_effect=slow_llm),
             patch("onyx.chat.prepare.construct_tools", return_value={}),
             patch(
-                "onyx.chat.persistence.save_chat_response",
+                "onyx.chat.history_store.save_chat_response_to_db",
                 side_effect=mark_persisted,
             ) as mock_handle,
             patch(
@@ -812,7 +812,7 @@ class TestRunModels:
         with (
             patch_execution(),
             patch("onyx.chat.prepare.construct_tools", return_value={}),
-            patch("onyx.chat.persistence.save_chat_response") as mock_handle,
+            patch("onyx.chat.history_store.save_chat_response_to_db") as mock_handle,
             patch(
                 "onyx.chat.prepare.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -835,7 +835,7 @@ class TestRunModels:
                 side_effect=RuntimeError("fail"),
             ),
             patch("onyx.chat.prepare.construct_tools", return_value={}),
-            patch("onyx.chat.persistence.save_chat_response") as mock_handle,
+            patch("onyx.chat.history_store.save_chat_response_to_db") as mock_handle,
             patch(
                 "onyx.chat.prepare.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -874,7 +874,7 @@ class TestRunModels:
             ),
             patch("onyx.chat.prepare.construct_tools", return_value={}),
             patch(
-                "onyx.chat.persistence.save_chat_response",
+                "onyx.chat.history_store.save_chat_response_to_db",
                 side_effect=lambda *_, **__: completion_called.set(),
             ) as mock_handle,
             patch(
@@ -921,7 +921,7 @@ class TestRunModels:
             ),
             patch("onyx.chat.prepare.construct_tools", return_value={}),
             patch(
-                "onyx.chat.persistence.save_chat_response",
+                "onyx.chat.history_store.save_chat_response_to_db",
                 side_effect=lambda **_kwargs: commit_called.set(),
             ) as mock_handle,
             patch(
@@ -968,7 +968,7 @@ class TestRunModels:
             ),
             patch("onyx.chat.prepare.construct_tools", return_value={}),
             patch(
-                "onyx.chat.persistence.save_chat_response",
+                "onyx.chat.history_store.save_chat_response_to_db",
                 side_effect=lambda *_, **__: completion_called.set(),
             ) as mock_handle,
             patch(
@@ -1020,7 +1020,7 @@ class TestRunModels:
             ),
             patch("onyx.chat.prepare.construct_tools", return_value={}),
             patch(
-                "onyx.chat.persistence.save_chat_response",
+                "onyx.chat.history_store.save_chat_response_to_db",
                 side_effect=mark_persisted,
             ) as mock_handle,
             patch(
@@ -1072,7 +1072,7 @@ class TestRunModels:
                 side_effect=emit_then_block,
             ),
             patch("onyx.chat.prepare.construct_tools", return_value={}),
-            patch("onyx.chat.persistence.save_chat_response"),
+            patch("onyx.chat.history_store.save_chat_response_to_db"),
             patch(
                 "onyx.chat.prepare.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -1117,7 +1117,7 @@ class TestRunModels:
             patch_execution(side_effect=fail_model_0),
             patch("onyx.chat.prepare.construct_tools", return_value={}),
             patch(
-                "onyx.chat.persistence.save_chat_response",
+                "onyx.chat.history_store.save_chat_response_to_db",
                 side_effect=lambda *_, **__: model_1_persisted.set(),
             ) as mock_handle,
             patch(
@@ -1148,7 +1148,7 @@ class TestRunModels:
         with (
             patch_execution() as mock_llm,
             patch("onyx.chat.prepare.construct_tools", return_value={}),
-            patch("onyx.chat.persistence.save_chat_response"),
+            patch("onyx.chat.history_store.save_chat_response_to_db"),
             patch(
                 "onyx.chat.prepare.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -1272,7 +1272,7 @@ def test_persistence_failure_reaches_live_and_resumed_readers() -> None:
     with (
         mock_model_execution(),
         patch(
-            "onyx.chat.persistence.save_chat_response",
+            "onyx.chat.history_store.save_chat_response_to_db",
             side_effect=RuntimeError("database unavailable"),
         ) as save,
     ):
@@ -1314,7 +1314,7 @@ def test_startup_failure_finishes_every_response(failure_stage: str) -> None:
         if failure_stage == "startup"
         else nullcontext(),
         patch("onyx.chat.execution.create_chat_agent") as prepare,
-        patch("onyx.chat.persistence.save_chat_response") as save,
+        patch("onyx.chat.history_store.save_chat_response_to_db") as save,
     ):
         if failure_stage == "launch":
             with pytest.raises(RuntimeError, match="Startup failed"):
@@ -1417,7 +1417,7 @@ def test_stop_reaches_other_model_before_blocked_storage_resumes(
         with (
             mock_model_execution(side_effect=execute),
             patch(
-                "onyx.chat.persistence.save_chat_response", side_effect=save
+                "onyx.chat.history_store.save_chat_response_to_db", side_effect=save
             ) as persist,
             patch("onyx.chat.execution._CANCEL_POLL_INTERVAL_S", 0.01),
         ):
@@ -1499,7 +1499,7 @@ def test_overflowed_stream_storage_finishes_retention_cleanup() -> None:
         patch("onyx.chat.stream_buffer._BUFFER_WORK_CAPACITY", 1),
         patch("onyx.agents.concurrency.CLEANUP_SECONDS", 0.02),
         mock_model_execution(side_effect=execute),
-        patch("onyx.chat.persistence.save_chat_response") as save,
+        patch("onyx.chat.history_store.save_chat_response_to_db") as save,
     ):
         try:
             reader = start_chat_turn(
@@ -1547,7 +1547,7 @@ def test_cache_failure_does_not_finalize_active_execution() -> None:
     buffer.mark_truncated.side_effect = lambda: setattr(buffer, "truncated", True)
     with (
         mock_model_execution(side_effect=execute),
-        patch("onyx.chat.persistence.save_chat_response") as persist,
+        patch("onyx.chat.history_store.save_chat_response_to_db") as persist,
     ):
         reader = _start_chat_turn(_make_setup(), MagicMock(), stream_buffer=buffer)
         try:
@@ -1582,7 +1582,7 @@ def test_full_response_waits_for_execution_after_delivery_ends() -> None:
 
     with (
         patch("onyx.chat.execution.create_chat_agent", return_value=chat_agent),
-        patch("onyx.chat.persistence.save_chat_response") as persist,
+        patch("onyx.chat.history_store.save_chat_response_to_db") as persist,
         ContextThreadPoolExecutor(max_workers=1) as executor,
     ):
         reader = _start_chat_turn(
@@ -1629,7 +1629,7 @@ def test_failed_response_releases_full_response_waiter(failure_stage: str) -> No
                 error="Execution failed", error_code="GENERATION_FAILED"
             ),
         ),
-        patch("onyx.chat.persistence.save_chat_response"),
+        patch("onyx.chat.history_store.save_chat_response_to_db"),
         patch(
             "onyx.chat.persistence.project_response",
             side_effect=ValueError("Invalid projection"),
@@ -1680,7 +1680,9 @@ def test_full_response_reports_save_outcome_after_delivery_ends(
     save_finished = threading.Event()
     is_late = save_behavior.startswith("late_")
 
-    def save(*, message_id: int, response: ChatResponseSnapshot) -> None:
+    def save(
+        *, message_id: int, response: ChatResponseSnapshot, **_kwargs: Any
+    ) -> None:
         assert message_id == 1000
         assert response.answer == ("" if execution_fails else "Partial answer")
         save_started.set()
@@ -1701,7 +1703,7 @@ def test_full_response_reports_save_outcome_after_delivery_ends(
                 error="Generation failed", error_code="GENERATION_FAILED"
             ),
         ),
-        patch("onyx.chat.persistence.save_chat_response", side_effect=save),
+        patch("onyx.chat.history_store.save_chat_response_to_db", side_effect=save),
         patch(
             "onyx.chat.persistence.PERSISTENCE_WAIT_SECONDS",
             0.15 if is_late else 5,
@@ -1786,7 +1788,7 @@ def test_blocked_responses_do_not_prevent_new_chat_turns() -> None:
 
     with (
         mock_model_execution(side_effect=execute),
-        patch("onyx.chat.persistence.save_chat_response"),
+        patch("onyx.chat.history_store.save_chat_response_to_db"),
     ):
         try:
             for index in range(len(started)):
@@ -1856,7 +1858,7 @@ def test_api_execution_uses_threads_and_preserves_tenant_after_reader_closes() -
             with (
                 patch("onyx.chat.execution.create_chat_agent", return_value=prepared),
                 patch(
-                    "onyx.chat.persistence.save_chat_response",
+                    "onyx.chat.history_store.save_chat_response_to_db",
                     side_effect=lambda **_: saved.set(),
                 ),
                 ContextThreadPoolExecutor(max_workers=1) as worker,
@@ -1912,7 +1914,7 @@ def test_stop_retains_turn_while_preparation_drains() -> None:
     with (
         patch("onyx.chat.execution.create_chat_agent", side_effect=prepare),
         patch(
-            "onyx.chat.persistence.save_chat_response",
+            "onyx.chat.history_store.save_chat_response_to_db",
             side_effect=lambda **_: saved.set(),
         ),
     ):
@@ -1961,7 +1963,7 @@ def test_model_failure_does_not_cancel_comparison_response() -> None:
     setup.input_messages = []
     with (
         patch("onyx.chat.execution.create_chat_agent", side_effect=prepare),
-        patch("onyx.chat.persistence.save_chat_response") as save,
+        patch("onyx.chat.history_store.save_chat_response_to_db") as save,
     ):
         packets = list(_start_chat_turn(setup, MagicMock()))
     responses = {
@@ -1989,7 +1991,7 @@ def test_renderer_attachment_failure_cancels_run_before_saving() -> None:
             "onyx.chat.execution.ResponsePresenter",
             side_effect=ValueError("Renderer unavailable"),
         ),
-        patch("onyx.chat.persistence.save_chat_response") as save,
+        patch("onyx.chat.history_store.save_chat_response_to_db") as save,
     ):
         packets = list(_start_chat_turn(setup, MagicMock()))
         save.assert_called_once()
@@ -2003,7 +2005,7 @@ def test_response_cancelled_before_entry_is_saved() -> None:
     tasks = ActiveChatTurns()
     with (
         patch("onyx.chat.execution.create_chat_agent") as create_agent,
-        patch("onyx.chat.persistence.save_chat_response") as save,
+        patch("onyx.chat.history_store.save_chat_response_to_db") as save,
     ):
         turn = ChatTurnExecution(_make_setup(), MagicMock(), response_future)
         turn.begin()
@@ -2023,7 +2025,7 @@ def test_closed_chat_supervisor_rejects_without_starting_storage() -> None:
     response_future: Future[ChatResponseOutcome] = Future()
     with (
         patch("onyx.chat.execution.create_chat_agent") as create_agent,
-        patch("onyx.chat.persistence.save_chat_response") as save,
+        patch("onyx.chat.history_store.save_chat_response_to_db") as save,
     ):
         with pytest.raises(RuntimeError, match="shutting down"):
             start_chat_turn(
@@ -2074,7 +2076,7 @@ def test_response_workers_execute_models_and_share_one_event_consumer() -> None:
     with (
         patch("onyx.chat.execution.create_chat_agent", side_effect=prepare),
         patch("onyx.chat.execution.ResponsePresenter") as presenter,
-        patch("onyx.chat.persistence.save_chat_response") as save,
+        patch("onyx.chat.history_store.save_chat_response_to_db") as save,
     ):
         presenter.return_value.consume.side_effect = observe
         reader = start_chat_turn(setup, MagicMock(), active_chat_turns=tasks)
@@ -2128,7 +2130,7 @@ def test_stop_after_suspension_retains_root_cancellation_and_saves_once() -> Non
                 ownership=FakeRunOwnership(register=register),
             ),
         ),
-        patch("onyx.chat.persistence.save_chat_response") as save,
+        patch("onyx.chat.history_store.save_chat_response_to_db") as save,
     ):
         reader = start_chat_turn(
             setup, MagicMock(), response_future, active_chat_turns=tasks
@@ -2193,7 +2195,7 @@ def test_stop_cache_failure_retries_and_keeps_polling_ownership() -> None:
             "onyx.chat.execution.create_chat_agent",
             return_value=_chat_agent(Agent(FakeModelClient(generate))),
         ),
-        patch("onyx.chat.persistence.save_chat_response") as save,
+        patch("onyx.chat.history_store.save_chat_response_to_db") as save,
         patch("onyx.chat.execution._CANCEL_POLL_INTERVAL_S", 0.01),
         patch("onyx.chat.execution.PROCESSING_REFRESH_INTERVAL_S", 0),
         patch("onyx.chat.execution.set_processing_status") as processing,
@@ -2234,7 +2236,7 @@ def test_storage_ownership_failure_reports_failed_response_without_writing() -> 
             "onyx.chat.execution.create_chat_agent_coordinator",
             return_value=coordinator,
         ),
-        patch("onyx.chat.persistence.save_chat_response") as save,
+        patch("onyx.chat.history_store.save_chat_response_to_db") as save,
     ):
         reader = start_chat_turn(setup, MagicMock(), outcome, active_chat_turns=tasks)
         try:
@@ -2343,7 +2345,7 @@ def test_control_failure_retains_turn_and_polls_ownership_until_workers_drain() 
     store.poll_control.side_effect = poll_ownership
     with (
         patch("onyx.chat.execution.create_chat_agent", side_effect=prepare),
-        patch("onyx.chat.persistence.save_chat_response"),
+        patch("onyx.chat.history_store.save_chat_response_to_db"),
         patch.object(turn, "_poll_control", side_effect=poll),
         patch("onyx.chat.execution._CANCEL_POLL_INTERVAL_S", 0.01),
     ):

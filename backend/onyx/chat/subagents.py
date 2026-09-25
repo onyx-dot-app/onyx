@@ -12,22 +12,11 @@ from onyx.agents.execution_records import RunStatus
 from onyx.agents.models import AgentInfo, RunState
 from onyx.agents.runtime import Agent
 from onyx.cache.factory import get_cache_backend
-from onyx.chat.incognito_context import (
-    load_incognito_agent_history,
-    load_incognito_agent_metadata,
-    load_incognito_saved_run,
-    lookup_incognito_agent,
-)
+from onyx.chat.history_store import ChatHistoryStore, get_chat_history_store
 from onyx.chat.response import response_snapshot
 from onyx.chat.restoration import restore_chat_agent
 from onyx.chat.run_store import ENABLE_CHAT_CHECKPOINTS, ChatRunStore
-from onyx.db.chat_subagents import (
-    load_agent_history,
-    load_chat_branch,
-    load_saved_run,
-    load_session_agent_metadata,
-    lookup_session_agent,
-)
+from onyx.db.chat_subagents import load_chat_branch
 from onyx.deep_research.research_agent import ResearchAgent
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM, LLMUserIdentity
@@ -41,19 +30,13 @@ class ChatAgentDirectory(AgentDirectory):
     def __init__(
         self,
         *,
-        message_id: int,
-        chat_session_id: UUID,
-        visible_message_ids: list[int],
-        persist_content: bool,
+        history_store: ChatHistoryStore,
         llm: LLM,
         tools: list[Tool],
         user_identity: LLMUserIdentity,
         store: ChatRunStore | None,
     ) -> None:
-        self.message_id = message_id
-        self.chat_session_id = chat_session_id
-        self.visible_message_ids = visible_message_ids
-        self.persist_content = persist_content
+        self.history_store = history_store
         self.llm = llm
         self.tools = tools
         self.user_identity = user_identity
@@ -62,11 +45,7 @@ class ChatAgentDirectory(AgentDirectory):
     def lookup_agent(self, agent_id: str, parent_id: str) -> AgentInfo | None:
         if self.store is not None:
             return self.store.lookup_agent(agent_id, parent_id)
-        if self.persist_content:
-            return lookup_session_agent(self.message_id, agent_id, parent_id)
-        return lookup_incognito_agent(
-            self.chat_session_id, self.visible_message_ids, agent_id, parent_id
-        )
+        return self.history_store.lookup_agent(agent_id, parent_id)
 
     def restore_agent(self, agent_id: str, parent_id: str) -> Agent:
         saved = self.lookup_agent(agent_id, parent_id)
@@ -74,12 +53,8 @@ class ChatAgentDirectory(AgentDirectory):
             raise ValueError("Agent is not a visible child of this parent")
         if self.store is not None and saved.latest_run_id is not None:
             history = self.store.load_history(saved.latest_run_id, parent_id)
-        elif self.persist_content:
-            history = load_agent_history(self.message_id, saved.id)
         else:
-            history = load_incognito_agent_history(
-                self.chat_session_id, self.visible_message_ids, saved.id
-            )
+            history = self.history_store.load_agent_history(saved.id)
         configuration = history.configuration
         if configuration is None:
             raise ValueError("This agent's external resources are no longer available")
@@ -100,13 +75,7 @@ class ChatAgentDirectory(AgentDirectory):
     def read_run(self, run_id: str, parent_id: str) -> RunState | None:
         if self.store is not None:
             return self.store.read_run(run_id, parent_id)
-        record = (
-            load_saved_run(self.message_id, run_id, parent_id)
-            if self.persist_content
-            else load_incognito_saved_run(
-                self.chat_session_id, self.visible_message_ids, run_id, parent_id
-            )
-        )
+        record = self.history_store.load_saved_run(run_id, parent_id)
         return response_snapshot(record) if record is not None else None
 
     def read_run_status(self, run_id: str, parent_id: str) -> RunStatus:
@@ -157,18 +126,16 @@ def create_chat_agent_coordinator(
     )
     if durable is not None and register_store is not None:
         register_store(durable)
-    if persist_content:
-        saved_agents = load_session_agent_metadata(message_id)
-    else:
-        saved_agents = load_incognito_agent_metadata(
-            chat_session_id, branch.message_ids
-        )
-
-    directory = ChatAgentDirectory(
+    history_store = get_chat_history_store(
         message_id=message_id,
         chat_session_id=chat_session_id,
         visible_message_ids=branch.message_ids,
         persist_content=persist_content,
+    )
+    saved_agents = history_store.list_agents()
+
+    directory = ChatAgentDirectory(
+        history_store=history_store,
         llm=llm,
         tools=tools,
         user_identity=user_identity,

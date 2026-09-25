@@ -4,6 +4,7 @@ import threading
 from collections.abc import Callable, Generator
 from concurrent.futures import Future
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
 
@@ -12,6 +13,7 @@ from onyx.agents.execution_records import OperationSnapshot, RunStatus
 from onyx.agents.models import AgentInfo, PreparedStep, RunState
 from onyx.agents.runtime import Agent, Run
 from onyx.chat.emitter import Emitter
+from onyx.chat.history_store import get_chat_history_store
 from onyx.chat.models import (
     AnswerStreamPart,
     ChatMessageMetadata,
@@ -359,7 +361,9 @@ def test_response_save_captures_run_once() -> None:
     outcome: Future[ChatResponseOutcome] = Future()
     delivery = ChatDelivery(None)
     persistence = ChatResponsePersistence(
-        message_id=42,
+        history_store=get_chat_history_store(
+            message_id=42, chat_session_id=uuid4(), persist_content=True
+        ),
         model_index=0,
         llm=FakeModelClient(lambda *_: AssistantMessage()),
         delivery=delivery,
@@ -367,14 +371,16 @@ def test_response_save_captures_run_once() -> None:
     )
     saved: list[ChatResponseSnapshot] = []
 
-    def save(*, message_id: int, response: ChatResponseSnapshot) -> None:
+    def save(
+        *, message_id: int, response: ChatResponseSnapshot, **_kwargs: object
+    ) -> None:
         assert message_id == 42
         saved.append(response)
 
     try:
         with (
             patch.object(run, "snapshot", wraps=run.snapshot) as snapshot,
-            patch("onyx.chat.persistence.save_chat_response", side_effect=save),
+            patch("onyx.chat.history_store.save_chat_response_to_db", side_effect=save),
         ):
             persistence.save(run)
         snapshot.assert_called_once_with()

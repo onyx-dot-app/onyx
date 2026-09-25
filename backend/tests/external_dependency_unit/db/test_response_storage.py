@@ -22,6 +22,7 @@ from onyx.agents.execution_records import (
 from onyx.agents.models import RunState
 from onyx.agents.tools import ToolProgress
 from onyx.chat.emitter import Emitter
+from onyx.chat.history_store import get_chat_history_store
 from onyx.chat.models import ChatResponseSnapshot, MessageRendering, ResponseRecord
 from onyx.chat.presentation import ResponsePresenter, project_response
 from onyx.chat.response_items import (
@@ -57,7 +58,7 @@ from onyx.db.chat_history import (
 )
 from onyx.db.chat_response import (
     read_chat_execution,
-    save_chat_response,
+    save_chat_response_to_db,
     save_response_content,
 )
 from onyx.db.chat_response_items import read_response_items, write_response_items
@@ -889,7 +890,9 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
     projected = project_response(
         snapshot, response_id=row.id, tool_ids={call.name: tool.id}
     )
-    save_chat_response(message_id=row.id, response=projected)
+    get_chat_history_store(
+        message_id=row.id, chat_session_id=conversation.id, persist_content=True
+    ).save_response(projected)
     db_session.refresh(row, ["response_items", "search_docs"])
     assert (
         db_session.scalar(
@@ -1242,7 +1245,11 @@ def test_lifecycle_and_display_saves_share_response_content(
         def save_display() -> None:
             if barrier is not None:
                 barrier.wait(timeout=10)
-            save_chat_response(message_id=root_id, response=display)
+            get_chat_history_store(
+                message_id=root_id,
+                chat_session_id=root_session_id,
+                persist_content=True,
+            ).save_response(display)
 
         if save_order == "concurrent":
             lifecycle = start_thread_future(save_lifecycle, name="test-lifecycle-save")
@@ -1334,3 +1341,47 @@ def test_history_size_checks_all_payloads_in_one_query(
     monkeypatch.setattr(chat_subagents, "MAX_AGENT_HISTORY_BYTES", 10000)
     chat_subagents._check_history_size(db_session, [response_id])
     chat_subagents._check_history_size(db_session, [])
+
+
+@pytest.mark.parametrize("mismatch", ["session", "recording_mode"])
+def test_response_store_rejects_wrong_session_or_recording_mode_before_writes(
+    db_session: Session,
+    conversation: ChatSession,
+    executed_sql: list[str],
+    mismatch: str,
+) -> None:
+    conversation.incognito_record_mode = IncognitoRecordMode.USAGE_ONLY
+    row = _response(db_session, conversation)
+    message_id, session_id = row.id, conversation.id
+    db_session.commit()
+    response = ChatResponseSnapshot(
+        answer="private answer",
+        response=None,
+        reasoning=None,
+        request_params=None,
+        citation_to_doc={},
+        tool_calls=[],
+        is_clarification=False,
+        all_search_docs={},
+        pre_answer_processing_time=None,
+        cancelled=False,
+    )
+    executed_sql.clear()
+    expected_error = (
+        "another chat session" if mismatch == "session" else "recording mode"
+    )
+    with pytest.raises(ValueError, match=expected_error):
+        save_chat_response_to_db(
+            message_id=message_id,
+            chat_session_id=uuid4() if mismatch == "session" else session_id,
+            expected_persist_content=mismatch == "recording_mode",
+            response=response,
+        )
+    assert not any(
+        statement.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
+        for statement in executed_sql
+    )
+    db_session.refresh(row)
+    assert row.message == ""
+    assert row.error is None
+    assert not row.response_items

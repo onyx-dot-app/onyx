@@ -17,14 +17,10 @@ from onyx.chat.files import (
     resolve_context_user_files,
     summarize_file_metadata,
 )
+from onyx.chat.history_store import get_chat_history_store
 from onyx.chat.incognito import (
     content_free_file_descriptors,
     incognito_llm_request_policy,
-)
-from onyx.chat.incognito_context import (
-    append_incognito_message,
-    get_or_create_incognito_root_id,
-    load_incognito_context,
 )
 from onyx.chat.llm_step import PromptMetadata
 from onyx.chat.models import (
@@ -92,7 +88,7 @@ from onyx.hooks.points.query_processing import (
 from onyx.llm.cancellation import CancellationSignal, cancellation_scope
 from onyx.llm.factory import get_llm_for_persona, get_llm_token_counter
 from onyx.llm.interfaces import LLM, LLMUserIdentity
-from onyx.llm.models import AssistantMessage, ReasoningEffort, TextContent, UserMessage
+from onyx.llm.models import AssistantMessage, ReasoningEffort, TextContent
 from onyx.llm.override_models import LLMOverride
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.onyxbot.slack.models import SlackContext
@@ -481,23 +477,14 @@ def _prepare_history(
         ),
         None,
     )
-    messages = history.messages
-    if not record_mode_persists_content(prepared.incognito_record_mode):
-        stored = load_incognito_context(prepared.session_id)
-        stored_messages = stored.messages
-        previous_run_id = stored.previous_run_id
-        if (
-            prepared.accepted_text is not None
-            and messages
-            and isinstance(messages[-1], UserMessage)
-        ):
-            current_user = messages[-1].model_copy(
-                update={"content": prepared.accepted_text}
-            )
-            messages = stored_messages + [current_user]
-            append_incognito_message(prepared.session_id, current_user)
-        else:
-            messages = stored_messages
+    history_store = get_chat_history_store(
+        message_id=prepared.user_message_id,
+        chat_session_id=prepared.session_id,
+        persist_content=record_mode_persists_content(prepared.incognito_record_mode),
+    )
+    messages, previous_run_id = history_store.prepare_messages(
+        history.messages, previous_run_id, prepared.accepted_text
+    )
     file_metadata = (
         history.all_injected_file_metadata
         if any(
@@ -714,9 +701,12 @@ def create_chat_agent(
         }:
             raise ValueError(f"Forced tool {setup.forced_tool_id} not found in tools")
 
-        agent_id = str(setup.chat_session_id)
-        if not record_mode_persists_content(setup.incognito_record_mode):
-            agent_id = get_or_create_incognito_root_id(setup.chat_session_id, agent_id)
+        history_store = get_chat_history_store(
+            message_id=setup.user_message_id,
+            chat_session_id=setup.chat_session_id,
+            persist_content=record_mode_persists_content(setup.incognito_record_mode),
+        )
+        agent_id = history_store.root_agent_id(str(setup.chat_session_id))
 
         if len(setup.responses) == 1 and setup.new_msg_req.deep_research:
             if setup.chat_session_project_id:

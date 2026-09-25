@@ -163,7 +163,7 @@ class ImageGenerationTool(Tool):
         except requests.RequestException as e:
             logger.error("Error fetching or converting image: %s", e)
             raise ToolExecutionException(
-                "Failed to fetch or convert the generated image", emit_error_packet=True
+                "Failed to fetch or convert the generated image"
             )
         except Exception as e:
             logger.debug("Error occurred during image generation: %s", e)
@@ -179,22 +179,18 @@ class ImageGenerationTool(Tool):
                             "The image generation request was rejected due to OpenAI's content policy. "
                             "Please try a different prompt."
                         ),
-                        emit_error_packet=True,
                     )
                 elif "Invalid image URL" in error_message:
                     raise ToolExecutionException(
                         "Invalid image URL provided for image generation.",
-                        emit_error_packet=True,
                     )
                 elif "invalid_request_error" in error_message:
                     raise ToolExecutionException(
                         "Invalid request for image generation. Please check your input.",
-                        emit_error_packet=True,
                     )
 
             raise ToolExecutionException(
                 f"An error occurred during image generation. error={error_message}",
-                emit_error_packet=True,
             )
 
     def _resolve_reference_image_file_ids(
