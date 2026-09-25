@@ -73,8 +73,11 @@ def provision_tenant_for_user(
     )
 
     r = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+    # Not thread-local: the heartbeat thread below must be able to extend it.
     lock: RedisLock = r.lock(
-        user_provision_lock_name(email), timeout=_USER_PROVISION_LOCK_TIMEOUT
+        user_provision_lock_name(email),
+        timeout=_USER_PROVISION_LOCK_TIMEOUT,
+        thread_local=False,
     )
     # Wait rather than skip: a request may hold this while assigning a pool
     # tenant, and if it fails this run is the signup's only remaining chance.
