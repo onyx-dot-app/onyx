@@ -82,6 +82,40 @@ def fetch_connector_by_id(connector_id: int, db_session: Session) -> Connector |
     return connector
 
 
+def delete_connector_if_unpaired(db_session: Session, connector_id: int) -> bool:
+    """Remove a connector nobody has paired, inside the caller's transaction.
+    The row lock makes a pair being inserted concurrently either show up here
+    or wait behind the delete and fail on the missing connector. Returns
+    whether the row is gone."""
+    connector = db_session.execute(
+        select(Connector).where(Connector.id == connector_id).with_for_update()
+    ).scalar_one_or_none()
+    if connector is None:
+        return True
+    paired = db_session.scalar(
+        select(exists().where(ConnectorCredentialPair.connector_id == connector_id))
+    )
+    if paired:
+        return False
+    db_session.delete(connector)
+    return True
+
+
+def discard_connector_if_unpaired(db_session: Session, connector_id: int) -> bool:
+    """The cleanup behind a failed creation validation: it runs in its own
+    transaction and never raises, because the caller is inside an exception
+    handler whose validation error is what the user needs to see."""
+    try:
+        with db_session.begin():
+            return delete_connector_if_unpaired(db_session, connector_id)
+    except Exception:
+        logger.exception(
+            "Left connector %s behind after a failed validation", connector_id
+        )
+        db_session.rollback()
+        return False
+
+
 def fetch_ingestion_connector_by_name(
     connector_name: str, db_session: Session
 ) -> Connector | None:
