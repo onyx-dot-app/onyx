@@ -6,8 +6,9 @@ Create Date: 2026-09-25 13:39:45.369786
 
 f57f35403f6c built ix_chat_message_chat_session_id, but through a
 transaction-pooled pgbouncer connection its `current_schema()` read could land
-on a server connection without the tenant search_path, so the build ran against
-another schema and the tenant it migrated ended up without the index. This
+on a server connection without the tenant search_path, so the existence check
+and build targeted another schema and the tenant it migrated ended up without
+the index. This
 revision repeats the build for every schema that still lacks it. Schemas that
 have a valid index skip in one catalog read.
 
@@ -71,5 +72,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # The index belongs to f57f35403f6c; this revision only repairs it.
+    # f57f35403f6c owns the index and drops it on downgrade. Nothing to undo here.
     pass

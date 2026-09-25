@@ -5,8 +5,8 @@ one, and leaves a valid one alone.
 
 Runs the migration's repair function against the real PostgreSQL the suite
 uses, on a throwaway schema with a minimal chat_message table. The invalid
-state is what a failed CREATE INDEX CONCURRENTLY leaves behind; the catalog
-flag is flipped directly to reproduce it.
+state is what a failed CREATE INDEX CONCURRENTLY leaves behind, reproduced
+here with a unique build over duplicate rows.
 """
 
 import importlib.util
@@ -22,6 +22,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.pool import NullPool
 
 from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
+from tests.external_dependency_unit.db.shard_test_utils import (
+    create_schema,
+    drop_schema,
+)
 
 _MIGRATION = (
     Path(__file__).resolve().parents[3]
@@ -52,8 +56,8 @@ def engine() -> Generator[Engine, None, None]:
 @pytest.fixture
 def schema(engine: Engine) -> Generator[str, None, None]:
     name = f"index_repair_test_{uuid.uuid4().hex[:8]}"
+    create_schema(engine, name)
     with engine.begin() as connection:
-        connection.execute(text(f'CREATE SCHEMA "{name}"'))
         connection.execute(
             text(
                 f'CREATE TABLE "{name}".chat_message '
@@ -61,8 +65,7 @@ def schema(engine: Engine) -> Generator[str, None, None]:
             )
         )
     yield name
-    with engine.begin() as connection:
-        connection.execute(text(f'DROP SCHEMA "{name}" CASCADE'))
+    drop_schema(engine, name)
 
 
 def _index_oid_and_validity(

@@ -25,6 +25,10 @@ from onyx.db.engine.migration_search_path import (
     pin_search_path_to_schema,
 )
 from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
+from tests.external_dependency_unit.db.shard_test_utils import (
+    create_schema,
+    drop_schema,
+)
 
 
 def _pooler_loses_search_path_on_commit(connection: Connection) -> None:
@@ -46,11 +50,9 @@ def schema() -> Generator[str, None, None]:
     sync_engine = create_engine(
         build_connection_string(db_api=SYNC_DB_API), poolclass=NullPool
     )
-    with sync_engine.begin() as connection:
-        connection.execute(text(f'CREATE SCHEMA "{name}"'))
+    create_schema(sync_engine, name)
     yield name
-    with sync_engine.begin() as connection:
-        connection.execute(text(f'DROP SCHEMA "{name}" CASCADE'))
+    drop_schema(sync_engine, name)
     sync_engine.dispose()
 
 
@@ -88,5 +90,5 @@ async def test_unpinned_connection_is_left_alone(
             sync_connection.commit()
             return _current_schema(sync_connection)
 
-        # Only the pooler's reset ran here, which is the pre-fix behavior.
+        # No pin, so only the simulated pooler reset ran and the SET did not survive.
         assert await connection.run_sync(run) == "public"

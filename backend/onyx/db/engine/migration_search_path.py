@@ -21,9 +21,10 @@ _REAPPLY_PENDING_INFO_KEY = "onyx_migration_search_path_pending"
 
 
 def pin_search_path_to_schema(connection: Connection, schema_name: str) -> None:
-    """Set the schema now and at the start of every later transaction."""
+    """Set the schema now and record it for the engine's re-apply listeners."""
     connection.info[SEARCH_PATH_SCHEMA_INFO_KEY] = schema_name
-    # Schema names are validated tenant ids or the default schema, never user input.
+    # Schema names come from the tenant registry or the migration CLI, never
+    # from end users.
     connection.exec_driver_sql(f'SET search_path TO "{schema_name}"')
 
 
@@ -41,15 +42,15 @@ def _flag_reapply(connection: Connection) -> None:
 def _reapply_before_statement(
     connection: Connection,
     cursor: Any,
-    statement: str,  # noqa: ARG001
-    parameters: Any,  # noqa: ARG001
-    context: Any,  # noqa: ARG001
-    executemany: bool,  # noqa: ARG001
+    _statement: str,
+    _parameters: Any,
+    _context: Any,
+    _executemany: bool,
 ) -> None:
     if not connection.info.pop(_REAPPLY_PENDING_INFO_KEY, False):
         return
     schema_name = connection.info[SEARCH_PATH_SCHEMA_INFO_KEY]
-    # The raw cursor keeps this out of SQLAlchemy's transaction bookkeeping; the
-    # transaction has already begun, so the SET lands on the same server
+    # The raw cursor keeps this out of SQLAlchemy's transaction bookkeeping.
+    # The transaction has already begun, so the SET lands on the same server
     # connection as the statement that follows.
     cursor.execute(f'SET search_path TO "{schema_name}"')
