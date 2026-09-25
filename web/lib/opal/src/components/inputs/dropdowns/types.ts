@@ -17,8 +17,8 @@ export type SelectOption = {
  * so nothing dangles.
  *
  * A titled divider may be `foldable`: its rows fold behind the title. It
- * opens when it holds the selection and while a search is on; otherwise it
- * starts closed and a click on the title toggles it.
+ * starts closed unless it holds the selection, opens while a search is on,
+ * and a click on the title toggles it either way.
  */
 export type SelectDivider =
   | { title: string; options: SelectOption[]; foldable?: boolean }

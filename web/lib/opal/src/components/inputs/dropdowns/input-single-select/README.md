@@ -71,10 +71,10 @@ next field, as it would from the trigger.
 ## Foldable dividers
 
 A titled divider with `foldable: true` folds its rows behind the title. It
-opens when it holds the selection and while a search is on (folding is off
-then, so a match can never hide); otherwise it starts closed and a click on
-the title toggles it until the list closes. Folded rows leave the keyboard
-order.
+starts closed unless it holds the selection, and starts open while a search
+is on so no match hides; either way a click on the title toggles it. Toggles
+reset when the search starts or stops and when the list closes. Folded rows
+leave the keyboard order.
 
 ```tsx
 <InputSingleSelect

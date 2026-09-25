@@ -264,6 +264,24 @@ describe("InputSingleSelect", () => {
       expect(screen.queryByText("Anthropic")).not.toBeInTheDocument();
     });
 
+    test("a group can be folded while searching", async () => {
+      const user = setupUser();
+      render(
+        <InputSingleSelect
+          search
+          placeholder="Model"
+          value=""
+          options={providerOptions}
+        />
+      );
+      await user.click(screen.getByRole("combobox", { name: "Model" }));
+      await user.type(screen.getByRole("textbox", { name: "Search" }), "gpt");
+      expect(screen.getAllByRole("option")).toHaveLength(2);
+      await user.click(screen.getByText("OpenAI"));
+      expect(screen.queryAllByRole("option")).toHaveLength(0);
+      expect(screen.getByText("OpenAI")).toBeInTheDocument();
+    });
+
     test("searching opens folded groups to show their matches", async () => {
       const user = setupUser();
       render(

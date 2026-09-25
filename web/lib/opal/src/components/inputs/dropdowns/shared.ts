@@ -120,16 +120,16 @@ interface UseFoldedGroupsProps {
   /** Post-filter groups in render order. */
   sections: OptionGroup[];
   isSelected: (option: SelectOption) => boolean;
-  /** A search is on: every group shows its matches and folding is off. */
+  /** A search is on: groups open to show their matches, until folded. */
   searching: boolean;
 }
 
 /**
- * Fold state for foldable groups, per open session. A group opens when it
- * holds the selection or while searching; otherwise it starts closed, and
- * a click on its title toggles it until the list closes. Returns the
- * groups with folded rows withheld, so rendering and the keyboard order
- * agree.
+ * Fold state for foldable groups, per open session. A group starts closed
+ * unless it holds the selection, and starts open while a search is on;
+ * either way a click on its title toggles it, and the toggle holds until
+ * the search starts or stops, or the list closes. Returns the groups with
+ * folded rows withheld, so rendering and the keyboard order agree.
  */
 export function useFoldedGroups({
   isOpen,
@@ -140,17 +140,18 @@ export function useFoldedGroups({
   const [toggled, setToggled] = useState<ReadonlyMap<string, boolean>>(
     new Map()
   );
+  // Toggles reset when the list closes and when a search starts or stops,
+  // so each of those begins from the defaults below.
   useEffect(() => {
-    if (!isOpen) setToggled(new Map());
-  }, [isOpen]);
+    setToggled(new Map());
+  }, [isOpen, searching]);
 
   const isGroupOpen = useCallback(
     (group: OptionGroup) => {
-      if (!group.foldable || group.title === undefined || searching) {
-        return true;
-      }
+      if (!group.foldable || group.title === undefined) return true;
       const choice = toggled.get(group.title);
       if (choice !== undefined) return choice;
+      if (searching) return true;
       return group.options.some(isSelected);
     },
     [toggled, searching, isSelected]
@@ -158,12 +159,12 @@ export function useFoldedGroups({
 
   const toggleGroup = useCallback(
     (group: OptionGroup) => {
-      if (searching || group.title === undefined) return;
+      if (group.title === undefined) return;
       const title = group.title;
       const open = isGroupOpen(group);
       setToggled((prev) => new Map(prev).set(title, !open));
     },
-    [searching, isGroupOpen]
+    [isGroupOpen]
   );
 
   const foldedSections = useMemo(
