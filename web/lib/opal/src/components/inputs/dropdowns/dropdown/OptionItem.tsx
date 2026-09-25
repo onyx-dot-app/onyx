@@ -36,7 +36,7 @@ export const OptionItem = React.memo(
     return (
       <LineItemButton
         presentational
-        selectVariant="select-light"
+        selectVariant="select-heavy"
         state={isSelected || isExact ? "selected" : "empty"}
         interaction={isHighlighted ? "hover" : "rest"}
         disabled={option.disabled}

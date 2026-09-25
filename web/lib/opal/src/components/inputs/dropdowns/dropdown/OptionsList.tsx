@@ -98,7 +98,7 @@ export const OptionsList: React.FC<OptionsListProps> = ({
       {showCreateOption && (
         <LineItemButton
           presentational
-          selectVariant="select-light"
+          selectVariant="select-heavy"
           interaction={highlightedIndex === 0 ? "hover" : "rest"}
           rounding={2}
           title={createText}
