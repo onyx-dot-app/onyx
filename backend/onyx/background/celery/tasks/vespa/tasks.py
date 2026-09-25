@@ -28,7 +28,7 @@ from onyx.background.celery.tasks.vespa.document_sync import (
 )
 from onyx.configs.app_configs import JOB_TIMEOUT, VESPA_SYNC_MAX_TASKS
 from onyx.configs.constants import (
-    CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT,
+    CELERY_DOCUMENT_SYNC_BEAT_LOCK_TIMEOUT,
     OnyxCeleryTask,
     OnyxRedisConstants,
     OnyxRedisLocks,
@@ -107,7 +107,7 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str) -> bool | None:
 
     lock_beat: RedisLock = r.lock(
         OnyxRedisLocks.CHECK_VESPA_SYNC_BEAT_LOCK,
-        timeout=CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT,
+        timeout=CELERY_DOCUMENT_SYNC_BEAT_LOCK_TIMEOUT,
     )
 
     # these tasks should never overlap

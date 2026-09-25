@@ -126,9 +126,42 @@ KV_KG_CONFIG_KEY = "kg_config"
 # rather than holding the beat lock past its timeout.
 INCOGNITO_FILE_CLEANUP_BATCH = 200
 
+
+def lock_timeout_from_env(name: str, default: int, minimum: int = 1) -> int:
+    """A Redis lock TTL in seconds that an operator may set through the env.
+
+    Values under ``minimum`` would break the guard (0 is a lock with no TTL that
+    a crashed worker leaves stuck forever, negatives fail acquisition, and a
+    lock refreshed on a fixed cadence must outlive that cadence), so a bad
+    override falls back to the default loudly: an operator who set a TTL needs
+    to know it is not in effect."""
+    raw: str | None = os.environ.get(name)
+    value: int
+    try:
+        value = int(raw) if raw else default
+    except ValueError:
+        value = minimum - 1
+    if value >= minimum:
+        return value
+    logging.getLogger(__name__).warning(
+        "Ignoring invalid %s=%r (must be an integer of at least %d seconds); "
+        "using the %ds default.",
+        name,
+        raw,
+        minimum,
+        default,
+    )
+    return default
+
+
 CELERY_GENERIC_BEAT_LOCK_TIMEOUT = 120
 
-CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT = 120
+# Beat lock for one document-index sync pass, reacquired every quarter of its
+# TTL. A step that outruns it loses the lock and aborts the pass, so large
+# tenants raise it.
+CELERY_DOCUMENT_SYNC_BEAT_LOCK_TIMEOUT: int = lock_timeout_from_env(
+    "CELERY_DOCUMENT_SYNC_BEAT_LOCK_TIMEOUT", 120
+)
 
 
 CELERY_PRIMARY_WORKER_LOCK_TIMEOUT = 120
@@ -160,39 +193,23 @@ CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT = 5 * 60  # 5 min
 # if we can get callbacks as object bytes download, we could lower this a lot.
 CELERY_PRUNING_LOCK_TIMEOUT = 3600  # 1 hour (in seconds)
 
-CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT = 3600  # 1 hour (in seconds)
+# Held for one connector's whole document permission sync and refreshed every
+# quarter of the generic beat TTL, so it must not be set below that TTL. A
+# connector silent longer than this loses it, so large tenants raise it.
+CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT: int = lock_timeout_from_env(
+    "CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT",
+    3600,
+    minimum=CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+)
 
 # While this lock is held, duplicate dispatches for the same cc_pair exit
 # immediately. Deployments whose group syncs legitimately run for hours should
 # raise this toward the JOB_TIMEOUT crawl deadline (6h) so re-dispatches can't
 # stack concurrent crawls on one heavy worker; a worker that dies mid-sync
 # leaves the lock stuck for at most this TTL.
-# Non-positive values would break the guard (0 = a lock with no TTL that a
-# crashed worker leaves stuck forever; negatives fail acquisition), so clamp
-# bad overrides back to the default — loudly, since an operator who set a
-# long TTL needs to know their duplicate-crawl protection is NOT in effect.
-_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT_DEFAULT = 300
-_external_group_sync_lock_timeout_raw = os.environ.get(
-    "CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT"
+CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT: int = lock_timeout_from_env(
+    "CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT", 300
 )
-try:
-    _external_group_sync_lock_timeout = (
-        int(_external_group_sync_lock_timeout_raw)
-        if _external_group_sync_lock_timeout_raw
-        else _EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT_DEFAULT
-    )
-except ValueError:
-    _external_group_sync_lock_timeout = -1
-if _external_group_sync_lock_timeout > 0:
-    CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT: int = _external_group_sync_lock_timeout
-else:
-    logging.getLogger(__name__).warning(
-        "Ignoring invalid CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT=%r "
-        "(must be a positive integer of seconds); using the %ds default.",
-        _external_group_sync_lock_timeout_raw,
-        _EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT_DEFAULT,
-    )
-    CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT = _EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT_DEFAULT
 
 CELERY_USER_FILE_PROCESSING_LOCK_TIMEOUT = 30 * 60  # 30 minutes (in seconds)
 
