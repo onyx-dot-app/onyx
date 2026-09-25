@@ -126,3 +126,35 @@ def test_checkpoint_resume_walks_every_history_page() -> None:
         call.kwargs["oldest"] is None
         for call in gateway.fetch_channel_history.call_args_list
     )
+
+
+def test_checkpoint_resume_within_finite_poll_window() -> None:
+    # Messages span below the window start; only those strictly newer than
+    # ``start`` belong to this poll, and they still span several pages.
+    all_messages = [_message(f"{1000 + i}.000100") for i in range(8)]
+    connector, gateway = _connector(all_messages)
+
+    outputs = load_everything_from_checkpoint_connector(
+        connector, start=1002.5, end=2000.0
+    )
+
+    doc_ids = [
+        item.id
+        for output in outputs
+        for item in output.items
+        if isinstance(item, Document)
+    ]
+    expected_ids = [f"C1__{m['ts']}" for m in all_messages if float(m["ts"]) > 1002.5]
+
+    assert sorted(doc_ids) == sorted(expected_ids)
+    assert len(doc_ids) == len(set(doc_ids))
+
+    calls = gateway.fetch_channel_history.call_args_list
+    # Every request keeps the window's lower bound ...
+    assert [call.kwargs["oldest"] for call in calls] == ["1002.5"] * 3
+    # ... while ``latest`` walks down below the oldest message already processed.
+    assert [call.kwargs["latest"] for call in calls] == [
+        "2000.0",
+        "1006.000100",
+        "1004.000100",
+    ]
