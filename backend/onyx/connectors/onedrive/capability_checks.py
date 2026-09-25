@@ -44,7 +44,6 @@ _PROBE_PAGE_SIZE = 1
 _CANDIDATE_PAGES = 20
 
 T = TypeVar("T")
-_MAX_DISCOVERY_PAGES = 20
 _HIDDEN_MEMBERSHIP_VISIBILITY = "HiddenMembership"
 
 
@@ -147,7 +146,7 @@ def _first_delta_item(
     start_url: str,
 ) -> DriveDeltaItem | None:
     cursor: str | None = start_url
-    for _ in range(_MAX_DISCOVERY_PAGES):
+    for _ in range(_CANDIDATE_PAGES):
         assert cursor is not None
         result = gateway.get_delta_page(
             drive_id=drive.id,
@@ -164,7 +163,7 @@ def _first_delta_item(
         if cursor is None:
             return None
     raise ConnectorValidationError(
-        f"No readable OneDrive item was found in {_MAX_DISCOVERY_PAGES} delta pages."
+        f"No readable OneDrive item was found in {_CANDIDATE_PAGES} delta pages."
     )
 
 
@@ -193,7 +192,7 @@ def _group_membership_probe_group(
     gateway: OneDriveSourceOperations,
 ) -> EntraGroup | None:
     next_link: str | None = None
-    for _ in range(_MAX_DISCOVERY_PAGES):
+    for _ in range(_CANDIDATE_PAGES):
         page = gateway.list_groups(
             page_size=_PROBE_PAGE_SIZE,
             next_link=next_link,
@@ -201,7 +200,7 @@ def _group_membership_probe_group(
         visible_group = next(
             (
                 group
-                for group in page.groups
+                for group in page.items
                 if group.visibility != _HIDDEN_MEMBERSHIP_VISIBILITY
             ),
             None,

@@ -20,13 +20,21 @@ individual connector.
 
 import re
 from collections.abc import Generator
+from urllib.parse import quote
 
 from office365.directory.object_collection import DirectoryObjectCollection
 from office365.graph_client import GraphClient
 from pydantic import BaseModel
 
 from ee.onyx.db.external_perm import ExternalUserGroup
-from onyx.connectors.microsoft_utils.entra import EntraClient
+from onyx.connectors.microsoft_utils.entra import (
+    ENTRA_GROUP_MEMBER_SELECT,
+    ENTRA_NAMED_GROUP_SELECT,
+    EntraDirectoryObject,
+    EntraGroup,
+    fetch_entra_page,
+    iter_entra_items,
+)
 from onyx.connectors.microsoft_utils.graph_client import (
     GraphApiClient,
     sleep_and_retry,
@@ -211,10 +219,19 @@ def enumerate_entra_groups(
     Skips groups whose name is already in ``already_resolved``. Stops once
     ``threshold`` groups have been seen.
     """
-    entra = EntraClient(client.get_json, client.graph_api_base)
     total_groups = 0
 
-    for group in entra.iter_groups():
+    groups = iter_entra_items(
+        lambda next_link: fetch_entra_page(
+            client.get_json,
+            url=f"{client.graph_api_base}/groups",
+            item_model=EntraGroup,
+            select_fields=ENTRA_NAMED_GROUP_SELECT,
+            next_link=next_link,
+        ),
+        "Entra group listing",
+    )
+    for group in groups:
         group_id = group.id
         display_name = group.display_name
         if not group_id or not display_name:
@@ -233,7 +250,17 @@ def enumerate_entra_groups(
             continue
 
         member_emails: list[str] = []
-        for member in entra.iter_group_members(group_id):
+        members = iter_entra_items(
+            lambda next_link, group_id=group_id: fetch_entra_page(
+                client.get_json,
+                url=f"{client.graph_api_base}/groups/{quote(group_id)}/members",
+                item_model=EntraDirectoryObject,
+                select_fields=ENTRA_GROUP_MEMBER_SELECT,
+                next_link=next_link,
+            ),
+            f"Entra group `{group_id}` members",
+        )
+        for member in members:
             email = member.user_principal_name or member.mail
             if email:
                 member_emails.append(normalize_email(email))

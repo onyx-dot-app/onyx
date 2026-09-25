@@ -9,28 +9,28 @@ from ee.onyx.external_permissions.onedrive.group_sync import (
 from onyx.connectors.microsoft_utils.entra import (
     EntraDirectoryObject as OneDriveGroupMember,
 )
-from onyx.connectors.microsoft_utils.entra import (
-    EntraDirectoryObjectPage as OneDriveGroupMemberPage,
-)
 from onyx.connectors.microsoft_utils.entra import EntraGroup as OneDriveGroup
-from onyx.connectors.microsoft_utils.entra import EntraGroupPage as OneDriveGroupPage
+from onyx.connectors.microsoft_utils.entra import EntraPage
 from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftGraphError as OneDriveGraphError,
 )
+
+OneDriveGroupPage = EntraPage[OneDriveGroup]
+OneDriveGroupMemberPage = EntraPage[OneDriveGroupMember]
 
 
 def _connector() -> MagicMock:
     connector = MagicMock()
     connector.ops.list_groups.side_effect = [
         OneDriveGroupPage(
-            groups=[OneDriveGroup(id="group-1", displayName="First")],
+            items=[OneDriveGroup(id="group-1", displayName="First")],
             next_link="groups-next",
         ),
-        OneDriveGroupPage(groups=[OneDriveGroup(id="group-2", displayName="Second")]),
+        OneDriveGroupPage(items=[OneDriveGroup(id="group-2", displayName="Second")]),
     ]
     connector.ops.list_transitive_group_members.side_effect = [
         OneDriveGroupMemberPage(
-            members=[
+            items=[
                 OneDriveGroupMember(
                     id="user-1",
                     **{
@@ -42,7 +42,7 @@ def _connector() -> MagicMock:
             next_link="members-next",
         ),
         OneDriveGroupMemberPage(
-            members=[
+            items=[
                 OneDriveGroupMember(
                     id="nested-group",
                     **{"@odata.type": "#microsoft.graph.group", "mail": "group@mail"},
@@ -50,7 +50,7 @@ def _connector() -> MagicMock:
             ]
         ),
         OneDriveGroupMemberPage(
-            members=[OneDriveGroupMember(id="user-2", mail="second@example.com")]
+            items=[OneDriveGroupMember(id="user-2", mail="second@example.com")]
         ),
     ]
     return connector
@@ -92,7 +92,7 @@ def test_hidden_membership_failure_clears_group_and_continues(
     connector = _connector()
     connector.ops.list_groups.side_effect = [
         OneDriveGroupPage(
-            groups=[
+            items=[
                 OneDriveGroup(id="hidden", displayName="Hidden"),
                 OneDriveGroup(id="visible", displayName="Visible"),
             ]
@@ -100,14 +100,14 @@ def test_hidden_membership_failure_clears_group_and_continues(
     ]
     connector.ops.list_transitive_group_members.side_effect = [
         OneDriveGroupMemberPage(
-            members=[OneDriveGroupMember(id="partial", mail="partial@example.com")],
+            items=[OneDriveGroupMember(id="partial", mail="partial@example.com")],
             next_link="hidden-next",
         ),
         OneDriveGraphError(
             403, "Authorization_RequestDenied", "Insufficient privileges"
         ),
         OneDriveGroupMemberPage(
-            members=[OneDriveGroupMember(id="visible-user", mail="user@example.com")]
+            items=[OneDriveGroupMember(id="visible-user", mail="user@example.com")]
         ),
     ]
     cc_pair = MagicMock()
@@ -142,8 +142,8 @@ def test_group_sync_rejects_group_page_limit(
         2,
     )
     connector.ops.list_groups.side_effect = [
-        OneDriveGroupPage(groups=[], next_link="groups-1"),
-        OneDriveGroupPage(groups=[], next_link="groups-2"),
+        OneDriveGroupPage(items=[], next_link="groups-1"),
+        OneDriveGroupPage(items=[], next_link="groups-2"),
     ]
     cc_pair = MagicMock()
     cc_pair.connector.connector_specific_config = {}
@@ -167,11 +167,11 @@ def test_group_sync_rejects_group_page_limit(
 def test_group_members_reject_repeated_cursor() -> None:
     connector = _connector()
     connector.ops.list_transitive_group_members.return_value = OneDriveGroupMemberPage(
-        members=[], next_link="members-next"
+        items=[], next_link="members-next"
     )
     connector.ops.list_transitive_group_members.side_effect = None
 
-    with pytest.raises(RuntimeError, match="repeated member cursor"):
+    with pytest.raises(RuntimeError, match="repeated cursor"):
         _group_members(connector, OneDriveGroup(id="group"))
 
     assert connector.ops.list_transitive_group_members.call_count == 2
@@ -186,7 +186,7 @@ def test_group_members_reject_member_count_limit(
         1,
     )
     connector.ops.list_transitive_group_members.return_value = OneDriveGroupMemberPage(
-        members=[
+        items=[
             OneDriveGroupMember(id="first", mail="first@example.com"),
             OneDriveGroupMember(id="second", mail="second@example.com"),
         ]
