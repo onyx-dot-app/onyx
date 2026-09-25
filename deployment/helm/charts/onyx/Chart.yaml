@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.8.36
+version: 0.8.38
 appVersion: latest
 annotations:
   category: Productivity
@@ -20,9 +20,10 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: added
-      description: SHAREPOINT_CONNECTOR_SIZE_THRESHOLD in the config map values,
-        the SharePoint file size cap that Teams and Outlook already exposed.
+    - kind: fixed
+      description: Scope the pre-delete cleanup hook to this release's Postgres and
+        Redis resources, pin and harden its kubectl image, and add
+        postgresql.cluster.retainOnUninstall to keep the database on uninstall.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

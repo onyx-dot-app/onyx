@@ -64,9 +64,13 @@ Other 0.5.0 changes:
   (`postgresql.crds.create: false`). Run `scripts/check-cnpg-crds.sh` after
   bumping the CNPG subchart version to verify the copy is in sync.
 * **Pre-delete hook** — a cleanup Job (`templates/pre-delete-cleanup.yaml`)
-  deletes operator-managed CRs before `helm uninstall` tears down the
-  operators, ensuring finalizers are processed and namespace cleanup
-  completes promptly.
+  deletes this release's CNPG Cluster and Redis CRs, by name, before
+  `helm uninstall` tears down the operators. This makes sure finalizers are
+  processed and namespace cleanup completes promptly. Set
+  `postgresql.cluster.retainOnUninstall: true` to keep the CNPG Cluster and
+  its PVCs instead. The operator is still removed, so the kept Cluster has no
+  controller: reinstall with the same release name to adopt it, or delete it
+  and clear its finalizers (see the comment in `values.yaml`).
 
 # Dependency updates (when subchart versions are bumped)
 * If updating subcharts, you need to run this before committing!
