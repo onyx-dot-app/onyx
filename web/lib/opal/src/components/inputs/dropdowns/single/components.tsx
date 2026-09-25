@@ -451,6 +451,12 @@ function SingleDropdown({
       // portalled, so its clicks bubble here through React's tree too: a
       // foldable title, the search field or the padding must not toggle
       // the list. Only a pick closes it, and the rows do that themselves.
+      //
+      // A wrapping <label> forwards a click on anything but the input to
+      // the input, which would reach here and toggle a second time: a click
+      // on the field's padding would open and close at once. Cancelling the
+      // click's default action drops the forwarded click; nothing else in
+      // here relies on it, since focus moves on mousedown.
       onClick={
         typeIn
           ? undefined
@@ -461,6 +467,7 @@ function SingleDropdown({
               ) {
                 return;
               }
+              event.preventDefault();
               toggleDropdown();
             }
       }
