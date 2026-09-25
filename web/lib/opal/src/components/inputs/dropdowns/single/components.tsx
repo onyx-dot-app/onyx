@@ -575,17 +575,13 @@ function SingleDropdown({
           value={effectiveValue}
           highlightedIndex={highlightedIndex}
           onSelect={handleOptionSelect}
-          onMouseEnter={(index) => {
-            setIsKeyboardNav(false);
-            setHighlightedIndex(index);
-          }}
+          // The pointer took over: the keyboard highlight yields to Interactive's
+          // own hover on whatever the pointer is on.
           onMouseMove={() => {
             if (isKeyboardNav) {
               setIsKeyboardNav(false);
+              setHighlightedIndex(-1);
             }
-          }}
-          onMouseLeave={() => {
-            if (!isKeyboardNav) setHighlightedIndex(-1);
           }}
           isExactMatch={isExactMatch}
           inputValue={filterText}

@@ -310,15 +310,13 @@ function MultiDropdown(props: MultiDropdownProps) {
         selectedValues={selectedValues}
         highlightedIndex={highlightedIndex}
         onSelect={handleOptionSelect}
-        onMouseEnter={(index) => {
-          setIsKeyboardNav(false);
-          setHighlightedIndex(index);
-        }}
+        // The pointer took over: the keyboard highlight yields to Interactive's
+        // own hover on whatever the pointer is on.
         onMouseMove={() => {
-          if (isKeyboardNav) setIsKeyboardNav(false);
-        }}
-        onMouseLeave={() => {
-          if (!isKeyboardNav) setHighlightedIndex(-1);
+          if (isKeyboardNav) {
+            setIsKeyboardNav(false);
+            setHighlightedIndex(-1);
+          }
         }}
         isExactMatch={(option) => selectedValues.has(option.value)}
         markAllMatches

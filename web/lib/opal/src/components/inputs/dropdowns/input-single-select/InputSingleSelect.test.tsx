@@ -113,12 +113,14 @@ describe("InputSingleSelect", () => {
       // Nothing highlighted yet; Tab lands on the first row.
       await user.keyboard("{Tab}");
       expect(screen.getByRole("option", { name: /Apple/ })).toHaveAttribute(
-        "data-highlighted"
+        "data-interaction",
+        "hover"
       );
       // Shift+Tab from the first row wraps to the last.
       await user.keyboard("{Shift>}{Tab}{/Shift}");
       expect(screen.getByRole("option", { name: /Cherry/ })).toHaveAttribute(
-        "data-highlighted"
+        "data-interaction",
+        "hover"
       );
       // ArrowDown from the last wraps to the first; Enter picks it.
       await user.keyboard("{ArrowDown}{Enter}");
@@ -141,19 +143,20 @@ describe("InputSingleSelect", () => {
       expect(
         screen
           .queryAllByRole("option")
-          .filter((o) => o.hasAttribute("data-highlighted"))
+          .filter((o) => o.getAttribute("data-interaction") === "hover")
       ).toHaveLength(0);
       // Shift+Tab from the search field wraps to the last visible row.
       await user.keyboard("{Shift>}{Tab}{/Shift}");
       expect(screen.getByRole("option", { name: /Banana/ })).toHaveAttribute(
-        "data-highlighted"
+        "data-interaction",
+        "hover"
       );
       // Tab from the last row returns to the search field: no row highlighted.
       await user.keyboard("{Tab}");
       expect(
         screen
           .queryAllByRole("option")
-          .filter((o) => o.hasAttribute("data-highlighted"))
+          .filter((o) => o.getAttribute("data-interaction") === "hover")
       ).toHaveLength(0);
       expect(searchField).toHaveFocus();
     });

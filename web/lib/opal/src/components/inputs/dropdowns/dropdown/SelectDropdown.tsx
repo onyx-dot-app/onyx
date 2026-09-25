@@ -24,10 +24,7 @@ interface SelectDropdownProps {
   markAllMatches?: boolean;
   highlightedIndex: number;
   onSelect: (option: SelectOption) => void;
-  onMouseEnter: (index: number) => void;
   onMouseMove: () => void;
-  /** Pointer left the listbox — clear the pointer-driven highlight. */
-  onMouseLeave: () => void;
   isExactMatch: (option: SelectOption) => boolean;
   /** Current input value for creating new option */
   inputValue: string;
@@ -78,9 +75,7 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
       markAllMatches,
       highlightedIndex,
       onSelect,
-      onMouseEnter,
       onMouseMove,
-      onMouseLeave,
       isExactMatch,
       inputValue,
       allowCreate,
@@ -168,7 +163,6 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
         className="opal-select-dropdown"
         style={floatingStyles}
         onAnimationEnd={presence.onAnimationEnd}
-        onMouseLeave={onMouseLeave}
         onMouseDown={(e) => {
           // Clicks on padding, gaps, or dividers must not steal focus from
           // the combobox input (the listbox is tabIndex={-1} for AT only).
@@ -231,7 +225,6 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
             highlightedIndex={highlightedIndex}
             fieldId={fieldId}
             onSelect={onSelect}
-            onMouseEnter={onMouseEnter}
             onMouseMove={onMouseMove}
             isExactMatch={isExactMatch}
             inputValue={inputValue}

@@ -6,6 +6,7 @@ import type { OptionGroup } from "../shared";
 import { Divider } from "@opal/components/divider/components";
 import { Text } from "@opal/components/text/components";
 import { clickOnKeyDown } from "@opal/utils";
+import { Interactive } from "@opal/core";
 import { SvgPlus } from "@opal/icons";
 import { sanitizeOptionId } from "./aria";
 
@@ -25,7 +26,7 @@ interface OptionsListProps {
   highlightedIndex: number;
   fieldId: string;
   onSelect: (option: SelectOption) => void;
-  onMouseEnter: (index: number) => void;
+  /** The pointer moved over a stop: the keyboard highlight yields. */
   onMouseMove: () => void;
   isExactMatch: (option: SelectOption) => boolean;
   /** Current input value for creating new option */
@@ -52,7 +53,6 @@ export const OptionsList: React.FC<OptionsListProps> = ({
   highlightedIndex,
   fieldId,
   onSelect,
-  onMouseEnter,
   onMouseMove,
   isExactMatch,
   inputValue,
@@ -97,34 +97,42 @@ export const OptionsList: React.FC<OptionsListProps> = ({
     <>
       {/* Create New Option */}
       {showCreateOption && (
-        <div
-          id={`${fieldId}-option-${sanitizeOptionId(createText)}`}
-          data-index={0}
-          role="option"
-          tabIndex={-1}
-          aria-selected={false}
-          aria-label={strings.comboBoxCreateOption(
-            strings.comboBoxCreate,
-            createText
-          )}
+        <Interactive.Stateless
+          variant="default"
+          prominence="tertiary"
+          interaction={highlightedIndex === 0 ? "hover" : "rest"}
           onClick={(e) => {
             e.stopPropagation();
             onSelect({ value: createText, title: createText });
           }}
-          onKeyDown={clickOnKeyDown(() =>
-            onSelect({ value: createText, title: createText })
-          )}
-          onMouseDown={(e) => {
-            e.preventDefault();
-          }}
-          onMouseEnter={() => onMouseEnter(0)}
-          onMouseMove={onMouseMove}
-          className="opal-select-create"
-          data-highlighted={highlightedIndex === 0 || undefined}
         >
-          <span className="opal-select-create-label">{createText}</span>
-          <SvgPlus className="opal-select-create-icon" />
-        </div>
+          <Interactive.Container
+            rounding={2}
+            size="fit"
+            width="full"
+            id={`${fieldId}-option-${sanitizeOptionId(createText)}`}
+            data-index={0}
+            role="option"
+            tabIndex={-1}
+            aria-selected={false}
+            aria-label={strings.comboBoxCreateOption(
+              strings.comboBoxCreate,
+              createText
+            )}
+            onKeyDown={clickOnKeyDown(() =>
+              onSelect({ value: createText, title: createText })
+            )}
+            onMouseDown={(e) => {
+              e.preventDefault();
+            }}
+            onMouseMove={onMouseMove}
+          >
+            <div className="opal-select-create">
+              <span className="opal-select-create-label">{createText}</span>
+              <SvgPlus className="opal-select-create-icon" />
+            </div>
+          </Interactive.Container>
+        </Interactive.Stateless>
       )}
 
       {/* A line separates consecutive groups; it carries the group's title
@@ -155,7 +163,6 @@ export const OptionsList: React.FC<OptionsListProps> = ({
                 }
                 isExact={isExact}
                 onSelect={onSelect}
-                onMouseEnter={onMouseEnter}
                 onMouseMove={onMouseMove}
                 searchTerm={inputValue}
               />
@@ -173,6 +180,7 @@ export const OptionsList: React.FC<OptionsListProps> = ({
                 // the Divider's own Interactive.
                 id={`${fieldId}-group-${sanitizeOptionId(group.title)}`}
                 role="presentation"
+                className="opal-select-group"
                 data-index={index}
               >
                 <Divider
@@ -180,6 +188,9 @@ export const OptionsList: React.FC<OptionsListProps> = ({
                   foldable
                   open={!group.folded}
                   onOpenChange={() => onToggleGroup?.(group)}
+                  // Only the keyboard stop reads as hover; an open title
+                  // stays at rest, unlike a standalone foldable Divider.
+                  interaction={index === highlightedIndex ? "hover" : "rest"}
                 >
                   {rows}
                 </Divider>

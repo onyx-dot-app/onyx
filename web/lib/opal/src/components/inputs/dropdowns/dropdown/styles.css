@@ -4,8 +4,8 @@
    Select dropdown — the family-internal listbox
 
    State styling rides data attributes set by the components:
-     .opal-select-option: data-exact, data-highlighted, data-selected,
-     data-disabled. Layout-only values; colors come from the tokens.
+     the row's Interactive container: data-exact, data-selected. Hover,
+     press and the keyboard highlight are Interactive's own.
    ============================================================================ */
 
 .opal-select-dropdown {
@@ -98,31 +98,34 @@
 
 /* 8px side padding: with the listbox 4px wider than the trigger on each
    side, a row's text and icon then sit exactly under the trigger's. */
+/* A row's hover, press, disabled and keyboard highlight are its
+   Interactive's. The row itself only lays out its content; the exact and
+   selected tints sit on the Interactive container, marked by data attributes. */
 .opal-select-option {
-  @apply flex cursor-pointer flex-col px-2 py-2 rounded-08 transition-colors;
+  /* Full width and start-aligned inside the container, which centres. */
+  @apply flex w-full flex-col px-2 py-2 text-start;
 }
-.opal-select-option[data-exact] {
+.interactive-container[data-exact] {
   @apply bg-[var(--action-selection-01)];
 }
-.opal-select-option:not([data-exact])[data-highlighted],
-.opal-select-option:not([data-exact])[data-selected] {
+.interactive-container:not([data-exact])[data-selected] {
   @apply bg-background-tint-02;
 }
-.opal-select-option:not([data-disabled]):not([data-exact]):hover {
-  @apply bg-background-tint-02;
-}
-.opal-select-option[data-disabled] {
-  @apply cursor-not-allowed bg-background-neutral-02 opacity-50;
+
+/* A foldable group wraps its title and rows; the same row gap as the list. */
+.opal-select-group {
+  @apply flex flex-col gap-1;
 }
 
 .opal-select-option-label {
   @apply flex flex-row items-center gap-1.5 text-text-04 font-main-ui-action;
 }
-.opal-select-option[data-exact] .opal-select-option-label {
+.interactive-container[data-exact] .opal-select-option-label {
   @apply font-medium;
   color: var(--action-selection-05);
 }
-.opal-select-option:not([data-exact])[data-selected] .opal-select-option-label {
+.interactive-container:not([data-exact])[data-selected]
+  .opal-select-option-label {
   @apply font-medium;
 }
 
@@ -132,7 +135,7 @@
   @apply h-4 w-4 shrink-0;
   color: var(--text-03);
 }
-.opal-select-option[data-exact] .opal-select-option-icon {
+.interactive-container[data-exact] .opal-select-option-icon {
   color: var(--action-selection-05);
 }
 
@@ -148,7 +151,7 @@
 .opal-select-option-description {
   @apply mt-0.5 text-text-03 font-secondary-body;
 }
-.opal-select-option[data-exact] .opal-select-option-description {
+.interactive-container[data-exact] .opal-select-option-description {
   color: var(--action-selection-04);
 }
 
@@ -157,10 +160,7 @@
    --------------------------------------------------------------------------- */
 
 .opal-select-create {
-  @apply flex cursor-pointer items-center justify-between px-2 py-2 rounded-08 transition-colors hover:bg-background-tint-02;
-}
-.opal-select-create[data-highlighted] {
-  @apply bg-background-tint-02;
+  @apply flex w-full items-center justify-between px-2 py-2 text-start;
 }
 
 .opal-select-create-label {

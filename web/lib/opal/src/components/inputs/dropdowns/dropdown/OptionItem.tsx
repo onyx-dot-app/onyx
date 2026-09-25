@@ -1,5 +1,6 @@
 import React from "react";
 import { clickOnKeyDown } from "@opal/utils";
+import { Interactive } from "@opal/core";
 import { SelectOption } from "../types";
 import { sanitizeOptionId } from "./aria";
 
@@ -11,7 +12,7 @@ interface OptionItemProps {
   isSelected: boolean;
   isExact: boolean;
   onSelect: (option: SelectOption) => void;
-  onMouseEnter: (index: number) => void;
+  /** The pointer moved over the row: the keyboard highlight yields. */
   onMouseMove: () => void;
   /** Search term to highlight in the label */
   searchTerm: string;
@@ -57,46 +58,56 @@ export const OptionItem = React.memo(
     isSelected,
     isExact,
     onSelect,
-    onMouseEnter,
     onMouseMove,
     searchTerm,
   }: OptionItemProps) => {
+    // Hover and press are Interactive's; the keyboard highlight is its
+    // "hover" override on the one row the walk stopped on.
     return (
-      <div
-        id={`${fieldId}-option-${sanitizeOptionId(option.value)}`}
-        data-index={index}
-        role="option"
-        tabIndex={-1}
-        aria-selected={isSelected}
-        aria-disabled={option.disabled}
+      <Interactive.Stateless
+        variant="default"
+        prominence="tertiary"
+        interaction={isHighlighted ? "hover" : "rest"}
+        disabled={option.disabled}
         onClick={(e) => {
           e.stopPropagation();
           onSelect(option);
         }}
-        onKeyDown={clickOnKeyDown(() => onSelect(option))}
-        onMouseDown={(e) => {
-          e.preventDefault();
-        }}
-        onMouseEnter={() => onMouseEnter(index)}
-        onMouseMove={onMouseMove}
-        className="opal-select-option"
-        data-exact={isExact || undefined}
-        data-highlighted={isHighlighted || undefined}
-        data-selected={isSelected || undefined}
-        data-disabled={option.disabled || undefined}
       >
-        <span className="opal-select-option-label">
-          {option.icon && <option.icon className="opal-select-option-icon" />}
-          <span className="opal-select-option-text">
-            {highlightMatch(option.title, searchTerm)}
-          </span>
-        </span>
-        {option.description && (
-          <span className="opal-select-option-description">
-            {option.description}
-          </span>
-        )}
-      </div>
+        <Interactive.Container
+          rounding={2}
+          size="fit"
+          width="full"
+          id={`${fieldId}-option-${sanitizeOptionId(option.value)}`}
+          data-index={index}
+          role="option"
+          tabIndex={-1}
+          aria-selected={isSelected}
+          onKeyDown={clickOnKeyDown(() => onSelect(option))}
+          onMouseDown={(e) => {
+            e.preventDefault();
+          }}
+          onMouseMove={onMouseMove}
+          data-exact={isExact || undefined}
+          data-selected={isSelected || undefined}
+        >
+          <div className="opal-select-option">
+            <span className="opal-select-option-label">
+              {option.icon && (
+                <option.icon className="opal-select-option-icon" />
+              )}
+              <span className="opal-select-option-text">
+                {highlightMatch(option.title, searchTerm)}
+              </span>
+            </span>
+            {option.description && (
+              <span className="opal-select-option-description">
+                {option.description}
+              </span>
+            )}
+          </div>
+        </Interactive.Container>
+      </Interactive.Stateless>
     );
   }
 );
