@@ -1,4 +1,5 @@
 import time
+from collections.abc import Mapping
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 from uuid import UUID
@@ -51,6 +52,26 @@ _OFFLINE_ACCESS_AUTH_PARAMS_BY_HOST: dict[str, dict[str, str]] = {
     # config without one. Matches Onyx's own Google login flow.
     "accounts.google.com": {"access_type": "offline", "prompt": "consent"},
 }
+
+_PROTOCOL_AUTHORIZATION_PARAMS = frozenset(
+    {
+        "client_id",
+        "code_challenge",
+        "code_challenge_method",
+        "redirect_uri",
+        "resource",
+        "response_type",
+        "scope",
+        "state",
+    }
+)
+
+
+def conflicting_authorization_params(
+    additional_params: Mapping[str, object] | None,
+) -> frozenset[str]:
+    """Return configured parameters whose values the OAuth flow must own."""
+    return _PROTOCOL_AUTHORIZATION_PARAMS.intersection(additional_params or {})
 
 
 def ensure_offline_access_auth_params(authorization_url: str) -> str:
