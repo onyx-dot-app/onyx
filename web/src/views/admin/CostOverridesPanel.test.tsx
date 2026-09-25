@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import CostOverridesPanel from "@/views/admin/CostOverridesPanel";
 import type { CostOverride } from "@/lib/languageModels/types";
@@ -45,37 +44,34 @@ jest.mock("@/lib/languageModels/costOverrides", () => ({
 }));
 
 jest.mock("@/lib/languageModels/hooks", () => ({
-  useAdminLanguageModels: () => ({ llmProviders: [] }),
+  useAdminLanguageModels: () => ({
+    llmProviders: [
+      {
+        id: 2,
+        name: "Anthropic",
+        provider: "anthropic",
+        model_configurations: [
+          {
+            id: 1,
+            name: "shared-model",
+            is_visible: true,
+            max_input_tokens: null,
+            supports_image_input: false,
+            supports_reasoning: false,
+            effectiveDisplayName: "shared-model",
+          },
+        ],
+      },
+    ],
+  }),
 }));
 
-jest.mock("@/sections/model-selector/ModelSelector", () => ({
-  __esModule: true,
-  default: ({
+jest.mock("@/lib/languageModels/components", () => ({
+  SimpleModelSelector: ({
     onChange,
-    renderTrigger,
   }: {
-    onChange: (option: {
-      modelName: string;
-      provider: string;
-      modelConfigurationId: number;
-    }) => void;
-    renderTrigger: () => ReactNode;
-  }) => (
-    <>
-      {renderTrigger()}
-      <button
-        onClick={() =>
-          onChange({
-            modelName: "shared-model",
-            provider: "anthropic",
-            modelConfigurationId: 1,
-          })
-        }
-      >
-        Choose Anthropic model
-      </button>
-    </>
-  ),
+    onChange: (modelConfigurationId: number) => void;
+  }) => <button onClick={() => onChange(1)}>Choose Anthropic model</button>,
 }));
 
 describe("CostOverridesPanel", () => {
