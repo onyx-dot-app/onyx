@@ -13,7 +13,6 @@ from onyx.agents.models import RunState
 from onyx.agents.runtime import Agent
 from onyx.agents.transcript import RunStatus
 from onyx.cache.factory import get_cache_backend
-from onyx.cache.interface import CacheBackend
 from onyx.chat.incognito_context import (
     get_or_create_incognito_root_id,
     load_incognito_agent_history,
@@ -142,7 +141,6 @@ def create_chat_agent_coordinator(
     owner: AgentCoordinator | None = None,
     register_store: Callable[[ChatRunStore], None] | None = None,
     response_store: RunStore | None = None,
-    control_cache: CacheBackend | None = None,
 ) -> AgentCoordinator:
     """Create a coordinator that can discover and restore subagents on this chat branch."""
     branch = load_chat_branch(message_id)
@@ -156,7 +154,6 @@ def create_chat_agent_coordinator(
             visible_response_ids=branch.message_ids,
             cache=get_cache_backend(),
             root_response=response_store,
-            control_cache=control_cache,
         )
         if persist_content and ENABLE_CHAT_CHECKPOINTS
         else None

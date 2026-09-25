@@ -7,9 +7,8 @@ logger = setup_logger()
 
 PREFIX = "chatprocessing"
 FENCE_PREFIX = f"{PREFIX}_fence"
-FENCE_TTL = 30 * 60  # Retain the buffer identity after a worker dies.
+FENCE_TTL = 30 * 60  # 30 minutes
 PROCESSING_REFRESH_INTERVAL_S = 5.0
-PROCESSING_STALE_AFTER_S = 3 * PROCESSING_REFRESH_INTERVAL_S
 
 
 def _get_fence_key(chat_session_id: UUID) -> str:
@@ -33,8 +32,9 @@ def set_processing_status(
 ) -> None:
     """Set or clear the fence for a chat session processing a message.
 
-    The marker retains the buffered stream ID after a worker becomes inactive.
-    Its remaining TTL determines liveness; 0 means no stream ID is available.
+    If the key exists, a message is being processed. The fence value carries the
+    stream ID of the active stream buffer when known; 0 means unknown (legacy pods
+    or pre-reservation failures) and reads as "in flight, not resumable".
 
     Args:
         chat_session_id: The UUID of the chat session
@@ -50,7 +50,8 @@ def set_processing_status(
 
 
 def get_processing_stream_id(chat_session_id: UUID, cache: CacheBackend) -> int | None:
-    """Buffered stream ID, retained for recovery after the worker becomes inactive."""
+    """Stream ID of the session's in-flight stream buffer, or None when idle or the
+    fence carries no stream ID."""
     raw = cache.get(_get_fence_key(chat_session_id))
     if raw is None:
         return None
@@ -67,6 +68,13 @@ def get_processing_stream_id(chat_session_id: UUID, cache: CacheBackend) -> int 
 
 
 def is_chat_session_processing(chat_session_id: UUID, cache: CacheBackend) -> bool:
-    """A worker must refresh its processing marker to remain live across pods."""
-    remaining = cache.ttl(_get_fence_key(chat_session_id))
-    return FENCE_TTL - PROCESSING_STALE_AFTER_S < remaining <= FENCE_TTL
+    """Check if the chat session is processing a message.
+
+    Args:
+        chat_session_id: The UUID of the chat session
+        cache: Tenant-aware cache backend
+
+    Returns:
+        True if the chat session is processing a message, False otherwise
+    """
+    return cache.exists(_get_fence_key(chat_session_id))

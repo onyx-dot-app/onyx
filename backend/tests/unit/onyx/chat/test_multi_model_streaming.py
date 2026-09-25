@@ -2153,11 +2153,11 @@ def test_stop_after_suspension_retains_root_cancellation_and_saves_once() -> Non
             assert coordinator.close(5)
 
 
-def test_stop_cache_failure_keeps_polling_retained_ownership_after_root_finishes() -> (
-    None
-):
+def test_stop_cache_failure_retries_and_keeps_polling_ownership() -> None:
     setup = _make_setup()
     provider_entered = threading.Event()
+    cache_failed = threading.Event()
+    cache_recovered = threading.Event()
     polled_after_completion = threading.Event()
     outcome = Future[ChatResponseOutcome]()
     tasks = ActiveChatTurns()
@@ -2175,8 +2175,11 @@ def test_stop_cache_failure_keeps_polling_retained_ownership_after_root_finishes
         raise AssertionError("Cancelled provider must not produce an answer")
 
     def stop_read(_key: str) -> bool:
+        if cache_recovered.is_set():
+            return True
         if provider_entered.is_set():
-            raise ConnectionError("Control cache unavailable")
+            cache_failed.set()
+            raise ConnectionError("Cache unavailable")
         return False
 
     def poll_owned_runs() -> None:
@@ -2201,6 +2204,10 @@ def test_stop_cache_failure_keeps_polling_retained_ownership_after_root_finishes
         turn.begin()
         tasks.start(turn)
         try:
+            assert cache_failed.wait(5)
+            assert not turn.cancellation.cancelled
+            assert not outcome.done()
+            cache_recovered.set()
             assert outcome.result(timeout=5).response.cancelled
             assert polled_after_completion.wait(5)
             turn.finished.result(timeout=5)
@@ -2246,3 +2253,45 @@ def test_storage_ownership_failure_reports_failed_response_without_writing() -> 
         finally:
             reader.close()
             assert coordinator.close(5)
+
+
+def test_blocked_stream_status_does_not_block_ownership_polling() -> None:
+    setup = _make_setup()
+    entered = threading.Event()
+    release = threading.Event()
+
+    def stop_read(_key: str) -> bool:
+        entered.set()
+        assert release.wait(5)
+        return False
+
+    setup.cache.exists.side_effect = stop_read
+    store = MagicMock(spec=ChatRunStore)
+    turn = ChatTurnExecution(setup, MagicMock())
+    turn._register_store(store)
+    turn._last_stop_check = 0
+    try:
+        turn._poll_control()
+        assert entered.wait(5)
+        turn._poll_control()
+        assert store.poll_control.call_count == 2
+        assert not turn.cancellation.cancelled
+    finally:
+        release.set()
+        assert turn._stream_status is not None
+        turn._stream_status.result(timeout=5)
+
+
+def test_processing_marker_failure_does_not_cancel_chat() -> None:
+    turn = ChatTurnExecution(_make_setup(), MagicMock())
+    with patch(
+        "onyx.chat.execution.set_processing_status",
+        side_effect=[ConnectionError("offline"), None],
+    ) as processing:
+        turn._last_refresh = 0
+        turn._poll_stream_status()
+        assert not turn.cancellation.cancelled
+        turn._last_refresh = 0
+        turn._poll_stream_status()
+        assert processing.call_count == 2
+        assert not turn.cancellation.cancelled

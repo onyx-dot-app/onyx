@@ -162,9 +162,10 @@ class ExecutionWork:
 
 
 class EventDispatcher:
-    """Serialize listeners and flush their output on one worker.
+    """Deliver queued agent events to listeners on one shared worker.
 
-    The flush callback receives True after close drains all accepted events.
+    The optional flush callback batches listener output on that same worker. It
+    receives True after close drains all accepted events, for final output cleanup.
     """
 
     def __init__(

@@ -8,7 +8,6 @@ from contextlib import ExitStack
 from onyx.agents.coordination import AgentCoordinator
 from onyx.agents.models import RunState
 from onyx.agents.runtime import Run
-from onyx.cache.interface import CacheBackend
 from onyx.chat.agent import ChatAgent
 from onyx.chat.chat_processing_checker import (
     PROCESSING_REFRESH_INTERVAL_S,
@@ -104,11 +103,8 @@ def start_chat_turn(
     stream_buffer: StreamBufferWriter | None = None,
     *,
     active_chat_turns: ActiveChatTurns | None = None,
-    control_cache: CacheBackend | None = None,
 ) -> ChatStream:
-    turn = ChatTurnExecution(
-        setup, user, response_future, stream_buffer, control_cache=control_cache
-    )
+    turn = ChatTurnExecution(setup, user, response_future, stream_buffer)
     startup_error: Exception | None = None
     try:
         turn.begin()
@@ -127,15 +123,13 @@ class ChatTurnExecution:
         user: User,
         response_future: Future[ChatResponseOutcome] | None = None,
         stream_buffer: StreamBufferWriter | None = None,
-        *,
-        control_cache: CacheBackend | None = None,
     ) -> None:
         self.setup = setup
-        self.control_cache = control_cache or setup.cache
         self.user = user
         self.delivery = ChatDelivery(stream_buffer)
         self.events = self.delivery.events
         self._stores: list[ChatRunStore] = []
+        self._stream_status: Future[None] | None = None
         self._persistence: dict[int, ChatResponsePersistence] = {}
         self._delivery_closed = False
         self._completion_reported = False
@@ -161,12 +155,12 @@ class ChatTurnExecution:
         self._auto_filters = load_settings().auto_detect_search_filters is not False
         clear_stop(
             self.setup.chat_session_id,
-            self.control_cache,
+            self.setup.cache,
             stream_id=self.setup.stream_id,
         )
         set_processing_status(
             chat_session_id=self.setup.chat_session_id,
-            cache=self.control_cache,
+            cache=self.setup.cache,
             value=True,
             stream_id=self.setup.stream_id,
         )
@@ -288,14 +282,28 @@ class ChatTurnExecution:
             return
         self._delivery_closed = True
 
+        def clear_status() -> None:
+            try:
+                if self._stream_status is not None:
+                    self._stream_status.result()
+                set_processing_status(
+                    chat_session_id=self.setup.chat_session_id,
+                    cache=self.setup.cache,
+                    value=False,
+                )
+            except Exception:
+                logger.exception("Failed to clear chat processing status")
+            finally:
+                with self._lock:
+                    self._delivery_finished = True
+                self._changed.set()
+                self._maybe_finish()
+
         def drained(_future: Future[None]) -> None:
-            with self._lock:
-                self._delivery_finished = True
-            self._changed.set()
-            self._maybe_finish()
+            start_thread_future(clear_status, name="chat-status-cleanup")
 
         try:
-            self._finish_delivery()
+            self.delivery.finish()
         finally:
             self.delivery.finished.add_done_callback(drained)
 
@@ -370,7 +378,6 @@ class ChatTurnExecution:
                 tools=chat_agent.tools,
                 user_identity=self.setup.user_identity,
                 register_store=self._register_store,
-                control_cache=self.control_cache,
                 response_store=persistence,
             )
             persistence.coordinator = coordinator
@@ -423,8 +430,16 @@ class ChatTurnExecution:
             stores = tuple(self._stores)
         for store in stores:
             store.poll_control()
-        if self._delivery_closed:
-            return self.cancellation.cancelled
+        if not self._delivery_closed and (
+            self._stream_status is None or self._stream_status.done()
+        ):
+            self._stream_status = start_thread_future(
+                self._poll_stream_status, name="chat-stream-status"
+            )
+        return self.cancellation.cancelled
+
+    def _poll_stream_status(self) -> None:
+        # Ordinary cache waits must not delay ownership deadlines.
         now = time.monotonic()
         if (
             not self.cancellation.cancelled
@@ -434,37 +449,21 @@ class ChatTurnExecution:
             try:
                 if is_stop_requested(
                     self.setup.chat_session_id,
-                    self.control_cache,
+                    self.setup.cache,
                     stream_id=self.setup.stream_id,
                 ):
                     self._stopped_by_user = True
                     self.cancellation.cancel()
             except Exception:
-                self.cancellation.cancel()
-                logger.exception("Failed to read chat Stop request")
+                logger.exception("Failed to read chat Stop request; will retry")
         if now - self._last_refresh >= PROCESSING_REFRESH_INTERVAL_S:
             self._last_refresh = now
             try:
                 set_processing_status(
                     chat_session_id=self.setup.chat_session_id,
-                    cache=self.control_cache,
+                    cache=self.setup.cache,
                     value=True,
                     stream_id=self.setup.stream_id,
                 )
             except Exception:
-                self.cancellation.cancel()
-                logger.exception("Failed to refresh chat processing status")
-        return self.cancellation.cancelled
-
-    def _finish_delivery(self) -> None:
-        try:
-            self.delivery.finish()
-        finally:
-            try:
-                set_processing_status(
-                    chat_session_id=self.setup.chat_session_id,
-                    cache=self.control_cache,
-                    value=False,
-                )
-            except Exception:
-                logger.exception("Failed to clear chat processing status")
+                logger.exception("Failed to refresh chat processing status; will retry")

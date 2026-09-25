@@ -337,18 +337,22 @@ def _stream_gap() -> StreamingError:
 
 
 class ChatDelivery:
-    """Deliver packets independently of execution, with bounded cache work and cleanup."""
+    """Own live packets and replay storage for one chat turn.
+
+    One worker delivers agent events to packet producers and flushes replay batches.
+    Direct control packets use the same publication lock to preserve replay order.
+    """
 
     def __init__(self, buffer: StreamBufferWriter | None) -> None:
         self.reader = ChatStream()
         self.finished: Future[None] = Future()
         self._buffer = buffer
-        self._lines: queue.Queue[str] = queue.Queue(_BUFFER_WORK_CAPACITY)
+        self._pending_replay: list[str] = []
         self._finished = threading.Event()
         self._closing = False
         self._gap = threading.Event()
         self._publish_lock = threading.RLock()
-        self.events = EventDispatcher(flush=self._flush)
+        self.events = EventDispatcher(flush=self._flush_replay)
 
     def start(self) -> None:
         self.events.start()
@@ -362,11 +366,11 @@ class ChatDelivery:
             self.reader.publish(item)
             if line is None or self._gap.is_set():
                 return
-            try:
-                self._lines.put_nowait(line)
-            except queue.Full:
+            if len(self._pending_replay) >= _BUFFER_WORK_CAPACITY:
                 logger.warning("Chat cache delivery exceeded its backlog bound")
                 self.report_gap()
+                return
+            self._pending_replay.append(line)
 
     def report_gap(self) -> None:
         with self._publish_lock:
@@ -393,23 +397,22 @@ class ChatDelivery:
             self.report_gap()
         self.reader.publish(_StreamStatus.DONE)
 
-    def _flush(self, final: bool) -> None:
-        if final:
-            with self._publish_lock:
+    def _flush_replay(self, final: bool) -> None:
+        with self._publish_lock:
+            if final:
                 self._finished.set()
-        if self.finished.done():
-            return
+            if self.finished.done():
+                return
+            lines = self._pending_replay
+            self._pending_replay = []
+        # Cache I/O must leave control and error packet producers free to publish.
         buffer = self._buffer
         try:
             if buffer is not None:
-                # Bound each batch so cache producers cannot starve agent events.
-                for _ in range(_BUFFER_WORK_CAPACITY):
-                    try:
-                        line = self._lines.get_nowait()
-                    except queue.Empty:
+                for line in lines:
+                    if self._gap.is_set():
                         break
-                    if not self._gap.is_set():
-                        buffer.append_line(line)
+                    buffer.append_line(line)
                 if self._gap.is_set() and not buffer.truncated:
                     buffer.mark_truncated()
                 buffer.flush()
