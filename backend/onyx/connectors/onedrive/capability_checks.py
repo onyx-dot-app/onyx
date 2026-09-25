@@ -46,7 +46,10 @@ _CANDIDATE_PAGES = 20
 T = TypeVar("T")
 _MAX_DISCOVERY_PAGES = 20
 _HIDDEN_MEMBERSHIP_VISIBILITY = "HiddenMembership"
-_MEMBER_READ_HIDDEN_SCOPE = "Member.Read.Hidden"
+
+
+class _NoCandidateFound(ConnectorValidationError):
+    pass
 
 
 def _gateway(context: CapabilityCheckContext) -> OneDriveSourceOperations:
@@ -135,7 +138,7 @@ def _first_drive_that(
             return drive, opened
     if denied is not None:
         raise_for_graph_error(denied, denied_message)
-    raise ConnectorValidationError(nothing_to_probe)
+    raise _NoCandidateFound(nothing_to_probe)
 
 
 def _first_delta_item(
@@ -169,7 +172,7 @@ def _probe_item_permissions(
     gateway: OneDriveSourceOperations,
     drive: OneDriveDrive,
     graph_api_base: str,
-) -> bool:
+) -> bool | None:
     item = _first_delta_item(
         gateway,
         drive,
@@ -180,37 +183,35 @@ def _probe_item_permissions(
             select_fields=DRIVE_DELTA_SELECT_FIELDS,
         ),
     )
-    if item is not None:
-        gateway.list_permissions(drive_id=drive.id, item_id=item.id)
+    if item is None:
+        return None
+    gateway.list_permissions(drive_id=drive.id, item_id=item.id)
     return True
 
 
 def _group_membership_probe_group(
     gateway: OneDriveSourceOperations,
 ) -> OneDriveGroup | None:
-    representative: OneDriveGroup | None = None
     next_link: str | None = None
     for _ in range(_MAX_DISCOVERY_PAGES):
         page = gateway.list_groups(
             page_size=_PROBE_PAGE_SIZE,
             next_link=next_link,
         )
-        if representative is None and page.groups:
-            representative = page.groups[0]
-        hidden_group = next(
+        visible_group = next(
             (
                 group
                 for group in page.groups
-                if group.visibility == _HIDDEN_MEMBERSHIP_VISIBILITY
+                if group.visibility != _HIDDEN_MEMBERSHIP_VISIBILITY
             ),
             None,
         )
-        if hidden_group is not None:
-            return hidden_group
+        if visible_group is not None:
+            return visible_group
         next_link = page.next_link
         if next_link is None:
-            return representative
-    return representative
+            return None
+    return None
 
 
 class _TokenCheck(CapabilityCheck):
@@ -348,17 +349,29 @@ class _PermissionCheck(CapabilityCheck):
     def run(self, context: CapabilityCheckContext) -> None:
         gateway = _gateway(context)
         host = _config(context).graph_api_host.rstrip("/")
+        found_empty_drive = False
+
+        def probe_permissions(drive: OneDriveDrive) -> bool | None:
+            nonlocal found_empty_drive
+            result = _probe_item_permissions(
+                gateway,
+                drive,
+                f"{host}/{GRAPH_API_VERSION}",
+            )
+            found_empty_drive = result is None
+            return result
+
         try:
             _first_drive_that(
                 context,
-                lambda drive: _probe_item_permissions(
-                    gateway,
-                    drive,
-                    f"{host}/{GRAPH_API_VERSION}",
-                ),
+                probe_permissions,
                 "The app cannot read permissions in the tenant's first OneDrives.",
                 "No readable OneDrive was found among the first users.",
             )
+        except _NoCandidateFound:
+            if found_empty_drive:
+                return
+            raise
         except OneDriveGraphError as error:
             raise_for_graph_error(error, "The app cannot read OneDrive permissions.")
 
@@ -388,10 +401,7 @@ class _GroupMembershipCheck(CapabilityCheck):
             check_id="onedrive_group_members",
             display_name="Entra transitive group members are readable",
             requires_connector_instance=False,
-            remediation=(
-                "Grant `GroupMember.ReadBasic.All` and grant "
-                f"`{_MEMBER_READ_HIDDEN_SCOPE}` for hidden membership."
-            ),
+            remediation="Grant `GroupMember.ReadBasic.All`.",
             docs_link=_DOCS_LINK,
         )
 
@@ -404,8 +414,6 @@ class _GroupMembershipCheck(CapabilityCheck):
             gateway.list_transitive_group_members(group_id=group.id)
         except OneDriveGraphError as error:
             denied = "The app cannot expand transitive Entra group members."
-            if error.status == 403:
-                denied += f" Hidden groups require `{_MEMBER_READ_HIDDEN_SCOPE}`."
             raise_for_graph_error(error, denied)
 
 

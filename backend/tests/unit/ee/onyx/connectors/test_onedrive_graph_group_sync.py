@@ -173,3 +173,23 @@ def test_group_members_reject_repeated_cursor() -> None:
         _group_members(connector, OneDriveGroup(id="group"))
 
     assert connector.ops.list_transitive_group_members.call_count == 2
+
+
+def test_group_members_reject_member_count_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connector = _connector()
+    monkeypatch.setattr(
+        "ee.onyx.external_permissions.onedrive.group_sync.MAX_GROUP_MEMBERS",
+        1,
+    )
+    connector.ops.list_transitive_group_members.return_value = OneDriveGroupMemberPage(
+        members=[
+            OneDriveGroupMember(id="first", mail="first@example.com"),
+            OneDriveGroupMember(id="second", mail="second@example.com"),
+        ]
+    )
+    connector.ops.list_transitive_group_members.side_effect = None
+
+    with pytest.raises(ValueError, match="member count limit"):
+        _group_members(connector, OneDriveGroup(id="group"))

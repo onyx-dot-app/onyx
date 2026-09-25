@@ -46,7 +46,10 @@ from onyx.connectors.models import (
     HierarchyNode,
     SlimDocument,
 )
-from onyx.connectors.onedrive.access import get_onedrive_external_access
+from onyx.connectors.onedrive.access import (
+    get_onedrive_external_access,
+    prefix_onedrive_external_groups,
+)
 from onyx.connectors.onedrive.models import (
     OneDriveCheckpoint,
     OneDriveDiscoveredFile,
@@ -318,7 +321,9 @@ class OneDriveConnector(
         *,
         add_prefix: bool,
     ) -> ExternalAccess:
-        permissions = self._list_all_permissions(drive.id, item_id)
+        permissions: list[OneDrivePermission] = self._list_all_permissions(
+            drive.id, item_id
+        )
         return get_onedrive_external_access(
             permissions,
             user.user_principal_name,
@@ -559,7 +564,12 @@ class OneDriveConnector(
                 except Exception as error:
                     yield _entity_failure(item.id, str(error), error)
                     continue
-                yield folder_node(drive, item, access)
+                node_access = (
+                    prefix_onedrive_external_groups(access)
+                    if access is not None and not add_group_prefix
+                    else access
+                )
+                yield folder_node(drive, item, node_access)
                 continue
             if not item.is_file or not self._item_allowed(item, start_at, end_at):
                 continue
@@ -574,6 +584,13 @@ class OneDriveConnector(
                     if include_permissions
                     else None
                 )
+            except OneDriveGraphError as error:
+                if error.fails_the_attempt:
+                    raise
+                yield _document_failure(
+                    DriveItemData.from_graph_json(item.to_graph_json()), error
+                )
+                continue
             except Exception as error:
                 yield _document_failure(
                     DriveItemData.from_graph_json(item.to_graph_json()), error
