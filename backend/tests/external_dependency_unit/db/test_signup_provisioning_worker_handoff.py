@@ -108,7 +108,7 @@ def _pool_has(tenant_id: str) -> bool:
 def _run_worker_task(email: str) -> bool:
     """Run the celery task in-process, as the monitoring worker would."""
     result = provisioning_tasks.provision_tenant_for_user.apply(
-        kwargs={"email": email}
+        kwargs={"tenant_id": ONYX_CLOUD_TENANT_ID, "email": email}
     ).get()
     return bool(result)
 
@@ -307,13 +307,17 @@ def test_worker_migrates_a_stale_pool_tenant_and_assigns_it(
     assert not _pool_has(pool_tenant_id)
 
 
-def test_worker_runs_once_per_email(email: str, no_alembic: MagicMock) -> None:
+def test_worker_waits_for_the_per_email_lock(email: str, no_alembic: MagicMock) -> None:
     r = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
     lock = r.lock(provisioning.user_provision_lock_name(email), timeout=30)
     assert lock.acquire(blocking=False)
     try:
-        with patch.object(provisioning, "provision_user_tenant") as provision:
-            assert _run_worker_task(email) is False
+        with (
+            patch.object(provisioning_tasks, "TENANT_PROVISIONING_WAIT_SECONDS", 1),
+            patch.object(provisioning, "provision_user_tenant") as provision,
+            pytest.raises(RuntimeError),
+        ):
+            _run_worker_task(email)
         provision.assert_not_called()
     finally:
         lock.release()

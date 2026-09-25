@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ee.onyx.configs.app_configs import HUBSPOT_TRACKING_URL
+from ee.onyx.db.available_tenant import take_available_tenant
 from ee.onyx.db.user_tenant_mapping import (
     add_users_to_tenant,
     resolve_tenant_id,
@@ -226,7 +227,11 @@ def _enqueue_user_provisioning(email: str, referral_source: str | None) -> None:
     )
     client_app.send_task(
         OnyxCeleryTask.CLOUD_PROVISION_TENANT_FOR_USER,
-        kwargs={"email": email, "referral_source": referral_source},
+        kwargs={
+            "tenant_id": ONYX_CLOUD_TENANT_ID,
+            "email": email,
+            "referral_source": referral_source,
+        },
         queue=OnyxCeleryQueues.MONITORING,
         priority=OnyxCeleryPriority.HIGH,
         # Past this the request has already failed, so the user retries and
@@ -830,39 +835,21 @@ async def get_available_tenant(allow_stale: bool = False) -> PoolTenant | None:
     if not MULTI_TENANT:
         return None
 
+    at_revision = None if allow_stale else get_alembic_head_revision()
     with get_session_with_shared_schema() as db_session:
         try:
             db_session.begin()
-
-            # Get the oldest available tenant with FOR UPDATE lock to prevent race conditions
-            query = db_session.query(AvailableTenant)
-            if not allow_stale:
-                query = query.filter(
-                    AvailableTenant.alembic_version == get_alembic_head_revision()
-                )
-            available_tenant = (
-                query.order_by(AvailableTenant.date_created)
-                .with_for_update(skip_locked=True)  # Skip locked rows to avoid blocking
-                .first()
-            )
-
-            if available_tenant is None:
-                db_session.rollback()
-                return None
-
-            pool_tenant = PoolTenant(
-                tenant_id=available_tenant.tenant_id,
-                alembic_version=available_tenant.alembic_version,
-            )
-            # Remove the tenant from the available tenants table
-            db_session.delete(available_tenant)
-            db_session.commit()
-            logger.info("Using pre-provisioned tenant %s", pool_tenant.tenant_id)
-            return pool_tenant
+            taken = take_available_tenant(db_session, at_revision)
         except Exception:
             logger.exception("Error getting available tenant")
             db_session.rollback()
             return None
+
+    if taken is None:
+        return None
+    tenant_id, alembic_version = taken
+    logger.info("Using pre-provisioned tenant %s", tenant_id)
+    return PoolTenant(tenant_id=tenant_id, alembic_version=alembic_version)
 
 
 async def setup_tenant(tenant_id: str) -> None:

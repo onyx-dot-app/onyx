@@ -51,6 +51,7 @@ _USER_PROVISION_LOCK_TIMEOUT = 60 * 10
 def provision_tenant_for_user(
     self: Task,  # noqa: ARG001
     *,
+    tenant_id: str,  # noqa: ARG001, the cloud system tenant, carried for TenantAwareTask
     email: str,
     referral_source: str | None = None,
 ) -> bool:
@@ -75,11 +76,15 @@ def provision_tenant_for_user(
     lock: RedisLock = r.lock(
         user_provision_lock_name(email), timeout=_USER_PROVISION_LOCK_TIMEOUT
     )
-    # A user who retries the signup page enqueues again. Only one run per email
-    # may build, or the retry creates a second workspace for the same person.
-    if not lock.acquire(blocking=False):
-        task_logger.info("Skipping provision_tenant_for_user: already running")
-        return False
+    # Wait rather than skip: a request may hold this while assigning a pool
+    # tenant, and if it fails this run is the signup's only remaining chance.
+    if not lock.acquire(
+        blocking=True, blocking_timeout=TENANT_PROVISIONING_WAIT_SECONDS
+    ):
+        raise RuntimeError(
+            "provision_tenant_for_user: the per-user lock stayed held past the "
+            "signup wait window"
+        )
 
     try:
         tenant_id = asyncio.run(provision_user_tenant(email, referral_source))
