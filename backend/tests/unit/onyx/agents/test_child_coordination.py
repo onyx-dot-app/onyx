@@ -13,7 +13,6 @@ import pytest
 
 from onyx.agents.coordination import AgentCoordinator, AgentInfo, RunCoordination
 from onyx.agents.events import AgentEvent, MessageEndEvent
-from onyx.agents.items import messages_from_items
 from onyx.agents.models import PreparedStep, RunState, StepInput
 from onyx.agents.runtime import Agent, Run, RunFailed, RunNotTransferable, RunReleased
 from onyx.agents.tools import (
@@ -28,7 +27,9 @@ from onyx.agents.tools import (
     ToolInvocation,
 )
 from onyx.agents.transcript import RunFailureKind, RunStatus
+from onyx.chat.checkpoint import CheckpointBinding
 from onyx.chat.presentation import project_response
+from onyx.chat.response_items import messages_from_items
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.exceptions import LLMTimeoutError
 from onyx.llm.interfaces import GenerationContext
@@ -44,6 +45,7 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.utils.threadpool_concurrency import start_thread_future
+from tests.unit.onyx.agents.checkpoint_storage import CheckpointStorage
 from tests.unit.onyx.agents.fakes import (
     FakeAgentDirectory,
     FakeModelClient,
@@ -1096,7 +1098,6 @@ def test_cold_restore_rejects_existing_owner_and_missing_child_rolls_back() -> N
 
 
 def test_cold_parent_restores_archived_handled_child_failure() -> None:
-    from onyx.agents.checkpoint import CheckpointBinding, SnapshotCodec
     from onyx.agents.models import AgentState
     from onyx.agents.tools import (
         ChildRunWait,
@@ -1106,7 +1107,7 @@ def test_cold_parent_restores_archived_handled_child_failure() -> None:
         PendingToolInput,
     )
 
-    codec = SnapshotCodec({})
+    codec = CheckpointStorage({})
     binding = CheckpointBinding(
         tenant_id="tenant", branch_id="branch", context_version="1"
     )
@@ -1182,16 +1183,16 @@ def test_cold_parent_restores_archived_handled_child_failure() -> None:
                 child.run_id
             ]
             return (
-                codec.encode(checkpoint.run_state, checkpoint.agent_state, binding),
-                codec.encode(child, AgentState(), binding),
+                codec.save(checkpoint.run_state, checkpoint.agent_state, binding),
+                codec.save(child, AgentState(), binding),
                 info,
             )
         finally:
             assert owner.close(3)
 
     parent_json, child_json, info = save_original()
-    restored = codec.decode(parent_json, expected_binding=binding)
-    archived_child = codec.decode(child_json, expected_binding=binding).run_state
+    restored = codec.load(parent_json, expected_binding=binding)
+    archived_child = codec.load(child_json, expected_binding=binding).run_state
 
     def unexpected(_invocation: ToolInvocation) -> ToolResult:
         raise AssertionError("Completed or pending tool code must not repeat")

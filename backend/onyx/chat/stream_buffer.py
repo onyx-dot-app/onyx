@@ -51,16 +51,16 @@ class StreamChunkRead(BaseModel):
     gap: bool
 
 
-def _chunk_key(chat_session_id: UUID, processing_key: int, chunk_n: int) -> str:
-    return f"{_PREFIX}_{chat_session_id}_{processing_key}:{chunk_n}"
+def _chunk_key(chat_session_id: UUID, stream_id: int, chunk_n: int) -> str:
+    return f"{_PREFIX}_{chat_session_id}_{stream_id}:{chunk_n}"
 
 
-def _meta_key(chat_session_id: UUID, processing_key: int) -> str:
-    return f"{_PREFIX}_{chat_session_id}_{processing_key}:meta"
+def _meta_key(chat_session_id: UUID, stream_id: int) -> str:
+    return f"{_PREFIX}_{chat_session_id}_{stream_id}:meta"
 
 
 def stream_buffer_key_pattern(chat_session_id: UUID) -> str:
-    """Glob matching every buffered chunk and meta key of the session's runs."""
+    """Glob matching every buffered chunk and meta key of the session's streams."""
     return f"{_PREFIX}_{chat_session_id}_*"
 
 
@@ -72,13 +72,13 @@ class StreamBufferWriter:
         self,
         cache: CacheBackend,
         chat_session_id: UUID,
-        processing_key: int,
+        stream_id: int,
         delete_on_done: bool = False,
         session_ended: Callable[[], bool] | None = None,
     ) -> None:
         self._cache = cache
         self._chat_session_id = chat_session_id
-        self._processing_key = processing_key
+        self._stream_id = stream_id
         # Content-free incognito runs: completion deletes the run's keys, so a
         # flush racing the session teardown still cleans itself up. Costs
         # post-completion resume.
@@ -93,8 +93,8 @@ class StreamBufferWriter:
         self._compressed_total = 0
 
     @property
-    def processing_key(self) -> int:
-        return self._processing_key
+    def stream_id(self) -> int:
+        return self._stream_id
 
     @property
     def truncated(self) -> bool:
@@ -124,16 +124,16 @@ class StreamBufferWriter:
                 self._meta.truncated = True
                 self._write_meta(CHAT_STREAM_BUFFER_TTL_S)
                 logger.warning(
-                    "stream buffer for session %s run %d exceeded %d bytes; "
+                    "stream buffer for session %s stream %d exceeded %d bytes; "
                     "marking truncated",
                     self._chat_session_id,
-                    self._processing_key,
+                    self._stream_id,
                     CHAT_STREAM_BUFFER_MAX_BYTES,
                 )
                 return
             self._cache.set(
                 _chunk_key(
-                    self._chat_session_id, self._processing_key, self._meta.chunk_count
+                    self._chat_session_id, self._stream_id, self._meta.chunk_count
                 ),
                 payload,
                 ex=CHAT_STREAM_BUFFER_TTL_S,
@@ -143,19 +143,19 @@ class StreamBufferWriter:
             self._write_meta(CHAT_STREAM_BUFFER_TTL_S)
         except Exception:
             logger.exception(
-                "stream buffer flush failed for session %s run %d; "
+                "stream buffer flush failed for session %s stream %d; "
                 "run continues non-resumable",
                 self._chat_session_id,
-                self._processing_key,
+                self._stream_id,
             )
             self._meta.truncated = True
             try:
                 self._write_meta(CHAT_STREAM_BUFFER_TTL_S)
             except Exception:
                 logger.exception(
-                    "stream buffer meta update failed after flush error for session %s run %d",
+                    "stream buffer meta update failed after flush error for session %s stream %d",
                     self._chat_session_id,
-                    self._processing_key,
+                    self._stream_id,
                 )
 
     def mark_truncated(self) -> None:
@@ -169,9 +169,9 @@ class StreamBufferWriter:
             self._write_meta(CHAT_STREAM_BUFFER_TTL_S)
         except Exception:
             logger.exception(
-                "stream buffer truncation update failed for session %s run %d",
+                "stream buffer truncation update failed for session %s stream %d",
                 self._chat_session_id,
-                self._processing_key,
+                self._stream_id,
             )
 
     def mark_done(self) -> None:
@@ -180,18 +180,16 @@ class StreamBufferWriter:
                 return
             self._meta.done = True
             try:
-                self._cache.delete(
-                    _meta_key(self._chat_session_id, self._processing_key)
-                )
+                self._cache.delete(_meta_key(self._chat_session_id, self._stream_id))
                 for chunk_n in range(self._meta.chunk_count):
                     self._cache.delete(
-                        _chunk_key(self._chat_session_id, self._processing_key, chunk_n)
+                        _chunk_key(self._chat_session_id, self._stream_id, chunk_n)
                     )
             except Exception:
                 logger.exception(
-                    "stream buffer deletion failed for session %s run %d",
+                    "stream buffer deletion failed for session %s stream %d",
                     self._chat_session_id,
-                    self._processing_key,
+                    self._stream_id,
                 )
             return
         self.flush()
@@ -202,43 +200,43 @@ class StreamBufferWriter:
             self._write_meta(CHAT_STREAM_BUFFER_DONE_TTL_S)
             for chunk_n in range(self._meta.chunk_count):
                 self._cache.expire(
-                    _chunk_key(self._chat_session_id, self._processing_key, chunk_n),
+                    _chunk_key(self._chat_session_id, self._stream_id, chunk_n),
                     CHAT_STREAM_BUFFER_DONE_TTL_S,
                 )
         except Exception:
             logger.exception(
-                "stream buffer done-marking failed for session %s run %d",
+                "stream buffer done-marking failed for session %s stream %d",
                 self._chat_session_id,
-                self._processing_key,
+                self._stream_id,
             )
 
     def _write_meta(self, ttl: int) -> None:
         self._cache.set(
-            _meta_key(self._chat_session_id, self._processing_key),
+            _meta_key(self._chat_session_id, self._stream_id),
             self._meta.model_dump_json(),
             ex=ttl,
         )
 
 
 def has_stream_buffer(
-    cache: CacheBackend, chat_session_id: UUID, processing_key: int
+    cache: CacheBackend, chat_session_id: UUID, stream_id: int
 ) -> bool:
     """O(1) existence probe — no chunk reads or decompression."""
-    return cache.exists(_meta_key(chat_session_id, processing_key))
+    return cache.exists(_meta_key(chat_session_id, stream_id))
 
 
 def read_stream_chunks(
     cache: CacheBackend,
     chat_session_id: UUID,
-    processing_key: int,
+    stream_id: int,
     cursor: int,
     max_chunks: int | None = None,
 ) -> StreamChunkRead | None:
     """Read buffered stream blocks from ``cursor``. Returns None when no buffer
-    exists for the run (never started, or fully expired). ``max_chunks`` bounds
+    exists for the stream (never started, or fully expired). ``max_chunks`` bounds
     memory per call — a capped read may return ``done=True`` with chunks still
     pending, so callers must re-read until ``blocks`` comes back empty."""
-    meta_raw = cache.get(_meta_key(chat_session_id, processing_key))
+    meta_raw = cache.get(_meta_key(chat_session_id, stream_id))
     if meta_raw is None:
         return None
     try:
@@ -247,9 +245,9 @@ def read_stream_chunks(
         )
     except (ValidationError, UnicodeDecodeError):
         logger.warning(
-            "stream buffer meta corrupt for session %s run %d; treating as missing",
+            "stream buffer meta corrupt for session %s stream %d; treating as missing",
             chat_session_id,
-            processing_key,
+            stream_id,
         )
         return None
 
@@ -259,7 +257,7 @@ def read_stream_chunks(
     while chunk_n < meta.chunk_count:
         if max_chunks is not None and len(blocks) >= max_chunks:
             break
-        raw = cache.get(_chunk_key(chat_session_id, processing_key, chunk_n))
+        raw = cache.get(_chunk_key(chat_session_id, stream_id, chunk_n))
         if raw is None or not isinstance(raw, bytes):
             gap = True
             break
@@ -267,9 +265,9 @@ def read_stream_chunks(
             blocks.append(zlib.decompress(raw).decode("utf-8"))
         except (zlib.error, UnicodeDecodeError):
             logger.warning(
-                "stream buffer chunk decode failed for session %s run %d chunk %d",
+                "stream buffer chunk decode failed for session %s stream %d chunk %d",
                 chat_session_id,
-                processing_key,
+                stream_id,
                 chunk_n,
             )
             gap = True

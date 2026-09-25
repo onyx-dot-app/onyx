@@ -12,7 +12,6 @@ from onyx.agents.events import (
     ToolStartEvent,
     ToolUpdateEvent,
 )
-from onyx.agents.items import build_response_items, messages_from_items
 from onyx.agents.models import RunState
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation, ToolProgress
@@ -21,6 +20,7 @@ from onyx.chat.emitter import Emitter
 from onyx.chat.models import ChatMessageMetadata, CitationMode, MessageRendering
 from onyx.chat.presentation import ResponsePresenter, project_response
 from onyx.chat.renderer import MessageRenderer
+from onyx.chat.response_items import build_response_items, messages_from_items
 from onyx.context.search.models import SearchDoc
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.litellm_conversion import MessageAccumulator

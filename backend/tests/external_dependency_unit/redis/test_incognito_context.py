@@ -13,7 +13,6 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from onyx.agents.items import build_response_items, messages_from_items
 from onyx.agents.transcript import RunStatus
 from onyx.cache.interface import CacheBackendType
 from onyx.chat.incognito_context import (
@@ -28,6 +27,7 @@ from onyx.chat.incognito_context import (
 )
 from onyx.chat.llm_step import PromptMetadata, prompt_metadata
 from onyx.chat.models import ResponseRecord
+from onyx.chat.response_items import build_response_items, messages_from_items
 from onyx.configs.constants import MessageType
 from onyx.file_store.models import ChatFileType, ChatLoadedFile
 from onyx.llm.models import (

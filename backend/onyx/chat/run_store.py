@@ -9,7 +9,6 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel
 
-from onyx.agents.checkpoint import CheckpointBinding
 from onyx.agents.concurrency import OPERATION_TIMEOUT_SECONDS
 from onyx.agents.coordination import (
     AgentCoordinator,
@@ -21,7 +20,11 @@ from onyx.agents.models import AgentState, ExecutionCheckpoint, RunState
 from onyx.agents.runtime import Agent, Run, RunNotTransferable
 from onyx.agents.transcript import RunStatus
 from onyx.cache.interface import CacheBackend
-from onyx.chat.checkpoint import restore_checkpoint_data, save_checkpoint_data
+from onyx.chat.checkpoint import (
+    CheckpointBinding,
+    restore_checkpoint_data,
+    save_checkpoint_data,
+)
 from onyx.chat.models import ResponseRecord, SavedAgentContext
 from onyx.chat.response import response_record, response_snapshot
 from onyx.chat.restoration import persist_checkpoint_files

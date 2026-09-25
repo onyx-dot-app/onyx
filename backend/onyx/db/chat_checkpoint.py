@@ -7,10 +7,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, aliased, selectinload
 
 from onyx.agents.coordination import AgentInfo
-from onyx.agents.items import ResponseItemKind
 from onyx.agents.transcript import RunFailure, RunFailureKind, RunStatus
 from onyx.chat.checkpoint import ResponseCheckpoint
 from onyx.chat.models import ResponseRecord
+from onyx.chat.response_items import ResponseItemKind
 from onyx.db.chat_history import checkpoint_from_summary, find_summary_for_ancestry
 from onyx.db.chat_response import (
     _ResponseWriter,

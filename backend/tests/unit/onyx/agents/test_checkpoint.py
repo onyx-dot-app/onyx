@@ -9,13 +9,9 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from onyx.agents.checkpoint import (
-    CheckpointBinding,
-    RestoredCheckpoint,
-    SnapshotCodec,
-)
 from onyx.agents.models import (
     AgentState,
+    ExecutionCheckpoint,
     RunAction,
     RunProgress,
     RunState,
@@ -30,7 +26,8 @@ from onyx.agents.tools import (
     PendingToolInput,
     ToolInvocation,
 )
-from onyx.agents.transcript import RunStatus
+from onyx.agents.transcript import OperationSnapshot, RunStatus
+from onyx.chat.checkpoint import CheckpointBinding
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import (
     AssistantMessage,
@@ -42,6 +39,7 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
+from tests.unit.onyx.agents.checkpoint_storage import CheckpointStorage
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
 
@@ -57,8 +55,8 @@ class FeatureState(BaseModel):
     next_citation: int
 
 
-def codec() -> SnapshotCodec:
-    return SnapshotCodec(
+def codec() -> CheckpointStorage:
+    return CheckpointStorage(
         {
             "test.citations.v1": CitationMetadata,
             "test.search.v1": SearchDetails,
@@ -67,7 +65,7 @@ def codec() -> SnapshotCodec:
     )
 
 
-def checkpoint() -> RestoredCheckpoint:
+def checkpoint() -> ExecutionCheckpoint:
     instruction = UserMessage(
         content="Search then send",
         cacheable=True,
@@ -89,6 +87,7 @@ def checkpoint() -> RestoredCheckpoint:
         input_messages=[instruction],
         messages=[
             AssistantMessage(
+                id="generation",
                 content=[
                     ToolCall(id="search", name="search", arguments={}),
                     ToolCall(id="send", name="send", arguments={"to": "recipient"}),
@@ -96,6 +95,9 @@ def checkpoint() -> RestoredCheckpoint:
                 metadata=CitationMetadata(citations={1: "source"}),
             ),
             result,
+        ],
+        operations=[
+            OperationSnapshot(step_index=0, message_index=0, status=RunStatus.COMPLETE)
         ],
         progress=RunProgress(
             step_limit=3,
@@ -123,22 +125,22 @@ def checkpoint() -> RestoredCheckpoint:
             },
         ),
     )
-    snapshot.child_runs = [snapshot.model_copy(deep=True, update={"run_id": "child"})]
-    return RestoredCheckpoint(
+    return ExecutionCheckpoint(
         run_state=snapshot,
         agent_state=AgentState(messages=[instruction, result]),
-        binding=CheckpointBinding(
-            tenant_id="tenant", branch_id="branch", context_version="history-7"
-        ),
     )
 
 
 def test_json_round_trip_preserves_typed_payloads_at_every_execution_location() -> None:
     captured = checkpoint()
-    serialized = codec().encode(
-        captured.run_state, captured.agent_state, captured.binding
+    serialized = codec().save(
+        captured.run_state,
+        captured.agent_state,
+        CheckpointBinding(
+            tenant_id="tenant", branch_id="branch", context_version="history-7"
+        ),
     )
-    restored = codec().decode(serialized)
+    restored = codec().load(serialized)
     assert restored == captured
     assert isinstance(restored.agent_state.messages[0].metadata, CitationMetadata)
     result = restored.agent_state.messages[1]
@@ -151,24 +153,32 @@ def test_json_round_trip_preserves_typed_payloads_at_every_execution_location() 
 def test_unknown_payload_types_and_versions_fail_before_execution() -> None:
     captured = checkpoint()
     with pytest.raises(ValueError, match="unregistered"):
-        SnapshotCodec({}).encode(
-            captured.run_state, captured.agent_state, captured.binding
+        CheckpointStorage({}).save(
+            captured.run_state,
+            captured.agent_state,
+            CheckpointBinding(
+                tenant_id="tenant", branch_id="branch", context_version="history-7"
+            ),
         )
-    serialized = codec().encode(
-        captured.run_state, captured.agent_state, captured.binding
+    serialized = codec().save(
+        captured.run_state,
+        captured.agent_state,
+        CheckpointBinding(
+            tenant_id="tenant", branch_id="branch", context_version="history-7"
+        ),
     )
     with pytest.raises(ValueError, match="Unknown checkpoint payload"):
-        SnapshotCodec({}).decode(serialized)
+        CheckpointStorage({}).load(serialized)
     payload = json.loads(serialized)
-    payload["version"] = 2
+    payload["checkpoint"]["version"] = 2
     with pytest.raises(ValidationError):
-        codec().decode(json.dumps(payload))
+        codec().load(json.dumps(payload))
     with pytest.raises(ValueError, match="selected context"):
-        codec().decode(
+        codec().load(
             serialized,
-            expected_binding=captured.binding.model_copy(
-                update={"context_version": "other"}
-            ),
+            expected_binding=CheckpointBinding(
+                tenant_id="tenant", branch_id="branch", context_version="history-7"
+            ).model_copy(update={"context_version": "other"}),
         )
 
 
@@ -293,7 +303,7 @@ def test_fresh_objects_resume_json_checkpoint_without_repeating_tools(
     run_id = run.id
     path = tmp_path / "run.json"
     path.write_text(
-        codec().encode(
+        codec().save(
             captured.run_state,
             captured.agent_state,
             CheckpointBinding(
@@ -308,7 +318,7 @@ def test_fresh_objects_resume_json_checkpoint_without_repeating_tools(
     assert old_agent() is None
     assert old_run() is None
 
-    restored = codec().decode(path.read_text())
+    restored = codec().load(path.read_text())
     agent = _make_executable_agent(counts, restored.agent_state)
     resumed = agent.resume(restored.run_state)
     resumed.submit(

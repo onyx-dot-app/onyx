@@ -2,18 +2,18 @@
 
 from collections.abc import Mapping
 
-from onyx.agents.items import (
+from onyx.agents.transcript import RunStatus
+from onyx.chat.citation_processor import DynamicCitationProcessor
+from onyx.chat.models import MessageRendering, PresentationMode
+from onyx.chat.response_items import (
     ResponseGeneration,
     ResponseItem,
     ResponseText,
     messages_from_items,
 )
-from onyx.agents.items import (
+from onyx.chat.response_items import (
     TextPurpose as ResponseTextPurpose,
 )
-from onyx.agents.transcript import RunStatus
-from onyx.chat.citation_processor import DynamicCitationProcessor
-from onyx.chat.models import MessageRendering, PresentationMode
 from onyx.context.search.models import SearchDoc
 from onyx.llm.models import (
     AssistantMessage,

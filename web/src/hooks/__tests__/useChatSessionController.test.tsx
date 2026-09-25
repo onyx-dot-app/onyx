@@ -144,7 +144,7 @@ test.each(["404", "gap"])(
       owner_name: null,
       messages: [message],
       packets: [[]],
-      current_run: { run_id: 12, is_running: false },
+      current_stream: { stream_id: 12, is_running: false },
     };
     const fetchMock = jest
       .spyOn(global, "fetch")
@@ -153,7 +153,7 @@ test.each(["404", "gap"])(
         new Response(
           JSON.stringify({
             ...session,
-            current_run: null,
+            current_stream: null,
             packets: [savedPackets],
           })
         )

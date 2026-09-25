@@ -8,7 +8,6 @@ import pytest
 from pydantic import BaseModel
 
 import onyx.agents.runtime as runtime
-from onyx.agents.checkpoint import CheckpointBinding, SnapshotCodec
 from onyx.agents.coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent, AgentSuspendedEvent, InputRequiredEvent
 from onyx.agents.models import (
@@ -27,6 +26,7 @@ from onyx.agents.tools import (
     ToolInvocation,
 )
 from onyx.agents.transcript import RunFailureKind, RunStatus
+from onyx.chat.checkpoint import CheckpointBinding
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import (
     AssistantMessage,
@@ -37,6 +37,7 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
+from tests.unit.onyx.agents.checkpoint_storage import CheckpointStorage
 from tests.unit.onyx.agents.fakes import FakeModelClient, FakeRunStore
 
 
@@ -214,7 +215,7 @@ def test_cold_question_resume_uses_answer_without_repeating_tool() -> None:
     assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
     assert run.wait_for_idle(3)
     captured = run.capture()
-    serialized = SnapshotCodec({}).encode(
+    serialized = CheckpointStorage({}).save(
         captured.run_state,
         captured.agent_state,
         CheckpointBinding(
@@ -222,7 +223,7 @@ def test_cold_question_resume_uses_answer_without_repeating_tool() -> None:
         ),
     )
     del captured, run, agent
-    restored = SnapshotCodec({}).decode(serialized)
+    restored = CheckpointStorage({}).load(serialized)
     agent = make_agent(restored.agent_state)
     resumed = agent.resume(restored.run_state)
     assert resumed.wait_until_settled(3).status == RunStatus.SUSPENDED
@@ -292,7 +293,7 @@ def test_cold_resume_retains_consumed_answer_identity_and_rejects_conflict() -> 
     assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
     assert run.wait_for_idle(3)
     captured = run.capture()
-    serialized = SnapshotCodec({}).encode(
+    serialized = CheckpointStorage({}).save(
         captured.run_state,
         captured.agent_state,
         CheckpointBinding(
@@ -300,7 +301,7 @@ def test_cold_resume_retains_consumed_answer_identity_and_rejects_conflict() -> 
         ),
     )
     del captured, run, agent
-    restored = SnapshotCodec({}).decode(serialized)
+    restored = CheckpointStorage({}).load(serialized)
     agent = make_agent(restored.agent_state)
     resumed = agent.resume(restored.run_state)
     assert resumed.wait_until_settled(3).status == RunStatus.SUSPENDED
@@ -379,14 +380,14 @@ def test_resume_after_completed_step_does_not_repeat_completion_callback() -> No
         release.set()
         assert run.wait_until_settled(2).status == RunStatus.SUSPENDED
         captured = run.handoff()
-        serialized = SnapshotCodec({}).encode(
+        serialized = CheckpointStorage({}).save(
             captured.run_state,
             captured.agent_state,
             CheckpointBinding(
                 tenant_id="tenant", branch_id="branch", context_version="version"
             ),
         )
-        restored = SnapshotCodec({}).decode(serialized)
+        restored = CheckpointStorage({}).load(serialized)
         replacement = Agent(
             FakeModelClient(
                 lambda *_: pytest.fail("Completed generation must not repeat")

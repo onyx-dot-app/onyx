@@ -8,7 +8,6 @@ import pytest
 
 from onyx.agents.coordination import AgentInfo
 from onyx.agents.events import AgentEvent, MessageEndEvent
-from onyx.agents.items import messages_from_items
 from onyx.agents.models import PreparedStep, RunState
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.transcript import OperationSnapshot, RunStatus
@@ -21,6 +20,7 @@ from onyx.chat.models import (
 )
 from onyx.chat.presentation import ResponsePresenter, project_response
 from onyx.chat.process_message import gather_stream_full
+from onyx.chat.response_items import messages_from_items
 from onyx.chat.stream_buffer import ChatDelivery
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc

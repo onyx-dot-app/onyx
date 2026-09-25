@@ -5,12 +5,6 @@ from collections.abc import Mapping
 from pydantic import JsonValue, TypeAdapter
 from sqlalchemy.orm import Session
 
-from onyx.agents.items import (
-    ResponseGeneration,
-    ResponseToolCall,
-    ResponseToolResult,
-    group_response_items_by_step,
-)
 from onyx.agents.transcript import RunStatus
 from onyx.chat.citation_utils import extract_citation_order_from_text
 from onyx.chat.models import (
@@ -20,6 +14,12 @@ from onyx.chat.models import (
     ResponseRecord,
 )
 from onyx.chat.renderer import MessageRenderer
+from onyx.chat.response_items import (
+    ResponseGeneration,
+    ResponseToolCall,
+    ResponseToolResult,
+    group_response_items_by_step,
+)
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import (

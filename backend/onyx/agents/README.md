@@ -9,13 +9,11 @@ streaming events, cancellation, and record-keeping.
 | --- | --- |
 | `runtime.py` | Agent configuration and history, run lifecycle, and model-step execution functions. |
 | `models.py` | Conversation context, step decisions, and run records. |
-| `checkpoint.py` | Versioned JSON encoding for execution snapshots and their context. |
 | `concurrency.py` | Tracked threads, update acceptance, and event delivery. |
 | `coordination.py` | Optional child discovery, execution control, and archive access. |
 | `tool_execution.py` | Parallel tool execution, pending input, and ordered result completion. |
 | `tools.py` | `AgentTool`, `ToolInvocation`, and the `AgentControl` interface. |
 | `events.py` | Typed execution events. |
-| `items.py` | Ordered response content and generation boundaries. |
 | `compaction.py` | Token budgets, checkpoints, and history summarization. |
 | `transcript.py` | Run outcomes, compaction checkpoints, and model-history replay. |
 
@@ -332,8 +330,8 @@ output), and per-operation status records that index into those messages.
 Message and operation changes are recorded together. Event listeners cannot change recorded data.
 Child records are collected when the parent finishes; a parent snapshot is not a live view of every child.
 
-`snapshot.items` exposes accepted content with stable generation identities and outcomes.
-Chat captures these items in a detached `ResponseRecord`, removing application metadata
+Chat converts run messages and operation outcomes into response items with stable identities.
+It captures these items in a detached `ResponseRecord`, removing application metadata
 and tool details before persistence. Saved rendering reads items directly. Model-context
 loading converts items into messages and excludes unfinished tool calls.
 
@@ -366,36 +364,17 @@ Tool authors do not manage checkpoints. Onyx binds response ownership through `C
 The following operations support storage integrations and runtime tests.
 
 Use `run.capture()` to copy the active run and its preceding `AgentState` together.
-`ExecutionCheckpoint` and `RestoredCheckpoint` name these values `run_state` and `agent_state`.
+`ExecutionCheckpoint` names these values `run_state` and `agent_state`.
 `agent.state` includes active output, so using it as the resume prefix would duplicate that output.
 Only a suspended snapshot can resume. Wait for its workers to become idle before transferring execution ownership.
 
-`SnapshotCodec` preserves message metadata, cache flags, and concrete tool-result details that ordinary model JSON excludes or erases.
-The application registers stable payload tags and explicit Pydantic schemas with `SnapshotCodec`.
-Onyx supplies these schemas through `onyx.chat.restoration.feature_payload_types()`.
-Unknown payload tags and codec versions fail before execution.
+Chat stores accepted output as response items. `chat/checkpoint.py` stores the extra data needed to resume:
+step progress, typed feature state, message metadata, and cache flags.
+It validates the saved data against the selected history and response before restoring `ExecutionCheckpoint`.
+`chat.restoration.feature_payload_types()` registers the allowed feature schemas; unknown payload tags fail before execution.
 
-```python
-from onyx.agents.checkpoint import CheckpointBinding, SnapshotCodec
-from onyx.agents.transcript import RunStatus
-from onyx.chat.restoration import feature_payload_types
-
-run.suspend()
-if run.wait_until_settled(timeout=60).status != RunStatus.SUSPENDED:
-    raise ValueError("The run finished before suspension")
-if not run.wait_for_idle(timeout=60):
-    raise TimeoutError("Execution cleanup has not finished")
-
-captured = run.handoff()
-codec = SnapshotCodec(feature_payload_types())
-binding = CheckpointBinding(
-    tenant_id=tenant_id,
-    branch_id=branch_id,
-    context_version=context_version,
-)
-serialized = codec.encode(captured.run_state, captured.agent_state, binding)
-restored = codec.decode(serialized, expected_binding=binding)
-```
+`ChatRunStore.handoff()` saves this data before releasing ownership.
+`ChatRunStore.resume()` loads it, rebuilds the feature, and resumes the saved run.
 
 `Run.handoff()` releases suspended execution. Discard the original Agent and Run afterward.
 `run.result()` raises `RunReleased` after release; input must target a resumed execution.

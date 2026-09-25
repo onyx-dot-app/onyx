@@ -137,12 +137,9 @@ interface UseChatControllerProps {
 
 const STOP_ID_WAIT_MS = 10_000;
 
-async function waitForProcessingKey(
-  sessionId: string
-): Promise<number | undefined> {
+async function waitForStreamId(sessionId: string): Promise<number | undefined> {
   const initial = useChatSessionStore.getState().sessions.get(sessionId);
-  if (!initial || initial.processingKey !== undefined)
-    return initial?.processingKey;
+  if (!initial || initial.streamId !== undefined) return initial?.streamId;
   return new Promise((resolve) => {
     const timeout = setTimeout(() => {
       unsubscribe();
@@ -153,13 +150,13 @@ async function waitForProcessingKey(
       if (
         !session ||
         session.abortController !== initial.abortController ||
-        session.processingKey !== undefined
+        session.streamId !== undefined
       ) {
         clearTimeout(timeout);
         unsubscribe();
         resolve(
           session?.abortController === initial.abortController
-            ? session.processingKey
+            ? session.streamId
             : undefined
         );
       }
@@ -169,10 +166,10 @@ async function waitForProcessingKey(
 
 async function stopChatSession(
   chatSessionId: string,
-  processingKey: number
+  streamId: number
 ): Promise<void> {
   const response = await fetch(
-    `/api/chat/stop-chat-session/${chatSessionId}?run_id=${processingKey}`,
+    `/api/chat/stop-chat-session/${chatSessionId}?stream_id=${streamId}`,
     {
       method: "POST",
       headers: {
@@ -416,15 +413,15 @@ export default function useChatController({
     const controller = useChatSessionStore
       .getState()
       .sessions.get(currentSession)?.abortController;
-    const processingKey = await waitForProcessingKey(currentSession);
-    if (processingKey === undefined) {
+    const streamId = await waitForStreamId(currentSession);
+    if (streamId === undefined) {
       console.warn("Stop request has no active execution identity", {
         sessionId: currentSession,
       });
       return;
     }
     try {
-      await stopChatSession(currentSession, processingKey);
+      await stopChatSession(currentSession, streamId);
     } catch (error) {
       console.error("Failed to stop chat session:", error);
       // Continue with UI cleanup even if backend call fails
@@ -680,7 +677,7 @@ export default function useChatController({
       const controller = new AbortController();
       setAbortController(currChatSessionId, controller);
       useChatSessionStore.getState().updateSessionData(currChatSessionId, {
-        processingKey: undefined,
+        streamId: undefined,
       });
 
       const messageToResend = currentHistory.find(
@@ -1258,7 +1255,7 @@ export default function useChatController({
               useChatSessionStore
                 .getState()
                 .updateSessionData(frozenSessionId, {
-                  processingKey: newAgentMessageId,
+                  streamId: newAgentMessageId,
                 });
             }
 
@@ -1277,7 +1274,7 @@ export default function useChatController({
               useChatSessionStore
                 .getState()
                 .updateSessionData(frozenSessionId, {
-                  processingKey: newUserMessageId ?? undefined,
+                  streamId: newUserMessageId ?? undefined,
                 });
               for (let mi = 0; mi < multiPacket.responses.length; mi++) {
                 const slot = multiPacket.responses[mi]!;

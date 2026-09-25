@@ -1,14 +1,14 @@
 from typing import cast
 from unittest.mock import MagicMock
 
-from onyx.agents.items import (
+from onyx.agents.transcript import RunStatus, messages_for_model
+from onyx.chat.llm_step import prompt_metadata
+from onyx.chat.response_items import (
     GenerationOutcome,
     ResponseGeneration,
     ResponseItemKind,
     ResponseText,
 )
-from onyx.agents.transcript import RunStatus, messages_for_model
-from onyx.chat.llm_step import prompt_metadata
 from onyx.configs.constants import MessageType
 from onyx.db.chat_history import (
     _build_tool_call_response_history_message,

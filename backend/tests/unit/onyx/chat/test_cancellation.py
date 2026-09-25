@@ -95,21 +95,21 @@ class TestStopRequests:
     def test_request_stop_creates_key(self) -> None:
         cache = _MemoryCacheBackend()
         sid = uuid4()
-        request_stop(sid, cache, processing_key=10)
-        assert is_stop_requested(sid, cache, processing_key=10)
+        request_stop(sid, cache, stream_id=10)
+        assert is_stop_requested(sid, cache, stream_id=10)
 
     def test_clear_stop_removes_key(self) -> None:
         cache = _MemoryCacheBackend()
         sid = uuid4()
-        request_stop(sid, cache, processing_key=10)
-        clear_stop(sid, cache, processing_key=10)
-        assert not is_stop_requested(sid, cache, processing_key=10)
+        request_stop(sid, cache, stream_id=10)
+        clear_stop(sid, cache, stream_id=10)
+        assert not is_stop_requested(sid, cache, stream_id=10)
 
     def test_request_stop_uses_ttl(self) -> None:
         cache = _MemoryCacheBackend()
         sid = uuid4()
         with patch.object(cache, "set", wraps=cache.set) as cache_set:
-            request_stop(sid, cache, processing_key=10)
+            request_stop(sid, cache, stream_id=10)
         cache_set.assert_called_once_with(
             f"chatsessionstop_fence_{sid}_10", 1, ex=STOP_TTL
         )
@@ -118,21 +118,21 @@ class TestStopRequests:
 def test_delayed_stop_and_cleanup_cannot_affect_next_request() -> None:
     cache = _MemoryCacheBackend()
     session_id = uuid4()
-    set_processing_status(session_id, cache, True, processing_key=11)
-    request_stop(session_id, cache, processing_key=10)
-    assert not is_stop_requested(session_id, cache, processing_key=11)
-    request_stop(session_id, cache, processing_key=11)
-    clear_stop(session_id, cache, processing_key=10)
-    assert is_stop_requested(session_id, cache, processing_key=11)
+    set_processing_status(session_id, cache, True, stream_id=11)
+    request_stop(session_id, cache, stream_id=10)
+    assert not is_stop_requested(session_id, cache, stream_id=11)
+    request_stop(session_id, cache, stream_id=11)
+    clear_stop(session_id, cache, stream_id=10)
+    assert is_stop_requested(session_id, cache, stream_id=11)
 
 
 class TestIsStopRequested:
     def test_sessions_are_isolated(self) -> None:
         cache = _MemoryCacheBackend()
         sid1, sid2 = uuid4(), uuid4()
-        request_stop(sid1, cache, processing_key=10)
-        assert is_stop_requested(sid1, cache, processing_key=10)
-        assert not is_stop_requested(sid2, cache, processing_key=10)
+        request_stop(sid1, cache, stream_id=10)
+        assert is_stop_requested(sid1, cache, stream_id=10)
+        assert not is_stop_requested(sid2, cache, stream_id=10)
 
 
 # ── chat_processing_checker ──────────────────────────────────────────

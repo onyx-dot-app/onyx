@@ -4,7 +4,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, aliased, object_session
 
 from onyx.agents.compaction import count_tokens
-from onyx.agents.items import (
+from onyx.chat.models import MessageRendering, ResponseRecord
+from onyx.chat.response_items import (
     ResponseGeneration,
     ResponseItem,
     ResponseItemKind,
@@ -13,7 +14,6 @@ from onyx.agents.items import (
     ResponseToolCall,
     ResponseToolResult,
 )
-from onyx.chat.models import MessageRendering, ResponseRecord
 from onyx.configs.constants import MessageType
 from onyx.db.models import (
     ChatMessage,

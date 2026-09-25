@@ -12,15 +12,6 @@ from sqlalchemy.orm import Session
 
 from onyx.agents.compaction import history_digest
 from onyx.agents.events import ToolEndEvent, ToolStartEvent, ToolUpdateEvent
-from onyx.agents.items import (
-    ResponseGeneration,
-    ResponseItemKind,
-    ResponseText,
-    ResponseToolCall,
-    TextPurpose,
-    build_response_items,
-    messages_from_items,
-)
 from onyx.agents.models import RunState
 from onyx.agents.tools import ToolProgress
 from onyx.agents.transcript import (
@@ -33,6 +24,15 @@ from onyx.agents.transcript import (
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import ChatResponseSnapshot, MessageRendering, ResponseRecord
 from onyx.chat.presentation import ResponsePresenter, project_response
+from onyx.chat.response_items import (
+    ResponseGeneration,
+    ResponseItemKind,
+    ResponseText,
+    ResponseToolCall,
+    TextPurpose,
+    build_response_items,
+    messages_from_items,
+)
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.configs.constants import MessageType
 from onyx.db.chat import (

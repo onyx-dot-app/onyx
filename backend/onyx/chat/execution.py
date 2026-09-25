@@ -162,13 +162,13 @@ class ChatTurnExecution:
         clear_stop(
             self.setup.chat_session_id,
             self.control_cache,
-            processing_key=self.setup.processing_key,
+            stream_id=self.setup.stream_id,
         )
         set_processing_status(
             chat_session_id=self.setup.chat_session_id,
             cache=self.control_cache,
             value=True,
-            processing_key=self.setup.processing_key,
+            stream_id=self.setup.stream_id,
         )
 
     def reject(self, error: Exception) -> None:
@@ -435,7 +435,7 @@ class ChatTurnExecution:
                 if is_stop_requested(
                     self.setup.chat_session_id,
                     self.control_cache,
-                    processing_key=self.setup.processing_key,
+                    stream_id=self.setup.stream_id,
                 ):
                     self._stopped_by_user = True
                     self.cancellation.cancel()
@@ -449,7 +449,7 @@ class ChatTurnExecution:
                     chat_session_id=self.setup.chat_session_id,
                     cache=self.control_cache,
                     value=True,
-                    processing_key=self.setup.processing_key,
+                    stream_id=self.setup.stream_id,
                 )
             except Exception:
                 self.cancellation.cancel()

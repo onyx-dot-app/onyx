@@ -1,6 +1,6 @@
 // Re-attach to a run still generating server-side when a session is opened cold (the store is
 // ephemeral, so a backgrounded/killed app loses the live stream). Mirrors web's resume tail;
-// runResumeStream is module-scope so it survives re-renders, resumingRuns dedupes across reopens.
+// runResumeStream is module-scope so it survives re-renders, resumingStreams dedupes across reopens.
 import { useEffect } from "react";
 import {
   QueryClient,
@@ -26,24 +26,24 @@ import { Packet } from "@/chat/streamingModels";
 import { useChatSessionStore } from "@/state/chatSessionStore";
 import { useSession } from "@/state/session";
 
-const resumingRuns = new Set<number>();
+const resumingStreams = new Set<number>();
 
 async function runResumeStream(
   sessionId: string,
-  runId: number,
+  streamId: number,
   serverUrl: string | null,
   queryClient: QueryClient,
 ): Promise<void> {
   const store = useChatSessionStore;
   const data = store.getState().sessions.get(sessionId);
   const node = data
-    ? getMessageByMessageId(data.messageTree, runId)
+    ? getMessageByMessageId(data.messageTree, streamId)
     : undefined;
-  // Single-model only: a multi-model run_id is the user message, not an assistant node.
+  // Single-model only: a multi-model stream_id is the user message, not an assistant node.
   if (!data || !node || node.type !== "assistant") return;
   // local send owns the stream, or another reopen already resumed this run
-  if (resumingRuns.has(runId) || data.abortController) return;
-  resumingRuns.add(runId);
+  if (resumingStreams.has(streamId) || data.abortController) return;
+  resumingStreams.add(streamId);
 
   const nodeId = node.nodeId;
   const controller = new AbortController();
@@ -137,7 +137,7 @@ async function runResumeStream(
   } finally {
     if (flushTimer) clearTimeout(flushTimer);
     flush();
-    resumingRuns.delete(runId);
+    resumingStreams.delete(streamId);
     store.getState().updateChatState(sessionId, "input");
     // Keep `controller` as an ownership token: a new send replaces it via setAbortController, so
     // stillOurs() tells this resume from a raced-in send (a finished send leaves null ≠ token).
@@ -157,7 +157,7 @@ async function runResumeStream(
               sessionId,
               processRawChatHistory(settled.messages, settled.packets),
             );
-          // clear the stale current_run so a remount can't re-resume this finished run
+          // clear the stale current_stream so a remount can't re-resume this finished run
           queryClient.setQueryData(
             QUERY_KEYS.chatSession(serverUrl, sessionId),
             settled,
@@ -191,10 +191,10 @@ export function useChatSessionController(sessionId: string | null): void {
     enabled: false,
   });
 
-  const runId = data?.current_run?.run_id ?? null;
+  const streamId = data?.current_stream?.stream_id ?? null;
 
   useEffect(() => {
-    if (sessionId == null || runId == null) return;
-    void runResumeStream(sessionId, runId, serverUrl, queryClient);
-  }, [sessionId, runId, serverUrl, queryClient]);
+    if (sessionId == null || streamId == null) return;
+    void runResumeStream(sessionId, streamId, serverUrl, queryClient);
+  }, [sessionId, streamId, serverUrl, queryClient]);
 }

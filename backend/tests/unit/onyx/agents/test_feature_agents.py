@@ -11,7 +11,6 @@ import pytest
 
 from onyx.agents.coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent, ToolEndEvent
-from onyx.agents.items import messages_from_items
 from onyx.agents.models import AgentStep, PreparedStep, StepInput
 from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import ToolInvocation
@@ -20,6 +19,7 @@ from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.citation_utils import collapse_citations
 from onyx.chat.emitter import Emitter
 from onyx.chat.presentation import ResponsePresenter, project_response
+from onyx.chat.response_items import messages_from_items
 from onyx.coding_agent.agent import CodingAgent
 from onyx.coding_agent.tool_definitions import BASH_TOOL_NAME, GENERATE_ANSWER_TOOL_NAME
 from onyx.configs.chat_configs import DR_REPORT_LLM_TIMEOUT_S

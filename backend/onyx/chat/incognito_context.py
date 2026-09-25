@@ -10,11 +10,11 @@ from pydantic import BaseModel, Field, JsonValue, TypeAdapter, ValidationError
 from redis.exceptions import WatchError
 
 from onyx.agents.coordination import AgentInfo
-from onyx.agents.items import messages_from_items
 from onyx.cache.interface import CacheBackendType
 from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.llm_step import PromptMetadata, prompt_metadata
 from onyx.chat.models import MAX_DISCOVERED_AGENTS, ResponseRecord, SavedAgentContext
+from onyx.chat.response_items import messages_from_items
 from onyx.chat.stream_buffer import stream_buffer_key_pattern
 from onyx.configs import app_configs
 from onyx.configs.constants import MessageType

@@ -5,12 +5,6 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, aliased, joinedload, object_session, selectinload
 
 from onyx.agents.compaction import count_tokens
-from onyx.agents.items import (
-    ResponseItemKind,
-    ResponseText,
-    TextPurpose,
-    messages_from_items,
-)
 from onyx.chat.incognito_context import save_incognito_response
 from onyx.chat.models import (
     ChatExecutionRecord,
@@ -18,6 +12,12 @@ from onyx.chat.models import (
     MessageRendering,
     ResponseRecord,
     ToolRecordReference,
+)
+from onyx.chat.response_items import (
+    ResponseItemKind,
+    ResponseText,
+    TextPurpose,
+    messages_from_items,
 )
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc

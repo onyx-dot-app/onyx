@@ -8,12 +8,12 @@ from functools import partial
 import pytest
 
 from onyx.agents.events import AgentEvent
-from onyx.agents.items import messages_from_items
 from onyx.agents.runtime import Run
 from onyx.chat.agent import ChatAgent
 from onyx.chat.emitter import Emitter
 from onyx.chat.llm_step import PromptMetadata
 from onyx.chat.presentation import ResponsePresenter, project_response
+from onyx.chat.response_items import messages_from_items
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.file_store.models import ExtractedContextFiles

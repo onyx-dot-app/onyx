@@ -4,7 +4,6 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny
 
-from onyx.agents.items import ResponseItem, build_response_items
 from onyx.agents.tools import AgentTool, ChildRunWait, HumanToolAnswer, PendingToolInput
 from onyx.agents.transcript import (
     CompactionCheckpoint,
@@ -159,15 +158,6 @@ class RunState(BaseModel):
     request_params: GenerationRequestParams | None = None
     failure: RunFailure | None = None
     checkpoint: CompactionCheckpoint | None = None
-
-    @property
-    def items(self) -> list[ResponseItem]:
-        return build_response_items(
-            self.run_id,
-            self.messages,
-            self.operations,
-            answer_message_index=self.answer_message_index,
-        )
 
 
 class ExecutionCheckpoint(BaseModel):

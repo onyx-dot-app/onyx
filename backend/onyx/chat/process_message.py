@@ -100,7 +100,7 @@ def _stream_chat_turn(
         stream_buffer = StreamBufferWriter(
             cache=setup.cache,
             chat_session_id=setup.chat_session_id,
-            processing_key=setup.processing_key,
+            stream_id=setup.stream_id,
             delete_on_done=content_free,
             session_ended=(
                 partial(incognito_session_ended, setup.chat_session_id)

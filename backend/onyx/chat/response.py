@@ -3,16 +3,17 @@
 from collections.abc import Sequence
 
 from onyx.agents.coordination import AgentInfo
-from onyx.agents.items import (
+from onyx.agents.models import RunState
+from onyx.agents.transcript import OperationSnapshot
+from onyx.chat.models import ResponseRecord
+from onyx.chat.response_items import (
     ResponseGeneration,
     ResponseToolCall,
     ResponseToolResult,
     answer_message_index,
+    build_response_items,
     messages_from_items,
 )
-from onyx.agents.models import RunState
-from onyx.agents.transcript import OperationSnapshot
-from onyx.chat.models import ResponseRecord
 from onyx.deep_research.models import ResearchConfiguration
 from onyx.llm.models import ToolResultMessage
 
@@ -29,7 +30,12 @@ def response_record(
             message.metadata = None
             if isinstance(message, ToolResultMessage):
                 message.details = None
-        items = node.items
+        items = build_response_items(
+            node.run_id,
+            node.messages,
+            node.operations,
+            answer_message_index=node.answer_message_index,
+        )
         info = metadata.get(node.agent_id) if node.agent_id is not None else None
         if not is_root and info is None:
             raise ValueError("Child response requires its agent registration")

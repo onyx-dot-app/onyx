@@ -12,7 +12,6 @@ import pytest
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from onyx.agents.checkpoint import CheckpointBinding, SnapshotCodec
 from onyx.agents.compaction import history_digest
 from onyx.agents.coordination import AgentCoordinator, RunStore
 from onyx.agents.models import (
@@ -33,6 +32,7 @@ from onyx.agents.tools import (
 from onyx.agents.transcript import CompactionCheckpoint, RunStatus
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.agent import ChatAgent
+from onyx.chat.checkpoint import CheckpointBinding
 from onyx.chat.models import ChatFeatureState
 from onyx.chat.presentation import project_response
 from onyx.chat.restoration import feature_payload_types, persist_checkpoint_files
@@ -60,6 +60,7 @@ from onyx.llm.models import (
 from onyx.tools.models import ChatFile, FileReadResult
 from onyx.utils.threadpool_concurrency import start_thread_future
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+from tests.unit.onyx.agents.checkpoint_storage import CheckpointStorage
 from tests.unit.onyx.agents.fakes import (
     FakeAgentDirectory,
     FakeModelClient,
@@ -686,8 +687,8 @@ def test_checkpoint_files_use_durable_references_and_session_cleanup(
             persist_checkpoint_files(captured, session_id=branch[0])
             reads.assert_not_called()
             assert saves.call_count == 1
-            codec = SnapshotCodec(feature_payload_types())
-            encoded = codec.encode(
+            codec = CheckpointStorage(feature_payload_types())
+            encoded = codec.save(
                 captured.run_state,
                 captured.agent_state,
                 CheckpointBinding(
@@ -696,7 +697,7 @@ def test_checkpoint_files_use_durable_references_and_session_cleanup(
                     context_version="1",
                 ),
             )
-            restored = codec.decode(encoded)
+            restored = codec.load(encoded)
             assert restored.run_state.progress is not None
             state = restored.run_state.progress.feature_state
             assert isinstance(state, ChatFeatureState)
