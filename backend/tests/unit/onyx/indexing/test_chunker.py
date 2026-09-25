@@ -5,9 +5,10 @@ import pytest
 
 from onyx.configs.app_configs import USE_CHUNK_SUMMARY, USE_DOCUMENT_SUMMARY
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.models import Document, TextSection
+from onyx.connectors.models import ConnectorStopSignal, Document, TextSection
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.indexing_pipeline import process_image_sections
 from onyx.llm.utils import MAX_CONTEXT_TOKENS
 from tests.unit.onyx.indexing.conftest import MockHeartbeat
@@ -107,3 +108,47 @@ def test_chunker_heartbeat(
 
     assert mock_heartbeat.call_count == 1
     assert len(chunks) > 0
+
+
+def test_chunker_stop_signal_raises_connector_stop_signal(
+    embedder: DefaultIndexingEmbedder,
+) -> None:
+    """A stop signal mid-chunking must surface as ConnectorStopSignal.
+
+    index_doc_batch_with_handler re-raises ConnectorStopSignal as clean control
+    flow. A plain RuntimeError would instead hit the generic handler, which
+    converts the whole batch into per-document ConnectorFailures and fires a
+    Sentry indexing-pipeline-failure alert on every canceled/paused attempt.
+    """
+
+    class StoppingHeartbeat(IndexingHeartbeatInterface):
+        def should_stop(self) -> bool:
+            return True
+
+        def progress(self, tag: str, amount: int) -> None:  # noqa: ARG002
+            pass
+
+    document = Document(
+        id="test_doc",
+        source=DocumentSource.WEB,
+        semantic_identifier="Test Document",
+        metadata={},
+        doc_updated_at=None,
+        sections=[TextSection(text="This is a short section.", link="link1")],
+    )
+    indexing_documents = process_image_sections([document])
+
+    chunker = Chunker(
+        tokenizer=embedder.embedding_model.tokenizer,
+        enable_multipass=False,
+        callback=StoppingHeartbeat(),
+        enable_contextual_rag=False,
+    )
+
+    with pytest.raises(
+        ConnectorStopSignal, match="Chunker.chunk: Stop signal detected"
+    ) as exc_info:
+        chunker.chunk(indexing_documents)
+
+    # the pipeline handler keys on this exact type
+    assert not isinstance(exc_info.value, RuntimeError)
