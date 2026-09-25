@@ -313,7 +313,9 @@ class CodeInterpreterClient:
             )
             time.sleep(wait)
             attempt += 1
-            timeout = max(deadline - time.monotonic(), _ADMISSION_MIN_ATTEMPT_SECONDS)
+            timeout = deadline - time.monotonic()
+            if timeout < _ADMISSION_MIN_ATTEMPT_SECONDS:
+                raise CodeInterpreterBusyError(status_code)
 
     def health(self, use_cache: bool = False) -> HealthResponse:
         """Check if the Code Interpreter service is healthy

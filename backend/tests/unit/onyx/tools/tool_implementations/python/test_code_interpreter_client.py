@@ -926,3 +926,24 @@ def test_execute_retry_gets_only_the_remaining_budget() -> None:
 
     # Budget is 40s from t=100; the retry starts at t=130 with 10s left.
     assert timeouts == [40.0, 10.0]
+
+
+def test_execute_gives_up_when_wake_up_is_past_the_budget() -> None:
+    """A late wake-up after the Retry-After sleep must not send past the deadline."""
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+    clock = iter([100.0, 100.0, 139.0])
+
+    with (
+        patch.object(
+            client.session,
+            "post",
+            return_value=_make_status_response(429, retry_after="3"),
+        ) as post,
+        patch.object(cic.time, "sleep"),
+        patch.object(cic.time, "monotonic", side_effect=lambda: next(clock, 139.0)),
+        pytest.raises(cic.CodeInterpreterBusyError),
+    ):
+        client.execute(code="print(1)", timeout_ms=30000)
+
+    # Budget ends at t=140; waking at t=139 leaves 1s, below the 5s minimum.
+    assert post.call_count == 1
