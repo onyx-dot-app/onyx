@@ -52,7 +52,7 @@ from onyx.connectors.microsoft_utils.drive_items import (
     parse_graph_datetime,
     timestamp_in_window,
 )
-from onyx.connectors.microsoft_utils.entra import EntraClient
+from onyx.connectors.microsoft_utils.entra import ENTRA_GROUP_ID_SELECT, EntraClient
 from onyx.connectors.microsoft_utils.graph_auth import (
     MicrosoftAuthMethod,
     acquire_graph_token,
@@ -806,7 +806,10 @@ class SharepointConnector(
                 self.graph_api.get_json,
                 self.graph_api_base,
             )
-            entra.list_group_ids_page(page_size=1)
+            entra.list_groups_page(
+                page_size=1,
+                select_fields=ENTRA_GROUP_ID_SELECT,
+            )
         except requests.HTTPError as error:
             status = error.response.status_code if error.response is not None else None
             if status in (401, 403):

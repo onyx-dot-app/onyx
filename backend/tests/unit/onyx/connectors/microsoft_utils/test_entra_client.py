@@ -39,7 +39,7 @@ def test_entra_user_operations_share_models_and_query_shape() -> None:
     )
     client = _client(get_json)
 
-    page = client.list_enabled_users_page(page_size=5)
+    page = client.list_users_page(page_size=5, enabled_only=True)
     user = client.get_user("mail@example.com")
 
     assert page.users[0].user_principal_name == "user@example.com"
@@ -95,7 +95,10 @@ def test_entra_group_operations_distinguish_direct_and_transitive_members() -> N
 
     group = client.list_groups_page().groups[0]
     direct = client.list_group_members_page(group_id=group.id).members[0]
-    transitive = client.list_transitive_group_members_page(group_id=group.id).members[0]
+    transitive = client.list_group_members_page(
+        group_id=group.id,
+        transitive=True,
+    ).members[0]
 
     assert group.display_name == "Group"
     assert direct.odata_type == EntraDirectoryObjectType.USER

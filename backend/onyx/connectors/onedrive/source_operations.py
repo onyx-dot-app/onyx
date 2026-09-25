@@ -297,7 +297,8 @@ class OneDriveSourceOperations(SourceOperations):
     def list_transitive_group_members(
         self, *, group_id: str, next_link: str | None = None
     ) -> EntraDirectoryObjectPage:
-        return self._entra().list_transitive_group_members_page(
+        return self._entra().list_group_members_page(
             group_id=group_id,
             next_link=next_link,
+            transitive=True,
         )
