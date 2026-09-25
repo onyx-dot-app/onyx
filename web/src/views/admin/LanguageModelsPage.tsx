@@ -21,7 +21,7 @@ import { SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
 import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import { getProvider } from "@/lib/languageModels";
+import { getProvider } from "@/lib/languageModels/utils";
 import {
   refreshLlmProviderCaches,
   setDefaultLlmModelAndRefresh,
