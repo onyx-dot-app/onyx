@@ -30,6 +30,7 @@ from onyx.deep_research.dr_mock_tools import (
 )
 from onyx.deep_research.models import (
     CombinedResearchAgentCallResult,
+    ResearchAgentCallFailure,
     ResearchAgentCallResult,
 )
 from onyx.deep_research.utils import (
@@ -91,7 +92,14 @@ logger = setup_logger()
 
 # 30 minute timeout per research agent
 RESEARCH_AGENT_TIMEOUT_SECONDS = 30 * 60
-RESEARCH_AGENT_TIMEOUT_MESSAGE = "Research Agent timed out after 30 minutes"
+RESEARCH_AGENT_TIMEOUT_MESSAGE = (
+    "Research agent timed out after 30 minutes. "
+    "Try a different approach or continue without this result."
+)
+RESEARCH_AGENT_FAILURE_MESSAGE = (
+    "Research agent call failed. "
+    "Try a different approach or continue without this result."
+)
 # 12 minute timeout before forcing intermediate report generation
 RESEARCH_AGENT_FORCE_REPORT_SECONDS = 12 * 60
 # May be good to experiment with this, empirically reports of around 5,000 tokens are pretty good.
@@ -654,12 +662,7 @@ def _on_research_agent_timeout(
     index: int,  # noqa: ARG001
     func: Callable[..., Any],  # noqa: ARG001
     args: tuple[Any, ...],
-) -> ResearchAgentCallResult:
-    """Callback for handling research agent timeouts.
-
-    Returns a ResearchAgentCallResult with the timeout message so the research
-    can continue with other agents.
-    """
+) -> ResearchAgentCallFailure:
     research_agent_call: ToolCallKickoff = args[0]  # First arg
     research_task = research_agent_call.tool_args.get(
         RESEARCH_AGENT_TASK_KEY, "unknown"
@@ -669,10 +672,7 @@ def _on_research_agent_timeout(
         RESEARCH_AGENT_TIMEOUT_SECONDS,
         research_task,
     )
-    return ResearchAgentCallResult(
-        intermediate_report=RESEARCH_AGENT_TIMEOUT_MESSAGE,
-        citation_mapping={},
-    )
+    return ResearchAgentCallFailure(message=RESEARCH_AGENT_TIMEOUT_MESSAGE)
 
 
 def run_research_agent_calls(
@@ -723,11 +723,16 @@ def run_research_agent_calls(
     )
 
     updated_citation_mapping = citation_mapping
-    updated_answers: list[str | None] = []
+    updated_answers: list[str | ResearchAgentCallFailure] = []
 
     for result in research_agent_call_results:
         if result is None:
-            updated_answers.append(None)
+            updated_answers.append(
+                ResearchAgentCallFailure(message=RESEARCH_AGENT_FAILURE_MESSAGE)
+            )
+            continue
+        if isinstance(result, ResearchAgentCallFailure):
+            updated_answers.append(result)
             continue
 
         # Use collapse_citations to renumber citations in the text and merge mappings.

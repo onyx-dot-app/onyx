@@ -14,9 +14,12 @@ class ResearchAgentCallResult(BaseModel):
     citation_mapping: CitationMapping
 
 
+class ResearchAgentCallFailure(BaseModel):
+    # LLM-facing explanation sent back as the failed call's tool response
+    message: str
+
+
 class CombinedResearchAgentCallResult(BaseModel):
-    # The None is needed here to keep the mappings consistent
-    # we later skip the failed research results but we need to know
-    # which ones failed
-    intermediate_reports: list[str | None]
+    # One entry per research agent call, in call order
+    intermediate_reports: list[str | ResearchAgentCallFailure]
     citation_mapping: CitationMapping
