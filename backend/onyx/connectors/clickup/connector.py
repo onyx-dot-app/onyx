@@ -19,7 +19,11 @@ from onyx.connectors.models import (
     HierarchyNode,
     TextSection,
 )
+from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
+
+logger = setup_logger()
+
 
 CLICKUP_API_BASE_URL = "https://api.clickup.com/api/v2"
 
@@ -181,11 +185,17 @@ class ClickupConnector(LoadConnector, PollConnector):
                         document.metadata[extra_field] = task[extra_field]
 
                 if self.retrieve_task_comments:
-                    document.sections = [
-                        *document.sections,
-                        *self._get_task_comments(task["id"]),
-                    ]
-
+                    try:
+                        document.sections = [
+                            *document.sections,
+                            *self._get_task_comments(task["id"]),
+                        ]
+                    except Exception:
+                        logger.exception(
+                            "Failed to fetch comments for Clickup task %s; "
+                            "indexing the task without its comments.",
+                            task["id"],
+                        )
                 doc_batch.append(document)
 
                 if len(doc_batch) >= self.batch_size:
