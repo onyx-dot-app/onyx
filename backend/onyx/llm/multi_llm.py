@@ -67,7 +67,7 @@ from onyx.llm.litellm_conversion import (
     to_assistant_message,
 )
 from onyx.llm.litellm_models import (
-    LanguageModelInput,
+    ChatCompletionMessage,
     ModelResponse,
     ModelResponseStream,
 )
@@ -374,15 +374,13 @@ def _consume_stream_until_deadline[T](stream: Iterable[T], deadline: float) -> l
     return chunks
 
 
-def _prompt_to_dicts(prompt: LanguageModelInput) -> list[dict[str, JsonValue]]:
+def _prompt_to_dicts(prompt: list[ChatCompletionMessage]) -> list[dict[str, JsonValue]]:
     """Convert Pydantic message models to dictionaries for LiteLLM.
 
     LiteLLM expects messages to be dictionaries (with .get() method),
     not Pydantic models. This function serializes the messages.
     """
-    if isinstance(prompt, list):
-        return [msg.model_dump(exclude_none=True) for msg in prompt]
-    return [prompt.model_dump(exclude_none=True)]
+    return [msg.model_dump(exclude_none=True) for msg in prompt]
 
 
 def _normalize_content(raw: JsonValue) -> str:
@@ -539,12 +537,11 @@ def _messages_contain_tool_content(messages: list[dict[str, JsonValue]]) -> bool
     return False
 
 
-def _prompt_contains_tool_call_history(prompt: LanguageModelInput) -> bool:
+def _prompt_contains_tool_call_history(prompt: list[ChatCompletionMessage]) -> bool:
     """Detect tool history for Anthropic's conservative thinking compatibility policy."""
     from onyx.llm.litellm_models import AssistantMessage
 
-    msgs = prompt if isinstance(prompt, list) else [prompt]
-    return any(isinstance(msg, AssistantMessage) and msg.tool_calls for msg in msgs)
+    return any(isinstance(msg, AssistantMessage) and msg.tool_calls for msg in prompt)
 
 
 @lru_cache(maxsize=None)
@@ -791,7 +788,7 @@ class LitellmLLM(LLM):
 
     def _completion(
         self,
-        prompt: LanguageModelInput,
+        prompt: list[ChatCompletionMessage],
         tools: list[dict[str, JsonValue]] | None,
         tool_choice: ToolChoice | None,
         stream: bool,
@@ -1368,7 +1365,7 @@ class LitellmLLM(LLM):
 
     def invoke_raw(
         self,
-        prompt: LanguageModelInput,
+        prompt: list[ChatCompletionMessage],
         tools: list[dict[str, JsonValue]] | None = None,
         tool_choice: ToolChoice | None = None,
         structured_response_format: dict[str, JsonValue] | None = None,
@@ -1451,7 +1448,7 @@ class LitellmLLM(LLM):
 
     def stream_raw(
         self,
-        prompt: LanguageModelInput,
+        prompt: list[ChatCompletionMessage],
         tools: list[dict[str, JsonValue]] | None = None,
         tool_choice: ToolChoice | None = None,
         structured_response_format: dict[str, JsonValue] | None = None,
@@ -1660,7 +1657,8 @@ class LitellmLLM(LLM):
                 raise
             finally:
                 stream.close()
-                message = accumulator.finish()
+                accumulator.finalize()
+                message = accumulator.message
                 record_llm_span_output(
                     span,
                     [message.model_dump()],

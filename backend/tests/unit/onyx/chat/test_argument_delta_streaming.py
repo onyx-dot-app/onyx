@@ -10,11 +10,11 @@ from onyx.llm.litellm_conversion import MessageAccumulator
 from onyx.llm.litellm_models import (
     ChatCompletionDeltaToolCall,
     Delta,
-    FunctionCall,
     ModelResponseStream,
+    ResponseFunctionCall,
     StreamingChoice,
 )
-from onyx.llm.models import ToolCallDeltaEvent
+from onyx.llm.models import GenerationLifecycleEvent, ToolCallDeltaEvent
 from onyx.server.query_and_chat.streaming_models import (
     ItemDelta,
     PacketIdentity,
@@ -32,7 +32,7 @@ def chunk(fragment: str, index: int = 0) -> ModelResponseStream:
                     ChatCompletionDeltaToolCall(
                         index=index,
                         id=f"call-{index}",
-                        function=FunctionCall(name="code", arguments=fragment),
+                        function=ResponseFunctionCall(name="code", arguments=fragment),
                     )
                 ]
             )
@@ -73,6 +73,8 @@ def test_decoded_strings_survive_arbitrary_fragment_boundaries(
     emitted: list[str] = []
     for offset in range(0, len(raw), size):
         for event in accumulator.add(chunk(raw[offset : offset + size])):
+            if isinstance(event, GenerationLifecycleEvent):
+                continue
             emitted.extend(
                 packet.obj.delta.arguments.get("code", "")
                 for packet in renderer.consume(event)
@@ -80,7 +82,8 @@ def test_decoded_strings_survive_arbitrary_fragment_boundaries(
                 and isinstance(packet.obj.delta, ToolArgumentsDelta)
             )
     for event in accumulator.end():
-        renderer.consume(event)
+        if not isinstance(event, GenerationLifecycleEvent):
+            renderer.consume(event)
     assert "".join(emitted) == text
     assert accumulator.message.tool_calls[0].arguments == json.loads(raw)
 
@@ -100,6 +103,8 @@ def test_interleaved_calls_have_independent_arguments_and_identities() -> None:
         (1, 'd"}'),
     ]:
         for event in accumulator.add(chunk(fragment, index)):
+            if isinstance(event, GenerationLifecycleEvent):
+                continue
             for packet in renderer.consume(event):
                 if isinstance(packet.obj, ItemDelta) and isinstance(
                     packet.obj.delta, ToolArgumentsDelta
@@ -143,4 +148,5 @@ def test_partial_events_include_non_string_arguments() -> None:
     }
     accumulator.add(chunk(' text"}'))
     assert partial.tool_call.arguments["code"] == "partial"
-    assert accumulator.finish().tool_calls[0].arguments["code"] == "partial text"
+    accumulator.finalize()
+    assert accumulator.message.tool_calls[0].arguments["code"] == "partial text"

@@ -259,7 +259,11 @@ def test_parallel_failure_cancels_a_blocked_earlier_call() -> None:
             assert run.wait_for_idle(timeout=2)
         snapshot = run.snapshot()
         assert snapshot.status == "error"
-        assert all(operation.status != "running" for operation in snapshot.operations)
+        assert all(
+            step.generation_status != "running"
+            and all(tool.status != "running" for tool in step.tools.values())
+            for step in snapshot.steps
+        )
 
     exercise()
 
@@ -306,7 +310,7 @@ def test_parent_completion_joins_unawaited_child_runs(child_fails: bool) -> None
     snapshot = runs[-1].snapshot()
     assert snapshot is not None
     assert snapshot.child_runs[0].status == ("error" if child_fails else "complete")
-    assert snapshot.operations[-1].status == "complete"
+    assert snapshot.steps[-1].generation_status == "complete"
 
 
 def test_cancelled_tool_cleanup_uses_its_own_live_signal() -> None:

@@ -7,8 +7,12 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from onyx.agents.events import ToolEndEvent
-from onyx.agents.execution_records import OperationSnapshot, RunStatus
-from onyx.agents.models import RunState
+from onyx.agents.execution_records import ExecutionStatus, RunStatus
+from onyx.agents.models import (
+    RunState,
+    StepRecord,
+    ToolExecutionRecord,
+)
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import ChatSearchResult
 from onyx.chat.presentation import ResponsePresenter, _saved_tool_metadata
@@ -208,14 +212,16 @@ def test_live_and_saved_tool_cards_share_public_content(kind: str) -> None:
         RunState(
             run_id="run",
             status=status,
-            messages=[AssistantMessage(id="run:0", content=[call]), result],
-            operations=[
-                OperationSnapshot(
-                    step_index=0, message_index=0, status=RunStatus.COMPLETE
-                ),
-                OperationSnapshot(
-                    step_index=0, message_index=0, tool_call_id=call.id, status=status
-                ),
+            steps=[
+                StepRecord(
+                    message=AssistantMessage(id="run:0", content=[call]),
+                    generation_status=ExecutionStatus.COMPLETE,
+                    tools={
+                        call.id: ToolExecutionRecord(
+                            status=ExecutionStatus(status.value), result=result
+                        )
+                    },
+                )
             ],
         )
     )

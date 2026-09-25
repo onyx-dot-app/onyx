@@ -30,14 +30,14 @@ from onyx.llm.litellm_models import (
     ChatCompletionMessageToolCall,
     Choice,
     Delta,
-    FunctionCall,
     Message,
     ModelResponse,
     ModelResponseStream,
+    RequestFunctionCall,
+    ResponseFunctionCall,
     StreamingChoice,
     SystemMessage,
     ToolCall,
-    ToolFunctionCall,
     UserMessage,
 )
 from onyx.llm.models import (
@@ -428,7 +428,7 @@ def test_prepare_messages_uses_no_cacheable_prefix_for_single_message() -> None:
 
 def test_drop_empty_text() -> None:
     tool_call = ToolCall(
-        id="call_1", function=ToolFunctionCall(name="bash", arguments="{}")
+        id="call_1", function=RequestFunctionCall(name="bash", arguments="{}")
     )
     image_part = ImageContentPart(image_url=ImageUrlDetail(url="https://x/y.png"))
     messages: list[ChatCompletionMessage] = [
@@ -504,7 +504,9 @@ def test_completion_payload_serializes_openai_shape() -> None:
                 tool_calls=[
                     ChatCompletionMessageToolCall(
                         id="call_1",
-                        function=FunctionCall(name="bash", arguments='{"cmd":"ls"}'),
+                        function=ResponseFunctionCall(
+                            name="bash", arguments='{"cmd":"ls"}'
+                        ),
                     )
                 ],
             ),
@@ -548,7 +550,7 @@ _TOOL_CALL_STREAM_CHUNKS = [
                     ChatCompletionDeltaToolCall(
                         id="call_1",
                         index=0,
-                        function=FunctionCall(name="bash", arguments=""),
+                        function=ResponseFunctionCall(name="bash", arguments=""),
                     )
                 ]
             )
@@ -562,7 +564,7 @@ _TOOL_CALL_STREAM_CHUNKS = [
                 tool_calls=[
                     ChatCompletionDeltaToolCall(
                         index=0,
-                        function=FunctionCall(arguments='{"cmd":"ls"}'),
+                        function=ResponseFunctionCall(arguments='{"cmd":"ls"}'),
                     )
                 ]
             )
@@ -1425,7 +1427,9 @@ _TOOL_CALL_CHUNKS = [
                     ChatCompletionDeltaToolCall(
                         id="call_1",
                         index=0,
-                        function=FunctionCall(name="bash", arguments='{"cmd":"ls"}'),
+                        function=ResponseFunctionCall(
+                            name="bash", arguments='{"cmd":"ls"}'
+                        ),
                     )
                 ]
             )
@@ -1564,7 +1568,9 @@ _TEXT_AND_TOOL_CALL_CHUNKS = [
                     ChatCompletionDeltaToolCall(
                         id="call_9",
                         index=0,
-                        function=FunctionCall(name="bash", arguments='{"cmd":"ls"}'),
+                        function=ResponseFunctionCall(
+                            name="bash", arguments='{"cmd":"ls"}'
+                        ),
                     )
                 ]
             )

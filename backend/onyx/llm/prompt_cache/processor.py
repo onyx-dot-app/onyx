@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from onyx.configs.model_configs import ENABLE_PROMPT_CACHING
 from onyx.llm.interfaces import LLMConfig
-from onyx.llm.litellm_models import LanguageModelInput
+from onyx.llm.litellm_models import ChatCompletionMessage
 from onyx.llm.litellm_models import UserMessage as ProviderUserMessage
 from onyx.llm.models import TextContentPart, UserMessage
 from onyx.llm.prompt_cache.cache_manager import generate_cache_key_hash
@@ -19,11 +19,11 @@ logger = setup_logger()
 # TODO: test with a history containing images
 def process_with_prompt_cache(
     llm_config: LLMConfig,
-    cacheable_prefix: LanguageModelInput | None,
-    suffix: LanguageModelInput,
+    cacheable_prefix: list[ChatCompletionMessage] | None,
+    suffix: list[ChatCompletionMessage],
     continuation: bool = False,
     with_metadata: bool = True,
-) -> tuple[LanguageModelInput, CacheMetadata | None]:
+) -> tuple[list[ChatCompletionMessage], CacheMetadata | None]:
     """Process prompt with caching support.
 
     This function takes a cacheable prefix and suffix, processes them according to
@@ -158,12 +158,12 @@ def cached_user_message(llm_config: LLMConfig, prefix: str, suffix: str) -> User
     """Prepare one continued user prompt with provider-specific cache metadata."""
     prepared, _ = process_with_prompt_cache(
         llm_config,
-        cacheable_prefix=ProviderUserMessage(content=prefix),
-        suffix=ProviderUserMessage(content=suffix),
+        cacheable_prefix=[ProviderUserMessage(content=prefix)],
+        suffix=[ProviderUserMessage(content=suffix)],
         continuation=True,
         with_metadata=False,
     )
-    message = prepared[0] if isinstance(prepared, list) else prepared
+    message = prepared[0]
     if not isinstance(message, ProviderUserMessage):
         raise TypeError("User prompt caching must preserve the message role")
     if message.cache_control:

@@ -14,7 +14,11 @@ from onyx.deep_research.tool_definitions import (
     GENERATE_REPORT_TOOL_NAME,
     RESEARCH_AGENT_TOOL_NAME,
 )
-from onyx.llm.litellm_models import ChatCompletionDeltaToolCall, Delta, FunctionCall
+from onyx.llm.litellm_models import (
+    ChatCompletionDeltaToolCall,
+    Delta,
+    ResponseFunctionCall,
+)
 from onyx.llm.models import ReasoningEffort, ToolResultMessage, UserMessage
 from tests.unit.onyx.agents.fakes import ScriptedLLM
 
@@ -46,7 +50,9 @@ def test_research_continues_after_child_provider_failure() -> None:
             ChatCompletionDeltaToolCall(
                 index=0,
                 id="report",
-                function=FunctionCall(name=GENERATE_REPORT_TOOL_NAME, arguments="{}"),
+                function=ResponseFunctionCall(
+                    name=GENERATE_REPORT_TOOL_NAME, arguments="{}"
+                ),
             )
         ]
     )
@@ -58,7 +64,7 @@ def test_research_continues_after_child_provider_failure() -> None:
                     ChatCompletionDeltaToolCall(
                         index=index,
                         id=f"research-{index}",
-                        function=FunctionCall(
+                        function=ResponseFunctionCall(
                             name=RESEARCH_AGENT_TOOL_NAME,
                             arguments=json.dumps({"task": f"Topic {index}"}),
                         ),

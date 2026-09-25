@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 
-from onyx.llm.litellm_models import ChatCompletionMessage, LanguageModelInput
+from onyx.llm.litellm_models import ChatCompletionMessage
 from onyx.llm.prompt_cache.models import CacheMetadata
 from onyx.llm.prompt_cache.providers.base import PromptCacheProvider
 from onyx.llm.prompt_cache.utils import prepare_messages_with_cacheable_transform
@@ -40,11 +40,11 @@ class AnthropicPromptCacheProvider(PromptCacheProvider):
 
     def prepare_messages_for_caching(
         self,
-        cacheable_prefix: LanguageModelInput | None,
-        suffix: LanguageModelInput,
+        cacheable_prefix: list[ChatCompletionMessage] | None,
+        suffix: list[ChatCompletionMessage],
         continuation: bool,
         cache_metadata: CacheMetadata | None,  # noqa: ARG002
-    ) -> LanguageModelInput:
+    ) -> list[ChatCompletionMessage]:
         """Prepare messages for Anthropic caching.
 
         Anthropic requires cache_control parameter on cacheable messages.

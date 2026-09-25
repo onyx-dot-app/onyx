@@ -9,14 +9,16 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from onyx.agents.execution_records import OperationSnapshot, RunStatus
+from onyx.agents.execution_records import ExecutionStatus, RunStatus
 from onyx.agents.models import (
     AgentState,
     ExecutionCheckpoint,
     RunAction,
     RunProgress,
     RunState,
+    StepRecord,
     ToolCallContext,
+    ToolExecutionRecord,
 )
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import (
@@ -85,24 +87,27 @@ def checkpoint() -> ExecutionCheckpoint:
         revision=4,
         status=RunStatus.SUSPENDED,
         input_messages=[instruction],
-        messages=[
-            AssistantMessage(
-                id="generation",
-                content=[
-                    ToolCall(id="search", name="search", arguments={}),
-                    ToolCall(id="send", name="send", arguments={"to": "recipient"}),
-                ],
-                metadata=CitationMetadata(citations={1: "source"}),
-            ),
-            result,
-        ],
-        operations=[
-            OperationSnapshot(step_index=0, message_index=0, status=RunStatus.COMPLETE)
+        steps=[
+            StepRecord(
+                message=AssistantMessage(
+                    id="generation",
+                    content=[
+                        ToolCall(id="search", name="search", arguments={}),
+                        ToolCall(id="send", name="send", arguments={"to": "recipient"}),
+                    ],
+                    metadata=CitationMetadata(citations={1: "source"}),
+                ),
+                generation_status=ExecutionStatus.COMPLETE,
+                tools={
+                    "search": ToolExecutionRecord(
+                        status=ExecutionStatus.COMPLETE, result=result
+                    )
+                },
+            )
         ],
         progress=RunProgress(
             step_limit=3,
             action=RunAction.TOOLS,
-            message_index=0,
             options=GenerationOptions(),
             previous_options=GenerationOptions(),
             feature_state=FeatureState(next_citation=2),
@@ -339,22 +344,12 @@ def test_fresh_objects_resume_json_checkpoint_without_repeating_tools(
 
 def test_checkpoint_restores_when_parallel_outcomes_load_in_call_order() -> None:
     captured = checkpoint()
-    captured.run_state.operations.extend(
-        [
-            OperationSnapshot(
-                step_index=0,
-                message_index=0,
-                tool_call_id="send",
-                status=RunStatus.SUSPENDED,
-            ),
-            OperationSnapshot(
-                step_index=0,
-                message_index=0,
-                tool_call_id="search",
-                status=RunStatus.COMPLETE,
-            ),
-        ]
-    )
+    step = captured.run_state.steps[0]
+    search = step.tools["search"]
+    step.tools = {
+        "send": ToolExecutionRecord(status=ExecutionStatus.RUNNING),
+        "search": search,
+    }
     storage = codec()
     serialized = storage.save(
         captured.run_state,
@@ -364,14 +359,16 @@ def test_checkpoint_restores_when_parallel_outcomes_load_in_call_order() -> None
         ),
     )
     saved = SavedCheckpoint.model_validate_json(serialized)
-    generation, send, search = saved.response.operations
-    saved.response.operations = [generation, search, send]
+    saved_tools = saved.response.steps[0].tools
+    saved.response.steps[0].tools = {
+        "search": saved_tools["search"],
+        "send": saved_tools["send"],
+    }
     restored = storage.load(saved.model_dump_json())
     assert restored.run_state.messages == captured.run_state.messages
     assert restored.run_state.progress == captured.run_state.progress
-    assert restored.run_state.operations == [generation, search, send]
-    assert captured.run_state.operations == [generation, send, search]
+    assert restored.run_state.steps == captured.run_state.steps
 
-    saved.response.operations[1].status = RunStatus.ERROR
+    saved.response.steps[0].tools["search"].status = ExecutionStatus.ERROR
     with pytest.raises(ValueError, match="Checkpoint response changed"):
         storage.load(saved.model_dump_json())

@@ -4,80 +4,66 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, object_session
 
 from onyx.agents.compaction import count_tokens
-from onyx.agents.execution_records import OperationSnapshot
+from onyx.agents.models import (
+    StepRecord,
+    ToolExecutionRecord,
+)
 from onyx.chat.models import MessageRendering, ResponseRecord
 from onyx.configs.constants import MessageType
 from onyx.db.models import ChatMessage, ChatResponseCheckpoint, ChatResponseMessage
 from onyx.db.models import ToolCall as StoredToolCall
-from onyx.llm.models import AssistantMessage, Message, ToolResultMessage, UserMessage
+from onyx.llm.models import UserMessage
 
 
-def read_response_messages(response: ChatMessage) -> list[Message]:
-    messages: list[Message] = []
+def read_response_steps(response: ChatMessage) -> list[StepRecord]:
+    steps: list[StepRecord] = []
+    tools = {
+        (tool.turn_number, tool.tool_call_id): tool
+        for tool in response.tool_calls or []
+    }
     calls: dict[str, str] = {}
-    step = -1
     for position, row in enumerate(response.response_messages):
         if row.position != position or row.chat_message_id != response.id:
             raise ValueError("Response message order or ownership is invalid")
         if row.content is not None:
-            if row.content.id != row.id or row.step_index <= step:
+            if row.content.id != row.id or row.step_index != len(steps):
                 raise ValueError("Response assistant identity or step is invalid")
-            step = row.step_index
+            if row.operation_status is None:
+                raise ValueError("Assistant message has no operation outcome")
+            step = StepRecord(
+                message=row.content.model_copy(deep=True),
+                generation_status=row.operation_status,
+            )
             calls = {call.id: call.name for call in row.content.tool_calls}
-            messages.append(row.content.model_copy(deep=True))
+            for call in row.content.tool_calls:
+                tool = tools.get((row.step_index, call.id))
+                if tool is None or tool.tool_name != call.name:
+                    raise ValueError(
+                        "Assistant tool call has no matching stored invocation"
+                    )
+                if tool.operation_status is not None:
+                    step.tools[call.id] = ToolExecutionRecord(
+                        status=tool.operation_status
+                    )
+            steps.append(step)
             continue
         tool = row.tool_call
         if (
             tool is None
             or tool.parent_chat_message_id != response.id
-            or tool.turn_number != step
-            or row.step_index != step
+            or tool.turn_number != len(steps) - 1
+            or row.step_index != len(steps) - 1
             or tool.tool_call_id not in calls
             or tool.result is None
             or tool.result.tool_call_id != tool.tool_call_id
             or tool.tool_name != calls.get(tool.tool_call_id)
             or tool.result.tool_name != tool.tool_name
+            or tool.tool_call_id not in steps[-1].tools
         ):
             raise ValueError("Response tool result has no matching call")
         del calls[tool.tool_call_id]
-        messages.append(tool.result.model_copy(deep=True))
-    return messages
-
-
-def read_response_operations(response: ChatMessage) -> list[OperationSnapshot]:
-    operations: list[OperationSnapshot] = []
-    tools = {
-        (tool.turn_number, tool.tool_call_id): tool
-        for tool in response.tool_calls or []
-    }
-    for row in response.response_messages:
-        if row.content is None:
-            continue
-        if row.operation_status is None:
-            raise ValueError("Assistant message has no operation outcome")
-        operations.append(
-            OperationSnapshot(
-                step_index=row.step_index,
-                message_index=row.position,
-                status=row.operation_status,
-            )
-        )
-        for call in row.content.tool_calls:
-            tool = tools.get((row.step_index, call.id))
-            if tool is None or tool.tool_name != call.name:
-                raise ValueError(
-                    "Assistant tool call has no matching stored invocation"
-                )
-            if tool.operation_status is not None:
-                operations.append(
-                    OperationSnapshot(
-                        step_index=row.step_index,
-                        message_index=row.position,
-                        tool_call_id=call.id,
-                        status=tool.operation_status,
-                    )
-                )
-    return operations
+        steps[-1].tools[tool.tool_call_id].result = tool.result.model_copy(deep=True)
+    return steps
 
 
 def _invoking_message_id(invocation: StoredToolCall) -> str:
@@ -115,8 +101,6 @@ def read_response_record(
         or question.chat_session_id != response.chat_session_id
     ):
         raise ValueError("Response has no question in its conversation")
-    messages = read_response_messages(response)
-    operations = read_response_operations(response)
     invocation = question.invoking_tool_call
     previous = question.parent_message
     if previous is not None and previous.response_status is None:
@@ -124,10 +108,10 @@ def read_response_record(
     parent_response_id = invocation.parent_chat_message_id if invocation else None
     return ResponseRecord(
         input_messages=[UserMessage(content=question.message)],
-        messages=messages,
-        operations=operations,
-        answer_message_index=next(
-            (row.position for row in response.response_messages if row.is_answer), None
+        steps=read_response_steps(response),
+        answer_step_index=next(
+            (row.step_index for row in response.response_messages if row.is_answer),
+            None,
         ),
         status=response.response_status,
         failure=response.response_failure,
@@ -160,104 +144,87 @@ def write_response_messages(
         (tool.turn_number, tool.tool_call_id): tool
         for tool in response.tool_calls or []
     }
-    outcomes = {
-        (operation.message_index, operation.tool_call_id): operation
-        for operation in record.operations
-    }
     incoming_ids: set[str] = set()
-    assistant_message_id: str | None = None
-    step = -1
-    if record.answer_message_index is not None and (
-        not 0 <= record.answer_message_index < len(record.messages)
-        or not isinstance(
-            record.messages[record.answer_message_index], AssistantMessage
-        )
+    next_position = len(existing)
+    if record.answer_step_index is not None and not (
+        0 <= record.answer_step_index < len(record.steps)
     ):
-        raise ValueError("Selected answer is not an assistant message")
-    response_tools = response.tool_calls
-    if response_tools is None:
-        response_tools = []
-        response.tool_calls = response_tools
-    for position, message in enumerate(record.messages):
-        outcome = outcomes.get((position, None))
-        if isinstance(message, AssistantMessage):
-            if outcome is None:
-                raise ValueError("Assistant message has no operation outcome")
-            next_step = outcome.step_index
-            if next_step <= step:
-                raise ValueError("Assistant message steps must increase")
-            step = next_step
-            assistant_message_id = message.id
-            if assistant_message_id is None:
-                raise ValueError("Saved assistant message has no identity")
-            message_id = assistant_message_id
-        elif isinstance(message, ToolResultMessage):
-            if assistant_message_id is None:
-                raise ValueError("Tool result has no preceding assistant message")
-            message_id = f"{assistant_message_id}:result:{message.tool_call_id}"
-        else:
-            raise ValueError("Response output must contain assistant or tool messages")
+        raise ValueError("Selected answer is not a recorded step")
+
+    def message_row(message_id: str, step_index: int) -> ChatResponseMessage:
+        nonlocal next_position
         if message_id in incoming_ids:
             raise ValueError("Response contains duplicate message identities")
         incoming_ids.add(message_id)
         row = existing.get(message_id) or ChatResponseMessage(
             id=message_id,
             chat_message_id=response.id,
-            position=position,
-            step_index=step,
+            position=next_position,
+            step_index=step_index,
         )
-        if (
-            row.chat_message_id != response.id
-            or row.position != position
-            or row.step_index != step
-        ):
+        if row.chat_message_id != response.id or row.step_index != step_index:
             raise ValueError("Response message identity or order changed")
-        row.is_answer = position == record.answer_message_index
-        if isinstance(message, AssistantMessage):
-            row.content = message
-            row.operation_status = outcomes[(position, None)].status
-            setting = presentation.pop(message_id, None)
-            if setting is not None:
-                row.rendering = setting.model_dump(mode="json")
-            for call in message.tool_calls:
-                key = (message_id, call.id)
-                if key in tools:
-                    raise ValueError("Duplicate tool call within one assistant message")
-                tool_outcome = outcomes.get((position, call.id))
-                tool = stored_tools.get((step, call.id)) or StoredToolCall(
-                    chat_session_id=response.chat_session_id,
-                    parent_chat_message_id=response.id,
-                    turn_number=step,
-                    tab_index=len(tools),
-                    tool_id=None,
-                    tool_call_id=call.id,
-                    tool_name=call.name,
-                    tool_call_arguments=call.arguments,
-                    argument_error=call.argument_error,
-                    raw_arguments=call.raw_arguments,
-                    arguments_complete=call.arguments_complete,
-                    tool_call_tokens=count_tokens(json.dumps(call.arguments)),
-                    tool_call_response="",
-                )
-                tool.tool_call_arguments = call.arguments
-                tool.argument_error = call.argument_error
-                tool.raw_arguments = call.raw_arguments
-                tool.arguments_complete = call.arguments_complete
-                tool.operation_status = (
-                    tool_outcome.status if tool_outcome is not None else None
-                )
-                if (step, call.id) not in stored_tools:
-                    response_tools.append(tool)
-                db_session.add(tool)
-                tools[key] = tool
-        else:
-            tool = tools.get((assistant_message_id or "", message.tool_call_id))
-            if tool is None:
-                raise ValueError("Tool result has no call in its assistant message")
-            tool.result = message
-            row.tool_call = tool
         if message_id not in existing:
+            # Resumed tools append rows; model order comes from the assistant's calls.
+            next_position += 1
             response.response_messages.append(row)
+        return row
+
+    response_tools = response.tool_calls
+    if response_tools is None:
+        response_tools = []
+        response.tool_calls = response_tools
+    for step_index, step in enumerate(record.steps):
+        message = step.message
+        message_id = message.id
+        if message_id is None:
+            raise ValueError("Saved assistant message has no identity")
+        row = message_row(message_id, step_index)
+        row.content = message
+        row.operation_status = step.generation_status
+        row.is_answer = step_index == record.answer_step_index
+        setting = presentation.pop(message_id, None)
+        if setting is not None:
+            row.rendering = setting.model_dump(mode="json")
+        if step.tools.keys() - {call.id for call in message.tool_calls}:
+            raise ValueError("Tool execution has no call in its assistant message")
+        for call in message.tool_calls:
+            key = (message_id, call.id)
+            if key in tools:
+                raise ValueError("Duplicate tool call within one assistant message")
+            execution = step.tools.get(call.id)
+            tool = stored_tools.get((step_index, call.id)) or StoredToolCall(
+                chat_session_id=response.chat_session_id,
+                parent_chat_message_id=response.id,
+                turn_number=step_index,
+                tab_index=len(tools),
+                tool_id=None,
+                tool_call_id=call.id,
+                tool_name=call.name,
+                tool_call_arguments=call.arguments,
+                argument_error=call.argument_error,
+                raw_arguments=call.raw_arguments,
+                arguments_complete=call.arguments_complete,
+                tool_call_tokens=count_tokens(json.dumps(call.arguments)),
+                tool_call_response="",
+            )
+            tool.tool_call_arguments = call.arguments
+            tool.argument_error = call.argument_error
+            tool.raw_arguments = call.raw_arguments
+            tool.arguments_complete = call.arguments_complete
+            tool.operation_status = execution.status if execution is not None else None
+            if (step_index, call.id) not in stored_tools:
+                response_tools.append(tool)
+            db_session.add(tool)
+            tools[key] = tool
+            if execution is not None and execution.result is not None:
+                result = execution.result
+                if result.tool_call_id != call.id or result.tool_name != call.name:
+                    raise ValueError("Tool result does not match its invocation")
+                tool.result = result
+                result_row = message_row(f"{message_id}:result:{call.id}", step_index)
+                result_row.tool_call = tool
+                result_row.is_answer = False
     if existing.keys() - incoming_ids:
         raise ValueError("Response update cannot discard recorded messages")
     db_session.flush()

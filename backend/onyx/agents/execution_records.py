@@ -24,6 +24,15 @@ class RunStatus(str, Enum):
         return self not in (RunStatus.RUNNING, RunStatus.SUSPENDED)
 
 
+class ExecutionStatus(str, Enum):
+    """State of one generation or tool invocation; running means no terminal outcome yet."""
+
+    RUNNING = "running"
+    COMPLETE = "complete"
+    CANCELLED = "cancelled"
+    ERROR = "error"
+
+
 class RunFailureKind(str, Enum):
     LLM = "llm"
     LLM_TIMEOUT = "llm_timeout"
@@ -41,18 +50,6 @@ class CompactionCheckpoint(BaseModel):
     summary: str
     covered_count: int = Field(gt=0)
     covered_digest: str
-
-
-class OperationSnapshot(BaseModel):
-    """Recorded generation or tool outcome; tool enrichment can revise the result.
-
-    A completed tool outcome does not imply its callbacks or cleanup have finished.
-    """
-
-    step_index: int
-    message_index: int
-    tool_call_id: str | None = None
-    status: RunStatus
 
 
 def completed_tool_call_ids(messages: list[Message], assistant_index: int) -> set[str]:

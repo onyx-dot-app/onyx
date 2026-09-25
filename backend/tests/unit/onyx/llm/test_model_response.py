@@ -20,9 +20,9 @@ from onyx.llm.litellm_models import (
     ChatCompletionDeltaToolCall,
     Choice,
     Delta,
-    FunctionCall,
     ModelResponse,
     ModelResponseStream,
+    ResponseFunctionCall,
     StreamingChoice,
 )
 from onyx.llm.litellm_models import ChatCompletionMessageToolCall as WireToolCall
@@ -215,7 +215,7 @@ def test_from_litellm_model_response_stream_parses_tool_calls() -> None:
         id=None,
         index=0,
         type="function",
-        function=FunctionCall(arguments='{"', name=None),
+        function=ResponseFunctionCall(arguments='{"', name=None),
     )
 
 
@@ -278,7 +278,7 @@ def test_from_litellm_model_response_stream_parses_multiple_tool_calls() -> None
         id="call_130bec4755e544ea95f4b1bafd81",
         index=0,
         type="function",
-        function=FunctionCall(
+        function=ResponseFunctionCall(
             arguments='{"queries": ["new agent framework"]}',
             name="internal_search",
         ),
@@ -287,7 +287,7 @@ def test_from_litellm_model_response_stream_parses_multiple_tool_calls() -> None
         id="call_42273e8ee5ac4c0a97237d6d25a6",
         index=1,
         type="function",
-        function=FunctionCall(
+        function=ResponseFunctionCall(
             arguments='{"queries": ["cheese"]}',
             name="web_search",
         ),
@@ -362,18 +362,22 @@ def test_accumulator_keeps_interleaved_calls_and_signed_thinking_separate() -> N
         ChatCompletionDeltaToolCall(
             index=0,
             id="first",
-            function=FunctionCall(name="search", arguments='{"query":"fir'),
+            function=ResponseFunctionCall(name="search", arguments='{"query":"fir'),
         ),
         ChatCompletionDeltaToolCall(
             index=1,
             id="second",
-            function=FunctionCall(name="search", arguments='{"query":"second"}'),
+            function=ResponseFunctionCall(
+                name="search", arguments='{"query":"second"}'
+            ),
         ),
-        ChatCompletionDeltaToolCall(index=0, function=FunctionCall(arguments='st"}')),
+        ChatCompletionDeltaToolCall(
+            index=0, function=ResponseFunctionCall(arguments='st"}')
+        ),
         ChatCompletionDeltaToolCall(
             index=2,
             id="invalid",
-            function=FunctionCall(name="search", arguments='{"query":broken'),
+            function=ResponseFunctionCall(name="search", arguments='{"query":broken'),
         ),
     ]:
         accumulator.add(
@@ -438,7 +442,7 @@ def test_text_deltas_preserve_content_boundaries_without_boundary_events() -> No
                 ChatCompletionDeltaToolCall(
                     index=0,
                     id="call",
-                    function=FunctionCall(name="search", arguments="{}"),
+                    function=ResponseFunctionCall(name="search", arguments="{}"),
                 )
             ]
         ),
@@ -487,7 +491,7 @@ def test_shared_client_normalizes_schema_directed_tool_arguments(
                 ChatCompletionDeltaToolCall(
                     index=0,
                     id="search-call",
-                    function=FunctionCall(name="search", arguments=encoded),
+                    function=ResponseFunctionCall(name="search", arguments=encoded),
                 )
             ]
         )
@@ -514,7 +518,7 @@ def test_shared_client_normalizes_schema_directed_tool_arguments(
                 tool_calls=[
                     WireToolCall(
                         id="search-call",
-                        function=FunctionCall(name="search", arguments=encoded),
+                        function=ResponseFunctionCall(name="search", arguments=encoded),
                     )
                 ]
                 if not text_fallback
@@ -610,7 +614,8 @@ def test_xml_tool_recovery_preserves_visible_prose(
         )
         accumulator = MessageAccumulator(request.tools)
         list(accumulator.consume(source, request))
-        message = accumulator.finish()
+        accumulator.finalize()
+        message = accumulator.message
     else:
         message = recover_tool_calls(
             AssistantMessage(content=[TextContent(text="".join(fragments))]), request
@@ -660,7 +665,9 @@ def test_complete_conversion_preserves_native_calls_and_response_metadata(
                 tool_calls=[
                     WireToolCall(
                         id="native-call",
-                        function=FunctionCall(name="search", arguments=arguments),
+                        function=ResponseFunctionCall(
+                            name="search", arguments=arguments
+                        ),
                     )
                 ],
             ),
@@ -711,7 +718,9 @@ def test_stream_keeps_native_precedence_stable_ids_and_event_snapshots() -> None
                 tool_calls=[
                     ChatCompletionDeltaToolCall(
                         index=0,
-                        function=FunctionCall(name="search", arguments='{"query":"fir'),
+                        function=ResponseFunctionCall(
+                            name="search", arguments='{"query":"fir'
+                        ),
                     )
                 ]
             )
@@ -722,7 +731,7 @@ def test_stream_keeps_native_precedence_stable_ids_and_event_snapshots() -> None
                     ChatCompletionDeltaToolCall(
                         index=0,
                         id="late-provider-id",
-                        function=FunctionCall(arguments='st"}'),
+                        function=ResponseFunctionCall(arguments='st"}'),
                     )
                 ]
             )
@@ -786,7 +795,8 @@ def test_stream_conversion_closes_provider_source(ending: str) -> None:
         assert caught.value is failure
     else:
         list(stream)
-        assert accumulator.finish().text == "visible tail"
+        accumulator.finalize()
+        assert accumulator.message.text == "visible tail"
     assert closed == [True]
 
 
@@ -906,14 +916,16 @@ def test_incremental_events_preserve_partial_content_and_snapshot_isolation() ->
                 ChatCompletionDeltaToolCall(
                     index=0,
                     id="call",
-                    function=FunctionCall(name="search", arguments='{"query":"par'),
+                    function=ResponseFunctionCall(
+                        name="search", arguments='{"query":"par'
+                    ),
                 )
             ]
         ),
         Delta(
             tool_calls=[
                 ChatCompletionDeltaToolCall(
-                    index=0, function=FunctionCall(arguments='tial","limit":3}')
+                    index=0, function=ResponseFunctionCall(arguments='tial","limit":3}')
                 )
             ]
         ),
@@ -938,8 +950,12 @@ def test_incremental_events_preserve_partial_content_and_snapshot_isolation() ->
     assert not accepted.tool_calls[0].arguments_complete
     for event in accumulator.end():
         apply_generation_event(accepted, event)
+        if isinstance(event, GenerationDoneEvent):
+            event.message.content.clear()
+        elif isinstance(event, GenerationToolCallEvent):
+            event.tool_call.arguments.clear()
     assert accepted.id == "run:0"
-    assert accepted.content == accumulator.finish().content
+    assert accepted.content == accumulator.message.content
     assert accepted.tool_calls[0].arguments_complete
 
 

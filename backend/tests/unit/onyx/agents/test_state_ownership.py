@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from onyx.agents.concurrency import EventDelivery
 from onyx.agents.events import (
     AgentEvent,
+    MessageEndEvent,
 )
 from onyx.agents.models import (
     AgentState,
@@ -333,7 +334,7 @@ def test_completed_tools_survive_sibling_cancellation() -> None:
     snapshot = run.snapshot()
     assert snapshot.messages[-1].text == "completed result"
     assert [
-        operation.status for operation in snapshot.operations if operation.tool_call_id
+        execution.status for step in snapshot.steps for execution in step.tools.values()
     ] == ["complete", "cancelled"]
     assert snapshot.messages == agent.state.messages
 
@@ -456,3 +457,30 @@ def test_prepared_request_isolates_nested_tool_arguments(with_assembly: bool) ->
         assembled = retained[0]
         assert isinstance(assembled, AssistantMessage)
         assert assembled.tool_calls[0].arguments == {"filters": {"q": "assembled"}}
+
+
+def test_message_end_observer_cannot_mutate_recorded_generation() -> None:
+    observed: list[MessageEndEvent] = []
+
+    def on_event(event: AgentEvent) -> None:
+        if isinstance(event, MessageEndEvent):
+            observed.append(event)
+            event.message.content.clear()
+            if isinstance(event.message.metadata, ExtraData):
+                event.message.metadata.value = "changed"
+
+    agent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(content=[TextContent(text="answer")])
+        ),
+        prepare_step=lambda _: PreparedStep(output_metadata=ExtraData()),
+    )
+    run = agent.start(max_steps=1, on_event=on_event)
+    result = run.result(timeout=5)
+    assert run.wait_for_idle(5)
+    assert len(observed) == 1
+    recorded = run.snapshot().messages[0]
+    assert isinstance(recorded, AssistantMessage)
+    assert recorded.text == result.output.text == "answer"
+    assert recorded.metadata == ExtraData()
+    assert recorded.id == observed[0].message_id

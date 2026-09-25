@@ -14,11 +14,11 @@ from pydantic import BaseModel, JsonValue
 from onyx.llm.interfaces import LLMConfig, LLMUserIdentity
 from onyx.llm.litellm_models import (
     ChatCompletionDeltaToolCall,
+    ChatCompletionMessage,
     Delta,
-    FunctionCall,
-    LanguageModelInput,
     ModelResponse,
     ModelResponseStream,
+    ResponseFunctionCall,
     StreamingChoice,
 )
 from onyx.llm.models import ReasoningEffort, ToolChoice
@@ -140,7 +140,7 @@ def create_delta_from_stream_item(item: StreamItem) -> Delta:
                         ChatCompletionDeltaToolCall(
                             id=tc_data["tool_call_id"],
                             index=tc_data["index"],
-                            function=FunctionCall(
+                            function=ResponseFunctionCall(
                                 arguments="",
                                 name=tc_data["tool_name"],
                             ),
@@ -151,7 +151,7 @@ def create_delta_from_stream_item(item: StreamItem) -> Delta:
                         ChatCompletionDeltaToolCall(
                             index=tc_data["index"],
                             id=None,
-                            function=FunctionCall(
+                            function=ResponseFunctionCall(
                                 arguments=tc_data["arguments"],
                                 name=None,
                             ),
@@ -166,7 +166,7 @@ def create_delta_from_stream_item(item: StreamItem) -> Delta:
                     tool_calls=[
                         ChatCompletionDeltaToolCall(
                             id=data["tool_call_id"],
-                            function=FunctionCall(
+                            function=ResponseFunctionCall(
                                 name=data["tool_name"],
                                 arguments="",
                             ),
@@ -178,7 +178,7 @@ def create_delta_from_stream_item(item: StreamItem) -> Delta:
                     tool_calls=[
                         ChatCompletionDeltaToolCall(
                             id=None,
-                            function=FunctionCall(
+                            function=ResponseFunctionCall(
                                 name=None,
                                 arguments=data["arguments"],
                             ),
@@ -302,7 +302,7 @@ class MockLLM(LitellmLLM, MockLLMController):
 
     def invoke_raw(
         self,
-        prompt: LanguageModelInput,
+        prompt: list[ChatCompletionMessage],
         tools: list[dict[str, JsonValue]] | None = None,
         tool_choice: ToolChoice | None = None,
         structured_response_format: dict[str, JsonValue] | None = None,
@@ -316,7 +316,7 @@ class MockLLM(LitellmLLM, MockLLMController):
 
     def stream_raw(
         self,
-        prompt: LanguageModelInput,  # noqa: ARG002
+        prompt: list[ChatCompletionMessage],  # noqa: ARG002
         tools: list[dict[str, JsonValue]] | None = None,  # noqa: ARG002
         tool_choice: ToolChoice | None = None,  # noqa: ARG002
         structured_response_format: dict[str, JsonValue] | None = None,  # noqa: ARG002

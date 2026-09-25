@@ -673,7 +673,7 @@ def test_checkpoint_files_use_durable_references_and_session_cleanup(
                 agent_state=AgentState(),
                 run_state=RunState(
                     run_id="files",
-                    messages=[],
+                    steps=[],
                     agent_id=str(branch[0]),
                     status=RunStatus.SUSPENDED,
                     progress=RunProgress(

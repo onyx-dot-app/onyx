@@ -8,9 +8,10 @@ from sqlalchemy.orm import Session
 from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.compaction import history_digest
 from onyx.agents.execution_records import (
-    OperationSnapshot,
+    ExecutionStatus,
     RunStatus,
 )
+from onyx.agents.models import StepRecord, ToolExecutionRecord
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.chat.models import MessageRendering, ResponseRecord
@@ -48,13 +49,25 @@ from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
 
-def _messages(run_id: str, messages: list[Message]) -> list[Message]:
-    step = 0
+def _steps(
+    run_id: str,
+    messages: list[Message],
+    status: ExecutionStatus = ExecutionStatus.COMPLETE,
+) -> list[StepRecord]:
+    steps: list[StepRecord] = []
     for message in messages:
         if isinstance(message, AssistantMessage):
-            message.id = message.id or f"{run_id}:{step}"
-            step += 1
-    return messages
+            message.id = message.id or f"{run_id}:{len(steps)}"
+            steps.append(StepRecord(message=message, generation_status=status))
+        else:
+            assert isinstance(message, ToolResultMessage)
+            steps[-1].tools[message.tool_call_id] = ToolExecutionRecord(
+                status=ExecutionStatus.ERROR
+                if message.is_error
+                else ExecutionStatus.COMPLETE,
+                result=message,
+            )
+    return steps
 
 
 def test_research_restores_across_request_contexts(db_session: Session) -> None:
@@ -121,7 +134,7 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
         agent_id=root_id,
         input_messages=[UserMessage(content="Investigate cedar")],
         status=RunStatus.COMPLETE,
-        messages=_messages(
+        steps=_steps(
             run_id,
             [
                 AssistantMessage(
@@ -129,10 +142,7 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
                 )
             ],
         ),
-        operations=[
-            OperationSnapshot(step_index=0, message_index=0, status=RunStatus.COMPLETE)
-        ],
-        answer_message_index=None,
+        answer_step_index=None,
         child_runs=[
             ResponseRecord(
                 run_id=first_run,
@@ -142,7 +152,7 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
                 restoration_config=settings,
                 status=RunStatus.COMPLETE,
                 input_messages=[UserMessage(content="Investigate cedar")],
-                messages=_messages(
+                steps=_steps(
                     first_run,
                     [
                         AssistantMessage(
@@ -150,12 +160,7 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
                         )
                     ],
                 ),
-                operations=[
-                    OperationSnapshot(
-                        step_index=0, message_index=0, status=RunStatus.COMPLETE
-                    )
-                ],
-                answer_message_index=None,
+                answer_step_index=None,
             )
         ],
     )
@@ -349,7 +354,7 @@ def test_saved_tools_filter_at_request_boundary(db_session: Session) -> None:
         agent_id=str(session.id),
         status=RunStatus.COMPLETE,
         input_messages=[UserMessage(content=question.message)],
-        messages=_messages(
+        steps=_steps(
             run_id,
             [
                 AssistantMessage(
@@ -371,11 +376,7 @@ def test_saved_tools_filter_at_request_boundary(db_session: Session) -> None:
                 AssistantMessage(content=[TextContent(text="Answer")]),
             ],
         ),
-        operations=[
-            OperationSnapshot(step_index=0, message_index=0, status=RunStatus.COMPLETE),
-            OperationSnapshot(step_index=1, message_index=3, status=RunStatus.COMPLETE),
-        ],
-        answer_message_index=3,
+        answer_step_index=1,
     )
     session_id, question_id, response_id = session.id, question.id, response.id
     try:

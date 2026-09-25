@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, aliased, joinedload, load_only, selectinload
 from sqlalchemy.sql.selectable import CTE
 
 from onyx.agents.execution_records import RunStatus
-from onyx.agents.models import AgentInfo
+from onyx.agents.models import AgentInfo, messages_from_steps
 from onyx.chat.models import (
     MAX_DISCOVERED_AGENTS,
     MessageRendering,
@@ -19,8 +19,8 @@ from onyx.configs.constants import MessageType
 from onyx.db.chat import translate_db_search_doc_to_saved_search_doc
 from onyx.db.chat_history import checkpoint_from_summary, find_summary_for_ancestry
 from onyx.db.chat_response_messages import (
-    read_response_messages,
     read_response_record,
+    read_response_steps,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import ChatMessage, ChatResponseMessage, ChatSession, ToolCall
@@ -412,7 +412,7 @@ def _load_history(
         if question is None or question.message_type != MessageType.USER:
             raise ValueError("Child response has no user instruction")
         messages.append(UserMessage(content=question.message))
-        messages.extend(read_response_messages(response))
+        messages.extend(messages_from_steps(read_response_steps(response)))
     restored = SavedAgentContext(
         agent_id=str(agent.id),
         configuration=agent.restoration_config,

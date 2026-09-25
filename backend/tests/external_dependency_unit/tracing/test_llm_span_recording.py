@@ -10,10 +10,10 @@ from onyx.llm.litellm_models import (
     Choice,
     Message,
     ModelResponse,
+    RequestFunctionCall,
+    ResponseFunctionCall,
     ToolCall,
 )
-from onyx.llm.litellm_models import FunctionCall as ModelResponseFunctionCall
-from onyx.llm.litellm_models import ToolFunctionCall as FunctionCall
 from onyx.llm.models import Usage
 from onyx.tracing.framework.span_data import GenerationSpanData
 from onyx.tracing.framework.traces import TraceContentMode
@@ -73,7 +73,7 @@ class TestRecordLlmResponse:
         tool_call = ChatCompletionMessageToolCall(
             id="call-123",
             type="function",
-            function=ModelResponseFunctionCall(
+            function=ResponseFunctionCall(
                 name="search_documents",
                 arguments='{"query": "test query"}',
             ),
@@ -161,7 +161,7 @@ class TestRecordLlmResponse:
         tool_call = ChatCompletionMessageToolCall(
             id="call-456",
             type="function",
-            function=ModelResponseFunctionCall(
+            function=ResponseFunctionCall(
                 name="analyze",
                 arguments='{"text": "sample"}',
             ),
@@ -261,7 +261,7 @@ class TestRecordLlmSpanOutput:
             ToolCall(
                 id="call-789",
                 type="function",
-                function=FunctionCall(
+                function=RequestFunctionCall(
                     name="get_weather",
                     arguments='{"location": "NYC"}',
                 ),
@@ -283,7 +283,7 @@ class TestRecordLlmSpanOutput:
             ToolCall(
                 id="call-abc",
                 type="function",
-                function=FunctionCall(
+                function=RequestFunctionCall(
                     name="search",
                     arguments='{"q": "test"}',
                 ),
@@ -310,7 +310,7 @@ class TestRecordLlmSpanOutput:
             ToolCall(
                 id="call-xyz",
                 type="function",
-                function=FunctionCall(
+                function=RequestFunctionCall(
                     name="calculator",
                     arguments='{"expr": "2+2"}',
                 ),

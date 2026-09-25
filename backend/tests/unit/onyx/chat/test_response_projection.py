@@ -9,8 +9,14 @@ from uuid import uuid4
 import pytest
 
 from onyx.agents.events import AgentEvent, MessageEndEvent
-from onyx.agents.execution_records import OperationSnapshot, RunStatus
-from onyx.agents.models import AgentInfo, PreparedStep, RunState
+from onyx.agents.execution_records import ExecutionStatus, RunStatus
+from onyx.agents.models import (
+    AgentInfo,
+    PreparedStep,
+    RunState,
+    StepRecord,
+    ToolExecutionRecord,
+)
 from onyx.agents.runtime import Agent, Run
 from onyx.chat.emitter import Emitter
 from onyx.chat.history_store import get_chat_history_store
@@ -259,21 +265,22 @@ def test_projection_retains_unfinished_descendant_for_inspection() -> None:
     snapshot = RunState(
         run_id="parent",
         status=RunStatus.ERROR,
-        messages=[
-            AssistantMessage(
-                content=[TextContent(text="Partial answer")],
-                metadata=ChatMessageMetadata(),
+        steps=[
+            StepRecord(
+                message=AssistantMessage(
+                    content=[TextContent(text="Partial answer")],
+                    metadata=ChatMessageMetadata(),
+                ),
+                generation_status=ExecutionStatus.ERROR,
+                tools={},
             )
-        ],
-        operations=[
-            OperationSnapshot(step_index=0, message_index=0, status=RunStatus.ERROR)
         ],
         child_runs=[
             RunState(
                 run_id="child",
                 agent_id="child-agent",
                 status=RunStatus.RUNNING,
-                messages=[],
+                steps=[],
             )
         ],
     )
@@ -301,24 +308,28 @@ def test_full_response_reads_canonical_tool_output() -> None:
     snapshot = RunState(
         run_id="root",
         status=RunStatus.COMPLETE,
-        messages=[
-            AssistantMessage(content=[ToolCall(id="tool", name="echo", arguments={})]),
-            ToolResultMessage(
-                tool_call_id="tool", tool_name="echo", content="tool output"
+        steps=[
+            StepRecord(
+                message=AssistantMessage(
+                    content=[ToolCall(id="tool", name="echo", arguments={})]
+                ),
+                generation_status=ExecutionStatus.COMPLETE,
+                tools={
+                    "tool": ToolExecutionRecord(
+                        status=ExecutionStatus.COMPLETE,
+                        result=ToolResultMessage(
+                            tool_call_id="tool", tool_name="echo", content="tool output"
+                        ),
+                    )
+                },
             ),
-            AssistantMessage(content=[TextContent(text="Answer")]),
-        ],
-        operations=[
-            OperationSnapshot(step_index=0, message_index=0, status=RunStatus.COMPLETE),
-            OperationSnapshot(
-                step_index=0,
-                message_index=0,
-                tool_call_id="tool",
-                status=RunStatus.COMPLETE,
+            StepRecord(
+                message=AssistantMessage(content=[TextContent(text="Answer")]),
+                generation_status=ExecutionStatus.COMPLETE,
+                tools={},
             ),
-            OperationSnapshot(step_index=1, message_index=2, status=RunStatus.COMPLETE),
         ],
-        answer_message_index=2,
+        answer_step_index=1,
     )
     projected = project_response(snapshot, response_id=42, tool_ids={"echo": 1})
     assert projected.tool_calls[0].tool_call_response == "tool output"
@@ -348,13 +359,14 @@ def test_response_save_captures_run_once() -> None:
             run_id="run",
             agent_id="agent",
             status=RunStatus.COMPLETE,
-            messages=[AssistantMessage(content=[TextContent(text="answer")])],
-            operations=[
-                OperationSnapshot(
-                    step_index=0, message_index=0, status=RunStatus.COMPLETE
+            steps=[
+                StepRecord(
+                    message=AssistantMessage(content=[TextContent(text="answer")]),
+                    generation_status=ExecutionStatus.COMPLETE,
+                    tools={},
                 )
             ],
-            answer_message_index=0,
+            answer_step_index=0,
         )
     )
     outcome: Future[ChatResponseOutcome] = Future()

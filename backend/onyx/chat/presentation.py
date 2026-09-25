@@ -18,7 +18,7 @@ from onyx.agents.events import (
     ToolStartEvent,
     ToolUpdateEvent,
 )
-from onyx.agents.execution_records import RunStatus
+from onyx.agents.execution_records import ExecutionStatus, RunStatus
 from onyx.agents.models import AgentInfo, RunState
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
 from onyx.chat.citation_utils import update_citation_processor_from_tool_result
@@ -92,25 +92,14 @@ def _collect_tool_history(
     documents: dict[str, SearchDoc] = {}
     citations = DynamicCitationProcessor(citation_mode=CitationMode.HYPERLINK)
     citations.update_citation_mapping(initial_citations or {})
-    for operation in snapshot.operations:
-        if operation.tool_call_id is not None:
-            continue
-        message = snapshot.messages[operation.message_index]
-        if not isinstance(message, AssistantMessage):
-            raise ValueError(
-                "Message operation does not reference an assistant message"
-            )
-        results: dict[str, ToolResultMessage] = {}
-        for item in snapshot.messages[operation.message_index + 1 :]:
-            if isinstance(item, AssistantMessage):
-                break
-            if isinstance(item, ToolResultMessage):
-                results[item.tool_call_id] = item
+    for step_index, step in enumerate(snapshot.steps):
+        message = step.message
         for index, call in enumerate(message.tool_calls):
             tool_id = tool_ids.get(call.name)
             if tool_id is None:
                 continue
-            result = results.get(call.id)
+            execution = step.tools.get(call.id)
+            result = execution.result if execution is not None else None
             records.append(
                 _tool_record(
                     tool_id,
@@ -118,7 +107,7 @@ def _collect_tool_history(
                     result,
                     call,
                     snapshot,
-                    operation.step_index,
+                    step_index,
                     index,
                 )
             )
@@ -272,8 +261,8 @@ def project_response(
     """
     record = response_record(snapshot, registrations)
     response = ChatResponseSnapshot(
-        answer=record.messages[record.answer_message_index].text
-        if record.answer_message_index is not None
+        answer=record.steps[record.answer_step_index].message.text
+        if record.answer_step_index is not None
         else "",
         reasoning=None,
         request_params=snapshot.request_params,
@@ -319,13 +308,9 @@ def _project_response_display(
     while pending:
         node, parent_tool_name = pending.pop()
         call_names: dict[tuple[str, str], str] = {}
-        for operation in node.operations:
-            if operation.tool_call_id is not None:
-                continue
-            message = node.messages[operation.message_index]
-            if not isinstance(message, AssistantMessage):
-                raise ValueError("Message operation has invalid output")
-            message_id = message.id or f"{node.run_id}:{operation.step_index}"
+        for step_index, step in enumerate(node.steps):
+            message = step.message
+            message_id = message.id or f"{node.run_id}:{step_index}"
             call_names.update(
                 {(message_id, call.id): call.name for call in message.tool_calls}
             )
@@ -345,8 +330,8 @@ def _project_response_display(
                     message_id=message_id,
                 ),
             )
-            is_answer = operation.message_index == node.answer_message_index
-            renderer.saved(message, operation.status, is_answer=is_answer)
+            is_answer = step_index == node.answer_step_index
+            renderer.saved(message, step.generation_status, is_answer=is_answer)
             if not is_answer and snapshot.status == RunStatus.COMPLETE:
                 continue
             response = response.model_copy(
@@ -359,7 +344,7 @@ def _project_response_display(
                     if renderer.answer_started
                     else response.pre_answer_processing_time,
                     "is_clarification": setting.is_clarification
-                    and operation.status == RunStatus.COMPLETE
+                    and step.generation_status == ExecutionStatus.COMPLETE
                     and not message.tool_calls,
                 }
             )

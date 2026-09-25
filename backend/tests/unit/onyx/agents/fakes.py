@@ -17,8 +17,8 @@ from onyx.agents.tools import ToolInvocation
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import LLM, GenerationContext, LLMConfig
 from onyx.llm.litellm_models import (
+    ChatCompletionMessage,
     Delta,
-    LanguageModelInput,
     ModelResponseStream,
     StreamingChoice,
 )
@@ -128,7 +128,7 @@ class ScriptedLLM(LitellmLLM):
         )
 
     def stream_raw(
-        self, prompt: LanguageModelInput, *args: Any, **kwargs: Any
+        self, prompt: list[ChatCompletionMessage], *args: Any, **kwargs: Any
     ) -> Iterator[ModelResponseStream]:
         assert not args
         self.requests.append({"prompt": prompt, **kwargs})

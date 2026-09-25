@@ -7,8 +7,14 @@ from unittest.mock import patch
 
 import pytest
 
-from onyx.agents.execution_records import OperationSnapshot, RunStatus
-from onyx.agents.models import PreparedStep, RunState, StepInput, ToolCallContext
+from onyx.agents.execution_records import ExecutionStatus, RunStatus
+from onyx.agents.models import (
+    PreparedStep,
+    RunState,
+    StepInput,
+    StepRecord,
+    ToolCallContext,
+)
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.llm.cancellation import CancellationSignal
@@ -29,14 +35,18 @@ def test_snapshot_can_omit_children_before_copying() -> None:
             run_id="parent",
             agent_id="agent",
             status=RunStatus.COMPLETE,
-            messages=[
-                AssistantMessage(
-                    content=[ToolCall(id="call", name="lookup", arguments={"q": "old"})]
+            steps=[
+                StepRecord(
+                    message=AssistantMessage(
+                        content=[
+                            ToolCall(id="call", name="lookup", arguments={"q": "old"})
+                        ]
+                    ),
+                    generation_status=ExecutionStatus.COMPLETE,
+                    tools={},
                 )
             ],
-            child_runs=[
-                RunState(run_id="child", status=RunStatus.COMPLETE, messages=[])
-            ],
+            child_runs=[RunState(run_id="child", status=RunStatus.COMPLETE, steps=[])],
         )
     )
     with patch.object(
@@ -128,26 +138,16 @@ def test_message_and_operation_updates_are_visible_together(
         for message in snapshot.messages
     )
     for snapshot in lock.snapshots:
-        for index, message in enumerate(snapshot.messages):
-            if isinstance(message, AssistantMessage):
-                assert any(
-                    operation.message_index == index and operation.tool_call_id is None
-                    for operation in snapshot.operations
-                )
-            elif isinstance(message, ToolResultMessage):
-                operation = next(
-                    operation
-                    for operation in snapshot.operations
-                    if operation.tool_call_id == message.tool_call_id
-                )
-                assert operation.status == (
-                    RunStatus.ERROR if message.is_error else RunStatus.COMPLETE
-                )
-        for operation in snapshot.operations:
-            source = snapshot.messages[operation.message_index]
-            assert isinstance(source, AssistantMessage)
-            if operation.tool_call_id is not None:
-                assert operation.tool_call_id in {call.id for call in source.tool_calls}
+        for step in snapshot.steps:
+            assert step.tools.keys() <= {call.id for call in step.message.tool_calls}
+            for call_id, execution in step.tools.items():
+                if execution.result is not None:
+                    assert execution.result.tool_call_id == call_id
+                    assert execution.status == (
+                        RunStatus.ERROR
+                        if execution.result.is_error
+                        else RunStatus.COMPLETE
+                    )
 
 
 def test_tool_result_is_retained_while_finalization_blocks_the_next_step() -> None:
@@ -189,7 +189,7 @@ def test_tool_result_is_retained_while_finalization_blocks_the_next_step() -> No
         assert finalizing.wait(3)
         snapshot = run.snapshot()
         assert snapshot.messages[-1].text == "raw"
-        assert snapshot.operations[-1].status == RunStatus.COMPLETE
+        assert snapshot.steps[0].tools["call"].status == ExecutionStatus.COMPLETE
         assert not next_generation.is_set()
         assert not run.wait_for_idle(0)
         release.set()
@@ -208,15 +208,14 @@ def test_result_copies_output_without_copying_run_history() -> None:
             run_id="parent",
             agent_id="agent",
             status=RunStatus.COMPLETE,
-            messages=[AssistantMessage(content=[TextContent(text="Answer")])],
-            operations=[
-                OperationSnapshot(
-                    step_index=0, message_index=0, status=RunStatus.COMPLETE
+            steps=[
+                StepRecord(
+                    message=AssistantMessage(content=[TextContent(text="Answer")]),
+                    generation_status=ExecutionStatus.COMPLETE,
+                    tools={},
                 )
             ],
-            child_runs=[
-                RunState(run_id="child", status=RunStatus.COMPLETE, messages=[])
-            ],
+            child_runs=[RunState(run_id="child", status=RunStatus.COMPLETE, steps=[])],
         )
     )
     with patch.object(

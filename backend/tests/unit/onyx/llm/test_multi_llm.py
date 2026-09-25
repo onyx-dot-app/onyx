@@ -20,15 +20,13 @@ from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.litellm_models import (
     AssistantMessage,
-    LanguageModelInput,
+    ChatCompletionMessage,
     ModelResponse,
     ModelResponseStream,
+    RequestFunctionCall,
     ToolCall,
     ToolMessage,
     UserMessage,
-)
-from onyx.llm.litellm_models import (
-    ToolFunctionCall as FunctionCall,
 )
 from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.llm.models import NamedToolChoice, ReasoningEffort, ToolChoiceOptions, Usage
@@ -68,7 +66,7 @@ def _model_response_to_assistant_message(response: ModelResponse) -> AssistantMe
         tool_calls = [
             ToolCall(
                 id=tc.id,
-                function=FunctionCall(
+                function=RequestFunctionCall(
                     name=tc.function.name or "",
                     arguments=tc.function.arguments or "",
                 ),
@@ -125,7 +123,7 @@ def _accumulate_stream_to_assistant_message(
             ToolCall(
                 type="function",
                 id=tc_data["id"],
-                function=FunctionCall(
+                function=RequestFunctionCall(
                     name=tc_data["name"],
                     arguments=tc_data["arguments"],
                 ),
@@ -201,7 +199,7 @@ def test_multiple_tool_calls(default_multi_llm: LitellmLLM) -> None:
         mock_completion.return_value = mock_stream_chunks
 
         # Define input messages
-        messages: LanguageModelInput = [
+        messages: list[ChatCompletionMessage] = [
             UserMessage(content="What's the weather and time in New York?")
         ]
 
@@ -357,7 +355,7 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
         mock_completion.return_value = mock_response
 
         # Define input messages and tools (same as in the non-streaming test)
-        messages: LanguageModelInput = [
+        messages: list[ChatCompletionMessage] = [
             UserMessage(content="What's the weather and time in New York?")
         ]
 
@@ -479,7 +477,7 @@ def test_omits_temperature_for_no_sampling_params_models(model_name: str) -> Non
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
 
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         list(llm.stream_raw(messages))
 
         kwargs = mock_completion.call_args.kwargs
@@ -492,7 +490,7 @@ def test_empty_tools_list_is_omitted(default_multi_llm: LitellmLLM) -> None:
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
 
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         list(default_multi_llm.stream_raw(messages, tools=[]))
 
         assert mock_completion.call_args.kwargs["tools"] is None
@@ -519,7 +517,7 @@ def test_claude_only_in_deployment_name_omits_temperature_and_reasons() -> None:
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
 
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         list(llm.stream_raw(messages, reasoning_effort=ReasoningEffort.HIGH))
 
         kwargs = mock_completion.call_args.kwargs
@@ -547,7 +545,7 @@ def test_openai_only_in_deployment_name_uses_responses_bridge() -> None:
 
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         list(llm.stream_raw(messages, reasoning_effort=ReasoningEffort.HIGH))
 
         kwargs = mock_completion.call_args.kwargs
@@ -601,7 +599,7 @@ def test_claude_adaptive_thinking_uses_output_config(
     ):
         mock_completion.return_value = []
 
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         list(llm.stream_raw(messages, reasoning_effort=reasoning_effort))
 
         kwargs = mock_completion.call_args.kwargs
@@ -691,7 +689,7 @@ def _anthropic_completion_kwargs(
     )
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         list(llm.stream_raw(messages, reasoning_effort=reasoning_effort))
         return mock_completion.call_args.kwargs
 
@@ -724,7 +722,7 @@ def test_reasoning_off_for_gemini_uses_lowest_accepted_level(
         patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
     ):
         mock_completion.return_value = []
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         list(llm.stream_raw(messages, reasoning_effort=ReasoningEffort.OFF))
         kwargs = mock_completion.call_args.kwargs
         assert kwargs.get("reasoning_effort") == expected_effort
@@ -737,7 +735,7 @@ def test_keeps_temperature_for_other_models(
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
 
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         list(default_multi_llm.stream_raw(messages))
 
         kwargs = mock_completion.call_args.kwargs
@@ -768,7 +766,7 @@ def test_keeps_temperature_for_older_sonnet_models(model_name: str) -> None:
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
 
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         list(llm.stream_raw(messages))
 
         kwargs = mock_completion.call_args.kwargs
@@ -790,7 +788,7 @@ def test_vertex_stream_omits_stream_options(model_name: str) -> None:
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
 
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         list(llm.stream_raw(messages))
 
         kwargs = mock_completion.call_args.kwargs
@@ -815,7 +813,7 @@ def test_openai_auto_reasoning_effort_maps_to_medium() -> None:
     ):
         mock_completion.return_value = []
 
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         list(llm.stream_raw(messages, reasoning_effort=ReasoningEffort.AUTO))
 
         kwargs = mock_completion.call_args.kwargs
@@ -842,7 +840,7 @@ def test_vertex_opus_still_sends_thinking(model_name: str) -> None:
     ):
         mock_completion.return_value = []
 
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         list(llm.stream_raw(messages, reasoning_effort=ReasoningEffort.HIGH))
 
         kwargs = mock_completion.call_args.kwargs
@@ -865,7 +863,7 @@ def test_claude_via_openai_compatible_proxy_uses_reasoning_param() -> None:
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
 
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         list(llm.stream_raw(messages, reasoning_effort=ReasoningEffort.HIGH))
 
         kwargs = mock_completion.call_args.kwargs
@@ -891,7 +889,7 @@ def test_openai_via_openai_compatible_proxy_reaches_xhigh(api_mode: str) -> None
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
 
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         list(llm.stream_raw(messages, reasoning_effort=ReasoningEffort.XHIGH))
 
         kwargs = mock_completion.call_args.kwargs
@@ -914,7 +912,7 @@ def test_gateway_chat_alias_only_silences_openai_models() -> None:
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
 
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         list(llm.stream_raw(messages, reasoning_effort=ReasoningEffort.HIGH))
 
         assert mock_completion.call_args.kwargs["reasoning"] == {
@@ -939,7 +937,7 @@ def test_aliased_claude_model_still_reasons() -> None:
     ):
         mock_completion.return_value = []
 
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         list(llm.stream_raw(messages, reasoning_effort=ReasoningEffort.HIGH))
 
         kwargs = mock_completion.call_args.kwargs
@@ -976,7 +974,7 @@ def test_legacy_claude_thinking_budget_fits_inside_max_tokens(
     ):
         mock_completion.return_value = []
 
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         list(
             llm.stream_raw(
                 messages, reasoning_effort=ReasoningEffort.HIGH, max_tokens=max_tokens
@@ -1030,7 +1028,7 @@ def test_openai_chat_omits_reasoning_params() -> None:
         ]
         mock_completion.return_value = mock_stream_chunks
 
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         llm.invoke_raw(messages)
 
         kwargs = mock_completion.call_args.kwargs
@@ -1058,7 +1056,7 @@ def test_chat_variant_only_in_deployment_name_omits_reasoning() -> None:
 
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         list(llm.stream_raw(messages, reasoning_effort=ReasoningEffort.HIGH))
 
         kwargs = mock_completion.call_args.kwargs
@@ -1082,7 +1080,7 @@ def test_coincidental_chat_alias_does_not_silence_reasoning() -> None:
 
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         list(llm.stream_raw(messages, reasoning_effort=ReasoningEffort.HIGH))
 
         kwargs = mock_completion.call_args.kwargs
@@ -1111,7 +1109,7 @@ def _stream_and_get_completion_kwargs(
         patch("onyx.llm.multi_llm.is_true_openai_model", return_value=is_openai),
     ):
         mock_completion.return_value = []
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         list(llm.stream_raw(messages))
         return dict(mock_completion.call_args.kwargs)
 
@@ -1196,7 +1194,7 @@ def test_reasoning_effort_omitted_for_models_rejecting_it(
     ):
         mock_completion.return_value = []
 
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         list(llm.stream_raw(messages, reasoning_effort=ReasoningEffort.AUTO))
 
         kwargs = mock_completion.call_args.kwargs
@@ -1215,7 +1213,7 @@ def test_reasoning_effort_sent_for_o1() -> None:
     ):
         mock_completion.return_value = []
 
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         list(llm.stream_raw(messages, reasoning_effort=ReasoningEffort.AUTO))
 
         kwargs = mock_completion.call_args.kwargs
@@ -1241,7 +1239,7 @@ def test_o1_mini_only_in_deployment_name_omits_reasoning_effort() -> None:
 
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         list(llm.stream_raw(messages, reasoning_effort=ReasoningEffort.AUTO))
 
         kwargs = mock_completion.call_args.kwargs
@@ -1270,7 +1268,7 @@ def test_user_identity_metadata_enabled(default_multi_llm: LitellmLLM) -> None:
         ]
         mock_completion.return_value = mock_stream_chunks
 
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         identity = LLMUserIdentity(user_id="user_123", session_id="session_abc")
 
         default_multi_llm.invoke_raw(messages, user_identity=identity)
@@ -1303,7 +1301,7 @@ def test_user_identity_user_id_truncated_to_64_chars(
         ]
         mock_completion.return_value = mock_stream_chunks
 
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         long_user_id = "u" * 82
         identity = LLMUserIdentity(user_id=long_user_id, session_id="session_abc")
 
@@ -1336,7 +1334,7 @@ def test_user_identity_metadata_disabled_omits_identity(
         ]
         mock_completion.return_value = mock_stream_chunks
 
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         identity = LLMUserIdentity(user_id="user_123", session_id="session_abc")
 
         default_multi_llm.invoke_raw(messages, user_identity=identity)
@@ -1381,7 +1379,7 @@ def test_existing_metadata_pass_through_when_identity_disabled() -> None:
         ]
         mock_completion.return_value = mock_stream_chunks
 
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         identity = LLMUserIdentity(user_id="user_123", session_id="session_abc")
 
         llm.invoke_raw(messages, user_identity=identity)
@@ -1414,7 +1412,7 @@ def test_openai_model_invoke_uses_httphandler_client(
         ]
         mock_completion.return_value = mock_stream_chunks
 
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         default_multi_llm.invoke_raw(messages)
 
         mock_completion.assert_called_once()
@@ -1431,7 +1429,7 @@ def test_openai_model_stream_uses_httphandler_client(
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
 
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         list(default_multi_llm.stream_raw(messages))
 
         mock_completion.assert_called_once()
@@ -1467,7 +1465,7 @@ def test_anthropic_model_passes_isolated_client() -> None:
         ]
         mock_completion.return_value = mock_stream_chunks
 
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         llm.invoke_raw(messages)
 
         mock_completion.assert_called_once()
@@ -1507,7 +1505,7 @@ def test_bedrock_model_passes_isolated_client(model_provider: str) -> None:
         ]
         mock_completion.return_value = mock_stream_chunks
 
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         llm.invoke_raw(messages)
 
         mock_completion.assert_called_once()
@@ -1548,7 +1546,7 @@ def test_azure_openai_model_uses_httphandler_client() -> None:
         ]
         mock_completion.return_value = mock_stream_chunks
 
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         llm.invoke_raw(messages)
 
         mock_completion.assert_called_once()
@@ -1577,7 +1575,7 @@ def test_openai_only_in_deployment_name_gets_isolated_client() -> None:
 
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         list(llm.stream_raw(messages))
 
         mock_completion.assert_called_once()
@@ -1649,7 +1647,7 @@ def test_temporary_env_cleanup(monkeypatch: pytest.MonkeyPatch) -> None:
     ):
         mock_completion.side_effect = on_litellm_completion
 
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         identity = LLMUserIdentity(user_id="user_123", session_id="session_abc")
 
         llm.invoke_raw(messages, user_identity=identity)
@@ -1719,7 +1717,7 @@ def test_temporary_env_cleanup_on_exception(monkeypatch: pytest.MonkeyPatch) -> 
     ):
         mock_completion.side_effect = on_litellm_completion_raises
 
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         identity = LLMUserIdentity(user_id="user_123", session_id="session_abc")
 
         with pytest.raises(RuntimeError, match="Simulated LLM API failure"):
@@ -1824,7 +1822,7 @@ def test_multithreaded_custom_config_isolation(
 
     def run_llm(llm: LitellmLLM) -> None:
         try:
-            messages: LanguageModelInput = [UserMessage(content="Hi")]
+            messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
             if use_stream:
                 list(llm.stream_raw(messages))
             else:
@@ -1920,7 +1918,7 @@ def test_multithreaded_invoke_without_custom_config_does_not_inject_env() -> Non
 
     def run_llm(llm: LitellmLLM) -> None:
         try:
-            messages: LanguageModelInput = [UserMessage(content="Hi")]
+            messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
             llm.invoke_raw(messages)
         except Exception as e:
             errors.append(e)
@@ -2648,7 +2646,7 @@ def test_no_tool_choice_sent_when_no_tools(default_multi_llm: LitellmLLM) -> Non
     When no tools are provided, tool_choice must not be forwarded to
     litellm.completion() at all — not even as None.
     """
-    messages: LanguageModelInput = [UserMessage(content="Hello!")]
+    messages: list[ChatCompletionMessage] = [UserMessage(content="Hello!")]
 
     mock_stream_chunks = [
         litellm.ModelResponse(
@@ -2714,7 +2712,7 @@ def test_required_tool_choice_downgraded_to_auto(
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
 
-        messages: LanguageModelInput = [UserMessage(content="Weather in NYC?")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Weather in NYC?")]
         list(
             llm.stream_raw(
                 messages,
@@ -2742,7 +2740,7 @@ def test_qwen_only_in_deployment_name_downgrades_tool_choice() -> None:
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
 
-        messages: LanguageModelInput = [UserMessage(content="Weather in NYC?")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Weather in NYC?")]
         list(
             llm.stream_raw(
                 messages,
@@ -2762,7 +2760,7 @@ def test_required_tool_choice_preserved_for_other_models(
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
 
-        messages: LanguageModelInput = [UserMessage(content="Weather in NYC?")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Weather in NYC?")]
         list(
             default_multi_llm.stream_raw(
                 messages,
@@ -2781,7 +2779,7 @@ def test_named_tool_choice_serialized_for_litellm(
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
 
-        messages: LanguageModelInput = [UserMessage(content="Weather in NYC?")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Weather in NYC?")]
         list(
             default_multi_llm.stream_raw(
                 messages,
@@ -2810,7 +2808,7 @@ def test_named_tool_choice_not_downgraded_for_claude_model() -> None:
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
 
-        messages: LanguageModelInput = [UserMessage(content="Weather in NYC?")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Weather in NYC?")]
         list(
             llm.stream_raw(
                 messages,
@@ -2842,7 +2840,7 @@ def test_named_tool_choice_skips_legacy_claude_thinking() -> None:
     ):
         mock_completion.return_value = []
 
-        messages: LanguageModelInput = [UserMessage(content="Weather in NYC?")]
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Weather in NYC?")]
         list(
             llm.stream_raw(
                 messages,
@@ -2877,14 +2875,14 @@ def test_bifrost_normalizes_api_base_in_model_kwargs() -> None:
 def test_prompt_contains_tool_call_history_true() -> None:
     from onyx.llm.multi_llm import _prompt_contains_tool_call_history
 
-    messages: LanguageModelInput = [
+    messages: list[ChatCompletionMessage] = [
         UserMessage(content="What's the weather?"),
         AssistantMessage(
             content=None,
             tool_calls=[
                 ToolCall(
                     id="tc_1",
-                    function=FunctionCall(name="get_weather", arguments="{}"),
+                    function=RequestFunctionCall(name="get_weather", arguments="{}"),
                 )
             ],
         ),
@@ -2895,7 +2893,7 @@ def test_prompt_contains_tool_call_history_true() -> None:
 def test_prompt_contains_tool_call_history_false_no_tools() -> None:
     from onyx.llm.multi_llm import _prompt_contains_tool_call_history
 
-    messages: LanguageModelInput = [
+    messages: list[ChatCompletionMessage] = [
         UserMessage(content="Hello"),
         AssistantMessage(content="Hi there!"),
     ]
@@ -2905,7 +2903,7 @@ def test_prompt_contains_tool_call_history_false_no_tools() -> None:
 def test_prompt_contains_tool_call_history_false_user_only() -> None:
     from onyx.llm.multi_llm import _prompt_contains_tool_call_history
 
-    messages: LanguageModelInput = [UserMessage(content="Hello")]
+    messages: list[ChatCompletionMessage] = [UserMessage(content="Hello")]
     assert _prompt_contains_tool_call_history(messages) is False
 
 
@@ -2920,14 +2918,14 @@ def test_bedrock_claude_drops_thinking_when_thinking_blocks_missing() -> None:
         max_input_tokens=200000,
     )
 
-    messages: LanguageModelInput = [
+    messages: list[ChatCompletionMessage] = [
         UserMessage(content="What's the weather?"),
         AssistantMessage(
             content=None,
             tool_calls=[
                 ToolCall(
                     id="tc_1",
-                    function=FunctionCall(
+                    function=RequestFunctionCall(
                         name="get_weather",
                         arguments='{"city": "Paris"}',
                     ),
@@ -2981,7 +2979,7 @@ def test_bedrock_claude_keeps_thinking_when_no_tool_history() -> None:
         max_input_tokens=200000,
     )
 
-    messages: LanguageModelInput = [
+    messages: list[ChatCompletionMessage] = [
         UserMessage(content="What's the weather?"),
     ]
 
@@ -3026,7 +3024,9 @@ def test_bifrost_claude_includes_allowed_openai_params() -> None:
         max_input_tokens=32000,
     )
 
-    messages: LanguageModelInput = [UserMessage(content="Use a tool if needed")]
+    messages: list[ChatCompletionMessage] = [
+        UserMessage(content="Use a tool if needed")
+    ]
     tools: list[dict[str, JsonValue]] = [
         {
             "type": "function",
@@ -3420,7 +3420,7 @@ def _openai_compatible_llm(
     )
 
 
-def _tool_cycle_prompt() -> LanguageModelInput:
+def _tool_cycle_prompt() -> list[ChatCompletionMessage]:
     return [
         UserMessage(content="What's the weather in Paris?"),
         AssistantMessage(
@@ -3429,7 +3429,7 @@ def _tool_cycle_prompt() -> LanguageModelInput:
                 ToolCall(
                     type="function",
                     id="call_1",
-                    function=FunctionCall(name="get_weather", arguments="{}"),
+                    function=RequestFunctionCall(name="get_weather", arguments="{}"),
                 )
             ],
         ),

@@ -11,8 +11,15 @@ from onyx.agents.agent_coordination import (
     AgentCoordinator,
 )
 from onyx.agents.events import AgentEvent
-from onyx.agents.execution_records import OperationSnapshot, RunStatus
-from onyx.agents.models import AgentInfo, PreparedStep, RunState, StepInput, StepResult
+from onyx.agents.execution_records import ExecutionStatus, RunStatus
+from onyx.agents.models import (
+    AgentInfo,
+    PreparedStep,
+    RunState,
+    StepInput,
+    StepRecord,
+    StepResult,
+)
 from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
@@ -62,9 +69,12 @@ def test_archive_lookup_does_not_restore_an_agent(in_discovery: bool) -> None:
         agent_id="research",
         run_id="saved",
         status=RunStatus.COMPLETE,
-        messages=[AssistantMessage(content=[TextContent(text="Saved")])],
-        operations=[
-            OperationSnapshot(step_index=0, message_index=0, status=RunStatus.COMPLETE)
+        steps=[
+            StepRecord(
+                message=AssistantMessage(content=[TextContent(text="Saved")]),
+                generation_status=ExecutionStatus.COMPLETE,
+                tools={},
+            )
         ],
     )
 
@@ -287,14 +297,7 @@ def test_parallel_result_survives_another_tool_failure(cancelled: bool) -> None:
     assert [(result.tool_call_id, result.text) for result in results] == [
         ("second", "Completed side effect")
     ]
-    assert (
-        next(
-            operation.status
-            for operation in snapshot.operations
-            if operation.tool_call_id == "second"
-        )
-        == RunStatus.COMPLETE
-    )
+    assert snapshot.steps[0].tools["second"].status == RunStatus.COMPLETE
 
 
 @pytest.mark.parametrize("cancel_child", [False, True])

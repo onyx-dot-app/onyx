@@ -14,12 +14,17 @@ from onyx.agents.compaction import history_digest
 from onyx.agents.events import ToolEndEvent, ToolStartEvent, ToolUpdateEvent
 from onyx.agents.execution_records import (
     CompactionCheckpoint,
-    OperationSnapshot,
+    ExecutionStatus,
     RunFailure,
     RunFailureKind,
     RunStatus,
 )
-from onyx.agents.models import RunState
+from onyx.agents.models import (
+    RunState,
+    StepRecord,
+    ToolExecutionRecord,
+    messages_from_steps,
+)
 from onyx.agents.tools import ToolProgress
 from onyx.chat.emitter import Emitter
 from onyx.chat.history_store import get_chat_history_store
@@ -53,7 +58,7 @@ from onyx.db.chat_response import (
     save_response_content,
 )
 from onyx.db.chat_response_messages import (
-    read_response_messages,
+    read_response_steps,
     write_response_messages,
 )
 from onyx.db.chat_subagents import (
@@ -96,13 +101,25 @@ from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.utils.threadpool_concurrency import start_thread_future
 
 
-def _messages(run_id: str, messages: list[Message]) -> list[Message]:
-    step = 0
+def _steps(
+    run_id: str,
+    messages: list[Message],
+    status: ExecutionStatus = ExecutionStatus.COMPLETE,
+) -> list[StepRecord]:
+    steps: list[StepRecord] = []
     for message in messages:
         if isinstance(message, AssistantMessage):
-            message.id = message.id or f"{run_id}:{step}"
-            step += 1
-    return messages
+            message.id = message.id or f"{run_id}:{len(steps)}"
+            steps.append(StepRecord(message=message, generation_status=status))
+        else:
+            assert isinstance(message, ToolResultMessage)
+            steps[-1].tools[message.tool_call_id] = ToolExecutionRecord(
+                status=ExecutionStatus.ERROR
+                if message.is_error
+                else ExecutionStatus.COMPLETE,
+                result=message,
+            )
+    return steps
 
 
 @pytest.fixture
@@ -182,13 +199,8 @@ def _record(response: ChatMessage, answer: str = "Answer") -> ResponseRecord:
         run_id=run_id,
         status=RunStatus.COMPLETE,
         input_messages=[UserMessage(content=response.parent_message.message)],
-        messages=_messages(
-            run_id, [AssistantMessage(content=[TextContent(text=answer)])]
-        ),
-        operations=[
-            OperationSnapshot(step_index=0, message_index=0, status=RunStatus.COMPLETE)
-        ],
-        answer_message_index=0,
+        steps=_steps(run_id, [AssistantMessage(content=[TextContent(text=answer)])]),
+        answer_step_index=0,
     )
 
 
@@ -204,7 +216,7 @@ def _child_record(
     answer: str,
     previous: str | None = None,
 ) -> ResponseRecord:
-    parent.messages = _messages(
+    parent.steps = _steps(
         parent.run_id,
         [
             AssistantMessage(
@@ -212,9 +224,7 @@ def _child_record(
             )
         ],
     )
-    parent.operations = [
-        OperationSnapshot(step_index=0, message_index=0, status=RunStatus.COMPLETE)
-    ]
+
     run_id = str(uuid4())
     child = ResponseRecord(
         agent_id=str(child_id),
@@ -226,13 +236,8 @@ def _child_record(
         parent_tool_call_id="delegate",
         status=RunStatus.COMPLETE,
         input_messages=[UserMessage(content=f"Find {answer}")],
-        messages=_messages(
-            run_id, [AssistantMessage(content=[TextContent(text=answer)])]
-        ),
-        operations=[
-            OperationSnapshot(step_index=0, message_index=0, status=RunStatus.COMPLETE)
-        ],
-        answer_message_index=0,
+        steps=_steps(run_id, [AssistantMessage(content=[TextContent(text=answer)])]),
+        answer_step_index=0,
     )
     parent.child_runs.append(child)
     return child
@@ -248,7 +253,7 @@ def test_response_tools_flush_together_and_keep_result_links(
         ToolResultMessage(tool_call_id=call.id, tool_name=call.name, content=call.id)
         for call in calls
     )
-    items = _messages(str(uuid4()), messages)
+    steps = _steps(str(uuid4()), messages)
     flushes = 0
 
     def count_flush(**_event: object) -> None:
@@ -266,12 +271,7 @@ def test_response_tools_flush_together_and_keep_result_links(
                 ResponseRecord(
                     run_id="tools",
                     status=RunStatus.COMPLETE,
-                    messages=items,
-                    operations=[
-                        OperationSnapshot(
-                            step_index=0, message_index=0, status=RunStatus.COMPLETE
-                        )
-                    ],
+                    steps=steps,
                 ),
                 {},
             )
@@ -280,7 +280,7 @@ def test_response_tools_flush_together_and_keep_result_links(
         assert flushes == 1
         assert len({tool.id for tool in tools.values()}) == len(calls)
         db_session.expire_all()
-        assert read_response_messages(response) == items
+        assert read_response_steps(response) == steps
         for call in calls:
             linked = [
                 row.tool_call_id
@@ -288,6 +288,78 @@ def test_response_tools_flush_together_and_keep_result_links(
                 if row.tool_call is not None and row.tool_call.tool_call_id == call.id
             ]
             assert len(linked) == 1
+
+
+def test_resumed_tool_results_keep_row_identity_and_model_call_order(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation)
+    record = _record(response)
+    record.status = RunStatus.SUSPENDED
+    record.answer_step_index = None
+    step = StepRecord(
+        message=AssistantMessage(
+            id=f"{record.run_id}:0",
+            content=[
+                ToolCall(id="first", name="search", arguments={}),
+                ToolCall(id="second", name="search", arguments={}),
+            ],
+        ),
+        generation_status=ExecutionStatus.COMPLETE,
+        tools={
+            "first": ToolExecutionRecord(status=ExecutionStatus.RUNNING),
+            "second": ToolExecutionRecord(
+                status=ExecutionStatus.COMPLETE,
+                result=ToolResultMessage(
+                    tool_call_id="second", tool_name="search", content="Second result"
+                ),
+            ),
+        },
+    )
+    record.steps = [step]
+    save_response_record__no_commit(db_session, response.id, record)
+    db_session.flush()
+    db_session.expire(response)
+    second_row = response.response_messages[1]
+    second_id, second_position = second_row.id, second_row.position
+    suspended = read_chat_execution(response)
+    assert suspended is not None and suspended.response is not None
+    assert suspended.response.steps == record.steps
+    assert suspended.response.steps[0].tools["first"].result is None
+
+    step.tools["first"] = ToolExecutionRecord(
+        status=ExecutionStatus.COMPLETE,
+        result=ToolResultMessage(
+            tool_call_id="first", tool_name="search", content="First result"
+        ),
+    )
+    record.steps.append(
+        StepRecord(
+            message=AssistantMessage(
+                id=f"{record.run_id}:1", content=[TextContent(text="Answer")]
+            ),
+            generation_status=ExecutionStatus.COMPLETE,
+        )
+    )
+    record.status = RunStatus.COMPLETE
+    record.answer_step_index = 1
+    save_response_record__no_commit(db_session, response.id, record)
+    db_session.flush()
+    db_session.expire(response)
+    restored = read_chat_execution(response)
+    assert restored is not None and restored.response is not None
+    assert restored.response.steps == record.steps
+    assert [message.text for message in restored.response.messages] == [
+        "",
+        "First result",
+        "Second result",
+        "Answer",
+    ]
+    stored_second = next(
+        row for row in response.response_messages if row.id == second_id
+    )
+    assert stored_second.position == second_position
+    assert restored.response.answer_step_index == 1
 
 
 def test_response_messages_preserve_order_provider_metadata_and_tool_identity(
@@ -320,16 +392,11 @@ def test_response_messages_preserve_order_provider_metadata_and_tool_identity(
         ),
         AssistantMessage(content=[TextContent(text="Final answer")]),
     ]
-    answer_index = 4
-    operations = [
-        OperationSnapshot(
-            step_index=step, message_index=index, status=RunStatus.COMPLETE
-        )
-        for step, index in enumerate([0, 2, 4])
-    ]
-    record.messages = _messages(record.run_id, messages)
-    record.operations = operations
-    record.answer_message_index = answer_index
+    answer_index = 2
+
+    record.steps = _steps(record.run_id, messages, ExecutionStatus(record.status.value))
+
+    record.answer_step_index = answer_index
     _save(db_session, response, record)
     restored = (
         execution.response if (execution := read_chat_execution(response)) else None
@@ -341,9 +408,9 @@ def test_response_messages_preserve_order_provider_metadata_and_tool_identity(
     first = restored.messages[0]
     assert isinstance(first, AssistantMessage)
     assert first.content[0] == record.messages[0].content[0]
-    assert restored.answer_message_index == 4
+    assert restored.answer_step_index == 2
     assert restored.messages[4].text == "Final answer"
-    items = read_response_messages(response)
+    items = messages_from_steps(read_response_steps(response))
     assert items == restored.messages
     tools = list(
         db_session.scalars(
@@ -368,10 +435,18 @@ def test_response_messages_preserve_order_provider_metadata_and_tool_identity(
 
 
 @pytest.mark.parametrize(
-    "status", [RunStatus.ERROR, RunStatus.CANCELLED, RunStatus.LIMIT]
+    ("status", "generation_status"),
+    [
+        (RunStatus.ERROR, ExecutionStatus.ERROR),
+        (RunStatus.CANCELLED, ExecutionStatus.CANCELLED),
+        (RunStatus.LIMIT, ExecutionStatus.COMPLETE),
+    ],
 )
 def test_empty_generation_retains_outcome_and_rendering(
-    db_session: Session, conversation: ChatSession, status: RunStatus
+    db_session: Session,
+    conversation: ChatSession,
+    status: RunStatus,
+    generation_status: ExecutionStatus,
 ) -> None:
     response = _response(db_session, conversation)
     record = _record(response)
@@ -379,15 +454,15 @@ def test_empty_generation_retains_outcome_and_rendering(
         AssistantMessage(
             id="empty-generation",
             content=[],
-            error_message="Failed",
-            stop_reason="error",
+            error_message="Failed"
+            if generation_status == ExecutionStatus.ERROR
+            else None,
+            stop_reason="error" if generation_status == ExecutionStatus.ERROR else None,
         )
     ]
     record.status = status
-    record.messages = _messages(record.run_id, messages)
-    record.operations = [
-        OperationSnapshot(step_index=0, message_index=0, status=status)
-    ]
+    record.steps = _steps(record.run_id, messages, generation_status)
+
     record.failure = (
         RunFailure(kind=RunFailureKind.EXECUTION, message="Failed")
         if status == RunStatus.ERROR
@@ -410,8 +485,8 @@ def test_empty_generation_retains_outcome_and_rendering(
     assert len(restored.messages) == 1
     restored_message = restored.messages[0]
     assert isinstance(restored_message, AssistantMessage)
-    assert restored_message.stop_reason == "error"
-    assert restored.operations[0].status == status
+    assert restored_message.stop_reason == record.steps[0].message.stop_reason
+    assert restored.steps[0].generation_status == generation_status
     execution = read_chat_execution(response)
     assert execution is not None
     assert execution.presentation["empty-generation"].text_as_thinking
@@ -439,17 +514,10 @@ def test_partial_tool_arguments_survive_storage_without_executable_arguments(
             ]
         )
     ]
-    record.messages = _messages(record.run_id, messages)
-    record.operations = [
-        OperationSnapshot(step_index=step, message_index=index, status=record.status)
-        for step, index in enumerate(
-            index
-            for index, message in enumerate(record.messages)
-            if isinstance(message, AssistantMessage)
-        )
-    ]
+    record.steps = _steps(record.run_id, messages, ExecutionStatus(record.status.value))
+
     _save(db_session, response, record)
-    assistant = read_response_messages(response)[0]
+    assistant = read_response_steps(response)[0].message
     assert isinstance(assistant, AssistantMessage)
     calls = assistant.tool_calls
     assert len(calls) == 1
@@ -857,26 +925,30 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
         run_id=run_id,
         status=RunStatus.COMPLETE,
         input_messages=[UserMessage(content="Question")],
-        answer_message_index=2,
-        messages=[
-            AssistantMessage(id="stable-generation", content=[call]),
-            ToolResultMessage(
-                tool_call_id=call.id,
-                tool_name=call.name,
-                content=result.content,
-                details=result.details,
+        answer_step_index=1,
+        steps=[
+            StepRecord(
+                message=AssistantMessage(id="stable-generation", content=[call]),
+                generation_status=ExecutionStatus.COMPLETE,
+                tools={
+                    call.id: ToolExecutionRecord(
+                        status=ExecutionStatus.COMPLETE,
+                        result=ToolResultMessage(
+                            tool_call_id=call.id,
+                            tool_name=call.name,
+                            content=result.content,
+                            details=result.details,
+                        ),
+                    )
+                },
             ),
-            AssistantMessage(id="final-generation", content=[TextContent(text="done")]),
-        ],
-        operations=[
-            OperationSnapshot(step_index=0, message_index=0, status=RunStatus.COMPLETE),
-            OperationSnapshot(
-                step_index=0,
-                message_index=0,
-                tool_call_id=call.id,
-                status=RunStatus.COMPLETE,
+            StepRecord(
+                message=AssistantMessage(
+                    id="final-generation", content=[TextContent(text="done")]
+                ),
+                generation_status=ExecutionStatus.COMPLETE,
+                tools={},
             ),
-            OperationSnapshot(step_index=1, message_index=2, status=RunStatus.COMPLETE),
         ],
     )
     db_session.commit()
@@ -1207,21 +1279,14 @@ def test_response_storage_sanitizes_postgres_text_without_mutating_input(
         ),
         AssistantMessage(content=[TextContent(text=original_text)]),
     ]
-    record.messages = _messages(record.run_id, messages)
-    record.operations = [
-        OperationSnapshot(step_index=step, message_index=index, status=record.status)
-        for step, index in enumerate(
-            index
-            for index, message in enumerate(record.messages)
-            if isinstance(message, AssistantMessage)
-        )
-    ]
-    record.answer_message_index = 2
+    record.steps = _steps(record.run_id, messages, ExecutionStatus(record.status.value))
+
+    record.answer_step_index = 1
     original = record.model_copy(deep=True)
 
     _save(db_session, response, record)
 
-    replay = read_response_messages(response)
+    replay = messages_from_steps(read_response_steps(response))
     assert [message.text for message in replay] == ["beforeafter"] * 3
     first = replay[0]
     assert isinstance(first, AssistantMessage)
@@ -1246,9 +1311,8 @@ def test_lifecycle_and_display_saves_share_response_content(
     root_session_id = conversation.id
     initial = record.model_copy(
         update={
-            "messages": [],
-            "operations": [],
-            "answer_message_index": None,
+            "steps": [],
+            "answer_step_index": None,
             "child_runs": [],
             "status": RunStatus.RUNNING,
         }
@@ -1306,7 +1370,7 @@ def test_lifecycle_and_display_saves_share_response_content(
         saved_root = db_session.get(ChatMessage, root_id)
         assert saved_root is not None
         assert saved_root.message == "Answer"
-        assert read_response_messages(saved_root) == record.messages
+        assert read_response_steps(saved_root) == record.steps
         saved_child = read_response__no_commit(db_session, child.run_id)
         assert saved_child is not None
         assert saved_child.response.parent_run_id == record.run_id
@@ -1370,15 +1434,8 @@ def test_history_size_checks_all_payloads_in_one_query(
             content="x" * 2000 if large_field == "tool" else "",
         ),
     ]
-    record.messages = _messages(record.run_id, messages)
-    record.operations = [
-        OperationSnapshot(step_index=step, message_index=index, status=record.status)
-        for step, index in enumerate(
-            index
-            for index, message in enumerate(record.messages)
-            if isinstance(message, AssistantMessage)
-        )
-    ]
+    record.steps = _steps(record.run_id, messages, ExecutionStatus(record.status.value))
+
     _save(db_session, response, record)
     response_id = response.id
     monkeypatch.setattr(chat_subagents, "MAX_AGENT_HISTORY_BYTES", 1000)

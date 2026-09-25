@@ -9,6 +9,7 @@ from sqlalchemy import case, select
 from sqlalchemy.orm import Session, load_only, selectinload
 
 from onyx.agents.execution_records import CompactionCheckpoint, messages_for_model
+from onyx.agents.models import messages_from_steps
 from onyx.chat.files import build_file_context
 from onyx.chat.llm_step import PromptMetadata, count_message_tokens
 from onyx.chat.models import ChatHistoryMessage, ChatHistoryResult
@@ -17,7 +18,7 @@ from onyx.db.chat import (
     get_chat_messages_by_session,
     get_or_create_root_message,
 )
-from onyx.db.chat_response_messages import read_response_messages
+from onyx.db.chat_response_messages import read_response_steps
 from onyx.db.enums import record_mode_persists_content
 from onyx.db.models import ChatMessage
 from onyx.file_store.models import (
@@ -268,7 +269,7 @@ def capture_chat_history(
                 message.chat_session.incognito_record_mode
             ):
                 response_messages = messages_for_model(
-                    read_response_messages(message),
+                    messages_from_steps(read_response_steps(message)),
                     copy_messages=False,
                 )
                 for response_message in response_messages:

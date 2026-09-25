@@ -17,7 +17,11 @@ from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.file_store.models import ExtractedContextFiles
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
-from onyx.llm.litellm_models import ChatCompletionDeltaToolCall, Delta, FunctionCall
+from onyx.llm.litellm_models import (
+    ChatCompletionDeltaToolCall,
+    Delta,
+    ResponseFunctionCall,
+)
 from onyx.llm.models import (
     AssistantMessage,
     Message,
@@ -58,7 +62,7 @@ def test_chat_preserves_parallel_tool_history_forcing_and_packets(
                     ChatCompletionDeltaToolCall(
                         id=f"call-{index}",
                         index=index,
-                        function=FunctionCall(
+                        function=ResponseFunctionCall(
                             name="echo", arguments='{"value":"hello"}'
                         ),
                     )
@@ -172,7 +176,7 @@ def test_chat_preserves_search_filters_in_accepted_result_and_projection(
                     ChatCompletionDeltaToolCall(
                         id="search",
                         index=0,
-                        function=FunctionCall(
+                        function=ResponseFunctionCall(
                             name="echo", arguments='{"value":"query"}'
                         ),
                     )
@@ -251,7 +255,7 @@ def test_source_file_staging_does_not_block_cancelled_snapshot(
                     ChatCompletionDeltaToolCall(
                         id="search",
                         index=0,
-                        function=FunctionCall(
+                        function=ResponseFunctionCall(
                             name="echo", arguments='{"value":"query"}'
                         ),
                     )
