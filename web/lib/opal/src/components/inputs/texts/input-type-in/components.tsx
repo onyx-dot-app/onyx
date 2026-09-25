@@ -103,7 +103,7 @@ export default function InputTypeIn({
       )}
 
       {prefixText && (
-        <span className="select-none pointer-events-none text-text-02 ps-0.5">
+        <span className="select-none pointer-events-none font-main-ui-body text-text-02 ps-0.5">
           {prefixText}
         </span>
       )}
