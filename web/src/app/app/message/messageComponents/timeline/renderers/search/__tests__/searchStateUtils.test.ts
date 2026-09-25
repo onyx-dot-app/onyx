@@ -6,29 +6,17 @@ import {
   constructCurrentSearchState,
   formatSearchHeader,
   formatTimeWindow,
-} from "@/app/app/message/messageComponents/timeline/renderers/search/searchStateUtils";
-import { ResponseItem, SearchResult } from "@/app/app/services/streamingModels";
-import { responseItem } from "@/app/app/message/messageComponents/timeline/hooks/__tests__/testHelpers";
+} from "../searchStateUtils";
+import {
+  SearchToolFilterDelta,
+  SearchToolPacket,
+} from "@/app/app/services/streamingModels";
 
-function searchItem(metadata: Partial<SearchResult>): ResponseItem {
-  return responseItem({
-    kind: "tool",
-    name: "internal_search",
-    arguments: {},
-    status: "running",
-    output: "",
-    metadata: {
-      type: "search_result",
-      queries: [],
-      sources: [],
-      search_docs: [],
-      displayed_docs: null,
-      time_filter_start: null,
-      time_filter_end: null,
-      citation_mapping: {},
-      ...metadata,
-    },
-  });
+function filterPacket(obj: Partial<SearchToolFilterDelta>): SearchToolPacket {
+  return {
+    placement: { turn_index: 0 },
+    obj: { type: "search_tool_filter_delta", sources: [], ...obj },
+  };
 }
 
 // The header helpers take the same translator the renderer gets from
@@ -141,10 +129,11 @@ describe("formatSearchHeader", () => {
 });
 
 describe("constructCurrentSearchState filter extraction", () => {
-  it("reads source and time filters from search result metadata", () => {
+  it("unions sources and takes the latest time window from filter deltas", () => {
     const state = constructCurrentSearchState([
-      searchItem({
-        sources: ["slack"],
+      filterPacket({ sources: ["slack"] }),
+      filterPacket({
+        sources: [],
         time_filter_start: "2024-01-05T12:00:00Z",
         time_filter_end: null,
       }),
@@ -156,9 +145,9 @@ describe("constructCurrentSearchState filter extraction", () => {
     });
   });
 
-  it("leaves timeFilter null when metadata has no time bound", () => {
+  it("leaves timeFilter null when no delta carries a time bound", () => {
     const state = constructCurrentSearchState([
-      searchItem({ sources: ["slack", "notion"] }),
+      filterPacket({ sources: ["slack", "notion"] }),
     ]);
     expect(state.sourceFilters).toEqual(["slack", "notion"]);
     expect(state.timeFilter).toBeNull();

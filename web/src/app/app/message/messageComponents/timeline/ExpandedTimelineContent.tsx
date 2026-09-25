@@ -3,26 +3,23 @@
 import React, { FunctionComponent, useMemo, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { StopReason } from "@/app/app/services/streamingModels";
-import { FullChatState } from "@/app/app/message/messageComponents/interfaces";
-import {
-  TurnGroup,
-  TransformedStep,
-} from "@/app/app/message/messageComponents/timeline/transformers";
+import { FullChatState } from "../interfaces";
+import { TurnGroup, TransformedStep } from "./transformers";
 import { SvgCheckCircle, SvgStopCircle } from "@opal/icons";
 import { IconProps } from "@opal/types";
 import {
   TimelineRendererComponent,
   TimelineRendererOutput,
   TimelineRendererResult,
-} from "@/app/app/message/messageComponents/timeline/TimelineRendererComponent";
-import { ParallelTimelineTabs } from "@/app/app/message/messageComponents/timeline/ParallelTimelineTabs";
-import { StepContainer } from "@/app/app/message/messageComponents/timeline/StepContainer";
-import { TimelineStepComposer } from "@/app/app/message/messageComponents/timeline/TimelineStepComposer";
+} from "./TimelineRendererComponent";
+import { ParallelTimelineTabs } from "./ParallelTimelineTabs";
+import { StepContainer } from "./StepContainer";
+import { TimelineStepComposer } from "./TimelineStepComposer";
 import {
-  isCodingAgentItems,
-  isPythonToolItems,
-  isSearchToolItems,
-} from "@/app/app/message/messageComponents/timeline/itemHelpers";
+  isSearchToolPackets,
+  isPythonToolPackets,
+  isCodingAgentPackets,
+} from "@/app/app/message/messageComponents/timeline/packetHelpers";
 
 // =============================================================================
 // TimelineStep Component - Memoized to prevent re-renders
@@ -50,12 +47,12 @@ const TimelineStep = React.memo(function TimelineStep({
   isStreaming = false,
 }: TimelineStepProps) {
   const isSearchTool = useMemo(
-    () => isSearchToolItems(step.items),
-    [step.items]
+    () => isSearchToolPackets(step.packets),
+    [step.packets]
   );
   const isPythonTool = useMemo(
-    () => isPythonToolItems(step.items),
-    [step.items]
+    () => isPythonToolPackets(step.packets),
+    [step.packets]
   );
   const getCollapsedIcon = useCallback(
     (result: TimelineRendererResult) =>
@@ -79,7 +76,7 @@ const TimelineStep = React.memo(function TimelineStep({
 
   return (
     <TimelineRendererComponent
-      items={step.items}
+      packets={step.packets}
       chatState={chatState}
       animate={!stopPacketSeen}
       stopPacketSeen={stopPacketSeen}
@@ -129,7 +126,7 @@ export const ExpandedTimelineContent = React.memo(
           // their tab-pill chrome is consistent with the multi-agent case.
           const renderAsParallelTabs =
             turnGroup.isParallel ||
-            turnGroup.steps.some((step) => isCodingAgentItems(step.items));
+            turnGroup.steps.some((step) => isCodingAgentPackets(step.packets));
 
           return renderAsParallelTabs ? (
             <ParallelTimelineTabs

@@ -1,39 +1,46 @@
 import { useMemo } from "react";
-import { ResponseItem } from "@/app/app/services/streamingModels";
-import { GroupedItem } from "@/app/app/message/messageComponents/timeline/hooks/packetProcessor";
+import {
+  CustomToolDelta,
+  Packet,
+  PacketType,
+} from "@/app/app/services/streamingModels";
 
 interface AuthError {
   toolName: string;
   toolId: number | null;
 }
 
-export function useAuthErrors(toolGroups: readonly GroupedItem[]): AuthError[] {
-  return useMemo(
-    () => computeAuthErrors(toolGroups.flatMap((group) => group.items)),
-    [toolGroups]
-  );
+export function useAuthErrors(rawPackets: Packet[]): AuthError[] {
+  // Keyed on the packet array so re-renders between packet batches reuse
+  // the same result identity instead of rescanning.
+  return useMemo(() => computeAuthErrors(rawPackets), [rawPackets]);
 }
 
-function computeAuthErrors(items: readonly ResponseItem[]): AuthError[] {
+function computeAuthErrors(rawPackets: Packet[]): AuthError[] {
   const errors: AuthError[] = [];
 
-  for (const item of items) {
-    const tool = item.content;
-    if (
-      tool.kind !== "tool" ||
-      tool.metadata?.type !== "custom_tool_result" ||
-      !tool.metadata.error?.is_auth_error
-    )
+  for (const packet of rawPackets) {
+    if (packet.obj.type !== PacketType.CUSTOM_TOOL_DELTA) {
       continue;
-    if (
-      errors.some((error) =>
-        tool.tool_id != null
-          ? error.toolId === tool.tool_id
-          : error.toolName === tool.name
-      )
-    )
+    }
+
+    const delta = packet.obj as CustomToolDelta;
+    if (!delta.error?.is_auth_error) {
       continue;
-    errors.push({ toolName: tool.name, toolId: tool.tool_id ?? null });
+    }
+
+    const alreadyPresent = errors.some(
+      (error) =>
+        (delta.tool_id != null && error.toolId === delta.tool_id) ||
+        (delta.tool_id == null && error.toolName === delta.tool_name)
+    );
+
+    if (!alreadyPresent) {
+      errors.push({
+        toolName: delta.tool_name,
+        toolId: delta.tool_id ?? null,
+      });
+    }
   }
 
   return errors;

@@ -11,7 +11,13 @@ from sqlalchemy import delete, event, func, inspect, select
 from sqlalchemy.orm import Session
 
 from onyx.agents.compaction import history_digest
-from onyx.agents.events import ToolEndEvent, ToolStartEvent, ToolUpdateEvent
+from onyx.agents.events import (
+    MessageEndEvent,
+    MessageStartEvent,
+    ToolEndEvent,
+    ToolStartEvent,
+    ToolUpdateEvent,
+)
 from onyx.agents.execution_records import (
     CompactionCheckpoint,
     ExecutionStatus,
@@ -89,9 +95,9 @@ from onyx.server.query_and_chat.session_loading import (
     translate_assistant_message_to_packets,
 )
 from onyx.server.query_and_chat.streaming_models import (
-    ItemUpdate,
+    CodingAgentFinal,
     Packet,
-    ToolItem,
+    PythonToolDelta,
 )
 from onyx.tools.models import LlmPythonExecutionResult
 from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
@@ -953,7 +959,19 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
     )
     db_session.commit()
     queue: Queue[Packet] = Queue()
-    presenter = ResponsePresenter(Emitter(queue.put_nowait, response_id=row.id))
+    presenter = ResponsePresenter(Emitter(queue.put_nowait))
+    presenter.consume(
+        MessageStartEvent(run_id=run_id, message_id="stable-generation", step_index=0)
+    )
+    presenter.consume(
+        MessageEndEvent(
+            run_id=run_id,
+            message_id="stable-generation",
+            step_index=0,
+            message=snapshot.steps[0].message,
+            status=ExecutionStatus.COMPLETE,
+        )
+    )
     presenter.consume(
         ToolStartEvent(
             run_id=run_id, message_id="stable-generation", step_index=0, tool_call=call
@@ -982,9 +1000,7 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
         packet = queue.get_nowait()
         assert isinstance(packet, Packet)
         live.append(packet)
-    projected = project_response(
-        snapshot, response_id=row.id, tool_ids={call.name: tool.id}
-    )
+    projected = project_response(snapshot, tool_ids={call.name: tool.id})
     get_chat_history_store(
         message_id=row.id, chat_session_id=conversation.id, persist_content=True
     ).save_response(projected)
@@ -998,18 +1014,30 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
         == 1
     )
     saved = translate_assistant_message_to_packets(row, db_session)
-    live_items = [
-        packet.obj.item
-        for packet in live
-        if isinstance(packet.obj, ItemUpdate) and isinstance(packet.obj.item, ToolItem)
-    ]
-    saved_items = [
-        packet.obj.item
-        for packet in saved
-        if isinstance(packet.obj, ItemUpdate) and isinstance(packet.obj.item, ToolItem)
-    ]
-    assert live_items[-1].metadata == saved_items[-1].metadata == result.details
-    assert live_items[-1].output == saved_items[-1].output
+    if tool_kind == "python":
+        live_stdout = "".join(
+            packet.obj.stdout
+            for packet in live
+            if isinstance(packet.obj, PythonToolDelta)
+        )
+        saved_stdout = "".join(
+            packet.obj.stdout
+            for packet in saved
+            if isinstance(packet.obj, PythonToolDelta)
+        )
+        assert live_stdout == saved_stdout == "hello world"
+    else:
+        live_answers = [
+            packet.obj.answer
+            for packet in live
+            if isinstance(packet.obj, CodingAgentFinal)
+        ]
+        saved_answers = [
+            packet.obj.answer
+            for packet in saved
+            if isinstance(packet.obj, CodingAgentFinal)
+        ]
+        assert live_answers[-1] == saved_answers[-1] == "coding answer"
 
 
 def test_exact_summary_keeps_legacy_baseline_selectable(

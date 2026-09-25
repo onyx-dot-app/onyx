@@ -8,8 +8,7 @@ import {
   patchMessageToBeLatest,
   resumeStream,
 } from "@/app/app/services/lib";
-import { interruptResponse } from "@/app/app/services/responseItems";
-import { Packet } from "@/app/app/services/streamingModels";
+import { Packet, PacketType } from "@/app/app/services/streamingModels";
 import {
   getLatestMessageChain,
   setMessageAsLatest,
@@ -38,9 +37,9 @@ import {
 import { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 
-// Streams currently being re-attached; module-level so effect re-runs (incl.
-// strict mode) can't start a second tail for the same stream.
-const resumingStreams = new Set<number>();
+// Runs currently being re-attached; module-level so effect re-runs (incl.
+// strict mode) can't start a second tail for the same run.
+const resumingRuns = new Set<number>();
 
 interface UseChatSessionControllerProps {
   existingChatSessionId: string | null;
@@ -269,28 +268,28 @@ export default function useChatSessionController({
 
       setIsFetchingChatMessages(chatSession.chat_session_id, false);
 
-      // Recover buffered output and tail it if the worker is live. Single-model only — a
+      // Re-attach to an in-flight run: replay its buffered stream and tail it
+      // live instead of leaving a stale placeholder. Single-model only — a
       // multi-model stream_id is the user message, not an assistant node, so it
       // fails the node-type check and keeps the refresh-after-completion
       // behavior.
-      async function resumeInFlightStream(
+      async function resumeInFlightRun(
         sessionId: string,
-        streamId: number,
-        isRunning: boolean,
-        messageMap: Map<number, Message>
+        runId: number,
+        messageMap: Map<number, Message>,
+        isRunning: boolean
       ) {
-        const node = messageMap.get(streamId);
-        if (!node || resumingStreams.has(streamId)) {
+        const node = messageMap.get(runId);
+        if (!node || resumingRuns.has(runId)) {
           return;
         }
         // Added and deleted in this function only, so an entry can never
         // outlive its tail.
-        resumingStreams.add(streamId);
+        resumingRuns.add(runId);
         // The reserved row's placeholder text would render above the live
         // timeline.
         node.message = "";
-        node.skipReplayAnimation = true;
-        let accumulated: Packet[] = [];
+        const accumulated: Packet[] = [];
         let lastFlush = 0;
         let trailingFlush: ReturnType<typeof setTimeout> | null = null;
         // updateSessionAndMessageTree re-points currentSessionId at this
@@ -307,13 +306,6 @@ export default function useChatSessionController({
           node.packetCount = accumulated.length;
           updateSessionAndMessageTree(sessionId, new Map(messageMap));
         };
-        const showInterruptedResponse = () => {
-          accumulated = interruptResponse(accumulated);
-          flush();
-          useChatSessionStore
-            .getState()
-            .updateSessionData(sessionId, { streamId: undefined });
-        };
         // handleSSEStream only releases the connection via this signal —
         // bailing out of the loop alone leaves the SSE response open.
         const abortController = new AbortController();
@@ -329,7 +321,6 @@ export default function useChatSessionController({
             if (!Object.hasOwn(rawPacket, "obj")) {
               continue;
             }
-            // SAFETY: The resume endpoint sends validated response packets; root controls have no obj.
             const packet = rawPacket as Packet;
             // Heartbeats are liveness ticks for the stillCurrent check above,
             // not run state — never render them.
@@ -353,19 +344,23 @@ export default function useChatSessionController({
             }
           }
         } catch (error) {
-          console.error("Failed to resume in-flight stream", {
-            streamId,
-            error,
-          });
+          console.error("Failed to resume in-flight run", { runId, error });
         } finally {
           abortController.abort();
           if (trailingFlush !== null) {
             clearTimeout(trailingFlush);
           }
-          resumingStreams.delete(streamId);
+          resumingRuns.delete(runId);
           if (stillCurrent()) {
-            if (isRunning) flush();
-            let refreshed = false;
+            if (
+              !accumulated.some((packet) => packet.obj.type === PacketType.STOP)
+            ) {
+              accumulated.push({
+                placement: { turn_index: 0, tab_index: 0 },
+                obj: { type: PacketType.STOP },
+              });
+            }
+            flush();
             // Settle final state (message text, citations, documents) from
             // the persisted session.
             try {
@@ -375,46 +370,36 @@ export default function useChatSessionController({
               if (settledResponse.ok && stillCurrent()) {
                 const settled: BackendChatSession =
                   await settledResponse.json();
-                const interrupted =
-                  settled.current_stream?.stream_id === streamId &&
-                  !settled.current_stream.is_running;
-                if (interrupted) {
-                  showInterruptedResponse();
-                } else {
-                  updateSessionAndMessageTree(
-                    sessionId,
-                    processRawChatHistory(settled.messages, settled.packets)
-                  );
+                const saved = processRawChatHistory(
+                  settled.messages,
+                  settled.packets
+                );
+                const response = saved.get(runId);
+                // A listed stream has no saved terminal response yet.
+                if (response && settled.current_stream?.stream_id === runId) {
+                  response.packets = [...accumulated];
+                  response.packetCount = accumulated.length;
+                  response.message = "";
                 }
-                refreshed = true;
+                updateSessionAndMessageTree(sessionId, saved);
               }
             } catch (error) {
               console.error("Post-resume session refresh failed", { error });
-            }
-            if (!refreshed && !isRunning && stillCurrent()) {
-              showInterruptedResponse();
             }
           }
         }
       }
 
       const currentStream = chatSession.current_stream;
-      useChatSessionStore
-        .getState()
-        .updateSessionData(chatSession.chat_session_id, {
-          streamId: currentStream?.is_running
-            ? currentStream.stream_id
-            : undefined,
-        });
       if (
         currentStream &&
         newMessageMap.get(currentStream.stream_id)?.type === "assistant"
       ) {
-        void resumeInFlightStream(
+        void resumeInFlightRun(
           chatSession.chat_session_id,
           currentStream.stream_id,
-          currentStream.is_running,
-          newMessageMap
+          newMessageMap,
+          currentStream.is_running
         );
       }
 

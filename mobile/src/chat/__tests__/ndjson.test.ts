@@ -8,7 +8,12 @@ import {
 } from "@jest/globals";
 
 import { createNdjsonBuffer } from "@/chat/ndjson";
-import { MessageResponseIDInfo, Packet } from "@/chat/streamingModels";
+import {
+  ChatHeartbeat,
+  MessageDelta,
+  MessageResponseIDInfo,
+  Packet,
+} from "@/chat/streamingModels";
 
 // silence + capture recovery-path logs
 let errorSpy: ReturnType<typeof jest.spyOn>;
@@ -20,24 +25,16 @@ afterEach(() => {
 });
 
 const wrapped = (content: string): Packet => ({
-  obj: {
-    type: "item_delta",
-    delta: { kind: "text", text: content, citations: [] },
-  },
+  placement: { turn_index: 0 },
+  obj: { type: "message_delta", content } as MessageDelta,
 });
-
-function deltaText(packet: Packet): string {
-  return packet.obj.type === "item_delta" && packet.obj.delta.kind === "text"
-    ? packet.obj.delta.text
-    : "";
-}
 
 describe("createNdjsonBuffer", () => {
   it("parses a single complete line", () => {
     const buf = createNdjsonBuffer<Packet>();
     const out = buf.pushChunk(JSON.stringify(wrapped("hi")) + "\n");
     expect(out).toHaveLength(1);
-    expect(deltaText(out[0]!)).toBe("hi");
+    expect((out[0]!.obj as MessageDelta).content).toBe("hi");
   });
 
   it("parses multiple complete lines in one chunk", () => {
@@ -45,7 +42,7 @@ describe("createNdjsonBuffer", () => {
     const text =
       JSON.stringify(wrapped("a")) + "\n" + JSON.stringify(wrapped("b")) + "\n";
     const out = buf.pushChunk(text);
-    expect(out.map((p) => deltaText(p))).toEqual(["a", "b"]);
+    expect(out.map((p) => (p.obj as MessageDelta).content)).toEqual(["a", "b"]);
   });
 
   it("carries a partial line across chunks until its newline arrives", () => {
@@ -56,7 +53,7 @@ describe("createNdjsonBuffer", () => {
     expect(buf.pushChunk(line.slice(0, mid))).toEqual([]);
     const out = buf.pushChunk(line.slice(mid) + "\n");
     expect(out).toHaveLength(1);
-    expect(deltaText(out[0]!)).toBe("split");
+    expect((out[0]!.obj as MessageDelta).content).toBe("split");
   });
 
   it("splits a chunk that contains a line boundary mid-way", () => {
@@ -66,10 +63,10 @@ describe("createNdjsonBuffer", () => {
 
     const out1 = buf.pushChunk(first + "\n" + second.slice(0, 4));
     expect(out1).toHaveLength(1);
-    expect(deltaText(out1[0]!)).toBe("one");
+    expect((out1[0]!.obj as MessageDelta).content).toBe("one");
 
     const out2 = buf.pushChunk(second.slice(4) + "\n");
-    expect(deltaText(out2[0]!)).toBe("two");
+    expect((out2[0]!.obj as MessageDelta).content).toBe("two");
   });
 
   it("skips blank lines", () => {
@@ -83,10 +80,11 @@ describe("createNdjsonBuffer", () => {
   it("is heartbeat-agnostic — returns heartbeats like any other packet", () => {
     const buf = createNdjsonBuffer<Packet>();
     const heartbeat: Packet = {
-      obj: { type: "chat_heartbeat" },
+      placement: { turn_index: 0 },
+      obj: { type: "chat_heartbeat" } as ChatHeartbeat,
     };
     const out = buf.pushChunk(JSON.stringify(heartbeat) + "\n");
-    expect(out[0]!.obj.type).toBe("chat_heartbeat");
+    expect((out[0]!.obj as ChatHeartbeat).type).toBe("chat_heartbeat");
   });
 
   it("returns both wrapped packets and root control objects", () => {
@@ -118,7 +116,7 @@ describe("createNdjsonBuffer", () => {
     it("cannot recover a malformed line whose objects are nested", () => {
       const buf = createNdjsonBuffer<unknown>();
       // nested braces defeat the flat recovery regex
-      const out = buf.pushChunk(`{"obj":{"type":"item_update"` + "\n");
+      const out = buf.pushChunk(`{"placement":{"turn_index":0` + "\n");
       expect(out).toEqual([]);
       expect(errorSpy).toHaveBeenCalled();
     });
@@ -130,7 +128,7 @@ describe("createNdjsonBuffer", () => {
       expect(buf.pushChunk(JSON.stringify(wrapped("tail")))).toEqual([]);
       const out = buf.flush();
       expect(out).toHaveLength(1);
-      expect(deltaText(out[0]!)).toBe("tail");
+      expect((out[0]!.obj as MessageDelta).content).toBe("tail");
     });
 
     it("drops a malformed trailing buffer (no brace recovery) and logs", () => {

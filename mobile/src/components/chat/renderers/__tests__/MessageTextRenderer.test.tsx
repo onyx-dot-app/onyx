@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { render } from "@testing-library/react-native";
 import { Fragment } from "react";
 
-import { makeItem } from "@/chat/__tests__/fixtures";
+import { makePacket } from "@/chat/__tests__/fixtures";
 
 import { MessageTextRenderer } from "../MessageTextRenderer";
 import { RenderType, type RendererOutput } from "../timelineContract";
@@ -17,16 +17,15 @@ jest.mock("@/components/chat/StreamingMarkdown", () => ({
   },
 }));
 
-const textItem = (text: string, status: "running" | "complete" = "running") =>
-  makeItem({
-    kind: "text",
-    text,
-    status,
-    purpose: "answer",
-    documents: [],
-    citations: [],
-  });
-const chatItems = [textItem("Hello world")];
+const chatPackets = [
+  makePacket({
+    type: "message_start",
+    id: "m",
+    content: "Hello ",
+    final_documents: null,
+  }),
+  makePacket({ type: "message_delta", content: "world" }),
+];
 
 function renderResults(results: RendererOutput) {
   return (
@@ -43,42 +42,10 @@ describe("MessageTextRenderer", () => {
     mockMarkdownProps = null;
   });
 
-  it("keeps text visible when its item changes from answer to commentary", () => {
-    const props = {
-      state: { agent: null },
-      onComplete: () => {},
-      renderType: RenderType.FULL,
-      animate: false,
-      stopPacketSeen: false,
-    };
-    const item = textItem("Checking sources", "complete");
-    const { rerender } = render(
-      <MessageTextRenderer {...props} items={[item]}>
-        {renderResults}
-      </MessageTextRenderer>,
-    );
-    expect(mockMarkdownProps?.content).toBe("Checking sources");
-    const commentary = makeItem({
-      kind: "text",
-      purpose: "commentary",
-      text: "Checking sources",
-      status: "complete",
-      documents: [],
-      citations: [],
-    });
-    rerender(
-      <MessageTextRenderer {...props} items={[commentary]}>
-        {renderResults}
-      </MessageTextRenderer>,
-    );
-    expect(mockMarkdownProps?.content).toBe("Checking sources");
-    expect(mockMarkdownProps?.isStreaming).toBe(false);
-  });
-
-  it("shows complete historical content", () => {
+  it("accumulates message_start + delta content and snaps historical messages to full", () => {
     render(
       <MessageTextRenderer
-        items={chatItems}
+        packets={chatPackets}
         state={{ agent: null }}
         onComplete={() => {}}
         renderType={RenderType.FULL}
@@ -97,7 +64,7 @@ describe("MessageTextRenderer", () => {
     let captured: RendererOutput | null = null;
     render(
       <MessageTextRenderer
-        items={chatItems}
+        packets={chatPackets}
         state={{ agent: null }}
         onComplete={() => {}}
         renderType={RenderType.FULL}
@@ -115,12 +82,22 @@ describe("MessageTextRenderer", () => {
     expect(captured![0].status).toBeNull();
   });
 
-  it("finishes when the text item completes before the response stops", () => {
-    const endedItems = [textItem("Hello world", "complete")];
+  it("treats a MESSAGE_END packet as complete even without a STOP (messageEndSeen branch)", () => {
+    // stopPacketSeen=false → only the messageEndSeen half of isStreamFinished can drive completion.
+    const endedPackets = [
+      makePacket({
+        type: "message_start",
+        id: "m",
+        content: "Hello ",
+        final_documents: null,
+      }),
+      makePacket({ type: "message_delta", content: "world" }),
+      makePacket({ type: "message_end" }),
+    ];
     let calls = 0;
     render(
       <MessageTextRenderer
-        items={endedItems}
+        packets={endedPackets}
         state={{ agent: null }}
         onComplete={() => {
           calls += 1;
@@ -140,7 +117,7 @@ describe("MessageTextRenderer", () => {
   it("fires onComplete exactly once even as onComplete's identity churns across re-renders", () => {
     let calls = 0;
     const props = {
-      items: chatItems,
+      packets: chatPackets,
       state: { agent: null },
       renderType: RenderType.FULL,
       animate: false,
@@ -182,11 +159,20 @@ describe("MessageTextRenderer", () => {
   });
 
   it("reveals content gradually and withholds onComplete while streaming (live path)", () => {
-    const streaming = [textItem("A".repeat(60))];
+    // animate=true + no MESSAGE_END/STOP → the typewriter starts empty and reveals over rAF.
+    const streaming = [
+      makePacket({
+        type: "message_start",
+        id: "m",
+        content: "",
+        final_documents: null,
+      }),
+      makePacket({ type: "message_delta", content: "A".repeat(60) }),
+    ];
     let calls = 0;
     render(
       <MessageTextRenderer
-        items={streaming}
+        packets={streaming}
         state={{ agent: null }}
         onComplete={() => {
           calls += 1;

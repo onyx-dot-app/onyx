@@ -127,9 +127,13 @@ interface UseFoldedGroupsProps {
 /**
  * Fold state for foldable groups, per open session. A group starts closed
  * unless it holds the selection, and starts open while a search is on;
- * either way a click on its title toggles it, and the toggle holds until
- * the search starts or stops, or the list closes. Returns the groups with
- * folded rows withheld, so rendering and the keyboard order agree.
+ * either way a click on its title toggles it. The selection those
+ * defaults read is the one from when the session started (the list
+ * opened, or a search started or stopped); after that only a title click
+ * changes a group, so a pick or a deselection while the list is open never
+ * folds anything, and a group that arrives mid-session starts as it would
+ * have at the start. Returns the groups with folded rows withheld, so
+ * rendering and the keyboard order agree.
  */
 export function useFoldedGroups({
   isOpen,
@@ -137,12 +141,20 @@ export function useFoldedGroups({
   isSelected,
   searching,
 }: UseFoldedGroupsProps) {
+  // The selection as the session found it. Held as state, not derived,
+  // so the live selection cannot re-fold groups afterwards.
+  const [sessionIsSelected, setSessionIsSelected] = useState(() => isSelected);
   const [toggled, setToggled] = useState<ReadonlyMap<string, boolean>>(
     new Map()
   );
-  // Toggles reset when the list closes and when a search starts or stops,
-  // so each of those begins from the defaults below.
+
+  const latestIsSelected = useRef(isSelected);
   useEffect(() => {
+    latestIsSelected.current = isSelected;
+  });
+  useEffect(() => {
+    if (!isOpen) return;
+    setSessionIsSelected(() => latestIsSelected.current);
     setToggled(new Map());
   }, [isOpen, searching]);
 
@@ -151,10 +163,9 @@ export function useFoldedGroups({
       if (!group.foldable || group.title === undefined) return true;
       const choice = toggled.get(group.title);
       if (choice !== undefined) return choice;
-      if (searching) return true;
-      return group.options.some(isSelected);
+      return searching || group.options.some(sessionIsSelected);
     },
-    [toggled, searching, isSelected]
+    [toggled, searching, sessionIsSelected]
   );
 
   const toggleGroup = useCallback(

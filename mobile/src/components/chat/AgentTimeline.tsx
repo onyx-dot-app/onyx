@@ -8,10 +8,10 @@ import { View } from "react-native";
 
 import type { StopReason } from "@/chat/streamingModels";
 import {
-  isSearchToolItems,
+  isSearchToolPackets,
   stepHasCollapsedStreamingContent,
   stepSupportsCollapsedStreaming,
-} from "@/chat/timeline/itemHelpers";
+} from "@/chat/timeline/packetHelpers";
 import type { TurnGroup } from "@/chat/timeline/transformers";
 import { AgentAvatar } from "@/components/avatars/AgentAvatar";
 import {
@@ -134,7 +134,7 @@ export const AgentTimeline = memo(function AgentTimeline({
   } = useTimelineMetrics(turnGroups, userStopped);
 
   const lastStepIsSearchTool = useMemo(
-    () => (lastStep ? isSearchToolItems(lastStep.items) : false),
+    () => (lastStep ? isSearchToolPackets(lastStep.packets) : false),
     [lastStep],
   );
 
@@ -152,20 +152,21 @@ export const AgentTimeline = memo(function AgentTimeline({
   const parallelActiveStepSupportsCollapsedStreaming = useMemo(
     () =>
       parallelActiveStep
-        ? stepSupportsCollapsedStreaming(parallelActiveStep.items)
+        ? stepSupportsCollapsedStreaming(parallelActiveStep.packets)
         : false,
     [parallelActiveStep],
   );
 
   const lastStepHasCollapsedContent = useMemo(
-    () => (lastStep ? stepHasCollapsedStreamingContent(lastStep.items) : false),
+    () =>
+      lastStep ? stepHasCollapsedStreamingContent(lastStep.packets) : false,
     [lastStep],
   );
 
   const parallelActiveStepHasCollapsedContent = useMemo(
     () =>
       parallelActiveStep
-        ? stepHasCollapsedStreamingContent(parallelActiveStep.items)
+        ? stepHasCollapsedStreamingContent(parallelActiveStep.packets)
         : false,
     [parallelActiveStep],
   );
@@ -176,7 +177,7 @@ export const AgentTimeline = memo(function AgentTimeline({
     let count = 0;
     for (const turnGroup of turnGroups) {
       for (const step of turnGroup.steps) {
-        if (stepHasCollapsedStreamingContent(step.items)) count += 1;
+        if (stepHasCollapsedStreamingContent(step.packets)) count += 1;
       }
     }
     return count;

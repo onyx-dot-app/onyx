@@ -533,7 +533,6 @@ def test_incognito_response_restores_agents_without_database_content(
 
         transcript = project_response(
             snapshot,
-            response_id=assistant.id,
             tool_ids={},
             registrations=coordinator.registrations(),
         ).response

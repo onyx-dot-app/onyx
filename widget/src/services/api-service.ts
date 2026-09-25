@@ -125,11 +125,58 @@ export class ApiService {
         buffer = lines.pop() || ""; // Keep incomplete line in buffer
 
         for (const line of lines) {
-          if (line.trim()) yield JSON.parse(line) as Packet;
+          if (line.trim()) {
+            try {
+              const rawData = JSON.parse(line);
+
+              // Check if this is a MessageResponseIDInfo (not wrapped in Packet)
+              if (
+                "user_message_id" in rawData &&
+                "reserved_assistant_message_id" in rawData
+              ) {
+                // Wrap it in a Packet structure for consistent handling
+                const packet: Packet = {
+                  obj: rawData as any,
+                };
+                yield packet;
+              } else {
+                // Regular packet with placement and obj
+                yield rawData as Packet;
+              }
+            } catch (e) {
+              // Fail fast on malformed packets - don't hide backend issues
+              throw new Error(
+                `Failed to parse SSE packet: ${line}. Error: ${e}`
+              );
+            }
+          }
         }
       }
-      buffer += decoder.decode();
-      if (buffer.trim()) yield JSON.parse(buffer) as Packet;
+
+      // Process any remaining data in buffer
+      if (buffer.trim()) {
+        try {
+          const rawData = JSON.parse(buffer);
+
+          // Check if this is a MessageResponseIDInfo (not wrapped in Packet)
+          if (
+            "user_message_id" in rawData &&
+            "reserved_assistant_message_id" in rawData
+          ) {
+            const packet: Packet = {
+              obj: rawData as any,
+            };
+            yield packet;
+          } else {
+            yield rawData as Packet;
+          }
+        } catch (e) {
+          // Fail fast on malformed final buffer packets
+          throw new Error(
+            `Failed to parse final packet: ${buffer}. Error: ${e}`
+          );
+        }
+      }
     } finally {
       reader.releaseLock();
     }

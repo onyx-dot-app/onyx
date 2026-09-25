@@ -1,100 +1,154 @@
-/** Fields consumed by the embedded chat client from the public item stream. */
-export type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | JsonValue[]
-  | { [key: string]: JsonValue };
-export type RunStatus =
-  | "running"
-  | "complete"
-  | "cancelled"
-  | "error"
-  | "limit";
+/**
+ * API Types - Mirror backend streaming_models.py packet structure
+ */
+
+export interface Packet {
+  placement?: Record<string, any>;
+  obj: PacketType;
+}
+
+export type PacketType =
+  | MessageResponseIDInfo
+  | MessageStart
+  | MessageDelta
+  | CitationInfo
+  | SearchToolStart
+  | SearchToolQueriesDelta
+  | SearchToolDocumentsDelta
+  | OpenUrlStart
+  | OpenUrlUrls
+  | OpenUrlDocuments
+  | ImageGenerationStart
+  | ImageGenerationHeartbeat
+  | PythonToolStart
+  | PythonToolDelta
+  | CustomToolStart
+  | ReasoningStart
+  | ReasoningDelta
+  | DeepResearchPlanStart
+  | ResearchAgentStart
+  | IntermediateReportStart
+  | Stop
+  | OverallStop
+  | ErrorPacket;
+
+export interface MessageResponseIDInfo {
+  type?: "message_response_id_info"; // Optional for backend compatibility
+  user_message_id: number | null;
+  reserved_assistant_message_id: number;
+}
+
+export interface MessageStart {
+  type: "message_start";
+}
+
+export interface MessageDelta {
+  type: "message_delta";
+  content: string;
+}
+
 export interface CitationInfo {
+  type: "citation_info";
   citation_number: number;
   document_id: string;
 }
-export interface ResolvedCitation extends CitationInfo {
+
+export interface ResolvedCitation {
+  citation_number: number;
+  document_id: string;
   semantic_identifier?: string;
   link?: string;
 }
+
+export interface SearchToolStart {
+  type: "search_tool_start";
+  is_internet_search?: boolean;
+}
+
+export interface SearchToolQueriesDelta {
+  type: "search_tool_queries_delta";
+  queries: string[];
+}
+
+export interface SearchToolDocumentsDelta {
+  type: "search_tool_documents_delta";
+  documents: SearchDocument[];
+}
+
 export interface SearchDocument {
   document_id: string;
   semantic_identifier: string;
-  title?: string;
-  link?: string | null;
+  title: string;
+  link?: string;
 }
-export type ToolMetadata =
-  | {
-      type: "search_result";
-      search_docs: SearchDocument[];
-      displayed_docs: SearchDocument[] | null;
-    }
-  | {
-      type:
-        | "custom_tool_result"
-        | "file_read_result"
-        | "memory_result"
-        | "python_execution"
-        | "bash_execution"
-        | "image_generation_result"
-        | "coding_result"
-        | "research_result";
-    };
-export type ChatItem =
-  | {
-      kind: "text";
-      text: string;
-      purpose: "answer" | "commentary" | "plan" | "report";
-      status: RunStatus;
-      citations: CitationInfo[];
-      documents: SearchDocument[];
-    }
-  | {
-      kind: "reasoning";
-      text: string;
-      status: RunStatus;
-    }
-  | {
-      kind: "tool";
-      name: string;
-      arguments: Record<string, JsonValue>;
-      status: RunStatus | "pending";
-      output: string;
-      metadata: ToolMetadata | null;
-    };
-export interface Packet {
-  model_index?: number | null;
-  identity?: {
-    message_id: string;
-    part_id: string;
-    parent_run_id?: string | null;
-  } | null;
-  user_message_id?: number | null;
-  reserved_assistant_message_id?: number;
-  error?: string;
-  obj?:
-    | { type: "item_update"; item: ChatItem }
-    | {
-        type: "item_delta";
-        delta:
-          | { kind: "text"; text: string; citations: CitationInfo[] }
-          | {
-              kind: "tool_arguments";
-              name: string;
-              arguments: Record<string, string>;
-            }
-          | {
-              kind: "tool_output";
-              output?: string | null;
-              metadata?: ToolMetadata | null;
-            };
-      }
-    | { type: "run_update"; status: RunStatus }
-    | { type: "stop"; stop_reason?: "finished" | "user_cancelled" | null }
-    | { type: "chat_heartbeat" };
+
+export interface OpenUrlStart {
+  type: "open_url_start";
+}
+
+export interface OpenUrlUrls {
+  type: "open_url_urls";
+  urls: string[];
+}
+
+export interface OpenUrlDocuments {
+  type: "open_url_documents";
+  documents: SearchDocument[];
+}
+
+export interface ImageGenerationStart {
+  type: "image_generation_start";
+}
+
+export interface ImageGenerationHeartbeat {
+  type: "image_generation_heartbeat";
+}
+
+export interface PythonToolStart {
+  type: "python_tool_start";
+}
+
+export interface PythonToolDelta {
+  type: "python_tool_delta";
+  code?: string;
+}
+
+export interface CustomToolStart {
+  type: "custom_tool_start";
+}
+
+export interface ReasoningStart {
+  type: "reasoning_start";
+}
+
+export interface ReasoningDelta {
+  type: "reasoning_delta";
+  reasoning: string;
+}
+
+export interface DeepResearchPlanStart {
+  type: "deep_research_plan_start";
+}
+
+export interface ResearchAgentStart {
+  type: "research_agent_start";
+}
+
+export interface IntermediateReportStart {
+  type: "intermediate_report_start";
+}
+
+export interface Stop {
+  type: "stop";
+}
+
+export interface OverallStop {
+  type: "overall_stop";
+}
+
+export interface ErrorPacket {
+  type: "error";
+  exception: string;
 }
 
 export interface Message {

@@ -23,6 +23,70 @@ function setupUser() {
 }
 
 describe("InputMultiSelect", () => {
+  describe("Foldable dividers", () => {
+    const providerOptions = [
+      {
+        title: "OpenAI",
+        foldable: true,
+        options: [
+          { value: "gpt-4o", title: "GPT-4o" },
+          { value: "gpt-4.1", title: "GPT-4.1" },
+        ],
+      },
+      {
+        title: "Anthropic",
+        foldable: true,
+        options: [{ value: "claude", title: "Claude Sonnet" }],
+      },
+    ];
+
+    function ControlledSelect({ initial }: { initial: string[] }) {
+      const [selected, setSelected] = React.useState(initial);
+      const tags = selected.map((id) => ({ id, label: id }));
+      return (
+        <InputMultiSelect
+          tags={tags}
+          options={providerOptions}
+          placeholder="Model"
+          onSelectOption={(option) =>
+            setSelected((prev) => [...prev, option.value])
+          }
+          onRemoveTag={(id) =>
+            setSelected((prev) => prev.filter((value) => value !== id))
+          }
+        />
+      );
+    }
+
+    test("deselecting a row while open leaves every group as it was", async () => {
+      const user = setupUser();
+      render(<ControlledSelect initial={["claude"]} />);
+      await user.click(screen.getByRole("combobox", { name: "Model" }));
+      // Anthropic opens for its selection; OpenAI is opened by hand.
+      await user.click(screen.getByText("OpenAI"));
+      expect(screen.getAllByRole("option")).toHaveLength(3);
+
+      await user.click(screen.getByRole("option", { name: /Claude/ }));
+      expect(screen.getByRole("listbox")).toBeInTheDocument();
+      expect(screen.getAllByRole("option")).toHaveLength(3);
+    });
+
+    test("picking a row while open does not unfold its group's neighbours", async () => {
+      const user = setupUser();
+      render(<ControlledSelect initial={[]} />);
+      await user.click(screen.getByRole("combobox", { name: "Model" }));
+      expect(screen.queryAllByRole("option")).toHaveLength(0);
+      await user.click(screen.getByText("OpenAI"));
+      expect(screen.getAllByRole("option")).toHaveLength(2);
+
+      await user.click(screen.getByRole("option", { name: /GPT-4o/ }));
+      expect(screen.getAllByRole("option")).toHaveLength(2);
+      expect(
+        screen.queryByRole("option", { name: /Claude/ })
+      ).not.toBeInTheDocument();
+    });
+  });
+
   describe("Search", () => {
     test("search: the search field filters the rows and a pick keeps the list open", async () => {
       const handleSelect = jest.fn();

@@ -1,72 +1,171 @@
+/**
+ * Shared test helpers for packet processing tests
+ */
 import {
-  ChatItem,
   Packet,
-  PacketIdentity,
+  PacketType,
   Placement,
-  ResponseItem,
   StopReason,
 } from "@/app/app/services/streamingModels";
+import { OnyxDocument } from "@/lib/search/types";
 
-export function responseItem(
-  content: ChatItem,
-  placement: Placement = { turn_index: 0, tab_index: 0 },
-  identity: Partial<PacketIdentity> = {}
-): ResponseItem {
+// Core packet factory
+export function createPacket(
+  type: PacketType,
+  placement: Partial<Placement> = {},
+  objOverrides: Record<string, unknown> = {}
+): Packet {
   return {
-    identity: {
-      response_id: 1,
-      run_id: "root",
-      message_id: `message-${placement.turn_index}`,
-      part_id: content.kind,
-      ...identity,
+    placement: {
+      turn_index: 0,
+      tab_index: 0,
+      ...placement,
     },
-    placement,
-    content,
-  };
+    obj: {
+      type,
+      ...objOverrides,
+    },
+  } as Packet;
 }
 
-export function itemPacket(item: ResponseItem): Packet {
-  return {
-    identity: item.identity,
-    obj: { type: "item_update", item: item.content },
-  };
+// Stop packet
+export function createStopPacket(
+  stopReason?: StopReason,
+  placement: Partial<Placement> = {}
+): Packet {
+  return createPacket(PacketType.STOP, placement, {
+    stop_reason: stopReason,
+  });
 }
 
-export function toolItem(
-  turnIndex = 0,
-  tabIndex = 0,
-  name = "internal_search"
-): ResponseItem {
-  return responseItem(
-    {
-      kind: "tool",
-      name,
-      arguments: {},
-      status: "running",
-      output: "",
-      metadata: null,
-    },
-    { turn_index: turnIndex, tab_index: tabIndex },
-    { tool_call_id: `tool-${turnIndex}-${tabIndex}` }
+// Branching packet
+export function createBranchingPacket(
+  numBranches: number,
+  turnIndex: number
+): Packet {
+  return createPacket(
+    PacketType.TOP_LEVEL_BRANCHING,
+    { turn_index: turnIndex },
+    { num_parallel_branches: numBranches }
   );
 }
 
-export function answerItem(turnIndex = 1, text = "Answer"): ResponseItem {
-  return responseItem(
-    {
-      kind: "text",
-      text,
-      status: "complete",
-      purpose: "answer",
-      documents: [],
-      citations: [],
-    },
-    { turn_index: turnIndex, tab_index: 0 }
-  );
+// Message packet
+export function createMessageStartPacket(
+  placement: Partial<Placement> = {},
+  preAnswerProcessingSeconds?: number
+): Packet {
+  return createPacket(PacketType.MESSAGE_START, placement, {
+    id: "msg-1",
+    content: "",
+    final_documents: null,
+    ...(preAnswerProcessingSeconds !== undefined && {
+      pre_answer_processing_seconds: preAnswerProcessingSeconds,
+    }),
+  });
 }
 
-export function stopPacket(): Packet {
-  return {
-    obj: { type: "stop", stop_reason: StopReason.FINISHED },
-  };
+// Citation packet
+export function createCitationPacket(
+  citationNumber: number,
+  documentId: string,
+  placement: Partial<Placement> = {}
+): Packet {
+  return createPacket(PacketType.CITATION_INFO, placement, {
+    citation_number: citationNumber,
+    document_id: documentId,
+  });
+}
+
+// Image generation packet
+export function createImageDeltaPacket(
+  imageCount: number,
+  placement: Partial<Placement> = {}
+): Packet {
+  const images = Array.from({ length: imageCount }, (_, i) => ({
+    file_id: `file-${i}`,
+    url: `https://example.com/image-${i}.png`,
+    revised_prompt: `Image ${i}`,
+  }));
+  return createPacket(PacketType.IMAGE_GENERATION_TOOL_DELTA, placement, {
+    images,
+  });
+}
+
+// Search Tool helpers
+export function createSearchToolStartPacket(
+  placement: Partial<Placement> = {},
+  isInternetSearch?: boolean
+): Packet {
+  return createPacket(PacketType.SEARCH_TOOL_START, placement, {
+    ...(isInternetSearch !== undefined && {
+      is_internet_search: isInternetSearch,
+    }),
+  });
+}
+
+export function createSearchToolQueriesPacket(
+  queries: string[],
+  placement: Partial<Placement> = {}
+): Packet {
+  return createPacket(PacketType.SEARCH_TOOL_QUERIES_DELTA, placement, {
+    queries,
+  });
+}
+
+export function createSearchToolDocumentsPacket(
+  documents: Partial<OnyxDocument>[],
+  placement: Partial<Placement> = {}
+): Packet {
+  return createPacket(PacketType.SEARCH_TOOL_DOCUMENTS_DELTA, placement, {
+    documents,
+  });
+}
+
+// Fetch Tool helpers
+export function createFetchToolStartPacket(
+  placement: Partial<Placement> = {}
+): Packet {
+  return createPacket(PacketType.FETCH_TOOL_START, placement);
+}
+
+export function createFetchToolUrlsPacket(
+  urls: string[],
+  placement: Partial<Placement> = {}
+): Packet {
+  return createPacket(PacketType.FETCH_TOOL_URLS, placement, {
+    urls,
+  });
+}
+
+export function createFetchToolDocumentsPacket(
+  documents: Partial<OnyxDocument>[],
+  placement: Partial<Placement> = {}
+): Packet {
+  return createPacket(PacketType.FETCH_TOOL_DOCUMENTS, placement, {
+    documents,
+  });
+}
+
+// Python Tool helpers
+export function createPythonToolStartPacket(
+  code: string,
+  placement: Partial<Placement> = {}
+): Packet {
+  return createPacket(PacketType.PYTHON_TOOL_START, placement, {
+    code,
+  });
+}
+
+export function createPythonToolDeltaPacket(
+  stdout: string,
+  stderr: string,
+  fileIds: string[],
+  placement: Partial<Placement> = {}
+): Packet {
+  return createPacket(PacketType.PYTHON_TOOL_DELTA, placement, {
+    stdout,
+    stderr,
+    file_ids: fileIds,
+  });
 }

@@ -1,12 +1,18 @@
-/** Build typed NDJSON streams for chat browser tests. */
+/**
+ * Shared helpers for mocking the chat streaming endpoint in Playwright specs.
+ *
+ * The helpers fall into two layers:
+ *   1. `buildMock*Stream` — construct NDJSON response bodies matching the
+ *      shape produced by `/api/chat/send-chat-message`.
+ *   2. `mockChatEndpoint` / `mockChatEndpointSequence` — register
+ *      `page.route` handlers that fulfill the endpoint with a provided body.
+ *
+ * Specs that share a module instance (same worker process) share the
+ * `turnCounter` used to generate unique message IDs. Call
+ * `resetTurnCounter()` in `beforeEach` so IDs start fresh per test.
+ */
+
 import type { Page } from "@playwright/test";
-import type {
-  ChatItem,
-  Packet,
-  PacketIdentity,
-} from "@/app/app/services/streamingModels";
-import { StopReason } from "@/app/app/services/streamingModels";
-import type { OnyxDocument } from "@/lib/search/types";
 
 let turnCounter = 0;
 
@@ -22,73 +28,39 @@ function nextMessageIds(): { userMessageId: number; agentMessageId: number } {
   };
 }
 
-function itemPacket(
-  responseId: number,
-  messageId: string,
-  item: ChatItem
-): Packet {
-  const identity: PacketIdentity = {
-    response_id: responseId,
-    run_id: `run-${responseId}`,
-    message_id: messageId,
-    part_id: item.kind,
-  };
-  if (item.kind === "tool") identity.tool_call_id = `call-${messageId}`;
-  return {
-    identity,
-    obj: { type: "item_update", item },
-  };
-}
-
-function answerPacket(
-  responseId: number,
-  text: string,
-  documents: OnyxDocument[] = [],
-  citations: Record<number, string> = {}
-): Packet {
-  return itemPacket(responseId, `answer-${responseId}`, {
-    kind: "text",
-    text,
-    purpose: "answer",
-    status: "complete",
-    documents,
-    citations: Object.entries(citations).map(([number, document_id]) => ({
-      citation_number: Number(number),
-      document_id,
-    })),
-  });
-}
-
-function serializeStream(
-  userMessageId: number,
-  agentMessageId: number,
-  packets: Packet[],
-  citations: Record<number, string> = {},
-  files: { id: string; type: string }[] = []
-): string {
-  const stop: Packet = {
-    obj: { type: "stop", stop_reason: StopReason.FINISHED },
-  };
-  return (
-    [
-      {
-        user_message_id: userMessageId,
-        reserved_assistant_message_id: agentMessageId,
-      },
-      ...packets,
-      stop,
-      { message_id: agentMessageId, citations, files },
-    ]
-      .map((packet) => JSON.stringify(packet))
-      .join("\n") + "\n"
-  );
+function serializePackets(packets: unknown[]): string {
+  return `${packets.map((p) => JSON.stringify(p)).join("\n")}\n`;
 }
 
 export function buildMockStream(content: string): string {
   const { userMessageId, agentMessageId } = nextMessageIds();
-  return serializeStream(userMessageId, agentMessageId, [
-    answerPacket(agentMessageId, content),
-  ]);
+
+  const packets = [
+    {
+      user_message_id: userMessageId,
+      reserved_assistant_message_id: agentMessageId,
+    },
+    {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: {
+        type: "message_start",
+        id: `mock-${agentMessageId}`,
+        content,
+        final_documents: null,
+      },
+    },
+    {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: { type: "stop", stop_reason: "finished" },
+    },
+    {
+      message_id: agentMessageId,
+      citations: {},
+      files: [],
+    },
+  ];
+
+  return serializePackets(packets);
 }
 
 export interface ImageGenStreamOptions {
@@ -103,56 +75,79 @@ export function buildMockImageGenStream({
   message,
 }: ImageGenStreamOptions): string {
   const { userMessageId, agentMessageId } = nextMessageIds();
-  return serializeStream(
-    userMessageId,
-    agentMessageId,
-    [
-      itemPacket(agentMessageId, `image-${agentMessageId}`, {
-        kind: "tool",
-        name: "generate_image",
-        arguments: {},
-        status: "complete",
-        output: "",
-        metadata: {
-          type: "image_generation_result",
-          generated_images: [
-            {
-              file_id: fileId,
-              url: `/api/chat/file/${fileId}`,
-              revised_prompt: revisedPrompt,
-              shape: "square",
-            },
-          ],
-        },
-      }),
-      answerPacket(agentMessageId, message),
-    ],
-    {},
-    [{ id: fileId, type: "image" }]
-  );
+
+  const packets = [
+    {
+      user_message_id: userMessageId,
+      reserved_assistant_message_id: agentMessageId,
+    },
+    {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: { type: "image_generation_start" },
+    },
+    {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: {
+        type: "image_generation_final",
+        images: [
+          {
+            file_id: fileId,
+            url: `/api/chat/file/${fileId}`,
+            revised_prompt: revisedPrompt,
+            shape: "square",
+          },
+        ],
+      },
+    },
+    {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: { type: "section_end" },
+    },
+    {
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: {
+        type: "message_start",
+        id: `mock-${agentMessageId}`,
+        content: message,
+        final_documents: null,
+      },
+    },
+    {
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: { type: "stop", stop_reason: "finished" },
+    },
+    {
+      message_id: agentMessageId,
+      citations: {},
+      files: [{ id: fileId, type: "image" }],
+    },
+  ];
+
+  return serializePackets(packets);
 }
 
-export type MockDocument = Pick<
-  OnyxDocument,
-  | "document_id"
-  | "semantic_identifier"
-  | "link"
-  | "source_type"
-  | "blurb"
-  | "is_internet"
->;
+export interface MockDocument {
+  document_id: string;
+  semantic_identifier: string;
+  link: string;
+  source_type: string;
+  blurb: string;
+  is_internet: boolean;
+}
 
 export interface SearchMockOptions {
   content: string;
   queries: string[];
   documents: MockDocument[];
+  /** Maps citation number -> document_id */
   citations: Record<number, string>;
   isInternetSearch?: boolean;
 }
 
 export function buildMockSearchStream(options: SearchMockOptions): string {
   const { userMessageId, agentMessageId } = nextMessageIds();
-  const documents: OnyxDocument[] = options.documents.map((doc) => ({
+
+  const fullDocs = options.documents.map((doc) => ({
     ...doc,
     boost: 0,
     hidden: false,
@@ -162,36 +157,64 @@ export function buildMockSearchStream(options: SearchMockOptions): string {
     metadata: {},
     updated_at: null,
   }));
-  return serializeStream(
-    userMessageId,
-    agentMessageId,
-    [
-      itemPacket(agentMessageId, `search-${agentMessageId}`, {
-        kind: "tool",
-        name: options.isInternetSearch ? "web_search" : "internal_search",
-        arguments: { queries: options.queries },
-        status: "complete",
-        output: "",
-        metadata: {
-          type: "search_result",
-          queries: options.queries,
-          sources: [],
-          time_filter_start: null,
-          time_filter_end: null,
-          search_docs: documents,
-          displayed_docs: null,
-          citation_mapping: options.citations,
-        },
-      }),
-      answerPacket(
-        agentMessageId,
-        options.content,
-        documents,
-        options.citations
-      ),
-    ],
-    options.citations
-  );
+
+  // Turn 0: search tool
+  // Turn 1: answer + citations
+  const packets: Record<string, unknown>[] = [
+    {
+      user_message_id: userMessageId,
+      reserved_assistant_message_id: agentMessageId,
+    },
+    {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: {
+        type: "search_tool_start",
+        ...(options.isInternetSearch !== undefined && {
+          is_internet_search: options.isInternetSearch,
+        }),
+      },
+    },
+    {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: { type: "search_tool_queries_delta", queries: options.queries },
+    },
+    {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: { type: "search_tool_documents_delta", documents: fullDocs },
+    },
+    {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: { type: "section_end" },
+    },
+    {
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: {
+        type: "message_start",
+        id: `mock-${agentMessageId}`,
+        content: options.content,
+        final_documents: fullDocs,
+      },
+    },
+    ...Object.entries(options.citations).map(([num, docId]) => ({
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: {
+        type: "citation_info",
+        citation_number: Number(num),
+        document_id: docId,
+      },
+    })),
+    {
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: { type: "stop", stop_reason: "finished" },
+    },
+    {
+      message_id: agentMessageId,
+      citations: options.citations,
+      files: [],
+    },
+  ];
+
+  return serializePackets(packets);
 }
 
 /**

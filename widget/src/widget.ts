@@ -18,7 +18,7 @@ import {
 import { theme } from "./styles/theme";
 import { widgetStyles } from "./styles/widget-styles";
 import { ApiService } from "./services/api-service";
-import { ChatStreamParser } from "./services/stream-parser";
+import { processPacket } from "./services/stream-parser";
 import { saveSession, loadSession, clearSession } from "./utils/storage";
 import { DEFAULT_LOGO } from "./assets/logo";
 
@@ -408,7 +408,6 @@ export class OnyxChatWidget extends LitElement {
 
       // Stream response
       this.abortController = new AbortController();
-      const streamParser = new ChatStreamParser();
       let currentMessage: ChatMessage | null = null;
       let assistantMessageId: number | null = null;
 
@@ -419,7 +418,7 @@ export class OnyxChatWidget extends LitElement {
         signal: this.abortController.signal,
         includeCitations: this.config.includeCitations,
       })) {
-        const result = streamParser.process(packet, currentMessage);
+        const result = processPacket(packet, currentMessage);
 
         // Capture message IDs from backend and update local messages
         if (result.messageIds) {
@@ -457,14 +456,12 @@ export class OnyxChatWidget extends LitElement {
           }
         }
 
-        if (result.citations) {
-          this.citationMap.clear();
-          for (const citation of result.citations) {
-            this.citationMap.set(
-              citation.citation_number,
-              citation.document_id
-            );
-          }
+        // Accumulate citation mappings for the current message
+        if (result.citation) {
+          this.citationMap.set(
+            result.citation.citation_number,
+            result.citation.document_id
+          );
         }
 
         if (result.message) {

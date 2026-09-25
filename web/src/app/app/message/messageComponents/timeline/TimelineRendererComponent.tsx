@@ -1,14 +1,14 @@
 "use client";
 
 import React, { useState, useCallback, JSX } from "react";
-import { StopReason, ResponseItem } from "@/app/app/services/streamingModels";
+import { Packet, StopReason } from "@/app/app/services/streamingModels";
 import {
   FullChatState,
   RenderType,
   RendererResult,
   RendererOutput,
-} from "@/app/app/message/messageComponents/interfaces";
-import { findRenderer } from "@/app/app/message/messageComponents/renderMessageComponent";
+} from "../interfaces";
+import { findRenderer } from "../renderMessageComponent";
 
 /** Extended result that includes collapse state */
 export interface TimelineRendererResult extends RendererResult {
@@ -31,7 +31,7 @@ export type TimelineRendererOutput = TimelineRendererResult[];
 
 export interface TimelineRendererComponentProps {
   /** Packets to render */
-  items: ResponseItem[];
+  packets: Packet[];
   /** Chat state for rendering */
   chatState: FullChatState;
   /** Whether to animate streaming */
@@ -59,7 +59,7 @@ function arePropsEqual(
   next: TimelineRendererComponentProps
 ): boolean {
   return (
-    prev.items === next.items &&
+    prev.packets === next.packets &&
     prev.stopPacketSeen === next.stopPacketSeen &&
     prev.stopReason === next.stopReason &&
     prev.animate === next.animate &&
@@ -73,7 +73,7 @@ function arePropsEqual(
 
 export const TimelineRendererComponent = React.memo(
   function TimelineRendererComponent({
-    items,
+    packets,
     chatState,
     animate,
     stopPacketSeen,
@@ -86,7 +86,7 @@ export const TimelineRendererComponent = React.memo(
   }: TimelineRendererComponentProps) {
     const [isExpanded, setIsExpanded] = useState(defaultExpanded);
     const handleToggle = useCallback(() => setIsExpanded((prev) => !prev), []);
-    const RendererFn = findRenderer({ items });
+    const RendererFn = findRenderer({ packets });
     const renderType =
       renderTypeOverride ?? (isExpanded ? RenderType.FULL : RenderType.COMPACT);
 
@@ -120,7 +120,7 @@ export const TimelineRendererComponent = React.memo(
 
     return (
       <RendererFn
-        items={items}
+        packets={packets}
         state={chatState}
         onComplete={() => {}}
         animate={animate}

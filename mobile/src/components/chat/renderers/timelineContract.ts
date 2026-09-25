@@ -6,7 +6,7 @@ import type { ComponentType, ReactElement } from "react";
 
 import { MinimalAgent } from "@/chat/agents";
 import { CitationMap, SearchDoc } from "@/chat/contracts/documents";
-import { ResponseItem, StopReason } from "@/chat/streamingModels";
+import { Packet, StopReason } from "@/chat/streamingModels";
 import type { IconFunctionComponent } from "@/icons/types";
 
 export enum RenderType {
@@ -53,10 +53,10 @@ export interface FullChatState {
 }
 
 export type MessageRenderer<
-  T extends ResponseItem,
+  T extends Packet,
   S extends Partial<FullChatState>,
 > = ComponentType<{
-  items: T[];
+  packets: T[];
   state: S;
   messageNodeId?: number;
   // True when timeline/thinking UI is already shown above this block.
@@ -73,7 +73,7 @@ export type MessageRenderer<
 
 // The dispatch surface. `findRenderer` returns this widened form; concrete renderers narrow their packet
 // type internally instead of exposing `any` at the boundary.
-export type DispatchRenderer = MessageRenderer<ResponseItem, FullChatState>;
+export type DispatchRenderer = MessageRenderer<Packet, FullChatState>;
 
 // RendererResult plus per-step expand/collapse state (produced by TimelineRendererComponent in 9b.5).
 // Present now so the contract is complete; unused until the timeline UI lands.

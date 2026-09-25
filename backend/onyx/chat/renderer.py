@@ -1,13 +1,25 @@
-"""Format model text, citations, and tool output into public items and updates."""
+"""Translate shared messages and tool results into chat browser packets."""
 
 from collections.abc import Mapping
 
 from pydantic import BaseModel, JsonValue, TypeAdapter
 
-from onyx.agents.execution_records import ExecutionStatus, RunStatus
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.models import MessageRendering, PresentationMode
-from onyx.context.search.models import SearchDoc
+from onyx.coding_agent.models import CodingAgentCallResult
+from onyx.coding_agent.tool_definitions import (
+    BASH_TOOL_NAME,
+    CODING_AGENT_TOOL_NAME,
+    GENERATE_ANSWER_TOOL_NAME,
+)
+from onyx.context.search.models import SearchDoc, SearchDocsResponse
+from onyx.deep_research.models import ResearchAgentCallResult
+from onyx.deep_research.tool_definitions import (
+    GENERATE_PLAN_TOOL_NAME,
+    GENERATE_REPORT_TOOL_NAME,
+    RESEARCH_AGENT_TOOL_NAME,
+    THINK_TOOL_NAME,
+)
 from onyx.llm.models import (
     AssistantMessage,
     GenerationContentEvent,
@@ -15,74 +27,89 @@ from onyx.llm.models import (
     TextDeltaEvent,
     ThinkingContent,
     ThinkingDeltaEvent,
+    ToolCall,
     ToolCallDeltaEvent,
     ToolCallStartEvent,
     ToolResult,
 )
-from onyx.server.query_and_chat.streaming_models import (
-    CitationInfo,
-    ItemDelta,
-    ItemUpdate,
-    Packet,
-    PacketIdentity,
-    ReasoningItem,
-    TextDelta,
-    TextItem,
-    TextPurpose,
-    ToolArgumentsDelta,
-    ToolItem,
-    ToolMetadata,
-    ToolStatus,
+from onyx.server.query_and_chat import streaming_models as packets
+from onyx.server.query_and_chat.placement import Placement
+from onyx.tools.models import (
+    CustomToolCallSummary,
+    CustomToolUserFileSnapshot,
+    FileReadResult,
+    LlmBashExecutionResult,
+    LlmPythonExecutionResult,
+    MemoryUpdated,
 )
 from onyx.tools.tool_implementations.custom.openapi_parsing import REQUEST_BODY
+from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReaderTool
+from onyx.tools.tool_implementations.images.image_generation_tool import (
+    ImageGenerationTool,
+)
+from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
+from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
+from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+from onyx.tools.tool_implementations.python.python_tool import PythonTool
+from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 
-_TOOL_METADATA = TypeAdapter(ToolMetadata)
+HIDDEN_TOOLS = frozenset(
+    {
+        GENERATE_PLAN_TOOL_NAME,
+        GENERATE_REPORT_TOOL_NAME,
+        GENERATE_ANSWER_TOOL_NAME,
+        THINK_TOOL_NAME,
+    }
+)
+
+_STRING = TypeAdapter(str)
+_STRINGS = TypeAdapter(list[str])
 
 
-def visible_tool_arguments[T](arguments: Mapping[str, T]) -> dict[str, T]:
-    return {key: value for key, value in arguments.items() if key != REQUEST_BODY}
+class ResponseLayout:
+    """Allocate browser sections; child sections stay inside their parent tool tab."""
 
+    def __init__(self) -> None:
+        self._next_turn = 0
+        self._next_sub_turn: dict[tuple[int, int], int] = {}
 
-def tool_metadata(details: BaseModel | None) -> ToolMetadata | None:
-    """Project tool details onto public fields, excluding private subclass state."""
-    return (
-        _TOOL_METADATA.validate_python(details.model_dump())
-        if details is not None
-        else None
-    )
-
-
-def build_tool_item(
-    *,
-    name: str,
-    arguments: Mapping[str, JsonValue],
-    status: ToolStatus,
-    result: ToolResult | None = None,
-    tool_id: int | None = None,
-) -> ToolItem:
-    """Apply the same argument and result visibility rules to live and saved tools."""
-    return ToolItem(
-        name=name,
-        arguments=visible_tool_arguments(arguments),
-        status=status,
-        tool_id=tool_id,
-        output=result.text if result is not None and result.details is None else "",
-        metadata=tool_metadata(result.details) if result is not None else None,
-    )
+    def next_section(self, parent: Placement | None = None) -> Placement:
+        if parent is None:
+            placement = Placement(turn_index=self._next_turn)
+            self._next_turn += 1
+            return placement
+        key = (parent.turn_index, parent.tab_index)
+        index = self._next_sub_turn.get(key, 0)
+        self._next_sub_turn[key] = index + 1
+        return parent.model_copy(update={"sub_turn_index": index})
 
 
 class MessageRenderer:
-    """Keep formatted text for completion; publish new text without reconstructing deltas."""
+    """Append formatted text once, then close its browser sections on completion."""
 
     def __init__(
         self,
         settings: MessageRendering,
         documents: Mapping[str, SearchDoc],
-        identity: PacketIdentity,
+        layout: ResponseLayout,
+        parent: Placement | None = None,
     ) -> None:
-        self.documents = documents
         self.settings = settings
-        self.identity = identity
+        self.layout = layout
+        self.parent = parent
+        self.answer = ""
+        self.reasoning = ""
+        self.citations: list[packets.CitationInfo] = []
+        self.documents = [
+            documents[key] for key in settings.document_ids if key in documents
+        ]
+        self._answer_placement: Placement | None = None
+        self._reasoning_placement: Placement | None = None
+        self._raw_text = ""
+        self._raw_thinking = ""
+        self._finished = False
+        self.tool_placements: dict[str, Placement] = {}
         self.citation_processor = (
             DynamicCitationProcessor(citation_mode=settings.citation_mode)
             if settings.citation_mode is not None
@@ -91,228 +118,467 @@ class MessageRenderer:
         if self.citation_processor:
             self.citation_processor.update_citation_mapping(
                 {
-                    number: documents[doc_id]
-                    for number, doc_id in settings.citation_documents.items()
-                    if doc_id in documents
+                    number: documents[key]
+                    for number, key in settings.citation_documents.items()
+                    if key in documents
                 }
             )
-        purpose = {
-            PresentationMode.ANSWER: TextPurpose.ANSWER,
-            PresentationMode.PLAN: TextPurpose.PLAN,
-            PresentationMode.REPORT: TextPurpose.REPORT,
-            PresentationMode.CODING_THINKING: TextPurpose.COMMENTARY,
-            PresentationMode.SILENT: TextPurpose.COMMENTARY,
-        }[settings.mode]
-        self.text = TextItem(
-            purpose=purpose,
-            documents=[
-                documents[doc_id]
-                for doc_id in settings.document_ids
-                if doc_id in documents
-            ],
-            pre_answer_seconds=settings.pre_answer_seconds,
-        )
-        self.thinking = ReasoningItem()
-        self._started: set[str] = set()
-        self._tool_calls: set[str] = set()
-        self._finished = False
-
-    @property
-    def answer(self) -> str:
-        return self.text.text
-
-    @property
-    def reasoning(self) -> str:
-        return self.thinking.text
 
     @property
     def answer_started(self) -> bool:
-        return "answer" in self._started
+        return self._answer_placement is not None
 
-    def _packet(
-        self, obj: ItemUpdate | ItemDelta, part: str, tool_call_id: str | None = None
-    ) -> Packet:
-        return Packet(
-            identity=self.identity.model_copy(
-                update={"part_id": part, "tool_call_id": tool_call_id}
-            ),
-            obj=obj,
-        )
-
-    def _append(
-        self,
-        text: str,
-        *,
-        thinking: bool = False,
-        citations: list[CitationInfo] | None = None,
-    ) -> list[Packet]:
-        if not text and not citations:
+    def _append(self, text: str, *, thinking: bool = False) -> list[packets.Packet]:
+        if not text or self.settings.mode == PresentationMode.SILENT:
             return []
-        if self.settings.mode == PresentationMode.SILENT:
-            return []
-        part = "reasoning" if thinking else "answer"
-        item = self.thinking if thinking else self.text
-        packets: list[Packet] = []
-        if part not in self._started:
-            packets.append(
-                self._packet(ItemUpdate(item=item.model_copy(deep=True)), part)
+        if thinking:
+            self.reasoning += text
+            if self.settings.mode == PresentationMode.CODING_THINKING:
+                if self.parent is None:
+                    raise ValueError("Coding output requires a parent tool placement")
+                return [
+                    packets.Packet(
+                        placement=self.parent,
+                        obj=packets.CodingAgentThinkingDelta(content=text),
+                    )
+                ]
+            result = []
+            if self._reasoning_placement is None:
+                self._reasoning_placement = self.layout.next_section(self.parent)
+                result.append(
+                    packets.Packet(
+                        placement=self._reasoning_placement,
+                        obj=packets.ReasoningStart(),
+                    )
+                )
+            result.append(
+                packets.Packet(
+                    placement=self._reasoning_placement,
+                    obj=packets.ReasoningDelta(reasoning=text),
+                )
             )
-            self._started.add(part)
-        item.text += text
-        if not thinking and citations:
-            self.text.citations.extend(citations)
-        packets.append(
-            self._packet(
-                ItemDelta(delta=TextDelta(text=text, citations=citations or [])), part
-            )
-        )
-        return packets
+            return result
+        self.answer += text
+        if self.settings.mode == PresentationMode.CODING_THINKING:
+            if self.parent is None:
+                raise ValueError("Coding output requires a parent tool placement")
+            return [
+                packets.Packet(
+                    placement=self.parent,
+                    obj=packets.CodingAgentThinkingDelta(content=text),
+                )
+            ]
+        result = []
+        if self._answer_placement is None:
+            result.extend(self._close_reasoning())
+            self._answer_placement = self.layout.next_section(self.parent)
+            if self.settings.mode == PresentationMode.PLAN:
+                start: packets.PacketObj = packets.DeepResearchPlanStart()
+            elif self.settings.mode == PresentationMode.REPORT:
+                start = packets.IntermediateReportStart()
+            else:
+                start = packets.AgentResponseStart(
+                    final_documents=self.documents,
+                    pre_answer_processing_seconds=self.settings.pre_answer_seconds,
+                )
+            result.append(packets.Packet(placement=self._answer_placement, obj=start))
+        if self.settings.mode == PresentationMode.PLAN:
+            delta: packets.PacketObj = packets.DeepResearchPlanDelta(content=text)
+        elif self.settings.mode == PresentationMode.REPORT:
+            delta = packets.IntermediateReportDelta(content=text)
+        else:
+            delta = packets.AgentResponseDelta(content=text)
+        result.append(packets.Packet(placement=self._answer_placement, obj=delta))
+        return result
 
-    def _content(self, text: str | None) -> list[Packet]:
+    def _content(self, text: str | None) -> list[packets.Packet]:
         if self.settings.text_as_thinking:
             return self._append(text or "", thinking=True)
         if self.citation_processor is None:
             return self._append(text or "")
-        packets: list[Packet] = []
+        result = []
         for value in self.citation_processor.process_token(text):
-            packets.extend(
-                self._append(value)
-                if isinstance(value, str)
-                else self._append("", citations=[value])
-            )
-        return packets
+            if isinstance(value, str):
+                result.extend(self._append(value))
+            else:
+                self.citations.append(value)
+                if self._answer_placement is not None:
+                    result.append(
+                        packets.Packet(placement=self._answer_placement, obj=value)
+                    )
+        return result
 
-    def consume(self, event: GenerationContentEvent) -> list[Packet]:
+    def tool_placement(self, call_id: str) -> Placement:
+        if call_id not in self.tool_placements:
+            first = next(iter(self.tool_placements.values()), None)
+            self.tool_placements[call_id] = (
+                first.model_copy(update={"tab_index": len(self.tool_placements)})
+                if first is not None and self.parent is None
+                else self.layout.next_section(self.parent)
+            )
+        return self.tool_placements[call_id]
+
+    def consume(self, event: GenerationContentEvent) -> list[packets.Packet]:
         if isinstance(event, TextDeltaEvent):
+            self._raw_text += event.text
             return self._content(event.text)
         if isinstance(event, ThinkingDeltaEvent):
+            self._raw_thinking += event.text
             return self._append(event.text, thinking=True)
-        if isinstance(event, (ToolCallStartEvent, ToolCallDeltaEvent)):
-            call = event.tool_call
-            if call.name == self.settings.think_tool:
-                return self._append(
-                    event.argument_deltas.get("reasoning", ""), thinking=True
-                )
-            packets = []
-            if call.id not in self._tool_calls:
-                packets.append(
-                    self._packet(
-                        ItemUpdate(
-                            item=ToolItem(name=call.name, status=ToolStatus.PENDING)
+        if (
+            isinstance(event, (ToolCallStartEvent, ToolCallDeltaEvent))
+            and event.tool_call.name == self.settings.think_tool
+        ):
+            text = event.argument_deltas.get("reasoning", "")
+            self._raw_thinking += text
+            return self._append(text, thinking=True)
+        if (
+            isinstance(event, (ToolCallStartEvent, ToolCallDeltaEvent))
+            and event.tool_call.name
+            and event.tool_call.name not in HIDDEN_TOOLS
+        ):
+            result = self._close_reasoning()
+            placement = self.tool_placement(event.tool_call.id)
+            if event.tool_call.name == PythonTool.NAME:
+                result.append(
+                    packets.Packet(
+                        placement=placement,
+                        obj=packets.ToolCallArgumentDelta(
+                            tool_type=PythonTool.NAME,
+                            argument_deltas=event.argument_deltas,
                         ),
-                        "tool",
-                        call.id,
                     )
                 )
-                self._tool_calls.add(call.id)
-            arguments = visible_tool_arguments(event.argument_deltas)
-            if arguments:
-                packets.append(
-                    self._packet(
-                        ItemDelta(
-                            delta=ToolArgumentsDelta(
-                                name=call.name, arguments=arguments
-                            )
-                        ),
-                        "tool",
-                        call.id,
-                    )
-                )
-            return packets
+            return result
         return []
 
-    def complete(
-        self,
-        message: AssistantMessage,
-        status: ExecutionStatus = ExecutionStatus.COMPLETE,
-        *,
-        purpose: TextPurpose | None = None,
-    ) -> list[Packet]:
-        """Replace streamed previews with the accepted message, including nonstreaming output."""
-        complete = MessageRenderer(self.settings, self.documents, self.identity)
-        for block in message.content:
-            if isinstance(block, TextContent):
-                complete._content(block.text)
-            elif isinstance(block, ThinkingContent):
-                complete._append(block.text, thinking=True)
-            elif block.name == self.settings.think_tool:
-                reasoning = block.arguments.get("reasoning")
-                if isinstance(reasoning, str):
-                    complete._append(reasoning, thinking=True)
-        if message.tool_calls and complete.text.purpose == TextPurpose.ANSWER:
-            complete.text.purpose = TextPurpose.COMMENTARY
-        if purpose is not None:
-            complete.text.purpose = purpose
-        complete._content(None)
-        if message.text and not complete.text.text and not complete.thinking.text:
-            complete._append(message.text)
-        complete._started.update(self._started)
-        packets = [
-            packet
-            for packet in complete.finish(RunStatus(status.value))
-            if isinstance(packet.obj, ItemUpdate)
-        ]
-        self.text = complete.text
-        self.thinking = complete.thinking
-        self._started = complete._started
-        self._finished = True
+    def complete(self, message: AssistantMessage) -> list[packets.Packet]:
+        if self._finished:
+            return []
+        # Nonstreaming providers and interrupted streams can deliver a final suffix.
+        text = "".join(
+            block.text for block in message.content if isinstance(block, TextContent)
+        )
+        thinking = "".join(
+            block.text
+            for block in message.content
+            if isinstance(block, ThinkingContent)
+        )
         for call in message.tool_calls:
             if call.name == self.settings.think_tool:
-                continue
-            packets.append(
-                self._packet(
-                    ItemUpdate(
-                        item=build_tool_item(
-                            name=call.name,
-                            arguments=call.arguments,
-                            status=ToolStatus.PENDING
-                            if status == ExecutionStatus.COMPLETE
-                            else ToolStatus(status),
-                        )
-                    ),
-                    "tool",
-                    call.id,
-                )
+                thinking += _STRING.validate_python(call.arguments.get("reasoning", ""))
+        result = []
+        if thinking.startswith(self._raw_thinking):
+            result.extend(
+                self._append(thinking[len(self._raw_thinking) :], thinking=True)
             )
-        return packets
+        if text.startswith(self._raw_text):
+            result.extend(self._content(text[len(self._raw_text) :]))
+        result.extend(self.finish())
+        if text and not self.answer and not self.reasoning:
+            result.extend(self._append(text))
+            if self._answer_placement is not None:
+                result.append(
+                    packets.Packet(
+                        placement=self._answer_placement, obj=packets.SectionEnd()
+                    )
+                )
+        return result
 
-    def saved(
-        self,
-        message: AssistantMessage,
-        status: ExecutionStatus,
-        *,
-        is_answer: bool,
-    ) -> list[Packet]:
-        """Render stored messages with the same citation and purpose rules as live output."""
-        purpose = None
-        if self.text.purpose == TextPurpose.ANSWER:
-            purpose = (
-                TextPurpose.ANSWER
-                if is_answer
-                or (
-                    status in {ExecutionStatus.CANCELLED, ExecutionStatus.ERROR}
-                    and not message.tool_calls
-                )
-                else TextPurpose.COMMENTARY
-            )
+    def _close_reasoning(self) -> list[packets.Packet]:
+        if self._reasoning_placement is None:
+            return []
+        placement = self._reasoning_placement
+        self._reasoning_placement = None
         return [
-            packet
-            for packet in self.complete(message, status, purpose=purpose)
-            if isinstance(packet.obj, ItemUpdate)
-            and not isinstance(packet.obj.item, ToolItem)
+            packets.Packet(placement=placement, obj=packets.ReasoningDone()),
+            packets.Packet(placement=placement, obj=packets.SectionEnd()),
         ]
 
-    def finish(self, status: RunStatus) -> list[Packet]:
+    def finish(self) -> list[packets.Packet]:
         if self._finished:
             return []
         self._finished = True
-        if self._tool_calls and self.text.purpose == TextPurpose.ANSWER:
-            self.text.purpose = TextPurpose.COMMENTARY
-        packets = self._content(None)
-        for part, item in (("reasoning", self.thinking), ("answer", self.text)):
-            if part in self._started:
-                item.status = status
-                packets.append(
-                    self._packet(ItemUpdate(item=item.model_copy(deep=True)), part)
+        result = self._content(None)
+        result.extend(self._close_reasoning())
+        if self._answer_placement is not None:
+            if self.settings.mode == PresentationMode.REPORT:
+                result.append(
+                    packets.Packet(
+                        placement=self._answer_placement,
+                        obj=packets.IntermediateReportCitedDocs(
+                            cited_docs=self.documents
+                        ),
+                    )
                 )
-        return packets
+            result.append(
+                packets.Packet(
+                    placement=self._answer_placement, obj=packets.SectionEnd()
+                )
+            )
+        return result
+
+
+class ToolRenderer:
+    """Project tool progress and final results without sending private tool state."""
+
+    def __init__(
+        self, call: ToolCall, placement: Placement, tool_id: int | None = None
+    ) -> None:
+        self.call = call
+        self.placement = placement
+        self.tool_id = tool_id
+        self._queries: set[str] = set()
+        self._documents: set[str] = set()
+        self._last_details: BaseModel | None = None
+        self.has_child_output = False
+        self._stdout = ""
+        self._stderr = ""
+        self._files: set[str] = set()
+
+    def start(self) -> list[packets.Packet]:
+        name = self.call.name
+        args = self.call.arguments
+        objects: list[packets.PacketObj]
+        if name in {SearchTool.NAME, WebSearchTool.NAME}:
+            objects = [
+                packets.SearchToolStart(is_internet_search=name == WebSearchTool.NAME)
+            ]
+            queries = _STRINGS.validate_python(args.get("queries", []))
+            self._queries.update(queries)
+            objects.append(packets.SearchToolQueriesDelta(queries=queries))
+        elif name == OpenURLTool.NAME:
+            objects = [
+                packets.OpenUrlStart(),
+                packets.OpenUrlUrls(
+                    urls=_STRINGS.validate_python(args.get("urls", []))
+                ),
+            ]
+        elif name == PythonTool.NAME:
+            objects = [
+                packets.PythonToolStart(
+                    code=_STRING.validate_python(args.get("code", ""))
+                )
+            ]
+        elif name == BASH_TOOL_NAME:
+            objects = [
+                packets.BashToolStart(cmd=_STRING.validate_python(args.get("cmd", "")))
+            ]
+        elif name == FileReaderTool.NAME:
+            objects = [packets.FileReaderStart()]
+        elif name == MemoryTool.NAME:
+            objects = [packets.MemoryToolStart()]
+        elif name == ImageGenerationTool.NAME:
+            objects = [packets.ImageGenerationToolStart()]
+        elif name == RESEARCH_AGENT_TOOL_NAME:
+            objects = [
+                packets.ResearchAgentStart(
+                    research_task=_STRING.validate_python(args.get("task", ""))
+                )
+            ]
+        elif name == CODING_AGENT_TOOL_NAME:
+            objects = [
+                packets.CodingAgentStart(
+                    query=_STRING.validate_python(args.get("query", "")),
+                    repo=_STRING.validate_python(args.get("github_repo", "")),
+                )
+            ]
+        else:
+            objects = [
+                packets.CustomToolStart(tool_name=name, tool_id=self.tool_id),
+                packets.CustomToolArgs(
+                    tool_name=name,
+                    tool_args={
+                        key: value for key, value in args.items() if key != REQUEST_BODY
+                    },
+                ),
+            ]
+        objects.append(
+            packets.ToolCallDebug(
+                tool_call_id=self.call.id,
+                tool_name=name,
+                tool_args={
+                    key: value for key, value in args.items() if key != REQUEST_BODY
+                },
+            )
+        )
+        return [packets.Packet(placement=self.placement, obj=obj) for obj in objects]
+
+    def update(
+        self, details: BaseModel | None, content: str = ""
+    ) -> list[packets.Packet]:
+        objects: list[packets.PacketObj] = []
+        if isinstance(details, SearchDocsResponse):
+            docs = details.displayed_docs or details.search_docs
+            new_docs = [doc for doc in docs if doc.document_id not in self._documents]
+            self._documents.update(doc.document_id for doc in docs)
+            if self.call.name == OpenURLTool.NAME:
+                if new_docs:
+                    objects.append(packets.OpenUrlDocuments(documents=new_docs))
+            else:
+                queries = [
+                    query for query in details.queries if query not in self._queries
+                ]
+                self._queries.update(queries)
+                if queries:
+                    objects.append(packets.SearchToolQueriesDelta(queries=queries))
+                objects.append(
+                    packets.SearchToolFilterDelta(
+                        sources=details.sources,
+                        time_filter_start=details.time_filter_start,
+                        time_filter_end=details.time_filter_end,
+                    )
+                )
+                if new_docs:
+                    objects.append(packets.SearchToolDocumentsDelta(documents=new_docs))
+        elif details is not None and details == self._last_details:
+            return []
+        elif isinstance(details, FileReadResult):
+            objects.append(
+                packets.FileReaderResult(
+                    file_name=details.file_name,
+                    file_id=details.file_id,
+                    start_char=details.start_char,
+                    end_char=details.end_char,
+                    total_chars=details.total_chars,
+                    preview_start=details.preview_start,
+                    preview_end=details.preview_end,
+                )
+            )
+        elif isinstance(details, MemoryUpdated):
+            objects.append(
+                packets.MemoryToolDelta(
+                    memory_text=details.memory_text,
+                    operation=details.operation.value,
+                    memory_id=details.memory_id,
+                    index=details.index,
+                )
+            )
+        elif isinstance(details, LlmPythonExecutionResult):
+            objects.append(
+                packets.PythonToolDelta(
+                    stdout=details.stdout[len(self._stdout) :]
+                    if details.stdout.startswith(self._stdout)
+                    else "",
+                    stderr=details.stderr[len(self._stderr) :]
+                    if details.stderr.startswith(self._stderr)
+                    else "",
+                    file_ids=[
+                        file.file_link.rsplit("/", 1)[-1]
+                        for file in details.generated_files
+                        if file.file_link not in self._files
+                    ],
+                )
+            )
+            self._stdout = details.stdout
+            self._stderr = details.stderr
+            self._files.update(file.file_link for file in details.generated_files)
+        elif isinstance(details, LlmBashExecutionResult):
+            objects.append(
+                packets.BashToolDelta(
+                    stdout=details.stdout,
+                    stderr=details.stderr,
+                    exit_code=details.exit_code,
+                    timed_out=details.timed_out,
+                )
+            )
+        elif isinstance(details, FinalImageGenerationResponse):
+            objects.append(
+                packets.ImageGenerationFinal(
+                    images=[
+                        packets.GeneratedImage(
+                            file_id=image.file_id,
+                            url=image.url,
+                            revised_prompt=image.revised_prompt,
+                            shape=image.shape,
+                        )
+                        for image in details.generated_images
+                    ]
+                )
+            )
+        elif isinstance(details, CustomToolCallSummary):
+            files = (
+                details.tool_result
+                if isinstance(details.tool_result, CustomToolUserFileSnapshot)
+                else None
+            )
+            data: JsonValue = (
+                None
+                if isinstance(details.tool_result, CustomToolUserFileSnapshot)
+                else details.tool_result
+            )
+            error = details.error
+            objects.append(
+                packets.CustomToolDelta(
+                    tool_name=details.tool_name,
+                    tool_id=self.tool_id,
+                    response_type=details.response_type,
+                    data=data,
+                    file_ids=files.file_ids if files else None,
+                    error=packets.CustomToolErrorInfo(
+                        is_auth_error=error.is_auth_error,
+                        status_code=error.status_code,
+                        message=error.message,
+                    )
+                    if error
+                    else None,
+                )
+            )
+        elif isinstance(details, CodingAgentCallResult):
+            objects.append(packets.CodingAgentThinkingDelta(content=details.answer))
+        elif isinstance(details, ResearchAgentCallResult):
+            if not self.has_child_output:
+                nested = self.placement.model_copy(update={"sub_turn_index": 0})
+                return [
+                    packets.Packet(placement=nested, obj=obj)
+                    for obj in [
+                        packets.IntermediateReportStart(),
+                        packets.IntermediateReportDelta(
+                            content=details.intermediate_report
+                        ),
+                        packets.IntermediateReportCitedDocs(
+                            cited_docs=list(details.citation_mapping.values())
+                        ),
+                        packets.SectionEnd(),
+                    ]
+                ]
+        elif content and self.call.name not in {
+            SearchTool.NAME,
+            WebSearchTool.NAME,
+            OpenURLTool.NAME,
+            ImageGenerationTool.NAME,
+            MemoryTool.NAME,
+        }:
+            objects.append(
+                packets.CustomToolDelta(
+                    tool_name=self.call.name,
+                    tool_id=self.tool_id,
+                    response_type="text",
+                    data=content,
+                )
+            )
+        self._last_details = details
+        return [packets.Packet(placement=self.placement, obj=obj) for obj in objects]
+
+    def complete(self, result: ToolResult | None) -> list[packets.Packet]:
+        if result is not None and isinstance(result.details, CodingAgentCallResult):
+            output = [
+                packets.Packet(
+                    placement=self.placement,
+                    obj=packets.CodingAgentFinal(answer=result.details.answer),
+                )
+            ]
+        else:
+            output = (
+                self.update(result.details, result.text) if result is not None else []
+            )
+        if self.call.name == MemoryTool.NAME and result is not None and result.is_error:
+            output.append(
+                packets.Packet(
+                    placement=self.placement, obj=packets.MemoryToolNoAccess()
+                )
+            )
+        output.append(
+            packets.Packet(placement=self.placement, obj=packets.SectionEnd())
+        )
+        return output

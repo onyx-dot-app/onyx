@@ -13,7 +13,7 @@ export interface StoppedHeaderProps {
   onToggle: () => void;
 }
 
-/** Header for cancelled or interrupted responses. */
+/** Header when user stopped/cancelled */
 export const StoppedHeader = React.memo(function StoppedHeader({
   totalSteps,
   collapsible,

@@ -27,6 +27,7 @@ from onyx.chat.stream_buffer import (
     _StreamStatus,
     read_stream_chunks,
 )
+from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
 from onyx.server.utils import get_json_line
 from onyx.utils.threadpool_concurrency import ContextThreadPoolExecutor
@@ -267,8 +268,12 @@ def test_concurrent_delivery_keeps_reader_and_cache_order(
     release_first = Event()
     second_started = Event()
     publish = delivery.reader.publish
-    first = Packet(obj=OverallStop(stop_reason="first"))
-    second = Packet(obj=OverallStop(stop_reason="second"))
+    first = Packet(
+        placement=Placement(turn_index=0), obj=OverallStop(stop_reason="first")
+    )
+    second = Packet(
+        placement=Placement(turn_index=0), obj=OverallStop(stop_reason="second")
+    )
 
     def hold_first(item: Packet | StreamingError | _StreamStatus) -> None:
         publish(item)
@@ -340,7 +345,12 @@ def test_event_delivery_and_cache_writes_share_worker(
 
     def receive(event: AgentEvent) -> None:
         workers.add(get_ident())
-        output.publish(Packet(obj=OverallStop(stop_reason=event.run_id)))
+        output.publish(
+            Packet(
+                placement=Placement(turn_index=0),
+                obj=OverallStop(stop_reason=event.run_id),
+            )
+        )
 
     monkeypatch.setattr(cache, "set", write)
     channel.subscribe(receive)
@@ -348,12 +358,19 @@ def test_event_delivery_and_cache_writes_share_worker(
     try:
         channel.publish(AgentStartEvent(run_id="first"))
         assert writing.wait(2)
-        assert next(output.reader) == Packet(obj=OverallStop(stop_reason="first"))
+        assert next(output.reader) == Packet(
+            placement=Placement(turn_index=0), obj=OverallStop(stop_reason="first")
+        )
         assert channel.tracker.wait_idle(timeout=0)
         # Cache I/O must not hold the publication lock used by execution/control.
         with ContextThreadPoolExecutor(max_workers=1) as executor:
             executor.submit(
-                lambda: output.publish(Packet(obj=OverallStop(stop_reason="control")))
+                lambda: output.publish(
+                    Packet(
+                        placement=Placement(turn_index=0),
+                        obj=OverallStop(stop_reason="control"),
+                    )
+                )
             ).result(timeout=1)
         channel.publish(AgentStartEvent(run_id="second"))
     finally:
@@ -361,15 +378,23 @@ def test_event_delivery_and_cache_writes_share_worker(
         channel.close()
         output.finish()
     assert list(output.reader) == [
-        Packet(obj=OverallStop(stop_reason="control")),
-        Packet(obj=OverallStop(stop_reason="second")),
+        Packet(
+            placement=Placement(turn_index=0), obj=OverallStop(stop_reason="control")
+        ),
+        Packet(
+            placement=Placement(turn_index=0), obj=OverallStop(stop_reason="second")
+        ),
     ]
     saved = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
     assert saved is not None and saved.done and not saved.gap
     assert len(workers) == 1
     assert get_ident() not in workers
     assert "".join(saved.blocks) == "".join(
-        get_json_line(Packet(obj=OverallStop(stop_reason=reason)).model_dump())
+        get_json_line(
+            Packet(
+                placement=Placement(turn_index=0), obj=OverallStop(stop_reason=reason)
+            ).model_dump()
+        )
         for reason in ("first", "control", "second")
     )
 
@@ -387,7 +412,12 @@ def test_delivery_finish_drains_accepted_agent_events() -> None:
         if event.run_id == "first":
             entered.set()
             assert release.wait(3)
-        output.publish(Packet(obj=OverallStop(stop_reason=event.run_id)))
+        output.publish(
+            Packet(
+                placement=Placement(turn_index=0),
+                obj=OverallStop(stop_reason=event.run_id),
+            )
+        )
 
     def finish() -> None:
         finishing.set()
@@ -412,7 +442,8 @@ def test_delivery_finish_drains_accepted_agent_events() -> None:
         channel.close()
         output.finish()
     packets = [
-        Packet(obj=OverallStop(stop_reason=reason)) for reason in ("first", "second")
+        Packet(placement=Placement(turn_index=0), obj=OverallStop(stop_reason=reason))
+        for reason in ("first", "second")
     ]
     assert list(output.reader) == packets
     saved = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)

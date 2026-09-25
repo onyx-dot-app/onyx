@@ -1,18 +1,24 @@
-/** Verify MCP execution through the public tool-item lifecycle. */
+/**
+ * Helpers for asserting whether an MCP tool actually runs when invoked from
+ * chat. Wraps the chat-stream capture + packet-count utilities with the
+ * forced-tool plumbing the MCP specs use.
+ */
 
 import { type Page, expect } from "@playwright/test";
 import {
-  getToolInvocationCounts,
+  getToolPacketCounts,
   sendMessageAndCaptureStreamPackets,
-  type ToolInvocationCounts,
 } from "@tests/e2e/utils/chatStream";
 
-/** Force a tool call and count distinct started and finished executions. */
+/**
+ * Send a chat message that forces the given MCP tool to be called and return
+ * the per-tool invocation packet counts (start / delta / debug).
+ */
 export async function sendForcedMcpToolCall(
   page: Page,
   toolName: string,
   forcedToolId?: number | null
-): Promise<ToolInvocationCounts> {
+): Promise<{ start: number; delta: number; debug: number }> {
   const argName = `playwright-${Date.now()}`;
   const prompt = [
     `Call the MCP tool "${toolName}" now.`,
@@ -32,18 +38,19 @@ export async function sendForcedMcpToolCall(
     waitForAiMessage: false,
   });
 
-  return getToolInvocationCounts(packets, toolName);
+  return getToolPacketCounts(packets, toolName);
 }
 
-/** Assert that each started invocation reaches a terminal state. */
+/** Assert the tool ran (start / delta / debug packets were all emitted). */
 export async function expectMcpToolInvoked(
   page: Page,
   toolName: string,
   forcedToolId?: number | null
 ): Promise<void> {
   const counts = await sendForcedMcpToolCall(page, toolName, forcedToolId);
-  expect(counts.started).toBeGreaterThan(0);
-  expect(counts.finished).toBe(counts.started);
+  expect(counts.start).toBeGreaterThan(0);
+  expect(counts.delta).toBeGreaterThan(0);
+  expect(counts.debug).toBeGreaterThan(0);
 }
 
 /** Assert the tool did NOT run (e.g. because it was disabled for the agent). */
@@ -53,6 +60,7 @@ export async function expectMcpToolNotInvoked(
   forcedToolId?: number | null
 ): Promise<void> {
   const counts = await sendForcedMcpToolCall(page, toolName, forcedToolId);
-  expect(counts.started).toBe(0);
-  expect(counts.finished).toBe(0);
+  expect(counts.start).toBe(0);
+  expect(counts.delta).toBe(0);
+  expect(counts.debug).toBe(0);
 }

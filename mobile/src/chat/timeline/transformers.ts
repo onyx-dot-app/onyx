@@ -1,12 +1,12 @@
-// GroupedItem → step → turn-group transforms + parallel detection. Port of web's transformers.
+// GroupedPacket → step → turn-group transforms + parallel detection. Port of web's transformers.
 
-import { GroupedItem } from "@/chat/messageProcessor";
+import { GroupedPacket } from "@/chat/messageProcessor";
 
 export interface TransformedStep {
   key: string;
   turnIndex: number;
   tabIndex: number;
-  items: GroupedItem["items"];
+  packets: GroupedPacket["packets"];
 }
 
 export interface TurnGroup {
@@ -15,17 +15,19 @@ export interface TurnGroup {
   isParallel: boolean;
 }
 
-export function transformItemGroup(group: GroupedItem): TransformedStep {
+export function transformPacketGroup(group: GroupedPacket): TransformedStep {
   return {
     key: `${group.turn_index}-${group.tab_index}`,
     turnIndex: group.turn_index,
     tabIndex: group.tab_index,
-    items: group.items,
+    packets: group.packets,
   };
 }
 
-export function transformItemGroups(groups: GroupedItem[]): TransformedStep[] {
-  return groups.map(transformItemGroup);
+export function transformPacketGroups(
+  groups: GroupedPacket[],
+): TransformedStep[] {
+  return groups.map(transformPacketGroup);
 }
 
 export function groupStepsByTurn(steps: TransformedStep[]): TurnGroup[] {

@@ -177,7 +177,7 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
         saved_roots.append(snapshot.run_id)
         get_chat_history_store(
             message_id=branch[1], chat_session_id=branch[0], persist_content=True
-        ).save_response(project_response(snapshot, response_id=branch[1], tool_ids={}))
+        ).save_response(project_response(snapshot, tool_ids={}))
 
     owner = store(branch)
     remote = store(
@@ -726,7 +726,7 @@ def test_owner_cleanup_failure_releases_local_control(
             raise ValueError("response save failed")
         get_chat_history_store(
             message_id=branch[1], chat_session_id=branch[0], persist_content=True
-        ).save_response(project_response(snapshot, response_id=branch[1], tool_ids={}))
+        ).save_response(project_response(snapshot, tool_ids={}))
 
     owner = store(
         branch, root_response=FakeRunStore(save=lambda run: save_root(run.snapshot()))

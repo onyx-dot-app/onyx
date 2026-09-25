@@ -3,10 +3,10 @@
 import { useMemo } from "react";
 
 import {
-  isCodingAgentItems,
-  isResearchAgentItems,
+  isCodingAgentPackets,
+  isResearchAgentPackets,
   stepSupportsCollapsedStreaming,
-} from "@/chat/timeline/itemHelpers";
+} from "@/chat/timeline/packetHelpers";
 import { TransformedStep, TurnGroup } from "@/chat/timeline/transformers";
 
 export interface TimelineMetrics {
@@ -33,13 +33,13 @@ export function useTimelineMetrics(
     const lastStep = lastTurnGroup?.steps[lastTurnGroup.steps.length - 1];
 
     const lastStepIsResearchAgent = lastStep
-      ? isResearchAgentItems(lastStep.items)
+      ? isResearchAgentPackets(lastStep.packets)
       : false;
     const lastStepIsCodingAgent = lastStep
-      ? isCodingAgentItems(lastStep.items)
+      ? isCodingAgentPackets(lastStep.packets)
       : false;
     const lastStepSupportsCollapsedStreaming = lastStep
-      ? stepSupportsCollapsedStreaming(lastStep.items)
+      ? stepSupportsCollapsedStreaming(lastStep.packets)
       : false;
 
     return {

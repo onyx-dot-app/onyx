@@ -1,6 +1,6 @@
 import { useLocale, useTranslations } from "next-intl";
 import { SvgSearch, SvgSearchMenu } from "@opal/icons";
-import { ResponseItem } from "@/app/app/services/streamingModels";
+import { SearchToolPacket } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
   RenderType,
@@ -8,10 +8,7 @@ import {
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { OnyxDocument } from "@/lib/search/types";
 import { ValidSources } from "@/lib/types";
-import {
-  SearchChipList,
-  SourceInfo,
-} from "@/app/app/message/messageComponents/timeline/renderers/search/SearchChipList";
+import { SearchChipList, SourceInfo } from "./SearchChipList";
 import {
   formatSearchHeader,
   constructCurrentSearchState,
@@ -20,7 +17,7 @@ import {
   INITIAL_RESULTS_TO_SHOW,
   RESULTS_PER_EXPANSION,
   getMetadataTags,
-} from "@/app/app/message/messageComponents/timeline/renderers/search/searchStateUtils";
+} from "./searchStateUtils";
 import Text from "@/refresh-components/texts/Text";
 
 const queryToSourceInfo = (query: string, index: number): SourceInfo => ({
@@ -54,8 +51,11 @@ const resultToSourceInfo = (doc: OnyxDocument): SourceInfo => ({
  *              No StepContainer wrapper. Used for parallel streaming preview.
  * - INLINE: Phase-based (queries -> results) for collapsed streaming view.
  */
-export const InternalSearchToolRenderer: MessageRenderer<ResponseItem, {}> = ({
-  items,
+export const InternalSearchToolRenderer: MessageRenderer<
+  SearchToolPacket,
+  {}
+> = ({
+  packets,
   onComplete,
   animate,
   stopPacketSeen,
@@ -64,7 +64,7 @@ export const InternalSearchToolRenderer: MessageRenderer<ResponseItem, {}> = ({
 }) => {
   const t = useTranslations("chat.messages.timeline");
   const locale = useLocale();
-  const searchState = constructCurrentSearchState(items);
+  const searchState = constructCurrentSearchState(packets);
   const { queries, results, sourceFilters, timeFilter, isComplete } =
     searchState;
 
@@ -81,7 +81,7 @@ export const InternalSearchToolRenderer: MessageRenderer<ResponseItem, {}> = ({
     locale
   );
 
-  if (queries.length === 0 && !hasResults && !isComplete) {
+  if (queries.length === 0) {
     return children([
       {
         icon: SvgSearchMenu,
@@ -94,7 +94,7 @@ export const InternalSearchToolRenderer: MessageRenderer<ResponseItem, {}> = ({
   }
 
   // HIGHLIGHT mode: header embedded in content, no StepContainer
-  if (isHighlight && hasResults) {
+  if (isHighlight) {
     return children([
       {
         icon: null,
@@ -136,7 +136,7 @@ export const InternalSearchToolRenderer: MessageRenderer<ResponseItem, {}> = ({
   }
 
   // INLINE mode: dynamic phase-based content for collapsed streaming view
-  if (isInline || isHighlight) {
+  if (isInline) {
     // Querying phase: show queries
     if (!hasResults) {
       return children([
@@ -219,7 +219,7 @@ export const InternalSearchToolRenderer: MessageRenderer<ResponseItem, {}> = ({
             />
           )}
 
-          {(results.length > 0 || queries.length > 0 || isComplete) && (
+          {(results.length > 0 || queries.length > 0) && (
             <>
               {!isCompact && (
                 <Text as="p" mainUiMuted text04>

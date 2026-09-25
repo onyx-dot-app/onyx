@@ -124,18 +124,6 @@ func (v *viewport) startAgent() {
 	v.entries = append(v.entries, chatEntry{kind: entryInfo, rendered: ""})
 }
 
-func (v *viewport) setResponseText(text string) {
-	if !strings.HasPrefix(text, v.streamBuf) {
-		v.streamBuf = text
-		v.streamRendered = ""
-		v.lastRenderLen = 0
-		v.lastRenderTime = time.Time{}
-		v.appendToken("")
-		return
-	}
-	v.appendToken(strings.TrimPrefix(text, v.streamBuf))
-}
-
 func (v *viewport) appendToken(token string) {
 	v.streamBuf += sanitize.Terminal(token)
 

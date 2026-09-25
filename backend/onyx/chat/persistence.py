@@ -212,7 +212,6 @@ class ChatResponsePersistence(RunStore):
             )
         return project_response(
             snapshot,
-            response_id=self.message_id,
             tool_ids=self.tool_ids,
             initial_citations=self.initial_citations,
             registrations=self.coordinator.registrations() if self.coordinator else (),

@@ -1,11 +1,16 @@
-import { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
-import { ResponseItem } from "@/app/app/services/streamingModels";
 import {
-  MessageRenderer,
-  RenderType,
-} from "@/app/app/message/messageComponents/interfaces";
-import { buildImgUrl } from "@/app/app/components/files/images/utils";
+  PacketType,
+  CustomToolPacket,
+  CustomToolStart,
+  CustomToolArgs,
+  CustomToolDelta,
+  CustomToolErrorInfo,
+  SectionEnd,
+} from "../../../services/streamingModels";
+import { MessageRenderer, RenderType } from "../interfaces";
+import { buildImgUrl } from "../../../components/files/images/utils";
 import Text from "@/refresh-components/texts/Text";
 import { SvgActions, SvgDownload, SvgExternalLink } from "@opal/icons";
 import { CodeBlock } from "@/app/app/message/CodeBlock";
@@ -13,11 +18,6 @@ import hljs from "highlight.js/lib/core";
 import json from "highlight.js/lib/languages/json";
 import FadingEdgeContainer from "@/refresh-components/FadingEdgeContainer";
 import { IoBlockLabel } from "@/app/app/message/messageComponents/IoBlockLabel";
-import {
-  firstTool,
-  isComplete as itemsComplete,
-  toolMetadata,
-} from "@/app/app/services/responseItems";
 
 // Lazy registration for hljs JSON language
 function ensureHljsRegistered() {
@@ -52,26 +52,34 @@ function HighlightedJsonCode({ code }: HighlightedJsonCodeProps) {
 }
 
 function constructCustomToolState(
-  items: ResponseItem[],
+  packets: CustomToolPacket[],
   fallbackToolName: string
 ) {
-  const tool = firstTool(items);
-  const result = toolMetadata(items, "custom_tool_result").at(-1);
-  const toolName = tool?.name || result?.tool_name || fallbackToolName;
-  const toolArgs = tool?.arguments ?? null;
-  const responseType = result?.response_type ?? (tool?.output ? "text" : null);
-  const data = result?.tool_result ?? tool?.output;
-  const fileValue =
-    data && typeof data === "object" && !Array.isArray(data)
-      ? data.file_ids
-      : null;
-  const fileIds = Array.isArray(fileValue)
-    ? fileValue.filter((id): id is string => typeof id === "string")
-    : null;
-  const error = result?.error ?? null;
+  const toolStart = packets.find(
+    (p) => p.obj.type === PacketType.CUSTOM_TOOL_START
+  )?.obj as CustomToolStart | null;
+  const toolDeltas = packets
+    .filter((p) => p.obj.type === PacketType.CUSTOM_TOOL_DELTA)
+    .map((p) => p.obj as CustomToolDelta);
+  const toolEnd = packets.find(
+    (p) =>
+      p.obj.type === PacketType.SECTION_END || p.obj.type === PacketType.ERROR
+  )?.obj as SectionEnd | null;
 
-  const isRunning = !itemsComplete(items);
-  const isComplete = itemsComplete(items);
+  const toolName =
+    toolStart?.tool_name || toolDeltas[0]?.tool_name || fallbackToolName;
+  const toolArgsPacket = packets.find(
+    (p) => p.obj.type === PacketType.CUSTOM_TOOL_ARGS
+  )?.obj as CustomToolArgs | null;
+  const toolArgs = toolArgsPacket?.tool_args ?? null;
+  const latestDelta = toolDeltas[toolDeltas.length - 1] || null;
+  const responseType = latestDelta?.response_type || null;
+  const data = latestDelta?.data;
+  const fileIds = latestDelta?.file_ids || null;
+  const error = latestDelta?.error || null;
+
+  const isRunning = Boolean(toolStart && !toolEnd);
+  const isComplete = Boolean(toolStart && toolEnd);
 
   return {
     toolName,
@@ -80,14 +88,13 @@ function constructCustomToolState(
     data,
     fileIds,
     error,
-    hasError: tool?.status === "error",
     isRunning,
     isComplete,
   };
 }
 
-export const CustomToolRenderer: MessageRenderer<ResponseItem, {}> = ({
-  items,
+export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
+  packets,
   onComplete,
   renderType,
   children,
@@ -100,10 +107,9 @@ export const CustomToolRenderer: MessageRenderer<ResponseItem, {}> = ({
     data,
     fileIds,
     error,
-    hasError,
     isRunning,
     isComplete,
-  } = constructCustomToolState(items, t("customTool.fallbackName.label"));
+  } = constructCustomToolState(packets, t("customTool.fallbackName.label"));
 
   useEffect(() => {
     if (isComplete) {
@@ -124,7 +130,6 @@ export const CustomToolRenderer: MessageRenderer<ResponseItem, {}> = ({
               statusCode: error.status_code,
             });
       }
-      if (hasError) return t("errorBanner.toolError.title");
       if (responseType === "image")
         return t("customTool.imagesStatus.text", { toolName });
       if (responseType === "csv")
@@ -133,7 +138,7 @@ export const CustomToolRenderer: MessageRenderer<ResponseItem, {}> = ({
     }
     if (isRunning) return t("customTool.runningStatus.text", { toolName });
     return null;
-  }, [toolName, responseType, error, hasError, isComplete, isRunning, t]);
+  }, [toolName, responseType, error, isComplete, isRunning, t]);
 
   const icon = SvgActions;
 
@@ -260,7 +265,8 @@ export const CustomToolRenderer: MessageRenderer<ResponseItem, {}> = ({
     [toolArgsJson, dataJson, data, fileIds, error, isRunning, t]
   );
 
-  if (hasError || error?.is_auth_error) {
+  // Auth error: always render FULL with error surface
+  if (error?.is_auth_error) {
     return children([
       {
         icon,

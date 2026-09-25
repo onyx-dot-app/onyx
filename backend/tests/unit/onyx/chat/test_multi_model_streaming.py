@@ -67,12 +67,12 @@ from onyx.llm.models import (
 )
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.models import MessageResponseIDInfo, SendMessageRequest
+from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     ChatHeartbeat,
-    ItemUpdate,
     OverallStop,
     Packet,
-    ReasoningItem,
+    ReasoningStart,
 )
 from onyx.utils.threadpool_concurrency import (
     ContextThreadPoolExecutor,
@@ -425,6 +425,7 @@ class TestRunModels:
         def emit_stop(**kwargs: Any) -> None:
             kwargs["emitter"].emit(
                 Packet(
+                    placement=Placement(turn_index=0),
                     obj=OverallStop(stop_reason="complete"),
                 )
             )
@@ -486,7 +487,8 @@ class TestRunModels:
         def emit_one(**kwargs: Any) -> None:
             kwargs["emitter"].emit(
                 Packet(
-                    obj=ItemUpdate(item=ReasoningItem()),
+                    placement=Placement(turn_index=0),
+                    obj=ReasoningStart(),
                 )
             )
 
@@ -504,12 +506,10 @@ class TestRunModels:
         reasoning = [
             p
             for p in packets
-            if isinstance(p, Packet)
-            and isinstance(p.obj, ItemUpdate)
-            and isinstance(p.obj.item, ReasoningItem)
+            if isinstance(p, Packet) and isinstance(p.obj, ReasoningStart)
         ]
         assert len(reasoning) == 1
-        assert reasoning[0].model_index == 0
+        assert reasoning[0].placement.model_index == 0
 
     def test_n2_each_model_packet_tagged_with_its_index(self) -> None:
         """Multi-model path: packets from model 0 get index=0, model 1 gets index=1."""
@@ -519,7 +519,8 @@ class TestRunModels:
             emitter = kwargs["emitter"]
             emitter.emit(
                 Packet(
-                    obj=ItemUpdate(item=ReasoningItem()),
+                    placement=Placement(turn_index=0),
+                    obj=ReasoningStart(),
                 )
             )
 
@@ -537,12 +538,10 @@ class TestRunModels:
         reasoning = [
             p
             for p in packets
-            if isinstance(p, Packet)
-            and isinstance(p.obj, ItemUpdate)
-            and isinstance(p.obj.item, ReasoningItem)
+            if isinstance(p, Packet) and isinstance(p.obj, ReasoningStart)
         ]
         assert len(reasoning) == 2
-        indices = {p.model_index for p in reasoning}
+        indices = {p.placement.model_index for p in reasoning}
         assert indices == {0, 1}
 
     def test_preparation_error_yields_streaming_error(self) -> None:
@@ -635,7 +634,8 @@ class TestRunModels:
                 raise RuntimeError("model 0 failed")
             kwargs["emitter"].emit(
                 Packet(
-                    obj=ItemUpdate(item=ReasoningItem()),
+                    placement=Placement(turn_index=0),
+                    obj=ReasoningStart(),
                 )
             )
 
@@ -658,12 +658,10 @@ class TestRunModels:
         reasoning = [
             p
             for p in packets
-            if isinstance(p, Packet)
-            and isinstance(p.obj, ItemUpdate)
-            and isinstance(p.obj.item, ReasoningItem)
+            if isinstance(p, Packet) and isinstance(p.obj, ReasoningStart)
         ]
         assert len(reasoning) == 1
-        assert reasoning[0].model_index == 1
+        assert reasoning[0].placement.model_index == 1
 
     def test_cancellation_yields_user_cancelled_stop(self) -> None:
         """A cached Stop request ends the turn with user_cancelled."""
@@ -726,7 +724,8 @@ class TestRunModels:
                     signal.check()
                     kwargs["emitter"].emit(
                         Packet(
-                            obj=ItemUpdate(item=ReasoningItem()),
+                            placement=Placement(turn_index=0),
+                            obj=ReasoningStart(),
                         )
                     )
                 raise AssertionError("Stop did not reach the model worker")
@@ -860,7 +859,8 @@ class TestRunModels:
             emitter = kwargs["emitter"]
             emitter.emit(
                 Packet(
-                    obj=ItemUpdate(item=ReasoningItem()),
+                    placement=Placement(turn_index=0),
+                    obj=ReasoningStart(),
                 )
             )
             client_gone.wait(timeout=5)
@@ -902,7 +902,8 @@ class TestRunModels:
             emitter = kwargs["emitter"]
             emitter.emit(
                 Packet(
-                    obj=ItemUpdate(item=ReasoningItem()),
+                    placement=Placement(turn_index=0),
+                    obj=ReasoningStart(),
                 )
             )
             client_gone.wait(timeout=5)
@@ -955,7 +956,8 @@ class TestRunModels:
             # immediately — no blocking.  The worker will be done in microseconds.
             kwargs["emitter"].emit(
                 Packet(
-                    obj=ItemUpdate(item=ReasoningItem()),
+                    placement=Placement(turn_index=0),
+                    obj=ReasoningStart(),
                 )
             )
 
@@ -997,7 +999,8 @@ class TestRunModels:
             llm = kwargs["llm"]
             emitter.emit(
                 Packet(
-                    obj=ItemUpdate(item=ReasoningItem()),
+                    placement=Placement(turn_index=0),
+                    obj=ReasoningStart(),
                 )
             )
             if llm is setup.responses[1].llm:
@@ -1051,13 +1054,15 @@ class TestRunModels:
         def emit_then_block(**kwargs: Any) -> None:
             kwargs["emitter"].emit(
                 Packet(
-                    obj=ItemUpdate(item=ReasoningItem()),
+                    placement=Placement(turn_index=0),
+                    obj=ReasoningStart(),
                 )
             )
             client_gone.wait(timeout=5)
             kwargs["emitter"].emit(
                 Packet(
-                    obj=ItemUpdate(item=ReasoningItem()),
+                    placement=Placement(turn_index=0),
+                    obj=ReasoningStart(),
                 )
             )
 
@@ -1096,7 +1101,7 @@ class TestRunModels:
         )
         # Both packets reached the buffer — including the one emitted after the
         # client was gone.
-        assert buffered.count("item_update") == 2
+        assert buffered.count("reasoning_start") == 2
 
     def test_stop_preserves_failed_and_cancelled_model_snapshots(self) -> None:
 
@@ -1489,10 +1494,12 @@ def test_overflowed_stream_storage_finishes_retention_cleanup() -> None:
         _signal: CancellationSignal,
         _filters: bool,
     ) -> None:
-        emitter.emit(Packet(obj=ItemUpdate(item=ReasoningItem())))
+        emitter.emit(Packet(placement=Placement(turn_index=0), obj=ReasoningStart()))
         assert writing.wait(2)
         for _ in range(10):
-            emitter.emit(Packet(obj=ItemUpdate(item=ReasoningItem())))
+            emitter.emit(
+                Packet(placement=Placement(turn_index=0), obj=ReasoningStart())
+            )
         overflowed.set()
 
     with (
@@ -1540,7 +1547,7 @@ def test_cache_failure_does_not_finalize_active_execution() -> None:
         _signal: CancellationSignal,
         _filters: bool,
     ) -> None:
-        emitter.emit(Packet(obj=ItemUpdate(item=ReasoningItem())))
+        emitter.emit(Packet(placement=Placement(turn_index=0), obj=ReasoningStart()))
         assert release.wait(5)
 
     buffer.append_line.side_effect = fail_cache

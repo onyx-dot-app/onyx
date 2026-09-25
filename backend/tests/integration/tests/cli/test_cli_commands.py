@@ -213,18 +213,13 @@ def test_ask_json(
     event_types = [e["type"] for e in events]
 
     assert "session_created" in event_types
-    assert "item_update" in event_types
+    assert "message_delta" in event_types
     assert "stop" in event_types
 
-    answers = [
-        event["event"]["item"]["text"]
-        for event in events
-        if event["type"] == "item_update"
-        and event["event"]["item"]["kind"] == "text"
-        and event["event"]["item"].get("purpose") == "answer"
-        and event["event"]["item"].get("status") == "complete"
-    ]
-    assert any(answers), "expected a complete answer item"
+    # Verify message_delta events have content
+    deltas = [e for e in events if e["type"] == "message_delta"]
+    content = "".join(e["event"]["content"] for e in deltas)
+    assert len(content) > 0, "expected non-empty message content"
 
 
 def test_ask_quiet(

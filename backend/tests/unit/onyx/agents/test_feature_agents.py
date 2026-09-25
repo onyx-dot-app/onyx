@@ -58,7 +58,13 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
-from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
+from onyx.server.query_and_chat.streaming_models import (
+    AgentResponseDelta,
+    DeepResearchPlanDelta,
+    IntermediateReportDelta,
+    OverallStop,
+    Packet,
+)
 from onyx.tools.interface import ToolContext
 from onyx.tools.tool_implementations.bash.bash_tool import BashTool
 from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
@@ -170,9 +176,7 @@ def test_research_think_steps_are_bounded_and_report_is_generated(render: bool) 
         128000,
     )
     presentation = (
-        ResponsePresenter(Emitter(queue.Queue[Packet]().put_nowait, response_id=42))
-        if render
-        else None
+        ResponsePresenter(Emitter(queue.Queue[Packet]().put_nowait)) if render else None
     )
     feature = ResearchAgent([], llm, len, None, "", ReasoningEffort.LOW)
     result = run_agent(
@@ -293,7 +297,6 @@ def test_deep_research_composes_plan_child_and_report() -> None:
     coordinator = AgentCoordinator()
     project = partial(
         project_response,
-        response_id=42,
         tool_ids={RESEARCH_AGENT_TOOL_NAME: 7},
     )
     run_agent(
@@ -301,7 +304,7 @@ def test_deep_research_composes_plan_child_and_report() -> None:
         runs=runs,
         coordinator=coordinator,
         messages=[UserMessage(content="Research")],
-        listener=ResponsePresenter(Emitter(output.put_nowait, response_id=42)).consume,
+        listener=ResponsePresenter(Emitter(output.put_nowait)).consume,
         max_steps=8,
     )
     assert (
@@ -332,6 +335,32 @@ def test_deep_research_composes_plan_child_and_report() -> None:
     assert snapshot.response.messages[-1].text == "Final report"
     assert len(snapshot.response.child_runs) == 1
     assert snapshot.response.child_runs[0].messages[-1].text == "Child report"
+    packets = list(output.queue)
+    assert (
+        "".join(
+            packet.obj.content
+            for packet in packets
+            if isinstance(packet.obj, DeepResearchPlanDelta)
+        )
+        == "Plan"
+    )
+    assert (
+        "".join(
+            packet.obj.content
+            for packet in packets
+            if isinstance(packet.obj, IntermediateReportDelta)
+        )
+        == "Child report"
+    )
+    assert (
+        "".join(
+            packet.obj.content
+            for packet in packets
+            if isinstance(packet.obj, AgentResponseDelta)
+            and packet.placement.sub_turn_index is None
+        )
+        == "Final report"
+    )
     assert any(isinstance(item.obj, OverallStop) for item in list(output.queue))
 
 
@@ -367,7 +396,6 @@ def test_deep_research_prelude_cancellation_keeps_partial_output(
     coordinator = AgentCoordinator()
     project = partial(
         project_response,
-        response_id=42,
         tool_ids={RESEARCH_AGENT_TOOL_NAME: 7},
     )
     with pytest.raises(AgentCancelled):
@@ -587,7 +615,6 @@ def test_research_preserves_citation_identity_across_completion_and_call_order(
     coordinator = AgentCoordinator()
     project = partial(
         project_response,
-        response_id=42,
         tool_ids={RESEARCH_AGENT_TOOL_NAME: 7},
     )
     final_events: list[ToolEndEvent] = []

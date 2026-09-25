@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import ReactMarkdown, { Components } from "react-markdown";
 import type { PluggableList } from "unified";
@@ -8,18 +8,18 @@ import rehypeHighlight from "rehype-highlight";
 import { useHighlightLanguages } from "@/hooks/useHighlightLanguages";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
+
 import { useTypewriter } from "@/hooks/useTypewriter";
 import Text from "@/refresh-components/texts/Text";
-import { StopReason, ResponseItem } from "@/app/app/services/streamingModels";
 import {
-  MessageRenderer,
-  FullChatState,
-} from "@/app/app/message/messageComponents/interfaces";
-import {
-  processContent,
-  ScrollableTable,
-} from "@/app/app/message/messageComponents/markdownUtils";
-import { BlinkingBar } from "@/app/app/message/BlinkingBar";
+  ChatPacket,
+  PacketType,
+  StopReason,
+} from "../../../services/streamingModels";
+import { MessageRenderer, FullChatState } from "../interfaces";
+import { isFinalAnswerComplete } from "../../../services/packetUtils";
+import { processContent, ScrollableTable } from "../markdownUtils";
+import { BlinkingBar } from "../../BlinkingBar";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import {
   MemoizedAnchor,
@@ -34,10 +34,6 @@ import { rehypeDirection } from "@/lib/rehypeDirection";
 import { cn } from "@opal/utils";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
-import {
-  isComplete as itemsComplete,
-  textContent,
-} from "@/app/app/services/responseItems";
 
 /** Maps a visible-char count to a markdown index (skips formatting chars,
  *  extends to word boundary). Used by the voice-sync reveal path only. */
@@ -92,10 +88,10 @@ const STREAMING_REHYPE_PLUGINS: PluggableList = [rehypeKatex, rehypeDirection];
 const FULL_REMARK_PLUGINS: PluggableList = STREAMING_REMARK_PLUGINS;
 
 export const MessageTextRenderer: MessageRenderer<
-  ResponseItem,
+  ChatPacket,
   FullChatState
 > = ({
-  items,
+  packets,
   state,
   messageNodeId,
   hasTimelineThinking,
@@ -134,11 +130,17 @@ export const MessageTextRenderer: MessageRenderer<
     isAwaitingAutoPlaybackStart,
   } = useVoiceMode();
 
-  const firstText = items.find((item) => item.content.kind === "text")?.content;
-  const fullContent = textContent(
-    items,
-    firstText?.kind === "text" ? firstText.purpose : "answer"
-  );
+  const fullContent = packets
+    .map((packet) => {
+      if (
+        packet.obj.type === PacketType.MESSAGE_DELTA ||
+        packet.obj.type === PacketType.MESSAGE_START
+      ) {
+        return packet.obj.content;
+      }
+      return "";
+    })
+    .join("");
 
   const shouldUseAutoPlaybackSync =
     autoPlayback &&
@@ -263,7 +265,7 @@ export const MessageTextRenderer: MessageRenderer<
     stopReason !== StopReason.USER_CANCELLED &&
     smoothStreamingEnabled;
 
-  const isStreamFinished = itemsComplete(items);
+  const isStreamFinished = isFinalAnswerComplete(packets);
 
   const { displayed: displayedContent, isDraining } = useTypewriter(
     content,
@@ -293,7 +295,11 @@ export const MessageTextRenderer: MessageRenderer<
     [highlightLanguages]
   );
 
-  // Restored output must not release queued messages for a newer response.
+  // Capture `animate` at mount. `animate = !stopPacketSeen`, which only
+  // ever goes true→false during a renderer's lifetime, so its mount-time
+  // value distinguishes "actively-streaming renderer" (animate=true) from
+  // "historical mount" (animate=false). Used to gate the queue-release
+  // write below.
   const wasEverAnimatingRef = useRef(animate);
 
   // Bind sessionId at mount so a navigation while the typewriter is still
@@ -449,7 +455,6 @@ export const MessageTextRenderer: MessageRenderer<
     {
       icon: null,
       status: null,
-      timelineLayout: "content",
       content:
         shouldShowThinkingPlaceholder || shouldShowSpeechWarmupIndicator ? (
           <Text as="span" secondaryBody text04 className="italic">

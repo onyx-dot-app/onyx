@@ -1,12 +1,16 @@
 import { useMemo } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { TurnGroup } from "@/app/app/message/messageComponents/timeline/transformers";
-import { StopReason } from "@/app/app/services/streamingModels";
+import { TurnGroup } from "../transformers";
+import {
+  PacketType,
+  SearchToolPacket,
+  StopReason,
+  CustomToolStart,
+} from "@/app/app/services/streamingModels";
 import {
   formatSearchHeader,
   constructCurrentSearchState,
 } from "@/app/app/message/messageComponents/timeline/renderers/search/searchStateUtils";
-import { displayType, firstTool } from "@/app/app/services/responseItems";
 
 export interface TimelineHeaderResult {
   headerText: string;
@@ -16,7 +20,7 @@ export interface TimelineHeaderResult {
 
 /**
  * Hook that determines timeline header state based on current activity.
- * Returns header text, whether there are items, and whether user stopped.
+ * Returns header text, whether there are packets, and whether user stopped.
  */
 export function useTimelineHeader(
   turnGroups: TurnGroup[],
@@ -28,12 +32,10 @@ export function useTimelineHeader(
 
   return useMemo(() => {
     const hasPackets = turnGroups.length > 0;
-    const userStopped =
-      stopReason === StopReason.USER_CANCELLED ||
-      stopReason === StopReason.INTERRUPTED;
+    const userStopped = stopReason === StopReason.USER_CANCELLED;
     const thinkingHeader = t("header.thinkingEllipsis.label");
 
-    // If generating image with no tool items, show image generation header
+    // If generating image with no tool packets, show image generation header
     if (isGeneratingImage && !hasPackets) {
       return {
         headerText: t("header.generatingImage.label"),
@@ -53,20 +55,22 @@ export function useTimelineHeader(
     }
 
     const currentStep = currentTurn.steps[0];
-    if (!currentStep?.items?.length) {
+    if (!currentStep?.packets?.length) {
       return { headerText: thinkingHeader, hasPackets, userStopped };
     }
 
-    const firstPacket = currentStep.items[0];
+    const firstPacket = currentStep.packets[0];
     if (!firstPacket) {
       return { headerText: thinkingHeader, hasPackets, userStopped };
     }
 
-    const packetType = displayType(currentStep.items);
+    const packetType = firstPacket.obj.type;
 
     // Determine header based on packet type
-    if (packetType === "internal_search" || packetType === "web_search") {
-      const searchState = constructCurrentSearchState(currentStep.items);
+    if (packetType === PacketType.SEARCH_TOOL_START) {
+      const searchState = constructCurrentSearchState(
+        currentStep.packets as SearchToolPacket[]
+      );
       let headerText: string;
       if (searchState.hasResults && !searchState.isInternetSearch) {
         headerText = t("header.reading.label");
@@ -83,11 +87,11 @@ export function useTimelineHeader(
       return { headerText, hasPackets, userStopped };
     }
 
-    if (packetType === "open_url") {
+    if (packetType === PacketType.FETCH_TOOL_START) {
       return { headerText: t("header.reading.label"), hasPackets, userStopped };
     }
 
-    if (packetType === "run_python") {
+    if (packetType === PacketType.PYTHON_TOOL_START) {
       return {
         headerText: t("header.executingCode.label"),
         hasPackets,
@@ -95,7 +99,7 @@ export function useTimelineHeader(
       };
     }
 
-    if (packetType === "generate_image") {
+    if (packetType === PacketType.IMAGE_GENERATION_TOOL_START) {
       return {
         headerText: t("header.generatingImages.label"),
         hasPackets,
@@ -103,7 +107,7 @@ export function useTimelineHeader(
       };
     }
 
-    if (packetType === "read_file") {
+    if (packetType === PacketType.FILE_READER_START) {
       return {
         headerText: t("header.readingFile.label"),
         hasPackets,
@@ -111,8 +115,8 @@ export function useTimelineHeader(
       };
     }
 
-    if (packetType === "custom") {
-      const toolName = firstTool(currentStep.items)?.name ?? "";
+    if (packetType === PacketType.CUSTOM_TOOL_START) {
+      const toolName = (firstPacket.obj as CustomToolStart).tool_name;
       return {
         headerText: toolName
           ? t("header.executingNamedTool.label", { toolName })
@@ -122,7 +126,10 @@ export function useTimelineHeader(
       };
     }
 
-    if (packetType === "add_memory") {
+    if (
+      packetType === PacketType.MEMORY_TOOL_START ||
+      packetType === PacketType.MEMORY_TOOL_NO_ACCESS
+    ) {
       return {
         headerText: t("header.updatingMemory.label"),
         hasPackets,
@@ -130,7 +137,7 @@ export function useTimelineHeader(
       };
     }
 
-    if (packetType === "reasoning") {
+    if (packetType === PacketType.REASONING_START) {
       return {
         headerText: t("header.thinking.label"),
         hasPackets,
@@ -138,7 +145,7 @@ export function useTimelineHeader(
       };
     }
 
-    if (packetType === "plan") {
+    if (packetType === PacketType.DEEP_RESEARCH_PLAN_START) {
       return {
         headerText: t("header.generatingPlan.label"),
         hasPackets,
@@ -146,7 +153,7 @@ export function useTimelineHeader(
       };
     }
 
-    if (packetType === "research_agent") {
+    if (packetType === PacketType.RESEARCH_AGENT_START) {
       return {
         headerText: t("header.researching.label"),
         hasPackets,

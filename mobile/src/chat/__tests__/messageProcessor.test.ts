@@ -1,7 +1,5 @@
 import { describe, expect, it } from "@jest/globals";
 
-import { Packet } from "@/chat/streamingModels";
-
 import { createInitialState, processPackets } from "@/chat/messageProcessor";
 
 import {
@@ -13,53 +11,6 @@ import {
 } from "./fixtures";
 
 describe("messageProcessor", () => {
-  it("retains reclassified commentary outside the tool timeline", () => {
-    const initial: Packet = {
-      identity: {
-        response_id: 1,
-        run_id: "root",
-        message_id: "root:0",
-        part_id: "answer",
-      },
-      obj: {
-        type: "item_update",
-        item: {
-          kind: "text",
-          purpose: "answer",
-          text: "Checking sources",
-          status: "running",
-          documents: [],
-          citations: [],
-        },
-      },
-    };
-    const state = processPackets(createInitialState(1), [initial]);
-    expect(state.potentialDisplayGroups).toHaveLength(1);
-    const commentary: Packet = {
-      identity: initial.identity,
-      obj: {
-        type: "item_update",
-        item: {
-          kind: "text",
-          purpose: "commentary",
-          text: "Checking sources",
-          status: "complete",
-          documents: [],
-          citations: [],
-        },
-      },
-    };
-    processPackets(state, [initial, commentary]);
-    expect(state.potentialDisplayGroups).toHaveLength(0);
-    expect(state.toolGroups).toHaveLength(0);
-    expect(state.narrationGroups[0]?.items[0]?.content).toMatchObject({
-      text: "Checking sources",
-      purpose: "commentary",
-    });
-    const saved = processPackets(createInitialState(1), [commentary]);
-    expect(saved.narrationGroups).toEqual(state.narrationGroups);
-  });
-
   it("builds citationMap and deduped citations in first-cite order", () => {
     let state = createInitialState(1);
     state = processPackets(state, [
@@ -74,7 +25,7 @@ describe("messageProcessor", () => {
     ]);
   });
 
-  it("collects documents from tool metadata and response text", () => {
+  it("upserts documentMap from both document packet types and final_documents", () => {
     let state = createInitialState(1);
     state = processPackets(state, [
       makeSearchDocsPacket([makeSearchDoc({ document_id: "d1" })], "search"),

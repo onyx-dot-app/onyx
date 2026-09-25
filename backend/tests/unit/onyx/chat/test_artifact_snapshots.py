@@ -101,9 +101,7 @@ def test_stop_preserves_accepted_file_and_unfinished_parent(
     coordinator = AgentCoordinator() if child_run else None
 
     def exercise() -> Run:
-        presenter = ResponsePresenter(
-            Emitter(Queue[Packet]().put_nowait, response_id=42)
-        )
+        presenter = ResponsePresenter(Emitter(Queue[Packet]().put_nowait))
 
         def observe(event: AgentEvent) -> None:
             on_event(event)
@@ -130,7 +128,6 @@ def test_stop_preserves_accepted_file_and_unfinished_parent(
     for _ in range(2):
         snapshot = project_response(
             run.snapshot(),
-            response_id=42,
             tool_ids={"write": 1, "wait": 2, "research": 7},
             registrations=coordinator.registrations() if coordinator else (),
         )

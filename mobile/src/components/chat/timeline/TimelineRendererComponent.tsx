@@ -1,5 +1,5 @@
 // Owns one step's expand/collapse state, derives its RenderType, dispatches via `findRenderer`, and
-// hands the enhanced results to `children`. Drops web's `isHover`; items are already `ResponseItem` at the
+// hands the enhanced results to `children`. Drops web's `isHover`; packets are already `Packet` at the
 // dispatch boundary, so no `as any` is needed.
 import { memo, useCallback, useState, type ReactElement } from "react";
 
@@ -11,10 +11,10 @@ import {
   type RendererResult,
   type TimelineRendererResult,
 } from "@/components/chat/renderers/timelineContract";
-import type { ResponseItem, StopReason } from "@/chat/streamingModels";
+import type { Packet, StopReason } from "@/chat/streamingModels";
 
 export interface TimelineRendererComponentProps {
-  items: ResponseItem[];
+  packets: Packet[];
   chatState: FullChatState;
   animate: boolean;
   stopPacketSeen: boolean;
@@ -35,7 +35,7 @@ function arePropsEqual(
   next: TimelineRendererComponentProps,
 ): boolean {
   return (
-    prev.items === next.items &&
+    prev.packets === next.packets &&
     prev.stopPacketSeen === next.stopPacketSeen &&
     prev.stopReason === next.stopReason &&
     prev.animate === next.animate &&
@@ -47,7 +47,7 @@ function arePropsEqual(
 
 export const TimelineRendererComponent = memo(
   function TimelineRendererComponent({
-    items,
+    packets,
     chatState,
     animate,
     stopPacketSeen,
@@ -59,7 +59,7 @@ export const TimelineRendererComponent = memo(
   }: TimelineRendererComponentProps) {
     const [isExpanded, setIsExpanded] = useState(defaultExpanded);
     const handleToggle = useCallback(() => setIsExpanded((prev) => !prev), []);
-    const RendererFn = findRenderer(items);
+    const RendererFn = findRenderer(packets);
     const renderType =
       renderTypeOverride ?? (isExpanded ? RenderType.FULL : RenderType.COMPACT);
 
@@ -90,7 +90,7 @@ export const TimelineRendererComponent = memo(
 
     return (
       <RendererFn
-        items={items}
+        packets={packets}
         state={chatState}
         onComplete={() => {}}
         animate={animate}

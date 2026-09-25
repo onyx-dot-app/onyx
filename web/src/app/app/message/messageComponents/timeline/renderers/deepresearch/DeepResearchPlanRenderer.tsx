@@ -1,7 +1,11 @@
-import { useCallback } from "react";
+import React, { useCallback, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { SvgCircle } from "@opal/icons";
-import { ResponseItem } from "@/app/app/services/streamingModels";
+
+import {
+  DeepResearchPlanPacket,
+  PacketType,
+} from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
   FullChatState,
@@ -12,22 +16,30 @@ import {
   mutedTextMarkdownComponents,
   collapsedMarkdownComponents,
 } from "@/app/app/message/messageComponents/timeline/renderers/sharedMarkdownComponents";
-import {
-  isComplete as itemsComplete,
-  textContent,
-} from "@/app/app/services/responseItems";
 
 /**
- * Renderer for deep research plan items.
+ * Renderer for deep research plan packets.
  * Streams the research plan content with a list icon.
  */
 export const DeepResearchPlanRenderer: MessageRenderer<
-  ResponseItem,
+  DeepResearchPlanPacket,
   FullChatState
-> = ({ items, stopPacketSeen, children }) => {
+> = ({ packets, stopPacketSeen, children }) => {
   const t = useTranslations("chat.messages.timeline");
-  const isComplete = itemsComplete(items);
-  const fullContent = textContent(items, "plan");
+  const isComplete = packets.some((p) => p.obj.type === PacketType.SECTION_END);
+
+  const fullContent = useMemo(
+    () =>
+      packets
+        .map((packet) => {
+          if (packet.obj.type === PacketType.DEEP_RESEARCH_PLAN_DELTA) {
+            return packet.obj.content;
+          }
+          return "";
+        })
+        .join(""),
+    [packets]
+  );
 
   const statusText = isComplete
     ? t("deepResearchPlan.generated.status")

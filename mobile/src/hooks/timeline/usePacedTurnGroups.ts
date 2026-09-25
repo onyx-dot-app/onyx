@@ -8,20 +8,39 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { GroupedItem } from "@/chat/messageProcessor";
-
+import { GroupedPacket } from "@/chat/messageProcessor";
+import { PacketType } from "@/chat/streamingModels";
 import { TransformedStep, TurnGroup } from "@/chat/timeline/transformers";
 
 const PACING_DELAY_MS = 200;
 
-function getStepKind(step: TransformedStep): string | null {
-  const content = step.items[0]?.content;
-  return content?.kind === "tool" ? content.name : (content?.kind ?? null);
+const TOOL_START_PACKET_TYPES = new Set<PacketType>([
+  PacketType.SEARCH_TOOL_START,
+  PacketType.FETCH_TOOL_START,
+  PacketType.PYTHON_TOOL_START,
+  PacketType.CUSTOM_TOOL_START,
+  PacketType.FILE_READER_START,
+  PacketType.REASONING_START,
+  PacketType.IMAGE_GENERATION_TOOL_START,
+  PacketType.DEEP_RESEARCH_PLAN_START,
+  PacketType.RESEARCH_AGENT_START,
+  PacketType.MEMORY_TOOL_START,
+  PacketType.MEMORY_TOOL_NO_ACCESS,
+]);
+
+function getStepPacketType(step: TransformedStep): PacketType | null {
+  for (const packet of step.packets) {
+    if (TOOL_START_PACKET_TYPES.has(packet.obj.type as PacketType)) {
+      return packet.obj.type as PacketType;
+    }
+  }
+  return null;
 }
 
+// Internal pacing bookkeeping — lives in a ref, touched only inside effects/callbacks.
 interface PacingState {
   revealedStepKeys: Set<string>;
-  lastRevealedStepKind: string | null;
+  lastRevealedPacketType: PacketType | null;
   pendingSteps: TransformedStep[];
   pacingTimer: ReturnType<typeof setTimeout> | null;
   toolPacingComplete: boolean;
@@ -32,7 +51,7 @@ interface PacingState {
 function createInitialPacingState(): PacingState {
   return {
     revealedStepKeys: new Set(),
-    lastRevealedStepKind: null,
+    lastRevealedPacketType: null,
     pendingSteps: [],
     pacingTimer: null,
     toolPacingComplete: false,
@@ -43,13 +62,13 @@ function createInitialPacingState(): PacingState {
 
 export interface UsePacedTurnGroupsResult {
   pacedTurnGroups: TurnGroup[];
-  pacedDisplayGroups: GroupedItem[];
+  pacedDisplayGroups: GroupedPacket[];
   pacedFinalAnswerComing: boolean;
 }
 
 export function usePacedTurnGroups(
   toolTurnGroups: TurnGroup[],
-  displayGroups: GroupedItem[],
+  displayGroups: GroupedPacket[],
   stopPacketSeen: boolean,
   nodeId: number,
   finalAnswerComing: boolean,
@@ -95,7 +114,7 @@ export function usePacedTurnGroups(
     if (state.pendingSteps.length > 0) {
       const stepToReveal = state.pendingSteps.shift()!;
       state.revealedStepKeys.add(stepToReveal.key);
-      state.lastRevealedStepKind = getStepKind(stepToReveal);
+      state.lastRevealedPacketType = getStepPacketType(stepToReveal);
 
       if (state.pendingSteps.length > 0) {
         state.pacingTimer = setTimeout(
@@ -210,7 +229,7 @@ export function usePacedTurnGroups(
     }
 
     for (const step of newSteps) {
-      const stepType = getStepKind(step);
+      const stepType = getStepPacketType(step);
 
       // First step ever — reveal immediately.
       if (
@@ -218,7 +237,7 @@ export function usePacedTurnGroups(
         state.pendingSteps.length === 0
       ) {
         state.revealedStepKeys.add(step.key);
-        state.lastRevealedStepKind = stepType;
+        state.lastRevealedPacketType = stepType;
         publish();
         continue;
       }

@@ -586,7 +586,6 @@ def test_failed_child_settlement_retains_accepted_partial_output(
         )
         projected = project_response(
             snapshot,
-            response_id=42,
             tool_ids={"coordinate": 1},
             registrations=coordinator.registrations(),
         )

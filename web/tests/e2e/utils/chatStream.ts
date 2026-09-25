@@ -1,54 +1,77 @@
 import { expect, Page, Route } from "@playwright/test";
-import { sendMessage } from "@tests/e2e/utils/chatActions";
-import type { Packet } from "@/app/app/services/streamingModels";
-import type { PacketType } from "@/app/app/services/lib";
+import { sendMessage } from "./chatActions";
 
-function parseStreamLine(rawLine: string): Packet | null {
+export type ChatStreamObject = Record<string, unknown> & {
+  type?: string;
+};
+
+export type ChatStreamPacket = Record<string, unknown> & {
+  obj?: ChatStreamObject;
+};
+
+function parseStreamLine(rawLine: string): ChatStreamPacket | null {
   const trimmed = rawLine.trim();
-  const line = trimmed.startsWith("data:")
+  if (!trimmed) {
+    return null;
+  }
+
+  const withoutPrefix = trimmed.startsWith("data:")
     ? trimmed.slice("data:".length).trim()
     : trimmed;
-  if (!line || line === "[DONE]") return null;
-  const packet: PacketType = JSON.parse(line);
-  return "obj" in packet ? packet : null;
+  if (!withoutPrefix || withoutPrefix === "[DONE]") {
+    return null;
+  }
+
+  try {
+    return JSON.parse(withoutPrefix) as ChatStreamPacket;
+  } catch {
+    return null;
+  }
 }
 
-export function parseChatStreamBody(body: string): Packet[] {
+export function parseChatStreamBody(body: string): ChatStreamPacket[] {
   return body
     .split("\n")
     .map(parseStreamLine)
-    .filter((packet): packet is Packet => packet !== null);
+    .filter((packet): packet is ChatStreamPacket => packet !== null);
 }
 
-export interface ToolInvocationCounts {
-  started: number;
-  finished: number;
+export function getPacketObjectsByType(
+  packets: ChatStreamPacket[],
+  packetType: string
+): ChatStreamObject[] {
+  return packets
+    .map((packet) => packet.obj)
+    .filter(
+      (obj): obj is ChatStreamObject =>
+        !!obj && typeof obj.type === "string" && obj.type === packetType
+    );
 }
 
-/** Count distinct executions; repeated snapshots do not create another invocation. */
-export function getToolInvocationCounts(
-  packets: Packet[],
+/** Read a packet object's `tool_name` field, if present. */
+export function getToolName(packetObject: ChatStreamObject): string | null {
+  const value = packetObject.tool_name;
+  return typeof value === "string" ? value : null;
+}
+
+/**
+ * Count the tool-invocation packets (start / delta / debug) emitted for a
+ * specific tool. Used to assert whether an MCP tool actually ran.
+ */
+export function getToolPacketCounts(
+  packets: ChatStreamPacket[],
   toolName: string
-): ToolInvocationCounts {
-  const started = new Set<string>();
-  const finished = new Set<string>();
-  for (const packet of packets) {
-    if (packet.obj.type !== "item_update") continue;
-    const item = packet.obj.item;
-    if (item.kind !== "tool" || item.name !== toolName) continue;
-    const identity = packet.identity;
-    if (!identity?.tool_call_id)
-      throw new Error("Tool update has no invocation identity");
-    const key = JSON.stringify([
-      identity.response_id,
-      identity.run_id,
-      identity.message_id,
-      identity.tool_call_id,
-    ]);
-    if (item.status === "running") started.add(key);
-    else if (item.status !== "pending") finished.add(key);
-  }
-  return { started: started.size, finished: finished.size };
+): { start: number; delta: number; debug: number } {
+  const countOfType = (packetType: string): number =>
+    getPacketObjectsByType(packets, packetType).filter(
+      (packetObject) => getToolName(packetObject) === toolName
+    ).length;
+
+  return {
+    start: countOfType("custom_tool_start"),
+    delta: countOfType("custom_tool_delta"),
+    debug: countOfType("tool_call_debug"),
+  };
 }
 
 export async function sendMessageAndCaptureStreamPackets(
@@ -59,7 +82,7 @@ export async function sendMessageAndCaptureStreamPackets(
     payloadOverrides?: Record<string, unknown>;
     waitForAiMessage?: boolean;
   }
-): Promise<Packet[]> {
+): Promise<ChatStreamPacket[]> {
   const requestUrlPattern = "**/api/chat/send-chat-message";
   const mockLlmResponse = options?.mockLlmResponse;
   const payloadOverrides = options?.payloadOverrides;

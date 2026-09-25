@@ -1,4 +1,3 @@
-import { ValidSources } from "@/lib/types";
 import { expect, Page, test } from "@playwright/test";
 import { ChatPage } from "@tests/e2e/chat/ChatPage";
 import { loginAsWorkerUser } from "@tests/e2e/utils/auth";
@@ -396,7 +395,7 @@ for (const theme of THEMES) {
           document_id: "web-doc-1",
           semantic_identifier: "Onyx Documentation - Getting Started",
           link: "https://docs.onyx.app/getting-started",
-          source_type: ValidSources.Web,
+          source_type: "web",
           blurb:
             "Onyx is an open-source enterprise search and AI platform. Deploy in minutes with Docker Compose.",
           is_internet: true,
@@ -405,7 +404,7 @@ for (const theme of THEMES) {
           document_id: "web-doc-2",
           semantic_identifier: "Onyx GitHub Repository",
           link: "https://github.com/onyx-dot-app/onyx",
-          source_type: ValidSources.Web,
+          source_type: "web",
           blurb:
             "Open-source Gen-AI platform with 30+ connectors. MIT licensed community edition.",
           is_internet: true,
@@ -414,7 +413,7 @@ for (const theme of THEMES) {
           document_id: "web-doc-3",
           semantic_identifier: "Enterprise Search Comparison 2025",
           link: "https://example.com/enterprise-search-comparison",
-          source_type: ValidSources.Web,
+          source_type: "web",
           blurb:
             "Comparing top enterprise search platforms including Onyx, Glean, and Coveo.",
           is_internet: true,
@@ -479,7 +478,7 @@ Key advantages include:
             document_id: "confluence-doc-1",
             semantic_identifier: "Q3 2025 Engineering Roadmap",
             link: "https://company.atlassian.net/wiki/spaces/ENG/pages/123",
-            source_type: ValidSources.Confluence,
+            source_type: "confluence",
             blurb:
               "Engineering priorities for Q3 include platform stability, new connector integrations, and performance improvements.",
             is_internet: false,
@@ -488,7 +487,7 @@ Key advantages include:
             document_id: "gdrive-doc-1",
             semantic_identifier: "Platform Architecture Overview.pdf",
             link: "https://drive.google.com/file/d/abc123",
-            source_type: ValidSources.GoogleDrive,
+            source_type: "google_drive",
             blurb:
               "Onyx platform architecture document covering microservices, data flow, and deployment topology.",
             is_internet: false,
