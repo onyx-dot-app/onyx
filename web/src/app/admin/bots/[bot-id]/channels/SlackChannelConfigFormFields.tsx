@@ -484,6 +484,12 @@ export function SlackChannelConfigFormFields({
               />
 
               <CheckboxField
+                name="remove_feedback_buttons"
+                label="Remove the 'Helpful' and 'Not helpful' buttons after bot response."
+                tooltip="If set, OnyxBot responses will not include feedback buttons or send feedback reminders"
+              />
+
+              <CheckboxField
                 name="still_need_help_enabled"
                 onChange={(checked: boolean) => {
                   setFieldValue("still_need_help_enabled", checked);
