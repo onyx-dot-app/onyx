@@ -341,6 +341,9 @@ export function useSelectOverlay() {
   const [isKeyboardNav, setIsKeyboardNav] = useState(false);
 
   const rootRef = useRef<HTMLDivElement>(null);
+  // A wrapping <label> is part of the trigger's hit area: the browser
+  // forwards its clicks to the input, so it must not count as outside.
+  const labelRef = useRef<HTMLLabelElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -378,14 +381,18 @@ export function useSelectOverlay() {
   const setRootRef = useCallback(
     (node: HTMLDivElement | null) => {
       rootRef.current = node;
+      labelRef.current = node?.closest("label") ?? null;
       refs.setReference(node);
     },
     [refs]
   );
 
+  // Otherwise a label click dismisses the list and the forwarded click
+  // reopens it, so a second click on the label never closes it.
   useClickOutside<HTMLElement>(
     [
       rootRef as React.RefObject<HTMLElement>,
+      labelRef as React.RefObject<HTMLElement>,
       dropdownRef as React.RefObject<HTMLElement>,
     ],
     useCallback(() => {
