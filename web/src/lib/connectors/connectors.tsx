@@ -1,161 +1,6 @@
-import * as Yup from "yup";
-import { ConfigurableSources, ValidInputTypes, ValidSources } from "../types";
-import { AccessTypeGroupSelectorFormType } from "@/components/admin/connectors/AccessTypeGroupSelector";
-import { Credential } from "@/lib/connectors/credentials"; // Import Credential type
+import { ConfigurableSources } from "../types";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
-
-export function isLoadState(connector_name: string): boolean {
-  // TODO: centralize connector metadata like this somewhere instead of hardcoding it here
-  const loadStateConnectors = ["web", "xenforo", "file", "airtable"];
-  if (loadStateConnectors.includes(connector_name)) {
-    return true;
-  }
-
-  return false;
-}
-
-export type InputType =
-  | "list"
-  | "text"
-  | "select"
-  | "multiselect"
-  | "boolean"
-  | "number"
-  | "file";
-
-export type StringWithDescription = {
-  value: string;
-  name: string;
-  description?: string;
-};
-
-export interface Option {
-  label: string | ((currentCredential: Credential<any> | null) => string);
-  name: string;
-  description?:
-    | string
-    | ((currentCredential: Credential<any> | null) => string);
-  query?: string;
-  optional?: boolean;
-  hidden?: boolean;
-  visibleCondition?: (
-    values: any,
-    currentCredential: Credential<any> | null
-  ) => boolean;
-  wrapInCollapsible?: boolean;
-  disabled?: boolean | ((currentCredential: Credential<any> | null) => boolean);
-}
-
-export interface SelectOption extends Option {
-  type: "select";
-  options?: StringWithDescription[];
-  default?: string;
-}
-
-export interface MultiSelectOption extends Option {
-  type: "multiselect";
-  options?: StringWithDescription[];
-  default?: string[];
-}
-
-export interface ListOption extends Option {
-  type: "list";
-  default?: string[];
-  transform?: (values: string[]) => string[];
-}
-
-export interface StringPairListOption extends Option {
-  type: "string_pair_list";
-  // Object keys each row serializes to, e.g. { leftKey: "source", rightKey: "target" }.
-  leftKey: string;
-  rightKey: string;
-  default?: Record<string, string>[];
-  leftLabel: string;
-  rightLabel: string;
-  leftPlaceholder?: string;
-  rightPlaceholder?: string;
-}
-
-export interface TextOption extends Option {
-  type: "text";
-  default?: string;
-  initial?: string | ((currentCredential: Credential<any> | null) => string);
-  isTextArea?: boolean;
-}
-
-export interface NumberOption extends Option {
-  type: "number";
-  default?: number;
-}
-
-export interface BooleanOption extends Option {
-  type: "checkbox";
-  default?: boolean;
-}
-
-export interface FileOption extends Option {
-  type: "file";
-  default?: string;
-}
-
-export interface StringTabOption extends Option {
-  type: "string_tab";
-  default?: string;
-}
-
-export interface TabOption extends Option {
-  type: "tab";
-  defaultTab?: string;
-  tabs: {
-    label: string;
-    value: string;
-    fields: (
-      | BooleanOption
-      | ListOption
-      | StringPairListOption
-      | TextOption
-      | NumberOption
-      | SelectOption
-      | MultiSelectOption
-      | FileOption
-      | StringTabOption
-    )[];
-  }[];
-  default?: [];
-}
-
-export interface ConnectionConfiguration {
-  description: string;
-  subtext?: string;
-  initialConnectorName?: string; // a key in the credential to prepopulate the connector name field
-  values: (
-    | BooleanOption
-    | ListOption
-    | StringPairListOption
-    | TextOption
-    | NumberOption
-    | SelectOption
-    | MultiSelectOption
-    | FileOption
-    | TabOption
-  )[];
-  advanced_values: (
-    | BooleanOption
-    | ListOption
-    | StringPairListOption
-    | TextOption
-    | NumberOption
-    | SelectOption
-    | MultiSelectOption
-    | FileOption
-    | TabOption
-  )[];
-  overrideDefaultFreq?: number;
-  advancedValuesVisibleCondition?: (
-    values: any,
-    currentCredential: Credential<any> | null
-  ) => boolean;
-}
+import type { BooleanOption, ConnectionConfiguration } from "./types";
 
 // Shared "Include Attachments" checkbox. Pair with an `include_attachments`
 // kwarg on the backend connector; see backend/onyx/connectors/README.md for
@@ -1043,9 +888,62 @@ export const connectorConfigs: Record<
         false,
         "Index the files in each channel's Files tab as their own documents, " +
           "with the readers SharePoint grants them. Needs a certificate " +
-          "credential and read access to the channel sites, through " +
-          "Sites.Read.All or a Sites.Selected grant on each channel site."
+          "credential, Files.Read.All or Sites.Read.All on Graph, and " +
+          "Sites.FullControl.All on the SharePoint API to read each file's " +
+          "readers. With Sites.Selected, grant the app full control on each " +
+          "channel site."
       ),
+      {
+        type: "checkbox",
+        query: "Include inline images?",
+        label: "Include Inline Images",
+        name: "include_inline_images",
+        description:
+          "Index the images pasted into channel messages with their thread. " +
+          "Needs no extra permission. Nothing is downloaded while image " +
+          "extraction and analysis is off in the search settings.",
+        default: false,
+      },
+      {
+        type: "checkbox",
+        query: "Include meeting transcripts?",
+        label: "Include Meeting Transcripts",
+        name: "include_meeting_transcripts",
+        description:
+          "Index the transcripts of scheduled meetings as their own documents, " +
+          "readable by the organizer and the attendees. Needs the " +
+          "OnlineMeetingTranscript.Read.All, OnlineMeetings.Read.All and " +
+          "User.Read.All application permissions, the tenant setting that " +
+          "allows Graph API access to transcripts, and an application access " +
+          "policy granted to the organizers. Channel meetings are not covered. " +
+          "Transcripts from the last six months are indexed, and a transcript " +
+          "leaves the index once it is older than that.",
+        default: false,
+      },
+      {
+        type: "checkbox",
+        query: "Include meeting chats?",
+        label: "Include Meeting Chats",
+        name: "include_meeting_chats",
+        description:
+          "Index what people write in the chat of a scheduled meeting, a " +
+          "document per day, readable by the members of the chat. Needs the " +
+          "Chat.Read.All and User.Read.All application permissions. Covers " +
+          "meetings organized in this tenant: Microsoft does not serve the " +
+          "chat of a meeting another organization set up.",
+        default: false,
+      },
+      {
+        type: "list",
+        query: "Enter meeting organizers to include:",
+        label: "Meeting Organizers",
+        name: "meeting_organizers",
+        optional: true,
+        description:
+          "User principal names of the organizers whose meeting transcripts " +
+          "and chats to index. Leave empty to include every enabled user with " +
+          "a Teams license.",
+      },
     ],
     advanced_values: [
       {
@@ -2093,372 +1991,4 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
     advanced_values: [],
   },
 };
-type ConnectorField = ConnectionConfiguration["values"][number];
-
-const buildInitialValuesForFields = (
-  fields: ConnectorField[]
-): Record<string, any> =>
-  fields.reduce<Record<string, any>>((acc, field) => {
-    if (field.type === "select") {
-      acc[field.name] = null;
-    } else if (field.type === "list") {
-      acc[field.name] = field.default || [];
-    } else if (field.type === "multiselect") {
-      acc[field.name] = field.default || [];
-    } else if (field.type === "checkbox") {
-      acc[field.name] = field.default ?? false;
-    } else if (field.default !== undefined) {
-      acc[field.name] = field.default;
-    }
-    return acc;
-  }, {});
-
-export function createConnectorInitialValues(
-  connector: ConfigurableSources
-): Record<string, any> & AccessTypeGroupSelectorFormType {
-  const configuration = connectorConfigs[connector];
-
-  return {
-    name: "",
-    groups: [],
-    access_type: "public",
-    ...buildInitialValuesForFields(configuration.values),
-    ...buildInitialValuesForFields(configuration.advanced_values),
-  };
-}
-
-export function createConnectorValidationSchema(
-  connector: ConfigurableSources,
-  requireGroups: boolean = false
-): Yup.ObjectSchema<Record<string, any>> {
-  const configuration = connectorConfigs[connector];
-
-  const object = Yup.object().shape({
-    access_type: Yup.string().required("Access Type is required"),
-    name: Yup.string().required("Connector Name is required"),
-    groups: Yup.array()
-      .of(Yup.number())
-      .when("access_type", ([accessType], schema) =>
-        requireGroups && accessType !== "sync"
-          ? schema.min(1, "Select at least one group you manage")
-          : schema
-      ),
-    ...[...configuration.values, ...configuration.advanced_values].reduce<
-      Record<string, any>
-    >((acc, field) => {
-      let schema: any =
-        field.type === "select"
-          ? Yup.string()
-          : field.type === "list"
-            ? Yup.array().of(Yup.string())
-            : field.type === "multiselect"
-              ? Yup.array().of(Yup.string())
-              : field.type === "string_pair_list"
-                ? Yup.array().of(Yup.object())
-                : field.type === "checkbox"
-                  ? Yup.boolean()
-                  : field.type === "file"
-                    ? Yup.mixed()
-                    : Yup.string();
-
-      if (!field.optional) {
-        schema = schema.required(`${field.label} is required`);
-      }
-
-      acc[field.name] = schema;
-      return acc;
-    }, {}),
-    // These are advanced settings
-    indexingStart: Yup.string().nullable(),
-    pruneFreq: Yup.number().min(
-      0.083,
-      "Prune frequency must be at least 0.083 hours (5 minutes)"
-    ),
-    refreshFreq: Yup.number().min(
-      1,
-      "Refresh frequency must be at least 1 minute"
-    ),
-  });
-
-  return object;
-}
 export const defaultRefreshFreqMinutes = 30; // 30 minutes
-
-// CONNECTORS
-export interface ConnectorBase<T> {
-  name: string;
-  source: ValidSources;
-  input_type: ValidInputTypes;
-  connector_specific_config: T;
-  refresh_freq: number | null;
-  prune_freq: number | null;
-  indexing_start: Date | null;
-  access_type: string;
-  groups?: number[];
-  from_beginning?: boolean;
-}
-
-export interface Connector<T> extends ConnectorBase<T> {
-  id: number;
-  credential_ids: number[];
-  time_created: string;
-  time_updated: string;
-}
-
-export interface ConnectorSnapshot {
-  id: number;
-  name: string;
-  source: ValidSources;
-  input_type: ValidInputTypes;
-  // connector_specific_config
-  refresh_freq: number | null;
-  prune_freq: number | null;
-  credential_ids: number[];
-  indexing_start: number | null;
-  time_created: string;
-  time_updated: string;
-  from_beginning?: boolean;
-}
-
-export interface UrlRewriteRule {
-  source: string;
-  target: string;
-}
-
-export interface WebConfig {
-  base_url: string;
-  web_connector_type?: "recursive" | "single" | "sitemap";
-  url_rewrites?: UrlRewriteRule[];
-}
-
-export interface GithubConfig {
-  repo_owner: string;
-  repositories: string; // Comma-separated list of repository names
-  include_prs: boolean;
-  include_issues: boolean;
-  include_files: boolean;
-  branch?: string;
-}
-
-export interface GitlabConfig {
-  project_owner: string;
-  project_name: string;
-  include_mrs: boolean;
-  include_issues: boolean;
-}
-
-export interface LumAppsConfig {
-  base_url: string;
-  organization_id: string;
-  instance_ids?: string[];
-  custom_content_types?: string[];
-  lang?: string;
-}
-
-export interface BitbucketConfig {
-  workspace: string;
-  repositories?: string;
-  projects?: string;
-}
-
-export interface GoogleDriveConfig {
-  include_shared_drives?: boolean;
-  shared_drive_urls?: string;
-  include_my_drives?: boolean;
-  my_drive_emails?: string;
-  shared_folder_urls?: string;
-}
-
-export interface GmailConfig {}
-
-export interface BookstackConfig {}
-
-export interface OutlineConfig {}
-
-export interface ConfluenceConfig {
-  wiki_base: string;
-  space?: string;
-  page_id?: string;
-  is_cloud?: boolean;
-  index_recursively?: boolean;
-  cql_query?: string;
-  include_attachments?: boolean;
-}
-
-export interface JiraConfig {
-  jira_project_url: string;
-  project_key?: string;
-  comment_email_blacklist?: string[];
-  jql_query?: string;
-}
-
-export interface SalesforceConfig {
-  requested_objects?: string[];
-}
-
-export interface SharepointConfig {
-  sites?: string[];
-  include_site_pages?: boolean;
-  treat_sharing_link_as_public?: boolean;
-  include_site_documents?: boolean;
-  authority_host?: string;
-  graph_api_host?: string;
-  sharepoint_domain_suffix?: string;
-}
-
-export interface TeamsConfig {
-  teams?: string[];
-  include_attachments?: boolean;
-  authority_host?: string;
-  graph_api_host?: string;
-}
-
-export interface DiscourseConfig {
-  base_url: string;
-  categories?: string[];
-}
-
-export interface AxeroConfig {
-  spaces?: string[];
-}
-
-export interface CanvasConfig {
-  canvas_base_url: string;
-}
-
-export interface DrupalWikiConfig {
-  base_url: string;
-  spaces?: string[];
-  pages?: string[];
-  include_attachments?: boolean;
-}
-
-export interface ProductboardConfig {}
-
-export interface SlackConfig {
-  workspace: string;
-  channels?: string[];
-  channel_regex_enabled?: boolean;
-  exclude_channels?: string[];
-  exclude_channel_regex_enabled?: boolean;
-  include_bot_messages?: boolean;
-}
-
-export interface SlabConfig {
-  base_url: string;
-}
-
-export interface GuruConfig {}
-
-export interface GongConfig {
-  workspaces?: string[];
-}
-
-export interface LoopioConfig {
-  loopio_stack_name?: string;
-}
-
-export interface FileConfig {
-  file_locations: string[];
-  file_names: string[];
-  zip_metadata_file_id: string | null;
-}
-
-export interface ZulipConfig {
-  realm_name: string;
-  realm_url: string;
-}
-
-export interface CodaConfig {
-  workspace_id?: string;
-}
-
-export interface NotionConfig {
-  root_page_id?: string;
-}
-
-export interface HubSpotConfig {
-  object_types?: string[];
-}
-
-export interface Document360Config {
-  workspace: string;
-  categories?: string[];
-}
-
-export interface ClickupConfig {
-  connector_type: "list" | "folder" | "space" | "workspace";
-  connector_ids?: string[];
-  retrieve_task_comments: boolean;
-}
-
-export interface GoogleSitesConfig {
-  zip_path: string;
-  base_url: string;
-}
-
-export interface XenforoConfig {
-  base_url: string;
-}
-
-export interface ZendeskConfig {
-  content_type?: "articles" | "tickets";
-  calls_per_minute?: number;
-}
-
-export interface DropboxConfig {}
-
-export interface S3Config {
-  bucket_type: "s3";
-  bucket_name: string;
-  prefix: string;
-}
-
-export interface R2Config {
-  bucket_type: "r2";
-  bucket_name: string;
-  prefix: string;
-  european_residency?: boolean;
-}
-
-export interface GCSConfig {
-  bucket_type: "google_cloud_storage";
-  bucket_name: string;
-  prefix: string;
-}
-
-export interface OCIConfig {
-  bucket_type: "oci_storage";
-  bucket_name: string;
-  prefix: string;
-}
-
-export interface MediaWikiBaseConfig {
-  connector_name: string;
-  language_code: string;
-  categories?: string[];
-  pages?: string[];
-  recurse_depth?: number;
-}
-
-export interface AsanaConfig {
-  asana_workspace_id: string;
-  asana_project_ids?: string;
-  asana_team_id?: string;
-}
-
-export interface FreshdeskConfig {}
-
-export interface FirefliesConfig {}
-
-export interface MediaWikiConfig extends MediaWikiBaseConfig {
-  hostname: string;
-}
-
-export interface WikipediaConfig extends MediaWikiBaseConfig {}
-
-export interface ImapConfig {
-  host: string;
-  port?: number;
-  mailboxes?: string[];
-}

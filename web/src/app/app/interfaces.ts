@@ -2,7 +2,7 @@ import {
   OnyxDocument,
   SearchOnyxDocument,
   StreamStopReason,
-} from "@/lib/search/interfaces";
+} from "@/lib/search/types";
 import { Packet } from "./services/streamingModels";
 import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 

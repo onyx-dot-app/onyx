@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import TokenRateLimitScope
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import AccountType
 from onyx.db.models import User
 from onyx.db.token_limit import (
     fetch_all_user_token_rate_limits,
@@ -37,8 +38,9 @@ def _check_token_rate_limits(user: User) -> None:
     if user.is_anonymous:
         _user_is_rate_limited_by_global()
 
-    elif is_api_key_email_address(user.email):
-        # API keys are only rate limited by global settings
+    elif user.account_type == AccountType.SERVICE_ACCOUNT or is_api_key_email_address(
+        user.email
+    ):
         _user_is_rate_limited_by_global()
 
     else:

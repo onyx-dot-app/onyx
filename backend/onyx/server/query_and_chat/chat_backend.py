@@ -94,7 +94,9 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.serving import (
+    ATTACHMENT_SAFE_MIME_TYPES,
     RESPONSE_POLICY_VERSION,
+    ensure_filename_extension,
     resolve_inline_disposition,
 )
 from onyx.llm.constants import LlmProviderNames
@@ -1172,6 +1174,10 @@ def fetch_chat_file(
 
     media_type, security_headers = resolve_inline_disposition(
         file_record.file_type,
+        filename=ensure_filename_extension(
+            file_record.display_name or file_id, file_record.file_type
+        ),
+        attachment_types=ATTACHMENT_SAFE_MIME_TYPES,
         # A parsed spreadsheet is served as a JSON preview, not as the stored bytes.
         fallback_disposition=None if parse_spreadsheet else "attachment",
     )

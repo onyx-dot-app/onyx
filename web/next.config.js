@@ -209,6 +209,20 @@ const nextConfig = {
         destination: "/admin/web-search",
         permanent: true,
       },
+      // The connector catalog moved from /admin/add-connector to
+      // /admin/connectors, beside the per-source wizard at /admin/connectors/:source.
+      {
+        source: "/admin/add-connector",
+        destination: "/admin/connectors",
+        permanent: true,
+      },
+      // The indexing status page moved from /admin/indexing/status to
+      // /admin/indexing-status; the /indexing/ segment held nothing else.
+      {
+        source: "/admin/indexing/status",
+        destination: "/admin/indexing-status",
+        permanent: true,
+      },
       // Replaces the redirect page that used to live at
       // /admin/configuration/craft, kept for /admin/craft/access bookmarks.
       {

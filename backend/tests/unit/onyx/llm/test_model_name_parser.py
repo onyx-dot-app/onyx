@@ -32,7 +32,7 @@ def test_region_extraction() -> None:
 
 
 def test_direct_provider_inference() -> None:
-    """Test that provider is inferred from litellm.model_cost for unprefixed models."""
+    """Test that provider is inferred from the model catalog for unprefixed models."""
     result = parse_litellm_model_name("gpt-4o")
 
     assert result.provider == LlmProviderNames.OPENAI

@@ -61,7 +61,10 @@ from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.llm.tracing_wrap import _finalize_tool_calls
 from onyx.server.features.build.craft_gateway import gateway_request_flow
-from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
+from onyx.server.gateway.configs import (
+    GATEWAY_LLM_TOTAL_TIMEOUT_SECONDS,
+    GATEWAY_PATH_PREFIX,
+)
 from onyx.server.gateway.model_catalog import build_gateway_model_catalog
 from onyx.server.gateway.models import (
     AnthropicContentBlock,
@@ -111,11 +114,13 @@ from onyx.server.gateway.models import (
 )
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
+from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import trace
 from onyx.tracing.framework.traces import Trace
 from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 if TYPE_CHECKING:
     from litellm.types.llms.anthropic import (
@@ -404,6 +409,7 @@ def handle_chat_completion(
         try:
             response = llm.invoke(
                 prompt=messages,
+                total_timeout_s=GATEWAY_LLM_TOTAL_TIMEOUT_SECONDS,
                 tools=request.tools,
                 tool_choice=tool_choice,
                 structured_response_format=request.response_format,
@@ -783,6 +789,7 @@ def handle_responses_request(
         try:
             response = llm.invoke(
                 prompt=messages,
+                total_timeout_s=GATEWAY_LLM_TOTAL_TIMEOUT_SECONDS,
                 tools=tools,
                 tool_choice=tool_choice,
                 max_tokens=max_tokens,
@@ -1332,6 +1339,7 @@ def handle_anthropic_messages(
         try:
             response = llm.invoke(
                 prompt=messages,
+                total_timeout_s=GATEWAY_LLM_TOTAL_TIMEOUT_SECONDS,
                 tools=tools,
                 tool_choice=tool_choice,
                 max_tokens=max_tokens,
@@ -1389,6 +1397,25 @@ def handle_anthropic_messages(
     )
 
 
+def _resolve_metered_gateway_model(
+    db_session: Session,
+    user: User,
+    requested_model: str,
+) -> tuple[LLMProviderView, ModelConfigurationView]:
+    """Resolve the model and enforce the cloud cost cap on Onyx-managed keys,
+    the same check the chat route runs per provider."""
+    with closing(db_session):
+        provider, model_config = resolve_gateway_model(
+            db_session, user, requested_model
+        )
+        check_llm_cost_limit_for_provider(
+            db_session=db_session,
+            tenant_id=get_current_tenant_id(),
+            llm_provider_api_key=provider.api_key,
+        )
+    return provider, model_config
+
+
 @router.get("/v1/models")
 def gateway_list_models(
     http_request: Request,
@@ -1410,8 +1437,9 @@ def gateway_chat_completions(
 ) -> Response:
     flow = _authorize_gateway_request(http_request, user)
     check_token_rate_limits(user)
-    with closing(db_session):
-        provider, model_config = resolve_gateway_model(db_session, user, request.model)
+    provider, model_config = _resolve_metered_gateway_model(
+        db_session, user, request.model
+    )
     result = handle_chat_completion(
         request=request,
         provider=provider,
@@ -1434,8 +1462,9 @@ def gateway_responses(
 ) -> Response:
     flow = _authorize_gateway_request(http_request, user)
     check_token_rate_limits(user)
-    with closing(db_session):
-        provider, model_config = resolve_gateway_model(db_session, user, request.model)
+    provider, model_config = _resolve_metered_gateway_model(
+        db_session, user, request.model
+    )
     if is_openai_passthrough_eligible(provider, model_config):
         return handle_openai_responses_passthrough(
             request=request,
@@ -1464,8 +1493,9 @@ def gateway_anthropic_messages(
 ) -> Response:
     flow = _authorize_gateway_request(http_request, user)
     check_token_rate_limits(user)
-    with closing(db_session):
-        provider, model_config = resolve_gateway_model(db_session, user, request.model)
+    provider, model_config = _resolve_metered_gateway_model(
+        db_session, user, request.model
+    )
     if is_anthropic_passthrough_eligible(provider):
         return handle_anthropic_passthrough(
             request=request,

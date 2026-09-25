@@ -19,8 +19,12 @@ import { SettingsLayouts, toast } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
-import { InputTextArea, InputTypeIn } from "@opal/components";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import {
+  InputSingleSelect,
+  InputTextArea,
+  InputTypeIn,
+  type SelectOption,
+} from "@opal/components";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
 import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
 import { findProviderOwningModelConfig } from "@/lib/languageModels/utils";
@@ -68,12 +72,12 @@ import {
 import { Modal } from "@opal/components";
 import GenericConfirmModal from "@/sections/modals/GenericConfirmModal";
 import { InputSwitch } from "@opal/components";
-import { useMcpServers } from "@/lib/tools/hooks";
+import { useMcpServers } from "@/lib/mcp/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { getActionIcon } from "@/lib/tools/utils";
 import { Disabled, Hoverable } from "@opal/core";
 import useFilter from "@/hooks/useFilter";
-import { MCPServer } from "@/lib/tools/types";
+import { MCPServer } from "@/lib/mcp/types";
 import type { IconProps } from "@opal/types";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
@@ -439,6 +443,7 @@ interface RetentionFieldProps {
 // existing value — preset or not — round-trips correctly.
 function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
   const t = useTranslations("admin.chatPreferences");
+  const tInputSelect = useTranslations("common.inputSelect");
   const retentionPresets = useMemo(
     () => [
       { days: 7, label: t("retention.presets.days7") },
@@ -453,16 +458,23 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
   const [customDays, setCustomDays] = useState(
     valueIsCustomRetention(value) ? String(value) : ""
   );
-  // Controlled so the "More" chevron can reopen the presets from custom mode.
-  const [selectOpen, setSelectOpen] = useState(false);
   // A pending reduction awaiting confirmation (always a positive number; null
   // means nothing is pending).
   const [pendingValue, setPendingValue] = useState<number | null>(null);
 
   const customInputRef = useRef<HTMLInputElement>(null);
   const focusCustomOnShowRef = useRef(false);
-  // Set when a preset is chosen from the dropdown, so closing the dropdown
-  // doesn't bounce a still-custom value back into the input (see onOpenChange).
+  // "More" focuses and clicks the select's trigger once the select is back
+  // on screen: the Opal select has no controlled-open prop, and a button
+  // trigger opens on click, not on focus.
+  const selectWrapperRef = useRef<HTMLDivElement>(null);
+  const reopenPresetsRef = useRef(false);
+  // True while the presets are open in place of a stored custom value. The
+  // select gives no close signal, so while it is set, a pointer down outside
+  // the field and its list, or Escape, returns to the custom input.
+  const [presetsReopened, setPresetsReopened] = useState(false);
+  // Set when a preset is chosen from the dropdown, so leaving the dropdown
+  // doesn't bounce a still-custom value back into the input (see onBlur).
   const pickedPresetRef = useRef(false);
 
   const syncToValue = (v: number | null) => {
@@ -488,10 +500,49 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
     }
   }, [showCustom]);
 
+  useEffect(() => {
+    if (!showCustom && reopenPresetsRef.current) {
+      const trigger = selectWrapperRef.current?.querySelector("input");
+      trigger?.focus();
+      trigger?.click();
+      reopenPresetsRef.current = false;
+    }
+  }, [showCustom]);
+
+  useEffect(() => {
+    if (!presetsReopened) return;
+    const revert = () => {
+      setPresetsReopened(false);
+      if (valueIsCustomRetention(value)) setShowCustom(true);
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (selectWrapperRef.current?.contains(target)) return;
+      // A pick in the portalled list lands in handleSelectChange instead.
+      if (target.closest('[role="listbox"]')) return;
+      revert();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") revert();
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [presetsReopened, value]);
+
   // Only read while in select mode. A stored custom value (transiently visible
-  // here after "More") maps to no item, so the trigger shows the placeholder
-  // until the user picks — at which point onValueChange fires reliably.
-  const selectValue = value === null ? FOREVER_RETENTION_VALUE : String(value);
+  // here after "More") maps to no option, so the select is left empty and the
+  // trigger shows the placeholder until the user picks.
+  const selectValue =
+    value === null
+      ? FOREVER_RETENTION_VALUE
+      : valueIsCustomRetention(value)
+        ? ""
+        : String(value);
 
   const persist = (next: number | null) => {
     lastSavedRef.current = next;
@@ -510,6 +561,9 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
   };
 
   const handleSelectChange = (next: string) => {
+    setPresetsReopened(false);
+    // Re-picking the selected preset unselects it; the field keeps its value.
+    if (next === "") return;
     if (next === CUSTOM_RETENTION_VALUE) {
       focusCustomOnShowRef.current = true;
       setShowCustom(true);
@@ -522,14 +576,13 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
     );
   };
 
-  // Closing the reopened dropdown without picking a preset returns to the
+  // Leaving the reopened dropdown without picking a preset returns to the
   // custom input (the stored value is still custom).
-  const handleOpenChange = (open: boolean) => {
-    setSelectOpen(open);
-    if (open) return;
+  const handleSelectBlur = () => {
     if (!pickedPresetRef.current && valueIsCustomRetention(value)) {
       setShowCustom(true);
     }
+    setPresetsReopened(false);
     pickedPresetRef.current = false;
   };
 
@@ -560,8 +613,9 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
 
   // More → leave custom mode and reopen the preset dropdown.
   const handleReopenPresets = () => {
+    reopenPresetsRef.current = true;
+    setPresetsReopened(true);
     setShowCustom(false);
-    setSelectOpen(true);
   };
 
   const handleConfirmReduction = () => {
@@ -627,29 +681,35 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
           )}
         </div>
       ) : (
-        <InputSelect
-          value={selectValue}
-          onValueChange={handleSelectChange}
-          open={selectOpen}
-          onOpenChange={handleOpenChange}
-          disabled={disabled}
-        >
-          <InputSelect.Trigger />
-          <InputSelect.Content>
-            <InputSelect.Item value={FOREVER_RETENTION_VALUE}>
-              {t("retention.forever.label")}
-            </InputSelect.Item>
-            {retentionPresets.map((preset) => (
-              <InputSelect.Item key={preset.days} value={String(preset.days)}>
-                {preset.label}
-              </InputSelect.Item>
-            ))}
-            <InputSelect.Separator />
-            <InputSelect.Item value={CUSTOM_RETENTION_VALUE}>
-              {t("retention.custom.label")}
-            </InputSelect.Item>
-          </InputSelect.Content>
-        </InputSelect>
+        <div ref={selectWrapperRef} className="w-full">
+          <InputSingleSelect
+            value={selectValue}
+            onValueChange={handleSelectChange}
+            onBlur={handleSelectBlur}
+            disabled={disabled}
+            placeholder={tInputSelect("placeholder.fallback")}
+            options={[
+              {
+                value: FOREVER_RETENTION_VALUE,
+                title: t("retention.forever.label"),
+              },
+              ...retentionPresets.map(
+                (preset): SelectOption => ({
+                  value: String(preset.days),
+                  title: preset.label,
+                })
+              ),
+              {
+                options: [
+                  {
+                    value: CUSTOM_RETENTION_VALUE,
+                    title: t("retention.custom.label"),
+                  },
+                ],
+              },
+            ]}
+          />
+        </div>
       )}
 
       {pendingValue !== null && (
@@ -667,6 +727,7 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
 
 export default function ChatPreferencesPage() {
   const t = useTranslations("admin.chatPreferences");
+  const tInputSelect = useTranslations("common.inputSelect");
   const adminRouteTitle = useAdminRouteTitle();
   const router = useRouter();
   const settings = useSettings();
@@ -1116,7 +1177,9 @@ export default function ChatPreferencesPage() {
               withLabel
             >
               <InputTextArea
-                placeholder={t("teamContext.placeholder")}
+                placeholder={t("teamContext.placeholder", {
+                  appName: settings.appName,
+                })}
                 rows={4}
                 maxRows={10}
                 autoResize
@@ -1196,7 +1259,7 @@ export default function ChatPreferencesPage() {
                         </Section>
 
                         <Button
-                          href="/admin/indexing/status"
+                          href="/admin/indexing-status"
                           prominence="tertiary"
                           rightIcon={SvgExternalLink}
                         >
@@ -1413,7 +1476,9 @@ export default function ChatPreferencesPage() {
                     >
                       <InputHorizontal
                         title={t("retention.title")}
-                        description={t("retention.description")}
+                        description={t("retention.description", {
+                          appName: settings.appName,
+                        })}
                         tag={
                           !enterpriseTier
                             ? {
@@ -1443,38 +1508,35 @@ export default function ChatPreferencesPage() {
                       withLabel
                       fillInput
                     >
-                      <InputSelect
+                      <InputSingleSelect
                         value={s.query_history_type ?? QueryHistoryType.NORMAL}
                         onValueChange={(value) => {
                           void saveSettings({
                             query_history_type: value as QueryHistoryType,
                           });
                         }}
-                      >
-                        <InputSelect.Trigger />
-                        <InputSelect.Content>
-                          <InputSelect.Item
-                            value={QueryHistoryType.NORMAL}
-                            description={t("queryHistory.normal.description")}
-                          >
-                            {t("queryHistory.normal.label")}
-                          </InputSelect.Item>
-                          <InputSelect.Item
-                            value={QueryHistoryType.ANONYMIZED}
-                            description={t(
+                        defaultOption={QueryHistoryType.NORMAL}
+                        placeholder={tInputSelect("placeholder.fallback")}
+                        options={[
+                          {
+                            value: QueryHistoryType.NORMAL,
+                            title: t("queryHistory.normal.label"),
+                            description: t("queryHistory.normal.description"),
+                          },
+                          {
+                            value: QueryHistoryType.ANONYMIZED,
+                            title: t("queryHistory.anonymized.label"),
+                            description: t(
                               "queryHistory.anonymized.description"
-                            )}
-                          >
-                            {t("queryHistory.anonymized.label")}
-                          </InputSelect.Item>
-                          <InputSelect.Item
-                            value={QueryHistoryType.DISABLED}
-                            description={t("queryHistory.disabled.description")}
-                          >
-                            {t("queryHistory.disabled.label")}
-                          </InputSelect.Item>
-                        </InputSelect.Content>
-                      </InputSelect>
+                            ),
+                          },
+                          {
+                            value: QueryHistoryType.DISABLED,
+                            title: t("queryHistory.disabled.label"),
+                            description: t("queryHistory.disabled.description"),
+                          },
+                        ]}
+                      />
                     </InputHorizontal>
                   </Section>
                 </Card>

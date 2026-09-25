@@ -22,6 +22,8 @@ This file provides guidance to AI agents when working with code in this reposito
   This works on a host checkout and inside the devcontainer. If no `psql` client is available, fall back to
   `docker exec onyx-relational_db-1 psql -U postgres -c "<SQL>"` (no `-it` — agent shells have no TTY).
 - When making calls to the backend, always go through the frontend. E.g. make a call to `http://localhost:3000/api/persona` not `http://localhost:8080/api/persona`
+- If `.agents-local.md` exists at the repo root and its rules are not already in your context,
+  read and follow it. It carries developer-local agent guidance and is never committed.
 
 ## Project Overview
 

@@ -27,7 +27,6 @@ interface ContentXlPresetConfig {
   /** More-icon-1 width/height (CSS value). */
   moreIcon1Size: string;
   /** More-icon-2 width/height (CSS value). */
-  moreIcon2Size: string;
   /** Button `size` prop for the edit button. */
   editButtonSize: ContainerSizeVariants;
   /** Tailwind padding class for the edit button container. */
@@ -67,7 +66,7 @@ interface ContentXlProps {
   /** Optional secondary icon rendered in the icon row. */
   moreIcon1?: IconFunctionComponent;
 
-  /** Optional tertiary icon rendered in the icon row. */
+  /** Optional tertiary icon rendered in the icon row, boxed and sized like `icon`. */
   moreIcon2?: IconFunctionComponent;
 
   /** Ref forwarded to the root `<div>`. */
@@ -84,7 +83,6 @@ const CONTENT_XL_PRESETS: Record<ContentXlSizePreset, ContentXlPresetConfig> = {
     lineHeight: "2.25rem",
     iconSize: "2rem",
     moreIcon1Size: "1rem",
-    moreIcon2Size: "2rem",
     editButtonSize: "md",
     editButtonPadding: "p-1",
     iconRowMarginBottom: "0rem",
@@ -94,7 +92,6 @@ const CONTENT_XL_PRESETS: Record<ContentXlSizePreset, ContentXlPresetConfig> = {
     lineHeight: "1.75rem",
     iconSize: "1.5rem",
     moreIcon1Size: "0.75rem",
-    moreIcon2Size: "1.5rem",
     editButtonSize: "sm",
     editButtonPadding: "p-0.5",
     iconRowMarginBottom: "0.25rem",
@@ -168,14 +165,16 @@ function ContentXl({
             </div>
           )}
 
+          {/* The tertiary icon is a peer of the primary one: same box, same
+              line-height floor, same size. */}
           {MoreIcon2 && (
-            <div className="opal-content-xl-more-icon-container shrink-0">
+            <div
+              className="opal-content-xl-icon-container shrink-0"
+              style={{ minHeight: config.lineHeight }}
+            >
               <MoreIcon2
                 className="opal-content-xl-icon"
-                style={{
-                  width: config.moreIcon2Size,
-                  height: config.moreIcon2Size,
-                }}
+                style={{ width: config.iconSize, height: config.iconSize }}
               />
             </div>
           )}

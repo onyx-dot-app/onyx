@@ -59,7 +59,6 @@ from onyx.db.engine.sql_engine import (
     get_session_with_tenant,
 )
 from onyx.db.enums import (
-    AccessType,
     CapabilityCheckTrigger,
     ConnectorCredentialPairStatus,
     SyncStatus,
@@ -163,7 +162,7 @@ def _fail_doc_permission_sync_attempt(
 def _is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
     """Returns boolean indicating if external doc permissions sync is due."""
 
-    if cc_pair.access_type != AccessType.SYNC:
+    if not cc_pair.access_type.is_perm_synced():
         return False
 
     # skip doc permissions sync if not active

@@ -35,9 +35,15 @@ def test_image_indexing(
         file_path=test_file_path, file_name=FILE_NAME, user_performing_action=admin_user
     )
 
-    LLMProviderManager.create(
+    llm_provider = LLMProviderManager.create(
         name="test_llm",
         user_performing_action=admin_user,
+    )
+    assert llm_provider.default_model_name is not None
+    LLMProviderManager.set_default_vision(
+        llm_provider.id,
+        user_performing_action=admin_user,
+        model_name=llm_provider.default_model_name,
     )
 
     SettingsManager.update_settings(
@@ -133,9 +139,15 @@ def test_docx_image_indexing(
         user_performing_action=admin_user,
     )
 
-    LLMProviderManager.create(
+    llm_provider = LLMProviderManager.create(
         name="test_llm_docx",
         user_performing_action=admin_user,
+    )
+    assert llm_provider.default_model_name is not None
+    LLMProviderManager.set_default_vision(
+        llm_provider.id,
+        user_performing_action=admin_user,
+        model_name=llm_provider.default_model_name,
     )
 
     SettingsManager.update_settings(

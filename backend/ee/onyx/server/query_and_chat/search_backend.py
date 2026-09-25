@@ -39,6 +39,7 @@ from onyx.db.engine.sql_engine import get_session, get_session_with_current_tena
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.llm.factory import get_default_llm
+from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.utils import get_json_line
 from onyx.server.utils_vector_db import require_vector_db
@@ -137,6 +138,15 @@ def handle_send_search_message(
 
     if request.hybrid_alpha is None and ONYX_SEARCH_UI_USES_OPENSEARCH_KEYWORD_SEARCH:
         request.hybrid_alpha = 0.0
+
+    # Query expansion and LLM doc selection spend tokens, so the chat budgets apply.
+    if request.run_query_expansion or (request.num_docs_fed_to_llm_selection or 0) >= 1:
+        check_token_rate_limits(user)
+        check_llm_cost_limit_for_provider(
+            db_session=db_session,
+            tenant_id=get_current_tenant_id(),
+            llm_provider_api_key=get_default_llm().config.api_key,
+        )
 
     # Non-streaming path
     if not request.stream:

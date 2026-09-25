@@ -30,7 +30,7 @@ import {
   InputTypeIn,
   InputPasswordTypeIn,
 } from "@opal/components";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelect } from "@opal/components";
 import { InputSwitch } from "@opal/components";
 import { useUser } from "@/providers/UserProvider";
 import { useTheme } from "next-themes";
@@ -62,7 +62,7 @@ import {
 import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
 import useCCPairs from "@/hooks/useCCPairs";
 import { ValidSources } from "@/lib/types";
-import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
+import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { BasicModalFooter, Modal } from "@opal/components";
 import { Code, CopyButton } from "@opal/components";
@@ -243,6 +243,8 @@ interface PATModalProps {
   setExpirationDays: (days: string) => void;
   accessMode: AccessMode;
   setAccessMode: (mode: AccessMode) => void;
+  /** The access mode the modal opened with; the select never empties below it. */
+  defaultAccessMode: AccessMode;
   scopeOptions: PatScopeOption[];
   scopesError: boolean;
   selectedScopes: string[];
@@ -260,6 +262,7 @@ function PATModal({
   setExpirationDays,
   accessMode,
   setAccessMode,
+  defaultAccessMode,
   scopeOptions,
   scopesError,
   selectedScopes,
@@ -353,29 +356,28 @@ function PATModal({
           }
           withLabel
         >
-          <InputSelect
+          <InputSingleSelect
             value={expirationDays}
             onValueChange={setExpirationDays}
             disabled={isCreating}
-          >
-            <InputSelect.Trigger
-              placeholder={t("apiKeys.createModal.expiration.placeholder")}
-            />
-            <InputSelect.Content>
-              <InputSelect.Item value="7">
-                {t("apiKeys.createModal.expiration.days7")}
-              </InputSelect.Item>
-              <InputSelect.Item value="30">
-                {t("apiKeys.createModal.expiration.days30")}
-              </InputSelect.Item>
-              <InputSelect.Item value="365">
-                {t("apiKeys.createModal.expiration.days365")}
-              </InputSelect.Item>
-              <InputSelect.Item value="null">
-                {t("apiKeys.createModal.expiration.noExpiration")}
-              </InputSelect.Item>
-            </InputSelect.Content>
-          </InputSelect>
+            defaultOption="30"
+            placeholder={t("apiKeys.createModal.expiration.placeholder")}
+            options={[
+              { value: "7", title: t("apiKeys.createModal.expiration.days7") },
+              {
+                value: "30",
+                title: t("apiKeys.createModal.expiration.days30"),
+              },
+              {
+                value: "365",
+                title: t("apiKeys.createModal.expiration.days365"),
+              },
+              {
+                value: "null",
+                title: t("apiKeys.createModal.expiration.noExpiration"),
+              },
+            ]}
+          />
         </InputVertical>
         <InputVertical
           title={t("apiKeys.createModal.permissions.title")}
@@ -386,23 +388,23 @@ function PATModal({
           }
           withLabel
         >
-          <InputSelect
+          <InputSingleSelect
             value={accessMode}
             onValueChange={(value) => setAccessMode(value as AccessMode)}
             disabled={isCreating}
-          >
-            <InputSelect.Trigger
-              placeholder={t("apiKeys.createModal.permissions.placeholder")}
-            />
-            <InputSelect.Content>
-              <InputSelect.Item value="full">
-                {t("apiKeys.createModal.permissions.fullAccessOption")}
-              </InputSelect.Item>
-              <InputSelect.Item value="limited">
-                {t("apiKeys.createModal.permissions.limitedAccessOption")}
-              </InputSelect.Item>
-            </InputSelect.Content>
-          </InputSelect>
+            defaultOption={defaultAccessMode}
+            placeholder={t("apiKeys.createModal.permissions.placeholder")}
+            options={[
+              {
+                value: "full",
+                title: t("apiKeys.createModal.permissions.fullAccessOption"),
+              },
+              {
+                value: "limited",
+                title: t("apiKeys.createModal.permissions.limitedAccessOption"),
+              },
+            ]}
+          />
         </InputVertical>
         {accessMode === "limited" && (
           <ScopeSelector
@@ -523,6 +525,7 @@ function usePATCreation({
     setExpirationDays,
     accessMode,
     setAccessMode,
+    defaultAccessMode,
     selectedScopes,
     toggleScope,
     newlyCreatedToken,
@@ -534,6 +537,7 @@ function usePATCreation({
 
 function GeneralSettings() {
   const t = useTranslations("settings");
+  const tInputSelect = useTranslations("common.inputSelect");
   const {
     user,
     updateUserPersonalization,
@@ -728,48 +732,47 @@ function GeneralSettings() {
                 center
                 withLabel
               >
-                <InputSelect
-                  value={theme}
+                <InputSingleSelect
+                  value={theme ?? ""}
                   onValueChange={(value) => {
                     setTheme(value);
                     updateUserThemePreference(value as ThemePreference);
                   }}
-                >
-                  <InputSelect.Trigger />
-                  <InputSelect.Content>
-                    <InputSelect.Item
-                      value={ThemePreference.SYSTEM}
-                      icon={() => (
-                        <ColorSwatch
-                          light={systemTheme === "light"}
-                          dark={systemTheme === "dark"}
-                        />
-                      )}
-                      description={
+                  defaultOption={ThemePreference.SYSTEM}
+                  placeholder={tInputSelect("placeholder.fallback")}
+                  options={[
+                    {
+                      value: ThemePreference.SYSTEM,
+                      title: t("appearance.colorMode.auto"),
+                      description:
                         systemTheme === "light"
                           ? t("appearance.colorMode.light")
                           : systemTheme === "dark"
                             ? t("appearance.colorMode.dark")
-                            : undefined
-                      }
-                    >
-                      {t("appearance.colorMode.auto")}
-                    </InputSelect.Item>
-                    <InputSelect.Separator />
-                    <InputSelect.Item
-                      value={ThemePreference.LIGHT}
-                      icon={() => <ColorSwatch light />}
-                    >
-                      {t("appearance.colorMode.light")}
-                    </InputSelect.Item>
-                    <InputSelect.Item
-                      value={ThemePreference.DARK}
-                      icon={() => <ColorSwatch dark />}
-                    >
-                      {t("appearance.colorMode.dark")}
-                    </InputSelect.Item>
-                  </InputSelect.Content>
-                </InputSelect>
+                            : undefined,
+                      icon: () => (
+                        <ColorSwatch
+                          light={systemTheme === "light"}
+                          dark={systemTheme === "dark"}
+                        />
+                      ),
+                    },
+                    {
+                      options: [
+                        {
+                          value: ThemePreference.LIGHT,
+                          title: t("appearance.colorMode.light"),
+                          icon: () => <ColorSwatch light />,
+                        },
+                        {
+                          value: ThemePreference.DARK,
+                          title: t("appearance.colorMode.dark"),
+                          icon: () => <ColorSwatch dark />,
+                        },
+                      ],
+                    },
+                  ]}
+                />
               </InputHorizontal>
               <InputVertical title={t("appearance.chatBackground.title")}>
                 <div className="flex flex-wrap gap-2">
@@ -842,25 +845,22 @@ function GeneralSettings() {
                 center
                 withLabel
               >
-                <InputSelect
+                <InputSingleSelect
                   value={currentLanguage}
                   onValueChange={(value) => {
-                    // SAFETY: the items below only carry SUPPORTED_LOCALES
+                    // SAFETY: the options below only carry SUPPORTED_LOCALES
                     // values, so the select can't emit anything else.
                     updateUserLanguage(value as Locale).catch(() => {
                       toast.error(t("language.toasts.updateFailed"));
                     });
                   }}
-                >
-                  <InputSelect.Trigger />
-                  <InputSelect.Content>
-                    {SUPPORTED_LOCALES.map((locale) => (
-                      <InputSelect.Item key={locale} value={locale}>
-                        {LOCALE_ENDONYMS[locale]}
-                      </InputSelect.Item>
-                    ))}
-                  </InputSelect.Content>
-                </InputSelect>
+                  defaultOption={DEFAULT_LOCALE}
+                  placeholder={tInputSelect("placeholder.fallback")}
+                  options={SUPPORTED_LOCALES.map((locale) => ({
+                    value: locale,
+                    title: LOCALE_ENDONYMS[locale],
+                  }))}
+                />
               </InputHorizontal>
             </Section>
           </Card>
@@ -1184,6 +1184,7 @@ function PromptShortcuts() {
 
 function ChatPreferencesSettings() {
   const t = useTranslations("settings");
+  const tInputSelect = useTranslations("common.inputSelect");
   const tModelSelector = useTranslations("chat.modelSelector");
   const {
     user,
@@ -1327,7 +1328,9 @@ function ChatPreferencesSettings() {
           <Section alignItems="start" height="fit">
             <InputHorizontal
               title={t("chats.defaultModel.title")}
-              description={t("chats.defaultModel.description")}
+              description={t("chats.defaultModel.description", {
+                appName: settings.appName,
+              })}
               withLabel
             >
               <ModelSelector
@@ -1495,23 +1498,25 @@ function ChatPreferencesSettings() {
                   disabled={!searchUiEnabled}
                   withLabel
                 >
-                  <InputSelect
+                  <InputSingleSelect
                     value={user?.preferences.default_app_mode ?? "CHAT"}
                     onValueChange={(value) => {
                       void updateUserDefaultAppMode(value as "CHAT" | "SEARCH");
                     }}
                     disabled={!searchUiEnabled}
-                  >
-                    <InputSelect.Trigger />
-                    <InputSelect.Content>
-                      <InputSelect.Item value="CHAT">
-                        {t("chats.defaultAppMode.chatOption")}
-                      </InputSelect.Item>
-                      <InputSelect.Item value="SEARCH">
-                        {t("chats.defaultAppMode.searchOption")}
-                      </InputSelect.Item>
-                    </InputSelect.Content>
-                  </InputSelect>
+                    defaultOption="CHAT"
+                    placeholder={tInputSelect("placeholder.fallback")}
+                    options={[
+                      {
+                        value: "CHAT",
+                        title: t("chats.defaultAppMode.chatOption"),
+                      },
+                      {
+                        value: "SEARCH",
+                        title: t("chats.defaultAppMode.searchOption"),
+                      },
+                    ]}
+                  />
                 </InputHorizontal>
               </Tooltip>
             )}
@@ -1550,7 +1555,9 @@ function ChatPreferencesSettings() {
           <Section alignItems="start" height="fit">
             <InputHorizontal
               title={t("memory.referenceStoredMemories.title")}
-              description={t("memory.referenceStoredMemories.description")}
+              description={t("memory.referenceStoredMemories.description", {
+                appName: settings.appName,
+              })}
               withLabel
             >
               <InputSwitch
@@ -1563,7 +1570,9 @@ function ChatPreferencesSettings() {
             </InputHorizontal>
             <InputHorizontal
               title={t("memory.updateMemories.title")}
-              description={t("memory.updateMemories.description")}
+              description={t("memory.updateMemories.description", {
+                appName: settings.appName,
+              })}
               withLabel
             >
               <InputSwitch
@@ -1730,6 +1739,7 @@ function GatewayAccessSection({
   onCreateToken,
 }: GatewayAccessSectionProps) {
   const t = useTranslations("settings");
+  const { appName } = useSettings();
   const gatewayTier = useTierAtLeast(LLM_GATEWAY_MIN_TIER);
   const { llmProviders } = useLLMProviders();
   const [gatewayUrl, setGatewayUrl] = useState("");
@@ -1782,7 +1792,7 @@ function GatewayAccessSection({
     <Section gap={3}>
       <ContentAction
         title={t("gateway.title")}
-        description={t("gateway.description")}
+        description={t("gateway.description", { appName })}
         sizePreset="main-content"
         variant="section"
         width="full"
@@ -1919,6 +1929,7 @@ function LLMGatewaySettings() {
           setExpirationDays={tokenCreation.setExpirationDays}
           accessMode={tokenCreation.accessMode}
           setAccessMode={tokenCreation.setAccessMode}
+          defaultAccessMode={tokenCreation.defaultAccessMode}
           scopeOptions={scopeOptions}
           scopesError={Boolean(scopeOptionsError)}
           selectedScopes={tokenCreation.selectedScopes}
@@ -2003,7 +2014,7 @@ function AccountsAccessSettings() {
     errorHandlingFetcher,
     { fallbackData: [] }
   );
-  const currentTier = useSettings().tier;
+  const { tier: currentTier, appName } = useSettings();
   const scopeOptions = useMemo(
     () =>
       // Undefined tier (settings loading/failed) must not hide Community scopes.
@@ -2119,6 +2130,7 @@ function AccountsAccessSettings() {
           setExpirationDays={tokenCreation.setExpirationDays}
           accessMode={tokenCreation.accessMode}
           setAccessMode={tokenCreation.setAccessMode}
+          defaultAccessMode={tokenCreation.defaultAccessMode}
           scopeOptions={scopeOptions}
           scopesError={Boolean(scopeOptionsError)}
           selectedScopes={tokenCreation.selectedScopes}
@@ -2148,6 +2160,7 @@ function AccountsAccessSettings() {
               {t("apiKeys.revokeModal.description", {
                 name: tokenToDelete.name,
                 tokenDisplay: tokenToDelete.token_display,
+                appName,
               })}
             </Text>
             <Text color="text-05">{t("apiKeys.revokeModal.question")}</Text>
@@ -2491,6 +2504,7 @@ function FederatedConnectorCard({
   onDisconnectSuccess,
 }: FederatedConnectorCardProps) {
   const t = useTranslations("settings");
+  const { appName } = useSettings();
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [showDisconnectConfirmation, setShowDisconnectConfirmation] =
     useState(false);
@@ -2545,6 +2559,7 @@ function FederatedConnectorCard({
             <Text color="text-05">
               {t("connectors.disconnectModal.description", {
                 name: sourceMetadata.displayName,
+                appName,
               })}
             </Text>
             <Text color="text-05">

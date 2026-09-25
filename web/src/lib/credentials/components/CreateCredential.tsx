@@ -6,14 +6,14 @@ import { submitCredential } from "@/components/admin/connectors/CredentialForm";
 import { TextFormField } from "@/components/Field";
 import { Form, Formik, FormikHelpers } from "formik";
 import { toast } from "@opal/layouts";
-import GDriveMain from "@/app/admin/connectors/[connector]/pages/gdrive/GoogleDrivePage";
-import { Connector } from "@/lib/connectors/connectors";
-import {
+import GDriveMain from "@/views/admin/connectors/AddConnectorPage/form/gdrive/GoogleDrivePage";
+import type { Connector } from "@/lib/connectors/types";
+import { credentialTemplates } from "@/lib/connectors/credentials";
+import type {
   Credential,
   CredentialTemplateWithAuth,
-  credentialTemplates,
-} from "@/lib/connectors/credentials";
-import { GmailMain } from "@/app/admin/connectors/[connector]/pages/gmail/GmailPage";
+} from "@/lib/connectors/types";
+import { GmailMain } from "@/views/admin/connectors/AddConnectorPage/form/gmail/GmailPage";
 import type {
   CredentialActionType,
   CredentialFieldValues,

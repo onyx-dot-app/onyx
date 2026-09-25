@@ -13,6 +13,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
+from sqlalchemy.exc import DataError
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.main import log_http_error, validation_exception_handler, value_error_handler
@@ -20,6 +21,13 @@ from onyx.main import log_http_error, validation_exception_handler, value_error_
 
 class _Body(BaseModel):
     count: int
+
+
+_LEAKY_SQL = "INSERT INTO persona (display_priority) VALUES (%(p)s)"
+
+
+class _ClientConflictError(Exception):
+    status_code = 409
 
 
 @pytest.fixture
@@ -42,6 +50,14 @@ def client() -> TestClient:
     @app.get("/value-error")
     def _value_error() -> None:
         raise ValueError("Model 'gpt-9' is not valid for provider_id=3")
+
+    @app.get("/unhandled")
+    def _unhandled() -> None:
+        raise DataError(_LEAKY_SQL, {"p": 2**31}, Exception("integer out of range"))
+
+    @app.get("/client-status-error")
+    def _client_status_error() -> None:
+        raise _ClientConflictError("Name already taken")
 
     @app.post("/validated")
     def _validated(body: _Body) -> None:  # noqa: ARG001
@@ -102,6 +118,27 @@ class TestHTTPExceptionContract:
         body: dict[str, Any] = response.json()
         assert body["detail"] == {"field": "name"}
         assert body["error_code"] == "BAD_REQUEST"
+
+
+class TestUnhandledExceptionContract:
+    def test_body_is_generic(self, client: TestClient) -> None:
+        response = client.get("/unhandled")
+
+        assert response.status_code == 500
+        assert response.json() == {
+            "error_code": "INTERNAL_ERROR",
+            "detail": "An internal server error occurred.",
+        }
+        assert "INSERT" not in response.text
+
+    def test_a_client_status_keeps_its_message(self, client: TestClient) -> None:
+        response = client.get("/client-status-error")
+
+        assert response.status_code == 409
+        assert response.json() == {
+            "error_code": "CONFLICT",
+            "detail": "Name already taken",
+        }
 
 
 class TestValueErrorContract:

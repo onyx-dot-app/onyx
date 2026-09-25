@@ -76,7 +76,7 @@ export class AdminVoicePage {
   }
 
   async expectLanguageValue(language: string): Promise<void> {
-    await expect(this.languageSelect).toContainText(language);
+    await expect(this.languageSelect).toHaveValue(language);
   }
 
   async fillZoomCredentials(credentials: {

@@ -179,7 +179,7 @@ def _get_connector_runner(
 
         perm_sync_validated = (
             not INTEGRATION_TESTS_MODE
-            and attempt.connector_credential_pair.access_type == AccessType.SYNC
+            and attempt.connector_credential_pair.access_type.is_perm_synced()
         )
         if perm_sync_validated:
             with time_stage(IndexAttemptStage.PERMISSION_VALIDATION, attempt.id):
@@ -525,7 +525,7 @@ def connector_document_extraction(
             else 0
         )
         should_fetch_permissions_during_indexing = (
-            index_attempt.connector_credential_pair.access_type == AccessType.SYNC
+            index_attempt.connector_credential_pair.access_type.is_perm_synced()
             and source_should_fetch_permissions_during_indexing(db_connector.source)
             # if we've already successfully indexed, let the doc_sync job take care
             # of doc-level permissions. Zoom skips both halves: with no doc_sync to

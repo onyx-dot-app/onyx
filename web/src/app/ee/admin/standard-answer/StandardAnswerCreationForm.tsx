@@ -21,7 +21,7 @@ import {
   SelectorFormField,
   Label,
 } from "@/components/Field";
-import { Button, InputMultiSelect, Text } from "@opal/components";
+import { Button, InputTypeInTag, Text } from "@opal/components";
 
 function mapKeywordSelectToMatchAny(keywordSelect: "any" | "all"): boolean {
   return keywordSelect == "any";
@@ -171,7 +171,7 @@ export const StandardAnswerCreationForm = ({
               </div>
               <div className="w-4/12 flex flex-col gap-2">
                 <Label>{t("form.categories.label")}</Label>
-                <InputMultiSelect
+                <InputTypeInTag
                   placeholder={t("form.categories.placeholder")}
                   value={categoryInput}
                   onChange={setCategoryInput}

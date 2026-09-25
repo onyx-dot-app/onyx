@@ -341,8 +341,8 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
             initial_index_should_sync=True,
         ),
     ),
-    # Threads are read by their members, so only channel files name groups:
-    # the SharePoint groups of their channel sites.
+    # A thread names the group of its channel's members, and a channel file the
+    # SharePoint groups of its channel site.
     DocumentSource.TEAMS: SyncConfig(
         doc_sync_config=DocSyncConfig(
             doc_sync_frequency=TEAMS_PERMISSION_DOC_SYNC_FREQUENCY,

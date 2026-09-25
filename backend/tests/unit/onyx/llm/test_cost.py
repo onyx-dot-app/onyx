@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from onyx.db.models import ModelCostOverride
 from onyx.llm import cost as cost_mod
 from onyx.llm import cost_overrides
-from onyx.llm.cost import compute_cost_cents
+from onyx.llm.cost import compute_cost_cents, get_model_price_per_million
 from onyx.tracing.flows import LLMFlow
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
@@ -157,18 +157,177 @@ class TestComputeCostCents:
         assert input_cents == pytest.approx(1.08)
         assert output_cents == 0
 
-    def test_bedrock_model_priced_via_provider(self) -> None:
+    def test_bedrock_model_priced_via_provider(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # Bedrock names aren't self-identifying — without custom_llm_provider
-        # litellm raises and the cost silently collapses to $0. Haiku:
-        # $0.25/Mtok in, $1.25/Mtok out → 0.025c in, 0.125c out for 1000 tok.
+        # litellm raises and the cost silently collapses to $0. litellm's
+        # price map drifts upstream, so stub the lookup and assert the
+        # provider plumbing rather than live prices.
+        import litellm
+
+        def _fake_cost_per_token(
+            model: str,  # noqa: ARG001
+            custom_llm_provider: str | None,
+            prompt_tokens: int,
+            completion_tokens: int,
+            **_kw: object,
+        ) -> tuple[float, float]:
+            assert custom_llm_provider == "bedrock"
+            return prompt_tokens * 1e-6, completion_tokens * 5e-6
+
+        monkeypatch.setattr(litellm, "cost_per_token", _fake_cost_per_token)
         in_cents, out_cents = compute_cost_cents(
-            model="anthropic.claude-3-haiku-20240307-v1:0",
+            model="anthropic.claude-haiku-4-5-20251001-v1:0",
             provider="bedrock",
             prompt_tokens=1000,
             completion_tokens=1000,
         )
-        assert in_cents == pytest.approx(0.025)
-        assert out_cents == pytest.approx(0.125)
+        assert in_cents == pytest.approx(0.1)
+        assert out_cents == pytest.approx(0.5)
+
+
+class TestUnmappedGatewayModels:
+    """Gateway-hosted names that the catalog does not carry fall back to the
+    configured default rates instead of silently recording zero."""
+
+    GATEWAY_CASES = [
+        ("acme/sonnet-9-ultra", "portkey"),
+        ("acme/gpt-77", "openai_compatible"),
+        ("acme/gemini-9.9-pro", "bifrost"),
+        ("acme/claude-42-opus", "nebius_tokenfactory"),
+    ]
+
+    @pytest.mark.parametrize("model,provider", GATEWAY_CASES)
+    def test_unmapped_gateway_model_uses_fallback_rates_not_zero(
+        self, model: str, provider: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_INPUT_COST_PER_MTOK", 2.0)
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_OUTPUT_COST_PER_MTOK", 6.0)
+        in_cents, out_cents = compute_cost_cents(
+            model=model,
+            provider=provider,
+            prompt_tokens=1_000_000,
+            completion_tokens=1_000_000,
+        )
+        assert in_cents == pytest.approx(200.0)
+        assert out_cents == pytest.approx(600.0)
+
+    @pytest.mark.parametrize("model,provider", GATEWAY_CASES)
+    def test_unmapped_gateway_model_reports_unknown_rates(
+        self, model: str, provider: str
+    ) -> None:
+        price = get_model_price_per_million(model, provider)
+        assert price.input_per_mtok is None
+        assert price.output_per_mtok is None
+
+    def test_unmapped_gateway_model_warns_when_no_fallback_configured(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_INPUT_COST_PER_MTOK", 0.0)
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_OUTPUT_COST_PER_MTOK", 0.0)
+        with caplog.at_level(logging.WARNING):
+            result = compute_cost_cents(
+                model="acme/sonnet-9-ultra",
+                provider="portkey",
+                prompt_tokens=1_000_000,
+                completion_tokens=1_000_000,
+            )
+        assert result == (0.0, 0.0)
+        assert "No price for model" in caplog.text
+
+    @pytest.mark.parametrize(
+        "model,provider",
+        [
+            ("anthropic/claude-sonnet-4.5", "vercel_ai_gateway"),
+            ("anthropic/claude-sonnet-4.5", "openrouter"),
+        ],
+    )
+    def test_mapped_gateway_model_keeps_its_real_price(
+        self, model: str, provider: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Gateways litellm does map must not be diverted to fallback rates."""
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_INPUT_COST_PER_MTOK", 2.0)
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_OUTPUT_COST_PER_MTOK", 6.0)
+        in_cents, out_cents = compute_cost_cents(
+            model=model,
+            provider=provider,
+            prompt_tokens=1000,
+            completion_tokens=1000,
+        )
+        assert in_cents == pytest.approx(0.3)
+        assert out_cents == pytest.approx(1.5)
+
+
+class TestLocallyHostedProviders:
+    """Self-hosted inference has no per-token vendor charge, so it must bill
+    zero rather than pick up the unpriced-model fallback rates."""
+
+    @pytest.mark.parametrize(
+        "model,provider",
+        [
+            ("gpt-oss:20b", "ollama_chat"),
+            ("llama3.3", "ollama"),
+            ("qwen/qwen3-4b", "lm_studio"),
+        ],
+    )
+    def test_local_provider_bills_zero_despite_fallback_rates(
+        self, model: str, provider: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_INPUT_COST_PER_MTOK", 2.0)
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_OUTPUT_COST_PER_MTOK", 6.0)
+        assert compute_cost_cents(
+            model=model,
+            provider=provider,
+            prompt_tokens=1_000_000,
+            completion_tokens=1_000_000,
+        ) == (0.0, 0.0)
+
+    def test_local_provider_reports_zero_rates(self) -> None:
+        price = get_model_price_per_million("gpt-oss:20b", "ollama_chat")
+        assert price.input_per_mtok == 0.0
+        assert price.output_per_mtok == 0.0
+
+    @pytest.mark.parametrize(
+        "model", ["gpt-oss:20b-cloud", "deepseek-v3.1:671b-cloud", "glm-4.6:cloud"]
+    )
+    def test_ollama_cloud_model_is_not_billed_as_local(
+        self, model: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Ollama Cloud is hosted, billable inference served under the same
+        provider name as local Ollama. litellm has no `ollama_chat/*-cloud`
+        entry, so it must reach the fallback rates, not the zero-cost path."""
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_INPUT_COST_PER_MTOK", 2.0)
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_OUTPUT_COST_PER_MTOK", 6.0)
+        in_cents, out_cents = compute_cost_cents(
+            model=model,
+            provider="ollama_chat",
+            prompt_tokens=1_000_000,
+            completion_tokens=1_000_000,
+        )
+        assert in_cents == pytest.approx(200.0)
+        assert out_cents == pytest.approx(600.0)
+
+    def test_ollama_cloud_model_reports_unknown_rates(self) -> None:
+        price = get_model_price_per_million("gpt-oss:20b-cloud", "ollama_chat")
+        assert price.input_per_mtok is None
+        assert price.output_per_mtok is None
+
+    @pytest.mark.parametrize("model", ["gpt-oss:20b-cloud", "gpt-oss:120b-cloud"])
+    def test_bare_ollama_cloud_model_reaches_fallback_rates(
+        self, model: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The catalog carries no `ollama/*-cloud` entries, so cloud models
+        fall back to the configured default rates rather than the zero-cost
+        local path; an admin can pin a real price with a ModelCostOverride."""
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_INPUT_COST_PER_MTOK", 2.0)
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_OUTPUT_COST_PER_MTOK", 6.0)
+        assert compute_cost_cents(
+            model=model,
+            provider="ollama",
+            prompt_tokens=1_000_000,
+            completion_tokens=1_000_000,
+        ) == (200.0, 600.0)
 
 
 class TestImageFlow:

@@ -1,7 +1,5 @@
-import {
-  credentialTemplates,
-  type Credential,
-} from "@/lib/connectors/credentials";
+import { credentialTemplates } from "@/lib/connectors/credentials";
+import type { Credential } from "@/lib/connectors/types";
 import { ValidSources } from "@/lib/types";
 
 import {

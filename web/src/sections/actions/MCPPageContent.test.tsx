@@ -1,6 +1,6 @@
 import { render, waitFor } from "@tests/setup/test-utils";
 import MCPPageContent from "@/sections/actions/MCPPageContent";
-import { MCPServerStatus } from "@/lib/tools/types";
+import { MCPServerStatus } from "@/lib/mcp/types";
 
 const mockUpdateMCPServerStatus = jest.fn();
 const mockRefreshMCPServerTools = jest.fn();
@@ -26,7 +26,7 @@ jest.mock("next/navigation", () => ({
 // spin the component's own effects instead of testing the trigger effect.
 const mockMcpData = { mcp_servers: [] };
 
-jest.mock("@/lib/tools/hooks", () => ({
+jest.mock("@/lib/mcp/hooks", () => ({
   useAdminMcpServers: () => ({
     mcpData: mockMcpData,
     isLoading: false,
@@ -34,8 +34,8 @@ jest.mock("@/lib/tools/hooks", () => ({
   }),
 }));
 
-jest.mock("@/lib/tools/svc", () => ({
-  ...jest.requireActual("@/lib/tools/svc"),
+jest.mock("@/lib/mcp/svc", () => ({
+  ...jest.requireActual("@/lib/mcp/svc"),
   updateMCPServerStatus: (...args: unknown[]) =>
     mockUpdateMCPServerStatus(...args),
   refreshMCPServerTools: (...args: unknown[]) =>

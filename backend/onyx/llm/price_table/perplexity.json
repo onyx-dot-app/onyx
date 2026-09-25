@@ -1,0 +1,166 @@
+{
+  "aliases": {},
+  "models": {
+    "pplx-embed-context-v1-0.6b": {
+      "cost": {
+        "input": 0.008,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 32768
+      },
+      "mode": "embedding",
+      "name": "pplx-embed-context-v1-0.6b"
+    },
+    "pplx-embed-context-v1-4b": {
+      "cost": {
+        "input": 0.049999999999999996,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 32768
+      },
+      "mode": "embedding",
+      "name": "pplx-embed-context-v1-4b"
+    },
+    "pplx-embed-v1-0.6b": {
+      "cost": {
+        "input": 0.004,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 32768
+      },
+      "mode": "embedding",
+      "name": "pplx-embed-v1-0.6b"
+    },
+    "pplx-embed-v1-4b": {
+      "cost": {
+        "input": 0.03,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 32768
+      },
+      "mode": "embedding",
+      "name": "pplx-embed-v1-4b"
+    },
+    "search": {
+      "mode": "search",
+      "name": "search"
+    },
+    "sonar": {
+      "attachment": false,
+      "cost": {
+        "input": 1,
+        "output": 1
+      },
+      "family": "sonar",
+      "limit": {
+        "context": 128000,
+        "output": 4096
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Sonar",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2024-01-01",
+      "temperature": true,
+      "tool_call": false
+    },
+    "sonar-deep-research": {
+      "attachment": false,
+      "cost": {
+        "input": 2,
+        "output": 8,
+        "reasoning": 3
+      },
+      "limit": {
+        "context": 128000,
+        "output": 32768
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Perplexity Sonar Deep Research",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-02-01",
+      "temperature": false,
+      "tool_call": false
+    },
+    "sonar-pro": {
+      "attachment": true,
+      "cost": {
+        "input": 3,
+        "output": 15
+      },
+      "family": "sonar-pro",
+      "limit": {
+        "context": 200000,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Sonar Pro",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2024-01-01",
+      "temperature": true,
+      "tool_call": false
+    },
+    "sonar-reasoning-pro": {
+      "attachment": true,
+      "cost": {
+        "input": 2,
+        "output": 8
+      },
+      "family": "sonar-reasoning",
+      "limit": {
+        "context": 128000,
+        "output": 4096
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Sonar Reasoning Pro",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2024-01-01",
+      "temperature": true,
+      "tool_call": false
+    }
+  },
+  "models_dev_providers": [
+    "perplexity"
+  ]
+}

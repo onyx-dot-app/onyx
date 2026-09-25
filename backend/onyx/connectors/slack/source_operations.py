@@ -38,6 +38,7 @@ from slack_sdk.web import SlackResponse
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
+from onyx.connectors.cross_connector_utils.server_wait import bound_server_wait
 from onyx.connectors.source_operations import (
     OperationConsumes,
     SourceOperations,
@@ -200,7 +201,14 @@ class OnyxRedisSlackRetryHandler(BaseRetryHandler):
         ttl_ms = self._redis.pttl(self._delay_key)
         if ttl_ms < 0:  # negative values are error status codes ... see docs
             ttl_ms = 0
-        ttl_ms_new = ttl_ms + int(duration_s * 1000.0)
+        duration_s = bound_server_wait(duration_s, "slack")
+        # The shared TTL accumulates across clients, so it is bounded too.
+        ttl_ms_new = int(
+            bound_server_wait(
+                (ttl_ms + int(duration_s * 1000.0)) / 1000.0, "slack", classify=False
+            )
+            * 1000.0
+        )
         self._redis.set(self._delay_key, "1", px=ttl_ms_new)
 
         logger.warning(
@@ -304,7 +312,8 @@ class OnyxSlackWebClient(WebClient):
                 self.num_requests,
             )
 
-            time.sleep(delay_ms / 1000.0)
+            # Another process can write the TTL, so bound it here too.
+            time.sleep(bound_server_wait(delay_ms / 1000.0, "slack", classify=False))
 
         result = super()._perform_urllib_http_request_internal(url, req)
 

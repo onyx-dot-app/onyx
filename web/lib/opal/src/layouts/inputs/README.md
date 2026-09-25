@@ -49,6 +49,8 @@ Places title/description on the left, input control on the right.
 | `description` | `string \| RichStr`     | —       | Section description                                                                                                                                                                                                                                              |
 | `suffix`      | `"optional" \| string`  | —       | Suffix after the title                                                                                                                                                                                                                                           |
 
+With `withLabel`, hovering anywhere on the row also paints an `InputSwitch` child's hover state, since the whole row is the switch's hit area.
+
 ### InputErrorText
 
 Renders an error or warning message with an icon.
@@ -70,6 +72,7 @@ Wraps children in standard `p-2 w-full` padding.
 
 ```tsx
 import { InputVertical, InputHorizontal } from "@opal/layouts";
+import { InputSwitch, InputSingleSelect } from "@opal/components";
 
 // Vertical with Formik field binding
 <InputVertical withLabel="email" title="Email" description="Your email address">

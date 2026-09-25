@@ -1,5 +1,5 @@
 import type { ErrorResponseBody } from "@/lib/fetcher";
-import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
+import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
 import { toast } from "@opal/layouts";
 
 export async function setCCPairStatus(

@@ -33,7 +33,7 @@ import { SvgActions, SvgUser } from "@opal/icons";
 import { Popover, PopoverMenu } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
 import useFilter from "@/hooks/useFilter";
-import { useAdminMcpServers } from "@/lib/tools/hooks";
+import { useAdminMcpServers } from "@/lib/mcp/hooks";
 import { useAvailableTools } from "@/lib/tools/hooks";
 import useUsers from "@/hooks/useUsers";
 import { useUser } from "@/providers/UserProvider";

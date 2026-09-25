@@ -12,7 +12,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
 import type { ConnectorIndexingStatusLite } from "@/lib/types";
-import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
+import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
 import { Content, IllustrationContent, toast } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { SettingsLayouts } from "@opal/layouts";
@@ -49,7 +49,7 @@ import {
   SvgVector,
 } from "@opal/icons";
 import SwitchField from "@/refresh-components/form/SwitchField";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelect } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
@@ -62,30 +62,32 @@ import {
   type EmbeddingModelSelection,
   type EmbeddingModelState,
   type EmbeddingProvider,
-} from "@/lib/indexing/types";
+} from "@/lib/searchSettings/types";
 import {
   CLOUD_BASED_PROVIDERS,
   CUSTOM_PROVIDER,
+  MAX_IMAGE_SIZE_OPTIONS,
   SELF_HOSTED_PROVIDERS,
+} from "@/lib/searchSettings/constants";
+import {
   embeddingModelDescription,
   findProvider,
   findRegistryModel,
   isCloudBased,
-  MAX_IMAGE_SIZE_OPTIONS,
   resolveProviderName,
-} from "@/lib/indexing";
+} from "@/lib/searchSettings";
 import {
   isSameModelSelection,
   resolveModelForApply,
   savedModelSelection,
-} from "@/lib/indexing/utils";
+} from "@/lib/searchSettings/utils";
 import {
   saveAdminSettings,
   cancelNewEmbedding,
   disconnectEmbeddingProvider,
   setNewSearchSettings,
   updateInferenceSettings,
-} from "@/lib/indexing/svc";
+} from "@/lib/searchSettings/svc";
 import { useCreateModal } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
 import { ConfirmationModalLayout } from "@opal/layouts";
@@ -98,7 +100,7 @@ import {
   useCurrentSearchSettings,
   useReindexProgress,
   useSecondarySearchSettings,
-} from "@/lib/indexing/hooks";
+} from "@/lib/searchSettings/hooks";
 import { useLlmDefaults } from "@/lib/languageModels/hooks";
 import useFilter from "@/hooks/useFilter";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
@@ -510,6 +512,7 @@ function EmbeddingModelCard({
   onSelect,
 }: EmbeddingModelCardProps) {
   const t = useTranslations("admin.indexSettings");
+  const { appName } = useSettings();
   const topRightButton = (() => {
     switch (modelState) {
       case "unconnected":
@@ -587,7 +590,7 @@ function EmbeddingModelCard({
           <Content
             icon={provider.icon}
             title={model.modelName}
-            description={embeddingModelDescription(model, t)}
+            description={embeddingModelDescription(model, t, appName)}
             sizePreset="main-ui"
             variant="section"
           />
@@ -622,6 +625,7 @@ function isContextualModelOnlyChange(
 
 export default function IndexSettingsPage() {
   const t = useTranslations("admin.indexSettings");
+  const tInputSelect = useTranslations("common.inputSelect");
   const adminRouteTitle = useAdminRouteTitle();
   const router = useRouter();
   const settings = useSettings();
@@ -1068,40 +1072,32 @@ export default function IndexSettingsPage() {
                 initialFormValues
               );
               const switchoverStrategySelect = (
-                <InputSelect
+                <InputSingleSelect
                   value={switchoverType}
                   onValueChange={(v) => setSwitchoverType(v as SwitchoverType)}
-                >
-                  <InputSelect.Trigger
-                    placeholder={t("switchover.placeholder")}
-                  />
-                  <InputSelect.Content>
-                    <InputSelect.Item
-                      value={SwitchoverType.REINDEX}
-                      icon={SvgClock}
-                      wrapDescription
-                      description={t("switchover.reindexAll.description")}
-                    >
-                      {t("switchover.reindexAll.label")}
-                    </InputSelect.Item>
-                    <InputSelect.Item
-                      value={SwitchoverType.ACTIVE_ONLY}
-                      icon={SvgSlowTime}
-                      wrapDescription
-                      description={t("switchover.activeOnly.description")}
-                    >
-                      {t("switchover.activeOnly.label")}
-                    </InputSelect.Item>
-                    <InputSelect.Item
-                      value={SwitchoverType.INSTANT}
-                      icon={SvgEmpty}
-                      wrapDescription
-                      description={t("switchover.instant.description")}
-                    >
-                      {t("switchover.instant.label")}
-                    </InputSelect.Item>
-                  </InputSelect.Content>
-                </InputSelect>
+                  defaultOption={SwitchoverType.REINDEX}
+                  placeholder={t("switchover.placeholder")}
+                  options={[
+                    {
+                      value: SwitchoverType.REINDEX,
+                      title: t("switchover.reindexAll.label"),
+                      description: t("switchover.reindexAll.description"),
+                      icon: SvgClock,
+                    },
+                    {
+                      value: SwitchoverType.ACTIVE_ONLY,
+                      title: t("switchover.activeOnly.label"),
+                      description: t("switchover.activeOnly.description"),
+                      icon: SvgSlowTime,
+                    },
+                    {
+                      value: SwitchoverType.INSTANT,
+                      title: t("switchover.instant.label"),
+                      description: t("switchover.instant.description"),
+                      icon: SvgEmpty,
+                    },
+                  ]}
+                />
               );
               const revertButton = (
                 <Button
@@ -1216,6 +1212,7 @@ export default function IndexSettingsPage() {
                         <Text font="main-ui-body" color="text-03" as="p">
                           {t("wontPortConsentModal.description", {
                             count: frozenWontPortRef.current.length,
+                            appName: settings.appName,
                           })}
                         </Text>
                         <div className="flex max-h-48 flex-col gap-1 overflow-y-auto rounded-08 border border-border-02 p-3">
@@ -1404,7 +1401,9 @@ export default function IndexSettingsPage() {
                       >
                         <Content
                           title={t("embeddingModel.title")}
-                          description={t("embeddingModel.description")}
+                          description={t("embeddingModel.description", {
+                            appName: settings.appName,
+                          })}
                           sizePreset="main-content"
                           variant="section"
                         />
@@ -1675,7 +1674,8 @@ export default function IndexSettingsPage() {
                                           findRegistryModel(
                                             currentEmbeddingModel.model_name
                                           ),
-                                          t
+                                          t,
+                                          settings.appName
                                         )}
                                         sizePreset="main-ui"
                                         variant="section"
@@ -1932,7 +1932,7 @@ export default function IndexSettingsPage() {
                                   disabled={!imageProcessingEnabled}
                                   withLabel
                                 >
-                                  <InputSelect
+                                  <InputSingleSelect
                                     value={String(
                                       settings.image_analysis_max_size_mb ?? 20
                                     )}
@@ -1945,19 +1945,17 @@ export default function IndexSettingsPage() {
                                       });
                                     }}
                                     disabled={!imageProcessingEnabled}
-                                  >
-                                    <InputSelect.Trigger />
-                                    <InputSelect.Content>
-                                      {MAX_IMAGE_SIZE_OPTIONS.map((size) => (
-                                        <InputSelect.Item
-                                          key={size}
-                                          value={size}
-                                        >
-                                          {size}
-                                        </InputSelect.Item>
-                                      ))}
-                                    </InputSelect.Content>
-                                  </InputSelect>
+                                    defaultOption="20"
+                                    placeholder={tInputSelect(
+                                      "placeholder.fallback"
+                                    )}
+                                    options={MAX_IMAGE_SIZE_OPTIONS.map(
+                                      (size) => ({
+                                        value: size,
+                                        title: size,
+                                      })
+                                    )}
+                                  />
                                 </InputHorizontal>
                               </Disabled>
                             </GeneralLayouts.Section>

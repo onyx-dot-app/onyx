@@ -15,6 +15,7 @@ A small colored label used to annotate items with status, category, or metadata.
 | `color`    | `TagColor`              | `"gray"`       | Color variant                                                                                  |
 | `icon`     | `IconFunctionComponent` | —              | Optional icon before the title                                                                 |
 | `size`     | `"sm" \| "md"`          | `"sm"`         | Size variant (Figma Small / Regular)                                                           |
+| `removeInTabOrder` | `boolean` | `true` | Editable only: whether the remove button is a Tab stop. Chip fields set it off and walk chips with the arrows |
 | `onRemove` | `() => void`            | —              | Switches to the editable type and renders the remove button                                    |
 | `disabled` | `boolean`               | `false`        | Editable only: dims the tag, hides the remove button                                           |
 | `value`    | `string \| RichStr`     | —              | Secondary text after the title, in `text-03`                                                   |

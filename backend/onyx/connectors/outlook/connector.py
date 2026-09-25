@@ -70,7 +70,6 @@ from onyx.connectors.outlook.errors import (
     raise_for_graph_error,
 )
 from onyx.connectors.outlook.mailboxes import (
-    MAILBOX_UNAVAILABLE_STATUSES,
     describe_unavailable_mailboxes,
     raise_if_unavailable,
 )
@@ -705,7 +704,7 @@ class OutlookConnector(
     def _mailbox_unavailable(
         self, mailbox: OutlookMailbox, error: OutlookGraphError
     ) -> Generator[ConnectorFailure, None, None]:
-        """Unlicensed, or out of the app's Exchange scope."""
+        """Unlicensed, locked, or out of the app's Exchange scope."""
         yield from self._unavailable(
             mailbox.address,
             f"Mailbox {mailbox.address} is unavailable ({error.code}). "
@@ -716,7 +715,8 @@ class OutlookConnector(
     def _calendar_unavailable(
         self, mailbox: OutlookMailbox, error: OutlookGraphError
     ) -> Generator[ConnectorFailure, None, None]:
-        """No calendar grant, or none for this mailbox. Its mail stays indexed."""
+        """No calendar grant, none for this mailbox, or locked. Its mail stays
+        indexed."""
         yield from self._unavailable(
             f"{mailbox.address} calendar",
             f"Calendar of {mailbox.address} is unavailable ({error.code}). "
@@ -1001,7 +1001,7 @@ class OutlookConnector(
             excluded = self._excluded_well_known_folder_ids(mailbox)
             tree = list(self._walk_folder_tree(mailbox, excluded))
         except OutlookGraphError as e:
-            if e.status not in MAILBOX_UNAVAILABLE_STATUSES:
+            if not e.is_permanent_refusal:
                 raise
             yield from self._mailbox_unavailable(mailbox, e)
             return
@@ -1217,7 +1217,7 @@ class OutlookConnector(
             if e.status == 410 and checkpoint.calendar_next_link is not None:
                 checkpoint.calendar_next_link = None
                 return
-            if e.status in MAILBOX_UNAVAILABLE_STATUSES:
+            if e.is_permanent_refusal:
                 yield from self._calendar_unavailable(mailbox, e)
                 checkpoint.calendar_done = True
                 return
