@@ -10,7 +10,6 @@ streaming events, cancellation, and record-keeping.
 | `runtime.py` | Agent configuration and history, run lifecycle, and model-step execution functions. |
 | `models.py` | Conversation context, step decisions, and run records. |
 | `checkpoint.py` | Versioned JSON encoding for execution snapshots and their context. |
-| `restoration.py` | Feature-owned state and tool reconstruction contract. |
 | `concurrency.py` | Tracked threads, update acceptance, and event delivery. |
 | `coordination.py` | Optional child discovery, execution control, and archive access. |
 | `tool_execution.py` | Parallel tool execution, pending input, and ordered result completion. |
@@ -390,7 +389,7 @@ restored = codec.decode(serialized, expected_binding=binding)
 `run.result()` raises `RunReleased` after release; input must target a resumed execution.
 The storage adapter uses `save` and `expected_revision` to save matching state before ownership is released.
 If saving fails, the local execution remains owned and can accept input or retry the save.
-Features with private state supply `FeatureRestoration` for typed state capture and restoration.
+Features with private state supply `FeatureRestoration` from `runtime.py` for typed state capture and restoration.
 Register executable tools on `Agent.tools`; the runtime restores the saved step's selection.
 Onyx tools receive application context when invoked. Chat and research derive it from feature state,
 which changes after the tool phase.

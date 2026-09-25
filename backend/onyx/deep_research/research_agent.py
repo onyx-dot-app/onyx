@@ -9,8 +9,7 @@ from onyx.agents.models import (
     StepInput,
     StepResult,
 )
-from onyx.agents.restoration import FeatureRestoration
-from onyx.agents.runtime import Agent
+from onyx.agents.runtime import Agent, FeatureRestoration
 from onyx.agents.tools import AgentTool
 from onyx.agents.transcript import CompactionCheckpoint
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
