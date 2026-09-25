@@ -13,6 +13,7 @@ export const SUPPORTED_LOCALES = [
   "zh",
   "ko",
   "ar",
+  "az",
 ] as const;
 
 export type Locale = (typeof SUPPORTED_LOCALES)[number];
@@ -37,6 +38,7 @@ export const LOCALE_ENDONYMS = {
   zh: "简体中文",
   ko: "한국어",
   ar: "العربية",
+  az: "Azərbaycan dili",
 } satisfies Record<Locale, string>;
 
 export function isSupportedLocale(
