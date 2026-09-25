@@ -9,12 +9,13 @@ import time
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.exc import OperationalError
 
 from onyx.cache.interface import TTL_KEY_NOT_FOUND, TTL_NO_EXPIRY
 from onyx.cache.postgres_backend import (
     PostgresCacheBackend,
+    PostgresCacheLock,
     cleanup_expired_cache_entries,
 )
 from onyx.db.engine.sql_engine import get_session_with_tenant
@@ -283,3 +284,19 @@ def test_statement_timeout_bounds_wait_on_a_locked_cache_row(
         assert bounded.ttl(key) > 60
     finally:
         pg_cache.delete(key)
+
+
+def test_statement_timeout_applies_to_lock_session() -> None:
+    bounded = PostgresCacheBackend(
+        POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, statement_timeout_ms=1000
+    )
+    lock = bounded.lock(_key())
+    assert isinstance(lock, PostgresCacheLock)
+    assert lock.acquire(blocking=False)
+    try:
+        assert lock._session is not None
+        for setting in ("statement_timeout", "lock_timeout"):
+            value = lock._session.execute(text(f"SHOW {setting}")).scalar()
+            assert value == "1s"
+    finally:
+        lock.release()
