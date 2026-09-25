@@ -47,9 +47,10 @@ outside the set shows the placeholder with the validation error.
 
 The trigger is a button: a click, Enter or ArrowDown opens the list,
 and a second click closes it. Open, the arrows and Tab walk the stops in
-order and wrap around: a foldable divider's title is a stop of its own, then
-its rows, and with `search` the search field is the stop before the first
-row. Enter picks the highlighted row or toggles the highlighted title;
+order and wrap around from the last row to the first: a foldable divider's
+title is a stop of its own, then its rows. With `search` the field keeps
+focus throughout and is not a stop, so typing works from anywhere in the
+walk. Enter picks the highlighted row or toggles the highlighted title;
 Escape closes and returns focus to the trigger. Disabled rows are passed
 over. Physical focus stays on the
 trigger or the search field, and `aria-activedescendant` follows the

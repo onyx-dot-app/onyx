@@ -407,7 +407,6 @@ function SingleDropdown({
     onSelect: handleOptionSelect,
     onToggleGroup: toggleGroup,
     mode: typeIn ? "combobox" : "select",
-    hasSearch: search,
   });
 
   const handleFocus = useCallback(() => {

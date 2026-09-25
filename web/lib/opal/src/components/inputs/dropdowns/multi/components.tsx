@@ -234,7 +234,6 @@ function MultiDropdown(props: MultiDropdownProps) {
     onSelect: handleOptionSelect,
     onToggleGroup: toggleGroup,
     mode: typeIn ? "combobox" : "select",
-    hasSearch: search,
   });
 
   const autoId = useId();

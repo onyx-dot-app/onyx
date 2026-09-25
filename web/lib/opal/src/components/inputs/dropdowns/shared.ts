@@ -194,13 +194,12 @@ interface UseSelectKeyboardProps {
   onToggleGroup?: (group: OptionGroup) => void;
   /**
    * A Select walks its list: Enter opens it, Tab and Shift+Tab move like
-   * the arrows, and both wrap around; with a search field, that field is
-   * the stop before the first row (index -1). A ComboBox keeps the text
-   * field's own Tab, which closes the list and moves on.
+   * the arrows, and both wrap around from the last row to the first. A
+   * search field, when there is one, keeps focus throughout and is not a
+   * stop. A ComboBox keeps the text field's own Tab, which closes the
+   * list and moves on.
    */
   mode: "select" | "combobox";
-  /** A search field sits above the rows and is a stop in the cycle. */
-  hasSearch?: boolean;
 }
 
 /**
@@ -218,7 +217,6 @@ export function useSelectKeyboard({
   onSelect,
   onToggleGroup,
   mode,
-  hasSearch = false,
 }: UseSelectKeyboardProps) {
   const cycles = mode === "select";
   const count = items.length;
@@ -234,35 +232,33 @@ export function useSelectKeyboard({
     [items]
   );
 
-  // The stop after `prev`. A Select wraps: past the last row comes the
-  // search field when there is one, else the first row.
+  // The stop after `prev`. A Select wraps from the last row to the first;
+  // from nothing highlighted (-1) both directions enter the list.
   const next = useCallback(
     (prev: number) => {
       let index = prev;
-      for (let step = 0; step < count + 1; step++) {
+      for (let step = 0; step < count; step++) {
         if (index < count - 1) index += 1;
-        else if (cycles) index = hasSearch ? -1 : 0;
+        else if (cycles) index = 0;
         else return prev;
-        if (index === -1 || isStop(index)) return index;
+        if (isStop(index)) return index;
       }
       return -1;
     },
-    [count, cycles, hasSearch, isStop]
+    [count, cycles, isStop]
   );
   const previous = useCallback(
     (prev: number) => {
       let index = prev;
-      for (let step = 0; step < count + 1; step++) {
+      for (let step = 0; step < count; step++) {
         if (index > 0) index -= 1;
-        else if (index === 0) index = cycles && !hasSearch ? count - 1 : -1;
-        // Nothing highlighted (the search field, when there is one).
-        else index = cycles ? count - 1 : -1;
-        if (index === -1 || isStop(index)) return index;
-        if (!cycles && index === -1) return -1;
+        else if (cycles) index = count - 1;
+        else return -1;
+        if (isStop(index)) return index;
       }
       return -1;
     },
-    [count, cycles, hasSearch, isStop]
+    [count, cycles, isStop]
   );
 
   const activate = useCallback(() => {
@@ -279,10 +275,9 @@ export function useSelectKeyboard({
           e.preventDefault();
           setIsKeyboardNav(true);
           if (!isOpen) {
-            // Opening lands on the first stop: the search field when there
-            // is one, else the first row.
+            // Opening lands on the first row.
             setIsOpen(true);
-            setHighlightedIndex(cycles && hasSearch ? -1 : 0);
+            setHighlightedIndex(0);
           } else {
             setHighlightedIndex(next);
           }

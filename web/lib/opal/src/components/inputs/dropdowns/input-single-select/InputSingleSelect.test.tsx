@@ -155,7 +155,7 @@ describe("InputSingleSelect", () => {
       expect(handleValueChange).toHaveBeenCalledWith("apple");
     });
 
-    test("with a search field, the cycle passes through it and typing never highlights", async () => {
+    test("with a search field, the cycle skips it and typing never highlights", async () => {
       const user = setupUser();
       render(
         <InputSingleSelect
@@ -173,19 +173,18 @@ describe("InputSingleSelect", () => {
           .queryAllByRole("option")
           .filter((o) => o.getAttribute("data-interaction") === "hover")
       ).toHaveLength(0);
-      // Shift+Tab from the search field wraps to the last visible row.
+      // Shift+Tab from nothing highlighted enters at the last visible row.
       await user.keyboard("{Shift>}{Tab}{/Shift}");
       expect(screen.getByRole("option", { name: /Banana/ })).toHaveAttribute(
         "data-interaction",
         "hover"
       );
-      // Tab from the last row returns to the search field: no row highlighted.
+      // Tab from the last row wraps straight to the first; the field keeps focus.
       await user.keyboard("{Tab}");
-      expect(
-        screen
-          .queryAllByRole("option")
-          .filter((o) => o.getAttribute("data-interaction") === "hover")
-      ).toHaveLength(0);
+      expect(screen.getByRole("option", { name: /Apple/ })).toHaveAttribute(
+        "data-interaction",
+        "hover"
+      );
       expect(searchField).toHaveFocus();
     });
 
