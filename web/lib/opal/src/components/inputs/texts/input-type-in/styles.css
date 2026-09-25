@@ -10,12 +10,15 @@
 }
 
 /* A chosen option's icon, sized like the search icon. */
+/* 2px before and 4px after: the icon lands 8px inside the chrome, where a
+   listbox row's icon sits, and the text 6px after it, matching the row gap. */
 .opal-input-leading-icon {
-  @apply flex shrink-0 items-center justify-center px-1;
+  @apply flex shrink-0 items-center justify-center ps-0.5 pe-1;
 }
 
 .opal-input-leading-icon-svg {
-  @apply h-4 w-4 stroke-text-02;
+  /* Colour, not stroke: a CSS stroke would outline fill-only logos. */
+  @apply h-4 w-4 text-text-02;
 }
 
 .opal-input[data-variant="primary"] .opal-input-field,

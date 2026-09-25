@@ -13083,7 +13083,8 @@
     },
     "select": {
       "emptySet": "항목을 찾을 수 없습니다",
-      "invalidOption": "목록에서 유효한 옵션을 선택하세요"
+      "invalidOption": "목록에서 유효한 옵션을 선택하세요",
+      "searchPlaceholder": "검색"
     },
     "settingsHeader": {
       "cancel": "취소"

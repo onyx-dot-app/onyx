@@ -183,6 +183,36 @@ function TagField({
     tagsElement.scrollTop = tagsElement.scrollHeight;
   }, [tags.length]);
 
+  // The chips' remove buttons, in order.
+  function removeButtons(): HTMLButtonElement[] {
+    return Array.from(
+      ownRootRef.current?.querySelectorAll<HTMLButtonElement>(
+        `.${TAG_REMOVE_CLASS}`
+      ) ?? []
+    );
+  }
+
+  // Backspace with nothing to delete in the field arms the last chip: its
+  // remove button takes focus, so the next Backspace removes it.
+  function armLastTag(event: React.KeyboardEvent<HTMLElement>) {
+    if (event.key !== "Backspace" || tags.length === 0) return;
+    event.preventDefault();
+    removeButtons().at(-1)?.focus();
+  }
+
+  // The button trigger has no text: Backspace or ArrowLeft arms the last
+  // chip directly.
+  function handleTriggerKeyDown(event: React.KeyboardEvent<HTMLElement>) {
+    onInputKeyDown?.(event);
+    if (event.defaultPrevented) return;
+    if (event.key === "ArrowLeft" && tags.length > 0) {
+      event.preventDefault();
+      removeButtons().at(-1)?.focus();
+      return;
+    }
+    armLastTag(event);
+  }
+
   function handleInputKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     // During IME composition, Enter confirms the candidate and Backspace
     // edits the composition. Neither may add or arm tags.
@@ -199,23 +229,51 @@ function TagField({
       if (trimmed) onEnter?.(trimmed);
       return;
     }
-    if (event.key === "Backspace" && value === "" && tags.length > 0) {
+    if (value === "") armLastTag(event);
+    // ArrowLeft with the caret at the start walks back onto the chips.
+    if (
+      event.key === "ArrowLeft" &&
+      tags.length > 0 &&
+      event.currentTarget.selectionStart === 0 &&
+      event.currentTarget.selectionEnd === 0
+    ) {
       event.preventDefault();
-      const removes = ownRootRef.current?.querySelectorAll<HTMLButtonElement>(
-        `.${TAG_REMOVE_CLASS}`
-      );
-      removes?.[removes.length - 1]?.focus();
+      removeButtons().at(-1)?.focus();
     }
   }
 
   // Backspace/Delete on an armed remove button deletes its tag. Enter and
   // Space already work as native button activation.
+  // Removing from the keyboard then arms the chip before the removed one,
+  // so holding Backspace clears chips one by one; with none left, focus
+  // returns to the field.
   function handleRootKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
-    if (event.key !== "Backspace" && event.key !== "Delete") return;
     const target = event.target as HTMLElement;
     if (!target.classList.contains(TAG_REMOVE_CLASS)) return;
+    const buttons = removeButtons();
+    const index = buttons.indexOf(target as HTMLButtonElement);
+    // The arrows walk the chips; Right off the last one returns to the
+    // field. Tab is free to leave the field, since chips are not stops.
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      buttons[index - 1]?.focus();
+      return;
+    }
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      const next = buttons[index + 1];
+      if (next) next.focus();
+      else focusField();
+      return;
+    }
+    if (event.key !== "Backspace" && event.key !== "Delete") return;
     event.preventDefault();
     target.click();
+    requestAnimationFrame(() => {
+      const previous = index > 0 ? removeButtons()[index - 1] : undefined;
+      if (previous) previous.focus();
+      else focusField();
+    });
   }
 
   return (
@@ -251,6 +309,7 @@ function TagField({
             icon={tag.icon}
             error={tag.error}
             disabled={disabled}
+            removeInTabOrder={false}
             onRemove={() => {
               onRemoveTag(tag.id);
               focusField();
@@ -272,7 +331,7 @@ function TagField({
             aria-disabled={disabled || undefined}
             onFocus={disabled ? undefined : onInputFocus}
             onClick={disabled ? undefined : onInputClick}
-            onKeyDown={disabled ? undefined : onInputKeyDown}
+            onKeyDown={disabled ? undefined : handleTriggerKeyDown}
           >
             {tags.length === 0 && placeholder && (
               <Text font="main-ui-muted" color="text-02">

@@ -23,6 +23,87 @@ function setupUser() {
 }
 
 describe("InputMultiSelect", () => {
+  describe("Search", () => {
+    test("search: the search field filters the rows and a pick keeps the list open", async () => {
+      const handleSelect = jest.fn();
+      const user = setupUser();
+      render(
+        <InputMultiSelect
+          search
+          tags={[]}
+          options={mockOptions}
+          placeholder="Pick"
+          onSelectOption={handleSelect}
+          onRemoveTag={jest.fn()}
+        />
+      );
+      await user.click(screen.getByRole("combobox", { name: "Pick" }));
+      const search = screen.getByRole("textbox", { name: "Search" });
+      expect(search).toHaveFocus();
+      await user.type(search, "ban");
+      expect(screen.getAllByRole("option")).toHaveLength(1);
+      await user.click(screen.getByRole("option", { name: /Banana/ }));
+      expect(handleSelect).toHaveBeenCalledWith(
+        expect.objectContaining({ value: "banana" })
+      );
+      expect(screen.getByRole("listbox")).toBeInTheDocument();
+    });
+  });
+
+  describe("Keyboard removal", () => {
+    test("Backspace on the closed field arms the last chip, then removes chips one by one", async () => {
+      const handleRemove = jest.fn();
+      const user = setupUser();
+      render(
+        <InputMultiSelect
+          tags={[
+            { id: "apple", label: "Apple" },
+            { id: "banana", label: "Banana" },
+          ]}
+          options={mockOptions}
+          placeholder="Pick"
+          onSelectOption={jest.fn()}
+          onRemoveTag={handleRemove}
+        />
+      );
+      screen.getByRole("combobox", { name: "Pick" }).focus();
+      await user.keyboard("{Backspace}");
+      expect(screen.getByRole("button", { name: /Banana/ })).toHaveFocus();
+      await user.keyboard("{Backspace}");
+      expect(handleRemove).toHaveBeenCalledWith("banana");
+    });
+
+    test("the arrows walk the chips and Tab leaves the field", async () => {
+      const user = setupUser();
+      render(
+        <>
+          <InputMultiSelect
+            tags={[
+              { id: "apple", label: "Apple" },
+              { id: "banana", label: "Banana" },
+            ]}
+            options={mockOptions}
+            placeholder="Pick"
+            onSelectOption={jest.fn()}
+            onRemoveTag={jest.fn()}
+          />
+          <button type="button">After</button>
+        </>
+      );
+      const field = screen.getByRole("combobox", { name: "Pick" });
+      field.focus();
+      await user.keyboard("{ArrowLeft}");
+      expect(screen.getByRole("button", { name: /Banana/ })).toHaveFocus();
+      await user.keyboard("{ArrowLeft}");
+      expect(screen.getByRole("button", { name: /Apple/ })).toHaveFocus();
+      await user.keyboard("{ArrowRight}{ArrowRight}");
+      expect(field).toHaveFocus();
+      // Chips are not Tab stops.
+      await user.keyboard("{Tab}");
+      expect(screen.getByRole("button", { name: "After" })).toHaveFocus();
+    });
+  });
+
   describe("Rendering and picking", () => {
     test("a chip shows its option's icon", () => {
       function Swatch(props: React.SVGProps<SVGSVGElement>) {

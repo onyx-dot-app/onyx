@@ -43,6 +43,58 @@ outside the set shows the placeholder with the validation error.
 />
 ```
 
+## Keyboard
+
+The trigger is a button: a click, Enter or ArrowDown opens the list, focus
+alone does not, and a second click closes it. The ComboBoxes share every rule
+below. Open, the arrows and Tab walk the stops in
+order and wrap around from the last row to the first: a foldable divider's
+title is a stop of its own, then its rows. With `search` the field keeps
+focus throughout and is not a stop, so typing works from anywhere in the
+walk. Enter picks the highlighted row or toggles the highlighted title;
+Escape closes and returns focus to the trigger. Disabled rows are passed
+over. Physical focus stays on the
+trigger or the search field, and `aria-activedescendant` follows the
+highlight. Typing in the search field never highlights a row; only walking
+the list does. Highlighting is modal: while the keyboard drives it the
+pointer's hover is suppressed, and the first pointer movement over the list
+hands control back to the pointer. A title stop has no highlight of its own yet: its hover and
+press come from the Divider's `Interactive`.
+
+Foldable groups start closed, except the one holding the selection; with
+nothing selected, every group starts closed.
+
+## Search
+
+With `search` a search field sits at the top of the list and filters the
+rows by title or value; a term that matches a divider's title keeps that
+whole section. It takes focus when the list opens, so typing starts at once;
+arrows, Enter, Escape and Tab work from it as from the trigger. Escape closes
+the list and returns focus to the trigger; a Tab on a closed list moves on to the
+next field, as it would from the trigger.
+
+## Foldable dividers
+
+A titled divider with `foldable: true` folds its rows behind the title. It
+starts closed unless it holds the selection, and starts open while a search
+is on so no match hides; either way a click on the title toggles it. Toggles
+reset when the search starts or stops and when the list closes. Folded rows
+leave the keyboard order.
+
+```tsx
+<InputSingleSelect
+  search
+  placeholder="Select a model"
+  value={model}
+  onValueChange={setModel}
+  options={providers.map((provider) => ({
+    title: provider.name,
+    foldable: true,
+    options: provider.models,
+  }))}
+/>
+```
+
 ## Props
 
 | Prop            | Type                                | Default | Description                                                     |
@@ -50,6 +102,7 @@ outside the set shows the placeholder with the validation error.
 | `value`         | `string`                            | —       | Current value (controlled)                                      |
 | `onValueChange` | `(value: string) => void`           | —       | Fires on a pick, and with `""` on an unpick                     |
 | `options`       | `SelectOptions` | `[]`    | Loose options and dividers, in order                        |
+| `search`    | `boolean`                           | `false` | A search field at the top of the list filters the rows          |
 | `defaultOption` | `string`                            | —       | Option value an empty `value` resolves to; never empties then   |
 | `placeholder`   | `string`                            | —       | Shown while empty; always the accessible name (required)        |
 | `isError`       | `boolean`                           | —       | External error state (overrides internal validation)            |

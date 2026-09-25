@@ -84,7 +84,7 @@ describe("InputSingleComboBox", () => {
         />
       );
       const input = screen.getByPlaceholderText("Select");
-      fireEvent.focus(input);
+      fireEvent.click(input);
       expect(screen.getByText("A red fruit")).toBeInTheDocument();
     });
   });
@@ -99,7 +99,7 @@ describe("InputSingleComboBox", () => {
         />
       );
       const input = screen.getByPlaceholderText("Select");
-      fireEvent.focus(input);
+      fireEvent.click(input);
       expect(screen.getByRole("listbox")).toBeInTheDocument();
     });
 
@@ -108,7 +108,7 @@ describe("InputSingleComboBox", () => {
         <InputSingleComboBox placeholder="Select" value="" options={[]} />
       );
       const input = screen.getByPlaceholderText("Select");
-      fireEvent.focus(input);
+      fireEvent.click(input);
       expect(screen.getByRole("listbox")).toBeInTheDocument();
       expect(screen.queryAllByRole("option")).toHaveLength(0);
     });
@@ -140,7 +140,7 @@ describe("InputSingleComboBox", () => {
         />
       );
       const input = screen.getByDisplayValue("Apple");
-      fireEvent.focus(input);
+      fireEvent.click(input);
 
       // The selected label stays in the trigger and filters the list, so
       // only the selection shows, painted as the exact match.
@@ -164,7 +164,7 @@ describe("InputSingleComboBox", () => {
       expect(screen.getAllByRole("option").length).toBe(3);
     });
 
-    test("closes dropdown on tab", async () => {
+    test("Tab walks the rows while the list is open", async () => {
       const user = setupUser();
       render(
         <InputSingleComboBox
@@ -179,7 +179,12 @@ describe("InputSingleComboBox", () => {
       expect(screen.getByRole("listbox")).toBeInTheDocument();
 
       await user.tab();
-      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+      expect(screen.getByRole("listbox")).toBeInTheDocument();
+      expect(screen.getByRole("option", { name: /Apple/ })).toHaveAttribute(
+        "data-interaction",
+        "hover"
+      );
+      expect(input).toHaveFocus();
     });
   });
 
@@ -489,7 +494,7 @@ describe("InputSingleComboBox", () => {
         />
       );
       const input = screen.getByRole("combobox");
-      fireEvent.focus(input);
+      fireEvent.click(input);
       expect(input).toHaveAttribute("aria-expanded", "true");
     });
 
@@ -502,7 +507,7 @@ describe("InputSingleComboBox", () => {
         />
       );
       const input = screen.getByPlaceholderText("Select");
-      fireEvent.focus(input);
+      fireEvent.click(input);
 
       const options = screen.getAllByRole("option");
       expect(options.length).toBe(3);
@@ -517,31 +522,10 @@ describe("InputSingleComboBox", () => {
         />
       );
       const input = screen.getByPlaceholderText("Select a fruit");
-      fireEvent.focus(input);
+      fireEvent.click(input);
 
       const listbox = screen.getByRole("listbox");
       expect(listbox).toHaveAttribute("aria-label", "Select a fruit");
-    });
-  });
-
-  describe("Text Highlighting", () => {
-    test("matching text is highlighted in option labels", async () => {
-      const user = setupUser();
-      const { container } = render(
-        <InputSingleComboBox
-          placeholder="Select"
-          value=""
-          options={mockOptions}
-        />
-      );
-      const input = screen.getByPlaceholderText("Select");
-
-      await user.type(input, "app");
-
-      // Look for the highlighted match span
-      const boldText = container.querySelector(".opal-select-match");
-      expect(boldText).toBeInTheDocument();
-      expect(boldText?.textContent).toBe("App");
     });
   });
 

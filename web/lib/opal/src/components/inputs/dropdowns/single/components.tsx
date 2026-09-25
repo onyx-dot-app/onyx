@@ -12,8 +12,10 @@
  * - `trigger="type-in"` (ComboBox): typing filters the option set.
  *   `mode="closed"` permits only option values; `mode="open"` also commits
  *   the raw text via the create row.
- * - `trigger="button"` (Select): nothing to type. A click or ArrowDown opens
- *   the full set, a second click closes it, and focus alone does not.
+ * - `trigger="button"` (Select): nothing to type; a second click closes it.
+ *
+ * Either opens on click, Enter or ArrowDown, and a ComboBox on typing too.
+ * Focus alone never opens the list, so tabbing through a form passes by.
  *
  * Re-picking the selected option unselects it. A Select may carry a
  * `defaultOption`, and then never reads as empty: an empty value resolves to
@@ -43,6 +45,8 @@ import { FieldMessage } from "@opal/form";
 
 // Hooks
 import {
+  buildNavItems,
+  useFoldedGroups,
   useSelectKeyboard,
   useSelectOverlay,
   filterSections,
@@ -79,6 +83,7 @@ function SingleDropdown({
   separatorLabel,
   showOtherOptions = false,
   dropdownMaxHeight,
+  search = false,
   ...rest
 }: WithoutStyles<SingleDropdownProps>) {
   const typeIn = trigger === "type-in";
@@ -154,9 +159,15 @@ function SingleDropdown({
     return { value: effectiveValue, title: effectiveValue };
   }, [strict, effectiveValue, options]);
 
-  // What filters the list. A button trigger never filters: its text is
-  // only ever the selection's label.
-  const filterText = typeIn ? inputValue : "";
+  // What filters the list: a ComboBox's typed text, or a Select's search
+  // field when it has one. Otherwise nothing: a button trigger's text is
+  // only ever the selection's label. The search is transient and clears
+  // with the list.
+  const [searchText, setSearchText] = useState("");
+  useEffect(() => {
+    if (!isOpen) setSearchText("");
+  }, [isOpen]);
+  const filterText = typeIn ? inputValue : search ? searchText : "";
 
   // Filtering: each section filters independently; empty ones disappear.
   const hasSearchTerm = filterText.trim() !== "";
@@ -215,18 +226,29 @@ function SingleDropdown({
   }, [customSelected, options, trimmedInput]);
   const showCreateOption = !strict && hasSearchTerm && !exactVisibleMatch;
 
-  // Combined list for keyboard navigation (includes create option when shown)
-  // Only show matched options when searching (hide unmatched)
-  const allVisibleOptions = useMemo(() => {
-    const baseOptions = flattenSections(visibleSections);
-    if (showCreateOption) {
-      // Prepend a synthetic option for the "create new" item. Trimmed to
-      // match what the rendered create row commits.
-      const createText = filterText.trim();
-      return [{ value: createText, title: createText }, ...baseOptions];
-    }
-    return baseOptions;
-  }, [visibleSections, showCreateOption, filterText]);
+  // Foldable groups withhold their rows while folded, for rendering and
+  // for the keyboard order alike.
+  const isSelectedOption = useCallback(
+    (option: SelectOption) => option.value === effectiveValue,
+    [effectiveValue]
+  );
+  const { foldedSections, toggleGroup } = useFoldedGroups({
+    isOpen,
+    sections: visibleSections,
+    isSelected: isSelectedOption,
+    searching: hasSearchTerm,
+  });
+
+  // The keyboard's stops in render order: the create row when shown, then
+  // each group's title (when foldable) and its rows.
+  const navItems = useMemo(() => {
+    // Trimmed to match what the rendered create row commits.
+    const createText = filterText.trim();
+    return buildNavItems(
+      foldedSections,
+      showCreateOption ? { value: createText, title: createText } : undefined
+    );
+  }, [foldedSections, showCreateOption, filterText]);
 
   // Check if an option is an exact match
   const isExactMatch = useCallback(
@@ -253,24 +275,27 @@ function SingleDropdown({
     onValidationError,
   });
 
-  // Sync highlightedIndex with exact match when typing (not keyboard nav)
+  // A ComboBox highlights the row its typed text matches exactly. A
+  // Select's search field never highlights on its own: only walking the
+  // list does.
   useEffect(() => {
-    // Skip if keyboard navigating or dropdown closed
-    if (isKeyboardNav || !isOpen) return;
+    if (!typeIn || isKeyboardNav || !isOpen) return;
     if (!filterText.trim()) return;
 
-    const exactMatchIndex = allVisibleOptions.findIndex(
-      (opt) =>
-        opt.value.toLowerCase() === filterText.trim().toLowerCase() ||
-        opt.title.toLowerCase() === filterText.trim().toLowerCase()
+    const exactMatchIndex = navItems.findIndex(
+      (item) =>
+        item.kind === "option" &&
+        (item.option.value.toLowerCase() === filterText.trim().toLowerCase() ||
+          item.option.title.toLowerCase() === filterText.trim().toLowerCase())
     );
 
     if (exactMatchIndex >= 0) {
       setHighlightedIndex(exactMatchIndex);
     }
   }, [
+    typeIn,
     filterText,
-    allVisibleOptions,
+    navItems,
     isKeyboardNav,
     isOpen,
     setHighlightedIndex,
@@ -380,27 +405,10 @@ function SingleDropdown({
     highlightedIndex,
     setHighlightedIndex,
     setIsKeyboardNav,
-    allVisibleOptions,
+    items: navItems,
     onSelect: handleOptionSelect,
+    onToggleGroup: toggleGroup,
   });
-
-  const handleFocus = useCallback(() => {
-    setInputValue(selectedLabel);
-    setIsOpen(true);
-    setHighlightedIndex(-1);
-    setIsKeyboardNav(false);
-    // Caret at the end, ready to modify.
-    requestAnimationFrame(() => {
-      const el = inputRef.current;
-      if (el) el.setSelectionRange(el.value.length, el.value.length);
-    });
-  }, [
-    selectedLabel,
-    setInputValue,
-    setIsOpen,
-    setHighlightedIndex,
-    setIsKeyboardNav,
-  ]);
 
   const toggleDropdown = useCallback(() => {
     if (disabled) return;
@@ -426,7 +434,7 @@ function SingleDropdown({
     isValid,
     highlightedIndex,
     fieldId,
-    allVisibleOptions,
+    items: navItems,
     placeholder,
     typeIn,
   });
@@ -439,8 +447,23 @@ function SingleDropdown({
       data-trigger={trigger}
       // A button trigger is the whole field, padding included, so the
       // toggle lives on the root; the input inside carries the keyboard,
-      // and the chevron and rightChildren stop propagation.
-      onClick={typeIn ? undefined : toggleDropdown}
+      // and the chevron and rightChildren stop propagation. The listbox is
+      // portalled, so its clicks bubble here through React's tree too: a
+      // foldable title, the search field or the padding must not toggle
+      // the list. Only a pick closes it, and the rows do that themselves.
+      onClick={
+        typeIn
+          ? undefined
+          : (event) => {
+              if (
+                event.target instanceof Node &&
+                dropdownRef.current?.contains(event.target)
+              ) {
+                return;
+              }
+              toggleDropdown();
+            }
+      }
     >
       <>
         <InputTypeIn
@@ -454,10 +477,8 @@ function SingleDropdown({
           value={inputValue}
           onChange={handleInputChange}
           // A button trigger opens on click or ArrowDown and a second click
-          // closes it, like a native <select>; keyboard focus alone does
-          // not open it. Type-in opens on focus, and a click while focused
-          // reopens it (e.g. after Escape) with the text kept for editing.
-          onFocus={typeIn ? handleFocus : undefined}
+          // closes it, like a native <select>. A type-in opens on click or
+          // typing, with the text kept for editing. Focus alone never opens.
           onClick={() => {
             if (!typeIn) return;
             if (!isOpen) {
@@ -529,22 +550,18 @@ function SingleDropdown({
           setFloatingRef={setFloatingRef}
           fieldId={fieldId}
           placeholder={placeholder ?? ""}
-          sections={visibleSections}
+          sections={foldedSections}
           emptySet={options.length === 0}
           value={effectiveValue}
           highlightedIndex={highlightedIndex}
           onSelect={handleOptionSelect}
-          onMouseEnter={(index) => {
-            setIsKeyboardNav(false);
-            setHighlightedIndex(index);
-          }}
+          // The pointer took over: the keyboard highlight yields to Interactive's
+          // own hover on whatever the pointer is on.
           onMouseMove={() => {
             if (isKeyboardNav) {
               setIsKeyboardNav(false);
+              setHighlightedIndex(-1);
             }
-          }}
-          onMouseLeave={() => {
-            if (!isKeyboardNav) setHighlightedIndex(-1);
           }}
           isExactMatch={isExactMatch}
           inputValue={filterText}
@@ -552,6 +569,27 @@ function SingleDropdown({
           showCreateOption={showCreateOption}
           dropdownMaxHeight={dropdownMaxHeight}
           keyboardNav={isKeyboardNav}
+          onToggleGroup={toggleGroup}
+          searchField={
+            search
+              ? {
+                  value: searchText,
+                  onChange: (next) => {
+                    setSearchText(next);
+                    // Typing never highlights; only walking the list does.
+                    setHighlightedIndex(-1);
+                    setIsKeyboardNav(false);
+                  },
+                  onKeyDown: (event) => {
+                    handleKeyDown(event);
+                    // Escape closes the list; focus goes back to the
+                    // trigger so the field is not left orphaned.
+                    if (event.key === "Escape") inputRef.current?.focus();
+                  },
+                  placeholder: strings.selectSearchPlaceholder,
+                }
+              : undefined
+          }
         />
       </>
 

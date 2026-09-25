@@ -1,8 +1,9 @@
-import React, { useEffect, forwardRef } from "react";
+import React, { useEffect, useRef, forwardRef } from "react";
 import { createPortal } from "react-dom";
 import "@opal/components/inputs/dropdowns/dropdown/styles.css";
 import { cn } from "@opal/utils";
 import { ShadowDiv } from "@opal/components/shadow-div/components";
+import InputTypeIn from "@opal/components/inputs/texts/input-type-in/components";
 import usePresence from "@opal/hooks/usePresence";
 import { OptionsList } from "./OptionsList";
 import type { SelectOption } from "../types";
@@ -23,10 +24,8 @@ interface SelectDropdownProps {
   markAllMatches?: boolean;
   highlightedIndex: number;
   onSelect: (option: SelectOption) => void;
-  onMouseEnter: (index: number) => void;
+  /** The pointer moved inside the list: the keyboard highlight yields. */
   onMouseMove: () => void;
-  /** Pointer left the listbox — clear the pointer-driven highlight. */
-  onMouseLeave: () => void;
   isExactMatch: (option: SelectOption) => boolean;
   /** Current input value for creating new option */
   inputValue: string;
@@ -42,6 +41,19 @@ interface SelectDropdownProps {
    * over rows must never scroll the list under itself.
    */
   keyboardNav: boolean;
+  /**
+   * A search field pinned above the rows. It takes focus when the list
+   * opens; the key handler is the trigger's, so arrows, Enter, Escape and
+   * Tab behave the same from either.
+   */
+  searchField?: {
+    value: string;
+    onChange: (value: string) => void;
+    onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
+    placeholder: string;
+  };
+  /** A click on a foldable group's title. */
+  onToggleGroup?: (group: OptionGroup) => void;
 }
 
 /**
@@ -64,21 +76,30 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
       markAllMatches,
       highlightedIndex,
       onSelect,
-      onMouseEnter,
       onMouseMove,
-      onMouseLeave,
       isExactMatch,
       inputValue,
       allowCreate,
       showCreateOption,
       dropdownMaxHeight,
       keyboardNav,
+      searchField,
+      onToggleGroup,
     },
     ref
   ) => {
     // The listbox stays mounted one exit animation longer than `isOpen`, so
     // it can animate out without living in the tree while closed.
     const presence = usePresence(isOpen);
+
+    // The search field takes focus when the list opens, so typing starts
+    // at once. An effect rather than autoFocus: the field mounts with the
+    // list, and focus must follow every open, not only the first mount.
+    const searchRef = useRef<HTMLInputElement>(null);
+    const hasSearch = searchField !== undefined;
+    useEffect(() => {
+      if (isOpen && hasSearch) searchRef.current?.focus();
+    }, [isOpen, hasSearch]);
 
     // Keyboard navigation keeps the highlighted row in view. Pointer
     // highlights never scroll: the list must not move under the mouse.
@@ -91,9 +112,15 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
         ref.current &&
         highlightedIndex >= 0
       ) {
-        const highlightedElement = ref.current.querySelector(
+        const stop = ref.current.querySelector(
           `[data-index="${highlightedIndex}"]`
         );
+        // A foldable group's stop is its wrapper, title and rows together;
+        // "nearest" is satisfied while any of that tall block shows, so
+        // scroll the title itself.
+        const highlightedElement = stop?.classList.contains("opal-select-group")
+          ? stop.firstElementChild
+          : stop;
         if (highlightedElement) {
           highlightedElement.scrollIntoView({
             block: "nearest",
@@ -140,10 +167,14 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
         // Closed while exiting: invisible to AT and to the pointer.
         aria-hidden={presence.state === "closed" || undefined}
         data-state={presence.state}
+        // Highlighting is modal: while the keyboard drives it, rows and
+        // titles ignore the pointer so no hover paints beside the keyboard
+        // stop. The first pointer movement hands control back.
+        data-keyboard-nav={keyboardNav || undefined}
+        onMouseMove={onMouseMove}
         className="opal-select-dropdown"
         style={floatingStyles}
         onAnimationEnd={presence.onAnimationEnd}
-        onMouseLeave={onMouseLeave}
         onMouseDown={(e) => {
           // Clicks on padding, gaps, or dividers must not steal focus from
           // the combobox input (the listbox is tabIndex={-1} for AT only).
@@ -158,8 +189,34 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
           e.stopPropagation();
         }}
       >
+        {searchField && (
+          <div
+            role="presentation"
+            className="opal-select-search"
+            // The listbox root cancels mousedown to keep focus on the
+            // trigger; a click into the search field must focus it. The
+            // click is held too: React bubbles through the portal, and the
+            // multi trigger's root click would pull focus straight back.
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <InputTypeIn
+              ref={searchRef}
+              searchIcon
+              variant="internal"
+              placeholder={searchField.placeholder}
+              aria-label={searchField.placeholder}
+              value={searchField.value}
+              onChange={(e) => searchField.onChange(e.target.value)}
+              onKeyDown={searchField.onKeyDown}
+            />
+          </div>
+        )}
         <ShadowDiv
           shadowHeight={3}
+          // Fade the rows themselves at the scroll edges. A painted shadow
+          // sat on top of the rows and read as a smudge on the light surface.
+          variant="mask"
           // The rise-and-settle runs on this non-scrolling wrapper: a
           // transform on the scroller itself makes Chromium repaint it at
           // scroll offset 0 for a frame when compositing switches.
@@ -183,12 +240,11 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
             highlightedIndex={highlightedIndex}
             fieldId={fieldId}
             onSelect={onSelect}
-            onMouseEnter={onMouseEnter}
-            onMouseMove={onMouseMove}
             isExactMatch={isExactMatch}
             inputValue={inputValue}
             allowCreate={allowCreate}
             showCreateOption={showCreateOption}
+            onToggleGroup={onToggleGroup}
           />
         </ShadowDiv>
       </div>,

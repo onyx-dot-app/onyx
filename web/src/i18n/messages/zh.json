@@ -13083,7 +13083,8 @@
     },
     "select": {
       "emptySet": "未找到任何项目",
-      "invalidOption": "请从列表中选择有效选项"
+      "invalidOption": "请从列表中选择有效选项",
+      "searchPlaceholder": "搜索"
     },
     "settingsHeader": {
       "cancel": "取消"

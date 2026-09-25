@@ -4,18 +4,31 @@
    Select dropdown — the family-internal listbox
 
    State styling rides data attributes set by the components:
-     .opal-select-option: data-exact, data-highlighted, data-selected,
-     data-disabled. Layout-only values; colors come from the tokens.
+     Rows are presentational LineItemButtons: selection, hover, press and
+     the keyboard highlight are its palette. This file carries the box,
+     the search field, the groups and the create row's icon.
    ============================================================================ */
 
 .opal-select-dropdown {
   @apply z-10000 overflow-hidden border bg-background-neutral-00 rounded-12 shadow-box-01 pointer-events-auto touch-auto;
 }
 
+/* The search field pinned above the rows: a borderless input on its own
+   row, with the same 4px inset as the rows below it. */
+.opal-select-search {
+  @apply p-1 pb-0;
+}
+
 /* The inner padding sits inside the ShadowDiv, so its scroll gradients span
-   the bordered box edge to edge instead of stopping at the padding. */
+   the bordered box edge to edge instead of stopping at the padding. The
+   list scrolls without a visible scrollbar: the mask fade at each edge
+   already says there is more. */
 .opal-select-dropdown-scroll {
   @apply flex flex-col gap-1 overflow-x-hidden p-1;
+  scrollbar-width: none;
+}
+.opal-select-dropdown-scroll::-webkit-scrollbar {
+  display: none;
 }
 
 /* Open and close animations. floating-ui positions the root with a
@@ -77,78 +90,33 @@
 }
 
 .opal-select-no-match {
-  @apply px-3 py-2 text-text-02 font-secondary-body;
+  @apply px-2 py-2 text-text-02 font-secondary-body;
 }
 
 /* ---------------------------------------------------------------------------
    Option rows
    --------------------------------------------------------------------------- */
 
-.opal-select-option {
-  @apply flex cursor-pointer flex-col px-3 py-2 rounded-08 transition-colors;
-}
-.opal-select-option[data-exact] {
-  @apply bg-[var(--action-selection-01)];
-}
-.opal-select-option:not([data-exact])[data-highlighted],
-.opal-select-option:not([data-exact])[data-selected] {
-  @apply bg-background-tint-02;
-}
-.opal-select-option:not([data-disabled]):not([data-exact]):hover {
-  @apply bg-background-tint-02;
-}
-.opal-select-option[data-disabled] {
-  @apply cursor-not-allowed bg-background-neutral-02 opacity-50;
+/* 8px side padding: with the listbox 4px wider than the trigger on each
+   side, a row's text and icon then sit exactly under the trigger's. */
+/* Keyboard mode: rows and titles ignore the pointer, so the pointer's hover
+   cannot paint a second highlight beside the keyboard's. A pointer movement
+   over the list drops the flag and hover returns. */
+.opal-select-dropdown[data-keyboard-nav] [role="option"],
+.opal-select-dropdown[data-keyboard-nav] .opal-select-group {
+  pointer-events: none;
 }
 
-.opal-select-option-label {
-  @apply flex flex-row items-center gap-1.5 text-text-04 font-main-ui-action;
-}
-.opal-select-option[data-exact] .opal-select-option-label {
-  @apply font-medium;
-  color: var(--action-selection-05);
-}
-.opal-select-option:not([data-exact])[data-selected] .opal-select-option-label {
-  @apply font-medium;
+/* A foldable group wraps its title and rows; the same row gap as the list. */
+.opal-select-group {
+  @apply flex flex-col gap-1;
 }
 
-.opal-select-option-icon {
-  @apply h-4 w-4 shrink-0;
-  stroke: var(--text-03);
-}
-.opal-select-option[data-exact] .opal-select-option-icon {
-  stroke: var(--action-selection-05);
-}
-
-/* The highlight splits the label into segments; they must stay inline —
-   as direct flex children the label's gap would space them mid-word. */
-.opal-select-option-text {
-  @apply min-w-0 truncate;
-}
-.opal-select-match {
-  @apply font-semibold;
-}
-
-.opal-select-option-description {
-  @apply mt-0.5 text-text-03 font-secondary-body;
-}
-.opal-select-option[data-exact] .opal-select-option-description {
-  color: var(--action-selection-04);
-}
-
-/* ---------------------------------------------------------------------------
-   Create row (open mode)
-   --------------------------------------------------------------------------- */
-
-.opal-select-create {
-  @apply flex cursor-pointer items-center justify-between px-3 py-2 rounded-08 transition-colors hover:bg-background-tint-02;
-}
-.opal-select-create[data-highlighted] {
-  @apply bg-background-tint-02;
-}
-
-.opal-select-create-label {
-  @apply min-w-0 truncate text-text-04 font-main-ui-action;
+/* Keyboard scrolling brings a stop to the nearest edge; the mask fade there
+   is 12px, so a stop keeps that much clear of the edge. */
+.opal-select-dropdown-scroll [role="option"],
+.opal-select-group > :first-child {
+  scroll-margin-block: 0.75rem;
 }
 
 .opal-select-create-icon {
