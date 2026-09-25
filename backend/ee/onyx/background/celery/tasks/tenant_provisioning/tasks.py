@@ -53,6 +53,7 @@ def provision_tenant_for_user(
     *,
     tenant_id: str,  # noqa: ARG001, the cloud system tenant, carried for TenantAwareTask
     email: str,
+    attempt_id: str,
     referral_source: str | None = None,
 ) -> bool:
     """Build or migrate the tenant for one signup, off the api server.
@@ -67,8 +68,8 @@ def provision_tenant_for_user(
 
     # Imported here: provisioning reaches every tool implementation (~75 MB).
     from ee.onyx.server.tenants.provisioning import (
+        provision_attempt_failure_key,
         provision_user_tenant,
-        user_provision_failure_key,
         user_provision_lock_name,
     )
 
@@ -91,10 +92,10 @@ def provision_tenant_for_user(
         task_logger.info("Provisioned tenant %s for a signup", tenant_id)
         return True
     except Exception:
-        # The request polling for the mapping reads this marker and fails now
-        # instead of at its deadline. The task itself fails loudly.
+        # The request that enqueued this attempt reads the marker and fails
+        # now instead of at its deadline. The task itself fails loudly.
         r.set(
-            user_provision_failure_key(email),
+            provision_attempt_failure_key(attempt_id),
             "1",
             ex=TENANT_PROVISIONING_WAIT_SECONDS,
         )

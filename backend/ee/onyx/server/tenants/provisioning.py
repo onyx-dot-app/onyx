@@ -7,6 +7,7 @@ import aiohttp  # Async HTTP client
 import httpx
 import requests
 from fastapi import Request
+from redis.lock import Lock as RedisLock
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -146,19 +147,26 @@ async def get_or_provision_tenant(
 
     # The same lock the worker task takes. Two overlapping signups for one
     # email (a double submit, two tabs) must not each take a pool tenant.
+    deadline = time.monotonic() + TENANT_PROVISIONING_WAIT_SECONDS
     lock = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID).lock(
         user_provision_lock_name(email), timeout=_REQUEST_PROVISION_LOCK_TIMEOUT_S
     )
-    if not lock.acquire(blocking=False):
-        return await _wait_for_tenant(email, oauth_name, account_id)
+    await _acquire_signup_lock(lock, deadline)
 
     try:
+        # The holder this waited on may have finished the job.
+        tenant_id = resolve_tenant_id(email, oauth_name, account_id)
+        if tenant_id:
+            return tenant_id
         pool_tenant = await get_available_tenant()
         if pool_tenant is not None:
             await finish_tenant_assignment(
                 pool_tenant.tenant_id, email, referral_source
             )
             return pool_tenant.tenant_id
+        attempt_id = _enqueue_user_provisioning(email, referral_source)
+    except OnyxError:
+        raise
     except Exception as e:
         logger.error("Failed to provision tenant", exc_info=e)
         raise OnyxError(
@@ -171,8 +179,18 @@ async def get_or_provision_tenant(
         except Exception:
             logger.warning("Could not release the signup lock (likely expired)")
 
-    _enqueue_user_provisioning(email, referral_source)
-    return await _wait_for_tenant(email, oauth_name, account_id)
+    return await _wait_for_tenant(email, oauth_name, account_id, attempt_id, deadline)
+
+
+async def _acquire_signup_lock(lock: RedisLock, deadline: float) -> None:
+    """Poll for the lock without blocking the event loop."""
+    while not lock.acquire(blocking=False):
+        if time.monotonic() >= deadline:
+            raise OnyxError(
+                OnyxErrorCode.SERVICE_UNAVAILABLE,
+                "Your workspace is still being set up. Try again in a minute.",
+            )
+        await asyncio.sleep(_PROVISIONING_POLL_INTERVAL_S)
 
 
 def _email_digest(email: str) -> str:
@@ -183,10 +201,10 @@ def user_provision_lock_name(email: str) -> str:
     return f"{OnyxRedisLocks.CLOUD_PROVISION_TENANT_FOR_USER_LOCK_PREFIX}:{_email_digest(email)}"
 
 
-def user_provision_failure_key(email: str) -> str:
-    """Set by the worker when a signup's provisioning fails, so the waiting
-    request fails now instead of polling until its deadline."""
-    return f"{ONYX_CLOUD_PROVISION_FAILURE_KEY_PREFIX}:{_email_digest(email)}"
+def provision_attempt_failure_key(attempt_id: str) -> str:
+    """Set by the worker when this attempt fails, so the request that
+    enqueued it fails now instead of polling until its deadline."""
+    return f"{ONYX_CLOUD_PROVISION_FAILURE_KEY_PREFIX}:{attempt_id}"
 
 
 async def finish_tenant_assignment(
@@ -220,16 +238,15 @@ async def finish_tenant_assignment(
     logger.info("Assigned tenant %s to user %s", tenant_id, email)
 
 
-def _enqueue_user_provisioning(email: str, referral_source: str | None) -> None:
-    # A retry after a failed attempt starts from a clean marker.
-    get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID).delete(
-        user_provision_failure_key(email)
-    )
+def _enqueue_user_provisioning(email: str, referral_source: str | None) -> str:
+    """Returns the attempt id the worker reports failure under."""
+    attempt_id = str(uuid.uuid4())
     client_app.send_task(
         OnyxCeleryTask.CLOUD_PROVISION_TENANT_FOR_USER,
         kwargs={
             "tenant_id": ONYX_CLOUD_TENANT_ID,
             "email": email,
+            "attempt_id": attempt_id,
             "referral_source": referral_source,
         },
         queue=OnyxCeleryQueues.MONITORING,
@@ -238,14 +255,18 @@ def _enqueue_user_provisioning(email: str, referral_source: str | None) -> None:
         # enqueues again. Running the stale task too would build twice.
         expires=TENANT_PROVISIONING_WAIT_SECONDS,
     )
+    return attempt_id
 
 
 async def _wait_for_tenant(
-    email: str, oauth_name: str | None, account_id: str | None
+    email: str,
+    oauth_name: str | None,
+    account_id: str | None,
+    attempt_id: str,
+    deadline: float,
 ) -> str:
     redis_client = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
-    failure_key = user_provision_failure_key(email)
-    deadline = time.monotonic() + TENANT_PROVISIONING_WAIT_SECONDS
+    failure_key = provision_attempt_failure_key(attempt_id)
     while time.monotonic() < deadline:
         tenant_id = resolve_tenant_id(email, oauth_name, account_id)
         if tenant_id:

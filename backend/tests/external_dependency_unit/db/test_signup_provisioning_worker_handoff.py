@@ -12,6 +12,7 @@ per-user lock. Alembic and the control plane are the only mocks. Multi-tenant
 mode is patched in so the suite runs in the default CI lane.
 """
 
+import threading
 import uuid
 from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
@@ -105,10 +106,14 @@ def _pool_has(tenant_id: str) -> bool:
         )
 
 
-def _run_worker_task(email: str) -> bool:
+def _run_worker_task(email: str, attempt_id: str | None = None) -> bool:
     """Run the celery task in-process, as the monitoring worker would."""
     result = provisioning_tasks.provision_tenant_for_user.apply(
-        kwargs={"tenant_id": ONYX_CLOUD_TENANT_ID, "email": email}
+        kwargs={
+            "tenant_id": ONYX_CLOUD_TENANT_ID,
+            "email": email,
+            "attempt_id": attempt_id or str(uuid.uuid4()),
+        }
     ).get()
     return bool(result)
 
@@ -176,6 +181,28 @@ async def test_a_stale_older_tenant_does_not_hide_a_current_one(
 
 
 @pytest.mark.asyncio
+async def test_request_waits_for_the_lock_then_assigns(
+    email: str,
+    pool_tenant_id: str,
+    no_alembic: MagicMock,
+    control_plane: MagicMock,  # noqa: ARG001
+) -> None:
+    _add_pool_tenant(pool_tenant_id, get_alembic_head_revision())
+    r = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+    lock = r.lock(provisioning.user_provision_lock_name(email), timeout=30)
+    assert lock.acquire(blocking=False)
+    # Released while the request polls for it, as a finishing holder would.
+    threading.Timer(0.5, lock.release).start()
+
+    with patch.object(provisioning.client_app, "send_task") as send_task:
+        tenant_id = await provisioning.get_or_provision_tenant(email)
+
+    assert tenant_id == pool_tenant_id
+    send_task.assert_not_called()
+    no_alembic.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_stale_pool_tenant_is_handed_to_the_worker(
     email: str,
     pool_tenant_id: str,
@@ -226,19 +253,33 @@ async def test_request_fails_fast_when_the_worker_reports_failure(
     email: str,
     no_alembic: MagicMock,
 ) -> None:
-    def worker_fails(*_args: object, **_kwargs: object) -> None:
-        with patch.object(
-            provisioning, "provision_user_tenant", side_effect=RuntimeError("boom")
-        ):
-            with pytest.raises(RuntimeError):
-                _run_worker_task(email)
+    workers: list[threading.Thread] = []
+
+    def worker_fails(*_args: object, **kwargs: object) -> None:
+        task_kwargs = cast(dict[str, str], kwargs["kwargs"])
+
+        def run() -> None:
+            # Own thread, as on a worker: takes the lock once the request
+            # releases it, and runs its own event loop.
+            with patch.object(
+                provisioning, "provision_user_tenant", side_effect=RuntimeError("boom")
+            ):
+                with pytest.raises(RuntimeError):
+                    _run_worker_task(email, attempt_id=task_kwargs["attempt_id"])
+
+        worker = threading.Thread(target=run)
+        workers.append(worker)
+        worker.start()
 
     with (
         patch.object(provisioning, "TENANT_PROVISIONING_WAIT_SECONDS", 30),
+        patch.object(provisioning_tasks, "TENANT_PROVISIONING_WAIT_SECONDS", 30),
         patch.object(provisioning.client_app, "send_task", side_effect=worker_fails),
         pytest.raises(provisioning.OnyxError) as excinfo,
     ):
         await provisioning.get_or_provision_tenant(email)
+    for worker in workers:
+        worker.join(timeout=30)
 
     # Far inside the 30s deadline: the worker's failure marker ended the wait.
     assert excinfo.value.error_code == provisioning.OnyxErrorCode.INTERNAL_ERROR
