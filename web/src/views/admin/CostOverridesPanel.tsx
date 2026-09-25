@@ -17,16 +17,16 @@ import { SvgCheck, SvgEdit, SvgPlus, SvgTrash, SvgX } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
 import { getProvider } from "@/lib/languageModels";
-import { LLMOption } from "@/lib/languageModels/options";
-import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
+import type { LLMOption } from "@/lib/languageModels/types";
+import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import {
-  CostOverride,
   deleteCostOverride,
   refreshCostOverrides,
   upsertCostOverride,
   useCostOverrides,
 } from "@/lib/languageModels/costOverrides";
+import type { CostOverride } from "@/lib/languageModels/types";
 
 /** `allProvidersLabel` is passed in: this module cannot call translation hooks. */
 function getProviderDisplayName(
@@ -62,7 +62,7 @@ interface OverrideFormProps {
 function OverrideForm({ existing, onDone }: OverrideFormProps) {
   const t = useTranslations("admin.costOverrides");
   const { mutate } = useSWRConfig();
-  const { llmProviders } = useAdminLLMProviders();
+  const { llmProviders } = useAdminLanguageModels();
   const [model, setModel] = useState(existing?.model ?? "");
   const [provider, setProvider] = useState(existing?.provider ?? "");
   const [inputRate, setInputRate] = useState(

@@ -26,8 +26,6 @@ import type { IconFunctionComponent, IconProps } from "@opal/types";
 import { Disabled, Hoverable, Interactive } from "@opal/core";
 import {
   GLOBAL_DEFAULT_LLM_OPTION,
-  LLMOption,
-  ModelOptionProvider,
   buildLlmOptions,
   groupLlmOptions,
   llmOptionKey,
@@ -44,7 +42,7 @@ import {
   minReasoningStop,
   reasoningStopIndex,
 } from "@/sections/model-selector/setting-controls";
-import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
+import { useLanguageModelsForCurrentAgent } from "@/lib/languageModels/hooks";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
 import {
@@ -52,6 +50,10 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/refresh-components/Collapsible";
+import type {
+  LLMOption,
+  ModelOptionProvider,
+} from "@/lib/languageModels/types";
 
 export interface TemperatureManager {
   temperature: number;
@@ -430,7 +432,7 @@ export default function ModelSelectorContent({
   const {
     llmProviders: currentAgentProviderOptions,
     isLoading: currentAgentProvidersLoading,
-  } = useCurrentAgentLLMProviders();
+  } = useLanguageModelsForCurrentAgent();
   const llmProviders = providerOptions ?? currentAgentProviderOptions;
   const isLoading =
     isLoadingProp ||

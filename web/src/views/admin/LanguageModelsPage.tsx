@@ -4,7 +4,7 @@ import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useState, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
-import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
+import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
 import { PageLoader } from "@opal/layouts";
 import { Content, ContentAction, InputHorizontal, toast } from "@opal/layouts";
 import {
@@ -337,7 +337,7 @@ export default function LanguageModelsPage() {
     boolean | null
   >(null);
   const { llmProviders: existingLlmProviders, defaultText } =
-    useAdminLLMProviders();
+    useAdminLanguageModels();
   const isConfigurationDisabled = usePHFeatureFlag(
     PHFeatureFlag.LANGUAGE_MODEL_CONFIGURATION_DISABLED
   );

@@ -3,7 +3,10 @@
  */
 import { renderHook } from "@testing-library/react";
 import useSWR from "swr";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+import {
+  useLanguageModels,
+  useLanguageModelsForAgent,
+} from "@/lib/languageModels/hooks";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
 jest.mock("swr", () => ({
@@ -17,7 +20,7 @@ jest.mock("@/lib/fetcher", () => ({
 
 const mockUseSWR = useSWR as jest.MockedFunction<typeof useSWR>;
 
-describe("useLLMProviders", () => {
+describe("useLanguageModels", () => {
   beforeEach(() => {
     mockUseSWR.mockReset();
   });
@@ -31,7 +34,7 @@ describe("useLLMProviders", () => {
       isValidating: false,
     } as any);
 
-    const { result } = renderHook(() => useLLMProviders());
+    const { result } = renderHook(() => useLanguageModels());
 
     expect(mockUseSWR).toHaveBeenCalledWith(
       "/api/llm/provider",
@@ -56,7 +59,7 @@ describe("useLLMProviders", () => {
       isValidating: false,
     } as any);
 
-    const { result } = renderHook(() => useLLMProviders(42));
+    const { result } = renderHook(() => useLanguageModelsForAgent(42));
 
     expect(mockUseSWR).toHaveBeenCalledWith(
       "/api/llm/persona/42/providers",
@@ -80,7 +83,7 @@ describe("useLLMProviders", () => {
       isValidating: false,
     } as any);
 
-    const { result } = renderHook(() => useLLMProviders());
+    const { result } = renderHook(() => useLanguageModels());
 
     expect(result.current.isLoading).toBe(false);
     expect(result.current.error).toBeInstanceOf(Error);

@@ -11,7 +11,7 @@ import { useIsMultiTenant } from "@/lib/auth/hooks";
 import { Section } from "@/layouts/general-layouts";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { LLM_GATEWAY_MIN_TIER } from "@/lib/tiers";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { useLanguageModels } from "@/lib/languageModels/hooks";
 import { hasVisibleLLMModel } from "@/lib/languageModels/utils";
 
 interface LayoutProps {
@@ -30,7 +30,7 @@ export default function Layout({ children }: LayoutProps) {
   const { user } = useUser();
   const isMultiTenant = useIsMultiTenant();
   const gatewayTier = useTierAtLeast(LLM_GATEWAY_MIN_TIER);
-  const { llmProviders } = useLLMProviders();
+  const { llmProviders } = useLanguageModels();
 
   const showPasswordSection = Boolean(user?.password_configured);
   const showTokensSection = isMultiTenant !== null;

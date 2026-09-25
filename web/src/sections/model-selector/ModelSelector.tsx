@@ -4,17 +4,20 @@ import React, { useState, useCallback, useMemo, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { Popover, OpenButton } from "@opal/components";
 import { getModelIcon } from "@/lib/languageModels";
+import { GLOBAL_DEFAULT_LLM_OPTION } from "@/lib/languageModels/options";
 import {
-  GLOBAL_DEFAULT_LLM_OPTION,
-  LLMOption,
-  ModelOptionProvider,
-} from "@/lib/languageModels/options";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+  useLanguageModels,
+  useLanguageModelsForAgent,
+} from "@/lib/languageModels/hooks";
 import ModelSelectorContent, {
   ReasoningManager,
   TemperatureManager,
   useModelDetailManagers,
 } from "@/sections/model-selector/ModelSelectorContent";
+import type {
+  LLMOption,
+  ModelOptionProvider,
+} from "@/lib/languageModels/types";
 
 export interface ModelSelectorProps {
   /** The currently selected model, identified by model_configuration_id. */
@@ -78,11 +81,11 @@ export default function ModelSelector({
     llmProviders: fetchedProviderOptions,
     defaultText,
     isLoading: providersLoading,
-  } = useLLMProviders(agentId);
+  } = useLanguageModelsForAgent(agentId);
   const {
     llmProviders: globalProviderOptions,
     defaultText: globalDefaultText,
-  } = useLLMProviders();
+  } = useLanguageModels();
   const llmProviders = providerOptions ?? fetchedProviderOptions ?? [];
   const isLoading = providerOptions === undefined && providersLoading;
   const [open, setOpen] = useState(false);

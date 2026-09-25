@@ -8,7 +8,7 @@ import { useSandboxStatusReconciler } from "@/app/craft/hooks/useSandboxStatusRe
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { hasSupportedCraftProvider } from "@/app/craft/onboarding/constants";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { useLanguageModels } from "@/lib/languageModels/hooks";
 import {
   checkPreProvisionedSession,
   fetchSession,
@@ -43,7 +43,7 @@ export function useBuildSessionController({
   // exists we start provisioning
   // immediately — even while the onboarding intro is still open — so the user
   // exits onboarding to a ready sandbox.
-  const { llmProviders } = useLLMProviders();
+  const { llmProviders } = useLanguageModels();
   const hasAnyProvider = hasSupportedCraftProvider(llmProviders);
 
   // Track previous existingSessionId to detect navigation transitions
