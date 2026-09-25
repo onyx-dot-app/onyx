@@ -1,7 +1,8 @@
 """Unit coverage for the DB-backed SAML router: the OneLogin settings built from
-a provider row (fixed ACS), fail-closed resolution by name and by issuer, the
-issuer extraction that routes the single callback, the per-provider email-domain
-gate, and email extraction from SAML attributes. No DB or live IdP."""
+a provider row (fixed ACS), the callback request data OneLogin checks against that
+ACS, fail-closed resolution by name and by issuer, the issuer extraction that routes
+the single callback, the per-provider email-domain gate, and email extraction from
+SAML attributes. No DB or live IdP."""
 
 import base64
 from types import SimpleNamespace
@@ -9,13 +10,15 @@ from typing import Any, cast
 
 import pytest
 from onelogin.saml2.auth import OneLogin_Saml2_Auth
+from onelogin.saml2.utils import OneLogin_Saml2_Utils
 from sqlalchemy.orm import Session
+from starlette.requests import Request
 
 from onyx.db.enums import SSOProviderType
 from onyx.db.models import SSOProvider
 from onyx.db.sso_provider import SAMLProviderConfig
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server import saml_multi
+from onyx.server import saml, saml_multi
 from onyx.utils.sensitive import make_mock_sensitive_value
 
 _IDP = {
@@ -53,6 +56,46 @@ def test_build_saml_settings_optional_sp_defaults_empty() -> None:
     settings = saml_multi.build_saml_settings(_config())
     assert settings["sp"]["x509cert"] == ""
     assert settings["sp"]["privateKey"] == ""
+
+
+def _callback_request() -> Request:
+    # TLS ends at the reverse proxy, so the API server sees plain HTTP.
+    return Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "scheme": "http",
+            "path": "/auth/saml/callback",
+            "query_string": b"",
+            "headers": [],
+            "client": ("10.0.0.5", 51234),
+            "server": ("api_server", 8080),
+        }
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "web_domain",
+    [
+        "https://onyx.example.com:3000",
+        "https://onyx.example.com",
+        "http://localhost:3000",
+    ],
+)
+async def test_callback_request_url_matches_acs(
+    monkeypatch: pytest.MonkeyPatch, web_domain: str
+) -> None:
+    monkeypatch.setattr(saml, "WEB_DOMAIN", web_domain)
+    monkeypatch.setattr(saml_multi, "WEB_DOMAIN", web_domain)
+
+    request_data = await saml.prepare_from_fastapi_request(_callback_request())
+    settings = saml_multi.build_saml_settings(_config())
+
+    assert (
+        OneLogin_Saml2_Utils.get_self_url_no_query(request_data)
+        == settings["sp"]["assertionConsumerService"]["url"]
+    )
 
 
 def _provider(**overrides: object) -> SSOProvider:
