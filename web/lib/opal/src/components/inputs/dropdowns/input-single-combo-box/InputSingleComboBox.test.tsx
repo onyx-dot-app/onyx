@@ -524,27 +524,6 @@ describe("InputSingleComboBox", () => {
     });
   });
 
-  describe("Text Highlighting", () => {
-    test("matching text is highlighted in option labels", async () => {
-      const user = setupUser();
-      const { container } = render(
-        <InputSingleComboBox
-          placeholder="Select"
-          value=""
-          options={mockOptions}
-        />
-      );
-      const input = screen.getByPlaceholderText("Select");
-
-      await user.type(input, "app");
-
-      // Look for the highlighted match span
-      const boldText = container.querySelector(".opal-select-match");
-      expect(boldText).toBeInTheDocument();
-      expect(boldText?.textContent).toBe("App");
-    });
-  });
-
   describe("onChange vs onValueChange", () => {
     test("onChange is called on every keystroke", async () => {
       const handleChange = jest.fn();

@@ -5,8 +5,7 @@ import type { SelectOption } from "../types";
 import type { OptionGroup } from "../shared";
 import { Divider } from "@opal/components/divider/components";
 import { Text } from "@opal/components/text/components";
-import { clickOnKeyDown } from "@opal/utils";
-import { Interactive } from "@opal/core";
+import { LineItemButton } from "@opal/components/buttons/line-item-button/components";
 import { SvgPlus } from "@opal/icons";
 import { sanitizeOptionId } from "./aria";
 
@@ -97,42 +96,33 @@ export const OptionsList: React.FC<OptionsListProps> = ({
     <>
       {/* Create New Option */}
       {showCreateOption && (
-        <Interactive.Stateless
-          variant="default"
-          prominence="tertiary"
+        <LineItemButton
+          presentational
+          selectVariant="select-light"
           interaction={highlightedIndex === 0 ? "hover" : "rest"}
+          rounding={2}
+          title={createText}
+          sizePreset="main-ui"
+          variant="body"
+          rightChildren={<SvgPlus className="opal-select-create-icon" />}
+          id={`${fieldId}-option-${sanitizeOptionId(createText)}`}
+          data-index={0}
+          role="option"
+          tabIndex={-1}
+          aria-selected={false}
+          aria-label={strings.comboBoxCreateOption(
+            strings.comboBoxCreate,
+            createText
+          )}
           onClick={(e) => {
             e.stopPropagation();
             onSelect({ value: createText, title: createText });
           }}
-        >
-          <Interactive.Container
-            rounding={2}
-            size="fit"
-            width="full"
-            id={`${fieldId}-option-${sanitizeOptionId(createText)}`}
-            data-index={0}
-            role="option"
-            tabIndex={-1}
-            aria-selected={false}
-            aria-label={strings.comboBoxCreateOption(
-              strings.comboBoxCreate,
-              createText
-            )}
-            onKeyDown={clickOnKeyDown(() =>
-              onSelect({ value: createText, title: createText })
-            )}
-            onMouseDown={(e) => {
-              e.preventDefault();
-            }}
-            onMouseMove={onMouseMove}
-          >
-            <div className="opal-select-create">
-              <span className="opal-select-create-label">{createText}</span>
-              <SvgPlus className="opal-select-create-icon" />
-            </div>
-          </Interactive.Container>
-        </Interactive.Stateless>
+          onMouseDown={(e) => {
+            e.preventDefault();
+          }}
+          onMouseMove={onMouseMove}
+        />
       )}
 
       {/* A line separates consecutive groups; it carries the group's title
@@ -164,7 +154,6 @@ export const OptionsList: React.FC<OptionsListProps> = ({
                 isExact={isExact}
                 onSelect={onSelect}
                 onMouseMove={onMouseMove}
-                searchTerm={inputValue}
               />
             );
           });

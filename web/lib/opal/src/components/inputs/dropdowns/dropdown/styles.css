@@ -4,8 +4,9 @@
    Select dropdown — the family-internal listbox
 
    State styling rides data attributes set by the components:
-     the row's Interactive container: data-exact, data-selected. Hover,
-     press and the keyboard highlight are Interactive's own.
+     Rows are presentational LineItemButtons: selection, hover, press and
+     the keyboard highlight are its palette. This file carries the box,
+     the search field, the groups and the create row's icon.
    ============================================================================ */
 
 .opal-select-dropdown {
@@ -98,73 +99,9 @@
 
 /* 8px side padding: with the listbox 4px wider than the trigger on each
    side, a row's text and icon then sit exactly under the trigger's. */
-/* A row's hover, press, disabled and keyboard highlight are its
-   Interactive's. The row itself only lays out its content; the exact and
-   selected tints sit on the Interactive container, marked by data attributes. */
-.opal-select-option {
-  /* Full width and start-aligned inside the container, which centres. */
-  @apply flex w-full flex-col px-2 py-2 text-start;
-}
-.interactive-container[data-exact] {
-  @apply bg-[var(--action-selection-01)];
-}
-.interactive-container:not([data-exact])[data-selected] {
-  @apply bg-background-tint-02;
-}
-
 /* A foldable group wraps its title and rows; the same row gap as the list. */
 .opal-select-group {
   @apply flex flex-col gap-1;
-}
-
-.opal-select-option-label {
-  @apply flex flex-row items-center gap-1.5 text-text-04 font-main-ui-action;
-}
-.interactive-container[data-exact] .opal-select-option-label {
-  @apply font-medium;
-  color: var(--action-selection-05);
-}
-.interactive-container:not([data-exact])[data-selected]
-  .opal-select-option-label {
-  @apply font-medium;
-}
-
-/* Colour, not stroke: Opal icons draw with stroke="currentColor", while a
-   CSS stroke on the <svg> would also outline the fill-only provider logos. */
-.opal-select-option-icon {
-  @apply h-4 w-4 shrink-0;
-  color: var(--text-03);
-}
-.interactive-container[data-exact] .opal-select-option-icon {
-  color: var(--action-selection-05);
-}
-
-/* The highlight splits the label into segments; they must stay inline —
-   as direct flex children the label's gap would space them mid-word. */
-.opal-select-option-text {
-  @apply min-w-0 truncate;
-}
-.opal-select-match {
-  @apply font-semibold;
-}
-
-.opal-select-option-description {
-  @apply mt-0.5 text-text-03 font-secondary-body;
-}
-.interactive-container[data-exact] .opal-select-option-description {
-  color: var(--action-selection-04);
-}
-
-/* ---------------------------------------------------------------------------
-   Create row (open mode)
-   --------------------------------------------------------------------------- */
-
-.opal-select-create {
-  @apply flex w-full items-center justify-between px-2 py-2 text-start;
-}
-
-.opal-select-create-label {
-  @apply min-w-0 truncate text-text-04 font-main-ui-action;
 }
 
 .opal-select-create-icon {

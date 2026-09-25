@@ -1,6 +1,5 @@
 import React from "react";
-import { clickOnKeyDown } from "@opal/utils";
-import { Interactive } from "@opal/core";
+import { LineItemButton } from "@opal/components/buttons/line-item-button/components";
 import { SelectOption } from "../types";
 import { sanitizeOptionId } from "./aria";
 
@@ -14,40 +13,14 @@ interface OptionItemProps {
   onSelect: (option: SelectOption) => void;
   /** The pointer moved over the row: the keyboard highlight yields. */
   onMouseMove: () => void;
-  /** Search term to highlight in the label */
-  searchTerm: string;
 }
 
 /**
- * Escapes special regex characters in a string
- */
-const escapeRegex = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-/**
- * Highlights matching text within a string
- */
-const highlightMatch = (text: string, searchTerm: string): React.ReactNode => {
-  if (!searchTerm.trim()) return text;
-
-  const regex = new RegExp(`(${escapeRegex(searchTerm)})`, "gi");
-  const parts = text.split(regex);
-
-  if (parts.length === 1) return text;
-
-  return parts.map((part, i) =>
-    part.toLowerCase() === searchTerm.toLowerCase() ? (
-      <span key={i} className="opal-select-match">
-        {part}
-      </span>
-    ) : (
-      part
-    )
-  );
-};
-
-/**
- * Renders a single option item in the dropdown
- * Memoized to prevent unnecessary re-renders
+ * One row of the listbox: a presentational `LineItemButton`, since the
+ * listbox owns focus and the keyboard and addresses the row through
+ * `aria-activedescendant`. Selection and the exact match read as the
+ * selected state; the keyboard stop reads as hover. Memoized to prevent
+ * unnecessary re-renders.
  */
 export const OptionItem = React.memo(
   ({
@@ -59,55 +32,34 @@ export const OptionItem = React.memo(
     isExact,
     onSelect,
     onMouseMove,
-    searchTerm,
   }: OptionItemProps) => {
-    // Hover and press are Interactive's; the keyboard highlight is its
-    // "hover" override on the one row the walk stopped on.
     return (
-      <Interactive.Stateless
-        variant="default"
-        prominence="tertiary"
+      <LineItemButton
+        presentational
+        selectVariant="select-light"
+        state={isSelected || isExact ? "selected" : "empty"}
         interaction={isHighlighted ? "hover" : "rest"}
         disabled={option.disabled}
+        rounding={2}
+        icon={option.icon}
+        title={option.title}
+        description={option.description}
+        sizePreset="main-ui"
+        variant="body"
+        id={`${fieldId}-option-${sanitizeOptionId(option.value)}`}
+        data-index={index}
+        role="option"
+        tabIndex={-1}
+        aria-selected={isSelected}
         onClick={(e) => {
           e.stopPropagation();
           onSelect(option);
         }}
-      >
-        <Interactive.Container
-          rounding={2}
-          size="fit"
-          width="full"
-          id={`${fieldId}-option-${sanitizeOptionId(option.value)}`}
-          data-index={index}
-          role="option"
-          tabIndex={-1}
-          aria-selected={isSelected}
-          onKeyDown={clickOnKeyDown(() => onSelect(option))}
-          onMouseDown={(e) => {
-            e.preventDefault();
-          }}
-          onMouseMove={onMouseMove}
-          data-exact={isExact || undefined}
-          data-selected={isSelected || undefined}
-        >
-          <div className="opal-select-option">
-            <span className="opal-select-option-label">
-              {option.icon && (
-                <option.icon className="opal-select-option-icon" />
-              )}
-              <span className="opal-select-option-text">
-                {highlightMatch(option.title, searchTerm)}
-              </span>
-            </span>
-            {option.description && (
-              <span className="opal-select-option-description">
-                {option.description}
-              </span>
-            )}
-          </div>
-        </Interactive.Container>
-      </Interactive.Stateless>
+        onMouseDown={(e) => {
+          e.preventDefault();
+        }}
+        onMouseMove={onMouseMove}
+      />
     );
   }
 );
