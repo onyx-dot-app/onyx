@@ -79,7 +79,6 @@ from onyx.db.connector_credential_pair import (
     get_connector_credential_pair_for_user,
     get_connector_credential_pairs_for_user,
     get_connector_credential_pairs_for_user_parallel,
-    verify_user_can_edit_all_cc_pairs,
     verify_user_has_access_to_cc_pair,
 )
 from onyx.db.credentials import (
@@ -1745,9 +1744,7 @@ def update_connector_from_model(
 def delete_connector_by_id(
     connector_id: int,
     only_unpaired: bool = False,
-    user: User = Depends(
-        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
-    ),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
     """``only_unpaired`` is for cleaning up a connector whose credential link
@@ -1758,16 +1755,6 @@ def delete_connector_by_id(
             if cc_pair_ids and only_unpaired:
                 raise OnyxError(
                     OnyxErrorCode.CONFLICT, "Connector is paired, nothing removed"
-                )
-            # GATE 2 as at association: a connector with no pairs is owned by
-            # nobody, so a scoped manager may remove one they just created. A
-            # paired connector needs edit rights on every pair.
-            if cc_pair_ids and not verify_user_can_edit_all_cc_pairs(
-                cc_pair_ids, db_session, user
-            ):
-                raise OnyxError(
-                    OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-                    "Connection not found for current user's permissions",
                 )
             result = delete_connector(
                 db_session=db_session,

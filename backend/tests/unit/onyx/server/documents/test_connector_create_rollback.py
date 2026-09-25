@@ -46,7 +46,6 @@ def stubbed_creation(monkeypatch: pytest.MonkeyPatch) -> dict[str, MagicMock]:
         "delete_credential": MagicMock(),
         "delete_connector": MagicMock(),
         "lock_connector_for_delete": MagicMock(return_value=(MagicMock(), set())),
-        "verify_user_can_edit_all_cc_pairs": MagicMock(return_value=False),
         "emit_audit_event": MagicMock(),
         "actor_from_user": MagicMock(),
     }
@@ -113,7 +112,7 @@ def _session_that_propagates() -> MagicMock:
     return db_session
 
 
-def test_scoped_manager_deletes_an_unpaired_connector(
+def test_delete_removes_an_unpaired_connector(
     stubbed_creation: dict[str, MagicMock],
 ) -> None:
     db_session = MagicMock()
@@ -127,26 +126,10 @@ def test_scoped_manager_deletes_an_unpaired_connector(
     )
 
 
-def test_scoped_manager_cannot_delete_a_paired_connector_they_cannot_edit(
-    stubbed_creation: dict[str, MagicMock],
-) -> None:
-    stubbed_creation["lock_connector_for_delete"].return_value = (MagicMock(), {5})
-    db_session = _session_that_propagates()
-
-    with pytest.raises(OnyxError) as raised:
-        connector_server.delete_connector_by_id(
-            connector_id=7, user=MagicMock(), db_session=db_session
-        )
-
-    assert raised.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
-    stubbed_creation["delete_connector"].assert_not_called()
-
-
 def test_only_unpaired_refuses_a_paired_connector(
     stubbed_creation: dict[str, MagicMock],
 ) -> None:
     stubbed_creation["lock_connector_for_delete"].return_value = (MagicMock(), {5})
-    stubbed_creation["verify_user_can_edit_all_cc_pairs"].return_value = True
     db_session = _session_that_propagates()
 
     with pytest.raises(OnyxError) as raised:
