@@ -174,11 +174,15 @@ export default function useChatSessionController({
           !submitOnLoadPerformed.current
         ) {
           submitOnLoadPerformed.current = true;
-          await onSubmit({
-            message: firstMessage || "",
-            currentMessageFiles: [],
-            deepResearch: false,
-          });
+          const message =
+            searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) || firstMessage;
+          if (message) {
+            await onSubmit({
+              message,
+              currentMessageFiles: [],
+              deepResearch: false,
+            });
+          }
         }
         return;
       }
