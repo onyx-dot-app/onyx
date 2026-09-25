@@ -90,15 +90,9 @@ def is_missing_object(e: ClientError) -> bool:
     return s3_error_code(e) in ("404", "NoSuchKey", "NotFound")
 
 
-# A failed legacy write or delete leaves a marker at this prefix plus the key in
-# the object store. The legacy copy replays a failed write into MinIO, and keeps
-# a failed delete's marker as a tombstone that holds MinIO's copy back. The
-# marker's metadata names the action that failed.
+# A failed legacy write leaves a marker at this prefix plus the key in the
+# object store, and the legacy copy replays the write into MinIO.
 LEGACY_OUT_OF_SYNC_PREFIX = "onyx-legacy-out-of-sync/"
-LEGACY_OUT_OF_SYNC_ACTION_KEY = "onyx-legacy-action"
-# The ETag MinIO's copy had when the delete failed, so the copy holds back that
-# version and nothing an older release writes afterwards.
-LEGACY_OUT_OF_SYNC_STALE_ETAG_KEY = "onyx-legacy-stale-etag"
 # On a copied object, the MinIO ETag the copy came from.
 LEGACY_COPIED_FROM_METADATA_KEY = "onyx-legacy-etag"
 
@@ -470,12 +464,10 @@ class S3BackedFileStore(FileStore):
             logger.warning(
                 "Failed to write %s to the legacy MinIO store", key, exc_info=True
             )
-            self._mark_legacy_out_of_sync(bucket, key, "write")
+            self._mark_legacy_out_of_sync(bucket, key)
 
-    # Without this the copy would bring a deleted file back as an orphan. It runs
-    # before the primary delete, so a copy that races the delete finds the legacy
-    # object gone and removes its own copy. A legacy failure logs and marks the
-    # key for the copy to replay.
+    # The legacy copy takes only objects a file record points at, so a copy
+    # left in MinIO by a failed delete stays there and never comes back.
     def _delete_legacy_object(self, bucket: str, key: str) -> None:
         try:
             legacy_client = self._get_legacy_write_client()
@@ -486,25 +478,8 @@ class S3BackedFileStore(FileStore):
             logger.warning(
                 "Failed to delete %s from the legacy MinIO store", key, exc_info=True
             )
-            self._mark_legacy_out_of_sync(
-                bucket, key, "delete", self._legacy_etag_of(bucket, key)
-            )
 
-    # Same bytes give the same ETag in both stores, and a copied object records
-    # the MinIO ETag it came from.
-    def _legacy_etag_of(self, bucket: str, key: str) -> str | None:
-        try:
-            head = self._get_s3_client().head_object(Bucket=bucket, Key=key)
-        except Exception:
-            return None
-        return head["Metadata"].get(LEGACY_COPIED_FROM_METADATA_KEY) or head["ETag"]
-
-    def _mark_legacy_out_of_sync(
-        self, bucket: str, key: str, action: str, stale_etag: str | None = None
-    ) -> None:
-        metadata = {LEGACY_OUT_OF_SYNC_ACTION_KEY: action}
-        if stale_etag is not None:
-            metadata[LEGACY_OUT_OF_SYNC_STALE_ETAG_KEY] = stale_etag
+    def _mark_legacy_out_of_sync(self, bucket: str, key: str) -> None:
         try:
             # A unique body gives each marker its own ETag, so the copy removes
             # only a marker it resynced.
@@ -512,7 +487,6 @@ class S3BackedFileStore(FileStore):
                 Bucket=bucket,
                 Key=LEGACY_OUT_OF_SYNC_PREFIX + key,
                 Body=uuid.uuid4().hex.encode(),
-                Metadata=metadata,
             )
         except Exception:
             logger.warning(

@@ -549,6 +549,7 @@ services:
         required: false
     # Takes the app's endpoints, so it copies only when S3_LEGACY_ENDPOINT_URL is set.
     environment:
+      - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
       - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:?set a strong value in .env, not minioadmin}
       - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:?set a strong value in .env, not minioadmin}

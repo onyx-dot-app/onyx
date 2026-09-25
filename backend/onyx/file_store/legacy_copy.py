@@ -11,7 +11,7 @@ Usage: python -m onyx.file_store.legacy_copy [--watch | --retire]
 import argparse
 import tempfile
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -35,12 +35,13 @@ from onyx.configs.app_configs import (
     S3_LEGACY_ENDPOINT_URL,
     S3_VERIFY_SSL,
 )
+from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
+from onyx.db.engine.tenant_utils import get_all_tenant_ids
+from onyx.db.file_record import get_object_keys_with_records
 from onyx.file_store.file_store import (
     DUAL_WRITE_METADATA_KEY,
     LEGACY_COPIED_FROM_METADATA_KEY,
-    LEGACY_OUT_OF_SYNC_ACTION_KEY,
     LEGACY_OUT_OF_SYNC_PREFIX,
-    LEGACY_OUT_OF_SYNC_STALE_ETAG_KEY,
     LEGACY_RETIRED_MARKER_KEY,
     build_s3_client,
     ensure_bucket,
@@ -98,6 +99,9 @@ class PassStats:
     vanished: int = 0
     retry: int = 0
     failed: int = 0
+    # Objects no file record points at, such as a deleted file whose MinIO copy
+    # outlived a failed delete. They are never copied.
+    unreferenced: int = 0
     copied_bytes: int = 0
 
     def add(self, outcome: CopyOutcome, size: int) -> None:
@@ -188,8 +192,25 @@ def _put_new_object(
         raise
 
 
+# A file record is what makes an object live, in any tenant.
+def _keys_with_records(bucket: str, keys: list[str]) -> set[str]:
+    found: set[str] = set()
+    for tenant_id in get_all_tenant_ids():
+        with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+            found |= get_object_keys_with_records(bucket, keys, db_session)
+    return found
+
+
+def _key_has_record(bucket: str, key: str) -> bool:
+    return key in _keys_with_records(bucket, [key])
+
+
 def copy_object(
-    source: "S3Client", target: "S3Client", bucket: str, key: str
+    source: "S3Client",
+    target: "S3Client",
+    bucket: str,
+    key: str,
+    has_record: Callable[[str, str], bool] = _key_has_record,
 ) -> tuple[CopyOutcome, int]:
     get_condition: _Condition = {}
     target_head = _head(target, bucket, key)
@@ -233,10 +254,10 @@ def copy_object(
                 return CopyOutcome.PRESENT, 0
             raise
 
-    # The app deletes from both stores, and a delete between the read and the
-    # put above would leave this copy behind with no file record. The If-Match
-    # keeps a file the app wrote again since.
-    if written_etag is not None and _head(source, bucket, key) is None:
+    # A delete between the record check and the put above would leave this
+    # copy behind with no file record. The If-Match keeps a file the app wrote
+    # again since.
+    if written_etag is not None and not has_record(bucket, key):
         try:
             target.delete_object(Bucket=bucket, Key=key, IfMatch=written_etag)
         except ClientError as e:
@@ -262,41 +283,19 @@ def _resync_key(
     bucket: str,
     key: str,
     marker: "ObjectTypeDef",
-) -> bool:
-    """Returns whether the marker still applies. A spent marker is dropped."""
-    metadata = target.head_object(Bucket=bucket, Key=marker["Key"])["Metadata"]
-    action = metadata.get(LEGACY_OUT_OF_SYNC_ACTION_KEY)
+) -> None:
     source_head = _head(source, bucket, key)
-    if action == "delete":
-        stale_etag = metadata.get(LEGACY_OUT_OF_SYNC_STALE_ETAG_KEY)
-        # Gone, or rewritten by an older release, so the tombstone is spent.
-        if source_head is None or (
-            stale_etag is not None and source_head["ETag"] != stale_etag
-        ):
-            return False
-        # A copy that raced the delete left the stale object in the object
-        # store, which its copied-from metadata shows.
-        target_head = _head(target, bucket, key)
-        if (
-            target_head is not None
-            and target_head["Metadata"].get(LEGACY_COPIED_FROM_METADATA_KEY)
-            == source_head["ETag"]
-        ):
-            target.delete_object(Bucket=bucket, Key=key, IfMatch=target_head["ETag"])
-        return True
     # A legacy object newer than the marker came from an older release writing
     # it again, and the forward copy takes it.
     if source_head is not None and source_head["LastModified"] > marker["LastModified"]:
-        return False
-    obj: "GetObjectOutputTypeDef | None" = None
+        return
     try:
         obj = target.get_object(Bucket=bucket, Key=key)
     except ClientError as e:
-        if not is_missing_object(e):
-            raise
-    if obj is None:
-        # Deleted since, and that delete's legacy half went through.
-        return False
+        # Deleted since the write failed, so there is nothing to mirror.
+        if is_missing_object(e):
+            return
+        raise
     with _spooled_body(obj) as (buffer, _):
         # The dual-write mark stops the forward copy from treating this as a
         # newer legacy version.
@@ -307,26 +306,18 @@ def _resync_key(
             ContentType=_content_type(obj),
             Metadata={DUAL_WRITE_METADATA_KEY: "1"},
         )
-    return False
 
 
-def _resync_out_of_sync(
-    source: "S3Client", target: "S3Client", bucket: str
-) -> tuple[set[str], int]:
-    """Make the legacy store match the object store for every key that a failed
-    app write or delete marked. A delete marker stays while MinIO still holds
-    the deleted version. Returns the keys the forward copy must skip this pass
-    and the number of keys still out of sync."""
-    held_back: set[str] = set()
+def _resync_out_of_sync(source: "S3Client", target: "S3Client", bucket: str) -> int:
+    """Replay every write that failed in the legacy store. Returns the number of
+    keys still out of sync."""
     failed = 0
     paginator = target.get_paginator("list_objects_v2")
     for page in paginator.paginate(Bucket=bucket, Prefix=LEGACY_OUT_OF_SYNC_PREFIX):
         for marker in page.get("Contents", []):
             key = marker["Key"].removeprefix(LEGACY_OUT_OF_SYNC_PREFIX)
             try:
-                if _resync_key(source, target, bucket, key, marker):
-                    held_back.add(key)
-                    continue
+                _resync_key(source, target, bucket, key, marker)
                 target.delete_object(
                     Bucket=bucket, Key=marker["Key"], IfMatch=marker["ETag"]
                 )
@@ -337,9 +328,8 @@ def _resync_out_of_sync(
                     key,
                     exc_info=True,
                 )
-                held_back.add(key)
                 failed += 1
-    return held_back, failed
+    return failed
 
 
 def run_pass(
@@ -349,33 +339,30 @@ def run_pass(
     workers: int,
     modified_since: datetime | None = None,
 ) -> PassStats:
-    """Copy the objects of the given buckets, or only those modified since the
-    given time."""
+    """Copy the objects of the given buckets that a file record points at, or
+    only those modified since the given time."""
     stats = PassStats()
     paginator = source.get_paginator("list_objects_v2")
     with ThreadPoolExecutor(max_workers=workers) as pool:
         for bucket in buckets:
-            # Runs before the listing, so a key that a failed delete left in
-            # MinIO is held back, never copied back.
-            held_back, failed = _resync_out_of_sync(source, target, bucket)
-            stats.failed += failed
+            stats.failed += _resync_out_of_sync(source, target, bucket)
             copy_key = partial(_copy_object_logged, source, target, bucket)
             for page in paginator.paginate(Bucket=bucket):
-                keys = [
+                listed = [
                     obj["Key"]
                     for obj in page.get("Contents", [])
-                    if obj["Key"] not in held_back
-                    and (
-                        modified_since is None or obj["LastModified"] >= modified_since
-                    )
+                    if modified_since is None or obj["LastModified"] >= modified_since
                 ]
+                with_records = _keys_with_records(bucket, listed)
+                keys = [key for key in listed if key in with_records]
+                stats.unreferenced += len(listed) - len(keys)
                 if not keys:
                     continue
                 for outcome, size in pool.map(copy_key, keys):
                     stats.add(outcome, size)
                 logger.info(
                     "Legacy copy pass so far (at %s): %d listed, %d copied (%d MiB), "
-                    "%d present, %d vanished, %d to retry, %d failed",
+                    "%d present, %d vanished, %d to retry, %d failed, %d without a file record",
                     bucket,
                     stats.listed,
                     stats.copied,
@@ -384,6 +371,7 @@ def run_pass(
                     stats.vanished,
                     stats.retry,
                     stats.failed,
+                    stats.unreferenced,
                 )
     return stats
 
@@ -551,6 +539,7 @@ if __name__ == "__main__":
         help="finish the copy, then stop every process from using MinIO",
     )
     args = parser.parse_args()
+    SqlEngine.init_engine(pool_size=LEGACY_COPY_WORKERS, max_overflow=2)
     if args.retire:
         retire_legacy_store()
     else:
