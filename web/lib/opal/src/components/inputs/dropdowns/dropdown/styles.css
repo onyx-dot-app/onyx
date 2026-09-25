@@ -13,9 +13,9 @@
 }
 
 /* The search field pinned above the rows: a borderless input on its own
-   row, separated from the list by a line. */
+   row, with the same 4px inset as the rows below it. */
 .opal-select-search {
-  @apply border-b border-border-01 p-1;
+  @apply p-1 pb-0;
 }
 
 /* The inner padding sits inside the ShadowDiv, so its scroll gradients span
