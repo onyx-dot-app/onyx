@@ -1272,6 +1272,54 @@ redis:
           requests:
             storage: 1Gi
 
+# In-cluster S3 object store (SeaweedFS), which replaces the bundled MinIO. While
+# minio.enabled is also true, writes reach both stores, reads fall back to MinIO,
+# and a Job copies MinIO's files. See MIGRATION.md.
+objectStore:
+  # Unset follows minio.enabled, so installs on external storage stay as they are.
+  enabled: null
+  image:
+    repository: chrislusf/seaweedfs
+    tag: 4.47@sha256:ce9e796f1fe6f06968f4c04bdaf8f678dad9c8acdfef3d244133d71bfa6bf882
+    pullPolicy: IfNotPresent
+  service:
+    port: 8333
+  # The PVC survives upgrade, rollback and uninstall, and must hold MinIO's data.
+  # Size and storage class follow minio.persistence unless set here.
+  persistence:
+    # size: 30Gi
+    # storageClass: ""
+    annotations: {}
+  # Unset, these take chart defaults: 100m CPU and 256Mi requested, a 2Gi limit,
+  # UID 1000, a read-only root file system and no capabilities.
+  # resources: {}
+  # podSecurityContext: {}
+  # securityContext: {}
+  # A value set here replaces the default whole. On OpenShift, set
+  # podSecurityContext: {} so the cluster assigns the UID.
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  priorityClassName: ""
+  # Copies the bundled MinIO's files into the object store while the app serves.
+  # Scheduling defaults to api's. The Job reruns when its spec changes.
+  legacyCopy:
+    enabled: true
+    # Finish only after a pass copies nothing and this long has passed, so
+    # writes from pods still on the old release are included.
+    settleSeconds: 600
+    workers: 16
+    backoffLimit: 20
+    # Unset takes 100m CPU and 256Mi requested with a 1Gi limit.
+    # resources: {}
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+
+# Bundled MinIO, the legacy store the copy reads from. Keep it enabled until the
+# copy completes. New installs set enabled: false and objectStore.enabled: true.
 minio:
   enabled: true
   mode: standalone
@@ -1292,6 +1340,10 @@ minio:
     enabled: true
     size: 30Gi
     storageClass: ""
+    # Retiring MinIO disables this subchart, which must not delete its data.
+    annotations:
+      helm.sh/resource-policy: keep
+      argocd.argoproj.io/sync-options: Prune=false
   service:
     type: ClusterIP
     port: 9000
@@ -1629,8 +1681,8 @@ configMap:
   EMAIL_FROM: ""
   # Optional comma-separated BCC archive recipients for all emails
   EMAIL_ARCHIVE_BCC_ADDRESSES: ""
-  # MinIO/S3 Configuration override
-  S3_ENDPOINT_URL: ""  # only used if minio is not enabled
+  # External S3 configuration
+  S3_ENDPOINT_URL: ""  # ignored while objectStore or minio is enabled
   S3_FILE_STORE_BUCKET_NAME: ""
   # Azure Blob Storage file store (set FILE_STORE_BACKEND: "azure" and
   # minio.enabled: false). Auth priority: AZURE_STORAGE_CONNECTION_STRING,
