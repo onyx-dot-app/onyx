@@ -87,7 +87,7 @@ variable "availability_type" {
 
 variable "db_name" {
   type        = string
-  description = "Database Onyx connects to. \"postgres\" uses the database Cloud SQL ships instead of creating one. Onyx reads it from POSTGRES_DB, which defaults to \"postgres\"."
+  description = "Database Onyx connects to. \"postgres\" uses the database Cloud SQL ships instead of creating one. Onyx reads it from POSTGRES_DB, which defaults to \"postgres\". A change on an existing instance creates the new database and leaves the old one, because Cloud SQL cannot drop a database with live connections and the resource abandons it on destroy; drop it by hand. With deletion_protection on, the apply fails instead."
   default     = "onyx"
 
   validation {
@@ -103,7 +103,7 @@ variable "db_name" {
 
 variable "username" {
   type        = string
-  description = "Login Onyx connects as. \"postgres\" sets the password of the user Cloud SQL ships; any other name creates a user. Both are members of cloudsqlsuperuser."
+  description = "Login Onyx connects as. \"postgres\" sets the password of the user Cloud SQL ships; any other name creates a user. Both are members of cloudsqlsuperuser. A change on an existing instance creates the new login and leaves the old one, because Cloud SQL cannot drop a role that owns objects and the resource abandons it on destroy; remove it by hand."
   default     = "postgres"
 
   validation {
