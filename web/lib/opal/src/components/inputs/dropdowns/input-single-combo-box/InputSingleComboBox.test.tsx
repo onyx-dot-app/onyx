@@ -84,7 +84,7 @@ describe("InputSingleComboBox", () => {
         />
       );
       const input = screen.getByPlaceholderText("Select");
-      fireEvent.focus(input);
+      fireEvent.click(input);
       expect(screen.getByText("A red fruit")).toBeInTheDocument();
     });
   });
@@ -99,7 +99,7 @@ describe("InputSingleComboBox", () => {
         />
       );
       const input = screen.getByPlaceholderText("Select");
-      fireEvent.focus(input);
+      fireEvent.click(input);
       expect(screen.getByRole("listbox")).toBeInTheDocument();
     });
 
@@ -108,7 +108,7 @@ describe("InputSingleComboBox", () => {
         <InputSingleComboBox placeholder="Select" value="" options={[]} />
       );
       const input = screen.getByPlaceholderText("Select");
-      fireEvent.focus(input);
+      fireEvent.click(input);
       expect(screen.getByRole("listbox")).toBeInTheDocument();
       expect(screen.queryAllByRole("option")).toHaveLength(0);
     });
@@ -140,7 +140,7 @@ describe("InputSingleComboBox", () => {
         />
       );
       const input = screen.getByDisplayValue("Apple");
-      fireEvent.focus(input);
+      fireEvent.click(input);
 
       // The selected label stays in the trigger and filters the list, so
       // only the selection shows, painted as the exact match.
@@ -489,7 +489,7 @@ describe("InputSingleComboBox", () => {
         />
       );
       const input = screen.getByRole("combobox");
-      fireEvent.focus(input);
+      fireEvent.click(input);
       expect(input).toHaveAttribute("aria-expanded", "true");
     });
 
@@ -502,7 +502,7 @@ describe("InputSingleComboBox", () => {
         />
       );
       const input = screen.getByPlaceholderText("Select");
-      fireEvent.focus(input);
+      fireEvent.click(input);
 
       const options = screen.getAllByRole("option");
       expect(options.length).toBe(3);
@@ -517,7 +517,7 @@ describe("InputSingleComboBox", () => {
         />
       );
       const input = screen.getByPlaceholderText("Select a fruit");
-      fireEvent.focus(input);
+      fireEvent.click(input);
 
       const listbox = screen.getByRole("listbox");
       expect(listbox).toHaveAttribute("aria-label", "Select a fruit");

@@ -12,8 +12,10 @@
  * - `trigger="type-in"` (ComboBox): typing filters the option set.
  *   `mode="closed"` permits only option values; `mode="open"` also commits
  *   the raw text via the create row.
- * - `trigger="button"` (Select): nothing to type. A click or ArrowDown opens
- *   the full set, a second click closes it, and focus alone does not.
+ * - `trigger="button"` (Select): nothing to type; a second click closes it.
+ *
+ * Either opens on click, Enter or ArrowDown, and a ComboBox on typing too.
+ * Focus alone never opens the list, so tabbing through a form passes by.
  *
  * Re-picking the selected option unselects it. A Select may carry a
  * `defaultOption`, and then never reads as empty: an empty value resolves to
@@ -406,26 +408,7 @@ function SingleDropdown({
     items: navItems,
     onSelect: handleOptionSelect,
     onToggleGroup: toggleGroup,
-    mode: typeIn ? "combobox" : "select",
   });
-
-  const handleFocus = useCallback(() => {
-    setInputValue(selectedLabel);
-    setIsOpen(true);
-    setHighlightedIndex(-1);
-    setIsKeyboardNav(false);
-    // Caret at the end, ready to modify.
-    requestAnimationFrame(() => {
-      const el = inputRef.current;
-      if (el) el.setSelectionRange(el.value.length, el.value.length);
-    });
-  }, [
-    selectedLabel,
-    setInputValue,
-    setIsOpen,
-    setHighlightedIndex,
-    setIsKeyboardNav,
-  ]);
 
   const toggleDropdown = useCallback(() => {
     if (disabled) return;
@@ -494,10 +477,8 @@ function SingleDropdown({
           value={inputValue}
           onChange={handleInputChange}
           // A button trigger opens on click or ArrowDown and a second click
-          // closes it, like a native <select>; keyboard focus alone does
-          // not open it. Type-in opens on focus, and a click while focused
-          // reopens it (e.g. after Escape) with the text kept for editing.
-          onFocus={typeIn ? handleFocus : undefined}
+          // closes it, like a native <select>. A type-in opens on click or
+          // typing, with the text kept for editing. Focus alone never opens.
           onClick={() => {
             if (!typeIn) return;
             if (!isOpen) {

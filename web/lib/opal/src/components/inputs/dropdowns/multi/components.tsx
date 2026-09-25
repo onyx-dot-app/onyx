@@ -233,7 +233,6 @@ function MultiDropdown(props: MultiDropdownProps) {
     items: navItems,
     onSelect: handleOptionSelect,
     onToggleGroup: toggleGroup,
-    mode: typeIn ? "combobox" : "select",
   });
 
   const autoId = useId();
@@ -278,11 +277,9 @@ function MultiDropdown(props: MultiDropdownProps) {
       rootRef={setRootRef}
       inputRef={inputRef}
       onInputKeyDown={handleDropdownKeyDown}
-      // Type-in opens on focus, and a click on the already-focused input
-      // reopens after Escape, like the single's. A button trigger opens on
-      // click or ArrowDown and a second click closes it; focus alone does
-      // not open it.
-      onInputFocus={typeIn ? () => setIsOpen(true) : undefined}
+      // A click opens either trigger; a second click closes a button
+      // trigger, and a type-in also opens on typing. Focus alone never
+      // opens the list, so tabbing through a form passes by.
       onInputClick={() => setIsOpen((prev) => (typeIn ? true : !prev))}
       inputAriaProps={ariaProps}
     >

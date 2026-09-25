@@ -2,9 +2,11 @@
 
 **Import:** `import { InputSingleComboBox, type InputSingleComboBoxProps, type SelectOption, type SelectDivider, type SelectOptions } from "@opal/components";`
 
-A single pick from a set behind a text input: typing filters the options, focus
-opens the list, and a click while focused reopens it. Keyboard navigation
-(arrows, Enter, Escape) and ARIA combobox semantics are built in. `options` is
+A single pick from a set behind a text input: typing filters the options and
+opens the list, as does a click, Enter or ArrowDown; focus alone does not, so
+tabbing through a form passes by. Open, the arrows and Tab walk the rows and
+wrap around, Enter picks, Escape closes, and ARIA combobox semantics are
+built in. `options` is
 required; for a plain text input use `InputTypeIn`. The pick-only sibling is
 [InputSingleSelect](../input-single-select/README.md).
 

@@ -192,20 +192,16 @@ interface UseSelectKeyboardProps {
   items: NavItem[];
   onSelect: (option: SelectOption) => void;
   onToggleGroup?: (group: OptionGroup) => void;
-  /**
-   * A Select walks its list: Enter opens it, Tab and Shift+Tab move like
-   * the arrows, and both wrap around from the last row to the first. A
-   * search field, when there is one, keeps focus throughout and is not a
-   * stop. A ComboBox keeps the text field's own Tab, which closes the
-   * list and moves on.
-   */
-  mode: "select" | "combobox";
 }
 
 /**
- * Keyboard navigation for the family's listbox: arrows, Enter, Escape and
- * Tab. Physical focus stays on the trigger or the search field; the
- * highlight moves and `aria-activedescendant` follows it.
+ * Keyboard navigation for the family's listbox, the same for every trigger:
+ * Enter or ArrowDown opens a closed list; open, the arrows and Tab walk the
+ * stops and wrap around from the last row to the first, Enter picks the
+ * highlighted row or toggles the highlighted title, and Escape closes. A
+ * closed list leaves Tab alone, so it moves on as normal. Physical focus
+ * stays on the trigger or the search field; the highlight moves and
+ * `aria-activedescendant` follows it.
  */
 export function useSelectKeyboard({
   isOpen,
@@ -216,9 +212,7 @@ export function useSelectKeyboard({
   items,
   onSelect,
   onToggleGroup,
-  mode,
 }: UseSelectKeyboardProps) {
-  const cycles = mode === "select";
   const count = items.length;
 
   // A disabled row is not a stop: the walk passes over it.
@@ -232,33 +226,29 @@ export function useSelectKeyboard({
     [items]
   );
 
-  // The stop after `prev`. A Select wraps from the last row to the first;
-  // from nothing highlighted (-1) both directions enter the list.
+  // The stop after `prev`, wrapping from the last row to the first; from
+  // nothing highlighted (-1) both directions enter the list.
   const next = useCallback(
     (prev: number) => {
       let index = prev;
       for (let step = 0; step < count; step++) {
-        if (index < count - 1) index += 1;
-        else if (cycles) index = 0;
-        else return prev;
+        index = index < count - 1 ? index + 1 : 0;
         if (isStop(index)) return index;
       }
       return -1;
     },
-    [count, cycles, isStop]
+    [count, isStop]
   );
   const previous = useCallback(
     (prev: number) => {
       let index = prev;
       for (let step = 0; step < count; step++) {
-        if (index > 0) index -= 1;
-        else if (cycles) index = count - 1;
-        else return -1;
+        index = index > 0 ? index - 1 : count - 1;
         if (isStop(index)) return index;
       }
       return -1;
     },
-    [count, cycles, isStop]
+    [count, isStop]
   );
 
   const activate = useCallback(() => {
@@ -289,11 +279,6 @@ export function useSelectKeyboard({
           break;
         case "Tab":
           if (!isOpen) break;
-          if (!cycles) {
-            setIsOpen(false);
-            setIsKeyboardNav(false);
-            break;
-          }
           // Inside the list Tab walks the stops, both ways, wrapping.
           e.preventDefault();
           setIsKeyboardNav(true);
@@ -301,11 +286,9 @@ export function useSelectKeyboard({
           break;
         case "Enter":
           if (!isOpen) {
-            if (cycles) {
-              e.preventDefault();
-              setIsOpen(true);
-              setHighlightedIndex(-1);
-            }
+            e.preventDefault();
+            setIsOpen(true);
+            setHighlightedIndex(-1);
             break;
           }
           // Always prevent default and stop propagation when the list is
@@ -323,7 +306,6 @@ export function useSelectKeyboard({
     },
     [
       isOpen,
-      cycles,
       next,
       previous,
       activate,

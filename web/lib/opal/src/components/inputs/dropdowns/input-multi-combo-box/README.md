@@ -2,7 +2,7 @@
 
 **Import:** `import { InputMultiComboBox, type InputMultiComboBoxProps } from "@opal/components";`
 
-Several picks from a set behind a text input: [InputTypeInTag](../../texts/input-type-in-tag/README.md)'s chips-in-input chrome over the family's dropdown. Typing filters the option set, focus opens the list, arrows navigate, Enter picks, and a chosen option becomes a `Tag`. The pick-only sibling is [InputMultiSelect](../input-multi-select/README.md).
+Several picks from a set behind a text input: [InputTypeInTag](../../texts/input-type-in-tag/README.md)'s chips-in-input chrome over the family's dropdown. Typing filters the option set and opens the list, as does a click, Enter or ArrowDown (focus alone does not); the arrows and Tab walk the rows and wrap around, Enter picks, and a chosen option becomes a `Tag`. The pick-only sibling is [InputMultiSelect](../input-multi-select/README.md).
 
 Free tagging with no set to pick from is `InputTypeInTag` itself. `InputMultiComboBox` always has an option set, so `options` is required.
 

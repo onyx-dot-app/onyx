@@ -45,8 +45,9 @@ outside the set shows the placeholder with the validation error.
 
 ## Keyboard
 
-The trigger is a button: a click, Enter or ArrowDown opens the list,
-and a second click closes it. Open, the arrows and Tab walk the stops in
+The trigger is a button: a click, Enter or ArrowDown opens the list, focus
+alone does not, and a second click closes it. The ComboBoxes share every rule
+below. Open, the arrows and Tab walk the stops in
 order and wrap around from the last row to the first: a foldable divider's
 title is a stop of its own, then its rows. With `search` the field keeps
 focus throughout and is not a stop, so typing works from anywhere in the
@@ -69,7 +70,7 @@ With `search` a search field sits at the top of the list and filters the
 rows by title or value; a term that matches a divider's title keeps that
 whole section. It takes focus when the list opens, so typing starts at once;
 arrows, Enter, Escape and Tab work from it as from the trigger. Escape closes
-the list and returns focus to the trigger; Tab closes it and moves on to the
+the list and returns focus to the trigger; a Tab on a closed list moves on to the
 next field, as it would from the trigger.
 
 ## Foldable dividers
