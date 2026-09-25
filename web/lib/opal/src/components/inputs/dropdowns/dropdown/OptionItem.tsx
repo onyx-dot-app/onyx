@@ -42,7 +42,9 @@ export const OptionItem = React.memo(
         title={option.title}
         description={option.description}
         sizePreset="main-ui"
-        variant="body"
+        // `body` resolves to `ContentSm`, which has no description slot; a
+        // row with one takes the `heading` layout so the line renders.
+        variant={option.description ? "heading" : "body"}
         id={`${fieldId}-option-${sanitizeOptionId(option.value)}`}
         data-index={index}
         role="option"

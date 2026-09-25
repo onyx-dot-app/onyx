@@ -194,8 +194,11 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
             role="presentation"
             className="opal-select-search"
             // The listbox root cancels mousedown to keep focus on the
-            // trigger; a click into the search field must focus it.
+            // trigger; a click into the search field must focus it. The
+            // click is held too: React bubbles through the portal, and the
+            // multi trigger's root click would pull focus straight back.
             onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
           >
             <InputTypeIn
               ref={searchRef}

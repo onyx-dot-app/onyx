@@ -164,7 +164,7 @@ describe("InputSingleComboBox", () => {
       expect(screen.getAllByRole("option").length).toBe(3);
     });
 
-    test("closes dropdown on tab", async () => {
+    test("Tab walks the rows while the list is open", async () => {
       const user = setupUser();
       render(
         <InputSingleComboBox
@@ -179,7 +179,12 @@ describe("InputSingleComboBox", () => {
       expect(screen.getByRole("listbox")).toBeInTheDocument();
 
       await user.tab();
-      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+      expect(screen.getByRole("listbox")).toBeInTheDocument();
+      expect(screen.getByRole("option", { name: /Apple/ })).toHaveAttribute(
+        "data-interaction",
+        "hover"
+      );
+      expect(input).toHaveFocus();
     });
   });
 
