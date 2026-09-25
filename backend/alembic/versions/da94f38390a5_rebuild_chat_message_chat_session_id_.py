@@ -41,6 +41,20 @@ def _index_state(conn: sa.engine.Connection, schema: str) -> bool | None:
     return row[0] if row is not None else None
 
 
+def repair_index(conn: sa.engine.Connection, schema: str) -> None:
+    """Leave the schema with a valid index. ``conn`` must be in AUTOCOMMIT mode,
+    since CONCURRENTLY cannot run inside a transaction."""
+    state = _index_state(conn, schema)
+    if state is True:
+        return
+    if state is False:
+        conn.exec_driver_sql(f'DROP INDEX CONCURRENTLY "{schema}"."{INDEX_NAME}"')
+    conn.exec_driver_sql(
+        f'CREATE INDEX CONCURRENTLY "{INDEX_NAME}" '
+        f'ON "{schema}".chat_message (chat_session_id)'
+    )
+
+
 def _release_migration_snapshot() -> tuple[sa.engine.Connection, str]:
     """Commit the migration txn and return (bind, current tenant schema)."""
     bind = op.get_bind()
@@ -53,15 +67,7 @@ def upgrade() -> None:
     bind, schema = _release_migration_snapshot()
 
     with bind.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-        state = _index_state(conn, schema)
-        if state is True:
-            return
-        if state is False:
-            conn.exec_driver_sql(f'DROP INDEX CONCURRENTLY "{schema}"."{INDEX_NAME}"')
-        conn.exec_driver_sql(
-            f'CREATE INDEX CONCURRENTLY "{INDEX_NAME}" '
-            f'ON "{schema}".chat_message (chat_session_id)'
-        )
+        repair_index(conn, schema)
 
 
 def downgrade() -> None:
