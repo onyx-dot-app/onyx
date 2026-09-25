@@ -31,6 +31,7 @@ import { isTypedFileField } from "@/lib/connectors/utils";
 import { SvgEdit, SvgKey } from "@opal/icons";
 import CreateCredential from "@/lib/credentials/components/CreateCredential";
 import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";
+import type { CredentialFieldValues } from "@/lib/credentials/types";
 import {
   CredentialCreationMethod,
   getCredentialCreationActionLabel,
@@ -146,7 +147,7 @@ export default function CredentialSection({
 
   const onUpdateCredential = async (
     selectedCredential: Credential<any | null>,
-    details: any,
+    details: CredentialFieldValues,
     onSucces: () => void
   ) => {
     let privateKey: TypedFile | null = null;
