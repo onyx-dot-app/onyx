@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import time
 from collections.abc import Callable, Generator
@@ -18,6 +19,38 @@ logger = setup_logger()
 _HEALTH_CACHE_TTL_SECONDS = 30
 _DEFAULT_SERVER_VERSION = "0.0.0"
 _health_cache: dict[str, tuple[float, "HealthResponse"]] = {}
+
+# 429 = replica admission queue full; 503 = cluster has no executor capacity.
+_ADMISSION_RETRY_STATUSES = frozenset({429, 503})
+_ADMISSION_MAX_ATTEMPTS = 3
+_ADMISSION_RETRY_AFTER_CAP_SECONDS = 10.0
+_ADMISSION_RETRY_AFTER_FALLBACK_SECONDS = 2.0
+
+
+class CodeInterpreterBusyError(RuntimeError):
+    """Raised when the Code Interpreter keeps rejecting a request for lack of
+    capacity after all admission retries."""
+
+    def __init__(self, status_code: int) -> None:
+        self.status_code = status_code
+        super().__init__(
+            f"Code Interpreter is busy (HTTP {status_code}). "
+            "Try again in a few moments."
+        )
+
+
+def _parse_retry_after(value: str | None) -> float:
+    """Seconds from a delta-seconds ``Retry-After``, capped. HTTP-date and
+    invalid values use the fallback."""
+    if value is None:
+        return _ADMISSION_RETRY_AFTER_FALLBACK_SECONDS
+    try:
+        seconds = float(value.strip())
+    except ValueError:
+        return _ADMISSION_RETRY_AFTER_FALLBACK_SECONDS
+    if not math.isfinite(seconds) or seconds < 0:
+        return _ADMISSION_RETRY_AFTER_FALLBACK_SECONDS
+    return min(seconds, _ADMISSION_RETRY_AFTER_CAP_SECONDS)
 
 
 class CodeInterpreterVersionError(RuntimeError):
@@ -240,6 +273,48 @@ class CodeInterpreterClient:
             payload["files"] = files
         return payload
 
+    def _send_with_admission_retry(
+        self,
+        operation: str,
+        send: Callable[[], requests.Response],
+        budget_seconds: float,
+    ) -> requests.Response:
+        """Call ``send`` and retry 429/503 admission rejections, honoring
+        ``Retry-After``, within ``budget_seconds`` total. Any other response is
+        returned unchanged for the caller to handle."""
+        deadline = time.monotonic() + budget_seconds
+        attempt = 1
+        while True:
+            response = send()
+            if response.status_code not in _ADMISSION_RETRY_STATUSES:
+                return response
+
+            status_code = response.status_code
+            wait = _parse_retry_after(response.headers.get("Retry-After"))
+            response.close()
+            if (
+                attempt >= _ADMISSION_MAX_ATTEMPTS
+                or time.monotonic() + wait >= deadline
+            ):
+                logger.warning(
+                    "Code Interpreter %s rejected with HTTP %s after %d attempt(s)",
+                    operation,
+                    status_code,
+                    attempt,
+                )
+                raise CodeInterpreterBusyError(status_code)
+
+            logger.info(
+                "Code Interpreter %s returned HTTP %s, retrying in %.1fs (attempt %d/%d)",
+                operation,
+                status_code,
+                wait,
+                attempt + 1,
+                _ADMISSION_MAX_ATTEMPTS,
+            )
+            time.sleep(wait)
+            attempt += 1
+
     def health(self, use_cache: bool = False) -> HealthResponse:
         """Check if the Code Interpreter service is healthy
 
@@ -332,8 +407,13 @@ class CodeInterpreterClient:
         """Execute Python code (batch)"""
         url = f"{self.base_url}/v1/execute"
         payload = self._build_payload(code, stdin, timeout_ms, files)
+        timeout = timeout_ms / 1000 + 10
 
-        response = self.session.post(url, json=payload, timeout=timeout_ms / 1000 + 10)
+        response = self._send_with_admission_retry(
+            "execute",
+            lambda: self.session.post(url, json=payload, timeout=timeout),
+            budget_seconds=timeout,
+        )
         response.raise_for_status()
 
         return ExecuteResponse(**response.json())
@@ -355,11 +435,13 @@ class CodeInterpreterClient:
         url = f"{self.base_url}/v1/execute/stream"
         payload = self._build_payload(code, stdin, timeout_ms, files)
 
-        response = self.session.post(
-            url,
-            json=payload,
-            stream=True,
-            timeout=timeout_ms / 1000 + 10,
+        timeout = timeout_ms / 1000 + 10
+
+        # Admission errors arrive as HTTP statuses before any SSE bytes.
+        response = self._send_with_admission_retry(
+            "execute_stream",
+            lambda: self.session.post(url, json=payload, stream=True, timeout=timeout),
+            budget_seconds=timeout,
         )
 
         if response.status_code == 404:
@@ -453,7 +535,11 @@ class CodeInterpreterClient:
         if files:
             payload["files"] = files
 
-        response = self.session.post(url, json=payload, timeout=30)
+        response = self._send_with_admission_retry(
+            "create_session",
+            lambda: self.session.post(url, json=payload, timeout=30),
+            budget_seconds=30,
+        )
         response.raise_for_status()
 
         return CreateSessionResponse(**response.json())
@@ -481,8 +567,13 @@ class CodeInterpreterClient:
         """
         url = f"{self.base_url}/v1/sessions/{session_id}/bash"
         payload = {"cmd": cmd, "timeout_ms": timeout_ms}
+        timeout = timeout_ms / 1000 + 10
 
-        response = self.session.post(url, json=payload, timeout=timeout_ms / 1000 + 10)
+        response = self._send_with_admission_retry(
+            "session_bash",
+            lambda: self.session.post(url, json=payload, timeout=timeout),
+            budget_seconds=timeout,
+        )
         response.raise_for_status()
 
         return BashExecResponse(**response.json())
