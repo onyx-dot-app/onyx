@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import time
 import uuid
 
@@ -42,9 +43,11 @@ from onyx.configs.app_configs import (
     VERTEXAI_DEFAULT_LOCATION,
 )
 from onyx.configs.constants import (
+    ONYX_CLOUD_TENANT_ID,
     OnyxCeleryPriority,
     OnyxCeleryQueues,
     OnyxCeleryTask,
+    OnyxRedisLocks,
 )
 from onyx.db.engine.shard_routing import get_shard_for_new_tenant
 from onyx.db.engine.sql_engine import (
@@ -81,6 +84,7 @@ from onyx.llm.well_known_providers.llm_provider_options import (
     get_recommendations,
     model_configurations_for_provider,
 )
+from onyx.redis.redis_pool import get_redis_client
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
@@ -103,6 +107,9 @@ _CONTROL_PLANE_TIMEOUT_S = 30
 
 # A signup polls for its worker-built tenant at this interval.
 _PROVISIONING_POLL_INTERVAL_S = 1.0
+
+# Covers a pool assignment plus the control plane call (30s timeout).
+_REQUEST_PROVISION_LOCK_TIMEOUT_S = 60
 
 
 async def get_or_provision_tenant(
@@ -135,26 +142,61 @@ async def get_or_provision_tenant(
     if tenant_id:
         return tenant_id
 
+    # The same lock the worker task takes. Two overlapping signups for one
+    # email (a double submit, two tabs) must not each take a pool tenant.
+    lock = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID).lock(
+        user_provision_lock_name(email), timeout=_REQUEST_PROVISION_LOCK_TIMEOUT_S
+    )
+    if not lock.acquire(blocking=False):
+        return await _wait_for_tenant(email, oauth_name, account_id)
+
     try:
         pool_tenant = await get_available_tenant()
         if pool_tenant is not None:
-            tenant_id = pool_tenant.tenant_id
-            await assign_tenant_to_user(tenant_id, email, referral_source)
-            logger.info(
-                "Assigned pre-provisioned tenant %s to user %s", tenant_id, email
+            await finish_tenant_assignment(
+                pool_tenant.tenant_id, email, referral_source
             )
-            if not DEV_MODE:
-                await notify_control_plane(tenant_id, email, referral_source)
-            return tenant_id
+            return pool_tenant.tenant_id
     except Exception as e:
         logger.error("Failed to provision tenant", exc_info=e)
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,
             "Failed to provision tenant. Please try again later.",
         )
+    finally:
+        try:
+            lock.release()
+        except Exception:
+            logger.warning("Could not release the signup lock (likely expired)")
 
     _enqueue_user_provisioning(email, referral_source)
     return await _wait_for_tenant(email, oauth_name, account_id)
+
+
+def user_provision_lock_name(email: str) -> str:
+    digest = hashlib.sha256(email.strip().lower().encode()).hexdigest()
+    return f"{OnyxRedisLocks.CLOUD_PROVISION_TENANT_FOR_USER_LOCK_PREFIX}:{digest}"
+
+
+async def finish_tenant_assignment(
+    tenant_id: str, email: str, referral_source: str | None
+) -> None:
+    """Tell the control plane, then write the mapping that makes the tenant
+    visible to the user. In this order a failed notification never leaves a
+    workspace the user can log in to but billing has never heard of. The
+    tenant is rolled back on failure, since it is already out of the pool."""
+    try:
+        if not DEV_MODE:
+            await notify_control_plane(tenant_id, email, referral_source)
+        await assign_tenant_to_user(tenant_id, email, referral_source)
+    except Exception:
+        logger.exception("Failed to assign tenant %s; rolling it back", tenant_id)
+        try:
+            await rollback_tenant_provisioning(tenant_id)
+        except Exception:
+            logger.exception("Failed to rollback tenant %s", tenant_id)
+        raise
+    logger.info("Assigned tenant %s to user %s", tenant_id, email)
 
 
 def _enqueue_user_provisioning(email: str, referral_source: str | None) -> None:
@@ -164,7 +206,7 @@ def _enqueue_user_provisioning(email: str, referral_source: str | None) -> None:
         queue=OnyxCeleryQueues.MONITORING,
         priority=OnyxCeleryPriority.HIGH,
         # Past this the request has already failed, so the user retries and
-        # enqueues again; running the stale task too would build twice.
+        # enqueues again. Running the stale task too would build twice.
         expires=TENANT_PROVISIONING_WAIT_SECONDS,
     )
 
@@ -216,13 +258,10 @@ async def provision_user_tenant(email: str, referral_source: str | None) -> str:
                 except Exception:
                     logger.exception("Failed to rollback orphaned tenant %s", tenant_id)
                 raise
-        await assign_tenant_to_user(tenant_id, email, referral_source)
-        logger.info("Assigned pre-provisioned tenant %s to user %s", tenant_id, email)
     else:
         tenant_id = await create_tenant(email, referral_source)
 
-    if not DEV_MODE:
-        await notify_control_plane(tenant_id, email, referral_source)
+    await finish_tenant_assignment(tenant_id, email, referral_source)
     return tenant_id
 
 
@@ -280,11 +319,9 @@ async def provision_tenant(tenant_id: str, email: str) -> None:
         else:
             logger.debug("Schema already exists for tenant %s", tenant_id)
 
-        # Set up the tenant with all necessary configurations
+        # Set up the tenant with all necessary configurations. The caller
+        # notifies the control plane and assigns the tenant afterwards.
         await setup_tenant(tenant_id)
-
-        # Assign the tenant to the user
-        await assign_tenant_to_user(tenant_id, email)
 
     except Exception as e:
         logger.exception("Failed to create tenant %s", tenant_id)
@@ -767,9 +804,13 @@ async def get_available_tenant(allow_stale: bool = False) -> PoolTenant | None:
             db_session.begin()
 
             # Get the oldest available tenant with FOR UPDATE lock to prevent race conditions
+            query = db_session.query(AvailableTenant)
+            if not allow_stale:
+                query = query.filter(
+                    AvailableTenant.alembic_version == get_alembic_head_revision()
+                )
             available_tenant = (
-                db_session.query(AvailableTenant)
-                .order_by(AvailableTenant.date_created)
+                query.order_by(AvailableTenant.date_created)
                 .with_for_update(skip_locked=True)  # Skip locked rows to avoid blocking
                 .first()
             )
@@ -782,18 +823,6 @@ async def get_available_tenant(allow_stale: bool = False) -> PoolTenant | None:
                 tenant_id=available_tenant.tenant_id,
                 alembic_version=available_tenant.alembic_version,
             )
-            if (
-                not allow_stale
-                and pool_tenant.alembic_version != get_alembic_head_revision()
-            ):
-                db_session.rollback()
-                logger.info(
-                    "Pool tenant %s is at %s, not head; leaving it for a worker",
-                    pool_tenant.tenant_id,
-                    pool_tenant.alembic_version,
-                )
-                return None
-
             # Remove the tenant from the available tenants table
             db_session.delete(available_tenant)
             db_session.commit()

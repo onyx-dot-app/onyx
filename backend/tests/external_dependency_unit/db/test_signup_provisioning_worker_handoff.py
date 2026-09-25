@@ -1,44 +1,60 @@
 """
 Signup provisioning never runs alembic inside the api server.
 
-A pool tenant at the code's head revision is assigned in the request. A stale
-pool tenant stays in the pool and the request hands off to the
-`provision_tenant_for_user` worker task, then waits for the mapping to appear.
-The worker task migrates the stale tenant, assigns it, and refuses to run twice
-for one email.
+A pool tenant at the code's head revision is assigned in the request. When no
+such tenant exists the request hands off to the `provision_tenant_for_user`
+worker task and waits for the mapping to appear. The worker task migrates a
+stale pool tenant, assigns it, and refuses to run twice for one email. The
+control plane hears about a tenant before its mapping is written.
 
 Uses real PostgreSQL for the pool and mapping tables and real Redis for the
-per-user lock. Alembic and the control plane are the only mocks.
+per-user lock. Alembic and the control plane are the only mocks. Multi-tenant
+mode is patched in so the suite runs in the default CI lane.
 """
 
 import uuid
 from collections.abc import Generator
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from typing import cast
 from unittest.mock import MagicMock, patch
 
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import Table, delete
 
 from ee.onyx.background.celery.tasks.tenant_provisioning import (
     tasks as provisioning_tasks,
 )
+from ee.onyx.db import user_tenant_mapping
 from ee.onyx.db.user_tenant_mapping import add_users_to_tenant
 from ee.onyx.server.tenants import provisioning
 from ee.onyx.server.tenants.schema_management import get_alembic_head_revision
 from onyx.configs.constants import ONYX_CLOUD_TENANT_ID, OnyxCeleryTask
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_shared_schema
-from onyx.db.models import AvailableTenant, UserTenantMapping
+from onyx.db.models import AvailableTenant, PublicBase, UserTenantMapping
 from onyx.redis.redis_pool import get_redis_client
 from shared_configs.configs import TENANT_ID_PREFIX
 
-pytestmark = pytest.mark.skipif(
-    not provisioning.MULTI_TENANT, reason="needs MULTI_TENANT=true"
-)
-
 
 @pytest.fixture(autouse=True)
-def _engine() -> None:
+def _multi_tenant() -> Generator[None, None, None]:
     SqlEngine.init_engine(pool_size=5, max_overflow=2)
+    # The pool and mapping tables come from the multi-tenant migration set,
+    # which the single-tenant test database never runs.
+    PublicBase.metadata.create_all(
+        SqlEngine.get_engine(),
+        tables=[
+            cast(Table, AvailableTenant.__table__),
+            cast(Table, UserTenantMapping.__table__),
+        ],
+    )
+    with (
+        patch.object(provisioning, "MULTI_TENANT", True),
+        patch.object(provisioning_tasks, "MULTI_TENANT", True),
+        patch.object(user_tenant_mapping, "MULTI_TENANT", True),
+        # Seat billing calls the control plane, which is not under test here.
+        patch("ee.onyx.server.tenants.billing.enforce_cloud_seat_limit"),
+    ):
+        yield
 
 
 @pytest.fixture
@@ -47,26 +63,34 @@ def email() -> str:
 
 
 @pytest.fixture
-def pool_tenant_id() -> Generator[str, None, None]:
-    tenant_id = TENANT_ID_PREFIX + str(uuid.uuid4())
-    yield tenant_id
+def pool_tenant_ids() -> Generator[list[str], None, None]:
+    """Tenant ids this test may put in the pool; rows are removed afterwards."""
+    tenant_ids = [TENANT_ID_PREFIX + str(uuid.uuid4()) for _ in range(2)]
+    yield tenant_ids
     with get_session_with_shared_schema() as db_session:
         db_session.execute(
-            delete(AvailableTenant).where(AvailableTenant.tenant_id == tenant_id)
+            delete(AvailableTenant).where(AvailableTenant.tenant_id.in_(tenant_ids))
         )
         db_session.execute(
-            delete(UserTenantMapping).where(UserTenantMapping.tenant_id == tenant_id)
+            delete(UserTenantMapping).where(UserTenantMapping.tenant_id.in_(tenant_ids))
         )
         db_session.commit()
 
 
-def _add_pool_tenant(tenant_id: str, alembic_version: str) -> None:
+@pytest.fixture
+def pool_tenant_id(pool_tenant_ids: list[str]) -> str:
+    return pool_tenant_ids[0]
+
+
+def _add_pool_tenant(
+    tenant_id: str, alembic_version: str, age: timedelta = timedelta()
+) -> None:
     with get_session_with_shared_schema() as db_session:
         db_session.add(
             AvailableTenant(
                 tenant_id=tenant_id,
                 alembic_version=alembic_version,
-                date_created=datetime.now(timezone.utc),
+                date_created=datetime.now(timezone.utc) - age,
                 shard_name="default",
             )
         )
@@ -103,9 +127,12 @@ def no_alembic() -> Generator[MagicMock, None, None]:
 
 
 @pytest.fixture
-def offline_control_plane() -> Generator[None, None, None]:
-    with patch.object(provisioning, "DEV_MODE", True):
-        yield
+def control_plane() -> Generator[MagicMock, None, None]:
+    with (
+        patch.object(provisioning, "DEV_MODE", False),
+        patch.object(provisioning, "notify_control_plane") as notify,
+    ):
+        yield notify
 
 
 @pytest.mark.asyncio
@@ -113,7 +140,7 @@ async def test_current_pool_tenant_is_assigned_in_the_request(
     email: str,
     pool_tenant_id: str,
     no_alembic: MagicMock,
-    offline_control_plane: None,  # noqa: ARG001
+    control_plane: MagicMock,
 ) -> None:
     _add_pool_tenant(pool_tenant_id, get_alembic_head_revision())
 
@@ -123,6 +150,27 @@ async def test_current_pool_tenant_is_assigned_in_the_request(
     assert tenant_id == pool_tenant_id
     assert _mapped_tenant(email) == pool_tenant_id
     assert not _pool_has(pool_tenant_id)
+    control_plane.assert_called_once_with(pool_tenant_id, email, None)
+    send_task.assert_not_called()
+    no_alembic.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_a_stale_older_tenant_does_not_hide_a_current_one(
+    email: str,
+    pool_tenant_ids: list[str],
+    no_alembic: MagicMock,
+    control_plane: MagicMock,  # noqa: ARG001
+) -> None:
+    stale_id, current_id = pool_tenant_ids
+    _add_pool_tenant(stale_id, "stale-revision", age=timedelta(hours=1))
+    _add_pool_tenant(current_id, get_alembic_head_revision())
+
+    with patch.object(provisioning.client_app, "send_task") as send_task:
+        tenant_id = await provisioning.get_or_provision_tenant(email)
+
+    assert tenant_id == current_id
+    assert _pool_has(stale_id)
     send_task.assert_not_called()
     no_alembic.assert_not_called()
 
@@ -132,7 +180,7 @@ async def test_stale_pool_tenant_is_handed_to_the_worker(
     email: str,
     pool_tenant_id: str,
     no_alembic: MagicMock,
-    offline_control_plane: None,  # noqa: ARG001
+    control_plane: MagicMock,  # noqa: ARG001
 ) -> None:
     _add_pool_tenant(pool_tenant_id, "stale-revision")
 
@@ -173,24 +221,46 @@ async def test_request_fails_when_the_worker_never_answers(
     no_alembic.assert_not_called()
 
 
+@pytest.mark.asyncio
+async def test_a_failed_control_plane_call_leaves_no_mapping(
+    email: str,
+    pool_tenant_id: str,
+    no_alembic: MagicMock,  # noqa: ARG001
+    control_plane: MagicMock,
+) -> None:
+    _add_pool_tenant(pool_tenant_id, get_alembic_head_revision())
+    control_plane.side_effect = RuntimeError("control plane down")
+
+    with (
+        patch.object(provisioning.client_app, "send_task"),
+        pytest.raises(provisioning.OnyxError),
+    ):
+        await provisioning.get_or_provision_tenant(email)
+
+    assert _mapped_tenant(email) is None
+    # Rolled back rather than left orphaned outside the pool.
+    assert not _pool_has(pool_tenant_id)
+
+
 def test_worker_migrates_a_stale_pool_tenant_and_assigns_it(
     email: str,
     pool_tenant_id: str,
     no_alembic: MagicMock,
-    offline_control_plane: None,  # noqa: ARG001
+    control_plane: MagicMock,
 ) -> None:
     _add_pool_tenant(pool_tenant_id, "stale-revision")
 
     assert _run_worker_task(email) is True
 
     no_alembic.assert_called_once_with(pool_tenant_id)
+    control_plane.assert_called_once_with(pool_tenant_id, email, None)
     assert _mapped_tenant(email) == pool_tenant_id
     assert not _pool_has(pool_tenant_id)
 
 
 def test_worker_runs_once_per_email(email: str, no_alembic: MagicMock) -> None:
     r = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
-    lock = r.lock(provisioning_tasks.user_provision_lock_name(email), timeout=30)
+    lock = r.lock(provisioning.user_provision_lock_name(email), timeout=30)
     assert lock.acquire(blocking=False)
     try:
         with patch.object(provisioning, "provision_user_tenant") as provision:

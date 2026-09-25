@@ -5,7 +5,6 @@ task the api server hands a signup to when the pool cannot serve it.
 
 import asyncio
 import datetime
-import hashlib
 import uuid
 
 from celery import Task, shared_task
@@ -39,11 +38,6 @@ _TENANT_PROVISIONING_TIME_LIMIT = 60 * 45  # 45 minutes
 _USER_PROVISION_LOCK_TIMEOUT = 60 * 10
 
 
-def user_provision_lock_name(email: str) -> str:
-    digest = hashlib.sha256(email.strip().lower().encode()).hexdigest()
-    return f"{OnyxRedisLocks.CLOUD_PROVISION_TENANT_FOR_USER_LOCK_PREFIX}:{digest}"
-
-
 @shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CLOUD_PROVISION_TENANT_FOR_USER,
     queue=OnyxCeleryQueues.MONITORING,
@@ -68,7 +62,10 @@ def provision_tenant_for_user(
         return False
 
     # Imported here: provisioning reaches every tool implementation (~75 MB).
-    from ee.onyx.server.tenants.provisioning import provision_user_tenant
+    from ee.onyx.server.tenants.provisioning import (
+        provision_user_tenant,
+        user_provision_lock_name,
+    )
 
     r = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
     lock: RedisLock = r.lock(
