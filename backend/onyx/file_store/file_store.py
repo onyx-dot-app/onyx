@@ -92,7 +92,9 @@ def is_missing_object(e: ClientError) -> bool:
 
 # A failed legacy write or delete leaves a marker at this prefix plus the key in
 # the object store, and the legacy copy makes MinIO match the object store for it.
+# The marker's metadata names the action that failed.
 LEGACY_OUT_OF_SYNC_PREFIX = "onyx-legacy-out-of-sync/"
+LEGACY_OUT_OF_SYNC_ACTION_KEY = "onyx-legacy-action"
 
 
 # `legacy_copy --retire` writes this object once MinIO holds nothing the object
@@ -428,7 +430,7 @@ class S3BackedFileStore(FileStore):
 
     # A rollback to a release that reads only the legacy store still finds
     # files written since the upgrade. The primary write already succeeded,
-    # so a legacy failure only logs.
+    # so a legacy failure logs and marks the key for the copy to replay.
     def _put_legacy_object(
         self,
         bucket: str,
@@ -462,11 +464,12 @@ class S3BackedFileStore(FileStore):
             logger.warning(
                 "Failed to write %s to the legacy MinIO store", key, exc_info=True
             )
-            self._mark_legacy_out_of_sync(bucket, key)
+            self._mark_legacy_out_of_sync(bucket, key, "write")
 
     # Without this the copy would bring a deleted file back as an orphan. It runs
     # before the primary delete, so a copy that races the delete finds the legacy
-    # object gone and removes its own copy. A legacy failure only logs.
+    # object gone and removes its own copy. A legacy failure logs and marks the
+    # key for the copy to replay.
     def _delete_legacy_object(self, bucket: str, key: str) -> None:
         try:
             legacy_client = self._get_legacy_write_client()
@@ -477,9 +480,9 @@ class S3BackedFileStore(FileStore):
             logger.warning(
                 "Failed to delete %s from the legacy MinIO store", key, exc_info=True
             )
-            self._mark_legacy_out_of_sync(bucket, key)
+            self._mark_legacy_out_of_sync(bucket, key, "delete")
 
-    def _mark_legacy_out_of_sync(self, bucket: str, key: str) -> None:
+    def _mark_legacy_out_of_sync(self, bucket: str, key: str, action: str) -> None:
         try:
             # A unique body gives each marker its own ETag, so the copy removes
             # only a marker it resynced.
@@ -487,6 +490,7 @@ class S3BackedFileStore(FileStore):
                 Bucket=bucket,
                 Key=LEGACY_OUT_OF_SYNC_PREFIX + key,
                 Body=uuid.uuid4().hex.encode(),
+                Metadata={LEGACY_OUT_OF_SYNC_ACTION_KEY: action},
             )
         except Exception:
             logger.warning(

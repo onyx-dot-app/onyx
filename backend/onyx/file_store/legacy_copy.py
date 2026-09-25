@@ -2,7 +2,8 @@
 
 Runs beside the app, which falls back to the legacy store on a miss, so the copy
 never blocks traffic. Conditional puts let a file the app writes during the copy
-win.
+win. Each pass first replays into the legacy store the keys a failed app write or
+delete marked.
 
 Usage: python -m onyx.file_store.legacy_copy [--watch | --retire]
 """
@@ -10,7 +11,9 @@ Usage: python -m onyx.file_store.legacy_copy [--watch | --retire]
 import argparse
 import tempfile
 import time
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
@@ -34,6 +37,7 @@ from onyx.configs.app_configs import (
 )
 from onyx.file_store.file_store import (
     DUAL_WRITE_METADATA_KEY,
+    LEGACY_OUT_OF_SYNC_ACTION_KEY,
     LEGACY_OUT_OF_SYNC_PREFIX,
     LEGACY_RETIRED_MARKER_KEY,
     build_s3_client,
@@ -46,7 +50,11 @@ from onyx.utils.logger import setup_logger
 
 if TYPE_CHECKING:
     from mypy_boto3_s3 import S3Client
-    from mypy_boto3_s3.type_defs import HeadObjectOutputTypeDef
+    from mypy_boto3_s3.type_defs import (
+        GetObjectOutputTypeDef,
+        HeadObjectOutputTypeDef,
+        ObjectTypeDef,
+    )
 
 logger = setup_logger()
 
@@ -105,6 +113,20 @@ class PassStats:
             self.retry += 1
         else:
             self.failed += 1
+
+
+def _content_type(obj: "GetObjectOutputTypeDef") -> str:
+    return obj.get("ContentType") or "application/octet-stream"
+
+
+@contextmanager
+def _spooled_body(obj: "GetObjectOutputTypeDef") -> Iterator[tuple[IO[bytes], int]]:
+    with tempfile.SpooledTemporaryFile(max_size=_SPOOL_MAX_BYTES) as buffer:
+        for chunk in obj["Body"].iter_chunks(chunk_size=_CHUNK_BYTES):
+            buffer.write(chunk)
+        size = buffer.tell()
+        buffer.seek(0)
+        yield buffer, size
 
 
 def _head(
@@ -186,15 +208,11 @@ def copy_object(
             return CopyOutcome.RETRY, 0
         raise
 
-    content_type = obj.get("ContentType") or "application/octet-stream"
+    content_type = _content_type(obj)
     metadata = {_COPIED_FROM_METADATA_KEY: obj["ETag"]}
     # Set only for a new object, the case that can outlive a racing delete.
     written_etag: str | None = None
-    with tempfile.SpooledTemporaryFile(max_size=_SPOOL_MAX_BYTES) as buffer:
-        for chunk in obj["Body"].iter_chunks(chunk_size=_CHUNK_BYTES):
-            buffer.write(chunk)
-        size = buffer.tell()
-        buffer.seek(0)
+    with _spooled_body(obj) as (buffer, size):
         try:
             if target_head is None:
                 written_etag = _put_new_object(
@@ -243,30 +261,45 @@ def _resync_key(
     target: "S3Client",
     bucket: str,
     key: str,
-    marked_at: datetime,
+    marker: "ObjectTypeDef",
 ) -> None:
+    action = target.head_object(Bucket=bucket, Key=marker["Key"])["Metadata"].get(
+        LEGACY_OUT_OF_SYNC_ACTION_KEY
+    )
+    source_head = _head(source, bucket, key)
+    # A legacy object newer than the marker came from an older release writing
+    # it again, and the forward copy takes it. A tie counts as the app's own
+    # write, since a save and delete within one second is far likelier.
+    if source_head is not None and source_head["LastModified"] > marker["LastModified"]:
+        return
+    if action == "delete":
+        if source_head is not None:
+            source.delete_object(Bucket=bucket, Key=key)
+        # A copy that raced the delete left an orphan, which its metadata shows.
+        target_head = _head(target, bucket, key)
+        if (
+            target_head is not None
+            and _COPIED_FROM_METADATA_KEY in target_head["Metadata"]
+        ):
+            target.delete_object(Bucket=bucket, Key=key, IfMatch=target_head["ETag"])
+        return
+    obj: "GetObjectOutputTypeDef | None" = None
     try:
         obj = target.get_object(Bucket=bucket, Key=key)
     except ClientError as e:
         if not is_missing_object(e):
             raise
-        # An older release may have written the key again since the failed
-        # delete, and then the forward copy takes it. A tie deletes, since a
-        # file saved and deleted within one second is far more common.
-        source_head = _head(source, bucket, key)
-        if source_head is not None and source_head["LastModified"] <= marked_at:
-            source.delete_object(Bucket=bucket, Key=key)
+    if obj is None:
+        # Deleted since, and that delete's legacy half went through.
         return
-    with tempfile.SpooledTemporaryFile(max_size=_SPOOL_MAX_BYTES) as buffer:
-        for chunk in obj["Body"].iter_chunks(chunk_size=_CHUNK_BYTES):
-            buffer.write(chunk)
-        buffer.seek(0)
-        # Marked as the app's own write, which the copy never takes for newer.
+    with _spooled_body(obj) as (buffer, _):
+        # The dual-write mark stops the forward copy from treating this as a
+        # newer legacy version.
         source.put_object(
             Bucket=bucket,
             Key=key,
             Body=buffer,
-            ContentType=obj.get("ContentType") or "application/octet-stream",
+            ContentType=_content_type(obj),
             Metadata={DUAL_WRITE_METADATA_KEY: "1"},
         )
 
@@ -282,7 +315,7 @@ def _resync_out_of_sync(
         for marker in page.get("Contents", []):
             key = marker["Key"].removeprefix(LEGACY_OUT_OF_SYNC_PREFIX)
             try:
-                _resync_key(source, target, bucket, key, marker["LastModified"])
+                _resync_key(source, target, bucket, key, marker)
                 target.delete_object(
                     Bucket=bucket, Key=marker["Key"], IfMatch=marker["ETag"]
                 )
@@ -310,8 +343,10 @@ def run_pass(
     paginator = source.get_paginator("list_objects_v2")
     with ThreadPoolExecutor(max_workers=workers) as pool:
         for bucket in buckets:
-            # A key a failed delete left in MinIO must not be copied back.
+            # Runs before the listing, so a key that a failed delete left in
+            # MinIO is gone or skipped, never copied back.
             out_of_sync = _resync_out_of_sync(source, target, bucket)
+            stats.failed += len(out_of_sync)
             copy_key = partial(_copy_object_logged, source, target, bucket)
             for page in paginator.paginate(Bucket=bucket):
                 keys = [
