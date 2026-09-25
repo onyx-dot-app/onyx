@@ -98,3 +98,17 @@ def test_timeout_pools_are_reused_without_changing_default_pool() -> None:
         assert create_pool.call_count == 2
         pool.get_client("tenant")
         assert redis_client.call_args.kwargs["connection_pool"] is default_pool
+
+
+def test_sentinel_retries_apply_to_data_connections_only() -> None:
+    with (
+        patch.object(redis_pool, "REDIS_SENTINEL_HOSTS", [("sentinel", 26379)]),
+        patch.object(redis_pool, "Sentinel") as sentinel_cls,
+    ):
+        redis_pool.RedisPool.create_pool()
+        kwargs = sentinel_cls.call_args.kwargs
+        assert kwargs["retry_on_error"] == [redis_pool.RedisConnectionError]
+        assert "retry" not in kwargs["sentinel_kwargs"]
+
+        redis_pool.RedisPool.create_pool(operation_timeout=1)
+        assert "retry" not in sentinel_cls.call_args.kwargs
