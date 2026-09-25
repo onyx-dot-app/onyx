@@ -36,14 +36,16 @@ class EmailHeaders(BaseModel):
             if not value:
                 return None
 
-            decoded_value, encoding = email.header.decode_header(value)[0]
-            if isinstance(decoded_value, bytes):
-                encoding = encoding or "utf-8"
-                return decoded_value.decode(encoding, errors="replace")
-            elif isinstance(decoded_value, str):
-                return decoded_value
-            else:
-                return None
+            # A header can mix RFC 2047 encoded words with plain text, e.g.
+            # `=?utf-8?q?J=C3=B6rg?= <jorg@example.com>`. Join every part.
+            parts: list[str] = []
+            for decoded_value, encoding in email.header.decode_header(value):
+                if isinstance(decoded_value, bytes):
+                    encoding = encoding or "utf-8"
+                    parts.append(decoded_value.decode(encoding, errors="replace"))
+                elif isinstance(decoded_value, str):
+                    parts.append(decoded_value)
+            return "".join(parts) or None
 
         def _parse_date(date_str: str | None) -> datetime | None:
             if not date_str:
