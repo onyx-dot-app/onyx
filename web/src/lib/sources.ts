@@ -10,7 +10,13 @@ import { SourceCategory, SourceMetadata } from "@/lib/search/types";
 import { Agent } from "@/lib/agents/types";
 import React from "react";
 import { DOCS_ADMINS_PATH, DOCS_BASE_URL } from "@/lib/constants";
-import { SvgFileText, SvgGlobe, SvgUploadCloud, SvgMail } from "@opal/icons";
+import {
+  SvgBubbleText,
+  SvgFileText,
+  SvgGlobe,
+  SvgUploadCloud,
+  SvgMail,
+} from "@opal/icons";
 import {
   SvgAirtable,
   SvgAsana,
@@ -329,6 +335,11 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Gmail",
     category: SourceCategory.Messaging,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/gmail/overview`,
+  },
+  google_chat: {
+    icon: SvgBubbleText,
+    displayName: "Google Chat",
+    category: SourceCategory.Messaging,
   },
   drupal_wiki: {
     icon: SvgDrupal,
