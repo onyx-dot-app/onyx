@@ -80,7 +80,11 @@ from onyx.db.connector_credential_pair import (
     get_connector_credential_pairs_for_user_parallel,
     verify_user_has_access_to_cc_pair,
 )
-from onyx.db.credentials import create_credential, fetch_credential_by_id_for_user
+from onyx.db.credentials import (
+    create_credential,
+    delete_credential,
+    fetch_credential_by_id_for_user,
+)
 from onyx.db.deletion_attempt import check_deletion_attempt_is_allowed
 from onyx.db.document import get_document_counts_for_all_cc_pairs
 from onyx.db.engine.sql_engine import get_session
@@ -1591,6 +1595,8 @@ def create_connector_with_mock_credential(
         is_non_public=connector_data.access_type != AccessType.PUBLIC,
     )
 
+    connector_id: int | None = None
+    credential_id: int | None = None
     try:
         _validate_connector_allowed(connector_data.source)
         _validate_indexing_start(connector_data)
@@ -1598,6 +1604,7 @@ def create_connector_with_mock_credential(
             db_session=db_session,
             connector_data=connector_data,
         )
+        connector_id = connector_response.id
 
         mock_credential = CredentialBase(
             credential_json={},
@@ -1609,9 +1616,6 @@ def create_connector_with_mock_credential(
             user=user,
             db_session=db_session,
         )
-
-        # Store the created connector and credential IDs
-        connector_id = connector_response.id
         credential_id = credential.id
 
         validate_ccpair_for_user(
@@ -1654,11 +1658,26 @@ def create_connector_with_mock_credential(
         return response
 
     except ConnectorValidationError as e:
+        _discard_unpaired_creation(db_session, connector_id, credential_id)
         raise HTTPException(
             status_code=400, detail="Connector validation error: " + str(e)
         )
     except ValueError as e:
+        _discard_unpaired_creation(db_session, connector_id, credential_id)
         raise HTTPException(status_code=400, detail=str(e))
+
+
+def _discard_unpaired_creation(
+    db_session: Session, connector_id: int | None, credential_id: int | None
+) -> None:
+    """Both rows are committed before validation runs, so a failed creation has
+    to remove them or the name stays taken for the retry."""
+    db_session.rollback()
+    if credential_id is not None:
+        delete_credential(credential_id, db_session)
+    if connector_id is not None:
+        delete_connector(db_session, connector_id)
+        db_session.commit()
 
 
 @router.patch("/admin/connector/{connector_id}", tags=PUBLIC_API_TAGS)

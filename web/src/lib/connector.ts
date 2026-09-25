@@ -86,6 +86,19 @@ export async function updateConnector<T>(
   return await response.json();
 }
 
+// The backend commits the connector row before it validates the credential, so
+// a link the server rejected (4xx) leaves an unpaired row that keeps the name
+// taken. A 409 means the pair already exists and a 5xx may have paired it.
+export async function discardConnectorAfterFailedLink(
+  connectorId: number,
+  linkStatus: number
+): Promise<void> {
+  if (linkStatus < 400 || linkStatus >= 500 || linkStatus === 409) {
+    return;
+  }
+  await deleteConnector(connectorId);
+}
+
 export async function deleteConnector(
   connectorId: number
 ): Promise<string | null> {
