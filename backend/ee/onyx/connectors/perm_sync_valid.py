@@ -74,7 +74,7 @@ def validate_sharepoint_perm_sync(connector: SharepointConnector) -> None:
 
 
 def validate_onedrive_perm_sync(connector: OneDriveConnector) -> None:
-    context = CapabilityCheckContext(
+    context: CapabilityCheckContext = CapabilityCheckContext(
         source=DocumentSource.ONEDRIVE,
         credential_json={},
         connector=connector,

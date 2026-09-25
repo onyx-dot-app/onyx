@@ -1,6 +1,5 @@
 from onyx.access.models import ExternalAccess
-from onyx.access.utils import build_ext_group_name_for_onyx
-from onyx.configs.constants import DocumentSource
+from onyx.connectors.onedrive.access import prefix_onedrive_external_groups
 from onyx.connectors.onedrive.models import (
     GraphIdentity,
     GraphLinkScope,
@@ -56,9 +55,9 @@ def map_onedrive_permissions(
     treat_organization_link_as_public: bool,
     add_prefix: bool,
 ) -> ExternalAccess:
-    user_emails = {owner_email.lower()}
+    user_emails: set[str] = {owner_email.lower()}
     group_ids: set[str] = set()
-    is_public = False
+    is_public: bool = False
 
     for permission in permissions:
         if permission.link is not None:
@@ -71,20 +70,19 @@ def map_onedrive_permissions(
                 is_public = True
 
         for identity_set in _identity_sets(permission):
-            email = _user_email(identity_set) or _site_user_login_email(identity_set)
-            if identity_set.user is not None and email:
+            email: str | None = _user_email(identity_set) or _site_user_login_email(
+                identity_set
+            )
+            if email:
                 user_emails.add(email)
-            group_id = identity_set.group.id if identity_set.group else None
+            group_id: str | None = identity_set.group.id if identity_set.group else None
             if group_id:
-                group_ids.add(
-                    build_ext_group_name_for_onyx(group_id, DocumentSource.ONEDRIVE)
-                    if add_prefix
-                    else group_id
-                )
+                group_ids.add(group_id)
             _check_principal_limit(user_emails, group_ids)
 
-    return ExternalAccess(
+    access = ExternalAccess(
         external_user_emails=user_emails,
         external_user_group_ids=group_ids,
         is_public=is_public,
     )
+    return prefix_onedrive_external_groups(access) if add_prefix else access

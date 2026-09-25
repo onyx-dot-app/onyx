@@ -16,8 +16,8 @@ from ee.onyx.configs.app_configs import (
     GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY,
     JIRA_PERMISSION_DOC_SYNC_FREQUENCY,
     JIRA_PERMISSION_GROUP_SYNC_FREQUENCY,
-    ONEDRIVE_PERMISSION_DOC_SYNC_FREQUENCY,
-    ONEDRIVE_PERMISSION_GROUP_SYNC_FREQUENCY,
+    ONEDRIVE_PERMISSION_DOC_SYNC_FREQUENCY_S,
+    ONEDRIVE_PERMISSION_GROUP_SYNC_FREQUENCY_S,
     OUTLOOK_PERMISSION_DOC_SYNC_FREQUENCY,
     SHAREPOINT_PERMISSION_DOC_SYNC_FREQUENCY,
     SHAREPOINT_PERMISSION_GROUP_SYNC_FREQUENCY,
@@ -392,12 +392,12 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
     ),
     DocumentSource.ONEDRIVE: SyncConfig(
         doc_sync_config=DocSyncConfig(
-            doc_sync_frequency=ONEDRIVE_PERMISSION_DOC_SYNC_FREQUENCY,
+            doc_sync_frequency=ONEDRIVE_PERMISSION_DOC_SYNC_FREQUENCY_S,
             doc_sync_func=_lazy_doc_sync(_load_onedrive_doc_sync),
             initial_index_should_sync=True,
         ),
         group_sync_config=GroupSyncConfig(
-            group_sync_frequency=ONEDRIVE_PERMISSION_GROUP_SYNC_FREQUENCY,
+            group_sync_frequency=ONEDRIVE_PERMISSION_GROUP_SYNC_FREQUENCY_S,
             group_sync_func=_lazy_group_sync(_load_onedrive_group_sync),
             group_sync_is_cc_pair_agnostic=False,
         ),

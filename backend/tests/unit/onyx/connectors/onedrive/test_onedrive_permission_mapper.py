@@ -72,20 +72,17 @@ def test_fixture_hidden_group_stays_restricted_to_its_group(
         permission_shapes["hidden_group"], "<owner-email>", False, False
     )
 
-    assert access.external_user_emails == {"<owner-email>"}
+    assert access.external_user_emails == {"<owner-email>", "<email-id-2>"}
     assert access.external_user_group_ids == {"<hidden-group-id>"}
     assert not access.is_public
 
 
-def test_indexing_prefixes_fixture_group_once() -> None:
-    permissions = [
-        OneDrivePermission.model_validate(permission)
-        for permission in json.loads(FIXTURE_PATH.read_text())["permission_shapes"][
-            "visible_group"
-        ]["value"]
-    ]
-
-    access = map_onedrive_permissions(permissions, "<owner-email>", False, True)
+def test_indexing_prefixes_fixture_group_once(
+    permission_shapes: dict[str, list[OneDrivePermission]],
+) -> None:
+    access = map_onedrive_permissions(
+        permission_shapes["visible_group"], "<owner-email>", False, True
+    )
 
     assert access.external_user_group_ids == {
         build_ext_group_name_for_onyx("<visible-group-id>", DocumentSource.ONEDRIVE)
@@ -131,3 +128,26 @@ def test_unresolved_grants_are_dropped_without_widening() -> None:
     assert access.external_user_emails == {"owner@example.com"}
     assert access.external_user_group_ids == set()
     assert not access.is_public
+
+
+def test_site_user_email_is_retained_without_user_identity() -> None:
+    permissions = [
+        OneDrivePermission.model_validate(
+            {
+                "roles": ["read"],
+                "grantedToV2": {
+                    "siteUser": {
+                        "id": "site-user",
+                        "email": "SITE-USER@EXAMPLE.COM",
+                    }
+                },
+            }
+        )
+    ]
+
+    access = map_onedrive_permissions(permissions, "owner@example.com", False, False)
+
+    assert access.external_user_emails == {
+        "owner@example.com",
+        "site-user@example.com",
+    }
