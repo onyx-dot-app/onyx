@@ -41,7 +41,7 @@ from onyx.deep_research.tool_definitions import GENERATE_REPORT_TOOL_NAME
 from onyx.file_store.models import ChatFileType, ChatLoadedFile, ExtractedContextFiles
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import LLM, LLMUserIdentity
-from onyx.llm.litellm_models import Delta
+from onyx.llm.model_response import Delta
 from onyx.llm.models import (
     AssistantMessage,
     ReasoningEffort,

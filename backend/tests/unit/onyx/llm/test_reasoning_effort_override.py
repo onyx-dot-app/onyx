@@ -2,7 +2,10 @@
 
 import pytest
 
-from onyx.llm.models import ReasoningEffort, parse_user_selectable_reasoning_effort
+from onyx.llm.models import (
+    ReasoningEffort,
+    parse_user_selectable_reasoning_effort,
+)
 
 
 @pytest.mark.parametrize(

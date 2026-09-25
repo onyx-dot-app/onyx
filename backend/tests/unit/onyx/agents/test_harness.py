@@ -374,7 +374,11 @@ def test_cancellation_closes_active_client_stream() -> None:
     from collections.abc import Generator
 
     from onyx.llm.interfaces import GenerationContext
-    from onyx.llm.models import GenerationDoneEvent, GenerationEvent, TextDeltaEvent
+    from onyx.llm.models import (
+        GenerationDoneEvent,
+        GenerationEvent,
+        TextDeltaEvent,
+    )
 
     closed: list[bool] = []
     cancelled = threading.Event()

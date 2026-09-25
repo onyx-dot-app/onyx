@@ -1,8 +1,7 @@
-"""Convert shared generation requests and provider responses, including stream events."""
+"""Provider responses, normalization, and application message accumulation."""
 
-import json
 from collections.abc import Generator, Iterator, Sequence
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Literal, Protocol, runtime_checkable
 from uuid import uuid4
 
 from pydantic import (
@@ -14,32 +13,13 @@ from pydantic import (
     field_validator,
 )
 
-from onyx.llm.constants import LlmProviderNames
-from onyx.llm.interfaces import LLMConfig
-from onyx.llm.litellm_models import AssistantMessage as WireAssistantMessage
-from onyx.llm.litellm_models import (
-    ChatCompletionDeltaToolCall,
-    ChatCompletionMessage,
-    Choice,
-    Delta,
-    ModelResponse,
-    ModelResponseStream,
-    RequestFunctionCall,
-    StreamingChoice,
-)
-from onyx.llm.litellm_models import Message as ResponseMessage
-from onyx.llm.litellm_models import SystemMessage as WireSystemMessage
-from onyx.llm.litellm_models import ToolCall as ProviderToolCall
-from onyx.llm.litellm_models import ToolMessage as ProviderToolMessage
-from onyx.llm.litellm_models import UserMessage as WireUserMessage
 from onyx.llm.models import (
     AnyThinkingBlock,
     AssistantMessage,
     GenerationDoneEvent,
     GenerationEvent,
     GenerationRequest,
-    Message,
-    SystemMessage,
+    MessageRole,
     TextContent,
     TextDeltaEvent,
     ThinkingContent,
@@ -50,31 +30,84 @@ from onyx.llm.models import (
     ToolCallStartEvent,
     ToolChoiceOptions,
     ToolDefinition,
-    ToolResultMessage,
     Usage,
-    UserMessage,
     apply_generation_event,
 )
-from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.llm.tool_parsing import (
     XmlToolCallContentFilter,
     _looks_like_xml_tool_call_payload,
     extract_tool_calls_from_response_text,
 )
-from onyx.llm.utils import model_needs_formatting_reenabled
-from onyx.tools.tool_name import sanitize_tool_name
 from onyx.utils.jsonriver import Parser
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
-
-# OpenAI reasoning models need this prefix to enable Markdown formatting.
-CODE_BLOCK_MARKDOWN = "Formatting re-enabled. "
 
 logger = setup_logger()
 
 if TYPE_CHECKING:
     from litellm.types.utils import ModelResponse as LiteLLMModelResponse
     from litellm.types.utils import ModelResponseStream as LiteLLMModelResponseStream
+
+
+class ResponseFunctionCall(BaseModel):
+    """Function fields received from the provider; streaming fields may be absent."""
+
+    arguments: str | None = None
+    name: str | None = None
+
+
+class ChatCompletionMessageToolCall(BaseModel):
+    id: str
+    type: Literal["function"] = "function"
+    function: ResponseFunctionCall
+
+
+class ChatCompletionDeltaToolCall(BaseModel):
+    id: str | None = None
+    index: int = 0
+    type: Literal["function"] = "function"
+    function: ResponseFunctionCall | None = None
+
+
+class Delta(BaseModel):
+    content: str | None = None
+    reasoning_content: str | None = None
+    thinking_blocks: list[AnyThinkingBlock] | None = None
+    tool_calls: list[ChatCompletionDeltaToolCall] = Field(default_factory=list)
+
+
+class StreamingChoice(BaseModel):
+    finish_reason: str | None = None
+    index: int = 0
+    delta: Delta = Field(default_factory=Delta)
+
+
+class ModelResponseStream(BaseModel):
+    id: str
+    created: str
+    choice: StreamingChoice
+    usage: Usage | None = None
+
+
+class Message(BaseModel):
+    content: str | None = None
+    role: Literal[MessageRole.ASSISTANT] = MessageRole.ASSISTANT
+    tool_calls: list[ChatCompletionMessageToolCall] | None = None
+    reasoning_content: str | None = None
+    thinking_blocks: list[AnyThinkingBlock] | None = None
+
+
+class Choice(BaseModel):
+    finish_reason: str | None = None
+    index: int = 0
+    message: Message = Field(default_factory=Message)
+
+
+class ModelResponse(BaseModel):
+    id: str
+    created: str
+    choice: Choice
+    usage: Usage | None = None
 
 
 class _CachedTokens(BaseModel):
@@ -122,7 +155,7 @@ class _ProviderChoice(BaseModel):
     finish_reason: str | None = None
     index: int = 0
     delta: _ProviderDelta = Field(default_factory=_ProviderDelta)
-    message: ResponseMessage = Field(default_factory=ResponseMessage)
+    message: Message = Field(default_factory=Message)
 
     @field_validator("delta", "message", mode="before")
     @classmethod
@@ -197,7 +230,7 @@ def from_litellm_model_response(
         choice = _ProviderChoice(
             index=0,
             finish_reason=finish_reasons[-1] if finish_reasons else None,
-            message=ResponseMessage(
+            message=Message(
                 role=messages[0].role,
                 content="".join(
                     message.content for message in messages if message.content
@@ -231,116 +264,6 @@ def from_litellm_model_response(
         ),
         usage=data.usage.to_usage() if data.usage is not None else None,
     )
-
-
-def serialize_request(
-    request: GenerationRequest, config: LLMConfig
-) -> list[ChatCompletionMessage]:
-    history = (
-        [SystemMessage(content=request.system_prompt, cacheable=True)]
-        if request.system_prompt
-        else []
-    ) + request.messages
-    messages: list[ChatCompletionMessage] = []
-    cacheable_prefix = 0
-    ollama = config.model_provider == LlmProviderNames.OLLAMA_CHAT
-    for index, message in enumerate(history):
-        if message.cacheable and cacheable_prefix == index:
-            cacheable_prefix += 1
-        if isinstance(message, AssistantMessage):
-            content = [
-                block.model_copy(update={"name": sanitize_tool_name(block.name)})
-                if isinstance(block, ToolCall)
-                else block
-                for block in message.content
-            ]
-            message = message.model_copy(update={"content": content})
-            if ollama and message.tool_calls:
-                calls = [
-                    f"[Tool Call] name={call.name} id={call.id} args={json.dumps(call.arguments)}"
-                    for call in message.tool_calls
-                ]
-                messages.append(
-                    WireAssistantMessage(
-                        content="\n".join(
-                            ([message.text] if message.text else []) + calls
-                        )
-                    )
-                )
-                continue
-        if isinstance(message, ToolResultMessage) and not message.tool_call_id:
-            raise ValueError("Provider tool messages require tool_call_id")
-        if ollama and isinstance(message, ToolResultMessage):
-            messages.append(
-                WireUserMessage(
-                    content=f"[Tool Result] id={message.tool_call_id}\n{message.text}"
-                )
-            )
-        else:
-            messages.append(format_provider_message(message))
-    if model_needs_formatting_reenabled(config.model_name, config.deployment_name):
-        for index, message in enumerate(messages):
-            if isinstance(message, WireSystemMessage):
-                messages[index] = WireSystemMessage(
-                    content=CODE_BLOCK_MARKDOWN + message.content
-                )
-                break
-    if cacheable_prefix:
-        prepared, _ = process_with_prompt_cache(
-            llm_config=config,
-            cacheable_prefix=messages[:cacheable_prefix],
-            suffix=messages[cacheable_prefix:],
-            continuation=False,
-            with_metadata=False,
-        )
-        messages = prepared
-    return messages
-
-
-def format_provider_message(message: Message) -> ChatCompletionMessage:
-    """Serialize message content, replaying thinking only when provider signatures exist."""
-    if isinstance(message, SystemMessage):
-        return WireSystemMessage(content=message.content)
-    if isinstance(message, UserMessage):
-        return WireUserMessage(content=message.content)
-    if isinstance(message, AssistantMessage):
-        return WireAssistantMessage(
-            content=message.text or None,
-            thinking_blocks=message.thinking_blocks,
-            tool_calls=[
-                ProviderToolCall(
-                    id=call.id,
-                    function=RequestFunctionCall(
-                        name=call.name, arguments=json.dumps(call.arguments)
-                    ),
-                )
-                for call in message.tool_calls
-            ]
-            or None,
-        )
-    if isinstance(message, ToolResultMessage):
-        if not isinstance(message.content, str):
-            raise ValueError("Provider tool messages require text content")
-        if not message.tool_call_id:
-            raise ValueError("Provider tool messages require tool_call_id")
-        return ProviderToolMessage(
-            content=message.content, tool_call_id=message.tool_call_id
-        )
-    raise TypeError(f"Unsupported message type: {type(message).__name__}")
-
-
-def serialize_tools(tools: Sequence[ToolDefinition]) -> list[dict[str, JsonValue]]:
-    return [
-        {
-            "type": "function",
-            "function": {
-                "name": tool.name,
-                "description": tool.description,
-                "parameters": tool.parameters,
-            },
-        }
-        for tool in tools
-    ]
 
 
 @runtime_checkable

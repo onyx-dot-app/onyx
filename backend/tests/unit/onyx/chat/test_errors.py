@@ -10,7 +10,11 @@ from onyx.chat.errors import (
     _build_empty_llm_response_error,
 )
 from onyx.llm.interfaces import LLMConfig
-from onyx.llm.models import AssistantMessage, ThinkingContent, ToolChoiceOptions
+from onyx.llm.models import (
+    AssistantMessage,
+    ThinkingContent,
+    ToolChoiceOptions,
+)
 
 
 class TestEmptyLlmResponseClassification:

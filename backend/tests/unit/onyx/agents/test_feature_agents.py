@@ -39,7 +39,7 @@ from onyx.deep_research.tool_definitions import (
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.exceptions import LLMTimeoutError
 from onyx.llm.interfaces import GenerationContext, LLMUserIdentity
-from onyx.llm.litellm_models import (
+from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
     ResponseFunctionCall,

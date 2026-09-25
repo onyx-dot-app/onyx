@@ -7,7 +7,7 @@ from onyx.chat.process_message import handle_stream_message_objects
 from onyx.db.chat import create_chat_session
 from onyx.db.models import User
 from onyx.db.persona import upsert_persona
-from onyx.llm.litellm_models import Delta
+from onyx.llm.model_response import Delta
 from onyx.server.query_and_chat.models import MessageResponseIDInfo, SendMessageRequest
 from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
 from tests.external_dependency_unit.answer.stream_test_utils import final_answer

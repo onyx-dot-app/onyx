@@ -1,4 +1,6 @@
-"""Provider request messages in the OpenAI Chat Completions shape."""
+"""Provider request messages and serialization from application messages."""
+
+from __future__ import annotations
 
 import json
 from collections.abc import Sequence
@@ -9,18 +11,19 @@ from pydantic import BaseModel, JsonValue
 from onyx.llm import models as app
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_capabilities import model_needs_formatting_reenabled
-from onyx.llm.models import AnyThinkingBlock, ContentPart
+from onyx.llm.models import AnyThinkingBlock, ContentPart, MessageRole
 from onyx.tools.tool_name import sanitize_tool_name
 
 if TYPE_CHECKING:
     from onyx.llm.interfaces import LLMConfig
 
-# Specifically for OpenAI models, this prefix needs to be in place for the model to output markdown and correct styling
+# OpenAI reasoning models need this prefix to enable Markdown formatting.
 CODE_BLOCK_MARKDOWN = "Formatting re-enabled. "
 
 
-# Tool call structures
 class RequestFunctionCall(BaseModel):
+    """Complete function call sent in conversation history."""
+
     name: str
     arguments: str
 
@@ -31,44 +34,39 @@ class ToolCall(BaseModel):
     function: RequestFunctionCall
 
 
-# Message types
-
-
-# Base class for all cacheable messages
 class CacheableMessage(BaseModel):
     # Some providers support prompt caching controls at the message level (passed through via LiteLLM).
-    cache_control: dict | None = None
+    cache_control: dict[str, JsonValue] | None = None
 
 
 class SystemMessage(CacheableMessage):
-    role: Literal["system"] = "system"
+    role: Literal[MessageRole.SYSTEM] = MessageRole.SYSTEM
     content: str
 
 
 class UserMessage(CacheableMessage):
-    role: Literal["user"] = "user"
+    role: Literal[MessageRole.USER] = MessageRole.USER
     content: str | list[ContentPart]
 
 
 class AssistantMessage(CacheableMessage):
-    role: Literal["assistant"] = "assistant"
+    role: Literal[MessageRole.ASSISTANT] = MessageRole.ASSISTANT
     content: str | None = None
     tool_calls: list[ToolCall] | None = None
     thinking_blocks: list[AnyThinkingBlock] | None = None
 
 
 class ToolMessage(CacheableMessage):
-    role: Literal["tool"] = "tool"
+    role: Literal[MessageRole.TOOL] = MessageRole.TOOL
     content: str
     tool_call_id: str
 
 
-# Union type for all OpenAI Chat Completions messages
 ChatCompletionMessage = SystemMessage | UserMessage | AssistantMessage | ToolMessage
 
 
 def serialize_request(
-    request: app.GenerationRequest, config: "LLMConfig"
+    request: app.GenerationRequest, config: LLMConfig
 ) -> tuple[list[ChatCompletionMessage], int]:
     """Serialize provider messages and return the cacheable prefix length."""
     history = (
@@ -145,6 +143,10 @@ def format_provider_message(message: app.Message) -> ChatCompletionMessage:
             or None,
         )
     if isinstance(message, app.ToolResultMessage):
+        if not isinstance(message.content, str):
+            raise ValueError("Provider tool messages require text content")
+        if not message.tool_call_id:
+            raise ValueError("Provider tool messages require tool_call_id")
         return ToolMessage(content=message.content, tool_call_id=message.tool_call_id)
     raise TypeError(f"Unsupported message type: {type(message).__name__}")
 

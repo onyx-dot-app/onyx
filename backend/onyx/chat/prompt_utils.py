@@ -22,7 +22,12 @@ from onyx.file_store.models import (
     FileToolMetadata,
 )
 from onyx.llm.interfaces import LLMConfig
-from onyx.llm.models import AssistantMessage, Message, ToolResultMessage, UserMessage
+from onyx.llm.models import (
+    AssistantMessage,
+    Message,
+    ToolResultMessage,
+    UserMessage,
+)
 from onyx.prompts.chat_prompts import (
     ANSWER_COMPLETENESS_REMINDER,
     ANSWER_COVERAGE_GUIDANCE,

@@ -5,13 +5,8 @@ import pytest
 from litellm.exceptions import MidStreamFallbackError, RateLimitError
 from litellm.exceptions import Timeout as LiteLLMTimeout
 
-from onyx.llm.litellm_models import (
-    ChatCompletionMessage,
-    Delta,
-    ModelResponseStream,
-    StreamingChoice,
-    UserMessage,
-)
+from onyx.llm.model_request import ChatCompletionMessage, UserMessage
+from onyx.llm.model_response import Delta, ModelResponseStream, StreamingChoice
 from onyx.llm.multi_llm import LitellmLLM, LLMRateLimitError, LLMTimeoutError
 
 
@@ -53,7 +48,7 @@ def test_stream_retries_timeout_before_first_chunk() -> None:
         patch("onyx.llm.multi_llm.LLM_FIRST_CHUNK_MAX_RETRIES", 1),
         patch("onyx.llm.multi_llm.is_true_openai_model", return_value=False),
         patch(
-            "onyx.llm.litellm_conversion.from_litellm_model_response_stream",
+            "onyx.llm.model_response.from_litellm_model_response_stream",
             return_value=translated_chunk,
         ),
         patch("onyx.llm.multi_llm.logger") as mock_logger,
@@ -81,7 +76,7 @@ def test_stream_does_not_retry_after_first_chunk() -> None:
         patch("onyx.llm.multi_llm.LLM_FIRST_CHUNK_MAX_RETRIES", 2),
         patch("onyx.llm.multi_llm.is_true_openai_model", return_value=False),
         patch(
-            "onyx.llm.litellm_conversion.from_litellm_model_response_stream",
+            "onyx.llm.model_response.from_litellm_model_response_stream",
             return_value=translated_chunk,
         ),
         patch("onyx.llm.multi_llm.logger") as mock_logger,
@@ -117,7 +112,7 @@ def test_stream_maps_a_rate_limit_wrapped_mid_stream() -> None:
     with (
         patch("onyx.llm.multi_llm.is_true_openai_model", return_value=False),
         patch(
-            "onyx.llm.litellm_conversion.from_litellm_model_response_stream",
+            "onyx.llm.model_response.from_litellm_model_response_stream",
             return_value=translated_chunk,
         ),
     ):

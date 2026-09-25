@@ -20,7 +20,7 @@ import pytest
 from litellm.llms.custom_httpx.http_handler import HTTPHandler
 
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.litellm_models import ChatCompletionMessage, UserMessage
+from onyx.llm.model_request import ChatCompletionMessage, UserMessage
 from onyx.llm.multi_llm import _AZURE_V1_API_VERSIONS, LitellmLLM
 from tests.utils.secret_names import TestSecret
 

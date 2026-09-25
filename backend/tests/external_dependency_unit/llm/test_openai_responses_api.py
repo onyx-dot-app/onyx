@@ -24,8 +24,8 @@ import pytest
 from pydantic import JsonValue
 
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.litellm_models import ChatCompletionMessage, UserMessage
 from onyx.llm.litellm_singleton import litellm
+from onyx.llm.model_request import ChatCompletionMessage, UserMessage
 from onyx.llm.multi_llm import LitellmLLM
 from tests.utils.secret_names import TestSecret
 

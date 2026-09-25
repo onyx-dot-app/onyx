@@ -60,20 +60,6 @@ from onyx.llm.interfaces import (
     LLMConfig,
     LLMUserIdentity,
 )
-from onyx.llm.litellm_conversion import (
-    MessageAccumulator,
-    serialize_request,
-    serialize_tools,
-    to_assistant_message,
-)
-from onyx.llm.litellm_models import (
-    ChatCompletionMessage,
-    ModelResponse,
-    ModelResponseStream,
-)
-from onyx.llm.litellm_models import (
-    ToolCall as ProviderToolCall,
-)
 from onyx.llm.model_capabilities import (
     OPENAI_API_PROVIDERS,
     ReasoningParamStyle,
@@ -95,6 +81,18 @@ from onyx.llm.model_capabilities import (
 from onyx.llm.model_capabilities import (
     model_identity_names as resolve_model_identity_names,
 )
+from onyx.llm.model_request import (
+    ChatCompletionMessage,
+    serialize_request,
+    serialize_tools,
+)
+from onyx.llm.model_request import ToolCall as ProviderToolCall
+from onyx.llm.model_response import (
+    MessageAccumulator,
+    ModelResponse,
+    ModelResponseStream,
+    to_assistant_message,
+)
 from onyx.llm.models import (
     AssistantMessage,
     GenerationErrorEvent,
@@ -109,6 +107,7 @@ from onyx.llm.models import (
     Usage,
     resolve_reasoning_effort,
 )
+from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.llm.request_context import get_llm_mock_response
 from onyx.llm.utils import build_litellm_passthrough_kwargs, collect_credential_values
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
@@ -539,7 +538,7 @@ def _messages_contain_tool_content(messages: list[dict[str, JsonValue]]) -> bool
 
 def _prompt_contains_tool_call_history(prompt: list[ChatCompletionMessage]) -> bool:
     """Detect tool history for Anthropic's conservative thinking compatibility policy."""
-    from onyx.llm.litellm_models import AssistantMessage
+    from onyx.llm.model_request import AssistantMessage
 
     return any(isinstance(msg, AssistantMessage) and msg.tool_calls for msg in prompt)
 
@@ -1386,7 +1385,7 @@ class LitellmLLM(LLM):
         from litellm import HTTPHandler
         from litellm import ModelResponse as LiteLLMModelResponse
 
-        from onyx.llm.litellm_conversion import from_litellm_model_response
+        from onyx.llm.model_response import from_litellm_model_response
 
         deadline = time.monotonic() + total_timeout_s
         env_injection_enabled = _env_injection_enabled()
@@ -1468,7 +1467,7 @@ class LitellmLLM(LLM):
         )
         from litellm.exceptions import Timeout as LiteLLMTimeout
 
-        from onyx.llm.litellm_conversion import from_litellm_model_response_stream
+        from onyx.llm.model_response import from_litellm_model_response_stream
 
         retryable_exceptions = (
             LiteLLMTimeout,
@@ -1533,6 +1532,21 @@ class LitellmLLM(LLM):
                 if client is not None:
                     client.close()
 
+    def _prepare_request(
+        self, request: GenerationRequest
+    ) -> list[ChatCompletionMessage]:
+        config = self.config
+        messages, cacheable_prefix = serialize_request(request, config)
+        if cacheable_prefix:
+            messages, _ = process_with_prompt_cache(
+                llm_config=config,
+                cacheable_prefix=messages[:cacheable_prefix],
+                suffix=messages[cacheable_prefix:],
+                continuation=False,
+                with_metadata=False,
+            )
+        return messages
+
     def invoke(
         self,
         request: GenerationRequest,
@@ -1544,7 +1558,7 @@ class LitellmLLM(LLM):
             context = context.model_copy(
                 update={"total_timeout_s": LLM_INVOKE_TIMEOUT_S}
             )
-        messages = serialize_request(request, self.config)
+        messages = self._prepare_request(request)
         definitions = serialize_tools(request.tools)
         with (
             _provider_scope(context, self) as signal,
@@ -1584,7 +1598,7 @@ class LitellmLLM(LLM):
         context = context or GenerationContext()
         operation = ProviderOperation()
         accumulator = MessageAccumulator(request.tools)
-        messages = serialize_request(request, self.config)
+        messages = self._prepare_request(request)
         definitions = serialize_tools(request.tools)
         with (
             _provider_scope(context, self) as signal,

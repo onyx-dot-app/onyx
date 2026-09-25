@@ -4,7 +4,12 @@ import json
 
 from onyx.chat.prompt_utils import prepare_prompt
 from onyx.context.search.models import SearchDocsResponse
-from onyx.llm.models import AssistantMessage, Message, ToolResultMessage, UserMessage
+from onyx.llm.models import (
+    AssistantMessage,
+    Message,
+    ToolResultMessage,
+    UserMessage,
+)
 
 
 def test_search_passages_are_deduplicated_only_within_the_same_step() -> None:

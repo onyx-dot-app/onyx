@@ -11,14 +11,15 @@ from onyx.agents.runtime import Agent, RunFailed
 from onyx.agents.tools import AgentTool
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import GenerationContext
-from onyx.llm.litellm_conversion import MessageAccumulator, recover_tool_calls
-from onyx.llm.litellm_models import (
+from onyx.llm.model_request import ToolMessage
+from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
+    MessageAccumulator,
     ModelResponseStream,
     ResponseFunctionCall,
     StreamingChoice,
-    ToolMessage,
+    recover_tool_calls,
 )
 from onyx.llm.models import (
     AssistantMessage,
@@ -227,7 +228,11 @@ class TestToolRecovery:
         }
 
     def test_reasoning_fallback_and_required_text(self) -> None:
-        from onyx.llm.models import AssistantMessage, TextContent, ThinkingContent
+        from onyx.llm.models import (
+            AssistantMessage,
+            TextContent,
+            ThinkingContent,
+        )
 
         for blocks in [
             [TextContent(text='{"name":"echo","arguments":{"value":3}}')],
@@ -264,19 +269,24 @@ class TestToolRecovery:
 def test_signed_thinking_survives_onyx_projection_and_details_serialize() -> None:
     from pydantic import BaseModel
 
-    from onyx.llm.litellm_conversion import serialize_request
-    from onyx.llm.models import AssistantMessage, ThinkingBlock, ThinkingContent
+    from onyx.llm.model_request import serialize_request
+    from onyx.llm.models import (
+        AssistantMessage,
+        ThinkingBlock,
+        ThinkingContent,
+    )
 
     block = ThinkingBlock(thinking="reasoning", signature="signature")
     message = AssistantMessage(
         content=[ThinkingContent(text="reasoning", blocks=[block])]
     )
     history = [message]
-    from onyx.llm.litellm_models import AssistantMessage as WireAssistantMessage
+    from onyx.llm.model_request import AssistantMessage as WireAssistantMessage
 
-    wire_message = serialize_request(
+    wire_messages, _ = serialize_request(
         GenerationRequest(messages=history), ScriptedLLM([]).config
-    )[0]
+    )
+    wire_message = wire_messages[0]
     assert isinstance(wire_message, WireAssistantMessage)
     assert wire_message.thinking_blocks == [block]
 

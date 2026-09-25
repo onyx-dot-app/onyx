@@ -12,24 +12,29 @@ from litellm.types.utils import ChatCompletionDeltaToolCall, Delta
 from litellm.types.utils import Function as LiteLLMFunction
 from pydantic import JsonValue
 
-import onyx.llm.litellm_models
+import onyx.llm.model_request
+import onyx.llm.model_response
 import onyx.llm.models
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
 from onyx.llm.cancellation import CancellationSignal, cancellation_scope
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLMUserIdentity
-from onyx.llm.litellm_models import (
+from onyx.llm.model_capabilities import get_max_input_tokens
+from onyx.llm.model_request import (
     AssistantMessage,
     ChatCompletionMessage,
-    ModelResponse,
-    ModelResponseStream,
     RequestFunctionCall,
     ToolCall,
     ToolMessage,
     UserMessage,
 )
-from onyx.llm.model_capabilities import get_max_input_tokens
-from onyx.llm.models import NamedToolChoice, ReasoningEffort, ToolChoiceOptions, Usage
+from onyx.llm.model_response import ModelResponse, ModelResponseStream
+from onyx.llm.models import (
+    NamedToolChoice,
+    ReasoningEffort,
+    ToolChoiceOptions,
+    Usage,
+)
 from onyx.llm.multi_llm import (
     LitellmLLM,
     LLMRateLimitError,
@@ -2932,7 +2937,7 @@ def test_bedrock_claude_drops_thinking_when_thinking_blocks_missing() -> None:
                 )
             ],
         ),
-        onyx.llm.litellm_models.ToolMessage(
+        onyx.llm.model_request.ToolMessage(
             content="22°C sunny",
             tool_call_id="tc_1",
         ),

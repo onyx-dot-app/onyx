@@ -6,10 +6,10 @@ import pytest
 
 from onyx.chat.models import MessageRendering
 from onyx.chat.renderer import MessageRenderer, ResponseLayout
-from onyx.llm.litellm_conversion import MessageAccumulator
-from onyx.llm.litellm_models import (
+from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
+    MessageAccumulator,
     ModelResponseStream,
     ResponseFunctionCall,
     StreamingChoice,

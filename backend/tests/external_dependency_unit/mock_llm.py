@@ -12,9 +12,9 @@ from unittest.mock import patch
 from pydantic import BaseModel, JsonValue
 
 from onyx.llm.interfaces import LLMConfig, LLMUserIdentity
-from onyx.llm.litellm_models import (
+from onyx.llm.model_request import ChatCompletionMessage
+from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
-    ChatCompletionMessage,
     Delta,
     ModelResponse,
     ModelResponseStream,

@@ -28,7 +28,12 @@ from onyx.db.chat_subagents import (
     load_session_agent_metadata,
     lookup_session_agent,
 )
-from onyx.llm.models import AssistantMessage, Message, TextContent, UserMessage
+from onyx.llm.models import (
+    AssistantMessage,
+    Message,
+    TextContent,
+    UserMessage,
+)
 
 
 class ChatHistoryStore(Protocol):

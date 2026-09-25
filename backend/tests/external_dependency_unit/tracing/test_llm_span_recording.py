@@ -5,14 +5,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from onyx.llm.litellm_models import (
+from onyx.llm.model_request import RequestFunctionCall, ToolCall
+from onyx.llm.model_response import (
     ChatCompletionMessageToolCall,
     Choice,
     Message,
     ModelResponse,
-    RequestFunctionCall,
     ResponseFunctionCall,
-    ToolCall,
 )
 from onyx.llm.models import Usage
 from onyx.tracing.framework.span_data import GenerationSpanData

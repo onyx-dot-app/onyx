@@ -27,8 +27,8 @@ from onyx.chat.response import response_record
 from onyx.file_store.models import ChatFileType, ChatLoadedFile
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import GenerationContext
-from onyx.llm.litellm_conversion import serialize_request
-from onyx.llm.litellm_models import Delta
+from onyx.llm.model_request import serialize_request
+from onyx.llm.model_response import Delta
 from onyx.llm.models import (
     AssistantMessage,
     GenerationDoneEvent,

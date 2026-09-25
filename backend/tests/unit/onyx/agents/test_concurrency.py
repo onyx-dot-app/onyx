@@ -14,7 +14,12 @@ from onyx.agents.runtime import Agent, RunFailed
 from onyx.agents.tool_execution import ToolBatch
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
-from onyx.llm.models import AssistantMessage, TextContent, ToolCall, ToolResult
+from onyx.llm.models import (
+    AssistantMessage,
+    TextContent,
+    ToolCall,
+    ToolResult,
+)
 from onyx.utils.threadpool_concurrency import start_thread_future
 from tests.unit.onyx.agents.fakes import FakeModelClient
 

@@ -17,8 +17,13 @@ from ee.onyx.server.gateway.api import _MESSAGES_ADAPTER
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.exceptions import LLMRateLimitError, LLMTimeoutError
-from onyx.llm.litellm_models import (
+from onyx.llm.model_request import (
     AssistantMessage,
+    SystemMessage,
+    ToolMessage,
+    UserMessage,
+)
+from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     ChatCompletionMessageToolCall,
     Choice,
@@ -28,9 +33,6 @@ from onyx.llm.litellm_models import (
     ModelResponseStream,
     ResponseFunctionCall,
     StreamingChoice,
-    SystemMessage,
-    ToolMessage,
-    UserMessage,
 )
 from onyx.llm.models import (
     NamedToolChoice,
