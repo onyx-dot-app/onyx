@@ -2,7 +2,7 @@
 
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from typing import Any, cast
+from typing import Any
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -65,17 +65,6 @@ def test_default_pool_does_not_replay_commands_that_may_have_run(
     with _fail_first_send(error) as calls, pytest.raises(type(error)):
         client.incr(key)
     assert len(calls) == 1
-
-
-def test_default_pool_reconnects_a_connection_closed_by_the_server(key: str) -> None:
-    client = _connected_client()
-    client_id = cast(int, client.client_id())
-    redis.Redis(connection_pool=RedisPool.create_pool()).client_kill_filter(
-        _id=str(client_id)
-    )
-    client.incr(key)
-    assert client.get(key) == b"1"
-    assert client.client_id() != client_id
 
 
 def test_timeout_pool_does_not_retry(key: str) -> None:

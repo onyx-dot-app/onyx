@@ -73,7 +73,8 @@ def _pool_retry_kwargs() -> dict[str, Any]:
     connection errors and timeouts can arrive after the command ran, so a
     retry could apply a write twice. ``supported_errors`` also lets health
     check PINGs and Sentinel reconnects retry ConnectionError; they send no
-    command. The pool itself reconnects stale connections before use.
+    command. The health check PINGs connections idle longer than
+    REDIS_HEALTH_CHECK_INTERVAL, so dropped idle connections reconnect.
     """
     return {
         "retry": Retry(
