@@ -223,25 +223,46 @@ export function useSelectKeyboard({
   const cycles = mode === "select";
   const count = items.length;
 
+  // A disabled row is not a stop: the walk passes over it.
+  const isStop = useCallback(
+    (index: number) => {
+      const item = items[index];
+      return (
+        item !== undefined && !(item.kind === "option" && item.option.disabled)
+      );
+    },
+    [items]
+  );
+
   // The stop after `prev`. A Select wraps: past the last row comes the
   // search field when there is one, else the first row.
   const next = useCallback(
     (prev: number) => {
-      if (count === 0) return -1;
-      if (prev < count - 1) return prev + 1;
-      return cycles ? (hasSearch ? -1 : 0) : prev;
+      let index = prev;
+      for (let step = 0; step < count + 1; step++) {
+        if (index < count - 1) index += 1;
+        else if (cycles) index = hasSearch ? -1 : 0;
+        else return prev;
+        if (index === -1 || isStop(index)) return index;
+      }
+      return -1;
     },
-    [count, cycles, hasSearch]
+    [count, cycles, hasSearch, isStop]
   );
   const previous = useCallback(
     (prev: number) => {
-      if (count === 0) return -1;
-      if (prev > 0) return prev - 1;
-      if (prev === 0) return cycles && !hasSearch ? count - 1 : -1;
-      // Nothing highlighted (the search field, when there is one).
-      return cycles ? count - 1 : -1;
+      let index = prev;
+      for (let step = 0; step < count + 1; step++) {
+        if (index > 0) index -= 1;
+        else if (index === 0) index = cycles && !hasSearch ? count - 1 : -1;
+        // Nothing highlighted (the search field, when there is one).
+        else index = cycles ? count - 1 : -1;
+        if (index === -1 || isStop(index)) return index;
+        if (!cycles && index === -1) return -1;
+      }
+      return -1;
     },
-    [count, cycles, hasSearch]
+    [count, cycles, hasSearch, isStop]
   );
 
   const activate = useCallback(() => {

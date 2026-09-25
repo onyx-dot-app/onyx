@@ -87,6 +87,34 @@ describe("InputSingleSelect", () => {
       expect(trigger).toHaveFocus();
     });
 
+    test("the walk skips disabled rows", async () => {
+      const handleValueChange = jest.fn();
+      const user = setupUser();
+      render(
+        <InputSingleSelect
+          placeholder="Model"
+          value=""
+          onValueChange={handleValueChange}
+          options={[
+            { value: "apple", title: "Apple" },
+            { value: "banana", title: "Banana", disabled: true },
+            { value: "cherry", title: "Cherry" },
+          ]}
+        />
+      );
+      screen.getByRole("combobox", { name: "Model" }).focus();
+      await user.keyboard("{Enter}{ArrowDown}{ArrowDown}");
+      expect(screen.getByRole("option", { name: /Cherry/ })).toHaveAttribute(
+        "data-interaction",
+        "hover"
+      );
+      await user.keyboard("{ArrowUp}");
+      expect(screen.getByRole("option", { name: /Apple/ })).toHaveAttribute(
+        "data-interaction",
+        "hover"
+      );
+    });
+
     test("Enter on the closed trigger opens the list", async () => {
       const user = setupUser();
       render(

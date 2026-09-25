@@ -50,7 +50,8 @@ and a second click closes it. Open, the arrows and Tab walk the stops in
 order and wrap around: a foldable divider's title is a stop of its own, then
 its rows, and with `search` the search field is the stop before the first
 row. Enter picks the highlighted row or toggles the highlighted title;
-Escape closes and returns focus to the trigger. Physical focus stays on the
+Escape closes and returns focus to the trigger. Disabled rows are passed
+over. Physical focus stays on the
 trigger or the search field, and `aria-activedescendant` follows the
 highlight. Typing in the search field never highlights a row; only walking
 the list does. A title stop has no highlight of its own yet: its hover and
