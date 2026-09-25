@@ -103,7 +103,11 @@ import {
 } from "@/lib/searchSettings/hooks";
 import { useLlmDefaults } from "@/lib/languageModels/hooks";
 import useFilter from "@/hooks/useFilter";
-import ModelSelector from "@/sections/model-selector/ModelSelector";
+import { SimpleModelSelector } from "@/lib/languageModels/components";
+import {
+  filterModelConfigurations,
+  findLlmOptionById,
+} from "@/lib/languageModels/options";
 import type { RichStr } from "@opal/types";
 import { ProviderCredentialsModal } from "@/views/admin/IndexSettingsPage/modals";
 import ReindexProgressBanner from "@/views/admin/IndexSettingsPage/ReindexProgressBanner";
@@ -1820,15 +1824,22 @@ export default function IndexSettingsPage() {
                                   disabled={!values.enable_contextual_rag}
                                   withLabel
                                 >
-                                  <ModelSelector
+                                  <SimpleModelSelector
+                                    providers={filterModelConfigurations(
+                                      llmProviders ?? [],
+                                      {
+                                        keep: values.contextual_rag_model_configuration_id,
+                                      }
+                                    )}
                                     value={
                                       values.contextual_rag_model_configuration_id
                                     }
                                     disabled={!values.enable_contextual_rag}
-                                    onChange={(opt) =>
+                                    grouped={!settings.hide_provider_grouping}
+                                    onChange={(modelConfigurationId) =>
                                       void setFieldValue(
                                         "contextual_rag_model_configuration_id",
-                                        opt.modelConfigurationId ?? null
+                                        modelConfigurationId
                                       )
                                     }
                                   />
@@ -1902,17 +1913,28 @@ export default function IndexSettingsPage() {
                                   disabled={!imageProcessingEnabled}
                                   withLabel
                                 >
-                                  <ModelSelector
+                                  <SimpleModelSelector
+                                    providers={filterModelConfigurations(
+                                      llmProviders ?? [],
+                                      {
+                                        imageInput: true,
+                                        keep: captioningModelConfigId,
+                                      }
+                                    )}
                                     value={captioningModelConfigId}
                                     disabled={!imageProcessingEnabled}
-                                    requiresImageInput
-                                    onChange={(opt) =>
+                                    grouped={!settings.hide_provider_grouping}
+                                    onChange={(modelConfigurationId) => {
+                                      const opt = findLlmOptionById(
+                                        llmProviders,
+                                        modelConfigurationId
+                                      );
+                                      if (!opt) return;
                                       void handleCaptioningModelChange({
                                         modelName: opt.modelName,
-                                        modelConfigurationId:
-                                          opt.modelConfigurationId,
-                                      })
-                                    }
+                                        modelConfigurationId,
+                                      });
+                                    }}
                                   />
                                 </InputHorizontal>
                               </Disabled>

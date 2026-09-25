@@ -96,6 +96,7 @@ import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
 import { hasPermission } from "@/lib/permissions";
 import {
   filterModelConfigurations,
+  findDefaultModelDisplayName,
   findLlmOptionById,
   findModelConfigId,
 } from "@/lib/languageModels/options";
@@ -1245,6 +1246,7 @@ function ChatPreferencesSettings() {
   );
 
   const settings = useSettings();
+  const { defaultText } = useLanguageModels();
   // The user's default as a configuration id; null means the global default.
   const defaultModelConfigId = user?.preferences?.default_model
     ? findModelConfigId(
@@ -1347,6 +1349,12 @@ function ChatPreferencesSettings() {
             >
               <SimpleModelSelector
                 nullable
+                globalDefault={{
+                  description: findDefaultModelDisplayName(
+                    llmManager.llmProviders,
+                    defaultText
+                  ),
+                }}
                 providers={filterModelConfigurations(
                   llmManager.llmProviders ?? [],
                   { keep: defaultModelConfigId }

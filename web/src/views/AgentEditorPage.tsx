@@ -30,8 +30,14 @@ import InputDatePickerField from "@/refresh-components/form/InputDatePickerField
 import { Content, InputHorizontal, InputVertical } from "@opal/layouts";
 import { useFormikContext } from "formik";
 import { SimpleModelSelector } from "@/lib/languageModels/components";
-import { useLanguageModelsForAgent } from "@/lib/languageModels/hooks";
-import { filterModelConfigurations } from "@/lib/languageModels/options";
+import {
+  useLanguageModels,
+  useLanguageModelsForAgent,
+} from "@/lib/languageModels/hooks";
+import {
+  filterModelConfigurations,
+  findDefaultModelDisplayName,
+} from "@/lib/languageModels/options";
 import {
   MAX_CHARACTERS_STARTER_MESSAGE,
   MAX_CHARACTERS_AGENT_DESCRIPTION,
@@ -432,6 +438,9 @@ export default function AgentEditorPage({
   const { llmProviders: agentLlmProviders } = useLanguageModelsForAgent(
     existingAgent?.id
   );
+  // The Global Default row names the workspace default, which only the
+  // unscoped list is sure to carry.
+  const { llmProviders: globalLlmProviders, defaultText } = useLanguageModels();
 
   const agentDraftStorageKey = draftKey("agent-editor", "new");
   const clearAgentDraftRef = useRef<(() => void) | null>(null);
@@ -1660,6 +1669,12 @@ export default function AgentEditorPage({
                                 >
                                   <SimpleModelSelector
                                     nullable
+                                    globalDefault={{
+                                      description: findDefaultModelDisplayName(
+                                        globalLlmProviders,
+                                        defaultText
+                                      ),
+                                    }}
                                     providers={filterModelConfigurations(
                                       agentLlmProviders ?? [],
                                       {
