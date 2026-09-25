@@ -59,6 +59,9 @@ During a run, the agent emits typed `AgentEvent` values to `on_event`:
 | `tool_start`, `tool_update`, `tool_end` | A tool call starts, reports progress, or returns a result. |
 
 Each event carries a run ID so consumers can distinguish concurrent executions.
+The run applies generation updates under its state lock before notifying listeners.
+Cancellation preserves accepted partial output; `snapshot()` copies that state for independent inspection.
+`message_start` and `message_end` own the agent's message lifecycle. Updates do not repeat generation start or done events.
 Chat converts these events into frontend packets for text, reasoning, tool activity, and run status.
 It saves the response under a chat message ID. Generation and content item IDs connect streamed output to saved response data.
 
@@ -147,7 +150,7 @@ Both callbacks run on tracked threads. Compaction does not repeat either callbac
 `PreparedStep.assemble_messages` must be pure and repeatable: compaction can call it again with shorter history.
 
 `Agent.generation_context` supplies tracing identity, content policy, and execution timeouts for every step.
-`PreparedStep.timeout` overrides the request timeout; `None` uses the agent's timeout.
+`PreparedStep.stall_timeout_s` overrides the stream's idle timeout; `None` uses the agent's setting.
 Generation options remain part of `PreparedStep`, since tool choice and token limits can change between steps.
 
 Two optional tool callbacks cover interception and enrichment:

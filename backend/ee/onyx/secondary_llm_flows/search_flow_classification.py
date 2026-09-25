@@ -34,7 +34,9 @@ def classify_is_search_flow(
             ),
         ),
         # Classification blocks the next UI action, so keep the timeout short.
-        context=GenerationContext(timeout=2, flow=LLMFlow.SEARCH_FLOW_CLASSIFICATION),
+        context=GenerationContext(
+            total_timeout_s=2, flow=LLMFlow.SEARCH_FLOW_CLASSIFICATION
+        ),
     )
 
     content = response.text.strip().lower()

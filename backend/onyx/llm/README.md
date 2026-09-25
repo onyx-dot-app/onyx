@@ -51,18 +51,34 @@ def summarize(client: LLM, text: str, flow: LLMFlow) -> str:
 `GenerationContext` carries the tracing flow, privacy mode, user identity, cancellation, and transport timeouts.
 Every application operation supplies a registered tracing flow.
 
-`timeout` controls provider request timeouts. `total_timeout` limits the complete generation, including retries.
-Both invocation methods support a total timeout. Deadline expiry interrupts owned provider I/O and raises `LLMTimeoutError`.
+`stall_timeout_s` bounds idle reads during streaming; it does not limit the complete generation.
+`total_timeout_s` limits the complete generation, including retries.
+`invoke` uses `LLM_INVOKE_TIMEOUT_S` when no total timeout is set and ignores the streaming idle timeout.
+`stream` uses `LLM_SOCKET_READ_TIMEOUT` for idle reads and has no total timeout unless explicitly set.
+Deadline expiry interrupts owned provider I/O and raises `LLMTimeoutError`.
 A generation deadline does not cancel the parent agent's signal.
 
 ## Streaming and cancellation
 
-`stream` yields `GenerationEvent` values with isolated assistant-message snapshots.
+Text and thinking deltas carry content indices; they have no separate start or end events.
+Tool calls retain start, delta, and end events for incremental arguments and final validation.
+
+`stream` yields indexed text and thinking deltas, plus snapshots of the tool call being updated.
+Updates do not contain the accumulated assistant message. Thinking deltas retain provider replay blocks.
+Start, completion, and error events carry isolated full-message snapshots.
 Events describe text, thinking, tool arguments, completion, and errors.
 A successful stream ends with `done`, which contains the completed assistant message.
 A stream error raises after emitting its error event when generation has started.
 Events also carry effective request settings for diagnostics. Presentation reads these settings from the event.
 Close the stream when consumption stops early.
+
+`apply_generation_event(message, event)` mutates the caller's assistant message in place.
+This avoids copying accumulated output for each delta. It preserves message identity and application metadata.
+It copies mutable event payloads and does not modify the event.
+
+Only the message owner may apply updates. Synchronize readers and writers when the message is shared across threads.
+The agent runtime applies updates under its state lock before notifying observers.
+Use `message.model_copy(deep=True)` when exposing a snapshot that must remain unchanged as generation continues.
 
 ```python
 from contextlib import closing

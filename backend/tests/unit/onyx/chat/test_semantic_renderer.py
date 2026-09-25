@@ -307,7 +307,7 @@ def test_interrupted_item_stream_flushes_buffered_citation_like_reload(
     live = MessageRenderer(
         MessageRendering(citation_mode=CitationMode.HYPERLINK), {}, identity
     )
-    live.consume(TextDeltaEvent(message=message, content_index=0, text="See [1"))
+    live.consume(TextDeltaEvent(content_index=0, text="See [1"))
     live_packets = live.finish(status)
     saved = MessageRenderer(
         MessageRendering(citation_mode=CitationMode.HYPERLINK), {}, identity
@@ -359,9 +359,7 @@ def test_complete_only_model_stream_publishes_answer_and_demotes_earlier_text() 
 def test_accepted_message_clears_superseded_streamed_text() -> None:
     identity = PacketIdentity(response_id=42, run_id="run", message_id="run:0")
     renderer = MessageRenderer(MessageRendering(), {}, identity)
-    renderer.consume(
-        TextDeltaEvent(message=AssistantMessage(), content_index=0, text="preview")
-    )
+    renderer.consume(TextDeltaEvent(content_index=0, text="preview"))
     final = renderer.complete(
         AssistantMessage(content=[ToolCall(id="call", name="echo", arguments={})])
     )

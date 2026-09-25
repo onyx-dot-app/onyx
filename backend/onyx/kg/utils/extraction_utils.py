@@ -529,7 +529,7 @@ def kg_deep_extract_chunks(
             GenerationRequest(messages=[prompt_msg]),
             context=GenerationContext(
                 flow=LLMFlow.KG_DEEP_EXTRACTION,
-                total_timeout=_DEEP_EXTRACTION_TIMEOUT_S,
+                total_timeout_s=_DEEP_EXTRACTION_TIMEOUT_S,
                 content_mode=TraceContentMode.METADATA_ONLY,
             ),
         )

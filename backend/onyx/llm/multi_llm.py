@@ -292,7 +292,7 @@ class _GenerationSignal(CancellationSignal):
 @contextmanager
 def _generation_scope(context: GenerationContext) -> Iterator[CancellationSignal]:
     parent = context.cancellation or current_cancellation() or CancellationSignal()
-    if context.total_timeout is None:
+    if context.total_timeout_s is None:
         with cancellation_scope(parent):
             parent.check()
             yield parent
@@ -301,7 +301,7 @@ def _generation_scope(context: GenerationContext) -> Iterator[CancellationSignal
     with (
         parent.on_cancel(signal.cancel),
         cancellation_scope(signal),
-        cancellation_deadline(context.total_timeout, signal.expire),
+        cancellation_deadline(context.total_timeout_s, signal.expire),
     ):
         parent.check()
         yield signal
@@ -1554,16 +1554,16 @@ class LitellmLLM(LLM):
     ) -> AssistantMessage:
         """Return one completed assistant message."""
         context = context or GenerationContext()
-        if context.total_timeout is None:
+        if context.total_timeout_s is None:
             context = context.model_copy(
-                update={"total_timeout": context.timeout or LLM_INVOKE_TIMEOUT_S}
+                update={"total_timeout_s": LLM_INVOKE_TIMEOUT_S}
             )
         messages = serialize_request(request, self.config)
         definitions = serialize_tools(request.tools)
         with (
             _provider_scope(context, self) as signal,
             llm_generation_span(
-                self.config,
+                self,
                 context.flow or LLMFlow.UNTAGGED_INVOKE,
                 input_messages=messages,
                 tools=definitions,
@@ -1576,7 +1576,7 @@ class LitellmLLM(LLM):
                 tools=definitions,
                 tool_choice=request.options.tool_choice,
                 structured_response_format=request.options.structured_response_format,
-                total_timeout_s=context.total_timeout or LLM_INVOKE_TIMEOUT_S,
+                total_timeout_s=context.total_timeout_s or LLM_INVOKE_TIMEOUT_S,
                 max_tokens=request.options.max_tokens,
                 reasoning_effort=request.options.reasoning_effort,
                 user_identity=context.user_identity,
@@ -1603,7 +1603,7 @@ class LitellmLLM(LLM):
         with (
             _provider_scope(context, self) as signal,
             llm_generation_span(
-                self.config,
+                self,
                 context.flow or LLMFlow.UNTAGGED_STREAM,
                 input_messages=messages,
                 tools=definitions,
@@ -1627,7 +1627,8 @@ class LitellmLLM(LLM):
                         reasoning_effort=request.options.reasoning_effort,
                         user_identity=context.user_identity,
                         operation=operation,
-                        stall_timeout_s=context.timeout or LLM_SOCKET_READ_TIMEOUT,
+                        stall_timeout_s=context.stall_timeout_s
+                        or LLM_SOCKET_READ_TIMEOUT,
                         structured_response_format=request.options.structured_response_format,
                     )
                 ),

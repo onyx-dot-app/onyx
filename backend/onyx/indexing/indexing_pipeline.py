@@ -976,7 +976,7 @@ def add_document_summaries(
         context=GenerationContext(
             flow=LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
             content_mode=TraceContentMode.METADATA_ONLY,
-            total_timeout=CONTEXTUAL_RAG_LLM_TIMEOUT,
+            total_timeout_s=CONTEXTUAL_RAG_LLM_TIMEOUT,
         ),
     )
     doc_summary = response.text
@@ -1032,7 +1032,7 @@ def add_chunk_summaries(
             context=GenerationContext(
                 flow=LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
                 content_mode=TraceContentMode.METADATA_ONLY,
-                total_timeout=CONTEXTUAL_RAG_LLM_TIMEOUT,
+                total_timeout_s=CONTEXTUAL_RAG_LLM_TIMEOUT,
             ),
         )
         doc_info = response.text
@@ -1059,7 +1059,7 @@ def add_chunk_summaries(
                 context=GenerationContext(
                     flow=LLMFlow.CONTEXTUAL_RAG_CHUNK_CONTEXT,
                     content_mode=TraceContentMode.METADATA_ONLY,
-                    total_timeout=CONTEXTUAL_RAG_LLM_TIMEOUT,
+                    total_timeout_s=CONTEXTUAL_RAG_LLM_TIMEOUT,
                 ),
             )
             chunk.chunk_context = response.text

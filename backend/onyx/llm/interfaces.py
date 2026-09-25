@@ -27,8 +27,10 @@ class GenerationContext(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
     cancellation: CancellationSignal | None = None
-    timeout: int | None = Field(default=None, gt=0)
-    total_timeout: float | None = Field(default=None, gt=0)
+    # Streaming idle reads only; invoke uses its total deadline.
+    stall_timeout_s: int | None = Field(default=None, gt=0)
+    # Invoke defaults to a finite deadline; streams have no default deadline.
+    total_timeout_s: float | None = Field(default=None, gt=0)
     user_identity: LLMUserIdentity | None = None
     flow: LLMFlow | None = None
     content_mode: TraceContentMode | None = None

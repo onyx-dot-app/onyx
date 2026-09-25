@@ -14,7 +14,13 @@ from onyx.llm.litellm_models import (
     ModelResponseStream,
     StreamingChoice,
 )
-from onyx.llm.models import GenerationEvent, GenerationRequest, UserMessage
+from onyx.llm.models import (
+    GenerationDoneEvent,
+    GenerationErrorEvent,
+    GenerationEvent,
+    GenerationRequest,
+    UserMessage,
+)
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import generation_span, trace
@@ -51,7 +57,9 @@ def test_generation_has_one_tagged_span(
         patch.object(client, "stream_raw", return_value=iter([chunk])),
     ):
         if streaming:
-            result = list(client.stream(request, context))[-1].message
+            terminal = list(client.stream(request, context))[-1]
+            assert isinstance(terminal, GenerationDoneEvent)
+            result = terminal.message
         else:
             result = client.invoke(request, context)
     assert result.text == "answer"
@@ -76,7 +84,7 @@ def test_trace_configuration_and_errors_exclude_credentials() -> None:
     with (
         trace("credential-boundary"),
         patch("onyx.tracing.llm_utils.generation_span", wraps=generation_span) as spans,
-        llm_generation_span(client.config, LLMFlow.CHAT_RESPONSE),
+        llm_generation_span(client, LLMFlow.CHAT_RESPONSE),
     ):
         pass
     assert "api_key" not in spans.call_args.kwargs["model_config"]
@@ -117,8 +125,10 @@ def test_stream_failure_keeps_private_exception_out_of_messages_and_trace() -> N
             )
         )
     assert caught.value is failure
-    assert events[-1].message.text == "Partial"
-    assert events[-1].message.error_message == "Generation failed"
+    terminal = events[-1]
+    assert isinstance(terminal, GenerationErrorEvent)
+    assert terminal.message.text == "Partial"
+    assert terminal.message.error_message == "Generation failed"
     assert all(
         "synthetic-private-provider-detail" not in event.model_dump_json()
         for event in events

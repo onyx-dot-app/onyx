@@ -168,7 +168,7 @@ def test_provider_context_rejection_preserves_execution_settings(
 
     def prepare(state: StepInput) -> PreparedStep:
         prepared.append(state.step.index)
-        return PreparedStep(timeout=step_timeout)
+        return PreparedStep(stall_timeout_s=step_timeout)
 
     signal = CancellationSignal()
     identity = LLMUserIdentity(user_id="user", session_id="session")
@@ -177,8 +177,8 @@ def test_provider_context_rejection_preserves_execution_settings(
         state=AgentState(messages=history),
         generation_context=GenerationContext(
             cancellation=signal,
-            timeout=23,
-            total_timeout=71,
+            stall_timeout_s=23,
+            total_timeout_s=71,
             user_identity=identity,
             flow=LLMFlow.RESEARCH_AGENT,
             content_mode=TraceContentMode.METADATA_ONLY,
@@ -194,8 +194,8 @@ def test_provider_context_rejection_preserves_execution_settings(
     ]
     for context in model.contexts:
         assert context.cancellation is signal
-        assert context.timeout == (step_timeout or 23)
-        assert context.total_timeout == 71
+        assert context.stall_timeout_s == (step_timeout or 23)
+        assert context.total_timeout_s == 71
         assert context.user_identity == identity
         assert context.content_mode == TraceContentMode.METADATA_ONLY
     assert len(model.generations) == 2

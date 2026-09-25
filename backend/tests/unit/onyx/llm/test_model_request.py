@@ -1,21 +1,27 @@
 """Canonical one-shot requests preserve provider capabilities and cancellation."""
 
 from collections.abc import Iterator
+from contextlib import nullcontext
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
+from onyx.configs.chat_configs import LLM_INVOKE_TIMEOUT_S, LLM_SOCKET_READ_TIMEOUT
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import GenerationContext, LLMConfig
 from onyx.llm.litellm_models import (
     ChatCompletionMessageToolCall,
     Choice,
+    Delta,
     FunctionCall,
     Message,
     ModelResponse,
     ModelResponseStream,
+    StreamingChoice,
 )
 from onyx.llm.models import (
+    GenerationDoneEvent,
     GenerationOptions,
     GenerationRequest,
     NamedToolChoice,
@@ -92,7 +98,9 @@ def test_invoke_preserves_options_and_returns_canonical_content() -> None:
             max_tokens=42,
         ),
     )
-    result = provider.invoke(request, GenerationContext(timeout=12, total_timeout=18.5))
+    result = provider.invoke(
+        request, GenerationContext(stall_timeout_s=12, total_timeout_s=18.5)
+    )
     assert result.text == "answer"
     assert result.thinking == "reasoning"
     assert result.thinking_blocks == [
@@ -119,6 +127,60 @@ def test_invoke_checks_cancellation_before_provider_call() -> None:
     with pytest.raises(AgentCancelled):
         provider.invoke(GenerationRequest(), GenerationContext(cancellation=signal))
     assert provider.calls == []
+
+
+@pytest.mark.parametrize("total_timeout_s", [None, 18.5])
+def test_invoke_deadline_is_independent_of_stream_idle_timeout(
+    total_timeout_s: float | None,
+) -> None:
+    provider = RecordingProvider()
+    context = GenerationContext(stall_timeout_s=1, total_timeout_s=total_timeout_s)
+    with patch(
+        "onyx.llm.multi_llm.cancellation_deadline", return_value=nullcontext()
+    ) as deadline:
+        provider.invoke(GenerationRequest(), context)
+    expected = total_timeout_s or LLM_INVOKE_TIMEOUT_S
+    assert provider.calls[0]["total_timeout_s"] == expected
+    assert "stall_timeout_s" not in provider.calls[0]
+    assert deadline.call_args.args[0] == expected
+    assert context.total_timeout_s == total_timeout_s
+
+
+@pytest.mark.parametrize("stall_timeout_s", [None, 7])
+@pytest.mark.parametrize("total_timeout_s", [None, 18.5])
+def test_stream_idle_timeout_does_not_create_a_total_deadline(
+    stall_timeout_s: int | None, total_timeout_s: float | None
+) -> None:
+    provider = RecordingProvider()
+    chunk = ModelResponseStream(
+        id="response",
+        created="1",
+        choice=StreamingChoice(delta=Delta(content="answer")),
+    )
+    with (
+        patch.object(provider, "stream_raw", return_value=iter([chunk])) as stream,
+        patch(
+            "onyx.llm.multi_llm.cancellation_deadline", return_value=nullcontext()
+        ) as deadline,
+    ):
+        events = list(
+            provider.stream(
+                GenerationRequest(),
+                GenerationContext(
+                    stall_timeout_s=stall_timeout_s, total_timeout_s=total_timeout_s
+                ),
+            )
+        )
+    terminal = events[-1]
+    assert isinstance(terminal, GenerationDoneEvent)
+    assert terminal.message.text == "answer"
+    assert stream.call_args.kwargs["stall_timeout_s"] == (
+        stall_timeout_s or LLM_SOCKET_READ_TIMEOUT
+    )
+    if total_timeout_s is None:
+        deadline.assert_not_called()
+    else:
+        assert deadline.call_args.args[0] == total_timeout_s
 
 
 def test_tool_recovery_does_not_share_attempts_across_generations() -> None:

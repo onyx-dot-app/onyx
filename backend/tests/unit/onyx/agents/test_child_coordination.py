@@ -519,7 +519,7 @@ def test_failed_child_settlement_retains_accepted_partial_output(
             message = AssistantMessage(
                 content=[TextContent(text="Child partial output")]
             )
-            yield TextDeltaEvent(message=message, content_index=0, text=message.text)
+            yield TextDeltaEvent(content_index=0, text=message.text)
             partial_accepted.set()
             assert release.wait(3)
             yield GenerationDoneEvent(message=message)

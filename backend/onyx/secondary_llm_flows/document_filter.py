@@ -139,7 +139,7 @@ def classify_section_relevance(
                 options=GenerationOptions(reasoning_effort=ReasoningEffort.OFF),
             ),
             context=GenerationContext(
-                timeout=SECONDARY_LLM_FLOW_TIMEOUT_S,
+                total_timeout_s=SECONDARY_LLM_FLOW_TIMEOUT_S,
                 flow=LLMFlow.CLASSIFY_SECTION_RELEVANCE,
             ),
         )
@@ -317,7 +317,7 @@ def select_sections_for_expansion(
                 options=GenerationOptions(reasoning_effort=ReasoningEffort.OFF),
             ),
             context=GenerationContext(
-                timeout=SECONDARY_LLM_FLOW_TIMEOUT_S,
+                total_timeout_s=SECONDARY_LLM_FLOW_TIMEOUT_S,
                 flow=LLMFlow.SELECT_SECTIONS_FOR_EXPANSION,
             ),
         )

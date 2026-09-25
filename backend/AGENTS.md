@@ -232,7 +232,7 @@ The LiteLLM adapter implements the client. Models remain configurable per featur
 Every LLM, embedding, rerank, image-generation, voice (STT/TTS), and intent-classification call must open a generation span tagged with a value from the `LLMFlow` registry in `backend/onyx/tracing/flows.py`. Use one of:
 
 - `GenerationContext(flow=LLMFlow.X)` for shared client calls. The client owns the generation span.
-- `llm_generation_span(llm_config=llm.config, flow=LLMFlow.X, input_messages=...)` for raw provider operations in protocol gateways. `llm_config` is an `LLMConfig` value.
+- `llm_generation_span(llm=llm, flow=LLMFlow.X, input_messages=...)` for raw provider operations in protocol gateways.
 - `traced_llm_call(flow=LLMFlow.X, model=..., provider=..., input_messages=...)` for direct provider SDK / `litellm` / model_server HTTP calls that bypass the `LLM` abstraction.
 
 Rules:

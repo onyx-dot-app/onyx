@@ -41,7 +41,7 @@ def test_deadline_interrupts_pending_provider_call(streaming: bool) -> None:
         finally:
             cleaned_up.set()
 
-    context = GenerationContext(cancellation=parent, total_timeout=0.05)
+    context = GenerationContext(cancellation=parent, total_timeout_s=0.05)
     with (
         parent.on_operation(operations.append),
         patch("onyx.llm.litellm_singleton.litellm.completion", pending_response),
@@ -68,7 +68,7 @@ def test_parent_cancellation_keeps_cancellation_semantics(streaming: bool) -> No
         model_name="gpt-5-mini",
         max_input_tokens=1000,
     )
-    context = GenerationContext(cancellation=parent, total_timeout=0.05)
+    context = GenerationContext(cancellation=parent, total_timeout_s=0.05)
     with pytest.raises(AgentCancelled):
         if streaming:
             list(client.stream(GenerationRequest(), context))
@@ -189,7 +189,7 @@ def test_deadline_cancels_generation_without_cancelling_parent() -> None:
     from onyx.llm.multi_llm import _generation_scope
 
     signal = CancellationSignal()
-    context = GenerationContext(cancellation=signal, total_timeout=0.02)
+    context = GenerationContext(cancellation=signal, total_timeout_s=0.02)
     expired = threading.Event()
     with _generation_scope(context) as generation:
         with generation.on_cancel(expired.set):

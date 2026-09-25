@@ -76,11 +76,14 @@ from onyx.llm.exceptions import (
 from onyx.llm.interfaces import LLM, GenerationContext
 from onyx.llm.models import (
     AssistantMessage,
+    GenerationDoneEvent,
     GenerationOptions,
     GenerationRequest,
+    GenerationStartEvent,
     Message,
     ToolResult,
     ToolResultMessage,
+    apply_generation_event,
 )
 from onyx.llm.token_budget import resolve_token_budget
 from onyx.utils.logger import setup_logger
@@ -1055,7 +1058,8 @@ def _generate_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) 
     generation_context = run._generation_context.model_copy(
         update={
             "cancellation": cancellation_signal,
-            "timeout": prepared.timeout or run._generation_context.timeout,
+            "stall_timeout_s": prepared.stall_timeout_s
+            or run._generation_context.stall_timeout_s,
         }
     )
     source = [*run._history.messages, *run._state.input_messages, *run._state.messages]
@@ -1098,22 +1102,24 @@ def _generate_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) 
                             run._state.request_params = event.request_params.model_copy(
                                 deep=True
                             )
-                        event.message.id = f"{run._state.run_id}:{step.index}"
-                        event.message.metadata = (
-                            prepared.output_metadata.model_copy(deep=True)
-                            if prepared.output_metadata
-                            else None
-                        )
-                        run._state.messages[start] = event.message.model_copy(deep=True)
-                        update = MessageUpdateEvent(
-                            **run._ancestry,
-                            step_index=step.index,
-                            generation_event=event,
-                        )
-                        if run._delivery:
-                            run._delivery.publish(update)
-                    if event.type == "done":
-                        final = event.message.model_copy(deep=True)
+                        message = run._state.messages[start]
+                        if not isinstance(message, AssistantMessage):
+                            raise RuntimeError(
+                                "Generation must update an assistant message"
+                            )
+                        apply_generation_event(message, event)
+                        if run._delivery and not isinstance(
+                            event, (GenerationStartEvent, GenerationDoneEvent)
+                        ):
+                            run._delivery.publish(
+                                MessageUpdateEvent(
+                                    **run._ancestry,
+                                    step_index=step.index,
+                                    generation_event=event,
+                                )
+                            )
+                        if isinstance(event, GenerationDoneEvent):
+                            final = message.model_copy(deep=True)
         except Exception:
             cancellation_signal.check()
             raise
@@ -1202,9 +1208,7 @@ def _fit_context(
 
 
 def _limit_output(llm: LLM, request: GenerationRequest) -> GenerationRequest:
-    allowance = resolve_token_budget(llm.config).output_allowance(
-        request_tokens(request)
-    )
+    allowance = resolve_token_budget(llm).output_allowance(request_tokens(request))
     if allowance is not None:
         request.options.max_tokens = (
             min(request.options.max_tokens, allowance)

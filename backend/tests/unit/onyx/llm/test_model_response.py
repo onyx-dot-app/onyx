@@ -31,16 +31,21 @@ from onyx.llm.models import (
     AssistantMessage,
     GenerationDoneEvent,
     GenerationEvent,
+    GenerationLifecycleEvent,
     GenerationOptions,
     GenerationRequest,
+    GenerationTextEvent,
     GenerationToolCallEvent,
     TextContent,
+    TextDeltaEvent,
     ThinkingBlock,
+    ThinkingDeltaEvent,
     ToolCallEndEvent,
     ToolChoiceOptions,
     ToolDefinition,
     Usage,
     UserMessage,
+    apply_generation_event,
 )
 from tests.unit.onyx.agents.fakes import ScriptedLLM
 
@@ -380,7 +385,9 @@ def test_accumulator_keeps_interleaved_calls_and_signed_thinking_separate() -> N
         )
     assert all(not call.arguments_complete for call in accumulator.message.tool_calls)
     events = accumulator.end()
-    message = events[-1].message
+    terminal = events[-1]
+    assert isinstance(terminal, GenerationDoneEvent)
+    message = terminal.message
     assert message.thinking_blocks == [signed]
     assert [(call.id, call.arguments) for call in message.tool_calls] == [
         ("first", {"query": "first"}),
@@ -417,6 +424,41 @@ def test_provider_stream_accepts_null_optional_tool_calls() -> None:
     )
     assert response.choice.delta.content == "hello"
     assert response.choice.delta.tool_calls == []
+
+
+def test_text_deltas_preserve_content_boundaries_without_boundary_events() -> None:
+    accumulator = MessageAccumulator()
+    deltas = [
+        Delta(reasoning_content="plan"),
+        Delta(content="first"),
+        Delta(content=" part"),
+        Delta(reasoning_content="reconsider"),
+        Delta(
+            tool_calls=[
+                ChatCompletionDeltaToolCall(
+                    index=0,
+                    id="call",
+                    function=FunctionCall(name="search", arguments="{}"),
+                )
+            ]
+        ),
+        Delta(content="last"),
+    ]
+    events = [
+        event for delta in deltas for event in accumulator.add(_stream_chunk(delta))
+    ]
+    text_events = [event for event in events if isinstance(event, GenerationTextEvent)]
+    assert [(event.content_index, event.text) for event in text_events] == [
+        (0, "plan"),
+        (1, "first"),
+        (1, " part"),
+        (2, "reconsider"),
+        (4, "last"),
+    ]
+    assert text_events[1].text == "first"
+    terminal = accumulator.end()[-1]
+    assert isinstance(terminal, GenerationDoneEvent)
+    assert terminal.message.text == "first partlast"
 
 
 class StructuredToolArguments(BaseModel):
@@ -691,9 +733,7 @@ def test_stream_keeps_native_precedence_stable_ids_and_event_snapshots() -> None
         events = list(client.stream(request))
     assert [event.type for event in events] == [
         "start",
-        "text_start",
         "text_delta",
-        "text_end",
         "tool_call_start",
         "tool_call_delta",
         "tool_call_delta",
@@ -709,11 +749,14 @@ def test_stream_keeps_native_precedence_stable_ids_and_event_snapshots() -> None
     assert calls[0].id and calls[0].arguments == {}
     assert calls[1].arguments == {"query": "fir"}
     assert calls[-1].arguments == {"query": "first"}
-    assert events[0].message.content == []
-    assert events[1].message.text == ""
-    assert events[2].message.text == fallback
-    assert events[-1].message.text == fallback
-    assert len(events[-1].message.tool_calls) == 1
+    start, delta, terminal = events[0], events[1], events[-1]
+    assert isinstance(start, GenerationLifecycleEvent)
+    assert start.message.content == []
+    assert isinstance(delta, TextDeltaEvent)
+    assert delta.text == fallback
+    assert isinstance(terminal, GenerationDoneEvent)
+    assert terminal.message.text == fallback
+    assert len(terminal.message.tool_calls) == 1
     assert chunks[1].choice.delta.tool_calls[0].id is None
     assert chunks[2].choice.delta.tool_calls[0].id == "late-provider-id"
 
@@ -794,7 +837,9 @@ def test_buffered_recovery_emits_one_call_with_usage_and_no_payload_text(
         "done",
     ]
     assert all(
-        not event.message.text and not event.message.thinking for event in events
+        not event.message.text and not event.message.thinking
+        for event in events
+        if isinstance(event, GenerationLifecycleEvent)
     )
     calls = [
         event.tool_call
@@ -803,7 +848,9 @@ def test_buffered_recovery_emits_one_call_with_usage_and_no_payload_text(
     ]
     assert len({call.id for call in calls}) == 1
     assert calls[-1].arguments == {"query": "recovered"}
-    final = events[-1].message
+    terminal = events[-1]
+    assert isinstance(terminal, GenerationDoneEvent)
+    final = terminal.message
     assert final.usage == usage
     assert final.stop_reason == "stop"
     assert final.tool_calls == [calls[-1]]
@@ -836,5 +883,72 @@ def test_buffered_stream_failure_keeps_unresolved_tool_payload_out_of_events() -
     assert caught.value is failure
     assert closed == [True]
     assert [event.type for event in events] == ["start", "error"]
-    assert all(event.message.content == [] for event in events)
+    assert all(
+        isinstance(event, GenerationLifecycleEvent) and event.message.content == []
+        for event in events
+    )
     assert payload not in str(record.call_args)
+
+
+def test_incremental_events_preserve_partial_content_and_snapshot_isolation() -> None:
+    accumulator = MessageAccumulator()
+    accepted = AssistantMessage(id="run:0")
+    saved = None
+    chunks = [
+        Delta(content="first"),
+        Delta(content=" second"),
+        Delta(
+            reasoning_content="plan",
+            thinking_blocks=[ThinkingBlock(thinking="plan", signature="signed")],
+        ),
+        Delta(
+            tool_calls=[
+                ChatCompletionDeltaToolCall(
+                    index=0,
+                    id="call",
+                    function=FunctionCall(name="search", arguments='{"query":"par'),
+                )
+            ]
+        ),
+        Delta(
+            tool_calls=[
+                ChatCompletionDeltaToolCall(
+                    index=0, function=FunctionCall(arguments='tial","limit":3}')
+                )
+            ]
+        ),
+    ]
+    for index, chunk in enumerate(chunks):
+        for event in accumulator.add(_stream_chunk(chunk)):
+            apply_generation_event(accepted, event)
+            # Event consumers cannot change already accepted tool or reasoning data.
+            if isinstance(event, GenerationToolCallEvent):
+                event.tool_call.arguments.clear()
+            elif isinstance(event, ThinkingDeltaEvent) and event.blocks:
+                event.blocks.clear()
+        assert accepted.content == accumulator.message.content
+        if index == 0:
+            saved = accepted.model_copy(deep=True)
+    assert saved is not None and saved.text == "first"
+    assert accepted.text == "first second"
+    assert accepted.thinking_blocks == [
+        ThinkingBlock(thinking="plan", signature="signed")
+    ]
+    assert accepted.tool_calls[0].arguments == {"query": "partial", "limit": 3}
+    assert not accepted.tool_calls[0].arguments_complete
+    for event in accumulator.end():
+        apply_generation_event(accepted, event)
+    assert accepted.id == "run:0"
+    assert accepted.content == accumulator.finish().content
+    assert accepted.tool_calls[0].arguments_complete
+
+
+def test_text_update_payload_does_not_grow_with_accumulated_output() -> None:
+    accumulator = MessageAccumulator()
+    accumulator.add(_stream_chunk(Delta(content="x" * 100_000)))
+    updates = [
+        accumulator.add(_stream_chunk(Delta(content="next")))[0] for _ in range(10)
+    ]
+    assert len({event.model_dump_json() for event in updates}) == 1
+    assert len(updates[0].model_dump_json()) < 200
+    assert accumulator.message.text == "x" * 100_000 + "next" * 10
