@@ -6,7 +6,7 @@ import pytest
 from jira.resources import Issue
 from pytest_mock import MockFixture
 
-from onyx.connectors.jira.connector import _perform_jql_search, process_jira_issue
+from onyx.connectors.jira.connector import perform_jql_search, process_jira_issue
 
 
 @pytest.fixture
@@ -88,7 +88,7 @@ def test_fetch_jira_issues_batch_small_ticket(
     mock_jira_client.search_issues.return_value = [mock_issue_small]
 
     # First get the issues via pagination
-    issues = list(_perform_jql_search(mock_jira_client, "project = TEST", 0, 50))
+    issues = list(perform_jql_search(mock_jira_client, "project = TEST", 0, 50))
     assert len(issues) == 1
 
     # Then process each issue
@@ -113,7 +113,7 @@ def test_fetch_jira_issues_batch_large_ticket(
     mock_jira_client.search_issues.return_value = [mock_issue_large]
 
     # First get the issues via pagination
-    issues = list(_perform_jql_search(mock_jira_client, "project = TEST", 0, 50))
+    issues = list(perform_jql_search(mock_jira_client, "project = TEST", 0, 50))
     assert len(issues) == 1
 
     # Then process each issue
@@ -132,7 +132,7 @@ def test_fetch_jira_issues_batch_mixed_tickets(
     mock_jira_client.search_issues.return_value = [mock_issue_small, mock_issue_large]
 
     # First get the issues via pagination
-    issues = list(_perform_jql_search(mock_jira_client, "project = TEST", 0, 50))
+    issues = list(perform_jql_search(mock_jira_client, "project = TEST", 0, 50))
     assert len(issues) == 2
 
     # Then process each issue
@@ -155,7 +155,7 @@ def test_fetch_jira_issues_batch_custom_size_limit(
     mock_jira_client.search_issues.return_value = [mock_issue_small, mock_issue_large]
 
     # First get the issues via pagination
-    issues = list(_perform_jql_search(mock_jira_client, "project = TEST", 0, 50))
+    issues = list(perform_jql_search(mock_jira_client, "project = TEST", 0, 50))
     assert len(issues) == 2
 
     # Then process each issue

@@ -40,7 +40,7 @@ def test_retrieve_all_slim_docs_skips_permission_resolution(
     permission endpoint, and must leave external_access unset."""
     with (
         patch(
-            "onyx.connectors.jira.connector._perform_jql_search",
+            "onyx.connectors.jira.connector.perform_jql_search",
             return_value=[_make_issue("TEST-1"), _make_issue("TEST-2")],
         ),
         patch.object(JiraConnector, "_get_project_permissions") as mock_get_permissions,
@@ -86,7 +86,7 @@ def test_retrieve_all_slim_docs_perm_sync_resolves_permissions(
     )
     with (
         patch(
-            "onyx.connectors.jira.connector._perform_jql_search",
+            "onyx.connectors.jira.connector.perform_jql_search",
             return_value=[_make_issue("TEST-1")],
         ),
         patch.object(
