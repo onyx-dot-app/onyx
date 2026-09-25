@@ -94,7 +94,8 @@ resource "google_container_cluster" "this" {
   # and this deletes it. The pools below are managed on their own, where a
   # change replaces one pool instead of the whole cluster.
   remove_default_node_pool = true
-  initial_node_count       = 1
+  # Per zone, so a regional cluster briefly runs three default nodes.
+  initial_node_count = 1
 
   # The default pool lives for a few minutes, but without this it runs as the
   # Compute Engine default account, which some organisations disable.
@@ -221,10 +222,11 @@ resource "google_container_node_pool" "this" {
 
   node_locations = length(each.value.node_locations) > 0 ? each.value.node_locations : null
 
-  # Counted per zone, so one here is three nodes on a regional cluster. A
-  # tainted pool starts empty: only pods that ask for it can use it, and those
-  # pods make the autoscaler add a node. That keeps a regional GPU pool from
-  # asking for a GPU in every zone before it settles to one.
+  # GKE counts this per zone, so on a regional cluster the first bring-up
+  # makes one node in each zone of an untainted pool. A tainted pool starts
+  # empty: only pods that ask for it can use it, and those pods make the
+  # autoscaler add a node. That keeps a regional GPU pool from asking for a
+  # GPU in every zone before it settles to one.
   initial_node_count = length(each.value.taints) == 0 && each.value.min_count > 0 ? 1 : 0
 
   # The totals count the whole pool. The per-zone form would triple every
@@ -239,6 +241,7 @@ resource "google_container_node_pool" "this" {
     auto_upgrade = true
   }
 
+  # Also per zone: an upgrade adds max_surge nodes in each zone of the pool.
   upgrade_settings {
     strategy        = "SURGE"
     max_surge       = var.node_pool_max_surge
