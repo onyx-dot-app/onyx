@@ -8,6 +8,7 @@ class EmbeddingProvider(str, Enum):
     GOOGLE = "google"
     LITELLM = "litellm"
     AZURE = "azure"
+    OPENAI_COMPATIBLE = "openai_compatible"
 
 
 class RerankerProvider(str, Enum):

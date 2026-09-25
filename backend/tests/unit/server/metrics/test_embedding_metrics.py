@@ -25,6 +25,7 @@ class TestProviderLabel:
     def test_enum_maps_to_value(self) -> None:
         assert provider_label(EmbeddingProvider.OPENAI) == "openai"
         assert provider_label(EmbeddingProvider.COHERE) == "cohere"
+        assert provider_label(EmbeddingProvider.OPENAI_COMPATIBLE) == "openai_compatible"
 
 
 class TestObserveEmbeddingClient:
