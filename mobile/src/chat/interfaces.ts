@@ -62,5 +62,5 @@ export interface BackendChatSession {
   packets: Packet[][];
   time_created: string;
   time_updated?: string;
-  current_run?: { run_id: number } | null; // set while a run is in flight
+  current_stream?: { stream_id: number } | null; // set while a run is in flight
 }

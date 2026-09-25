@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session, aliased, joinedload, load_only, selectinload
 from sqlalchemy.sql.selectable import CTE
 
 from onyx.agents.coordination import AgentInfo
-from onyx.agents.items import messages_from_items
 from onyx.agents.transcript import RunStatus
 from onyx.chat.models import (
     MAX_DISCOVERED_AGENTS,
@@ -16,6 +15,7 @@ from onyx.chat.models import (
     ResponseRecord,
     SavedAgentContext,
 )
+from onyx.chat.response_items import messages_from_items
 from onyx.configs.constants import MessageType
 from onyx.db.chat import translate_db_search_doc_to_saved_search_doc
 from onyx.db.chat_history import checkpoint_from_summary, find_summary_for_ancestry

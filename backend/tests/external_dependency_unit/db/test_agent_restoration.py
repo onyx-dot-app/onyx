@@ -7,9 +7,6 @@ from sqlalchemy.orm import Session
 
 from onyx.agents.compaction import history_digest
 from onyx.agents.coordination import AgentCoordinator
-from onyx.agents.items import (
-    build_response_items,
-)
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.agents.transcript import (
@@ -18,6 +15,9 @@ from onyx.agents.transcript import (
 )
 from onyx.chat.models import MessageRendering, ResponseRecord
 from onyx.chat.prompt_utils import prepare_prompt
+from onyx.chat.response_items import (
+    build_response_items,
+)
 from onyx.chat.subagents import create_chat_agent_coordinator
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc

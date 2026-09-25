@@ -16,7 +16,6 @@ from onyx.agents.events import (
     ToolStartEvent,
     ToolUpdateEvent,
 )
-from onyx.agents.items import ResponseText, TextPurpose, group_response_items_by_step
 from onyx.agents.models import RunState
 from onyx.agents.transcript import RunStatus
 from onyx.chat.artifacts import project_tool_artifacts
@@ -31,6 +30,11 @@ from onyx.chat.models import (
 )
 from onyx.chat.renderer import MessageRenderer
 from onyx.chat.response import response_record
+from onyx.chat.response_items import (
+    ResponseText,
+    TextPurpose,
+    group_response_items_by_step,
+)
 from onyx.coding_agent.tool_definitions import CODING_AGENT_TOOL_NAME
 from onyx.context.search.models import SearchDoc
 from onyx.deep_research.models import ResearchMessageMetadata, ResearchPhase
@@ -136,7 +140,7 @@ def project_response(
     response = ChatResponseSnapshot(
         answer="".join(
             item.content.text
-            for item in snapshot.items
+            for item in record.items
             if isinstance(item.content, ResponseText)
             and item.content.purpose == TextPurpose.ANSWER
         ),
@@ -177,11 +181,14 @@ def _project_response_display(
     snapshot: RunState, response_id: int, response: ChatResponseSnapshot
 ) -> ChatResponseSnapshot:
     presentation: dict[str, MessageRendering] = {}
+    record = response.response
+    if record is None:
+        raise ValueError("Saved response content is required for display projection")
+    items_by_step = group_response_items_by_step(record.items)
     pending: list[tuple[RunState, str | None]] = [(snapshot, None)]
     while pending:
         node, parent_tool_name = pending.pop()
         call_names: dict[tuple[str, str], str] = {}
-        items_by_step = group_response_items_by_step(node.items)
         for operation in node.operations:
             if operation.tool_call_id is not None:
                 continue

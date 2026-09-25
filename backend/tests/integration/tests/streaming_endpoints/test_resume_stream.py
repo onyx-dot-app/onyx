@@ -78,15 +78,17 @@ def _send_in_background(
     return done
 
 
-def _wait_for_current_run(
+def _wait_for_current_stream(
     chat_session_id: UUID, user: DATestUser, send_done: threading.Event
 ) -> dict | None:
-    """Poll session detail until current_run appears; None if the run ends first."""
+    """Poll session detail until current_stream appears; None if the run ends first."""
     deadline = time.monotonic() + _IN_FLIGHT_WAIT_S
     while time.monotonic() < deadline:
-        current_run = _get_session_detail(chat_session_id, user).get("current_run")
-        if current_run is not None:
-            return current_run
+        current_stream = _get_session_detail(chat_session_id, user).get(
+            "current_stream"
+        )
+        if current_stream is not None:
+            return current_stream
         if send_done.is_set():
             return None
         time.sleep(0.1)
@@ -117,8 +119,10 @@ def test_resume_replays_and_tails_in_flight_run(admin_user: DATestUser) -> None:
     test_chat_session = ChatSessionManager.create(user_performing_action=admin_user)
 
     send_done = _send_in_background(test_chat_session, admin_user, _SLOW_PROMPT)
-    current_run = _wait_for_current_run(test_chat_session.id, admin_user, send_done)
-    assert current_run is not None, "run never became visible as in-flight"
+    current_stream = _wait_for_current_stream(
+        test_chat_session.id, admin_user, send_done
+    )
+    assert current_stream is not None, "run never became visible as in-flight"
 
     # Second client attaches mid-run: cursor-0 replay plus live tail to the end.
     lines = _resume_lines(test_chat_session.id, admin_user)
@@ -158,14 +162,16 @@ def test_resume_idle_session_returns_404(admin_user: DATestUser) -> None:
     assert _resume_lines(test_chat_session.id, admin_user) is None
 
 
-def test_get_chat_session_exposes_current_run(admin_user: DATestUser) -> None:
+def test_get_chat_session_exposes_current_stream(admin_user: DATestUser) -> None:
     LLMProviderManager.create(user_performing_action=admin_user)
     test_chat_session = ChatSessionManager.create(user_performing_action=admin_user)
 
     send_done = _send_in_background(test_chat_session, admin_user, _SLOW_PROMPT)
-    current_run = _wait_for_current_run(test_chat_session.id, admin_user, send_done)
-    assert current_run is not None, "in-flight run must be exposed as current_run"
-    assert current_run["run_id"] > 0
+    current_stream = _wait_for_current_stream(
+        test_chat_session.id, admin_user, send_done
+    )
+    assert current_stream is not None, "in-flight run must be exposed as current_stream"
+    assert current_stream["stream_id"] > 0
 
     assert send_done.wait(timeout=120)
     final_message = _wait_for_completed_assistant_message(test_chat_session, admin_user)

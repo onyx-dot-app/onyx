@@ -12,7 +12,6 @@ from onyx.agents.concurrency import EventDelivery
 from onyx.agents.events import (
     AgentEvent,
 )
-from onyx.agents.items import messages_from_items
 from onyx.agents.models import (
     AgentState,
     PreparedStep,
@@ -23,6 +22,8 @@ from onyx.agents.models import (
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.chat.llm_step import PromptMetadata, prepare_model_messages
+from onyx.chat.response import response_record
+from onyx.chat.response_items import messages_from_items
 from onyx.file_store.models import ChatFileType, ChatLoadedFile
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import GenerationContext
@@ -208,7 +209,7 @@ def test_tool_finalization_has_one_commit_point(replace: bool) -> None:
         == "accepted"
     )
     assert "private metadata" not in "".join(
-        item.model_dump_json() for item in snapshot.items
+        item.model_dump_json() for item in response_record(snapshot).items
     )
 
 
@@ -375,7 +376,9 @@ def test_request_assembly_keeps_logical_tool_context_and_metadata() -> None:
     assert tool_histories == [["original task"]]
     assert result.output.metadata == metadata
     assert run.snapshot().messages[0].metadata == metadata
-    assert messages_from_items(run.snapshot().items)[0].metadata is None
+    assert (
+        messages_from_items(response_record(run.snapshot()).items)[0].metadata is None
+    )
     starts = [event for event in events if event.type == "message_start"]
     assert len(starts) == 1 and starts[0].metadata == metadata
 

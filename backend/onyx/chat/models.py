@@ -5,13 +5,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from onyx.agents.items import ResponseItem
 from onyx.agents.transcript import (
     CompactionCheckpoint,
     RunFailure,
     RunStatus,
 )
 from onyx.cache.interface import CacheBackend
+from onyx.chat.response_items import ResponseItem
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.db.enums import IncognitoRecordMode
@@ -385,7 +385,7 @@ class ChatTurnSetup(BaseModel):
     previous_run_id: str | None = None
     extracted_context_files: ExtractedContextFiles
     # Fences processing status and identifies the buffered stream.
-    processing_key: int
+    stream_id: int
     reasoning_effort: ReasoningEffort
     search_params: SearchParams
     all_injected_file_metadata: dict[str, FileToolMetadata]

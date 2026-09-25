@@ -8,7 +8,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from onyx.agents.checkpoint import CheckpointBinding, SnapshotCodec
 from onyx.agents.coordination import AgentCoordinator
 from onyx.agents.models import (
     AgentState,
@@ -26,9 +25,10 @@ from onyx.agents.tools import (
     PendingToolInput,
     ToolInvocation,
 )
-from onyx.agents.transcript import RunStatus
+from onyx.agents.transcript import OperationSnapshot, RunStatus
 from onyx.chat.agent import ChatAgent
 from onyx.chat.artifacts import ChatSearchResult
+from onyx.chat.checkpoint import CheckpointBinding
 from onyx.chat.models import ChatFeatureState
 from onyx.chat.restoration import feature_payload_types
 from onyx.coding_agent.agent import CodingAgent
@@ -63,6 +63,7 @@ from onyx.tools.tool_implementations.search.search_tool import (
     SearchTool,
 )
 from onyx.tools.tool_runner import bind_tool
+from tests.unit.onyx.agents.checkpoint_storage import CheckpointStorage
 from tests.unit.onyx.agents.fakes import EchoTool, FakeModelClient, ScriptedLLM
 from tests.unit.onyx.agents.test_feature_agents import tool_delta
 
@@ -135,7 +136,7 @@ def test_chat_json_restores_tool_context_from_feature_state() -> None:
             feature_state=original.capture_state(),
         ),
     )
-    encoded = SnapshotCodec(feature_payload_types()).encode(
+    encoded = CheckpointStorage(feature_payload_types()).save(
         snapshot,
         AgentState(),
         CheckpointBinding(tenant_id="tenant", branch_id="branch", context_version="1"),
@@ -143,7 +144,7 @@ def test_chat_json_restores_tool_context_from_feature_state() -> None:
     del original, snapshot
     tool = CaptureContextTool()
     restored = chat(tool)
-    saved = SnapshotCodec(feature_payload_types()).decode(encoded).run_state
+    saved = CheckpointStorage(feature_payload_types()).load(encoded).run_state
     assert saved.progress is not None
     assert isinstance(saved.progress.feature_state, ChatFeatureState)
     restored.restore_state(saved.progress.feature_state)
@@ -238,7 +239,7 @@ def test_chat_suspends_and_resumes_with_fresh_feature_and_model() -> None:
     assert run.wait_until_settled(timeout=5).status == RunStatus.SUSPENDED
     assert run.wait_for_idle(timeout=5)
     checkpoint = run.capture()
-    encoded = SnapshotCodec(feature_payload_types()).encode(
+    encoded = CheckpointStorage(feature_payload_types()).save(
         checkpoint.run_state,
         checkpoint.agent_state,
         CheckpointBinding(tenant_id="tenant", branch_id="branch", context_version="1"),
@@ -247,7 +248,7 @@ def test_chat_suspends_and_resumes_with_fresh_feature_and_model() -> None:
 
     tool = CaptureContextTool()
     restored = chat(tool)
-    checkpoint = SnapshotCodec(feature_payload_types()).decode(encoded)
+    checkpoint = CheckpointStorage(feature_payload_types()).load(encoded)
     restored = ChatAgent(
         messages=checkpoint.agent_state.messages,
         tools=[tool],
@@ -334,7 +335,7 @@ def test_real_feature_resumes_pending_control_call_after_json(kind: str) -> None
     assert run.wait_until_settled(timeout=5).status == RunStatus.SUSPENDED
     assert run.wait_for_idle(timeout=5)
     checkpoint = run.capture()
-    encoded = SnapshotCodec(feature_payload_types()).encode(
+    encoded = CheckpointStorage(feature_payload_types()).save(
         checkpoint.run_state,
         checkpoint.agent_state,
         CheckpointBinding(tenant_id="tenant", branch_id="branch", context_version="1"),
@@ -344,7 +345,7 @@ def test_real_feature_resumes_pending_control_call_after_json(kind: str) -> None
 
     final_model = ScriptedLLM([Delta(content="Answer [6]")], 128000)
     restored = build(final_model)
-    checkpoint = SnapshotCodec(feature_payload_types()).decode(encoded)
+    checkpoint = CheckpointStorage(feature_payload_types()).load(encoded)
     restored = build(final_model, checkpoint.run_state.agent_id, checkpoint.agent_state)
     resumed = restored.agent.resume(checkpoint.run_state)
     resumed.submit(
@@ -516,7 +517,14 @@ def test_chat_checkpoint_preserves_lazy_file_references() -> None:
         run_id="binary",
         agent_id="agent",
         status=RunStatus.SUSPENDED,
+        operations=[
+            OperationSnapshot(step_index=0, message_index=0, status=RunStatus.COMPLETE)
+        ],
         messages=[
+            AssistantMessage(
+                id="generation",
+                content=[ToolCall(id="search", name="search", arguments={})],
+            ),
             ToolResultMessage(
                 tool_call_id="search",
                 tool_name="search",
@@ -526,12 +534,12 @@ def test_chat_checkpoint_preserves_lazy_file_references() -> None:
                     citation_mapping={},
                     staged_files=[ChatFile(filename="result.bin", content=payload)],
                 ),
-            )
+            ),
         ],
         progress=RunProgress(step_limit=2, feature_state=original.capture_state()),
     )
-    codec = SnapshotCodec(feature_payload_types())
-    encoded = codec.encode(
+    codec = CheckpointStorage(feature_payload_types())
+    encoded = codec.save(
         snapshot,
         AgentState(),
         CheckpointBinding(
@@ -541,7 +549,7 @@ def test_chat_checkpoint_preserves_lazy_file_references() -> None:
         ),
     )
     del original, snapshot
-    restored = codec.decode(encoded).run_state
+    restored = codec.load(encoded).run_state
     assert restored.progress is not None
     saved = restored.progress.feature_state
     assert isinstance(saved, ChatFeatureState)
@@ -552,7 +560,7 @@ def test_chat_checkpoint_preserves_lazy_file_references() -> None:
         )
         assert saved.chat_files[0].restore().content == payload
         assert saved.context_files.restore().image_files[0].content == payload
-    result = restored.messages[0]
+    result = restored.messages[1]
     assert isinstance(result, ToolResultMessage)
     assert isinstance(result.details, ChatSearchResult)
     assert result.details.staged_files[0].content == payload
@@ -586,12 +594,12 @@ def test_chat_binary_checkpoint_resumes_new_execution_in_same_coordinator() -> N
         assert run.wait_until_settled(timeout=5).status == RunStatus.SUSPENDED
         assert run.wait_for_idle(timeout=5)
         checkpoint = run.handoff()
-        codec = SnapshotCodec(feature_payload_types())
+        codec = CheckpointStorage(feature_payload_types())
         binding = CheckpointBinding(
             tenant_id="tenant", branch_id="branch", context_version="1"
         )
-        encoded = codec.encode(checkpoint.run_state, checkpoint.agent_state, binding)
-        decoded = codec.decode(encoded, expected_binding=binding)
+        encoded = codec.save(checkpoint.run_state, checkpoint.agent_state, binding)
+        decoded = codec.load(encoded, expected_binding=binding)
         tool = CaptureContextTool()
         restored = ChatAgent(
             messages=decoded.agent_state.messages,

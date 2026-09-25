@@ -21,7 +21,7 @@ from onyx.cache.interface import (
     CacheBackend,
     CacheLock,
 )
-from onyx.db.cache_store import cache_session, expire_cache_if_value
+from onyx.db.cache_store import expire_cache_if_value, set_cache_statement_timeout
 from onyx.db.models import CacheStore
 
 _LIST_KEY_PREFIX = "_q:"
@@ -146,24 +146,31 @@ class PostgresCacheBackend(CacheBackend):
     SQLAlchemy's ``schema_translate_map`` (set by ``get_session_with_tenant``).
     """
 
-    def __init__(self, tenant_id: str, *, control: bool = False) -> None:
+    def __init__(
+        self, tenant_id: str, *, statement_timeout_ms: int | None = None
+    ) -> None:
         self._tenant_id = tenant_id
-        self._control = control
+        self._statement_timeout_ms = statement_timeout_ms
 
     # -- basic key/value ---------------------------------------------------
 
     def get(self, key: str) -> bytes | None:
+        from onyx.db.engine.sql_engine import get_session_with_tenant
+
         stmt = select(CacheStore.value).where(
             CacheStore.key == key,
             or_(CacheStore.expires_at.is_(None), CacheStore.expires_at > func.now()),
         )
-        with cache_session(self._tenant_id, control=self._control) as session:
+        with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            set_cache_statement_timeout(session, self._statement_timeout_ms)
             value = session.execute(stmt).scalar_one_or_none()
         if value is None:
             return None
         return bytes(value)
 
     def getdel(self, key: str) -> bytes | None:
+        from onyx.db.engine.sql_engine import get_session_with_tenant
+
         stmt = (
             delete(CacheStore)
             .where(
@@ -175,7 +182,8 @@ class PostgresCacheBackend(CacheBackend):
             )
             .returning(CacheStore.value)
         )
-        with cache_session(self._tenant_id, control=self._control) as session:
+        with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            set_cache_statement_timeout(session, self._statement_timeout_ms)
             value = session.execute(stmt).scalar_one_or_none()
             session.commit()
         if value is None:
@@ -188,6 +196,8 @@ class PostgresCacheBackend(CacheBackend):
         value: str | bytes | int | float,
         ex: int | None = None,
     ) -> None:
+        from onyx.db.engine.sql_engine import get_session_with_tenant
+
         value_bytes = _to_bytes(value)
         expires_at = (
             datetime.now(timezone.utc) + timedelta(seconds=ex)
@@ -202,7 +212,8 @@ class PostgresCacheBackend(CacheBackend):
                 set_={"value": value_bytes, "expires_at": expires_at},
             )
         )
-        with cache_session(self._tenant_id, control=self._control) as session:
+        with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            set_cache_statement_timeout(session, self._statement_timeout_ms)
             session.execute(stmt)
             session.commit()
 
@@ -212,6 +223,8 @@ class PostgresCacheBackend(CacheBackend):
         value: str | bytes | int | float,
         ex: int | None = None,
     ) -> bool:
+        from onyx.db.engine.sql_engine import get_session_with_tenant
+
         value_bytes = _to_bytes(value)
         expires_at = (
             datetime.now(timezone.utc) + timedelta(seconds=ex)
@@ -231,17 +244,23 @@ class PostgresCacheBackend(CacheBackend):
             )
             .returning(CacheStore.key)
         )
-        with cache_session(self._tenant_id, control=self._control) as session:
+        with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            set_cache_statement_timeout(session, self._statement_timeout_ms)
             stored_key = session.execute(stmt).scalar_one_or_none()
             session.commit()
         return stored_key is not None
 
     def delete(self, key: str) -> None:
-        with cache_session(self._tenant_id, control=self._control) as session:
+        from onyx.db.engine.sql_engine import get_session_with_tenant
+
+        with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            set_cache_statement_timeout(session, self._statement_timeout_ms)
             session.execute(delete(CacheStore).where(CacheStore.key == key))
             session.commit()
 
     def exists(self, key: str) -> bool:
+        from onyx.db.engine.sql_engine import get_session_with_tenant
+
         stmt = (
             select(CacheStore.key)
             .where(
@@ -253,28 +272,39 @@ class PostgresCacheBackend(CacheBackend):
             )
             .limit(1)
         )
-        with cache_session(self._tenant_id, control=self._control) as session:
+        with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            set_cache_statement_timeout(session, self._statement_timeout_ms)
             return session.execute(stmt).first() is not None
 
     # -- TTL ---------------------------------------------------------------
 
     def expire(self, key: str, seconds: int) -> None:
+        from onyx.db.engine.sql_engine import get_session_with_tenant
+
         new_exp = datetime.now(timezone.utc) + timedelta(seconds=seconds)
         stmt = (
             update(CacheStore).where(CacheStore.key == key).values(expires_at=new_exp)
         )
-        with cache_session(self._tenant_id, control=self._control) as session:
+        with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            set_cache_statement_timeout(session, self._statement_timeout_ms)
             session.execute(stmt)
             session.commit()
 
     def expire_if_value(self, key: str, expected: bytes, seconds: int) -> bool:
         return expire_cache_if_value(
-            self._tenant_id, key, expected, seconds, control=self._control
+            self._tenant_id,
+            key,
+            expected,
+            seconds,
+            statement_timeout_ms=self._statement_timeout_ms,
         )
 
     def ttl(self, key: str) -> int:
+        from onyx.db.engine.sql_engine import get_session_with_tenant
+
         stmt = select(CacheStore.expires_at).where(CacheStore.key == key)
-        with cache_session(self._tenant_id, control=self._control) as session:
+        with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            set_cache_statement_timeout(session, self._statement_timeout_ms)
             result = session.execute(stmt).first()
         if result is None:
             return TTL_KEY_NOT_FOUND
@@ -305,6 +335,8 @@ class PostgresCacheBackend(CacheBackend):
                 "timeout=0 would block the calling thread indefinitely "
                 "with no way to interrupt short of process termination."
             )
+        from onyx.db.engine.sql_engine import get_session_with_tenant
+
         deadline = time.monotonic() + timeout
         while True:
             for key in keys:
@@ -324,7 +356,8 @@ class PostgresCacheBackend(CacheBackend):
                     .limit(1)
                     .with_for_update(skip_locked=True)
                 )
-                with cache_session(self._tenant_id, control=self._control) as session:
+                with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+                    set_cache_statement_timeout(session, self._statement_timeout_ms)
                     row = session.execute(stmt).scalars().first()
                     if row is not None:
                         value = bytes(row.value) if row.value else b""

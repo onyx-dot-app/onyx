@@ -205,7 +205,7 @@ export interface BackendChatSession {
   owner_name: string | null;
   packets: Packet[][];
   // Buffered work can be live or interrupted.
-  current_run?: { run_id: number; is_running: boolean } | null;
+  current_stream?: { stream_id: number; is_running: boolean } | null;
   // True for sessions pinned to an incognito record mode.
   incognito?: boolean;
 }

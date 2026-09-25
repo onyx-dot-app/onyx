@@ -16,7 +16,7 @@ from onyx.chat import stream_buffer
 from onyx.chat.chat_processing_checker import (
     FENCE_TTL,
     PROCESSING_STALE_AFTER_S,
-    get_processing_key,
+    get_processing_stream_id,
     is_chat_session_processing,
     set_processing_status,
 )
@@ -33,12 +33,12 @@ from onyx.server.utils import get_json_line
 from onyx.utils.threadpool_concurrency import ContextThreadPoolExecutor
 from tests.unit.fakes import FakeCache
 
-_RUN_ID = 42
+_STREAM_ID = 42
 
 
 def _make_writer(cache: FakeCache, session_id: UUID) -> StreamBufferWriter:
     return StreamBufferWriter(
-        cache=cache, chat_session_id=session_id, processing_key=_RUN_ID
+        cache=cache, chat_session_id=session_id, stream_id=_STREAM_ID
     )
 
 
@@ -75,7 +75,7 @@ def test_append_flush_and_cursor_read_roundtrip() -> None:
     writer.append_line('{"c": 3}\n')
     writer.flush()
 
-    read = read_stream_chunks(cache, session_id, _RUN_ID, cursor=0)
+    read = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
     assert read is not None
     assert "".join(read.blocks) == '{"a": 1}\n{"b": 2}\n{"c": 3}\n'
     assert read.next_cursor == 2
@@ -83,7 +83,7 @@ def test_append_flush_and_cursor_read_roundtrip() -> None:
     assert not read.gap
 
     # Cursor skips already-replayed chunks.
-    later = read_stream_chunks(cache, session_id, _RUN_ID, cursor=1)
+    later = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=1)
     assert later is not None
     assert "".join(later.blocks) == '{"c": 3}\n'
     assert later.next_cursor == 2
@@ -121,7 +121,7 @@ def test_overflow_marks_truncated_and_stops_writing(
     writer.append_line('{"after": "overflow"}\n')
     writer.flush()
 
-    read = read_stream_chunks(cache, session_id, _RUN_ID, cursor=0)
+    read = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
     assert read is not None
     assert read.gap
     assert read.blocks == []
@@ -134,7 +134,7 @@ def test_mark_done_switches_ttls_and_sets_done() -> None:
     writer.append_line('{"a": 1}\n')
     writer.mark_done()
 
-    read = read_stream_chunks(cache, session_id, _RUN_ID, cursor=0)
+    read = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
     assert read is not None
     assert read.done
     assert not read.gap
@@ -164,7 +164,7 @@ def test_max_chunks_bounds_each_read() -> None:
         writer.flush()
     writer.mark_done()
 
-    first = read_stream_chunks(cache, session_id, _RUN_ID, cursor=0, max_chunks=2)
+    first = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0, max_chunks=2)
     assert first is not None
     assert "".join(first.blocks) == '{"n": 0}\n{"n": 1}\n'
     assert first.next_cursor == 2
@@ -174,14 +174,14 @@ def test_max_chunks_bounds_each_read() -> None:
     assert first.done
 
     rest = read_stream_chunks(
-        cache, session_id, _RUN_ID, cursor=first.next_cursor, max_chunks=2
+        cache, session_id, _STREAM_ID, cursor=first.next_cursor, max_chunks=2
     )
     assert rest is not None
     assert "".join(rest.blocks) == '{"n": 2}\n'
     assert rest.next_cursor == 3
 
     empty = read_stream_chunks(
-        cache, session_id, _RUN_ID, cursor=rest.next_cursor, max_chunks=2
+        cache, session_id, _STREAM_ID, cursor=rest.next_cursor, max_chunks=2
     )
     assert empty is not None
     assert empty.blocks == []
@@ -200,7 +200,7 @@ def test_missing_chunk_is_a_gap() -> None:
     # Simulate allkeys-lru evicting the first chunk.
     cache.delete(next(k for k in cache.store if k.endswith(":0")))
 
-    read = read_stream_chunks(cache, session_id, _RUN_ID, cursor=0)
+    read = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
     assert read is not None
     assert read.gap
     assert read.blocks == []
@@ -215,14 +215,14 @@ def test_flush_failure_marks_truncated_and_persists_meta() -> None:
     writer.append_line('{"a": 1}\n')
     writer.flush()
 
-    meta_key = f"chatstream_{session_id}_{_RUN_ID}:meta"
+    meta_key = f"chatstream_{session_id}_{_STREAM_ID}:meta"
     meta_raw = cache.store.get(meta_key)
     assert meta_raw is not None
     meta = StreamBufferMeta.model_validate_json(meta_raw.decode())
     assert meta.truncated
     assert meta.chunk_count == 0
 
-    read = read_stream_chunks(cache, session_id, _RUN_ID, cursor=0)
+    read = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
     assert read is not None
     assert read.gap
     assert read.blocks == []
@@ -231,9 +231,9 @@ def test_flush_failure_marks_truncated_and_persists_meta() -> None:
 def test_corrupt_meta_reads_as_missing_buffer() -> None:
     cache = FakeCache()
     session_id = uuid4()
-    cache.set(f"chatstream_{session_id}_{_RUN_ID}:meta", b"not json{", ex=600)
+    cache.set(f"chatstream_{session_id}_{_STREAM_ID}:meta", b"not json{", ex=600)
 
-    assert read_stream_chunks(cache, session_id, _RUN_ID, cursor=0) is None
+    assert read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0) is None
 
 
 def test_truncation_cache_failure_does_not_prevent_content_free_cleanup(
@@ -243,7 +243,7 @@ def test_truncation_cache_failure_does_not_prevent_content_free_cleanup(
     writer = StreamBufferWriter(
         cache=cache,
         chat_session_id=uuid4(),
-        processing_key=_RUN_ID,
+        stream_id=_STREAM_ID,
         delete_on_done=True,
     )
     writer.append_line('{"text": "private"}\n')
@@ -299,7 +299,7 @@ def test_concurrent_delivery_keeps_reader_and_cache_order(
     delivery.publish(first)
 
     assert list(delivery.reader) == [first, second]
-    saved = read_stream_chunks(cache, session_id, _RUN_ID, cursor=0)
+    saved = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
     assert saved is not None
     assert saved.done
     assert "".join(saved.blocks) == "".join(
@@ -314,13 +314,13 @@ def test_stale_worker_retains_buffer_identity_without_reporting_live() -> None:
 
     cache = ProcessingCache()
     session_id = uuid4()
-    set_processing_status(session_id, cache, True, processing_key=_RUN_ID)
+    set_processing_status(session_id, cache, True, stream_id=_STREAM_ID)
     assert is_chat_session_processing(session_id, cache)
     for key in cache.expiries:
         cache.expiries[key] = int(FENCE_TTL - PROCESSING_STALE_AFTER_S)
     assert not is_chat_session_processing(session_id, cache)
-    assert get_processing_key(session_id, cache) == _RUN_ID
-    set_processing_status(session_id, cache, True, processing_key=_RUN_ID)
+    assert get_processing_stream_id(session_id, cache) == _STREAM_ID
+    set_processing_status(session_id, cache, True, stream_id=_STREAM_ID)
     assert is_chat_session_processing(session_id, cache)
 
 
@@ -370,7 +370,7 @@ def test_event_delivery_and_cache_writes_share_worker(
         Packet(obj=OverallStop(stop_reason="control")),
         Packet(obj=OverallStop(stop_reason="second")),
     ]
-    saved = read_stream_chunks(cache, session_id, _RUN_ID, cursor=0)
+    saved = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
     assert saved is not None and saved.done and not saved.gap
     assert len(workers) == 1
     assert get_ident() not in workers
@@ -421,7 +421,7 @@ def test_delivery_finish_drains_accepted_agent_events() -> None:
         Packet(obj=OverallStop(stop_reason=reason)) for reason in ("first", "second")
     ]
     assert list(output.reader) == packets
-    saved = read_stream_chunks(cache, session_id, _RUN_ID, cursor=0)
+    saved = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
     assert saved is not None and saved.done and not saved.gap
     assert "".join(saved.blocks) == "".join(
         get_json_line(packet.model_dump()) for packet in packets

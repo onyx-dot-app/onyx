@@ -76,7 +76,7 @@ def get_shared_cache_backend() -> CacheBackend:
 
 
 def get_control_cache_backend(*, tenant_id: str | None = None) -> CacheBackend:
-    """Use short I/O deadlines for polling that must not block execution control."""
+    """Use short Redis I/O or PostgreSQL statement timeouts for execution control."""
     if tenant_id is None:
         from shared_configs.contextvars import get_current_tenant_id
 
@@ -89,5 +89,5 @@ def get_control_cache_backend(*, tenant_id: str | None = None) -> CacheBackend:
     if CACHE_BACKEND == CacheBackendType.POSTGRES:
         from onyx.cache.postgres_backend import PostgresCacheBackend
 
-        return PostgresCacheBackend(tenant_id, control=True)
+        return PostgresCacheBackend(tenant_id, statement_timeout_ms=1000)
     raise ValueError(f"Unsupported CACHE_BACKEND={CACHE_BACKEND!r}")

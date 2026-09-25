@@ -15,7 +15,6 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.agents.items import build_response_items, messages_from_items
 from onyx.chat.incognito import delete_incognito_generated_files
 from onyx.chat.incognito_context import (
     append_incognito_message,
@@ -27,6 +26,7 @@ from onyx.chat.incognito_context import (
 )
 from onyx.chat.llm_step import PromptMetadata
 from onyx.chat.models import ResponseRecord, SavedAgentContext
+from onyx.chat.response_items import build_response_items, messages_from_items
 from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import (

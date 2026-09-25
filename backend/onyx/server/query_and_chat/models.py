@@ -263,10 +263,10 @@ class SetPreferredResponseRequest(BaseModel):
     preferred_response_id: int
 
 
-class CurrentRunInfo(BaseModel):
+class CurrentStreamInfo(BaseModel):
     """Buffered response with worker liveness for replay or live reconnection."""
 
-    run_id: int
+    stream_id: int
     is_running: bool
 
 
@@ -286,7 +286,7 @@ class ChatSessionDetailResponse(BaseModel):
     owner_name: str | None = None
     packets: list[list[Packet]]
     # The buffer also retains interrupted work until its cache TTL expires.
-    current_run: CurrentRunInfo | None = None
+    current_stream: CurrentStreamInfo | None = None
     # True for sessions pinned to an incognito record mode, so a reload can
     # restore the incognito UI state.
     incognito: bool = False

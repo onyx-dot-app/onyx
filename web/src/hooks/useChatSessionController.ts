@@ -38,9 +38,9 @@ import {
 import { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 
-// Runs currently being re-attached; module-level so effect re-runs (incl.
-// strict mode) can't start a second tail for the same run.
-const resumingRuns = new Set<number>();
+// Streams currently being re-attached; module-level so effect re-runs (incl.
+// strict mode) can't start a second tail for the same stream.
+const resumingStreams = new Set<number>();
 
 interface UseChatSessionControllerProps {
   existingChatSessionId: string | null;
@@ -270,22 +270,22 @@ export default function useChatSessionController({
       setIsFetchingChatMessages(chatSession.chat_session_id, false);
 
       // Recover buffered output and tail it if the worker is live. Single-model only — a
-      // multi-model run_id is the user message, not an assistant node, so it
+      // multi-model stream_id is the user message, not an assistant node, so it
       // fails the node-type check and keeps the refresh-after-completion
       // behavior.
-      async function resumeInFlightRun(
+      async function resumeInFlightStream(
         sessionId: string,
-        runId: number,
+        streamId: number,
         isRunning: boolean,
         messageMap: Map<number, Message>
       ) {
-        const node = messageMap.get(runId);
-        if (!node || resumingRuns.has(runId)) {
+        const node = messageMap.get(streamId);
+        if (!node || resumingStreams.has(streamId)) {
           return;
         }
         // Added and deleted in this function only, so an entry can never
         // outlive its tail.
-        resumingRuns.add(runId);
+        resumingStreams.add(streamId);
         // The reserved row's placeholder text would render above the live
         // timeline.
         node.message = "";
@@ -312,7 +312,7 @@ export default function useChatSessionController({
           flush();
           useChatSessionStore
             .getState()
-            .updateSessionData(sessionId, { processingKey: undefined });
+            .updateSessionData(sessionId, { streamId: undefined });
         };
         // handleSSEStream only releases the connection via this signal —
         // bailing out of the loop alone leaves the SSE response open.
@@ -353,13 +353,16 @@ export default function useChatSessionController({
             }
           }
         } catch (error) {
-          console.error("Failed to resume in-flight run", { runId, error });
+          console.error("Failed to resume in-flight stream", {
+            streamId,
+            error,
+          });
         } finally {
           abortController.abort();
           if (trailingFlush !== null) {
             clearTimeout(trailingFlush);
           }
-          resumingRuns.delete(runId);
+          resumingStreams.delete(streamId);
           if (stillCurrent()) {
             if (isRunning) flush();
             let refreshed = false;
@@ -373,8 +376,8 @@ export default function useChatSessionController({
                 const settled: BackendChatSession =
                   await settledResponse.json();
                 const interrupted =
-                  settled.current_run?.run_id === runId &&
-                  !settled.current_run.is_running;
+                  settled.current_stream?.stream_id === streamId &&
+                  !settled.current_stream.is_running;
                 if (interrupted) {
                   showInterruptedResponse();
                 } else {
@@ -395,20 +398,22 @@ export default function useChatSessionController({
         }
       }
 
-      const currentRun = chatSession.current_run;
+      const currentStream = chatSession.current_stream;
       useChatSessionStore
         .getState()
         .updateSessionData(chatSession.chat_session_id, {
-          processingKey: currentRun?.is_running ? currentRun.run_id : undefined,
+          streamId: currentStream?.is_running
+            ? currentStream.stream_id
+            : undefined,
         });
       if (
-        currentRun &&
-        newMessageMap.get(currentRun.run_id)?.type === "assistant"
+        currentStream &&
+        newMessageMap.get(currentStream.stream_id)?.type === "assistant"
       ) {
-        void resumeInFlightRun(
+        void resumeInFlightStream(
           chatSession.chat_session_id,
-          currentRun.run_id,
-          currentRun.is_running,
+          currentStream.stream_id,
+          currentStream.is_running,
           newMessageMap
         );
       }
