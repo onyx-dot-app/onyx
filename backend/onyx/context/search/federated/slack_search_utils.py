@@ -202,7 +202,7 @@ def extract_date_range_from_query(
             flow=LLMFlow.SLACK_DATE_EXTRACTION,
             input_messages=[prompt_msg],
         ) as span_generation:
-            llm_response = llm.invoke(prompt_msg, stream=True)
+            llm_response = llm.invoke(prompt_msg)
             record_llm_response(span_generation, llm_response)
             response = llm_response_to_string(llm_response)
 
@@ -613,7 +613,7 @@ def expand_query_with_llm(query_text: str, llm: LLM) -> list[str]:
         with llm_generation_span(
             llm=llm, flow=LLMFlow.SLACK_QUERY_EXPANSION, input_messages=[prompt]
         ) as span_generation:
-            llm_response = llm.invoke(prompt, stream=True)
+            llm_response = llm.invoke(prompt)
             record_llm_response(span_generation, llm_response)
             response = llm_response_to_string(llm_response)
 

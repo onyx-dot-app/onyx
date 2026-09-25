@@ -19,7 +19,7 @@ import DocumentSetCard from "@/sections/cards/DocumentSetCard";
 import CollapsibleSection from "@/app/admin/agents/CollapsibleSection";
 import { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 import { StandardAnswerCategoryDropdownField } from "@/components/standardAnswers/StandardAnswerCategoryDropdown";
-import { InputSingleSelect } from "@opal/components";
+import { InputSingleComboBox } from "@opal/components";
 import { RadioGroup } from "@/components/ui/radio-group";
 import { RadioGroupItemField } from "@/components/ui/RadioGroupItemField";
 import { AlertCircle } from "lucide-react";
@@ -36,6 +36,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { CheckboxField } from "@/refresh-components/form/LabeledCheckboxField";
+import { isPermSynced } from "@/lib/connectors/accessType";
 
 export interface SlackChannelConfigFormFieldsProps {
   isUpdate: boolean;
@@ -67,8 +68,8 @@ export function SlackChannelConfigFormFields({
 
   // Helper function to check if a document set contains sync connectors
   const documentSetContainsSync = (documentSet: DocumentSetSummary) => {
-    return documentSet.cc_pair_summaries.some(
-      (summary) => summary.access_type === "sync"
+    return documentSet.cc_pair_summaries.some((summary) =>
+      isPermSynced(summary.access_type)
     );
   };
 
@@ -127,7 +128,7 @@ export function SlackChannelConfigFormFields({
   const searchAgentOptions = useMemo(
     () =>
       availableAgents.map((persona) => ({
-        label: persona.name,
+        title: persona.name,
         value: String(persona.id),
       })),
     [availableAgents]
@@ -136,7 +137,7 @@ export function SlackChannelConfigFormFields({
   const nonSearchAgentOptions = useMemo(
     () =>
       nonSearchAgents.map((persona) => ({
-        label: persona.name,
+        title: persona.name,
         value: String(persona.id),
       })),
     [nonSearchAgents]
@@ -362,7 +363,7 @@ export function SlackChannelConfigFormFields({
               </>
             </SubLabel>
 
-            <InputSingleSelect
+            <InputSingleComboBox
               placeholder={t("form.agent.placeholder")}
               value={String(values.persona_id ?? "")}
               onValueChange={(val) =>
@@ -423,7 +424,7 @@ export function SlackChannelConfigFormFields({
               </>
             </SubLabel>
 
-            <InputSingleSelect
+            <InputSingleComboBox
               placeholder={t("form.agent.placeholder")}
               value={String(values.persona_id ?? "")}
               onValueChange={(val) =>

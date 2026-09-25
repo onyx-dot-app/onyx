@@ -30,6 +30,71 @@ describe("InputTypeInTag", () => {
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
   });
 
+  test("caps the chip rows at maxRows and follows a new chip", () => {
+    const tag = (i: number) => ({ id: String(i), label: `Tag ${i}` });
+    const { container, rerender } = render(
+      <InputTypeInTag
+        tags={[tag(1)]}
+        value=""
+        onChange={jest.fn()}
+        placeholder="Tag"
+        onAdd={jest.fn()}
+        onRemoveTag={jest.fn()}
+        minRows={2}
+        maxRows={4}
+      />
+    );
+
+    const rows = container.querySelector<HTMLElement>(
+      ".opal-input-type-in-tag-tags"
+    );
+    expect(rows).not.toBeNull();
+    if (!rows) return;
+    expect(rows.style.getPropertyValue("--opal-input-type-in-tag-rows")).toBe(
+      "2"
+    );
+    expect(
+      rows.style.getPropertyValue("--opal-input-type-in-tag-max-rows")
+    ).toBe("4");
+
+    // jsdom has no layout: scrollHeight is what the field scrolls to.
+    Object.defineProperty(rows, "scrollHeight", { value: 200 });
+    rerender(
+      <InputTypeInTag
+        tags={[tag(1), tag(2)]}
+        value=""
+        onChange={jest.fn()}
+        placeholder="Tag"
+        onAdd={jest.fn()}
+        onRemoveTag={jest.fn()}
+        minRows={2}
+        maxRows={4}
+      />
+    );
+    expect(rows.scrollTop).toBe(200);
+  });
+
+  test("maxRows never drops below minRows", () => {
+    const { container } = render(
+      <InputTypeInTag
+        tags={[]}
+        value=""
+        onChange={jest.fn()}
+        placeholder="Tag"
+        onAdd={jest.fn()}
+        onRemoveTag={jest.fn()}
+        minRows={3}
+        maxRows={1}
+      />
+    );
+    const rows = container.querySelector<HTMLElement>(
+      ".opal-input-type-in-tag-tags"
+    );
+    expect(
+      rows?.style.getPropertyValue("--opal-input-type-in-tag-max-rows")
+    ).toBe("3");
+  });
+
   test("Enter commits the trimmed text through onAdd", async () => {
     const handleAdd = jest.fn();
     const user = setupUser();

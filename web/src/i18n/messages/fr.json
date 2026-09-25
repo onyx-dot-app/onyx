@@ -2152,12 +2152,29 @@
           "title": "Erreur de synchronisation de l'appartenance aux groupes"
         }
       },
+      "groupRestriction": {
+        "empty": {
+          "description": "Tout le monde conserve l'accès synchronisé depuis la source.",
+          "title": "Aucune restriction tant qu'aucun groupe n'est ajouté"
+        },
+        "memberCount": "{count, plural, one {# membre} other {# membres}}",
+        "picker": {
+          "placeholder": "Ajouter des groupes pour restreindre l'accès à ce connecteur"
+        },
+        "remove": {
+          "tooltip": "Retirer {name}"
+        },
+        "toggle": {
+          "description": "Limite l'accès aux membres des groupes sélectionnés. Les permissions synchronisées s'appliquent toujours.",
+          "title": "Restreindre l'accès à des groupes"
+        }
+      },
       "groupSelector": {
         "assignGroupAccess": {
           "title": "Attribuer l'accès des groupes à ce connecteur"
         },
         "assignToGroup": {
-          "title": "Attribuer ce connecteur à un groupe"
+          "title": "Groupes pouvant gérer ce connecteur"
         },
         "scopedManagerGroups": {
           "description": "Sélectionnez un ou plusieurs des groupes que vous gérez pour donner accès à ce connecteur"
@@ -7510,11 +7527,6 @@
       "appName": {
         "description": "Ce nom apparaîtra dans toute l'application et remplacera \"Onyx\" dans l'interface.",
         "label": "Nom d'affichage de l'application"
-      },
-      "branding": {
-        "description": "Supprimez « powered by Onyx » et les autres présences de la marque Onyx dans l'application.",
-        "enterpriseTooltip": "Masquer la marque Onyx est une fonctionnalité du forfait Enterprise.",
-        "label": "Masquer la marque Onyx"
       },
       "chatFooter": {
         "description": "Ajoutez du contenu markdown pour des avertissements ou des informations supplémentaires.",
@@ -13071,7 +13083,8 @@
     },
     "select": {
       "emptySet": "Aucun élément trouvé",
-      "invalidOption": "Veuillez sélectionner une option valide dans la liste"
+      "invalidOption": "Veuillez sélectionner une option valide dans la liste",
+      "searchPlaceholder": "Rechercher"
     },
     "settingsHeader": {
       "cancel": "Annuler"

@@ -7,7 +7,7 @@ import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
 import { InputTypeIn } from "@opal/components";
 import { InputFile } from "@opal/components";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelect } from "@opal/components";
 import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import { ImageGenFormWrapper } from "@/views/admin/ImageGenerationPage/forms/ImageGenFormWrapper";
 import {
@@ -96,6 +96,7 @@ function VertexFormFields(
   props: ImageGenFormChildProps<VertexImageGenFormValues>
 ) {
   const t = useTranslations("admin.imageGeneration");
+  const tInputSelect = useTranslations("common.inputSelect");
   const {
     apiStatus,
     showApiMessage,
@@ -126,31 +127,29 @@ function VertexFormFields(
             >
               <FormField.Label>{t("form.authMethod.label")}</FormField.Label>
               <FormField.Control>
-                <InputSelect
+                <InputSingleSelect
                   value={field.value}
                   onValueChange={(value) => helper.setValue(value)}
                   disabled={disabled}
-                >
-                  <InputSelect.Trigger />
-                  <InputSelect.Content>
-                    <InputSelect.Item
-                      value={AUTH_METHOD_SERVICE_ACCOUNT}
-                      description={t(
+                  defaultOption={AUTH_METHOD_SERVICE_ACCOUNT}
+                  placeholder={tInputSelect("placeholder.fallback")}
+                  options={[
+                    {
+                      value: AUTH_METHOD_SERVICE_ACCOUNT,
+                      title: t("form.authMethod.serviceAccount.label"),
+                      description: t(
                         "form.authMethod.serviceAccount.description"
-                      )}
-                    >
-                      {t("form.authMethod.serviceAccount.label")}
-                    </InputSelect.Item>
-                    <InputSelect.Item
-                      value={AUTH_METHOD_WORKLOAD_IDENTITY}
-                      description={t(
+                      ),
+                    },
+                    {
+                      value: AUTH_METHOD_WORKLOAD_IDENTITY,
+                      title: t("form.authMethod.workloadIdentity.label"),
+                      description: t(
                         "form.authMethod.workloadIdentity.description"
-                      )}
-                    >
-                      {t("form.authMethod.workloadIdentity.label")}
-                    </InputSelect.Item>
-                  </InputSelect.Content>
-                </InputSelect>
+                      ),
+                    },
+                  ]}
+                />
               </FormField.Control>
               <FormField.Message
                 messages={{

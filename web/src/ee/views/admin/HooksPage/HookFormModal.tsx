@@ -14,7 +14,7 @@ import {
 } from "@opal/icons";
 import { BasicModalFooter, Modal } from "@opal/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelect } from "@opal/components";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { Section } from "@/layouts/general-layouts";
 import { Content, ContentAction, InputVertical, toast } from "@opal/layouts";
@@ -328,41 +328,33 @@ export default function HookFormModal({
                     title={t("form.failStrategy.title")}
                     subDescription={failStrategyDescription}
                   >
-                    <InputSelect
+                    <InputSingleSelect
                       value={values.fail_strategy}
                       onValueChange={(v) =>
                         setFieldValue("fail_strategy", v as HookFailStrategy)
                       }
                       disabled={isSubmitting}
-                    >
-                      <InputSelect.Trigger
-                        placeholder={t("form.failStrategy.placeholder")}
-                      />
-                      <InputSelect.Content>
-                        <InputSelect.Item value="soft">
-                          {t("form.failStrategy.soft.label")}
-                          {spec?.default_fail_strategy === "soft" && (
-                            <>
-                              {" "}
-                              <Text color="text-03">
-                                {t("form.failStrategy.default.label")}
-                              </Text>
-                            </>
-                          )}
-                        </InputSelect.Item>
-                        <InputSelect.Item value="hard">
-                          {t("form.failStrategy.hard.label")}
-                          {spec?.default_fail_strategy === "hard" && (
-                            <>
-                              {" "}
-                              <Text color="text-03">
-                                {t("form.failStrategy.default.label")}
-                              </Text>
-                            </>
-                          )}
-                        </InputSelect.Item>
-                      </InputSelect.Content>
-                    </InputSelect>
+                      defaultOption={spec?.default_fail_strategy ?? "hard"}
+                      placeholder={t("form.failStrategy.placeholder")}
+                      options={[
+                        {
+                          value: "soft",
+                          title: t("form.failStrategy.soft.label"),
+                          description:
+                            spec?.default_fail_strategy === "soft"
+                              ? t("form.failStrategy.default.label")
+                              : undefined,
+                        },
+                        {
+                          value: "hard",
+                          title: t("form.failStrategy.hard.label"),
+                          description:
+                            spec?.default_fail_strategy === "hard"
+                              ? t("form.failStrategy.default.label")
+                              : undefined,
+                        },
+                      ]}
+                    />
                   </InputVertical>
 
                   <TimeoutField spec={spec} />

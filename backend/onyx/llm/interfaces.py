@@ -4,6 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from onyx.configs.chat_configs import LLM_INVOKE_TIMEOUT_S, LLM_SOCKET_READ_TIMEOUT
 from onyx.llm.model_response import ModelResponse, ModelResponseStream
 from onyx.llm.models import (
     LanguageModelInput,
@@ -93,20 +94,17 @@ class LLM(abc.ABC):
         tools: list[dict] | None = None,
         tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
-        timeout_override: int | None = None,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
-        total_timeout_override: float | None = None,
-        stream: bool = False,
+        total_timeout_s: float = LLM_INVOKE_TIMEOUT_S,
     ) -> "ModelResponse":
-        """Return one complete response.
+        """Return one complete response, or raise ``LLMTimeoutError`` after
+        ``total_timeout_s`` seconds.
 
-        timeout_override bounds each socket read. total_timeout_override caps
-        the whole call in wall-clock time. stream=True lets the implementation
-        stream from the provider and reassemble the answer; use it for long or
-        unbounded answers, because a non-streamed request has no chunks and the
-        read timeout then bounds the whole response.
+        Use ``stream`` when you want output as it arrives. The timeout is always
+        finite: our Celery pools disable Celery's own time limits, so a call that
+        never ends would hold its worker thread forever.
         """
         raise NotImplementedError
 
@@ -116,9 +114,16 @@ class LLM(abc.ABC):
         tools: list[dict] | None = None,
         tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
-        timeout_override: int | None = None,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
+        stall_timeout_s: int = LLM_SOCKET_READ_TIMEOUT,
     ) -> Iterator[ModelResponseStream]:
+        """Yield deltas as they arrive.
+
+        ``stall_timeout_s`` bounds the gap between deltas, not the whole run. A
+        stream takes no total timeout: its consumer sees progress and owns the
+        end-to-end deadline, and some runs (deep research reports) take many
+        minutes.
+        """
         raise NotImplementedError

@@ -69,6 +69,7 @@ import { useUser } from "@/providers/UserProvider";
 import { resolveAllErrorsForCCPair } from "@/lib/targeted_reindex";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { can } from "@/lib/permissions/resource-actions";
+import { isPermSynced } from "@/lib/connectors/accessType";
 // synchronize these validations with the SQLAlchemy connector class until we have a
 // centralized schema for both frontend and backend
 const RefreshFrequencySchema = Yup.object().shape({
@@ -666,7 +667,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
             </div>
           </div>
 
-          {ccPair.access_type === "sync" && (
+          {isPermSynced(ccPair.access_type) && (
             <>
               <div className="w-[200px]">
                 {/* TODO: Remove className and switch to text03 once Text is fully integrated across this page */}
@@ -783,7 +784,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
             )}
 
             {indexAttempts &&
-              (ccPair.access_type === "sync" ? (
+              (isPermSynced(ccPair.access_type) ? (
                 <Section height="auto" alignItems="stretch" className="mt-6">
                   <SyncAttemptsTabs
                     ccPair={ccPair}

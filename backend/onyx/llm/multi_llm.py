@@ -15,6 +15,7 @@ from onyx.configs.app_configs import (
 )
 from onyx.configs.chat_configs import (
     LLM_FIRST_CHUNK_MAX_RETRIES,
+    LLM_INVOKE_TIMEOUT_S,
     LLM_SOCKET_READ_TIMEOUT,
 )
 from onyx.configs.model_configs import (
@@ -196,25 +197,57 @@ class LLMRateLimitError(Exception):
     """
 
 
-def _consume_stream_with_timeout(stream: Any, total_timeout: float | None) -> list[Any]:
-    """Drain a litellm stream, capping total wall-clock time when set.
+def _as_onyx_llm_error(error: Exception) -> Exception:
+    """Translate a litellm exception into the Onyx one callers catch.
+
+    litellm raises a failure during a stream as ``MidStreamFallbackError`` (a
+    ``ServiceUnavailableError``), including 429s. It keeps the real cause in
+    ``original_exception``, but leaves ``__cause__`` empty and puts only a
+    message in ``args``. Chat's error classifier follows ``__cause__``, so we
+    set it on the wrapper, whether or not the cause maps to an Onyx error.
+
+    A mapped error also has its ``__cause__`` set to the real cause, so raise
+    the result without ``from``.
+    """
+    from litellm.exceptions import MidStreamFallbackError, RateLimitError, Timeout
+
+    cause = error
+    if isinstance(error, MidStreamFallbackError) and error.original_exception:
+        cause = error.original_exception
+        error.__cause__ = cause
+    mapped: Exception
+    if isinstance(cause, Timeout):
+        mapped = LLMTimeoutError(cause)
+    elif isinstance(cause, RateLimitError):
+        mapped = LLMRateLimitError(cause)
+    else:
+        return error
+    mapped.__cause__ = cause
+    return mapped
+
+
+def _consume_stream_until_deadline(stream: Any, deadline: float) -> list[Any]:
+    """Drain a litellm stream, capping total wall-clock time at ``deadline``.
 
     The socket read timeout only bounds the gap between packets, so keepalive
     pings defeat it; this caps the whole call. On breach we raise — never close,
     since litellm 1.93.0 exposes only async ``aclose`` — which frees the thread;
     GC releases the connection.
-    """
-    if total_timeout is None:
-        return list(stream)
 
-    deadline = time.monotonic() + total_timeout
+    The deadline is only checked between chunks, so a call can overshoot it by
+    up to one socket read timeout.
+    """
     chunks: list[Any] = []
-    for chunk in stream:
-        chunks.append(chunk)
-        if time.monotonic() > deadline:
-            raise LLMTimeoutError(
-                f"LLM streaming call exceeded total timeout of {total_timeout}s"
-            )
+    try:
+        for chunk in stream:
+            chunks.append(chunk)
+            if time.monotonic() > deadline:
+                raise LLMTimeoutError("LLM streaming call exceeded its total timeout")
+    except LLMTimeoutError:
+        raise
+    except Exception as e:
+        # The request itself succeeded, so _completion's mapping never saw this.
+        raise _as_onyx_llm_error(e)
     return chunks
 
 
@@ -466,7 +499,6 @@ class LitellmLLM(LLM):
         model_provider: str,
         model_name: str,
         max_input_tokens: int,
-        timeout: int | None = None,
         api_base: str | None = None,
         api_version: str | None = None,
         deployment_name: str | None = None,
@@ -480,13 +512,8 @@ class LitellmLLM(LLM):
         reasoning_effort_user_default: ReasoningEffort | None = None,
         reasoning_effort_max: ReasoningEffort | None = None,
     ):
-        # Timeout in seconds for each socket read operation (i.e., max time between
-        # receiving data chunks/tokens). This is NOT a total request timeout - a
-        # request can run indefinitely as long as data keeps arriving within this
-        # window. If the LLM pauses for longer than this timeout between chunks,
-        # a ReadTimeout is raised.
-        self._timeout = timeout if timeout is not None else LLM_SOCKET_READ_TIMEOUT
-
+        # No instance-level timeout: invoke() and stream() each take their own,
+        # so an instance default would be a second source of truth.
         self._temperature = GEN_AI_TEMPERATURE if temperature is None else temperature
 
         self._model_provider = model_provider
@@ -646,14 +673,15 @@ class LitellmLLM(LLM):
         parallel_tool_calls: bool,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         structured_response_format: dict | None = None,
-        timeout_override: int | None = None,
+        read_timeout_s: int = LLM_SOCKET_READ_TIMEOUT,
         max_tokens: int | None = None,
         user_identity: LLMUserIdentity | None = None,
         client: "HTTPHandler | None" = None,
         env_injection_enabled: bool | None = None,
+        deadline: float | None = None,
     ) -> Union["ModelResponse", "CustomStreamWrapper"]:
         # Lazy loading to avoid memory bloat for non-inference flows
-        from litellm.exceptions import BadRequestError, RateLimitError, Timeout
+        from litellm.exceptions import BadRequestError
 
         from onyx.llm.litellm_singleton import litellm
 
@@ -1102,7 +1130,19 @@ class LitellmLLM(LLM):
                     tuple(sorted(self._env_only_custom_config)),
                 )
 
+            def _attempt_timeout() -> float:
+                # The retry ladder below can make several requests. With a
+                # deadline, each one gets only the time left, so retries cannot
+                # stretch invoke() past its total timeout.
+                if deadline is None:
+                    return read_timeout_s
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise LLMTimeoutError("LLM call exceeded its total timeout")
+                return min(read_timeout_s, remaining)
+
             def _call_litellm(opts: dict[str, Any]) -> Any:
+                timeout = _attempt_timeout()
                 # Injection disabled means no env writer exists anywhere in
                 # the process, so skip the rwlock entirely. Built per attempt
                 # because the context manager is single-use.
@@ -1123,7 +1163,7 @@ class LitellmLLM(LLM):
                         # servers reject requests with an empty tools array.
                         tools=tools or None,
                         stream=stream,
-                        timeout=timeout_override or self._timeout,
+                        timeout=timeout,
                         max_tokens=max_tokens,
                         client=client,
                         **opts,
@@ -1187,14 +1227,7 @@ class LitellmLLM(LLM):
                     )
             raise RuntimeError("unreachable: retry ladder always returns or raises")
         except Exception as e:
-            # for break pointing
-            if isinstance(e, Timeout):
-                raise LLMTimeoutError(e)
-
-            elif isinstance(e, RateLimitError):
-                raise LLMRateLimitError(e)
-
-            raise e
+            raise _as_onyx_llm_error(e)
 
     @property
     def config(self) -> LLMConfig:
@@ -1233,22 +1266,18 @@ class LitellmLLM(LLM):
         tools: list[dict] | None = None,
         tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
-        timeout_override: int | None = None,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
-        total_timeout_override: float | None = None,
-        stream: bool = False,
+        total_timeout_s: float = LLM_INVOKE_TIMEOUT_S,
     ) -> ModelResponse:
-        """One complete response. By default it is one non-streamed request,
-        2-4x cheaper in CPU than streaming and reassembling.
+        """One complete response within ``total_timeout_s``. See ``LLM.invoke``.
 
-        Pass stream=True for long or unbounded answers: without chunks the
-        socket read timeout bounds the whole response, so a long generation
-        could time out. Streaming is also forced when total_timeout_override is
-        set (the deadline is checked between chunks) or when env injection of
-        custom_config is enabled (the env rwlock must not be held for a full
-        inference; self-hosted default).
+        Sends one plain request, so the socket read timeout is the whole budget.
+        The only exception is env injection of custom_config (self-hosted
+        default): the process-wide env lock must cover connection setup only,
+        not a whole inference, so we stream and reassemble. The deadline then
+        applies between chunks.
         """
         from litellm import HTTPHandler
         from litellm import ModelResponse as LiteLLMModelResponse
@@ -1291,22 +1320,14 @@ class LitellmLLM(LLM):
         # This note may not be entirely accurate as there is a lot of complexity in the LiteLLM codebase around this
         # and not every model path was traced thoroughly. It is also possible that in future versions of LiteLLM
         # they will realize that their OpenAI handling is not threadsafe. Hope they will just fix it.
-        # Cap the per-read timeout at the total budget. The deadline is only
-        # checked between chunks, so without this a single blocking read could
-        # overshoot a total shorter than the socket read timeout. No-op when the
-        # total exceeds it (our defaults do).
-        read_timeout = timeout_override or self._timeout
-        if total_timeout_override is not None:
-            read_timeout = min(read_timeout, max(1, int(total_timeout_override)))
+        deadline = time.monotonic() + total_timeout_s
+        env_injection_enabled = _env_injection_enabled()
+        use_stream = env_injection_enabled
+        read_timeout = max(1, math.ceil(total_timeout_s))
 
         client = None
         if self._uses_isolated_client():
             client = HTTPHandler(timeout=read_timeout)
-
-        env_injection_enabled = _env_injection_enabled()
-        use_stream = (
-            stream or total_timeout_override is not None or env_injection_enabled
-        )
 
         try:
             raw_response = self._completion(
@@ -1315,13 +1336,14 @@ class LitellmLLM(LLM):
                 tool_choice=tool_choice,
                 stream=use_stream,
                 structured_response_format=structured_response_format,
-                timeout_override=read_timeout,
+                read_timeout_s=read_timeout,
                 max_tokens=max_tokens,
                 parallel_tool_calls=True,
                 reasoning_effort=reasoning_effort,
                 user_identity=user_identity,
                 client=client,
                 env_injection_enabled=env_injection_enabled,
+                deadline=deadline,
             )
             if use_stream:
                 from litellm import (
@@ -1329,11 +1351,17 @@ class LitellmLLM(LLM):
                 )
                 from litellm import stream_chunk_builder
 
-                chunks = _consume_stream_with_timeout(
-                    cast(LiteLLMCustomStreamWrapper, raw_response),
-                    total_timeout_override,
+                chunks = _consume_stream_until_deadline(
+                    cast(LiteLLMCustomStreamWrapper, raw_response), deadline
                 )
-                response = cast(LiteLLMModelResponse, stream_chunk_builder(chunks))
+                # stream_chunk_builder returns None for an empty stream. Without
+                # this the cast would hide it until an AttributeError downstream.
+                built = stream_chunk_builder(chunks)
+                if built is None:
+                    raise ValueError(
+                        f"LLM {self.config.model_name} returned an empty stream"
+                    )
+                response = cast(LiteLLMModelResponse, built)
             else:
                 response = cast(LiteLLMModelResponse, raw_response)
 
@@ -1354,10 +1382,10 @@ class LitellmLLM(LLM):
         tools: list[dict] | None = None,
         tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
-        timeout_override: int | None = None,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
+        stall_timeout_s: int = LLM_SOCKET_READ_TIMEOUT,
     ) -> Iterator[ModelResponseStream]:
         from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
         from litellm import HTTPHandler
@@ -1411,7 +1439,7 @@ class LitellmLLM(LLM):
         for attempt in range(max_attempts):
             client = None
             if self._uses_isolated_client():
-                client = HTTPHandler(timeout=timeout_override or self._timeout)
+                client = HTTPHandler(timeout=stall_timeout_s)
 
             try:
                 response = cast(
@@ -1422,7 +1450,7 @@ class LitellmLLM(LLM):
                         tool_choice=tool_choice,
                         stream=True,
                         structured_response_format=structured_response_format,
-                        timeout_override=timeout_override,
+                        read_timeout_s=stall_timeout_s,
                         max_tokens=max_tokens,
                         parallel_tool_calls=True,
                         reasoning_effort=reasoning_effort,
@@ -1443,7 +1471,7 @@ class LitellmLLM(LLM):
                 return
             except retryable_exceptions as e:
                 if yielded_any or attempt >= max_attempts - 1:
-                    raise
+                    raise _as_onyx_llm_error(e)
                 logger.warning(
                     "Retrying pre-chunk stream for model %s after %s on attempt %d/%d",
                     self.config.model_name,

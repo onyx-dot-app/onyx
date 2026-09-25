@@ -38,6 +38,7 @@ import { ConnectorStaggeredSkeleton } from "./ConnectorRowSkeleton";
 import { Button } from "@opal/components";
 import { SvgSettings } from "@opal/icons";
 import { can } from "@/lib/permissions/resource-actions";
+import { isPermSynced } from "@/lib/connectors/accessType";
 
 // Helper to handle navigation with cmd/ctrl+click support
 // NOTE: using this rather than Next/Link (or similar) since shadcn
@@ -202,7 +203,7 @@ function ConnectorRow({
             <Badge variant={isEditable ? "success" : "default"} icon={FiUnlock}>
               {t("status.access.organizationPublic.label")}
             </Badge>
-          ) : ccPairsIndexingStatus.access_type === "sync" ? (
+          ) : isPermSynced(ccPairsIndexingStatus.access_type) ? (
             <Badge
               variant={isEditable ? "auto-sync" : "default"}
               icon={FiRefreshCw}

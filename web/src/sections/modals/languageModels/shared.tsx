@@ -18,8 +18,8 @@ import type {
 import { InputCheckbox } from "@opal/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import { InputTypeIn } from "@opal/components";
+import { InputSingleComboBox } from "@opal/components";
 import { InputSingleSelect } from "@opal/components";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { InputSwitch } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
@@ -216,14 +216,14 @@ export function ModelAccessField() {
     businessTier && !userGroupsIsLoading && userGroups
       ? userGroups.map((g) => ({
           value: `${GROUP_PREFIX}${g.id}`,
-          label: g.name,
+          title: g.name,
           description: t("access.groupOption.description"),
         }))
       : [];
 
   const agentOptions = agents.map((a) => ({
     value: `${AGENT_PREFIX}${a.id}`,
-    label: a.name,
+    title: a.name,
     description: t("access.agentOption.description"),
   }));
 
@@ -287,27 +287,31 @@ export function ModelAccessField() {
           title={t("access.field.title")}
           description={t("access.field.description")}
         >
-          <InputSelect
+          <InputSingleSelect
             value={isPublic ? "public" : "private"}
             onValueChange={handleAccessChange}
-          >
-            <InputSelect.Trigger placeholder={t("access.select.placeholder")} />
-            <InputSelect.Content>
-              <InputSelect.Item value="public" icon={SvgOrganization}>
-                {t("access.public.label")}
-              </InputSelect.Item>
-              <InputSelect.Item value="private" icon={SvgUsers}>
-                {t("access.private.label")}
-              </InputSelect.Item>
-            </InputSelect.Content>
-          </InputSelect>
+            defaultOption="public"
+            placeholder={t("access.select.placeholder")}
+            options={[
+              {
+                value: "public",
+                title: t("access.public.label"),
+                icon: SvgOrganization,
+              },
+              {
+                value: "private",
+                title: t("access.private.label"),
+                icon: SvgUsers,
+              },
+            ]}
+          />
         </InputHorizontal>
       </InputPadder>
 
       {!isPublic && (
         <Card color="background-tint-00" border="none" padding={2}>
           <Section gap={2}>
-            <InputSingleSelect
+            <InputSingleComboBox
               placeholder={t("access.comboBox.placeholder")}
               value=""
               onChange={() => {}}

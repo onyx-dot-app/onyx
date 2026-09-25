@@ -92,7 +92,7 @@ import { SvgArrowExchange, SvgCloud } from "@opal/icons";
 
 ```tsx
 import { ContentAction } from "@opal/layouts";
-import { InputSelect } from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelect } from "@opal/components";
 
 <ContentAction
   title="Query History Visibility"
@@ -100,7 +100,7 @@ import { InputSelect } from "@/refresh-components/inputs/InputSelect";
   sizePreset="main-ui"
   variant="section"
   fillRight
-  rightChildren={<InputSelect ... />}
+  rightChildren={<InputSingleSelect ... />}
 />
 ```
 

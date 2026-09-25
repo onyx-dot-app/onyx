@@ -8,6 +8,8 @@ import {
 import { useField } from "formik";
 import { useTranslations } from "next-intl";
 import { AutoSyncOptions } from "./AutoSyncOptions";
+import { ConnectorGroupRestrictionPicker } from "@/sections/connectors/ConnectorGroupRestrictionPicker";
+import { useConnectorGroupRestrictionsEnabled } from "@/lib/connectors/hooks";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { useEffect, useMemo } from "react";
@@ -42,6 +44,7 @@ export function AccessTypeForm({
   // both are Business+ features.
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const showAutoSync = businessTier && isValidAutoSyncSource(connector);
+  const groupRestrictionsEnabled = useConnectorGroupRestrictionsEnabled();
 
   const selectedAuthMethod = currentCredential?.credential_json?.[
     "authentication_method"
@@ -151,6 +154,9 @@ export function AccessTypeForm({
         }
         includeDefault={false}
       />
+      {access_type.value === "sync" &&
+        showAutoSync &&
+        groupRestrictionsEnabled && <ConnectorGroupRestrictionPicker />}
       {access_type.value === "sync" && showAutoSync && (
         <AutoSyncOptions connectorType={connector as ValidAutoSyncSource} />
       )}

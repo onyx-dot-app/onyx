@@ -2,7 +2,7 @@ import { FC } from "react";
 import { useTranslations } from "next-intl";
 import { StandardAnswerCategoryResponse } from "./getStandardAnswerCategoriesIfEE";
 import { Label } from "@/components/Field";
-import { InputSingleSelect } from "@opal/components";
+import { InputSingleComboBox } from "@opal/components";
 import Chip from "@/refresh-components/Chip";
 import { StandardAnswerCategory } from "@/lib/types";
 import { ErrorCallout } from "../ErrorCallout";
@@ -45,7 +45,7 @@ export const StandardAnswerCategoryDropdownField: FC<
     <div>
       <Label>{t("categories.label")}</Label>
       <div className="w-64 flex flex-col gap-2">
-        <InputSingleSelect
+        <InputSingleComboBox
           placeholder={t("search.placeholder")}
           value=""
           onChange={() => {}}
@@ -60,7 +60,7 @@ export const StandardAnswerCategoryDropdownField: FC<
           options={allCategories
             .filter((category) => !selectedIds.has(category.id))
             .map((category) => ({
-              label: category.name,
+              title: category.name,
               value: category.id.toString(),
             }))}
           searchIcon

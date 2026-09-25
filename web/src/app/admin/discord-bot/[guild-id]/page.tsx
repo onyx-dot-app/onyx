@@ -14,7 +14,7 @@ import Card from "@/refresh-components/cards/Card";
 import { Callout } from "@/components/ui/callout";
 import { Button, MessageCard } from "@opal/components";
 import { SvgServer } from "@opal/icons";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelect } from "@opal/components";
 import {
   useDiscordGuild,
   useDiscordChannels,
@@ -365,7 +365,7 @@ export default function Page({ params }: Props) {
             sizePreset="main-content"
             variant="section"
             rightChildren={
-              <InputSelect
+              <InputSingleSelect
                 value={guild?.default_persona_id?.toString() ?? "default"}
                 onValueChange={(value: string) =>
                   handleDefaultPersonaChange(
@@ -373,24 +373,19 @@ export default function Page({ params }: Props) {
                   )
                 }
                 disabled={isUpdating || !guild?.enabled || personasLoading}
-              >
-                <InputSelect.Trigger
-                  placeholder={t("defaultAgent.select.placeholder")}
-                />
-                <InputSelect.Content>
-                  <InputSelect.Item value="default">
-                    {t("defaultAgent.select.default.label")}
-                  </InputSelect.Item>
-                  {agents.map((persona) => (
-                    <InputSelect.Item
-                      key={persona.id}
-                      value={persona.id.toString()}
-                    >
-                      {persona.name}
-                    </InputSelect.Item>
-                  ))}
-                </InputSelect.Content>
-              </InputSelect>
+                defaultOption="default"
+                placeholder={t("defaultAgent.select.placeholder")}
+                options={[
+                  {
+                    value: "default",
+                    title: t("defaultAgent.select.default.label"),
+                  },
+                  ...agents.map((persona) => ({
+                    value: persona.id.toString(),
+                    title: persona.name,
+                  })),
+                ]}
+              />
             }
           />
         </Card>

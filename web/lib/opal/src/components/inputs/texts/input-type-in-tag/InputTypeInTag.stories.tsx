@@ -12,13 +12,16 @@ const meta: Meta<typeof InputTypeInTag> = {
 export default meta;
 type Story = StoryObj<typeof InputTypeInTag>;
 
-function ControlledInputTypeInTag(
-  props: Partial<React.ComponentProps<typeof InputTypeInTag>>
-) {
-  const [tags, setTags] = useState<TagItem[]>([
+function ControlledInputTypeInTag({
+  initialTags = [
     { id: "1", label: "Tag" },
     { id: "2", label: "2" },
-  ]);
+  ],
+  ...props
+}: Partial<React.ComponentProps<typeof InputTypeInTag>> & {
+  initialTags?: TagItem[];
+}) {
+  const [tags, setTags] = useState<TagItem[]>(initialTags);
   const [value, setValue] = useState("");
 
   return (
@@ -69,6 +72,17 @@ export const WithError: Story = {
         />
       </div>
     );
+  },
+};
+
+/** Past `maxRows` (two by default) the chips scroll inside the field. */
+export const ManyTags: Story = {
+  render: () => {
+    const tags: TagItem[] = Array.from({ length: 30 }, (_, i) => ({
+      id: String(i + 1),
+      label: `Team ${String(i + 1).padStart(2, "0")}`,
+    }));
+    return <ControlledInputTypeInTag initialTags={tags} />;
   },
 };
 

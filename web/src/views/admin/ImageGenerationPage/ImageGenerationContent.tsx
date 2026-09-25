@@ -22,7 +22,7 @@ import {
   deleteImageGenerationConfig,
 } from "@/views/admin/ImageGenerationPage/svc";
 import { ConfirmationModalLayout } from "@opal/layouts";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelect, type SelectDivider } from "@opal/components";
 import { Button, MessageCard, Text } from "@opal/components";
 import { Content, toast } from "@opal/layouts";
 import { SvgSlash, SvgUnplug } from "@opal/icons";
@@ -299,43 +299,31 @@ export default function ImageGenerationContent() {
                   <Text as="p" color="text-04">
                     {t("disconnectModal.replacement.label")}
                   </Text>
-                  <InputSelect
-                    value={replacementProviderId ?? undefined}
+                  <InputSingleSelect
+                    value={replacementProviderId ?? ""}
                     onValueChange={(v) => setReplacementProviderId(v)}
-                  >
-                    <InputSelect.Trigger
-                      placeholder={t("disconnectModal.replacement.placeholder")}
-                    />
-                    <InputSelect.Content>
-                      {replacementGroups.map((group) => (
-                        <InputSelect.Group key={group.name}>
-                          <InputSelect.Label>{group.name}</InputSelect.Label>
-                          {group.providers.map((p) => (
-                            <InputSelect.Item
-                              key={p.image_provider_id}
-                              value={p.image_provider_id}
-                              icon={getModelIcon(p.provider_name)}
-                            >
-                              {p.title}
-                            </InputSelect.Item>
-                          ))}
-                        </InputSelect.Group>
-                      ))}
-                      <InputSelect.Separator />
-                      <InputSelect.Item
-                        value={NO_DEFAULT_VALUE}
-                        icon={SvgSlash}
-                      >
-                        <span>
-                          <b>{t("disconnectModal.noDefaultOption.label")}</b>
-                          <span className="text-text-03">
-                            {" "}
-                            {t("disconnectModal.noDefaultOption.description")}
-                          </span>
-                        </span>
-                      </InputSelect.Item>
-                    </InputSelect.Content>
-                  </InputSelect>
+                    placeholder={t("disconnectModal.replacement.placeholder")}
+                    options={[
+                      ...replacementGroups.map(
+                        (group): SelectDivider => ({
+                          title: group.name,
+                          options: group.providers.map((p) => ({
+                            value: p.image_provider_id,
+                            title: p.title,
+                            icon: getModelIcon(p.provider_name),
+                          })),
+                        })
+                      ),
+                      {
+                        value: NO_DEFAULT_VALUE,
+                        title: t("disconnectModal.noDefaultOption.label"),
+                        description: t(
+                          "disconnectModal.noDefaultOption.description"
+                        ),
+                        icon: SvgSlash,
+                      },
+                    ]}
+                  />
                 </Section>
               </Section>
             ) : (

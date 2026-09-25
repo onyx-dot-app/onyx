@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from pydantic import BaseModel
 
+from onyx.configs.chat_configs import LLM_INVOKE_TIMEOUT_S, LLM_SOCKET_READ_TIMEOUT
 from onyx.llm.interfaces import (
     LLM,
     LanguageModelInput,
@@ -304,12 +305,10 @@ class MockLLM(LLM, MockLLMController):
         tools: list[dict] | None = None,
         tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
-        timeout_override: int | None = None,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
-        total_timeout_override: float | None = None,
-        stream: bool = False,
+        total_timeout_s: float = LLM_INVOKE_TIMEOUT_S,
     ) -> ModelResponse:
         raise NotImplementedError("We only care about streaming atm")
 
@@ -319,10 +318,10 @@ class MockLLM(LLM, MockLLMController):
         tools: list[dict] | None = None,  # noqa: ARG002
         tool_choice: ToolChoice | None = None,  # noqa: ARG002
         structured_response_format: dict | None = None,  # noqa: ARG002
-        timeout_override: int | None = None,  # noqa: ARG002
         max_tokens: int | None = None,  # noqa: ARG002
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,  # noqa: ARG002
         user_identity: LLMUserIdentity | None = None,  # noqa: ARG002
+        stall_timeout_s: int = LLM_SOCKET_READ_TIMEOUT,  # noqa: ARG002
     ) -> Iterator[ModelResponseStream]:
         if not self.stream_controller:
             return

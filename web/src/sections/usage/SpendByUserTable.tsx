@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
-  InputSingleSelect,
+  InputSingleComboBox,
   InputTypeIn,
   Table,
   Text,
@@ -240,18 +240,18 @@ export default function SpendByUserTable({
         <div className="flex w-full flex-col gap-2 sm:ms-auto sm:w-auto sm:flex-row">
           {models.length > 0 && (
             <div className="w-full sm:w-44">
-              <InputSingleSelect
+              <InputSingleComboBox
                 value={model}
                 onValueChange={setModel}
                 placeholder={t("spendByUser.filters.allModels.label")}
                 options={[
                   {
                     value: ALL,
-                    label: t("spendByUser.filters.allModels.label"),
+                    title: t("spendByUser.filters.allModels.label"),
                   },
                   ...models.map((option) => ({
                     value: option,
-                    label: option,
+                    title: option,
                   })),
                 ]}
               />
@@ -259,18 +259,18 @@ export default function SpendByUserTable({
           )}
           {flows.length > 0 && (
             <div className="w-full sm:w-40">
-              <InputSingleSelect
+              <InputSingleComboBox
                 value={flow}
                 onValueChange={setFlow}
                 placeholder={t("spendByUser.filters.allFlows.label")}
                 options={[
                   {
                     value: ALL,
-                    label: t("spendByUser.filters.allFlows.label"),
+                    title: t("spendByUser.filters.allFlows.label"),
                   },
                   ...flows.map((option) => ({
                     value: option,
-                    label: option,
+                    title: option,
                   })),
                 ]}
               />

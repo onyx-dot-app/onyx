@@ -2152,12 +2152,29 @@
           "title": "Erro na sincronização das associações de grupo"
         }
       },
+      "groupRestriction": {
+        "empty": {
+          "description": "Todos mantêm o acesso sincronizado da origem.",
+          "title": "Sem restrição até que grupos sejam adicionados"
+        },
+        "memberCount": "{count, plural, one {# membro} other {# membros}}",
+        "picker": {
+          "placeholder": "Adicione grupos para restringir o acesso a este conector"
+        },
+        "remove": {
+          "tooltip": "Remover {name}"
+        },
+        "toggle": {
+          "description": "Limite o acesso aos membros dos grupos selecionados. As permissões sincronizadas continuam valendo.",
+          "title": "Restringir acesso a grupos"
+        }
+      },
       "groupSelector": {
         "assignGroupAccess": {
           "title": "Atribuir acesso de grupos a este conector"
         },
         "assignToGroup": {
-          "title": "Atribuir este conector a um grupo"
+          "title": "Grupos que podem gerenciar este conector"
         },
         "scopedManagerGroups": {
           "description": "Selecione um ou mais dos grupos que você gerencia para dar acesso a este conector"
@@ -7510,11 +7527,6 @@
       "appName": {
         "description": "Este nome aparecerá em todo o aplicativo e substituirá \"Onyx\" na interface.",
         "label": "Nome de exibição do aplicativo"
-      },
-      "branding": {
-        "description": "Remova \"powered by Onyx\" e outras presenças da marca Onyx no aplicativo.",
-        "enterpriseTooltip": "Ocultar a marca Onyx é um recurso do plano Enterprise.",
-        "label": "Ocultar a marca Onyx"
       },
       "chatFooter": {
         "description": "Adicione conteúdo em markdown para avisos legais ou informações adicionais.",
@@ -13071,7 +13083,8 @@
     },
     "select": {
       "emptySet": "Nenhum item encontrado",
-      "invalidOption": "Selecione uma opção válida da lista"
+      "invalidOption": "Selecione uma opção válida da lista",
+      "searchPlaceholder": "Pesquisar"
     },
     "settingsHeader": {
       "cancel": "Cancelar"
