@@ -70,9 +70,8 @@ def _delete_objects(client: "S3Client", bucket: str, prefix: str = "") -> None:
         client.delete_object(Bucket=bucket, Key=obj["Key"])
 
 
-def _delete_during_outage(store: S3BackedFileStore, content: bytes) -> str:
-    """Saves a file, then deletes it while MinIO refuses deletes. Returns its key."""
-    file_id = _save(store, content)
+def _delete_during_outage(store: S3BackedFileStore, file_id: str) -> str:
+    """Deletes a file while MinIO refuses deletes. Returns its key."""
     key = store.read_file_record(file_id).object_key
     legacy = store._get_legacy_s3_client()
     assert legacy is not None
@@ -82,14 +81,14 @@ def _delete_during_outage(store: S3BackedFileStore, content: bytes) -> str:
     return key
 
 
-def _write_during_outage(store: S3BackedFileStore, content: bytes) -> str:
-    """Saves a file while MinIO refuses writes. Returns its key."""
+def _write_during_outage(store: S3BackedFileStore, content: bytes) -> tuple[str, str]:
+    """Saves a file while MinIO refuses writes. Returns its id and key."""
     legacy = store._get_legacy_s3_client()
     assert legacy is not None
     outage = ClientError({"Error": {"Code": "503"}}, "PutObject")
     with patch.object(legacy, "put_object", side_effect=outage):
         file_id = _save(store, content)
-    return store.read_file_record(file_id).object_key
+    return file_id, store.read_file_record(file_id).object_key
 
 
 def _object_exists(client: "S3Client", key: str) -> bool:
@@ -117,6 +116,9 @@ def stores(
     yield old_release, new_release
     for client in (old_release._get_s3_client(), new_release._get_s3_client()):
         _delete_objects(client, BUCKET, f"{prefix}/")
+    _delete_objects(
+        new_release._get_s3_client(), BUCKET, LEGACY_OUT_OF_SYNC_PREFIX + prefix
+    )
 
 
 def _save(store: S3BackedFileStore, content: bytes, file_id: str | None = None) -> str:
@@ -455,22 +457,23 @@ def test_copy_keeps_a_file_saved_again_after_a_delete_during_the_copy(
     file_id = _save(old_release, b"same bytes")
     key = new_release.read_file_record(file_id).object_key
     source, target = old_release._get_s3_client(), new_release._get_s3_client()
-    real_get, real_head = source.get_object, source.head_object
+    real_get, real_delete = source.get_object, target.delete_object
 
     def get_then_delete(**kwargs: Any) -> Any:
         read = real_get(**kwargs)
         new_release.delete_file(file_id)
         return read
 
-    def save_again_then_head(**kwargs: Any) -> Any:
-        # The app saves the same bytes again after the copy's put, before its
-        # legacy half lands.
-        target.put_object(Bucket=BUCKET, Key=key, Body=b"same bytes")
-        return real_head(**kwargs)
+    def save_again_then_delete(**kwargs: Any) -> Any:
+        # The app saves the same bytes again between the copy's record check
+        # and its cleanup delete.
+        if kwargs["Key"] == key:
+            _save(new_release, b"same bytes", file_id)
+        return real_delete(**kwargs)
 
     with (
         patch.object(source, "get_object", side_effect=get_then_delete),
-        patch.object(source, "head_object", side_effect=save_again_then_head),
+        patch.object(target, "delete_object", side_effect=save_again_then_delete),
     ):
         copy_object(source, target, BUCKET, key)
 
@@ -497,42 +500,24 @@ def test_a_failed_legacy_write_is_resynced(
     assert not _object_exists(target, LEGACY_OUT_OF_SYNC_PREFIX + key)
 
 
-def test_a_failed_legacy_delete_leaves_a_tombstone_that_holds_minio_back(
+def test_a_failed_legacy_delete_is_never_copied_back(
     stores: tuple[S3BackedFileStore, S3BackedFileStore],
 ) -> None:
     old_release, new_release = stores
-    key = _delete_during_outage(new_release, b"deleted while MinIO was down")
+    file_id = _save(new_release, b"deleted while MinIO was down")
+    key = _delete_during_outage(new_release, file_id)
     source, target = old_release._get_s3_client(), new_release._get_s3_client()
 
     for _ in range(2):
-        assert run_pass(source, target, [BUCKET], workers=4).failed == 0
+        stats = run_pass(source, target, [BUCKET], workers=4)
+        assert (stats.failed, stats.unreferenced) == (0, 1)
 
-    # MinIO keeps its stale copy, and the copy never brings it back.
+    # MinIO keeps its stale copy, which no file record points at.
     assert _object_exists(source, key)
     assert not _object_exists(target, key)
-    assert _object_exists(target, LEGACY_OUT_OF_SYNC_PREFIX + key)
 
 
-def test_resync_keeps_a_rewrite_that_follows_its_failed_delete(
-    stores: tuple[S3BackedFileStore, S3BackedFileStore],
-) -> None:
-    old_release, new_release = stores
-    key = _delete_during_outage(new_release, b"deleted while MinIO was down")
-    source, target = old_release._get_s3_client(), new_release._get_s3_client()
-    # A rolled-back release writes the key again, in MinIO only, within the
-    # same second as the failed delete.
-    source.put_object(Bucket=BUCKET, Key=key, Body=b"written after the rollback")
-
-    for _ in range(3):
-        assert run_pass(source, target, [BUCKET], workers=4).failed == 0
-        assert (
-            target.get_object(Bucket=BUCKET, Key=key)["Body"].read()
-            == b"written after the rollback"
-        )
-    assert not _object_exists(target, LEGACY_OUT_OF_SYNC_PREFIX + key)
-
-
-def test_a_tombstone_for_a_copied_file_holds_its_minio_original_back(
+def test_a_copied_file_deleted_during_an_outage_stays_deleted(
     stores: tuple[S3BackedFileStore, S3BackedFileStore],
 ) -> None:
     old_release, new_release = stores
@@ -540,11 +525,7 @@ def test_a_tombstone_for_a_copied_file_holds_its_minio_original_back(
     key = new_release.read_file_record(file_id).object_key
     source, target = old_release._get_s3_client(), new_release._get_s3_client()
     assert copy_object(source, target, BUCKET, key)[0] == CopyOutcome.COPIED
-    legacy = new_release._get_legacy_s3_client()
-    assert legacy is not None
-    outage = ClientError({"Error": {"Code": "503"}}, "DeleteObject")
-    with patch.object(legacy, "delete_object", side_effect=outage):
-        new_release.delete_file(file_id)
+    _delete_during_outage(new_release, file_id)
 
     for _ in range(2):
         assert run_pass(source, target, [BUCKET], workers=4).failed == 0
@@ -553,56 +534,60 @@ def test_a_tombstone_for_a_copied_file_holds_its_minio_original_back(
     assert not _object_exists(target, key)
 
 
-def test_a_delete_marker_removes_the_orphan_a_racing_copy_left(
+def test_a_rewrite_after_a_failed_delete_is_copied(
     stores: tuple[S3BackedFileStore, S3BackedFileStore],
 ) -> None:
     old_release, new_release = stores
-    key = _delete_during_outage(new_release, b"deleted while MinIO was down")
+    file_id = _save(new_release, b"deleted while MinIO was down")
+    _delete_during_outage(new_release, file_id)
     source, target = old_release._get_s3_client(), new_release._get_s3_client()
-    # A copy that listed the key before the marker put MinIO's copy back.
-    assert copy_object(source, target, BUCKET, key)[0] == CopyOutcome.COPIED
+    # A rolled-back release saves the same file again, in MinIO only, within
+    # the same second and possibly with the same bytes.
+    _save(old_release, b"deleted while MinIO was down", file_id)
 
-    assert run_pass(source, target, [BUCKET], workers=4).failed == 0
+    for _ in range(3):
+        assert run_pass(source, target, [BUCKET], workers=4).failed == 0
+        assert new_release.read_file(file_id).read() == b"deleted while MinIO was down"
 
-    assert _object_exists(source, key)
+
+def test_copy_removes_its_copy_when_the_record_is_gone(
+    stores: tuple[S3BackedFileStore, S3BackedFileStore],
+) -> None:
+    old_release, new_release = stores
+    file_id = _save(new_release, b"deleted while MinIO was down")
+    key = _delete_during_outage(new_release, file_id)
+    source, target = old_release._get_s3_client(), new_release._get_s3_client()
+
+    # A copy that listed the key before the delete finds no record after its put.
+    outcome, _ = copy_object(source, target, BUCKET, key)
+
+    assert outcome == CopyOutcome.VANISHED
     assert not _object_exists(target, key)
 
 
-def test_a_delete_marker_keeps_a_file_saved_again_over_the_orphan(
+def test_copy_skips_objects_without_a_file_record(
     stores: tuple[S3BackedFileStore, S3BackedFileStore],
 ) -> None:
     old_release, new_release = stores
-    key = _delete_during_outage(new_release, b"deleted while MinIO was down")
+    key = f"{old_release._s3_prefix}/public/no-record"
     source, target = old_release._get_s3_client(), new_release._get_s3_client()
-    assert copy_object(source, target, BUCKET, key)[0] == CopyOutcome.COPIED
-    real_delete = target.delete_object
+    source.put_object(Bucket=BUCKET, Key=key, Body=b"nothing points here")
 
-    def save_again_before_delete(**kwargs: Any) -> Any:
-        # The app saves the key again between the orphan check and its delete.
-        if kwargs["Key"] == key:
-            target.put_object(Bucket=BUCKET, Key=key, Body=b"saved again")
-        return real_delete(**kwargs)
+    stats = run_pass(source, target, [BUCKET], workers=4)
 
-    with patch.object(target, "delete_object", side_effect=save_again_before_delete):
-        run_pass(source, target, [BUCKET], workers=4)
-
-    assert target.get_object(Bucket=BUCKET, Key=key)["Body"].read() == b"saved again"
+    assert (stats.copied, stats.unreferenced) == (0, 1)
+    assert not _object_exists(target, key)
 
 
 def test_a_write_marker_yields_to_a_later_write_of_an_older_release(
     stores: tuple[S3BackedFileStore, S3BackedFileStore],
 ) -> None:
     old_release, new_release = stores
-    legacy = new_release._get_legacy_s3_client()
-    assert legacy is not None
-    outage = ClientError({"Error": {"Code": "503"}}, "PutObject")
-    with patch.object(legacy, "put_object", side_effect=outage):
-        file_id = _save(new_release, b"MinIO was down")
-    key = new_release.read_file_record(file_id).object_key
+    file_id, key = _write_during_outage(new_release, b"MinIO was down")
     source, target = old_release._get_s3_client(), new_release._get_s3_client()
     time.sleep(1.1)
-    # A rolled-back release writes the key again, in MinIO only.
-    source.put_object(Bucket=BUCKET, Key=key, Body=b"written after the rollback")
+    # A rolled-back release saves the file again, in MinIO only.
+    _save(old_release, b"written after the rollback", file_id)
 
     assert run_pass(source, target, [BUCKET], workers=4).failed == 0
 
@@ -611,42 +596,25 @@ def test_a_write_marker_yields_to_a_later_write_of_an_older_release(
     assert not _object_exists(target, LEGACY_OUT_OF_SYNC_PREFIX + key)
 
 
-def test_a_delete_marker_leaves_the_app_object_the_delete_has_not_reached(
+def test_a_write_marker_for_a_deleted_file_is_dropped(
     stores: tuple[S3BackedFileStore, S3BackedFileStore],
 ) -> None:
     old_release, new_release = stores
-    file_id = _save(new_release, b"being deleted")
-    key = new_release.read_file_record(file_id).object_key
+    file_id, key = _write_during_outage(new_release, b"MinIO was down")
+    new_release.delete_file(file_id)
     source, target = old_release._get_s3_client(), new_release._get_s3_client()
-    legacy = new_release._get_legacy_s3_client()
-    assert legacy is not None
-    outage = ClientError({"Error": {"Code": "503"}}, "DeleteObject")
-    real_delete = target.delete_object
-    seen: list[bool] = []
 
-    def pass_before_primary_delete(**kwargs: Any) -> Any:
-        # A copy pass replays the marker before the app deletes the object.
-        if kwargs["Key"] == key and not seen:
-            run_pass(source, target, [BUCKET], workers=4)
-            seen.append(_object_exists(target, key))
-        return real_delete(**kwargs)
+    assert run_pass(source, target, [BUCKET], workers=4).failed == 0
 
-    with (
-        patch.object(legacy, "delete_object", side_effect=outage),
-        patch.object(target, "delete_object", side_effect=pass_before_primary_delete),
-    ):
-        new_release.delete_file(file_id)
-
-    assert seen == [True]
-    assert _object_exists(source, key)
-    assert not _object_exists(target, key)
+    assert not _object_exists(target, LEGACY_OUT_OF_SYNC_PREFIX + key)
+    assert not _object_exists(source, key)
 
 
 def test_a_key_that_stays_out_of_sync_counts_as_failed(
     stores: tuple[S3BackedFileStore, S3BackedFileStore],
 ) -> None:
     old_release, new_release = stores
-    key = _write_during_outage(new_release, b"MinIO was down")
+    _, key = _write_during_outage(new_release, b"MinIO was down")
     source, target = old_release._get_s3_client(), new_release._get_s3_client()
     outage = ClientError({"Error": {"Code": "503"}}, "PutObject")
 
@@ -780,7 +748,7 @@ def test_retire_refuses_while_a_key_stays_out_of_sync(
     retirable: None,  # noqa: ARG001
 ) -> None:
     old_release, new_release = stores
-    key = _write_during_outage(new_release, b"MinIO was down")
+    _, key = _write_during_outage(new_release, b"MinIO was down")
     source, target = old_release._get_s3_client(), new_release._get_s3_client()
     outage = ClientError({"Error": {"Code": "503"}}, "PutObject")
 
