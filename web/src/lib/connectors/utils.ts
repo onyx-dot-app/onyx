@@ -22,7 +22,6 @@ import {
 } from "@/lib/connectors/types";
 import type {
   ConnectionConfiguration,
-  ConnectorValueField,
   GmailConfig,
   SortMode,
 } from "@/lib/connectors/types";
@@ -46,13 +45,6 @@ type ConnectorField = ConnectionConfiguration["values"][number];
 interface ConnectorValidationMessages {
   oneDriveUsersRequired?: string;
 }
-
-const flattenConnectorFields = (
-  fields: ConnectorField[]
-): ConnectorValueField[] =>
-  fields.flatMap((field) =>
-    field.type === "tab" ? field.tabs.flatMap((tab) => tab.fields) : [field]
-  );
 
 const buildInitialValuesForFields = (
   fields: ConnectorField[]
@@ -104,37 +96,32 @@ export function createConnectorValidationSchema(
   const configuration = connectorConfigs[connector];
   const fields = [...configuration.values, ...configuration.advanced_values];
 
-  const fieldSchemas = flattenConnectorFields(fields).reduce<
-    Record<string, Yup.Schema>
-  >((acc, field) => {
-    let schema: Yup.Schema =
-      field.type === "select"
-        ? Yup.string()
-        : field.type === "list"
-          ? Yup.array().of(Yup.string())
-          : field.type === "multiselect"
+  const fieldSchemas = fields.reduce<Record<string, Yup.Schema>>(
+    (acc, field) => {
+      let schema: Yup.Schema =
+        field.type === "select"
+          ? Yup.string()
+          : field.type === "list"
             ? Yup.array().of(Yup.string())
-            : field.type === "string_pair_list"
-              ? Yup.array().of(Yup.object())
-              : field.type === "checkbox"
-                ? Yup.boolean()
-                : field.type === "file"
-                  ? Yup.mixed()
-                  : Yup.string();
+            : field.type === "multiselect"
+              ? Yup.array().of(Yup.string())
+              : field.type === "string_pair_list"
+                ? Yup.array().of(Yup.object())
+                : field.type === "checkbox"
+                  ? Yup.boolean()
+                  : field.type === "file"
+                    ? Yup.mixed()
+                    : Yup.string();
 
-    if (!field.optional) {
-      schema = schema.required(`${field.label} is required`);
-    }
+      if (!field.optional) {
+        schema = schema.required(`${field.label} is required`);
+      }
 
-    acc[field.name] = schema;
-    return acc;
-  }, {});
-
-  for (const field of fields) {
-    if (field.type === "tab") {
-      fieldSchemas[field.name] = Yup.string().required();
-    }
-  }
+      acc[field.name] = schema;
+      return acc;
+    },
+    {}
+  );
 
   if (connector === ValidSources.OneDrive) {
     fieldSchemas.users = Yup.array()
