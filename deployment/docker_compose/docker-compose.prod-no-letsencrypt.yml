@@ -483,6 +483,9 @@ services:
       AWS_SECRET_ACCESS_KEY: ${S3_AWS_SECRET_ACCESS_KEY:?set a strong value in .env, not minioadmin}
       # File store keys can hold a name segment longer than the 255-byte default.
       WEED_FILER_OPTIONS_MAX_FILE_NAME_LENGTH: "1024"
+      # A bucket grows one volume at a time, not seven, so it can write with as
+      # little as one volume of free disk.
+      WEED_MASTER_VOLUME_GROWTH_COPY_1: "1"
     volumes:
       - object_store_data:/data
     # SeaweedFS does not fsync bucket writes by default, so a filer rule turns

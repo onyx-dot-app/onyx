@@ -377,6 +377,9 @@ jobs:
 
       - name: Verify deployment without external network
         working-directory: deployment/docker_compose
+        env:
+          S3_ENDPOINT_URL: http://object-store:8333
+          S3_LEGACY_ENDPOINT_URL: http://minio:9000
         run: |
           compose=(
             docker compose
@@ -412,6 +415,8 @@ jobs:
         working-directory: deployment/docker_compose
         env:
           AIRGAP_HF_ENDPOINT: https://tls_failure:4443
+          S3_ENDPOINT_URL: http://object-store:8333
+          S3_LEGACY_ENDPOINT_URL: http://minio:9000
         run: |
           compose=(
             docker compose

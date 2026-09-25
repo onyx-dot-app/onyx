@@ -34,6 +34,7 @@ from onyx.configs.app_configs import (
 )
 from onyx.file_store.file_store import (
     DUAL_WRITE_METADATA_KEY,
+    LEGACY_OUT_OF_SYNC_PREFIX,
     LEGACY_RETIRED_MARKER_KEY,
     build_s3_client,
     ensure_bucket,
@@ -237,6 +238,65 @@ def _copy_object_logged(
         return CopyOutcome.FAILED, 0
 
 
+def _resync_key(
+    source: "S3Client",
+    target: "S3Client",
+    bucket: str,
+    key: str,
+    marked_at: datetime,
+) -> None:
+    try:
+        obj = target.get_object(Bucket=bucket, Key=key)
+    except ClientError as e:
+        if not is_missing_object(e):
+            raise
+        # An older release may have written the key again since the failed
+        # delete, and then the forward copy takes it. A tie deletes, since a
+        # file saved and deleted within one second is far more common.
+        source_head = _head(source, bucket, key)
+        if source_head is not None and source_head["LastModified"] <= marked_at:
+            source.delete_object(Bucket=bucket, Key=key)
+        return
+    with tempfile.SpooledTemporaryFile(max_size=_SPOOL_MAX_BYTES) as buffer:
+        for chunk in obj["Body"].iter_chunks(chunk_size=_CHUNK_BYTES):
+            buffer.write(chunk)
+        buffer.seek(0)
+        # Marked as the app's own write, which the copy never takes for newer.
+        source.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=buffer,
+            ContentType=obj.get("ContentType") or "application/octet-stream",
+            Metadata={DUAL_WRITE_METADATA_KEY: "1"},
+        )
+
+
+def _resync_out_of_sync(
+    source: "S3Client", target: "S3Client", bucket: str
+) -> set[str]:
+    """Make the legacy store match the object store for every key that a failed
+    app write or delete marked. Returns the keys still out of sync."""
+    still_out_of_sync: set[str] = set()
+    paginator = target.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=bucket, Prefix=LEGACY_OUT_OF_SYNC_PREFIX):
+        for marker in page.get("Contents", []):
+            key = marker["Key"].removeprefix(LEGACY_OUT_OF_SYNC_PREFIX)
+            try:
+                _resync_key(source, target, bucket, key, marker["LastModified"])
+                target.delete_object(
+                    Bucket=bucket, Key=marker["Key"], IfMatch=marker["ETag"]
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to resync %s/%s with the legacy MinIO store",
+                    bucket,
+                    key,
+                    exc_info=True,
+                )
+                still_out_of_sync.add(key)
+    return still_out_of_sync
+
+
 def run_pass(
     source: "S3Client",
     target: "S3Client",
@@ -250,12 +310,17 @@ def run_pass(
     paginator = source.get_paginator("list_objects_v2")
     with ThreadPoolExecutor(max_workers=workers) as pool:
         for bucket in buckets:
+            # A key a failed delete left in MinIO must not be copied back.
+            out_of_sync = _resync_out_of_sync(source, target, bucket)
             copy_key = partial(_copy_object_logged, source, target, bucket)
             for page in paginator.paginate(Bucket=bucket):
                 keys = [
                     obj["Key"]
                     for obj in page.get("Contents", [])
-                    if modified_since is None or obj["LastModified"] >= modified_since
+                    if obj["Key"] not in out_of_sync
+                    and (
+                        modified_since is None or obj["LastModified"] >= modified_since
+                    )
                 ]
                 if not keys:
                     continue

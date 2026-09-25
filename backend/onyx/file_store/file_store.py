@@ -90,6 +90,11 @@ def is_missing_object(e: ClientError) -> bool:
     return s3_error_code(e) in ("404", "NoSuchKey", "NotFound")
 
 
+# A failed legacy write or delete leaves a marker at this prefix plus the key in
+# the object store, and the legacy copy makes MinIO match the object store for it.
+LEGACY_OUT_OF_SYNC_PREFIX = "onyx-legacy-out-of-sync/"
+
+
 # `legacy_copy --retire` writes this object once MinIO holds nothing the object
 # store lacks, so running processes stop writing to MinIO without a restart.
 LEGACY_RETIRED_MARKER_KEY = "onyx-legacy-minio-retired"
@@ -457,6 +462,7 @@ class S3BackedFileStore(FileStore):
             logger.warning(
                 "Failed to write %s to the legacy MinIO store", key, exc_info=True
             )
+            self._mark_legacy_out_of_sync(bucket, key)
 
     # Without this the copy would bring a deleted file back as an orphan. It runs
     # before the primary delete, so a copy that races the delete finds the legacy
@@ -470,6 +476,23 @@ class S3BackedFileStore(FileStore):
         except Exception:
             logger.warning(
                 "Failed to delete %s from the legacy MinIO store", key, exc_info=True
+            )
+            self._mark_legacy_out_of_sync(bucket, key)
+
+    def _mark_legacy_out_of_sync(self, bucket: str, key: str) -> None:
+        try:
+            # A unique body gives each marker its own ETag, so the copy removes
+            # only a marker it resynced.
+            self._get_s3_client().put_object(
+                Bucket=bucket,
+                Key=LEGACY_OUT_OF_SYNC_PREFIX + key,
+                Body=uuid.uuid4().hex.encode(),
+            )
+        except Exception:
+            logger.warning(
+                "Failed to record that %s is out of sync in the legacy MinIO store",
+                key,
+                exc_info=True,
             )
 
     def _get_bucket_name(self) -> str:
