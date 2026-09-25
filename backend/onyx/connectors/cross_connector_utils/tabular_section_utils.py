@@ -8,6 +8,7 @@ from onyx.connectors.models import TabularSection
 from onyx.file_processing.extract_file_text import file_io_to_text, stage_xlsx_sheets
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_store.staging import RawFileCallback
+from onyx.utils.csv_utils import detect_csv_delimiter
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -30,6 +31,32 @@ def _tsv_to_csv(tsv_text: str) -> str:
     csv.writer(out, lineterminator="\n").writerows(
         csv.reader(io.StringIO(tsv_text), dialect="excel-tab")
     )
+    return out.getvalue().rstrip("\n")
+
+
+def _normalize_csv_delimiter(csv_text: str) -> str:
+    """Re-serialize a .csv that is not comma-separated, for the same reason.
+
+    A file named .csv is not always comma-separated: Excel writes the list
+    separator of the machine's locale, a semicolon across most of Europe, and a
+    tab-separated export is routinely saved as .csv. The staged file is read by
+    parsers that assume the default Excel dialect, so such a file would be
+    indexed as one column holding the whole row, separators included.
+
+    Text whose separator cannot be told apart, or that the writer cannot
+    round-trip, is staged unchanged -- exactly what happens today.
+    """
+    delimiter = detect_csv_delimiter(csv_text)
+    if delimiter == ",":
+        return csv_text
+    out = io.StringIO()
+    try:
+        csv.writer(out, lineterminator="\n").writerows(
+            csv.reader(io.StringIO(csv_text, newline=""), delimiter=delimiter)
+        )
+    except csv.Error:
+        logger.warning("Could not re-serialize CSV with delimiter %r", delimiter)
+        return csv_text
     return out.getvalue().rstrip("\n")
 
 
@@ -74,6 +101,8 @@ def tabular_file_to_sections(
         return []
     if lowered.endswith(".tsv"):
         text = _tsv_to_csv(text)
+    else:
+        text = _normalize_csv_delimiter(text)
     csv_file_id = stage(io.BytesIO(text.encode("utf-8")), "text/csv")
     return [TabularSection(csv_file_id=csv_file_id, link=link or file_name)]
 
