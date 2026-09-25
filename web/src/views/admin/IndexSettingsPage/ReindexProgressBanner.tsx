@@ -14,7 +14,7 @@ import {
   SvgPauseCircle,
 } from "@opal/icons";
 import ReindexErrorsModal from "@/views/admin/IndexSettingsPage/ReindexErrorsModal";
-import { useReindexProgress } from "@/lib/indexing/hooks";
+import { useReindexProgress } from "@/lib/searchSettings/hooks";
 
 interface ReindexProgressBannerProps {
   secondaryModelName?: string;

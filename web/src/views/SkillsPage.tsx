@@ -40,6 +40,7 @@ import SkillPreviewModal from "@/sections/modals/SkillPreviewModal";
 import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
 import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
 import { isSkillNameConflict, setSkillEnabled } from "@/lib/skills/api";
+import { useSettings } from "@/lib/settings/hooks";
 
 // ---------------------------------------------------------------------------
 // Page
@@ -47,6 +48,7 @@ import { isSkillNameConflict, setSkillEnabled } from "@/lib/skills/api";
 
 export default function SkillsPage() {
   const t = useTranslations("skills");
+  const { appName } = useSettings();
   const router = useRouter();
   const externalAppIdParam = useSearchParams().get("externalAppId");
   const focusedExternalAppId =
@@ -289,8 +291,12 @@ export default function SkillsPage() {
         icon={SvgBlocks}
         title={t("page.header.title")}
         description={t("page.header.description")}
-        rightChildren={
-          <Popover open={createMenuOpen} onOpenChange={setCreateMenuOpen}>
+        actions={[
+          <Popover
+            key="primary"
+            open={createMenuOpen}
+            onOpenChange={setCreateMenuOpen}
+          >
             <Popover.Trigger asChild>
               <Button icon={SvgPlus}>
                 {t("page.createMenu.trigger.label")}
@@ -302,7 +308,9 @@ export default function SkillsPage() {
                   sizePreset="main-ui"
                   rounding={2}
                   icon={SvgEdit}
-                  description={t("page.createMenu.scratch.description")}
+                  description={t("page.createMenu.scratch.description", {
+                    appName,
+                  })}
                   onClick={() => {
                     setCreateMenuOpen(false);
                     router.push("/craft/v1/skills/new");
@@ -333,8 +341,8 @@ export default function SkillsPage() {
                 />
               </Popover.Menu>
             </Popover.Content>
-          </Popover>
-        }
+          </Popover>,
+        ]}
       >
         <InputTypeIn
           ref={searchInputRef}

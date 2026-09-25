@@ -133,7 +133,7 @@ def validate_existing_genai_api_key(
         pass
 
     try:
-        llm = get_default_llm(timeout=10)
+        llm = get_default_llm()
     except ValueError:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "LLM not setup")
 

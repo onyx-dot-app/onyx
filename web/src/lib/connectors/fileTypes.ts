@@ -1,18 +1,5 @@
-export enum FileTypeCategory {
-  SHAREPOINT_PFX_FILE = "sharepoint_pfx_file",
-}
-
-export interface FileValidationRule {
-  maxSizeKB?: number;
-  allowedExtensions?: string[];
-  contentValidation?: (file: File) => Promise<boolean>;
-}
-
-export interface FileTypeDefinition {
-  category: FileTypeCategory;
-  validation?: FileValidationRule;
-  description?: string;
-}
+import { FileTypeCategory } from "./types";
+import type { FileTypeDefinition } from "./types";
 
 export const FILE_TYPE_DEFINITIONS: Record<
   FileTypeCategory,
@@ -88,41 +75,4 @@ export class TypedFile {
       errors,
     };
   }
-}
-
-export function createTypedFile(
-  file: File,
-  fieldKey: string,
-  typeDefinitionKey: FileTypeCategory
-): TypedFile {
-  const typeDefinition = FILE_TYPE_DEFINITIONS[typeDefinitionKey];
-  if (!typeDefinition) {
-    throw new Error(`Unknown file type definition: ${typeDefinitionKey}`);
-  }
-
-  return new TypedFile(file, typeDefinition, fieldKey);
-}
-
-export function isTypedFileField(fieldKey: string): boolean {
-  // Define which fields should be typed files
-  const typedFileFields = new Set([
-    "sp_private_key",
-    "outlook_private_key",
-    "teams_private_key",
-  ]);
-  return typedFileFields.has(fieldKey);
-}
-
-// Get the appropriate file type definition for a field
-export function getFileTypeDefinitionForField(
-  fieldKey: string
-): FileTypeCategory | null {
-  const fieldToTypeMap: Record<string, FileTypeCategory> = {
-    sp_private_key: FileTypeCategory.SHAREPOINT_PFX_FILE,
-    // The same PFX bundle rules apply to every Microsoft app registration.
-    outlook_private_key: FileTypeCategory.SHAREPOINT_PFX_FILE,
-    teams_private_key: FileTypeCategory.SHAREPOINT_PFX_FILE,
-  };
-
-  return fieldToTypeMap[fieldKey] || null;
 }

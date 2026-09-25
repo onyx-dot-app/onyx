@@ -528,19 +528,22 @@ def get_hierarchy_node_external_access_from_sharepoint(
     graph_client: GraphClient,
     node_type: HierarchyNodeType,
     drive_name: str | None,
-    folder_url: str | None,
+    folder_server_relative_path: str | None,
     permission_cache: SharepointPermissionCache | None = None,
 ) -> ExternalAccess:
+    """``folder_server_relative_path`` is decoded, e.g. "/sites/eng/RD Docs/API".
+
+    The by-path lookup is used because the by-URL one rejects "%" and "#".
+    """
     permission_cache = permission_cache or SharepointPermissionCache()
     if node_type == HierarchyNodeType.SITE:
         securable_object = client_context.web
     elif node_type == HierarchyNodeType.DRIVE and drive_name:
         list_name = SHARED_DOCUMENTS_MAP_REVERSE.get(drive_name, drive_name)
         securable_object = client_context.web.lists.get_by_title(list_name)
-    elif node_type == HierarchyNodeType.FOLDER and folder_url:
-        server_relative_url = urlparse(folder_url).path
-        securable_object = client_context.web.get_folder_by_server_relative_url(
-            server_relative_url
+    elif node_type == HierarchyNodeType.FOLDER and folder_server_relative_path:
+        securable_object = client_context.web.get_folder_by_server_relative_path(
+            folder_server_relative_path
         ).list_item_all_fields
     else:
         raise ValueError(f"Unsupported SharePoint hierarchy node: {node_type}")

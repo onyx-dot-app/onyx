@@ -37,7 +37,6 @@ def _build_openai_llm(model: str, api_key: str) -> LitellmLLM:
         model_provider=LlmProviderNames.OPENAI,
         model_name=model,
         max_input_tokens=128_000,
-        timeout=60,
     )
 
 

@@ -160,6 +160,24 @@ class LLMProviderManager:
             raise ValueError(f"LLM Provider {llm_provider.id} not found")
 
     @staticmethod
+    def set_default_vision(
+        provider_id: int,
+        user_performing_action: DATestUser,
+        model_name: str,
+    ) -> None:
+        """Point image captioning at this provider's model. Without a default
+        vision model, indexing skips captions entirely."""
+        response = client.post(
+            f"{API_SERVER_URL}/admin/llm/default-vision",
+            json={
+                "provider_id": provider_id,
+                "model_name": model_name,
+            },
+            headers=user_performing_action.headers,
+        )
+        response.raise_for_status()
+
+    @staticmethod
     def get_default_model(
         user_performing_action: DATestUser | None = None,
     ) -> DefaultModel | None:

@@ -1368,7 +1368,9 @@ def test_group_token_rate_limit_write_scope(db_session: Session) -> None:
     managed = _make_group(db_session)
     other = _make_group(db_session)
 
-    args = TokenRateLimitArgs(enabled=True, token_budget=1000, period_hours=24)
+    # Disabled: these tests check write authorization only, and an enabled
+    # global limit left in the shared DB would be enforced on later suites.
+    args = TokenRateLimitArgs(enabled=False, token_budget=1000, period_hours=24)
     managed_limit = insert_user_group_token_rate_limit(
         db_session=db_session, token_rate_limit_settings=args, group_id=managed.id
     )
@@ -1428,7 +1430,9 @@ def test_group_token_rate_limit_write_multi_group_scope(db_session: Session) -> 
     managed = _make_group(db_session)
     unmanaged = _make_group(db_session)
 
-    args = TokenRateLimitArgs(enabled=True, token_budget=1000, period_hours=24)
+    # Disabled: these tests check write authorization only, and an enabled
+    # global limit left in the shared DB would be enforced on later suites.
+    args = TokenRateLimitArgs(enabled=False, token_budget=1000, period_hours=24)
     # limit attached to BOTH a managed and an unmanaged group
     shared_limit = insert_user_group_token_rate_limit(
         db_session=db_session, token_rate_limit_settings=args, group_id=managed.id

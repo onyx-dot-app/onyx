@@ -1,0 +1,433 @@
+{
+  "aliases": {},
+  "models": {
+    "allam-2-7b": {
+      "attachment": false,
+      "cost": {
+        "input": 0,
+        "output": 0
+      },
+      "limit": {
+        "context": 4096,
+        "output": 4096
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "ALLaM-2-7b",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-01-23",
+      "temperature": true,
+      "tool_call": false
+    },
+    "canopylabs/orpheus-arabic-saudi": {
+      "attachment": false,
+      "family": "canopylabs",
+      "limit": {
+        "context": 4000,
+        "output": 50000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "audio"
+        ]
+      },
+      "mode": "audio_speech",
+      "name": "Canopy Labs Orpheus Arabic Saudi",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2025-12-16",
+      "status": "beta",
+      "temperature": false,
+      "tool_call": false
+    },
+    "canopylabs/orpheus-v1-english": {
+      "attachment": false,
+      "family": "canopylabs",
+      "limit": {
+        "context": 4000,
+        "output": 50000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "audio"
+        ]
+      },
+      "mode": "audio_speech",
+      "name": "Canopy Labs Orpheus V1 English",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2025-12-19",
+      "status": "beta",
+      "temperature": false,
+      "tool_call": false
+    },
+    "groq/compound": {
+      "attachment": false,
+      "family": "groq",
+      "limit": {
+        "context": 131072,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Compound",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2025-09-04",
+      "temperature": true,
+      "tool_call": false
+    },
+    "groq/compound-mini": {
+      "attachment": false,
+      "family": "groq",
+      "limit": {
+        "context": 131072,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Compound Mini",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2025-09-04",
+      "temperature": true,
+      "tool_call": false
+    },
+    "llama-3.1-8b-instant": {
+      "attachment": false,
+      "cost": {
+        "input": 0.05,
+        "output": 0.08
+      },
+      "family": "llama",
+      "limit": {
+        "context": 131072,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Llama 3.1 8B",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2024-07-23",
+      "temperature": true,
+      "tool_call": true
+    },
+    "llama-3.3-70b-versatile": {
+      "attachment": false,
+      "cost": {
+        "input": 0.59,
+        "output": 0.79
+      },
+      "family": "llama",
+      "limit": {
+        "context": 131072,
+        "output": 32768
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Llama 3.3 70B",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2024-12-06",
+      "temperature": true,
+      "tool_call": true
+    },
+    "meta-llama/llama-prompt-guard-2-22m": {
+      "attachment": false,
+      "cost": {
+        "input": 0.03,
+        "output": 0.03
+      },
+      "family": "llama",
+      "limit": {
+        "context": 512,
+        "output": 512
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Llama Prompt Guard 2 22M",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-05-29",
+      "status": "beta",
+      "temperature": false,
+      "tool_call": false
+    },
+    "meta-llama/llama-prompt-guard-2-86m": {
+      "attachment": false,
+      "cost": {
+        "input": 0.04,
+        "output": 0.04
+      },
+      "family": "llama",
+      "limit": {
+        "context": 512,
+        "output": 512
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Prompt Guard 2 86M",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-05-29",
+      "status": "beta",
+      "temperature": false,
+      "tool_call": false
+    },
+    "openai/gpt-oss-120b": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.075,
+        "input": 0.15,
+        "output": 0.6
+      },
+      "family": "gpt-oss",
+      "limit": {
+        "context": 131072,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GPT OSS 120B",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-08-05",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "openai/gpt-oss-20b": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.0375,
+        "input": 0.075,
+        "output": 0.3
+      },
+      "family": "gpt-oss",
+      "limit": {
+        "context": 131072,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GPT OSS 20B",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-08-05",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "openai/gpt-oss-safeguard-20b": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.037,
+        "input": 0.075,
+        "output": 0.3
+      },
+      "family": "gpt-oss",
+      "limit": {
+        "context": 131072,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Safety GPT OSS 20B",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-10-29",
+      "status": "beta",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "qwen/qwen3.6-27b": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.3,
+        "input": 0.6,
+        "output": 3
+      },
+      "family": "qwen",
+      "limit": {
+        "context": 131072,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Qwen3.6 27B",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-04-22",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "qwen/qwen3.8-27b": {
+      "attachment": true,
+      "cost": {
+        "input": 0.8,
+        "output": 4
+      },
+      "family": "qwen",
+      "limit": {
+        "context": 131042,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Qwen3.8 27B",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-14",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "whisper-large-v3": {
+      "attachment": false,
+      "cost": {
+        "second": 0.0,
+        "second_input": 3.083e-05
+      },
+      "family": "whisper",
+      "limit": {
+        "context": 0,
+        "output": 0
+      },
+      "modalities": {
+        "input": [
+          "audio"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "audio_transcription",
+      "name": "Whisper",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2023-09-01",
+      "temperature": true,
+      "tool_call": false
+    },
+    "whisper-large-v3-turbo": {
+      "attachment": false,
+      "cost": {
+        "second": 0.0,
+        "second_input": 1.111e-05
+      },
+      "family": "whisper",
+      "limit": {
+        "context": 0,
+        "output": 0
+      },
+      "modalities": {
+        "input": [
+          "audio"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "audio_transcription",
+      "name": "Whisper Large V3 Turbo",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2024-10-01",
+      "temperature": true,
+      "tool_call": false
+    }
+  },
+  "models_dev_providers": [
+    "groq"
+  ]
+}

@@ -111,9 +111,10 @@ def raise_for_graph_error(
         raise InsufficientPermissionsError(
             f"{denied_message} Graph reported `{error.code}`. {remediation}"
         ) from error
-    if error.status == 404:
+    # 404 or 423 by now: no usable mailbox behind the address.
+    if error.is_permanent_refusal:
         raise ConnectorValidationError(
-            f"Graph found no mailbox ({error.code}). {MAILBOX_UNAVAILABLE_REMEDIATION}"
+            f"Graph found no usable mailbox ({error.code}). {MAILBOX_UNAVAILABLE_REMEDIATION}"
         ) from error
     if error.fails_the_attempt:
         raise UnexpectedValidationError(

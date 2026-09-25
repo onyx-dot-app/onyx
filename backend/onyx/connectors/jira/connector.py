@@ -845,7 +845,7 @@ class JiraConnector(
             except Exception as e:
                 yield ConnectorFailure(
                     failed_document=DocumentFailure(
-                        document_id=issue_key,
+                        document_id=build_jira_url(self.jira_base, issue_key),
                         document_link=build_jira_url(self.jira_base, issue_key),
                     ),
                     failure_message=f"Failed to process Jira issue: {str(e)}",

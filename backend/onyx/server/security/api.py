@@ -23,6 +23,7 @@ from onyx.server.security.store import (
 )
 from onyx.utils.audit import AuditActor
 from onyx.utils.logger import setup_logger
+from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
@@ -114,6 +115,19 @@ async def put_security_settings_endpoint(
                 "These fields are operator-controlled in multi-tenant deployments: "
                 + ", ".join(sorted(locked_in_payload)),
             )
+
+    # Turning it off is always allowed; turning it on is Business+ only.
+    if (
+        "allow_connector_group_restrictions" in present_keys
+        and overrides.allow_connector_group_restrictions
+    ):
+        await run_in_threadpool(
+            fetch_ee_implementation_or_noop(
+                "onyx.utils.tier",
+                "require_business_tier_for_connector_group_restrictions",
+                noop_return_value=None,
+            )
+        )
 
     # The auth dependency always yields a user, test seams may not.
     actor = (

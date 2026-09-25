@@ -9,7 +9,7 @@ import pytest
 import requests
 from office365.graph_client import GraphClient
 
-from onyx.connectors.teams.connector import _collect_all_teams
+from onyx.connectors.teams.listing import collect_all_teams
 
 
 def test_special_characters_in_team_names() -> None:
@@ -35,9 +35,7 @@ def test_special_characters_in_team_names() -> None:
 
     # Test with team name containing special characters (has &, parentheses)
     # This should use client-side filtering (get().top()) instead of OData filtering
-    result = _collect_all_teams(
-        mock_graph_client, ["Research & Development (R&D) Team"]
-    )
+    result = collect_all_teams(mock_graph_client, ["Research & Development (R&D) Team"])
 
     # Verify that get().top() was called for client-side filtering
     mock_graph_client.teams.get.assert_called()
@@ -65,7 +63,7 @@ def test_single_quote_escaping() -> None:
     mock_graph_client.teams.get = MagicMock(return_value=mock_get_query)
 
     # Test with a team name containing a single quote (no &, (, ) so uses OData)
-    _collect_all_teams(mock_graph_client, ["Team's Group"])
+    collect_all_teams(mock_graph_client, ["Team's Group"])
 
     # Verify OData filter was used (since no special characters)
     mock_graph_client.teams.get.assert_called()
@@ -81,22 +79,22 @@ def test_single_quote_escaping() -> None:
 
 def test_helper_functions() -> None:
     """Test the helper functions for team name processing."""
-    from onyx.connectors.teams.connector import (
+    from onyx.connectors.teams.listing import (
         _can_use_odata_filter,
-        _escape_odata_string,
-        _has_odata_incompatible_chars,
+        has_odata_incompatible_chars,
     )
+    from onyx.connectors.teams.utils import escape_odata_string
 
     # Test OData string escaping
-    assert _escape_odata_string("Team's Group") == "Team''s Group"
-    assert _escape_odata_string("Normal Team") == "Normal Team"
+    assert escape_odata_string("Team's Group") == "Team''s Group"
+    assert escape_odata_string("Normal Team") == "Normal Team"
 
     # Test special character detection
-    assert _has_odata_incompatible_chars(["R&D Team"])
-    assert _has_odata_incompatible_chars(["Team (Alpha)"])
-    assert not _has_odata_incompatible_chars(["Normal Team"])
-    assert not _has_odata_incompatible_chars([])
-    assert not _has_odata_incompatible_chars(None)
+    assert has_odata_incompatible_chars(["R&D Team"])
+    assert has_odata_incompatible_chars(["Team (Alpha)"])
+    assert not has_odata_incompatible_chars(["Normal Team"])
+    assert not has_odata_incompatible_chars([])
+    assert not has_odata_incompatible_chars(None)
 
     # Test filtering strategy determination
     can_use, safe, problematic = _can_use_odata_filter(["Normal Team", "R&D Team"])
@@ -139,7 +137,7 @@ def test_no_configured_teams_lists_every_team_to_the_last_page() -> None:
 
     for no_names in ([], None):
         query.execute_query.side_effect = list(pages)
-        found = _collect_all_teams(graph_client, no_names)
+        found = collect_all_teams(graph_client, no_names)
         assert [team.id for team in found] == ["t1", "t2"]
     # The second page is asked for by the link the first one carried.
     next_urls = [
@@ -187,7 +185,7 @@ def test_a_throttled_page_of_teams_is_asked_for_again(
     monkeypatch.setattr("time.sleep", lambda _: None)
     client = GraphClient(lambda: {"token_type": "Bearer", "access_token": "x"})
 
-    teams = _collect_all_teams(client, [])
+    teams = collect_all_teams(client, [])
 
     assert [team.id for team in teams] == ["t1", "t2"]
     assert requested[1:] == [second_page, second_page]

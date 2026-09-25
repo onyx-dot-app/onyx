@@ -1,7 +1,5 @@
 "use client";
 
-import { createContext, useContext, useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
 import AdminSidebar from "@/sections/sidebar/AdminSidebar";
 import { usePathname, useRouter } from "next/navigation";
 import type { Route } from "next";
@@ -31,26 +29,6 @@ export interface AdminChromeProps {
   initialAdminCapabilities: string[];
 }
 
-// The create-connector page (`/admin/connectors/<connector>`) renders its own
-// sidebar. Routes below it do not.
-const CUSTOM_SIDEBAR_ROUTE = /^\/admin\/connectors\/[^/]+\/?$/;
-
-// Lets a page render its own sidebar into the chrome as a sibling of the main
-// content column — i.e. *outside* the scrollable region — so it stays pinned
-// while the page scrolls. The page keeps ownership (and React context) of the
-// sidebar; only the DOM is portaled up next to `RootLayout.App`.
-const AdminCustomSidebarSlotContext = createContext<HTMLElement | null>(null);
-
-export function AdminCustomSidebarPortal({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  const slot = useContext(AdminCustomSidebarSlotContext);
-  if (!slot) return null;
-  return createPortal(children, slot);
-}
-
 export default function AdminChrome({
   children,
   initialAdminCapabilities,
@@ -63,9 +41,6 @@ export default function AdminChrome({
   useAdminDocumentTitle();
   const router = useRouter();
   const { adminCapabilities: liveAdminCapabilities, isUserLoading } = useUser();
-
-  const [customSidebarSlot, setCustomSidebarSlot] =
-    useState<HTMLDivElement | null>(null);
 
   // Seed only in flight — otherwise logout would leave the page authorized by a stale seed.
   const adminCapabilities = isUserLoading
@@ -91,12 +66,6 @@ export default function AdminChrome({
     );
   }, [denied, router, adminCapabilities]);
 
-  // Certain admin panels have their own custom sidebar.
-  // For those pages, we skip rendering the default `AdminSidebar` and let those individual pages render their own.
-  // The OAuth callback / finalize interstitials below the create-connector page
-  // render no sidebar of their own, so they keep the default one.
-  const hasCustomSidebar = CUSTOM_SIDEBAR_ROUTE.test(pathname);
-
   let content = children;
   if (isVectorDbRequiredRoute(pathname)) {
     if (isLoading) {
@@ -113,47 +82,39 @@ export default function AdminChrome({
   if (denied) return null;
 
   return (
-    <AdminCustomSidebarSlotContext.Provider value={customSidebarSlot}>
-      <RootLayout.Root>
-        {application_status === ApplicationStatus.PAYMENT_REMINDER && (
-          <div className="fixed top-2 left-1/2 -translate-x-1/2 bg-status-warning-01 p-4 rounded-lg shadow-lg z-50 max-w-md text-center">
-            <Text font="main-ui-body" color="text-05">
-              {markdown(t("adminChrome.paymentReminder.text"))}
-            </Text>
-            <div className="mt-2">
-              <Button width="full" href="/admin/billing">
-                {t("adminChrome.paymentReminder.billingButton.label")}
-              </Button>
-            </div>
+    <RootLayout.Root>
+      {application_status === ApplicationStatus.PAYMENT_REMINDER && (
+        <div className="fixed top-2 left-1/2 -translate-x-1/2 bg-status-warning-01 p-4 rounded-lg shadow-lg z-50 max-w-md text-center">
+          <Text font="main-ui-body" color="text-05">
+            {markdown(t("adminChrome.paymentReminder.text"))}
+          </Text>
+          <div className="mt-2">
+            <Button width="full" href="/admin/billing">
+              {t("adminChrome.paymentReminder.billingButton.label")}
+            </Button>
           </div>
-        )}
+        </div>
+      )}
 
-        {hasCustomSidebar ? (
-          // `display: contents` so the portaled sidebar column becomes the
-          // direct flex child of `RootLayout.Root`, exactly like `AdminSidebar`.
-          <div ref={setCustomSidebarSlot} className="contents" />
-        ) : (
-          <AdminSidebar />
-        )}
+      <AdminSidebar />
 
-        <RootLayout.App data-main-container>
-          {/* On mobile every sidebar is an off-screen overlay, so the main
+      <RootLayout.App data-main-container>
+        {/* On mobile every sidebar is an off-screen overlay, so the main
               column always needs a control to bring it back. */}
-          {isMobile && (
-            <RootLayout.Header>
-              <div className="h-full flex items-center px-4 py-2">
-                <Button
-                  prominence="internal"
-                  icon={SvgSidebar}
-                  aria-label={t("adminChrome.openSidebar.ariaLabel")}
-                  onClick={() => setFolded(false)}
-                />
-              </div>
-            </RootLayout.Header>
-          )}
-          <RootLayout.MainContent>{content}</RootLayout.MainContent>
-        </RootLayout.App>
-      </RootLayout.Root>
-    </AdminCustomSidebarSlotContext.Provider>
+        {isMobile && (
+          <RootLayout.Header>
+            <div className="h-full flex items-center px-4 py-2">
+              <Button
+                prominence="internal"
+                icon={SvgSidebar}
+                aria-label={t("adminChrome.openSidebar.ariaLabel")}
+                onClick={() => setFolded(false)}
+              />
+            </div>
+          </RootLayout.Header>
+        )}
+        <RootLayout.MainContent>{content}</RootLayout.MainContent>
+      </RootLayout.App>
+    </RootLayout.Root>
   );
 }

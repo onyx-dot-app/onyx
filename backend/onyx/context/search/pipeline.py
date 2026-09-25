@@ -45,7 +45,6 @@ def _build_index_filters(
     persona_document_sets: list[str] | None,
     persona_time_cutoff: datetime | None,
     db_session: Session | None = None,
-    bypass_acl: bool = False,
     # Assistant knowledge filters
     attached_document_ids: list[str] | None = None,
     hierarchy_node_ids: list[int] | None = None,
@@ -61,11 +60,9 @@ def _build_index_filters(
     # When the caller supplies document set names, enforce that the user has view
     # access to each one. This closes the API-layer bypass where a user could
     # override the persona's configured document sets with arbitrary names.
-    # Skipped when bypass_acl is set (system callers) or when no db_session is
-    # available for the lookup.
+    # Skipped when no db_session is available for the lookup.
     if (
         base_filters.document_set is not None
-        and not bypass_acl
         and not user.is_anonymous
         and db_session is not None
     ):
@@ -107,9 +104,7 @@ def _build_index_filters(
 
     source_filter = base_filters.source_type
 
-    if bypass_acl:
-        user_acl_filters = None
-    elif acl_filters is not None:
+    if acl_filters is not None:
         user_acl_filters = acl_filters
     else:
         if db_session is None:
@@ -307,7 +302,6 @@ def search_pipeline(
         persona_document_sets=persona_document_sets,
         persona_time_cutoff=persona_time_cutoff,
         db_session=db_session,
-        bypass_acl=chunk_search_request.bypass_acl,
         attached_document_ids=attached_document_ids,
         hierarchy_node_ids=hierarchy_node_ids,
         acl_filters=acl_filters,

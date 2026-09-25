@@ -1,0 +1,230 @@
+"use client";
+
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
+import { useTranslations } from "next-intl";
+import { CCPairIndexingStatusTable } from "./CCPairIndexingStatusTable";
+import { SearchAndFilterControls } from "./SearchAndFilterControls";
+import { SettingsLayouts, useToastFromQuery } from "@opal/layouts";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { Text } from "@opal/components";
+import { markdown } from "@opal/utils";
+import { Spacer } from "@opal/components";
+import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
+import { useSettings } from "@/lib/settings/hooks";
+import { useState, useRef, useMemo, RefObject } from "react";
+import { FilterOptions } from "./FilterComponent";
+import { ValidSources } from "@/lib/types";
+import Cookies from "js-cookie";
+import { TOGGLED_CONNECTORS_COOKIE_NAME } from "@/lib/constants";
+import { ConnectorStaggeredSkeleton } from "./ConnectorRowSkeleton";
+import { IndexingStatusRequest } from "@/lib/types";
+
+const route = ADMIN_ROUTES.INDEXING_STATUS;
+
+function Main() {
+  const t = useTranslations("admin.indexing");
+  const { vectorDbEnabled } = useSettings();
+
+  // State for filter management
+  const [filterOptions, setFilterOptions] = useState<FilterOptions>({
+    accessType: null,
+    docsCountFilter: {
+      operator: null,
+      value: null,
+    },
+    lastStatus: null,
+  });
+
+  // State for search
+  const [searchQuery, setSearchQuery] = useState<string>("");
+
+  // State for collapse/expand functionality
+  const [connectorsToggled, setConnectorsToggled] = useState<
+    Record<ValidSources, boolean>
+  >(() => {
+    const savedState = Cookies.get(TOGGLED_CONNECTORS_COOKIE_NAME);
+    return savedState ? JSON.parse(savedState) : {};
+  });
+
+  // Reference to the FilterComponent for resetting its state
+  const filterComponentRef = useRef<{
+    resetFilters: () => void;
+  }>(null);
+
+  // Convert filter options to API request format
+  const request: IndexingStatusRequest = useMemo(() => {
+    return {
+      secondary_index: false,
+      access_type_filters: filterOptions.accessType || [],
+      last_status_filters: filterOptions.lastStatus || [],
+      docs_count_operator: filterOptions.docsCountFilter.operator,
+      docs_count_value: filterOptions.docsCountFilter.value,
+      name_filter: searchQuery,
+    };
+  }, [filterOptions, searchQuery]);
+
+  // Use the paginated hook with filter request and 30-second refresh
+  const {
+    data: ccPairsIndexingStatuses,
+    isLoading: isLoadingCcPairsIndexingStatuses,
+    error: ccPairsIndexingStatusesError,
+    handlePageChange,
+    sourcePages,
+    sourceLoadingStates,
+    resetPagination,
+  } = useConnectorIndexingStatusWithPagination(request, 30000, vectorDbEnabled);
+
+  // Check if filters are active
+  const hasActiveFilters = useMemo(() => {
+    return (
+      (filterOptions.accessType && filterOptions.accessType.length > 0) ||
+      (filterOptions.lastStatus && filterOptions.lastStatus.length > 0) ||
+      filterOptions.docsCountFilter.operator !== null
+    );
+  }, [filterOptions]);
+
+  // Handle filter changes
+  const handleFilterChange = (newFilterOptions: FilterOptions) => {
+    setFilterOptions(newFilterOptions);
+    // Reset pagination when filters change
+    resetPagination();
+  };
+
+  // Toggle source expand/collapse functions
+  const toggleSource = (
+    source: ValidSources,
+    toggled: boolean | null = null
+  ) => {
+    const newConnectorsToggled = {
+      ...connectorsToggled,
+      [source]: toggled == null ? !connectorsToggled[source] : toggled,
+    };
+    setConnectorsToggled(newConnectorsToggled);
+    Cookies.set(
+      TOGGLED_CONNECTORS_COOKIE_NAME,
+      JSON.stringify(newConnectorsToggled)
+    );
+  };
+
+  const expandAll = () => {
+    if (!ccPairsIndexingStatuses) return;
+    const newConnectorsToggled = { ...connectorsToggled };
+    ccPairsIndexingStatuses.forEach((ccPairStatus) => {
+      newConnectorsToggled[ccPairStatus.source] = true;
+    });
+    setConnectorsToggled(newConnectorsToggled);
+    Cookies.set(
+      TOGGLED_CONNECTORS_COOKIE_NAME,
+      JSON.stringify(newConnectorsToggled)
+    );
+  };
+
+  const collapseAll = () => {
+    if (!ccPairsIndexingStatuses) return;
+    const newConnectorsToggled = { ...connectorsToggled };
+    ccPairsIndexingStatuses.forEach((ccPairStatus) => {
+      newConnectorsToggled[ccPairStatus.source] = false;
+    });
+    setConnectorsToggled(newConnectorsToggled);
+    Cookies.set(
+      TOGGLED_CONNECTORS_COOKIE_NAME,
+      JSON.stringify(newConnectorsToggled)
+    );
+  };
+
+  // Check if any sources are expanded
+  const hasExpandedSources =
+    ccPairsIndexingStatuses?.some(
+      (ccPairStatus) => connectorsToggled[ccPairStatus.source]
+    ) || false;
+
+  // Handler functions for the search and filter controls
+  const handleClearFilters = () => {
+    if (filterComponentRef.current) {
+      filterComponentRef.current.resetFilters();
+      setFilterOptions({
+        accessType: null,
+        docsCountFilter: {
+          operator: null,
+          value: null,
+        },
+        lastStatus: null,
+      });
+    }
+  };
+
+  if (ccPairsIndexingStatusesError) {
+    return (
+      <div className="text-error">
+        {ccPairsIndexingStatusesError?.info?.detail ||
+          t("status.loadError.message")}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* Search bar and controls */}
+      <SearchAndFilterControls
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        hasExpandedSources={hasExpandedSources}
+        onExpandAll={expandAll}
+        onCollapseAll={collapseAll}
+        filterOptions={filterOptions}
+        onFilterChange={handleFilterChange}
+        resetPagination={resetPagination}
+        onClearFilters={handleClearFilters}
+        hasActiveFilters={hasActiveFilters}
+        filterComponentRef={
+          filterComponentRef as RefObject<{ resetFilters: () => void }>
+        }
+      />
+
+      {/* Table component */}
+      {isLoadingCcPairsIndexingStatuses ? (
+        <div className="mt-12">
+          <ConnectorStaggeredSkeleton rowCount={8} standalone={true} />
+        </div>
+      ) : !ccPairsIndexingStatuses || ccPairsIndexingStatuses.length === 0 ? (
+        <div>
+          <Spacer rem={3} />
+          <Text as="p">{markdown(t("status.empty.message"))}</Text>
+        </div>
+      ) : (
+        <CCPairIndexingStatusTable
+          ccPairsIndexingStatuses={ccPairsIndexingStatuses}
+          connectorsToggled={connectorsToggled}
+          toggleSource={toggleSource}
+          onPageChange={handlePageChange}
+          sourceLoadingStates={sourceLoadingStates}
+        />
+      )}
+    </div>
+  );
+}
+
+export default function IndexingStatusPage() {
+  const t = useTranslations("admin.indexing");
+  const adminRouteTitle = useAdminRouteTitle();
+
+  useToastFromQuery({
+    "connector-created": {
+      message: t("status.connectorCreated.toast"),
+      type: "success",
+    },
+  });
+
+  return (
+    <SettingsLayouts.Root width="full">
+      <SettingsLayouts.Header
+        icon={route.icon}
+        title={adminRouteTitle(route)}
+        divider
+      />
+      <SettingsLayouts.Body>
+        <Main />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
+  );
+}

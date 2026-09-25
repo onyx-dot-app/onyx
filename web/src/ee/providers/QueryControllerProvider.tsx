@@ -7,7 +7,7 @@ import {
   SearchDocWithContent,
   SearchFlowClassificationResponse,
   SearchFullResponse,
-} from "@/lib/search/interfaces";
+} from "@/lib/search/types";
 import { classifyQuery, searchDocuments } from "@/ee/lib/search/svc";
 import { useAppPosition } from "@/lib/position/hooks";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";

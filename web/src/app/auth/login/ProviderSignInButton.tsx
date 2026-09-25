@@ -14,6 +14,10 @@
  * Like SignInButton, this renders on the login page which is hit by headless
  * SSR requests, so browser globals stay out of the render path and live only in
  * startSignIn, reached from the effect and the click handler.
+ *
+ * IdPs refuse to render inside a frame, so when this page is embedded (the
+ * Chrome extension's new tab page) the IdP opens in a new tab, falling back to
+ * the top-level window if the popup is blocked.
  */
 
 "use client";
@@ -32,6 +36,34 @@ interface ProviderSignInButtonProps {
   autoStart?: boolean;
 }
 
+function isFramed(): boolean {
+  return window.top !== window.self && !!window.top;
+}
+
+/**
+ * Opens the tab that will host the IdP. Must run synchronously in the click
+ * handler: the authorize request that follows can outlast the transient user
+ * activation `window.open` requires.
+ */
+function openIdpTab(): Window | null {
+  return isFramed() ? window.open("about:blank", "_blank") : null;
+}
+
+/** Returns true when the IdP opened in a new tab and this page stays put. */
+function navigateToIdp(url: string, idpTab: Window | null): boolean {
+  if (!isFramed()) {
+    window.location.href = url;
+    return false;
+  }
+  if (idpTab && !idpTab.closed) {
+    idpTab.location.href = url;
+    return true;
+  }
+  if (window.open(url, "_blank")) return true;
+  if (window.top) window.top.location.href = url;
+  return false;
+}
+
 export default function ProviderSignInButton({
   provider,
   nextUrl,
@@ -46,31 +78,37 @@ export default function ProviderSignInButton({
 
   const isGoogle = provider.providerType === "GOOGLE_OAUTH";
 
-  const startSignIn = useCallback(async () => {
-    setIsRedirecting(true);
-    setError(null);
-    try {
-      // The authorize URL may already carry a query (the workspace pin on
-      // cloud), so `next` has to be appended as a parameter, not concatenated.
-      const url = new URL(provider.authorizeUrl, window.location.origin);
-      if (nextUrl) url.searchParams.set("next", nextUrl);
-      const res = await fetch(url.toString(), { credentials: "include" });
-      if (!res.ok) {
-        throw new Error(
-          t("login.ssoStartFailed.error", { status: res.status })
-        );
+  const startSignIn = useCallback(
+    async (idpTab: Window | null = null) => {
+      setIsRedirecting(true);
+      setError(null);
+      try {
+        // The authorize URL may already carry a query (the workspace pin on
+        // cloud), so `next` has to be appended as a parameter, not concatenated.
+        const url = new URL(provider.authorizeUrl, window.location.origin);
+        if (nextUrl) url.searchParams.set("next", nextUrl);
+        const res = await fetch(url.toString(), { credentials: "include" });
+        if (!res.ok) {
+          throw new Error(
+            t("login.ssoStartFailed.error", { status: res.status })
+          );
+        }
+        const data: { authorization_url?: string } = await res.json();
+        if (!data.authorization_url) {
+          throw new Error(t("login.ssoMissingAuthUrl.error"));
+        }
+        if (navigateToIdp(data.authorization_url, idpTab)) {
+          setIsRedirecting(false);
+        }
+      } catch (exc) {
+        idpTab?.close();
+        // Re-enable the button so the user can retry.
+        setError(exc instanceof Error ? exc.message : String(exc));
+        setIsRedirecting(false);
       }
-      const data: { authorization_url?: string } = await res.json();
-      if (!data.authorization_url) {
-        throw new Error(t("login.ssoMissingAuthUrl.error"));
-      }
-      window.location.href = data.authorization_url;
-    } catch (exc) {
-      // Re-enable the button so the user can retry.
-      setError(exc instanceof Error ? exc.message : String(exc));
-      setIsRedirecting(false);
-    }
-  }, [provider.authorizeUrl, nextUrl, t]);
+    },
+    [provider.authorizeUrl, nextUrl, t]
+  );
 
   useEffect(() => {
     if (!autoStart || autoStarted.current) return;
@@ -80,7 +118,7 @@ export default function ProviderSignInButton({
 
   function handleClick() {
     if (isRedirecting) return;
-    void startSignIn();
+    void startSignIn(openIdpTab());
   }
 
   return (

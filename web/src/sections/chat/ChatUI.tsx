@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { Message } from "@/app/app/interfaces";
-import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
 import HumanMessage from "@/app/app/message/HumanMessage";
 import { ErrorBanner } from "@/app/app/message/Resubmit";
 import { MinimalAgent } from "@/lib/agents/types";

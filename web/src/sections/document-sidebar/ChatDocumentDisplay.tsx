@@ -1,5 +1,5 @@
 import { SourceIcon } from "@/components/SourceIcon";
-import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
+import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/types";
 import { SvgTag } from "@opal/icons";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
 import { DocumentUpdatedAtBadge } from "@/components/search/DocumentUpdatedAtBadge";

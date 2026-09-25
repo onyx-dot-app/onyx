@@ -15,7 +15,7 @@ import useFilter from "@/hooks/useFilter";
 import { useCreateModal, useModalClose } from "@opal/components";
 import { Button, LinkButton, SelectCard, Text } from "@opal/components";
 import { Disabled, Hoverable } from "@opal/core";
-import { markdown } from "@opal/utils";
+import { escapeMarkdown, markdown } from "@opal/utils";
 import { Content, IllustrationContent } from "@opal/layouts";
 import { Modal } from "@opal/components";
 import {
@@ -81,6 +81,7 @@ function DisconnectConfirmModal({
   onDisconnectAndDelete,
 }: DisconnectConfirmModalProps) {
   const t = useTranslations("admin.hooks");
+  const { appName } = useSettings();
   const onClose = useModalClose();
 
   return (
@@ -98,7 +99,10 @@ function DisconnectConfirmModal({
           <div className="flex flex-col gap-2">
             <Text font="main-ui-body" color="text-03">
               {markdown(
-                t("disconnectModal.body.description", { name: hook.name })
+                t("disconnectModal.body.description", {
+                  name: escapeMarkdown(hook.name),
+                  appName: escapeMarkdown(appName),
+                })
               )}
             </Text>
             <Text font="main-ui-body" color="text-03">
@@ -598,7 +602,7 @@ export default function HooksPage() {
         <SettingsLayouts.Header
           icon={route.icon}
           title={adminRouteTitle(route)}
-          description={t("page.description")}
+          description={t("page.description", { appName: settings.appName })}
           divider
         />
         <SettingsLayouts.Body>

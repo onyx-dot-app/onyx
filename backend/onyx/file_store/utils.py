@@ -1,14 +1,14 @@
 import base64
 from collections.abc import Callable
 from io import BytesIO
-from typing import cast
+from typing import Any, cast
 from uuid import UUID
 
 import requests
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.configs.constants import FileOrigin
+from onyx.configs.constants import CHAT_SESSION_ID_FILE_METADATA_KEY, FileOrigin
 from onyx.db.models import UserFile
 from onyx.db.user_file import get_user_file_by_id
 from onyx.file_store.file_store import get_default_file_store
@@ -239,7 +239,17 @@ def validate_user_files_ownership(
     return current_user_files
 
 
-def save_file_from_url(url: str) -> str:
+def chat_image_gen_metadata(chat_session_id: UUID) -> dict[str, Any]:
+    """Stamp the owning chat session onto a generated file.
+
+    `access.py:user_can_access_chat_file` scopes a `CHAT_IMAGE_GEN` file to the
+    users who may read this session. Only rows written before stamping existed
+    lack it; new writes must always carry it.
+    """
+    return {CHAT_SESSION_ID_FILE_METADATA_KEY: str(chat_session_id)}
+
+
+def save_file_from_url(url: str, chat_session_id: UUID) -> str:
     response = requests.get(url)
     response.raise_for_status()
 
@@ -250,30 +260,35 @@ def save_file_from_url(url: str) -> str:
         display_name="GeneratedImage",
         file_origin=FileOrigin.CHAT_IMAGE_GEN,
         file_type="image/png;base64",
+        file_metadata=chat_image_gen_metadata(chat_session_id),
     )
     return file_id
 
 
-def save_file_from_base64(base64_string: str) -> str:
+def save_file_from_base64(base64_string: str, chat_session_id: UUID) -> str:
     file_store = get_default_file_store()
     file_id = file_store.save_file(
         content=BytesIO(base64.b64decode(base64_string)),
         display_name="GeneratedImage",
         file_origin=FileOrigin.CHAT_IMAGE_GEN,
         file_type=get_image_type(base64_string),
+        file_metadata=chat_image_gen_metadata(chat_session_id),
     )
     return file_id
 
 
 def save_file(
-    url: str | None = None,
-    base64_data: str | None = None,
+    url: str | None,
+    base64_data: str | None,
+    chat_session_id: UUID,
 ) -> str:
     """Save a file from either a URL or base64 encoded string.
 
     Args:
         url: URL to download file from
         base64_data: Base64 encoded file data
+        chat_session_id: Owning chat session, stamped so the file is readable
+            only by users who may read that session
 
     Returns:
         The unique ID of the saved file
@@ -285,22 +300,27 @@ def save_file(
         raise ValueError("Cannot specify both url and base64_data")
 
     if url is not None:
-        return save_file_from_url(url)
+        return save_file_from_url(url, chat_session_id=chat_session_id)
     elif base64_data is not None:
-        return save_file_from_base64(base64_data)
+        return save_file_from_base64(base64_data, chat_session_id=chat_session_id)
     else:
         raise ValueError("Must specify either url or base64_data")
 
 
-def save_files(urls: list[str], base64_files: list[str]) -> list[str]:
+def save_files(
+    urls: list[str],
+    base64_files: list[str],
+    chat_session_id: UUID,
+) -> list[str]:
     # NOTE: be explicit about typing so that if we change things, we get notified
     funcs: list[
         tuple[
-            Callable[[str | None, str | None], str],
-            tuple[str | None, str | None],
+            Callable[[str | None, str | None, UUID], str],
+            tuple[str | None, str | None, UUID],
         ]
-    ] = [(save_file, (url, None)) for url in urls] + [
-        (save_file, (None, base64_file)) for base64_file in base64_files
+    ] = [(save_file, (url, None, chat_session_id)) for url in urls] + [
+        (save_file, (None, base64_file, chat_session_id))
+        for base64_file in base64_files
     ]
 
     return run_functions_tuples_in_parallel(funcs)

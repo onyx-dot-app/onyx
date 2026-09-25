@@ -1,13 +1,13 @@
 "use client";
 
-import { SearchDocWithContent } from "@/lib/search/interfaces";
+import { SearchDocWithContent } from "@/lib/search/types";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
 import Text from "@/refresh-components/texts/Text";
 import Chip from "@/refresh-components/Chip";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
 import { ValidSources } from "@/lib/types";
-import { MinimalOnyxDocument } from "@/lib/search/interfaces";
+import { MinimalOnyxDocument } from "@/lib/search/types";
 import { Section } from "@/layouts/general-layouts";
 import { Interactive } from "@opal/core";
 import Truncated from "@/refresh-components/texts/Truncated";

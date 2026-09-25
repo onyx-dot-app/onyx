@@ -39,6 +39,10 @@ spec:
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.inferenceCapability.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- with .Values.inferenceCapability.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
@@ -75,9 +79,8 @@ spec:
         startupProbe:
           {{- toYaml . | nindent 10 }}
         {{- end }}
-        {{- with .Values.inferenceCapability.readinessProbe }}
-        readinessProbe:
-          {{- toYaml . | nindent 10 }}
+        {{- with include "onyx.readinessProbe" (dict "values" .Values.inferenceCapability "handler" (dict "httpGet" (dict "path" "/api/health" "port" "model-server"))) | trim }}
+        {{- . | nindent 8 }}
         {{- end }}
         {{- with .Values.inferenceCapability.livenessProbe }}
         livenessProbe:

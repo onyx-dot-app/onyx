@@ -870,7 +870,3 @@ export const credentialDisplayNames: Record<string, string> = {
   bitbucket_email: "Bitbucket Account Email",
   bitbucket_api_token: "Bitbucket API Token",
 };
-
-export function getDisplayNameForCredentialKey(key: string): string {
-  return credentialDisplayNames[key] || key;
-}

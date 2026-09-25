@@ -413,6 +413,11 @@ class FileStoreType(str, Enum):
     AZURE = "azure"
 
 
+# Key in FileRecord.file_metadata naming the chat session that produced a
+# CHAT_IMAGE_GEN file. user_can_access_chat_file scopes the file by it.
+CHAT_SESSION_ID_FILE_METADATA_KEY = "chat_session_id"
+
+
 class FileOrigin(str, Enum):
     CHAT_UPLOAD = "chat_upload"
     CHAT_IMAGE_GEN = "chat_image_gen"

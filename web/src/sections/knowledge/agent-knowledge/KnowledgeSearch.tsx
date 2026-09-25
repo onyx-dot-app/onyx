@@ -11,7 +11,7 @@ import type {
   ConnectedSource,
   HierarchyNodeSearchSummary,
 } from "@/lib/hierarchy/interfaces";
-import type { SearchDocWithContent } from "@/lib/search/interfaces";
+import type { SearchDocWithContent } from "@/lib/search/types";
 import type { ValidSources } from "@/lib/types";
 import {
   Button,

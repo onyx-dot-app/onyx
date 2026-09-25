@@ -1,5 +1,5 @@
 import { ValidSources } from "@/lib/types";
-import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
+import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/types";
 import { transformLinkUri } from "@/lib/utils";
 
 export const openExternalLink = (url: string) => {

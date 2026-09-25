@@ -1,9 +1,9 @@
 import { Agent } from "@/lib/agents/types";
 import type { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import type { Locale } from "@/i18n/config";
-import { Credential } from "./connectors/credentials";
-import { Connector } from "./connectors/connectors";
-import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
+import type { Credential } from "@/lib/connectors/types";
+import type { Connector } from "@/lib/connectors/types";
+import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
 import type { PermissionsOf } from "@/lib/permissions/resource-actions";
 
 export enum ThemePreference {
@@ -184,7 +184,7 @@ export type ValidStatuses =
   | "not_started";
 export type TaskStatus = "PENDING" | "STARTED" | "SUCCESS" | "FAILURE";
 export type Feedback = "like" | "dislike" | "mixed";
-export type AccessType = "public" | "private" | "sync";
+export type AccessType = "public" | "private" | "sync" | "sync_restricted";
 export type ProcessingMode = "REGULAR";
 export type SessionType = "Chat" | "Search" | "Slack";
 
@@ -580,6 +580,7 @@ export interface SecuritySettings {
   user_directory_admin_only: boolean;
   incognito_availability: IncognitoAvailability;
   incognito_record_mode: IncognitoRecordMode;
+  allow_connector_group_restrictions: boolean;
   track_external_idp_expiry: boolean;
   allow_same_provider_subject_relink: boolean;
   ssrf_protection_level: SSRFProtectionLevel;

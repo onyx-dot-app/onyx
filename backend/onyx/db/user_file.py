@@ -1,7 +1,10 @@
 import datetime
+from collections.abc import Sequence
+from typing import NamedTuple
 from uuid import UUID
 
-from sqlalchemy import exists, func, select, update
+from sqlalchemy import column, exists, func, or_, select, true, update, values
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from onyx.db.enums import UserFileStatus
@@ -191,6 +194,57 @@ def fetch_port_scope_user_ids(db_session: Session) -> list[UUID]:
     ]
 
 
+class PortedUserScope(NamedTuple):
+    user_id: UUID
+    up_to_doc_id: str | None
+
+
+def sample_ported_user_file_ids(
+    db_session: Session,
+    user_scopes: Sequence[PortedUserScope],
+    per_scope_limit: int,
+) -> list[str]:
+    """Gets up to `per_scope_limit` user file IDs per user that its port copied.
+
+    Only COMPLETED, non-incognito files inside the port's snapshot bound count, which
+    is the scope the port itself copies. A user with a None `up_to_doc_id` is skipped:
+    that port found no files when it started, and files completed since belong to the
+    dual-write. Files with a NULL chunk_count are included; the column was added
+    without a backfill.
+
+    One LATERAL query serves every user. This runs on each 15-second swap-gate tick,
+    and a tenant can have thousands of users with files.
+    """
+    scope_rows = [
+        (scope.user_id, UUID(scope.up_to_doc_id))
+        for scope in user_scopes
+        if scope.up_to_doc_id is not None
+    ]
+    if per_scope_limit <= 0 or not scope_rows:
+        return []
+    scopes = values(
+        column("user_id", PGUUID(as_uuid=True)),
+        column("up_to_id", PGUUID(as_uuid=True)),
+        name="user_scope",
+    ).data(scope_rows)
+
+    per_user = (
+        select(UserFile.id)
+        .where(
+            UserFile.user_id == scopes.c.user_id,
+            UserFile.status == UserFileStatus.COMPLETED,
+            UserFile.incognito.is_(False),
+            or_(UserFile.chunk_count.is_(None), UserFile.chunk_count > 0),
+            UserFile.id <= scopes.c.up_to_id,
+        )
+        .order_by(UserFile.id)
+        .limit(per_scope_limit)
+        .lateral("sampled_user_file")
+    )
+    stmt = select(per_user.c.id).select_from(scopes.join(per_user, true()))
+    return [str(file_id) for file_id in db_session.scalars(stmt)]
+
+
 def get_user_file_ids_for_user_batch(
     db_session: Session,
     user_id: UUID,
@@ -243,6 +297,32 @@ def filter_existing_user_file_ids(
             UserFile.user_id == user_id,
             UserFile.status == UserFileStatus.COMPLETED,
             UserFile.id.in_([UUID(i) for i in ids]),
+        )
+    )
+    return {str(uf_id) for uf_id in rows}
+
+
+def filter_existing_user_file_ids_any_owner(
+    db_session: Session, ids: list[str]
+) -> set[str]:
+    """Returns the subset of `ids` that are COMPLETED user files, regardless of owner.
+
+    IDs that are not UUIDs are ignored, so connector document IDs can be mixed in.
+    """
+    if not ids:
+        return set()
+    parsed: list[UUID] = []
+    for raw_id in ids:
+        try:
+            parsed.append(UUID(raw_id))
+        except ValueError:
+            continue
+    if not parsed:
+        return set()
+    rows = db_session.scalars(
+        select(UserFile.id).where(
+            UserFile.status == UserFileStatus.COMPLETED,
+            UserFile.id.in_(parsed),
         )
     )
     return {str(uf_id) for uf_id in rows}

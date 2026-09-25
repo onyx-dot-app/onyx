@@ -23,7 +23,7 @@ from onyx.connectors.zoom.recordings.models import (
     has_no_transcript,
 )
 from onyx.connectors.zoom.recordings.session_types import get_session_type_handler
-from onyx.connectors.zoom.recordings.vtt import parse_vtt_transcript
+from onyx.file_processing.webvtt import parse_vtt_transcript
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

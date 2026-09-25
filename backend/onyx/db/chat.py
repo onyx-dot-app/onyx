@@ -3,14 +3,13 @@ from datetime import datetime, timedelta, timezone
 from typing import Tuple
 from uuid import UUID
 
-from fastapi import HTTPException
 from sqlalchemy import Row, delete, desc, func, nullsfirst, or_, select, update
 from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy.sql.expression import ColumnElement
 
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
-from onyx.configs.constants import MessageType
+from onyx.configs.constants import ANONYMOUS_USER_UUID, MessageType
 from onyx.context.search.models import InferenceSection, SavedSearchDoc
 from onyx.context.search.models import SearchDoc as ServerSearchDoc
 from onyx.db.enums import IncognitoRecordMode, record_mode_persists_content
@@ -25,6 +24,8 @@ from onyx.db.models import (
 )
 from onyx.db.models import SearchDoc as DBSearchDoc
 from onyx.db.persona import get_best_persona_id_for_user
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride, PromptOverride
@@ -291,15 +292,26 @@ def duplicate_chat_session_for_user_from_slack(
         (if it is available to the user clicking the button)
     - Sets the user to the given user (if provided)
     """
-    chat_session = get_chat_session_by_id(
-        chat_session_id=chat_session_id,
-        user_id=None,  # Ignore user permissions for this
-        db_session=db_session,
-    )
+    try:
+        chat_session = get_chat_session_by_id(
+            chat_session_id=chat_session_id,
+            user_id=None,
+            db_session=db_session,
+        )
+    except ValueError:
+        chat_session = None
+    # Slack answers are owned by the mapped user (DMs, ephemeral replies) or by
+    # the anonymous user (public channel replies). Any other owner is private.
+    if chat_session is None or chat_session.user_id not in (
+        None,
+        user.id,
+        UUID(ANONYMOUS_USER_UUID),
+    ):
+        raise OnyxError(
+            OnyxErrorCode.SESSION_NOT_FOUND, "Invalid Chat Session ID provided"
+        )
     if chat_session.incognito_record_mode is not None:
         raise ValueError("Incognito chat sessions cannot be duplicated")
-    if not chat_session:
-        raise HTTPException(status_code=400, detail="Invalid Chat Session ID provided")
 
     # This enforces permissions and sets a default
     new_persona_id = get_best_persona_id_for_user(

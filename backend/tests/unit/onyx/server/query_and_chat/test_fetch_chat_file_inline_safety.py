@@ -24,7 +24,11 @@ CURRENT_ETAG = f'"{FILE_ID}-{RESPONSE_POLICY_VERSION}"'
 PRE_POLICY_ETAG = f'"{FILE_ID}"'
 
 
-def _setup(monkeypatch: pytest.MonkeyPatch, file_type: str) -> MagicMock:
+def _setup(
+    monkeypatch: pytest.MonkeyPatch,
+    file_type: str,
+    display_name: str | None = "report",
+) -> MagicMock:
     """Patch the access checks and the file store; return the mock store."""
     monkeypatch.setattr(
         "onyx.server.query_and_chat.chat_backend.get_file_id_by_user_file_id",
@@ -37,7 +41,7 @@ def _setup(monkeypatch: pytest.MonkeyPatch, file_type: str) -> MagicMock:
 
     file_store = MagicMock()
     file_store.read_file_record.return_value = SimpleNamespace(
-        file_type=file_type, display_name="report"
+        file_type=file_type, display_name=display_name
     )
     file_store.read_file.return_value = BytesIO(b"payload")
     monkeypatch.setattr(
@@ -67,7 +71,7 @@ def test_allowlisted_type_is_served_inline(
     response = _call()
 
     assert response.headers["content-type"].startswith(file_type)
-    assert "content-disposition" not in response.headers
+    assert response.headers["content-disposition"].startswith("inline;")
 
 
 def test_mime_parameters_are_ignored_by_the_allowlist(
@@ -79,7 +83,7 @@ def test_mime_parameters_are_ignored_by_the_allowlist(
     response = _call()
 
     assert response.headers["content-type"] == "IMAGE/PNG; base64"
-    assert "content-disposition" not in response.headers
+    assert response.headers["content-disposition"].startswith("inline;")
 
 
 @pytest.mark.parametrize(
@@ -94,7 +98,7 @@ def test_active_content_is_forced_to_download(
     response = _call()
 
     assert response.headers["content-type"] == "application/octet-stream"
-    assert response.headers["content-disposition"] == "attachment"
+    assert response.headers["content-disposition"].startswith("attachment;")
 
 
 @pytest.mark.parametrize("file_type", ["image/png", "text/html"])
@@ -138,7 +142,7 @@ def test_security_headers_on_the_not_modified_response(
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["content-security-policy"] == "sandbox"
     # A 304 updates the stored response, so it repeats the 200's disposition.
-    assert response.headers["content-disposition"] == "attachment"
+    assert response.headers["content-disposition"].startswith("attachment;")
     file_store.read_file.assert_not_called()
 
 
@@ -150,7 +154,7 @@ def test_pre_policy_etag_is_not_revalidated(monkeypatch: pytest.MonkeyPatch) -> 
 
     assert response.status_code == 200
     assert response.headers["etag"] == CURRENT_ETAG
-    assert response.headers["content-disposition"] == "attachment"
+    assert response.headers["content-disposition"].startswith("attachment;")
 
 
 def test_parsed_spreadsheet_etag_is_versioned(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -167,3 +171,31 @@ def test_parsed_spreadsheet_etag_is_versioned(monkeypatch: pytest.MonkeyPatch) -
 
     assert response.status_code == 200
     assert response.headers["etag"] == f'"{FILE_ID}-parsed-{RESPONSE_POLICY_VERSION}"'
+
+
+def test_generated_office_file_downloads_with_its_extension(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pptx_type = (
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    )
+    _setup(monkeypatch, pptx_type, display_name='Q3 "Deck"')
+
+    response = _call()
+
+    assert response.headers["content-type"] == pptx_type
+    assert response.headers["content-disposition"] == (
+        "attachment; filename=\"Q3 _Deck_.pptx\"; filename*=UTF-8''Q3%20_Deck_.pptx"
+    )
+
+
+def test_file_without_display_name_is_named_after_its_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _setup(monkeypatch, "text/csv", display_name=None)
+
+    response = _call()
+
+    assert response.headers["content-disposition"] == (
+        f"attachment; filename=\"{FILE_ID}.csv\"; filename*=UTF-8''{FILE_ID}.csv"
+    )

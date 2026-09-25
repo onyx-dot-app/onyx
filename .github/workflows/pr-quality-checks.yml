@@ -36,6 +36,12 @@ jobs:
       - name: Install node dependencies
         working-directory: ./web
         run: bun install --frozen-lockfile
+      # web/ has its own lockfile; widget/, examples/widget/ and desktop/ live in
+      # the root bun workspace. The hooks that type-check them run `tsgo` from
+      # the root node_modules, and prek never runs the post-checkout hook that
+      # would install it.
+      - name: Install root workspace dependencies
+        run: bun install --frozen-lockfile
       - uses: j178/prek-action@4e14d07f9231acabce116ccfca13b13dd9755ece
         env:
           SKIP: ty,desktop-rust-fmt,desktop-rust-clippy

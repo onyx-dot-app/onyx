@@ -10,7 +10,7 @@ jest.mock("@/hooks/useUserExternalApps", () => ({
   default: (enabled?: boolean) => mockUseUserExternalApps(enabled),
 }));
 
-jest.mock("@/lib/tools/hooks", () => ({
+jest.mock("@/lib/mcp/hooks", () => ({
   useCraftMcpServers: (enabled?: boolean) => mockUseCraftMcpServers(enabled),
 }));
 
