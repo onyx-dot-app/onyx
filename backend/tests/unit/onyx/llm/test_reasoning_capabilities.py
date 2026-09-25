@@ -222,6 +222,26 @@ def test_openai_chat_tools_require_reasoning_none(
             None,
             ReasoningParamStyle.LITELLM_EFFORT,
         ),
+        # Vercel AI Gateway: litellm's config is OpenAI-shaped and drops
+        # thinking/output_config, so Claude must not get Anthropic params.
+        (
+            LlmProviderNames.VERCEL_AI_GATEWAY,
+            "anthropic/claude-opus-4.7",
+            None,
+            ReasoningParamStyle.LITELLM_EFFORT,
+        ),
+        (
+            LlmProviderNames.VERCEL_AI_GATEWAY,
+            "anthropic/claude-sonnet-4.5",
+            None,
+            ReasoningParamStyle.LITELLM_EFFORT,
+        ),
+        (
+            LlmProviderNames.VERCEL_AI_GATEWAY,
+            "openai/gpt-5.1",
+            None,
+            ReasoningParamStyle.LITELLM_EFFORT,
+        ),
     ],
 )
 def test_resolve_reasoning_param_style(

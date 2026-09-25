@@ -1019,6 +1019,17 @@ class LitellmLLM(LLM):
             # See also, https://github.com/ollama/ollama/issues/11171
             optional_kwargs["allowed_openai_params"] = ["tool_choice"]
 
+        # LiteLLM's vercel_ai_gateway config omits reasoning_effort from its
+        # supported params, so drop_params would silently discard it.
+        if (
+            self._model_provider == LlmProviderNames.VERCEL_AI_GATEWAY
+            and "reasoning_effort" in optional_kwargs
+        ):
+            optional_kwargs["allowed_openai_params"] = [
+                *optional_kwargs.get("allowed_openai_params", []),
+                "reasoning_effort",
+            ]
+
         # Passthrough kwargs
         passthrough_kwargs = build_litellm_passthrough_kwargs(
             model_kwargs=self._model_kwargs,

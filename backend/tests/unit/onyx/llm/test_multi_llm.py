@@ -731,6 +731,51 @@ def test_reasoning_off_for_gemini_uses_lowest_accepted_level(
         assert "reasoning" not in kwargs
 
 
+@pytest.mark.parametrize(
+    "model_name, reasoning_effort, expected_effort",
+    [
+        ("anthropic/claude-opus-4.7", ReasoningEffort.HIGH, "high"),
+        ("anthropic/claude-sonnet-4.5", ReasoningEffort.MEDIUM, "medium"),
+        ("openai/gpt-5.1", ReasoningEffort.LOW, "low"),
+        ("openai/gpt-5.1", ReasoningEffort.OFF, "none"),
+        # Pre-adaptive Claude thinks only when asked, so off sends nothing.
+        ("anthropic/claude-sonnet-4.5", ReasoningEffort.OFF, None),
+    ],
+)
+def test_vercel_ai_gateway_sends_reasoning_effort_and_allowlists_it(
+    model_name: str, reasoning_effort: ReasoningEffort, expected_effort: str | None
+) -> None:
+    # litellm's vercel_ai_gateway config drops thinking, output_config and
+    # reasoning_effort unless allowlisted, so Claude and OpenAI alike must go
+    # out as an allowlisted reasoning_effort.
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.VERCEL_AI_GATEWAY,
+        model_name=model_name,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.VERCEL_AI_GATEWAY,
+            model_name=model_name,
+        ),
+    )
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
+    ):
+        mock_completion.return_value = []
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=reasoning_effort))
+        kwargs = mock_completion.call_args.kwargs
+
+    assert kwargs["model"] == f"vercel_ai_gateway/{model_name}"
+    assert "thinking" not in kwargs
+    assert "output_config" not in kwargs
+    assert "reasoning" not in kwargs
+    assert kwargs.get("reasoning_effort") == expected_effort
+    if expected_effort is not None:
+        assert "reasoning_effort" in kwargs["allowed_openai_params"]
+
+
 def test_keeps_temperature_for_other_models(default_multi_llm: LitellmLLM) -> None:
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []

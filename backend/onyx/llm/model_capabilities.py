@@ -723,6 +723,13 @@ def resolve_reasoning_param_style(
     ):
         return ReasoningParamStyle.OPENAI
 
+    # LiteLLM's vercel_ai_gateway config is OpenAI chat completions and lists
+    # neither thinking nor output_config, so drop_params discards them before
+    # the wire. reasoning_effort is the one reasoning param that surface
+    # carries, Claude included (multi_llm allowlists it for this provider).
+    if model_provider == LlmProviderNames.VERCEL_AI_GATEWAY:
+        return ReasoningParamStyle.LITELLM_EFFORT
+
     if is_claude_model:
         if any(anthropic_uses_adaptive_thinking(name) for name in model_names):
             return ReasoningParamStyle.ANTHROPIC_ADAPTIVE
