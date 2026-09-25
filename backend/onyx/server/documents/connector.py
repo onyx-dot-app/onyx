@@ -1662,12 +1662,13 @@ def create_connector_with_mock_credential(
         # The base class: a transient source failure raises the unexpected
         # variant, and it must free the name the same way.
         _discard_unpaired_creation(db_session, connector_id, credential_id)
-        raise HTTPException(
-            status_code=400, detail="Connector validation error: " + str(e)
+        raise OnyxError(
+            OnyxErrorCode.CONNECTOR_VALIDATION_FAILED,
+            "Connector validation error: " + str(e),
         )
     except ValueError as e:
         _discard_unpaired_creation(db_session, connector_id, credential_id)
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
 
 
 def _discard_unpaired_creation(

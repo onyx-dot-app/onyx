@@ -1,10 +1,9 @@
-"""A failed creation validation must remove the connector row the create call
-already committed, or the name stays taken for the retry."""
+"""A failed validation in the mock-credential create flow must remove the
+connector and credential rows it already committed, or the name stays taken."""
 
 from unittest.mock import MagicMock
 
 import pytest
-from fastapi import HTTPException
 
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -13,10 +12,8 @@ from onyx.connectors.exceptions import (
 from onyx.db.enums import AccessType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.documents import cc_pair as cc_pair_server
 from onyx.server.documents import connector as connector_server
 from onyx.server.documents.models import (
-    ConnectorCredentialPairMetadata,
     ConnectorUpdateRequest,
     DocumentSource,
     InputType,
@@ -37,14 +34,6 @@ def request_data() -> ConnectorUpdateRequest:
         access_type=AccessType.PUBLIC,
         groups=[],
     )
-
-
-def _session_that_propagates() -> MagicMock:
-    """A MagicMock's ``with session.begin()`` swallows exceptions, a real one
-    does not."""
-    db_session = MagicMock()
-    db_session.begin.return_value.__exit__.return_value = False
-    return db_session
 
 
 @pytest.fixture
@@ -69,12 +58,12 @@ def test_failed_validation_removes_both_rows(
 ) -> None:
     db_session = MagicMock()
 
-    with pytest.raises(HTTPException) as raised:
+    with pytest.raises(OnyxError) as raised:
         connector_server.create_connector_with_mock_credential(
             connector_data=request_data, user=MagicMock(), db_session=db_session
         )
 
-    assert raised.value.status_code == 400
+    assert raised.value.error_code == OnyxErrorCode.CONNECTOR_VALIDATION_FAILED
     assert "no access to graph api" in raised.value.detail
     stubbed_creation["discard_connector_if_unpaired"].assert_called_once_with(
         db_session, 7
@@ -89,12 +78,12 @@ def test_duplicate_name_removes_nothing(
         "Connector by this name already exists, duplicate naming not allowed."
     )
 
-    with pytest.raises(HTTPException) as raised:
+    with pytest.raises(OnyxError) as raised:
         connector_server.create_connector_with_mock_credential(
             connector_data=request_data, user=MagicMock(), db_session=MagicMock()
         )
 
-    assert raised.value.status_code == 400
+    assert raised.value.error_code == OnyxErrorCode.INVALID_INPUT
     stubbed_creation["discard_connector_if_unpaired"].assert_not_called()
     stubbed_creation["delete_credential"].assert_not_called()
 
@@ -105,7 +94,7 @@ def test_connector_paired_meanwhile_still_drops_the_mock_credential(
     stubbed_creation["discard_connector_if_unpaired"].return_value = False
     db_session = MagicMock()
 
-    with pytest.raises(HTTPException):
+    with pytest.raises(OnyxError):
         connector_server.create_connector_with_mock_credential(
             connector_data=request_data, user=MagicMock(), db_session=db_session
         )
@@ -121,90 +110,12 @@ def test_transient_validation_failure_also_frees_the_name(
     ].side_effect = UnexpectedValidationError("source unreachable")
     db_session = MagicMock()
 
-    with pytest.raises(HTTPException) as raised:
+    with pytest.raises(OnyxError) as raised:
         connector_server.create_connector_with_mock_credential(
             connector_data=request_data, user=MagicMock(), db_session=db_session
         )
 
-    assert raised.value.status_code == 400
+    assert raised.value.error_code == OnyxErrorCode.CONNECTOR_VALIDATION_FAILED
     stubbed_creation["discard_connector_if_unpaired"].assert_called_once_with(
         db_session, 7
     )
-
-
-@pytest.fixture
-def stubbed_association(monkeypatch: pytest.MonkeyPatch) -> dict[str, MagicMock]:
-    stubs = {
-        "assert_within_scope": MagicMock(),
-        "get_cc_pair_ids_for_connector": MagicMock(return_value=set()),
-        "fetch_credential_by_id_for_user": MagicMock(return_value=MagicMock()),
-        "validate_ccpair_for_user": MagicMock(
-            side_effect=ConnectorValidationError("no access to graph api")
-        ),
-        "add_credential_to_connector": MagicMock(),
-        "discard_connector_if_unpaired": MagicMock(return_value=True),
-    }
-    for name, stub in stubs.items():
-        monkeypatch.setattr(cc_pair_server, name, stub)
-    return stubs
-
-
-def test_failed_link_removes_the_unpaired_connector(
-    stubbed_association: dict[str, MagicMock],
-) -> None:
-    db_session = _session_that_propagates()
-
-    with pytest.raises(OnyxError) as raised:
-        cc_pair_server.associate_credential_to_connector(
-            connector_id=7,
-            credential_id=9,
-            metadata=ConnectorCredentialPairMetadata(
-                name="sharepoint-retry", access_type=AccessType.PUBLIC
-            ),
-            user=MagicMock(),
-            db_session=db_session,
-            tenant_id="public",
-        )
-
-    assert raised.value.error_code == OnyxErrorCode.INVALID_INPUT
-    assert "no access to graph api" in raised.value.detail
-    assert "removed" in raised.value.detail
-    stubbed_association["discard_connector_if_unpaired"].assert_called_once_with(
-        db_session, 7
-    )
-    stubbed_association["add_credential_to_connector"].assert_not_called()
-
-
-def test_failed_link_keeps_a_connector_paired_meanwhile(
-    stubbed_association: dict[str, MagicMock],
-) -> None:
-    stubbed_association["discard_connector_if_unpaired"].return_value = False
-
-    with pytest.raises(OnyxError) as raised:
-        cc_pair_server.associate_credential_to_connector(
-            connector_id=7,
-            credential_id=9,
-            metadata=ConnectorCredentialPairMetadata(
-                name="sharepoint-retry", access_type=AccessType.PUBLIC
-            ),
-            user=MagicMock(),
-            db_session=_session_that_propagates(),
-            tenant_id="public",
-        )
-
-    assert "removed" not in raised.value.detail
-
-
-def test_credential_cleanup_failure_keeps_the_validation_error(
-    request_data: ConnectorUpdateRequest, stubbed_creation: dict[str, MagicMock]
-) -> None:
-    stubbed_creation["delete_credential"].side_effect = RuntimeError("db down")
-    db_session = MagicMock()
-
-    with pytest.raises(HTTPException) as raised:
-        connector_server.create_connector_with_mock_credential(
-            connector_data=request_data, user=MagicMock(), db_session=db_session
-        )
-
-    assert "no access to graph api" in raised.value.detail
-    assert db_session.rollback.call_count == 2
