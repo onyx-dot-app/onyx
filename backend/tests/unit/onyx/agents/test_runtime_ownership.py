@@ -9,7 +9,7 @@ import pytest
 
 from onyx.agents.coordination import AgentCoordinator, AgentInfo
 from onyx.agents.events import AgentEvent
-from onyx.agents.models import PreparedStep, RunSnapshot, StepInput, StepResult
+from onyx.agents.models import PreparedStep, RunState, StepInput, StepResult
 from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.agents.transcript import OperationSnapshot, RunStatus
@@ -23,7 +23,7 @@ from onyx.llm.models import (
     ToolResultMessage,
 )
 from onyx.utils.threadpool_concurrency import start_thread_future
-from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
+from tests.unit.onyx.agents.fakes import FakeAgentDirectory, FakeModelClient, run_agent
 from tests.unit.onyx.agents.test_child_coordination import parent_agent
 
 
@@ -47,14 +47,16 @@ def test_first_step_failure_is_recorded_and_agent_can_retry() -> None:
     with pytest.raises(RunFailed):
         run_agent(agent, max_steps=1, runs=handles)
     assert handles[0].snapshot().status == RunStatus.ERROR
-    assert agent.execute(max_steps=1).result().output.text == "Recovered"
+    assert (
+        agent.start(background=False, max_steps=1).result().output.text == "Recovered"
+    )
     assert attempts == 2
 
 
 @pytest.mark.parametrize("in_discovery", [False, True])
 def test_archive_lookup_does_not_restore_an_agent(in_discovery: bool) -> None:
     resolutions: list[str] = []
-    archived = RunSnapshot(
+    archived = RunState(
         agent_id="research",
         run_id="saved",
         status=RunStatus.COMPLETE,
@@ -100,12 +102,14 @@ def test_archive_lookup_does_not_restore_an_agent(in_discovery: bool) -> None:
     )
     coordinator = AgentCoordinator(
         agents=[info] if in_discovery else [],
-        lookup_agent=lambda agent_id, parent_id: (
-            info if agent_id == info.id and parent_id == parent.id else None
-        ),
-        resolve_agent=restore,
-        read_run=lambda run_id, parent_id: (
-            archived if run_id == "saved" and parent_id == parent.id else None
+        directory=FakeAgentDirectory(
+            lookup_agent=lambda agent_id, parent_id: (
+                info if agent_id == info.id and parent_id == parent.id else None
+            ),
+            restore_agent=restore,
+            read_run=lambda run_id, parent_id: (
+                archived if run_id == "saved" and parent_id == parent.id else None
+            ),
         ),
     )
     handles: list[Run] = []
@@ -179,7 +183,7 @@ def test_cancelled_work_keeps_agent_and_coordinator_reserved(kind: str) -> None:
 def test_archive_timeout_does_not_cancel_parent_or_release_its_work_early() -> None:
     entered, release, finished = Event(), Event(), Event()
 
-    def read(_run_id: str, _parent_id: str) -> RunSnapshot | None:
+    def read(_run_id: str, _parent_id: str) -> RunState | None:
         entered.set()
         try:
             assert release.wait(3)
@@ -200,7 +204,11 @@ def test_archive_timeout_does_not_cancel_parent_or_release_its_work_early() -> N
 
     parent = parent_agent(inspect)
 
-    run_agent(parent, max_steps=2, coordinator=AgentCoordinator(read_run=read))
+    run_agent(
+        parent,
+        max_steps=2,
+        coordinator=AgentCoordinator(directory=FakeAgentDirectory(read_run=read)),
+    )
     assert finished.is_set()
 
 
@@ -398,7 +406,7 @@ def test_child_restart_waits_for_its_timed_out_archive_read() -> None:
     entered, release = Event(), Event()
     calls = 0
 
-    def read(_run_id: str, _parent_id: str) -> RunSnapshot | None:
+    def read(_run_id: str, _parent_id: str) -> RunState | None:
         entered.set()
         assert release.wait(5)
         return None
@@ -435,7 +443,7 @@ def test_child_restart_waits_for_its_timed_out_archive_read() -> None:
         run_agent(
             parent_agent(delegate),
             max_steps=2,
-            coordinator=AgentCoordinator(read_run=read),
+            coordinator=AgentCoordinator(directory=FakeAgentDirectory(read_run=read)),
         )
     finally:
         release.set()

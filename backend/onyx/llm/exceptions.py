@@ -130,10 +130,10 @@ def litellm_exception_to_error_msg(  # noqa: C901 - Provider errors have distinc
         if llm is not None:
             try:
                 max_context = get_max_input_tokens(
-                    model_name=llm.info.model_name,
-                    model_provider=llm.info.model_provider,
+                    model_name=llm.config.model_name,
+                    model_provider=llm.config.model_provider,
                 )
-                error_msg += f" Your invoked model ({llm.info.model_name}) has a maximum context size of {max_context}."
+                error_msg += f" Your invoked model ({llm.config.model_name}) has a maximum context size of {max_context}."
             except Exception:
                 logger.warning(
                     "Unable to get maximum input token for LiteLLM exception handling"
@@ -169,8 +169,8 @@ def litellm_exception_to_error_msg(  # noqa: C901 - Provider errors have distinc
         is_retryable = True
     elif isinstance(core_exception, (RateLimitError, LLMRateLimitError)):
         provider_name = (
-            llm.info.model_provider
-            if llm is not None and llm.info.model_provider
+            llm.config.model_provider
+            if llm is not None and llm.config.model_provider
             else "The LLM provider"
         )
         upstream_detail: str | None = None
@@ -216,8 +216,8 @@ def litellm_exception_to_error_msg(  # noqa: C901 - Provider errors have distinc
             is_retryable = True
     elif isinstance(core_exception, ServiceUnavailableError):
         provider_name = (
-            llm.info.model_provider
-            if llm is not None and llm.info.model_provider
+            llm.config.model_provider
+            if llm is not None and llm.config.model_provider
             else "The LLM provider"
         )
         # Check if this is specifically the Bedrock "Too many connections" error

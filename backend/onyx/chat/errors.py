@@ -66,8 +66,8 @@ def _build_empty_llm_response_error(
     message: AssistantMessage,
     tool_choice: ToolChoiceOptions,
 ) -> EmptyLLMResponseError:
-    provider = llm.info.model_provider
-    model = llm.info.model_name
+    provider = llm.config.model_provider
+    model = llm.config.model_name
     finish_reason = message.stop_reason
 
     # A refusal/content-filter stop is a deliberate model decision (HTTP 200
@@ -162,8 +162,8 @@ def chat_error(
         )
     info = litellm_exception_to_safe_error(error, llm, fallback_to_error_msg=False)
     details: dict[str, str | int | None] = {
-        "model": llm.info.model_name,
-        "provider": llm.info.model_provider,
+        "model": llm.config.model_name,
+        "provider": llm.config.model_provider,
     }
     if model_index is not None:
         details["model_index"] = model_index

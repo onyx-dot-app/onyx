@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
-from onyx.llm.interfaces import GenerationContext, LLMConfig, LLMInfo
+from onyx.llm.interfaces import GenerationContext, LLMConfig
 from onyx.llm.litellm_models import (
     ChatCompletionMessageToolCall,
     Choice,
@@ -24,16 +24,12 @@ from onyx.llm.models import (
     Usage,
     UserMessage,
 )
-from onyx.llm.multi_llm import LitellmLLM, LitellmTransport
+from onyx.llm.multi_llm import LitellmLLM
 
 
-class RecordingProvider(LitellmTransport):
+class RecordingProvider(LitellmLLM):
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
-
-    @property
-    def info(self) -> LLMInfo:
-        return LLMInfo.model_validate(self.config.model_dump())
 
     @property
     def config(self) -> LLMConfig:
@@ -44,7 +40,7 @@ class RecordingProvider(LitellmTransport):
             max_input_tokens=4096,
         )
 
-    def invoke(self, prompt: Any, *args: Any, **kwargs: Any) -> ModelResponse:
+    def invoke_raw(self, prompt: Any, *args: Any, **kwargs: Any) -> ModelResponse:
         assert not args
         self.calls.append({"prompt": prompt, **kwargs})
         return ModelResponse(
@@ -77,7 +73,7 @@ class RecordingProvider(LitellmTransport):
             ),
         )
 
-    def stream(
+    def stream_raw(
         self, prompt: Any, *args: Any, **kwargs: Any
     ) -> Iterator[ModelResponseStream]:
         del prompt, args, kwargs
@@ -96,9 +92,7 @@ def test_invoke_preserves_options_and_returns_canonical_content() -> None:
             max_tokens=42,
         ),
     )
-    result = LitellmLLM(provider).invoke(
-        request, GenerationContext(timeout=12, total_timeout=18.5)
-    )
+    result = provider.invoke(request, GenerationContext(timeout=12, total_timeout=18.5))
     assert result.text == "answer"
     assert result.thinking == "reasoning"
     assert result.thinking_blocks == [
@@ -123,9 +117,7 @@ def test_invoke_checks_cancellation_before_provider_call() -> None:
     signal = CancellationSignal()
     signal.cancel()
     with pytest.raises(AgentCancelled):
-        LitellmLLM(provider).invoke(
-            GenerationRequest(), GenerationContext(cancellation=signal)
-        )
+        provider.invoke(GenerationRequest(), GenerationContext(cancellation=signal))
     assert provider.calls == []
 
 
@@ -135,8 +127,8 @@ def test_tool_recovery_does_not_share_attempts_across_generations() -> None:
     from onyx.llm.models import ToolChoiceOptions
 
     class RecoveryProvider(RecordingProvider):
-        def invoke(self, prompt: Any, *args: Any, **kwargs: Any) -> ModelResponse:
-            response = super().invoke(prompt, *args, **kwargs)
+        def invoke_raw(self, prompt: Any, *args: Any, **kwargs: Any) -> ModelResponse:
+            response = super().invoke_raw(prompt, *args, **kwargs)
             response.choice.message.tool_calls = []
             response.choice.message.content = (
                 '{"name":"lookup","arguments":{"q":"term"}}'
@@ -149,9 +141,7 @@ def test_tool_recovery_does_not_share_attempts_across_generations() -> None:
         options=GenerationOptions(tool_choice=ToolChoiceOptions.REQUIRED),
     )
     with ThreadPoolExecutor(max_workers=2) as executor:
-        results = list(
-            executor.map(lambda _: LitellmLLM(provider).invoke(request), range(4))
-        )
+        results = list(executor.map(lambda _: provider.invoke(request), range(4)))
     assert len(results) == 4
     assert all(result.tool_calls[0].arguments == {"q": "term"} for result in results)
 
@@ -169,7 +159,7 @@ def test_interleaved_streams_isolate_cancellation_and_trace_context() -> None:
     closed: list[CancellationSignal | None] = []
 
     class StreamingProvider(RecordingProvider):
-        def stream(
+        def stream_raw(
             self, prompt: Any, *args: Any, **kwargs: Any
         ) -> Iterator[ModelResponseStream]:
             del prompt, args, kwargs
@@ -183,7 +173,7 @@ def test_interleaved_streams_isolate_cancellation_and_trace_context() -> None:
             finally:
                 closed.append(current_cancellation())
 
-    client = LitellmLLM(StreamingProvider())
+    client = StreamingProvider()
     caller_signal, first_signal, second_signal = (
         CancellationSignal() for _ in range(3)
     )

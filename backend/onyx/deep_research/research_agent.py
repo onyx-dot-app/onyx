@@ -4,9 +4,8 @@ from functools import partial
 from pydantic import BaseModel
 
 from onyx.agents.models import (
-    AgentContext,
+    AgentState,
     PreparedStep,
-    RunResult,
     StepInput,
     StepResult,
 )
@@ -16,7 +15,6 @@ from onyx.agents.tools import AgentTool
 from onyx.agents.transcript import CompactionCheckpoint
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
 from onyx.chat.citation_utils import (
-    extract_citation_order_from_text,
     update_citation_processor_from_tool_result,
 )
 from onyx.chat.models import CitationMode
@@ -26,7 +24,6 @@ from onyx.context.messages import PromptMetadata
 from onyx.context.prompt import prepare_prompt
 from onyx.context.search.models import SearchDocsResponse
 from onyx.deep_research.models import (
-    ResearchAgentCallResult,
     ResearchMessageMetadata,
     ResearchPhase,
 )
@@ -115,7 +112,7 @@ class ResearchAgent(FeatureRestoration):
         self.tools = [tool.for_agent() for tool in tools if tool.name in allowed_names]
         self.llm = llm
         self.is_reasoning_model = model_is_reasoning_model(
-            llm.info.model_name, llm.info.model_provider
+            llm.config.model_name, llm.config.model_provider
         )
         self.token_counter = token_counter
         self.language_section = language_section
@@ -134,14 +131,14 @@ class ResearchAgent(FeatureRestoration):
             + self._control_tools(),
             agent_id=agent_id,
             previous_run_id=previous_run_id,
-            context=AgentContext(
+            state=AgentState(
                 messages=messages or [],
                 checkpoint=checkpoint,
             ),
             restoration=self,
             prepare_step=self.prepare_step,
             after_step=self.after_step,
-            execution=GenerationContext(
+            generation_context=GenerationContext(
                 flow=LLMFlow.RESEARCH_AGENT, user_identity=user_identity
             ),
         )
@@ -292,7 +289,7 @@ class ResearchAgent(FeatureRestoration):
                 else None,
                 context_files=None,
                 token_counter=self.token_counter,
-                llm_info=self.llm.info,
+                llm_config=self.llm.config,
             ),
         )
 
@@ -309,16 +306,3 @@ class ResearchAgent(FeatureRestoration):
         if isinstance(result.details, SearchDocsResponse):
             self.citation_mapping.update(result.details.citation_mapping)
             update_citation_processor_from_tool_result(result, self.citation_processor)
-
-    def report(self, completed: RunResult) -> ResearchAgentCallResult:
-        report = completed.output.text
-        if not report:
-            raise ValueError("Model failed to produce a research report")
-        return ResearchAgentCallResult(
-            intermediate_report=report,
-            citation_mapping={
-                number: self.citation_processor.citation_to_doc[number]
-                for number in extract_citation_order_from_text(report)
-                if number in self.citation_processor.citation_to_doc
-            },
-        )

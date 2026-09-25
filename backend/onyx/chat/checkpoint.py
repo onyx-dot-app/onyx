@@ -7,7 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, JsonValue
 
 from onyx.agents.checkpoint import CheckpointBinding, SnapshotCodec
-from onyx.agents.models import AgentContext, ExecutionCheckpoint
+from onyx.agents.models import AgentState, ExecutionCheckpoint
 from onyx.agents.transcript import RunStatus
 from onyx.chat.models import ResponseRecord
 from onyx.chat.response import response_snapshot
@@ -35,7 +35,7 @@ class ResponseCheckpoint(BaseModel):
     input_payloads: list[MessagePayload]
 
 
-def _digest(context: AgentContext, codec: SnapshotCodec) -> str:
+def _digest(context: AgentState, codec: SnapshotCodec) -> str:
     content = "\n".join(
         # The codec preserves typed metadata that BaseMessage excludes from JSON.
         json.dumps(codec.encode_message(message), sort_keys=True, separators=(",", ":"))
@@ -70,7 +70,7 @@ def save_checkpoint_data(
     binding: CheckpointBinding,
 ) -> ResponseCheckpoint:
     """Strip canonical message content; retain callback payloads only for resumption."""
-    snapshot = checkpoint.snapshot
+    snapshot = checkpoint.run_state
     if snapshot.status != RunStatus.SUSPENDED or snapshot.progress is None:
         raise ValueError("Checkpoint requires a safely suspended run")
     if snapshot.child_runs:
@@ -89,7 +89,7 @@ def save_checkpoint_data(
         )
 
     data = ResponseCheckpoint(
-        history_digest=_digest(checkpoint.context, codec),
+        history_digest=_digest(checkpoint.agent_state, codec),
         response_digest=_response_digest(response),
         binding=binding,
         revision=snapshot.revision,
@@ -98,9 +98,9 @@ def save_checkpoint_data(
         message_payloads=[payload(message) for message in snapshot.messages],
         input_payloads=[payload(message) for message in snapshot.input_messages],
     )
-    restored = restore_checkpoint_data(data, response, checkpoint.context, binding)
-    if codec.encode(restored.snapshot, restored.context, binding) != codec.encode(
-        snapshot, checkpoint.context, binding
+    restored = restore_checkpoint_data(data, response, checkpoint.agent_state, binding)
+    if codec.encode(restored.run_state, restored.agent_state, binding) != codec.encode(
+        snapshot, checkpoint.agent_state, binding
     ):
         raise ValueError("Response history cannot reconstruct this checkpoint")
     return data
@@ -109,7 +109,7 @@ def save_checkpoint_data(
 def restore_checkpoint_data(
     data: ResponseCheckpoint,
     response: ResponseRecord,
-    context: AgentContext,
+    context: AgentState,
     binding: CheckpointBinding,
 ) -> ExecutionCheckpoint:
     codec = SnapshotCodec(feature_payload_types())
@@ -140,4 +140,4 @@ def restore_checkpoint_data(
 
     restore_payloads(snapshot.messages, data.message_payloads)
     restore_payloads(snapshot.input_messages, data.input_payloads)
-    return ExecutionCheckpoint(context=context.snapshot(), snapshot=snapshot)
+    return ExecutionCheckpoint(agent_state=context.snapshot(), run_state=snapshot)

@@ -15,15 +15,15 @@ from onyx.llm.models import (
     ReasoningEffort,
     UserMessage,
 )
-from onyx.llm.multi_llm import LitellmLLM, LitellmTransport
+from onyx.llm.multi_llm import LitellmLLM
 
 
 def _make_llm(
     reasoning_effort_max: ReasoningEffort | None = None,
     temperature: float | None = None,
     model_name: str = "gpt-5.1",
-) -> LitellmTransport:
-    return LitellmTransport(
+) -> LitellmLLM:
+    return LitellmLLM(
         api_key="test-key",
         model_provider="openai",
         model_name=model_name,
@@ -34,7 +34,7 @@ def _make_llm(
 
 
 def _run(
-    llm: LitellmTransport,
+    llm: LitellmLLM,
     effort: ReasoningEffort,
     completion: Callable[[dict[str, JsonValue]], None] | None = None,
 ) -> GenerationRequestParams:
@@ -74,7 +74,7 @@ def _run(
 
     with patch("onyx.llm.multi_llm.CancellableStream", Response):
         events = list(
-            LitellmLLM(llm).stream(
+            llm.stream(
                 GenerationRequest(
                     messages=[UserMessage(content="hello")],
                     options=GenerationOptions(reasoning_effort=effort),

@@ -16,7 +16,7 @@ import pytest
 
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.litellm_models import ChatCompletionMessage, UserMessage
-from onyx.llm.multi_llm import LitellmTransport
+from onyx.llm.multi_llm import LitellmLLM
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.nightly
@@ -48,7 +48,7 @@ def test_nova_streaming_does_not_leak_thinking_tags(
     the leak is reliably reproducible — we don't want this to be flaky on
     prompts where Nova happens to skip the tags.
     """
-    llm = LitellmTransport(
+    llm = LitellmLLM(
         api_key=test_secrets[TestSecret.BEDROCK_API_KEY],
         model_provider=LlmProviderNames.BEDROCK,
         model_name=_NOVA_THINKING_MODEL,
@@ -68,7 +68,7 @@ def test_nova_streaming_does_not_leak_thinking_tags(
 
     content_parts: list[str] = []
     reasoning_parts: list[str] = []
-    for chunk in llm.stream(prompt=prompt):
+    for chunk in llm.stream_raw(prompt=prompt):
         delta = chunk.choice.delta
         if delta.content:
             content_parts.append(delta.content)

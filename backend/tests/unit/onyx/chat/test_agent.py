@@ -111,7 +111,7 @@ def test_chat_preserves_parallel_tool_history_forcing_and_packets(
     assert llm.requests[0]["tool_choice"] == ToolChoiceOptions.REQUIRED
     assert llm.requests[1]["tools"] == []
     assert llm.requests[1]["tool_choice"] == ToolChoiceOptions.NONE
-    assert [message.role for message in agent.agent.context.messages] == [
+    assert [message.role for message in agent.agent.state.messages] == [
         "user",
         "assistant",
         "tool_result",
@@ -120,10 +120,10 @@ def test_chat_preserves_parallel_tool_history_forcing_and_packets(
     ]
     assert [
         message.tool_call_id
-        for message in agent.agent.context.messages[2:4]
+        for message in agent.agent.state.messages[2:4]
         if message.role == "tool_result"
     ] == ["call-0", "call-1"]
-    assert agent.agent.context.messages[-1].text == "Final answer"
+    assert agent.agent.state.messages[-1].text == "Final answer"
     snapshot = project(runs[-1].snapshot())
     assert snapshot.answer == "Final answer"
     assert snapshot.reasoning == "Compare the evidence"
@@ -209,7 +209,7 @@ def test_chat_preserves_search_filters_in_accepted_result_and_projection(
     )
     accepted = next(
         message
-        for message in agent.agent.context.messages
+        for message in agent.agent.state.messages
         if isinstance(message, ToolResultMessage)
     )
     assert isinstance(accepted.details, SearchDocsResponse)

@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from onyx.agents.models import RunSnapshot
+from onyx.agents.models import RunState
 from onyx.agents.tools import ToolInvocation
 from onyx.agents.transcript import OperationSnapshot, RunStatus
 from onyx.chat.artifacts import project_tool_artifacts
@@ -78,7 +78,7 @@ def test_memory_outcome_is_final_before_serialization(
         ),
         committed,
     ]
-    snapshot = RunSnapshot(
+    snapshot = RunState(
         run_id="memory-run",
         status=RunStatus.COMPLETE,
         messages=messages,

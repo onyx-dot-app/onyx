@@ -5,7 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny
 
 from onyx.agents.items import ResponseItem, build_response_items
-from onyx.agents.tools import AgentTool, ChildRunWait, PendingToolInput, ToolAnswer
+from onyx.agents.tools import AgentTool, ChildRunWait, HumanToolAnswer, PendingToolInput
 from onyx.agents.transcript import (
     CompactionCheckpoint,
     OperationSnapshot,
@@ -22,7 +22,6 @@ from onyx.llm.models import (
     ToolCall,
     ToolDefinition,
     ToolResultMessage,
-    UserMessage,
 )
 
 
@@ -36,12 +35,12 @@ class AgentStep(BaseModel):
         return self.index + 1 == self.limit
 
 
-class AgentContext(BaseModel):
+class AgentState(BaseModel):
     model_config = ConfigDict(extra="forbid")
     messages: list[Message] = Field(default_factory=list)
     checkpoint: CompactionCheckpoint | None = None
 
-    def snapshot(self) -> "AgentContext":
+    def snapshot(self) -> "AgentState":
         return self.model_copy(deep=True)
 
 
@@ -92,12 +91,20 @@ class StepInput(BaseModel):
 
 
 class RunResult(BaseModel):
-    """Completed output for one run; conversation history remains on Agent.context."""
+    """Completed output for one run; conversation history remains on Agent.state."""
 
     run_id: str
     steps: int
     stop_reason: Literal[RunStatus.COMPLETE, RunStatus.LIMIT]
     output: AssistantMessage
+
+
+class ExecutionRequest(str, Enum):
+    """Local scheduling intent; suspension persists until explicit input or resume."""
+
+    NONE = "none"
+    WAKE = "wake"
+    SUSPEND = "suspend"
 
 
 class RunAction(str, Enum):
@@ -120,19 +127,19 @@ class RunProgress(BaseModel):
     previous_options: GenerationOptions | None = None
     finalized_tools: int = 0
     feature_state: SerializeAsAny[BaseModel] | None = None
-    pending: dict[str, PendingToolInput | ChildRunWait] = Field(default_factory=dict)
-    answers: dict[str, ToolAnswer] = Field(default_factory=dict)
-    steering: list[UserMessage] = Field(default_factory=list)
+    pending_tool_calls: dict[str, PendingToolInput | ChildRunWait] = Field(
+        default_factory=dict
+    )
+    human_tool_answers: dict[str, HumanToolAnswer] = Field(default_factory=dict)
     child_run_ids: list[str] = Field(default_factory=list)
     observed_child_run_ids: list[str] = Field(default_factory=list)
     outcome: RunStatus | None = None
 
 
-class RunSnapshot(BaseModel):
-    """Isolated output and progress; suspended records can resume with their context.
+class RunState(BaseModel):
+    """One run's input, output, and progress; Run.snapshot() returns an isolated copy.
 
     Operation indices address messages; input_messages is a separate prefix.
-    Child records are collected when parent execution finishes.
     """
 
     revision: int = 0
@@ -148,7 +155,7 @@ class RunSnapshot(BaseModel):
     messages: list[Message]
     operations: list[OperationSnapshot] = Field(default_factory=list)
     answer_message_index: int | None = None
-    child_runs: list["RunSnapshot"] = Field(default_factory=list)
+    child_runs: list["RunState"] = Field(default_factory=list)
     request_params: GenerationRequestParams | None = None
     failure: RunFailure | None = None
     checkpoint: CompactionCheckpoint | None = None
@@ -167,5 +174,5 @@ class ExecutionCheckpoint(BaseModel):
     """Run progress and the conversation history preceding its input."""
 
     model_config = ConfigDict(extra="forbid")
-    context: AgentContext
-    snapshot: RunSnapshot
+    agent_state: AgentState
+    run_state: RunState

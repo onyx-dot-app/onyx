@@ -6,9 +6,9 @@ from threading import Lock
 from pydantic import BaseModel
 
 from onyx.agents.models import (
-    AgentContext,
+    AgentState,
     PreparedStep,
-    RunSnapshot,
+    RunState,
     StepInput,
     StepResult,
 )
@@ -128,7 +128,7 @@ class DeepResearchAgent(FeatureRestoration):
         self.started = time.monotonic()
         self.skip_clarification = skip_clarification
         self.is_reasoning_model = model_is_reasoning_model(
-            llm.info.model_name, llm.info.model_provider
+            llm.config.model_name, llm.config.model_provider
         )
         self.max_orchestrator_cycles = (
             MAX_ORCHESTRATOR_CYCLES_REASONING
@@ -151,14 +151,14 @@ class DeepResearchAgent(FeatureRestoration):
             tools=[*self.clarification_tools, *self.research_tools],
             agent_id=agent_id,
             previous_run_id=previous_run_id,
-            context=AgentContext(
+            state=AgentState(
                 messages=messages,
                 checkpoint=checkpoint,
             ),
             restoration=self,
             prepare_step=self.prepare_step,
             after_step=self.after_step,
-            execution=GenerationContext(
+            generation_context=GenerationContext(
                 flow=LLMFlow.DEEP_RESEARCH, user_identity=user_identity
             ),
         )
@@ -304,7 +304,7 @@ class DeepResearchAgent(FeatureRestoration):
                 else None,
                 context_files=None,
                 token_counter=self.token_counter,
-                llm_info=self.llm.info,
+                llm_config=self.llm.config,
                 all_injected_file_metadata=dict(self.file_metadata)
                 if self.file_metadata
                 else None,
@@ -369,44 +369,30 @@ class DeepResearchAgent(FeatureRestoration):
             if self.reasoning_effort != ReasoningEffort.AUTO
             else ReasoningEffort.LOW,
         )
-        try:
-            submission = invocation.agents.spawn_agent(
-                child.agent,
-                name="research-"
-                + "".join(
-                    char if char.isascii() and char.isalnum() else "-"
-                    for char in invocation.call_id.lower()
-                ),
-                description=task.task,
-                max_steps=MAX_RESEARCH_CYCLES + 1,
-                messages=[UserMessage(content=task.task)],
-                restoration_config=AgentRestorationConfig(
-                    feature="research",
-                    settings=ResearchConfiguration(
-                        language_section=self.language_section,
-                        reasoning_effort=self.reasoning_effort
-                        if self.reasoning_effort != ReasoningEffort.AUTO
-                        else ReasoningEffort.LOW,
-                    ).model_dump(mode="json"),
-                ),
-            )
-            return ChildRunWait(run_ids=[submission.run_id])
-
-        except RunFailed as error:
-            if error.failure.kind not in {
-                RunFailureKind.LLM,
-                RunFailureKind.LLM_TIMEOUT,
-                RunFailureKind.LLM_RATE_LIMIT,
-            }:
-                raise
-            logger.exception("Research child generation failed")
-            return ToolResult(
-                content="Research failed. Continue with other sources or try a different task.",
-                is_error=True,
-            )
+        submission = invocation.agents.spawn_agent(
+            child.agent,
+            name="research-"
+            + "".join(
+                char if char.isascii() and char.isalnum() else "-"
+                for char in invocation.call_id.lower()
+            ),
+            description=task.task,
+            max_steps=MAX_RESEARCH_CYCLES + 1,
+            messages=[UserMessage(content=task.task)],
+            restoration_config=AgentRestorationConfig(
+                feature="research",
+                settings=ResearchConfiguration(
+                    language_section=self.language_section,
+                    reasoning_effort=self.reasoning_effort
+                    if self.reasoning_effort != ReasoningEffort.AUTO
+                    else ReasoningEffort.LOW,
+                ).model_dump(mode="json"),
+            ),
+        )
+        return ChildRunWait(run_ids=[submission.run_id])
 
     def _complete_research(
-        self, _invocation: ToolInvocation, completed: list[RunSnapshot]
+        self, _invocation: ToolInvocation, completed: list[RunState]
     ) -> ToolResult:
         if len(completed) != 1:
             raise ValueError("Research delegation requires one child result")
@@ -419,25 +405,22 @@ class DeepResearchAgent(FeatureRestoration):
                 RunFailureKind.LLM_RATE_LIMIT,
             }:
                 raise
+            logger.exception("Research child generation failed")
             return ToolResult(
                 content="Research failed. Continue with other sources or try a different task.",
                 is_error=True,
             )
         if not isinstance(output.metadata, ResearchMessageMetadata) or not output.text:
             raise ValueError("Research child requires a report with source metadata")
-        result = ResearchAgentCallResult(
-            intermediate_report=output.text,
-            citation_mapping={
-                number: output.metadata.sources[number]
-                for number in extract_citation_order_from_text(output.text)
-                if number in output.metadata.sources
-            },
-        )
         with self._citation_lock:
             report, self.citation_mapping = collapse_citations(
-                answer_text=result.intermediate_report,
+                answer_text=output.text,
                 existing_citation_mapping=self.citation_mapping,
-                new_citation_mapping=result.citation_mapping,
+                new_citation_mapping={
+                    number: output.metadata.sources[number]
+                    for number in extract_citation_order_from_text(output.text)
+                    if number in output.metadata.sources
+                },
             )
             citations = {
                 number: self.citation_mapping[number]

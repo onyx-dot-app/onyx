@@ -13,7 +13,7 @@ from onyx.agents.events import (
     ToolUpdateEvent,
 )
 from onyx.agents.items import build_response_items, messages_from_items
-from onyx.agents.models import RunSnapshot
+from onyx.agents.models import RunState
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation, ToolProgress
 from onyx.agents.transcript import OperationSnapshot, RunStatus
@@ -109,7 +109,7 @@ def test_rendering_does_not_change_requests_transcript_or_execution() -> None:
             listener=listener,
         )
         return _Execution(
-            requests=requests, messages=agent.context.messages, executed=executed
+            requests=requests, messages=agent.state.messages, executed=executed
         )
 
     rendered = run(True)
@@ -160,7 +160,7 @@ def test_citation_display_keeps_raw_transcript(
 
 
 def test_snapshot_projects_partial_output_before_observers_receive_it() -> None:
-    snapshot = RunSnapshot(
+    snapshot = RunState(
         run_id="run",
         status=RunStatus.CANCELLED,
         messages=[

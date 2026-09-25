@@ -8,7 +8,6 @@ from concurrent.futures import Future
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from functools import lru_cache
 from typing import TYPE_CHECKING, cast
-from uuid import uuid4
 
 from pydantic import BaseModel, JsonValue, TypeAdapter
 from readerwriterlock import rwlock
@@ -59,23 +58,18 @@ from onyx.llm.interfaces import (
     LLM,
     GenerationContext,
     LLMConfig,
-    LLMInfo,
     LLMUserIdentity,
 )
 from onyx.llm.litellm_conversion import (
     MessageAccumulator,
-    normalized_stream,
-    recover_tool_calls,
     serialize_request,
     serialize_tools,
+    to_assistant_message,
 )
 from onyx.llm.litellm_models import (
-    ChatCompletionDeltaToolCall,
-    Delta,
     LanguageModelInput,
     ModelResponse,
     ModelResponseStream,
-    StreamingChoice,
 )
 from onyx.llm.litellm_models import (
     ToolCall as ProviderToolCall,
@@ -615,8 +609,16 @@ def _warn_dropped_env_only_keys(
     )
 
 
-class LitellmTransport:
-    """Own provider configuration, requests, retries, cost tracking, and cleanup."""
+def _event_with_request_params(
+    event: GenerationEvent, operation: ProviderOperation
+) -> GenerationEvent:
+    return event.model_copy(
+        update={"request_params": copy.deepcopy(operation.request_params)}
+    )
+
+
+class LitellmLLM(LLM):
+    """Generate assistant messages and expose provider responses for gateways."""
 
     def __init__(
         self,
@@ -653,7 +655,7 @@ class LitellmTransport:
         self._api_version = api_version
         self._custom_llm_provider = custom_llm_provider
         self._max_input_tokens = max_input_tokens
-        self._custom_config = custom_config
+        self._custom_config = copy.deepcopy(custom_config)
         self._reasoning_effort_default = reasoning_effort_default
         self._reasoning_effort_user_default = reasoning_effort_user_default
         self._reasoning_effort_max = reasoning_effort_max
@@ -747,14 +749,9 @@ class LitellmTransport:
         ):
             supports_images = any(vision_values)
         output_identity = next((name for name, entry in known if entry), model_name)
-        self._llm_info = LLMInfo.model_validate(
-            self.config.model_dump()
-            | {
-                "supports_images": supports_images,
-                "max_output_tokens": get_llm_max_output_tokens(
-                    model_map, output_identity, model_provider
-                ),
-            }
+        self._supports_images = supports_images
+        self._max_output_tokens = get_llm_max_output_tokens(
+            model_map, output_identity, model_provider
         )
 
     def _track_llm_cost(self, usage: Usage) -> None:
@@ -1342,10 +1339,6 @@ class LitellmTransport:
         except Exception as e:
             raise _as_onyx_llm_error(e)
 
-    @property
-    def info(self) -> LLMInfo:
-        return self._llm_info
-
     def redact_error(self, text: str) -> str:
         return scrub_sensitive_values(
             text, collect_credential_values(self._api_key, self._custom_config)
@@ -1361,7 +1354,9 @@ class LitellmTransport:
             api_base=self._api_base,
             api_version=self._api_version,
             deployment_name=self._deployment_name,
-            custom_config=self._custom_config,
+            custom_config=copy.deepcopy(self._custom_config),
+            supports_images=self._supports_images,
+            max_output_tokens=self._max_output_tokens,
             max_input_tokens=self._max_input_tokens,
             reasoning_effort_default=self._reasoning_effort_default,
             reasoning_effort_user_default=self._reasoning_effort_user_default,
@@ -1382,7 +1377,7 @@ class LitellmTransport:
             LlmProviderNames.BEDROCK_CONVERSE,
         )
 
-    def invoke(
+    def invoke_raw(
         self,
         prompt: LanguageModelInput,
         tools: list[dict[str, JsonValue]] | None = None,
@@ -1394,7 +1389,9 @@ class LitellmTransport:
         total_timeout_s: float = LLM_INVOKE_TIMEOUT_S,
         operation: ProviderOperation | None = None,
     ) -> ModelResponse:
-        """Return a complete response within one deadline, including retries.
+        """Return a provider response within one deadline, including retries.
+
+        The caller owns the generation span and cancellation scope.
 
         Cancellation uses a request-owned streaming connection. Environment
         injection also uses streaming to release the environment lock after
@@ -1463,7 +1460,7 @@ class LitellmTransport:
             if client is not None:
                 client.close()
 
-    def stream(
+    def stream_raw(
         self,
         prompt: LanguageModelInput,
         tools: list[dict[str, JsonValue]] | None = None,
@@ -1475,6 +1472,7 @@ class LitellmTransport:
         user_identity: LLMUserIdentity | None = None,
         operation: ProviderOperation | None = None,
     ) -> Iterator[ModelResponseStream]:
+        """Yield provider chunks; the caller owns tracing and cancellation scope."""
         from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
         from litellm import HTTPHandler
         from litellm.exceptions import APIConnectionError as LiteLLMAPIConnectionError
@@ -1549,28 +1547,6 @@ class LitellmTransport:
                 if client is not None:
                     client.close()
 
-
-def _event_with_request_params(
-    event: GenerationEvent, operation: ProviderOperation
-) -> GenerationEvent:
-    return event.model_copy(
-        update={"request_params": copy.deepcopy(operation.request_params)}
-    )
-
-
-class LitellmLLM(LLM):
-    """Generate shared assistant messages through a configured LiteLLM transport."""
-
-    def __init__(self, transport: LitellmTransport) -> None:
-        self.transport = transport
-
-    @property
-    def info(self) -> LLMInfo:
-        return self.transport.info
-
-    def redact_error(self, text: str) -> str:
-        return self.transport.redact_error(text)
-
     def invoke(
         self,
         request: GenerationRequest,
@@ -1582,12 +1558,12 @@ class LitellmLLM(LLM):
             context = context.model_copy(
                 update={"total_timeout": context.timeout or LLM_INVOKE_TIMEOUT_S}
             )
-        messages = serialize_request(request, self.transport.config)
+        messages = serialize_request(request, self.config)
         definitions = serialize_tools(request.tools)
         with (
             _provider_scope(context, self) as signal,
             llm_generation_span(
-                self.info,
+                self.config,
                 context.flow or LLMFlow.UNTAGGED_INVOKE,
                 input_messages=messages,
                 tools=definitions,
@@ -1595,7 +1571,7 @@ class LitellmLLM(LLM):
             ) as span,
         ):
             signal.check()
-            response = self.transport.invoke(
+            response = self.invoke_raw(
                 messages,
                 tools=definitions,
                 tool_choice=request.options.tool_choice,
@@ -1606,34 +1582,7 @@ class LitellmLLM(LLM):
                 user_identity=context.user_identity,
             )
             signal.check()
-            source = response.choice.message
-            accumulator = MessageAccumulator(request.tools)
-            accumulator.add(
-                ModelResponseStream(
-                    id=response.id,
-                    created=response.created,
-                    usage=response.usage,
-                    choice=StreamingChoice(
-                        finish_reason=response.choice.finish_reason,
-                        delta=Delta(
-                            content=source.content,
-                            reasoning_content=source.reasoning_content,
-                            thinking_blocks=source.thinking_blocks,
-                            tool_calls=[
-                                ChatCompletionDeltaToolCall(
-                                    index=index,
-                                    id=call.id or str(uuid4()),
-                                    function=call.function,
-                                )
-                                for index, call in enumerate(source.tool_calls or [])
-                            ],
-                        ),
-                    ),
-                )
-            )
-            message = accumulator.finish()
-            if request.tools:
-                message = recover_tool_calls(message, request)
+            message = to_assistant_message(response, request)
             record_llm_span_output(
                 span,
                 [message.model_dump()],
@@ -1649,12 +1598,12 @@ class LitellmLLM(LLM):
         context = context or GenerationContext()
         operation = ProviderOperation()
         accumulator = MessageAccumulator(request.tools)
-        messages = serialize_request(request, self.transport.config)
+        messages = serialize_request(request, self.config)
         definitions = serialize_tools(request.tools)
         with (
             _provider_scope(context, self) as signal,
             llm_generation_span(
-                self.info,
+                self.config,
                 context.flow or LLMFlow.UNTAGGED_STREAM,
                 input_messages=messages,
                 tools=definitions,
@@ -1668,9 +1617,9 @@ class LitellmLLM(LLM):
             yield GenerationStartEvent(
                 message=accumulator.message.model_copy(deep=True)
             )
-            stream = normalized_stream(
+            stream = accumulator.consume(
                 iter(
-                    self.transport.stream(
+                    self.stream_raw(
                         messages,
                         tools=definitions,
                         tool_choice=request.options.tool_choice,
@@ -1685,22 +1634,17 @@ class LitellmLLM(LLM):
                 request,
             )
             try:
-                for chunk in stream:
+                for event in stream:
                     signal.check()
-                    events = accumulator.add(chunk)
-                    if events and not first_action:
+                    if not first_action:
                         span.span_data.time_to_first_action_seconds = (
                             time.monotonic() - started
                         )
                         first_action = True
-                    for event in events:
-                        if (
-                            not request_params_sent
-                            and operation.request_params is not None
-                        ):
-                            event = _event_with_request_params(event, operation)
-                            request_params_sent = True
-                        yield event
+                    if not request_params_sent and operation.request_params is not None:
+                        event = _event_with_request_params(event, operation)
+                        request_params_sent = True
+                    yield event
                 signal.check()
                 for event in accumulator.end():
                     yield (

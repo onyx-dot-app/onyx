@@ -3,7 +3,7 @@
 import subprocess
 import sys
 import threading
-from collections.abc import Callable, Generator
+from collections.abc import Generator
 from io import BytesIO
 from unittest.mock import Mock, patch
 from uuid import UUID, uuid4
@@ -14,20 +14,20 @@ from sqlalchemy.orm import Session
 
 from onyx.agents.checkpoint import CheckpointBinding, SnapshotCodec
 from onyx.agents.compaction import history_digest
-from onyx.agents.coordination import AgentCoordinator
+from onyx.agents.coordination import AgentCoordinator, RunStore
 from onyx.agents.models import (
-    AgentContext,
+    AgentState,
     ExecutionCheckpoint,
     RunProgress,
-    RunSnapshot,
+    RunState,
 )
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import (
     AgentTool,
+    HumanToolAnswer,
     InputDecision,
     InputMode,
     PendingToolInput,
-    ToolAnswer,
     ToolInvocation,
 )
 from onyx.agents.transcript import CompactionCheckpoint, RunStatus
@@ -60,7 +60,11 @@ from onyx.llm.models import (
 from onyx.tools.models import ChatFile, FileReadResult
 from onyx.utils.threadpool_concurrency import start_thread_future
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-from tests.unit.onyx.agents.fakes import FakeModelClient
+from tests.unit.onyx.agents.fakes import (
+    FakeAgentDirectory,
+    FakeModelClient,
+    FakeRunStore,
+)
 
 
 @pytest.fixture
@@ -97,10 +101,10 @@ def branch(db_session: Session) -> Generator[tuple[UUID, int], None, None]:
 def store(
     branch: tuple[UUID, int],
     *,
-    on_root_complete: Callable[[RunSnapshot], None] | None = None,
+    root_response: RunStore | None = None,
 ) -> ChatRunStore:
     return ChatRunStore(
-        on_root_complete=on_root_complete,
+        root_response=root_response,
         tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
         chat_session_id=branch[0],
         response_id=branch[1],
@@ -119,9 +123,9 @@ def poll_run_owners(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, No
     def registered_store(
         branch: tuple[UUID, int],
         *,
-        on_root_complete: Callable[[RunSnapshot], None] | None = None,
+        root_response: RunStore | None = None,
     ) -> ChatRunStore:
-        created = create_store(branch, on_root_complete=on_root_complete)
+        created = create_store(branch, root_response=root_response)
         with lock:
             stores.append(created)
         return created
@@ -150,6 +154,7 @@ def poll_run_owners(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, No
         "claim",
         "slow_release",
         "slow_resume",
+        "resume_thread",
         "ownership_lock",
         "root_save",
         "separate_process",
@@ -168,7 +173,7 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
         monkeypatch.setattr("onyx.chat.run_store.OWNER_POLL_SECONDS", 0.05)
     saved_roots: list[str] = []
 
-    def save_root(snapshot: RunSnapshot) -> None:
+    def save_root(snapshot: RunState) -> None:
         saved_roots.append(snapshot.run_id)
         save_chat_response(
             message_id=branch[1],
@@ -177,7 +182,10 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
 
     owner = store(branch)
     remote = store(
-        branch, on_root_complete=save_root if scenario == "root_save" else None
+        branch,
+        root_response=FakeRunStore(save=lambda run: save_root(run.snapshot()))
+        if scenario == "root_save"
+        else None,
     )
     if scenario == "root_save":
         monkeypatch.setattr(
@@ -191,7 +199,7 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
         )
 
     first, second = AgentCoordinator(), AgentCoordinator()
-    context = AgentContext()
+    context = AgentState()
     if scenario == "compaction":
         context.messages = [UserMessage(content="earlier question")]
         context.checkpoint = CompactionCheckpoint(
@@ -228,10 +236,10 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
         if scenario == "slow_resume":
             threading.Event().wait(1.5)
             assert (
-                remote.read_run_status(checkpoint.snapshot.run_id, "")
+                remote.read_run_status(checkpoint.run_state.run_id, "")
                 == RunStatus.RUNNING
             )
-        result = checkpoint.snapshot.messages[1]
+        result = checkpoint.run_state.messages[1]
         assert isinstance(result, ToolResult)
         assert isinstance(result.details, FileReadResult)
         assert result.details.file_name == "report.txt"
@@ -239,16 +247,34 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
             FakeModelClient(
                 lambda *_: AssistantMessage(content=[TextContent(text="done")])
             ),
-            agent_id=checkpoint.snapshot.agent_id,
-            context=checkpoint.context,
+            agent_id=checkpoint.run_state.agent_id,
+            state=checkpoint.agent_state,
             tools=tools,
             after_tool_call=lambda call, result: (
                 finalized.append(call.call.id) or result
             ),
         )
 
-    coordinator = owner.bind(first, build_agent=rebuild)
-    remote.bind(second, build_agent=rebuild)
+    coordinator = owner.bind(
+        first,
+        directory=FakeAgentDirectory(
+            lookup_agent=owner.lookup_agent,
+            read_run=owner.read_run,
+            read_run_status=owner.read_run_status,
+            cancel_run=owner.cancel_run,
+        ),
+        build_agent=rebuild,
+    )
+    remote.bind(
+        second,
+        directory=FakeAgentDirectory(
+            lookup_agent=remote.lookup_agent,
+            read_run=remote.read_run,
+            read_run_status=remote.read_run_status,
+            cancel_run=remote.cancel_run,
+        ),
+        build_agent=rebuild,
+    )
     agent = Agent(
         FakeModelClient(
             lambda *_: AssistantMessage(
@@ -259,7 +285,7 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
             )
         ),
         agent_id=str(branch[0]),
-        context=context,
+        state=context,
         tools=tools,
         after_tool_call=lambda call, result: finalized.append(call.call.id) or result,
     )
@@ -274,14 +300,14 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
                 owner.cache, "delete", side_effect=RuntimeError("cache unavailable")
             ):
                 with pytest.raises(RuntimeError, match="cache unavailable"):
-                    owner.release(run.id, coordinator=coordinator)
+                    owner.handoff(run.id)
             assert remote.resume(run.id, context=context) is None
             owner.cache.delete(owner._owner_key(run.id))
         elif scenario == "ownership_lock":
             with owner._ownership_lock(run.id):
                 threading.Event().wait(1.5)
                 assert owner.cache.exists(owner._owner_key(run.id))
-            owner.release(run.id, coordinator=coordinator)
+            owner.handoff(run.id)
         elif scenario == "slow_release":
 
             def slow_files(
@@ -294,10 +320,10 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
             with patch(
                 "onyx.chat.run_store.persist_checkpoint_files", side_effect=slow_files
             ):
-                owner.release(run.id, coordinator=coordinator)
+                owner.handoff(run.id)
         else:
-            owner.release(run.id, coordinator=coordinator)
-        assert run.is_remote
+            owner.handoff(run.id)
+        assert coordinator.active_run(agent.id) is None
         db_session.expire_all()
         row = db_session.get(ChatResponseCheckpoint, branch[1])
         assert row is not None
@@ -316,7 +342,7 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
         with pytest.raises(ValueError, match="history changed"):
             remote.resume(
                 run.id,
-                context=AgentContext(messages=[UserMessage(content="another branch")]),
+                context=AgentState(messages=[UserMessage(content="another branch")]),
             )
         unauthorized = ChatRunStore(
             tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
@@ -335,6 +361,15 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
             ):
                 with pytest.raises(RuntimeError, match="cache unavailable"):
                     remote.resume(run.id, context=context)
+        if scenario == "resume_thread":
+            with patch(
+                "onyx.agents.runtime.start_thread_with_context",
+                side_effect=RuntimeError("execution thread failed"),
+            ):
+                with pytest.raises(RuntimeError, match="execution thread failed"):
+                    remote.resume(run.id, context=context)
+            assert remote.read_run_status(run.id, "") == RunStatus.SUSPENDED
+            assert not remote.has_owned_work
         if scenario == "separate_process":
             completed = subprocess.run(
                 [
@@ -356,7 +391,7 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
             resumed = remote.resume(run.id, context=context)
             assert resumed is not None
             resumed.submit(
-                ToolAnswer(
+                HumanToolAnswer(
                     request_id="answer",
                     decision=InputDecision.RESULT,
                     result=ToolResult(content="report.txt"),
@@ -368,7 +403,8 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
             progress = resumed.snapshot().progress
             assert progress is not None
             assert progress.step_limit == 2
-        assert run.result(timeout=10).output.text == "done"
+        saved_result = remote.read_run(run.id, "")
+        assert saved_result is not None and saved_result.status == RunStatus.COMPLETE
         assert sorted(calls) == ["question", "search"]
         assert finalized == (
             ["search"] if scenario == "separate_process" else ["search", "question"]
@@ -398,8 +434,8 @@ def _resume_response_in_process(session_id: str, message_id: str, run_id: str) -
             FakeModelClient(
                 lambda *_: AssistantMessage(content=[TextContent(text="done")])
             ),
-            agent_id=checkpoint.snapshot.agent_id,
-            context=checkpoint.context,
+            agent_id=checkpoint.run_state.agent_id,
+            state=checkpoint.agent_state,
             tools=[
                 AgentTool(
                     name=name, description="", parameters={}, execute=unexpected_tool
@@ -408,7 +444,16 @@ def _resume_response_in_process(session_id: str, message_id: str, run_id: str) -
             ],
         )
 
-    remote.bind(coordinator, build_agent=rebuild)
+    remote.bind(
+        coordinator,
+        directory=FakeAgentDirectory(
+            lookup_agent=remote.lookup_agent,
+            read_run=remote.read_run,
+            read_run_status=remote.read_run_status,
+            cancel_run=remote.cancel_run,
+        ),
+        build_agent=rebuild,
+    )
     finished = threading.Event()
 
     def poll() -> None:
@@ -417,10 +462,10 @@ def _resume_response_in_process(session_id: str, message_id: str, run_id: str) -
 
     controller = start_thread_future(poll, name="test-chat-control")
     try:
-        resumed = remote.resume(run_id, context=AgentContext())
+        resumed = remote.resume(run_id, context=AgentState())
         assert resumed is not None
         resumed.submit(
-            ToolAnswer(
+            HumanToolAnswer(
                 request_id="answer",
                 decision=InputDecision.RESULT,
                 result=ToolResult(content="report.txt"),
@@ -448,7 +493,16 @@ def test_transfer_rejects_input_missing_from_history_before_handoff(
     def unexpected_resume(_: ExecutionCheckpoint) -> Agent:
         raise RuntimeError("Transfer must fail before reconstruction")
 
-    view = owner.bind(coordinator, build_agent=unexpected_resume)
+    view = owner.bind(
+        coordinator,
+        directory=FakeAgentDirectory(
+            lookup_agent=owner.lookup_agent,
+            read_run=owner.read_run,
+            read_run_status=owner.read_run_status,
+            cancel_run=owner.cancel_run,
+        ),
+        build_agent=unexpected_resume,
+    )
     agent = Agent(
         FakeModelClient(
             lambda *_: AssistantMessage(
@@ -476,8 +530,8 @@ def test_transfer_rejects_input_missing_from_history_before_handoff(
         assert run.wait_until_settled(timeout=10).status == RunStatus.SUSPENDED
         assert run.wait_for_idle(timeout=10)
         with pytest.raises(ValueError, match="Checkpoint response changed"):
-            owner.release(run.id, coordinator=view)
-        assert not run.is_remote
+            owner.handoff(run.id)
+        assert view.run(run.id) is run
         assert db_session.get(ChatResponseCheckpoint, branch[1]) is None
     finally:
         assert coordinator.close(timeout=10)
@@ -501,7 +555,16 @@ def test_competing_resume_claims_and_stale_writer(
     def unexpected_resume(_: ExecutionCheckpoint) -> Agent:
         raise RuntimeError("This test claims the checkpoint without starting a run")
 
-    view = owner.bind(coordinator, build_agent=unexpected_resume)
+    view = owner.bind(
+        coordinator,
+        directory=FakeAgentDirectory(
+            lookup_agent=owner.lookup_agent,
+            read_run=owner.read_run,
+            read_run_status=owner.read_run_status,
+            cancel_run=owner.cancel_run,
+        ),
+        build_agent=unexpected_resume,
+    )
     agent = Agent(
         FakeModelClient(
             lambda *_: AssistantMessage(
@@ -517,11 +580,11 @@ def test_competing_resume_claims_and_stale_writer(
     try:
         assert run.wait_until_settled(timeout=10).status == RunStatus.SUSPENDED
         assert run.wait_for_idle(timeout=10)
-        owner.release(run.id, coordinator=view)
+        owner.handoff(run.id)
         if cancel_paused:
-            store(branch).cancel_run(run.id, "")
-            with pytest.raises(AgentCancelled):
-                run.result(timeout=10)
+            remote = store(branch)
+            remote.cancel_run(run.id, "")
+            assert remote.read_run_status(run.id, "") == RunStatus.CANCELLED
             assert run.wait_for_idle(timeout=10)
             return
         barrier = threading.Barrier(2)
@@ -608,8 +671,8 @@ def test_checkpoint_files_use_durable_references_and_session_cleanup(
                 ],
             )
             captured = ExecutionCheckpoint(
-                context=AgentContext(),
-                snapshot=RunSnapshot(
+                agent_state=AgentState(),
+                run_state=RunState(
                     run_id="files",
                     messages=[],
                     agent_id=str(branch[0]),
@@ -625,8 +688,8 @@ def test_checkpoint_files_use_durable_references_and_session_cleanup(
             assert saves.call_count == 1
             codec = SnapshotCodec(feature_payload_types())
             encoded = codec.encode(
-                captured.snapshot,
-                captured.context,
+                captured.run_state,
+                captured.agent_state,
                 CheckpointBinding(
                     tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
                     branch_id=str(branch[1]),
@@ -634,8 +697,8 @@ def test_checkpoint_files_use_durable_references_and_session_cleanup(
                 ),
             )
             restored = codec.decode(encoded)
-            assert restored.snapshot.progress is not None
-            state = restored.snapshot.progress.feature_state
+            assert restored.run_state.progress is not None
+            state = restored.run_state.progress.feature_state
             assert isinstance(state, ChatFeatureState)
             assert all(file.content is None for file in state.chat_files)
             assert state.chat_files[0].file_id == original_id
@@ -659,7 +722,7 @@ def test_checkpoint_files_use_durable_references_and_session_cleanup(
 def test_owner_cleanup_failure_releases_local_control(
     branch: tuple[UUID, int], save_fails: bool
 ) -> None:
-    def save_root(snapshot: RunSnapshot) -> None:
+    def save_root(snapshot: RunState) -> None:
         if save_fails:
             raise ValueError("response save failed")
         save_chat_response(
@@ -667,13 +730,24 @@ def test_owner_cleanup_failure_releases_local_control(
             response=project_response(snapshot, response_id=branch[1], tool_ids={}),
         )
 
-    owner = store(branch, on_root_complete=save_root)
+    owner = store(
+        branch, root_response=FakeRunStore(save=lambda run: save_root(run.snapshot()))
+    )
     coordinator = AgentCoordinator()
 
     def unexpected_restore(_: ExecutionCheckpoint) -> Agent:
         raise AssertionError("This response does not suspend")
 
-    view = owner.bind(coordinator, build_agent=unexpected_restore)
+    view = owner.bind(
+        coordinator,
+        directory=FakeAgentDirectory(
+            lookup_agent=owner.lookup_agent,
+            read_run=owner.read_run,
+            read_run_status=owner.read_run_status,
+            cancel_run=owner.cancel_run,
+        ),
+        build_agent=unexpected_restore,
+    )
     agent = Agent(
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="done")])
@@ -688,12 +762,15 @@ def test_owner_cleanup_failure_releases_local_control(
                 messages=[UserMessage(content="task")], max_steps=1, coordinator=view
             )
             assert run.result(timeout=10).output.text == "done"
-            with pytest.raises(
-                ValueError if save_fails else RuntimeError,
-                match="response save failed" if save_fails else "cache cleanup failed",
-            ):
-                coordinator.completion(run.id).result(timeout=10)
-            assert run.wait_for_idle(timeout=10)
+            if save_fails:
+                with pytest.raises(ValueError, match="response save failed"):
+                    coordinator.completion(run.id).result(timeout=10)
+            else:
+                assert (
+                    coordinator.completion(run.id).result(timeout=10).run_id == run.id
+                )
+            with pytest.raises(RuntimeError, match="cache cleanup failed"):
+                run.wait_for_idle(timeout=10)
             assert not owner.has_owned_work
         owner.cache.delete(owner._owner_key(run.id))
     finally:
@@ -716,7 +793,16 @@ def test_terminal_run_retains_control_until_cancelled_tool_drains(
 
     owner = store(branch)
     coordinator = AgentCoordinator()
-    view = owner.bind(coordinator, build_agent=unexpected_restore)
+    view = owner.bind(
+        coordinator,
+        directory=FakeAgentDirectory(
+            lookup_agent=owner.lookup_agent,
+            read_run=owner.read_run,
+            read_run_status=owner.read_run_status,
+            cancel_run=owner.cancel_run,
+        ),
+        build_agent=unexpected_restore,
+    )
     agent = Agent(
         FakeModelClient(
             lambda *_: AssistantMessage(

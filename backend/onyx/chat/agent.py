@@ -5,7 +5,7 @@ from functools import partial
 from pydantic import BaseModel
 
 from onyx.agents.models import (
-    AgentContext,
+    AgentState,
     PreparedStep,
     StepInput,
     StepResult,
@@ -112,14 +112,14 @@ class ChatAgent(FeatureRestoration):
             tools=[bind_tool(tool, self._tool_context) for tool in self.tools],
             agent_id=agent_id,
             previous_run_id=previous_run_id,
-            context=AgentContext(
+            state=AgentState(
                 messages=messages,
                 checkpoint=checkpoint,
             ),
             restoration=self,
             prepare_step=self.prepare_step,
             after_step=self.after_step,
-            execution=GenerationContext(
+            generation_context=GenerationContext(
                 flow=LLMFlow.CHAT_RESPONSE, user_identity=user_identity
             ),
             after_tool_call=self._finalize_tool,
@@ -239,7 +239,7 @@ class ChatAgent(FeatureRestoration):
                 all_injected_file_metadata=dict(self.file_metadata)
                 if self.file_metadata
                 else None,
-                llm_info=self.llm.info,
+                llm_config=self.llm.config,
                 available_tool_names=selected_names,
             ),
         )

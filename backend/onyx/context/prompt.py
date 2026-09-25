@@ -12,7 +12,7 @@ from onyx.context.messages import (
     prompt_metadata,
 )
 from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
-from onyx.llm.interfaces import LLMInfo
+from onyx.llm.interfaces import LLMConfig
 from onyx.llm.models import Message, ToolResultMessage, UserMessage
 from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
 from onyx.tools.constants import FILE_READER_TOOL_NAME
@@ -62,7 +62,7 @@ def prepare_prompt(
     context_files: ExtractedContextFiles | None,
     token_counter: Callable[[str], int],
     all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
-    llm_info: LLMInfo | None = None,
+    llm_config: LLMConfig | None = None,
     available_tool_names: set[str] | None = None,
 ) -> list[Message]:
     """Assemble instructions and file context without discarding execution history."""
@@ -112,7 +112,7 @@ def prepare_prompt(
     result.extend(history[insertion:])
     if reminder_message is not None:
         result.append(reminder_message)
-    return prepare_model_messages(result, llm_info) if llm_info else result
+    return prepare_model_messages(result, llm_config) if llm_config else result
 
 
 def _create_file_tool_metadata_message(

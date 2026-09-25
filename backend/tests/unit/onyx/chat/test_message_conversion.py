@@ -549,7 +549,7 @@ class TestImageCap:
             _make_user_msg("hi", images=[_make_image(f"img{i}") for i in range(100)])
         ]
         translated = prepare_model_messages(
-            history=history, llm_info=_make_llm_config(AZURE_PROVIDER_NAME)
+            history=history, llm_config=_make_llm_config(AZURE_PROVIDER_NAME)
         )
         assert isinstance(translated, list)
         assert len(translated) == 1
@@ -571,7 +571,7 @@ class TestImageCap:
             )
         ]
         translated = prepare_model_messages(
-            history=history, llm_info=_make_llm_config(AZURE_PROVIDER_NAME)
+            history=history, llm_config=_make_llm_config(AZURE_PROVIDER_NAME)
         )
         assert isinstance(translated, list)
         assert len(translated) == 2
@@ -592,7 +592,7 @@ class TestImageCap:
             _make_user_msg("hi", images=[_make_image(f"img{i}") for i in range(5)])
         ]
         translated = prepare_model_messages(
-            history=history, llm_info=_make_llm_config(OPENAI_PROVIDER_NAME)
+            history=history, llm_config=_make_llm_config(OPENAI_PROVIDER_NAME)
         )
         assert isinstance(translated, list)
         assert len(translated) == 1
@@ -613,7 +613,7 @@ class TestNonVisionImageStripping:
         )
         history = [_make_user_msg("look at this", images=[_make_image("img0")])]
         translated = prepare_model_messages(
-            history=history, llm_info=_make_llm_config(OPENAI_PROVIDER_NAME)
+            history=history, llm_config=_make_llm_config(OPENAI_PROVIDER_NAME)
         )
         assert isinstance(translated, list)
         (user_msg,) = translated
@@ -636,7 +636,7 @@ class TestNonVisionImageStripping:
         )
         history = [_make_user_msg("look at this", images=[_make_image("img0")])]
         translated = prepare_model_messages(
-            history=history, llm_info=_make_llm_config(OPENAI_PROVIDER_NAME)
+            history=history, llm_config=_make_llm_config(OPENAI_PROVIDER_NAME)
         )
         (user_msg,) = translated
         assert isinstance(user_msg, UserMessage)
@@ -653,7 +653,7 @@ class TestNonVisionImageStripping:
         monkeypatch.setattr(conversion_module, "model_supports_image_input", _boom)
         history = [_make_user_msg("just text")]
         translated = prepare_model_messages(
-            history=history, llm_info=_make_llm_config(OPENAI_PROVIDER_NAME)
+            history=history, llm_config=_make_llm_config(OPENAI_PROVIDER_NAME)
         )
         assert isinstance(translated, list)
         assert len(translated) == 1

@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from onyx.agents.models import ExecutionCheckpoint, RunSnapshot
+from onyx.agents.models import ExecutionCheckpoint, RunState
 from onyx.agents.runtime import Agent
 from onyx.chat.agent import ChatAgent
 from onyx.chat.artifacts import ChatSearchResult
@@ -70,11 +70,11 @@ def restore_chat_agent(
     user_identity: LLMUserIdentity | None,
 ) -> Agent:
     """Build feature code and resources; Agent.resume restores saved execution state."""
-    snapshot = checkpoint.snapshot
+    snapshot = checkpoint.run_state
     if snapshot.progress is None:
         raise ValueError("Agent restoration requires saved execution progress")
     state = snapshot.progress.feature_state
-    context = checkpoint.context.model_copy(deep=True)
+    context = checkpoint.agent_state.model_copy(deep=True)
     token_counter = get_llm_token_counter(llm)
     if isinstance(state, ChatFeatureState):
         config = state.configuration
@@ -173,18 +173,18 @@ def persist_checkpoint_files(
             if isinstance(message, ToolResult):
                 payload(message.details)
 
-    def snapshot(record: RunSnapshot) -> None:
+    def snapshot(record: RunState) -> None:
         messages(record.input_messages)
         messages(record.messages)
         if record.progress is not None:
             progress = record.progress
             payload(progress.feature_state)
-            for answer in progress.answers.values():
+            for answer in progress.human_tool_answers.values():
                 if answer.result is not None:
                     payload(answer.result.details)
                     payload(answer.result.metadata)
         for child in record.child_runs:
             snapshot(child)
 
-    messages(checkpoint.context.messages)
-    snapshot(checkpoint.snapshot)
+    messages(checkpoint.agent_state.messages)
+    snapshot(checkpoint.run_state)

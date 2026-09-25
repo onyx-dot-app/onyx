@@ -97,12 +97,12 @@ def use_mock_llm() -> Generator[
 
     def mock_get_default_llm(*_args: Any, **_kwargs: Any) -> LitellmLLM:
         call_tracker["get_default_llm_called"] = True
-        return LitellmLLM(mock_llm)
+        return mock_llm
 
     def mock_get_llm(provider: str, *_args: Any, **_kwargs: Any) -> LitellmLLM:
         call_tracker["get_llm_called"] = True
         call_tracker["provider"] = provider
-        return LitellmLLM(mock_llm)
+        return mock_llm
 
     with (
         patch(

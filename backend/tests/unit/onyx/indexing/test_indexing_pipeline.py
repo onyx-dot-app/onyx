@@ -221,7 +221,7 @@ def test_contextual_rag(
     llm_tokenizer = embedder.embedding_model.tokenizer
 
     mock_llm = Mock()
-    mock_llm.info.max_input_tokens = get_max_input_tokens(
+    mock_llm.config.max_input_tokens = get_max_input_tokens(
         model_provider=LlmProviderNames.OPENAI, model_name="gpt-4o"
     )
     mock_llm.invoke = mock_llm_invoke

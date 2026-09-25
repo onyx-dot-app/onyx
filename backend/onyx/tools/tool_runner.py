@@ -1,6 +1,6 @@
 from collections.abc import Callable
 
-from onyx.agents.models import RunSnapshot
+from onyx.agents.models import RunState
 from onyx.agents.tools import AgentTool, ToolInvocation, ToolOutcome
 from onyx.llm.models import ToolResult
 from onyx.tools.interface import Tool, ToolContext
@@ -37,7 +37,7 @@ def complete_tool_children(
     tool: Tool,
     invocation: ToolInvocation,
     context: ToolContext,
-    children: list[RunSnapshot],
+    children: list[RunState],
 ) -> ToolResult:
     invocation.cancellation.check()
     with function_span(tool.name) as span:

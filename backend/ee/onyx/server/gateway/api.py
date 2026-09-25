@@ -60,7 +60,7 @@ from onyx.llm.models import (
     ToolChoice,
     ToolChoiceOptions,
 )
-from onyx.llm.multi_llm import LitellmTransport
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.server.features.build.craft_gateway import gateway_request_flow
 from onyx.server.gateway.configs import (
@@ -238,7 +238,7 @@ def _drop_empty_text(message: ChatCompletionMessage) -> ChatCompletionMessage | 
 
 
 def _prepare_messages(
-    llm: LitellmTransport, raw_messages: list[dict[str, Any]]
+    llm: LitellmLLM, raw_messages: list[dict[str, Any]]
 ) -> list[ChatCompletionMessage]:
     try:
         messages = _MESSAGES_ADAPTER.validate_python(raw_messages)
@@ -260,7 +260,7 @@ def _prepare_messages(
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "messages must not be empty")
     cacheable_prefix = messages[:-1] or None
     processed_messages, _ = process_with_prompt_cache(
-        llm_info=llm.config,
+        llm_config=llm.config,
         cacheable_prefix=cacheable_prefix,
         suffix=messages[-1:],
         continuation=False,
@@ -310,7 +310,7 @@ def _emit_stream_error(
 
 
 def _stream_worker(
-    llm: LitellmTransport,
+    llm: LitellmLLM,
     flow: LLMFlow,
     messages: list[ChatCompletionMessage],
     tools: list[dict[str, Any]] | None,
@@ -328,7 +328,7 @@ def _stream_worker(
     with (
         _gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
-            llm.info, flow=flow, input_messages=messages, tools=tools
+            llm.config, flow=flow, input_messages=messages, tools=tools
         ) as span,
     ):
         state = _StreamAccumulator()
@@ -342,7 +342,7 @@ def _stream_worker(
             out=out,
             cancelled=cancelled,
         ):
-            state.upstream = llm.stream(
+            state.upstream = llm.stream_raw(
                 prompt=messages,
                 tools=tools,
                 tool_choice=tool_choice,
@@ -376,7 +376,7 @@ def handle_chat_completion(
         model_name=model_config.name,
         llm_provider=provider,
         temperature=request.temperature,
-    ).transport
+    )
     messages = _prepare_messages(llm, request.messages)
     tool_choice = _parse_tool_choice(request.tool_choice)
     _require_named_tool(tool_choice, request.tools)
@@ -402,14 +402,14 @@ def handle_chat_completion(
     with (
         _gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
-            llm.info,
+            llm.config,
             flow=flow,
             input_messages=messages,
             tools=request.tools,
         ) as span,
     ):
         try:
-            response = llm.invoke(
+            response = llm.invoke_raw(
                 prompt=messages,
                 total_timeout_s=GATEWAY_LLM_TOTAL_TIMEOUT_SECONDS,
                 tools=request.tools,
@@ -547,7 +547,7 @@ def _build_responses_output_items(
 
 
 def _responses_stream_worker(
-    llm: LitellmTransport,
+    llm: LitellmLLM,
     flow: LLMFlow,
     messages: list[ChatCompletionMessage],
     tools: list[dict[str, Any]] | None,
@@ -627,7 +627,7 @@ def _responses_stream_worker(
     with (
         _gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
-            llm.info, flow=flow, input_messages=messages, tools=tools
+            llm.config, flow=flow, input_messages=messages, tools=tools
         ) as span,
     ):
         with _stream_worker_guard(
@@ -639,7 +639,7 @@ def _responses_stream_worker(
             out=out,
             cancelled=cancelled,
         ):
-            state.upstream = llm.stream(
+            state.upstream = llm.stream_raw(
                 prompt=messages,
                 tools=tools,
                 tool_choice=tool_choice,
@@ -749,7 +749,7 @@ def handle_responses_request(
         model_name=model_config.name,
         llm_provider=provider,
         temperature=request.temperature,
-    ).transport
+    )
     raw_messages = _responses_input_to_raw_messages(request)
     messages = _prepare_messages(llm, raw_messages)
     tools = _responses_tools(request)
@@ -782,14 +782,14 @@ def handle_responses_request(
     with (
         _gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
-            llm.info,
+            llm.config,
             flow=flow,
             input_messages=messages,
             tools=tools,
         ) as span,
     ):
         try:
-            response = llm.invoke(
+            response = llm.invoke_raw(
                 prompt=messages,
                 total_timeout_s=GATEWAY_LLM_TOTAL_TIMEOUT_SECONDS,
                 tools=tools,
@@ -1084,7 +1084,7 @@ def _anthropic_tool_use_blocks(
 
 
 def _anthropic_stream_worker(
-    llm: LitellmTransport,
+    llm: LitellmLLM,
     flow: LLMFlow,
     messages: list[ChatCompletionMessage],
     tools: list[dict[str, Any]] | None,
@@ -1129,7 +1129,7 @@ def _anthropic_stream_worker(
     with (
         _gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
-            llm.info, flow=flow, input_messages=messages, tools=tools
+            llm.config, flow=flow, input_messages=messages, tools=tools
         ) as span,
     ):
         state = _StreamAccumulator()
@@ -1213,7 +1213,7 @@ def _anthropic_stream_worker(
             out=out,
             cancelled=cancelled,
         ):
-            state.upstream = llm.stream(
+            state.upstream = llm.stream_raw(
                 prompt=messages,
                 tools=tools,
                 tool_choice=tool_choice,
@@ -1304,7 +1304,7 @@ def handle_anthropic_messages(
         model_name=model_config.name,
         llm_provider=provider,
         temperature=request.temperature,
-    ).transport
+    )
     raw_messages = _anthropic_messages_to_raw_messages(request.messages, request.system)
     messages = _prepare_messages(llm, raw_messages)
     tools = _anthropic_tools(request.tools)
@@ -1335,14 +1335,14 @@ def handle_anthropic_messages(
     with (
         _gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
-            llm.info,
+            llm.config,
             flow=flow,
             input_messages=messages,
             tools=tools,
         ) as span,
     ):
         try:
-            response = llm.invoke(
+            response = llm.invoke_raw(
                 prompt=messages,
                 total_timeout_s=GATEWAY_LLM_TOTAL_TIMEOUT_SECONDS,
                 tools=tools,

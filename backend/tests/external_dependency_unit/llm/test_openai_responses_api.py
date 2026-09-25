@@ -1,6 +1,6 @@
 """Live behavior tests for the OpenAI Responses API path through LiteLLM.
 
-`LitellmTransport` routes true OpenAI models through LiteLLM's Responses API
+`LitellmLLM` routes true OpenAI models through LiteLLM's Responses API
 bridge (model name prefixed with `openai/responses/`). These tests exercise
 behavior of that bridge that cannot be reached with mocks:
 
@@ -26,14 +26,14 @@ from pydantic import JsonValue
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.litellm_models import ChatCompletionMessage, UserMessage
 from onyx.llm.litellm_singleton import litellm
-from onyx.llm.multi_llm import LitellmTransport
+from onyx.llm.multi_llm import LitellmLLM
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.nightly
 
 
-def _build_openai_llm(model: str, api_key: str) -> LitellmTransport:
-    return LitellmTransport(
+def _build_openai_llm(model: str, api_key: str) -> LitellmLLM:
+    return LitellmLLM(
         api_key=api_key,
         model_provider=LlmProviderNames.OPENAI,
         model_name=model,
@@ -95,7 +95,7 @@ def test_streaming_parallel_tool_calls_land_in_distinct_slots(
     ]
 
     accumulated: dict[int, dict[str, str]] = {}
-    for chunk in llm.stream(prompt=prompt, tools=tools):
+    for chunk in llm.stream_raw(prompt=prompt, tools=tools):
         for tc in chunk.choice.delta.tool_calls:
             slot = accumulated.setdefault(
                 tc.index, {"id": "", "name": "", "arguments": ""}
@@ -213,7 +213,7 @@ def test_streaming_reasoning_summary_sections_are_separated_by_blank_line(
     ]
 
     reasoning_parts: list[str] = []
-    for chunk in llm.stream(prompt=prompt):
+    for chunk in llm.stream_raw(prompt=prompt):
         rc = chunk.choice.delta.reasoning_content
         if rc:
             reasoning_parts.append(rc)
@@ -252,7 +252,7 @@ def test_non_streaming_reasoning_summary_sections_are_separated_by_blank_line(
         )
     ]
 
-    response = llm.invoke(prompt=prompt)
+    response = llm.invoke_raw(prompt=prompt)
     reasoning = response.choice.message.reasoning_content or ""
 
     assert "\n\n" in reasoning, (
@@ -286,7 +286,7 @@ def test_streaming_emits_no_pydantic_serializer_warnings(
 
     with warnings.catch_warnings(record=True) as captured:
         warnings.simplefilter("always")
-        for _ in llm.stream(prompt=prompt):
+        for _ in llm.stream_raw(prompt=prompt):
             pass
 
     serializer_warnings = [

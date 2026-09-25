@@ -12,7 +12,7 @@ from onyx.llm.models import Message, ToolDefinition, ToolResult
 from onyx.tools.models import ChatFile, ChatMinimalTextMessage, ToolCallException
 
 if TYPE_CHECKING:
-    from onyx.agents.models import RunSnapshot
+    from onyx.agents.models import RunState
 
 
 CITATIONS_PER_TOOL_CALL = 100
@@ -115,6 +115,6 @@ class Tool(abc.ABC):
         self,
         invocation: ToolInvocation,
         context: ToolContext,
-        children: list["RunSnapshot"],
+        children: list["RunState"],
     ) -> ToolResult:
         raise NotImplementedError(f"Tool {self.name} does not support child completion")

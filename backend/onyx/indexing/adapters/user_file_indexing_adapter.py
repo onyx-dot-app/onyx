@@ -176,8 +176,8 @@ class UserFileIndexingAdapter:
         try:
             llm = get_default_llm()
             llm_tokenizer = get_tokenizer(
-                model_name=llm.info.model_name,
-                provider_type=llm.info.model_provider,
+                model_name=llm.config.model_name,
+                provider_type=llm.config.model_provider,
             )
         except Exception as e:
             logger.error("Error getting tokenizer: %s", e)

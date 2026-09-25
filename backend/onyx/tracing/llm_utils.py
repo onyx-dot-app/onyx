@@ -2,7 +2,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from typing import Any, cast
 
-from onyx.llm.interfaces import LLMInfo
+from onyx.llm.interfaces import LLMConfig
 from onyx.llm.litellm_models import ModelResponse, ToolCall
 from onyx.llm.models import GenerationRequestParams
 from onyx.tracing.flows import LLMFlow
@@ -13,11 +13,11 @@ from onyx.tracing.framework.traces import TraceContentMode
 
 
 def build_llm_model_config(
-    llm_info: LLMInfo, flow: LLMFlow | None = None
+    llm_config: LLMConfig, flow: LLMFlow | None = None
 ) -> dict[str, str]:
     model_config: dict[str, str] = {
-        "base_url": str(llm_info.api_base or ""),
-        "model_provider": llm_info.model_provider,
+        "base_url": str(llm_config.api_base or ""),
+        "model_provider": llm_config.model_provider,
     }
     if flow:
         model_config["flow"] = flow.value
@@ -26,7 +26,7 @@ def build_llm_model_config(
 
 @contextmanager
 def llm_generation_span(
-    llm_info: LLMInfo,
+    llm_config: LLMConfig,
     flow: LLMFlow | None,
     input_messages: Sequence[Any] | Any | None = None,
     tools: Sequence[Mapping[str, Any]] | None = None,
@@ -34,8 +34,8 @@ def llm_generation_span(
     content_mode: TraceContentMode | None = None,
 ) -> Iterator[Span[GenerationSpanData]]:
     with generation_span(
-        model=llm_info.model_name,
-        model_config=build_llm_model_config(llm_info, flow),
+        model=llm_config.model_name,
+        model_config=build_llm_model_config(llm_config, flow),
         tools=tools,
         parent=parent,
         content_mode=content_mode,

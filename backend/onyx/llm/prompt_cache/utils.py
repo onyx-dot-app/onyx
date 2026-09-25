@@ -1,7 +1,6 @@
 # pyright: reportMissingTypeStubs=false
 """Utility functions for prompt caching."""
 
-import json
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -69,11 +68,7 @@ def revalidate_message_from_original(
     the original message's Pydantic class so union discrimination (by role) stays
     intact.
     """
-    cls = original.__class__
-    try:
-        return cls.model_validate_json(json.dumps(mutated))
-    except Exception:
-        return cls.model_validate(mutated)
+    return type(original).model_validate(mutated)
 
 
 def prepare_messages_with_cacheable_transform(

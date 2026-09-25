@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from onyx.agents.coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent, AgentEventType
-from onyx.agents.models import AgentContext, PreparedStep, RunSnapshot
+from onyx.agents.models import AgentState, PreparedStep, RunState
 from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import (
     AgentTool,
@@ -32,7 +32,7 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
-from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
+from tests.unit.onyx.agents.fakes import FakeModelClient, FakeRunStore, run_agent
 
 
 def scripted(*messages: AssistantMessage) -> FakeModelClient:
@@ -120,10 +120,10 @@ def test_cancelled_turn_retains_completed_tools_for_resume() -> None:
 @pytest.mark.parametrize("sequential", [False, True])
 def test_all_calls_record_in_order_for_each_execution_mode(sequential: bool) -> None:
     runs: list[Run] = []
-    context = AgentContext()
+    context = AgentState()
     agent = Agent(
         scripted(calls(9), answer()),
-        context=context,
+        state=context,
         tools=[echo(sequential=sequential)],
     )
     events: list[AgentEvent] = []
@@ -138,7 +138,7 @@ def test_all_calls_record_in_order_for_each_execution_mode(sequential: bool) -> 
     assert result.stop_reason == "complete"
     results = [
         message
-        for message in agent.context.messages
+        for message in agent.state.messages
         if isinstance(message, ToolResultMessage)
     ]
     assert [message.content for message in results] == [str(i) for i in range(9)]
@@ -151,35 +151,28 @@ def test_all_calls_record_in_order_for_each_execution_mode(sequential: bool) -> 
     assert current_cancellation() is None
 
 
-@pytest.mark.parametrize(
-    "event_type",
-    [
-        "message_start",
-        "message_end",
-        "tool_start",
-        "tool_end",
-    ],
-)
-def test_cancellation_stops_before_next_operation(event_type: str) -> None:
+def test_observer_can_cancel_active_execution() -> None:
     signal = CancellationSignal()
-    executed: list[str] = []
-
-    def execute(invocation: ToolInvocation) -> ToolResult:
-        executed.append(invocation.call_id)
-        return ToolResult(content="ok")
-
-    agent = Agent(scripted(calls(), answer()), tools=[echo(execute)])
     events: list[AgentEvent] = []
 
-    def cancel(event: AgentEvent) -> None:
-        if event.type == event_type:
+    def generate(
+        _request: GenerationRequest, cancellation: CancellationSignal
+    ) -> AssistantMessage:
+        cancelled = threading.Event()
+        with cancellation.on_cancel(cancelled.set):
+            assert cancelled.wait(2)
+        cancellation.check()
+        raise AssertionError("Cancelled model must not return output")
+
+    def observe(event: AgentEvent) -> None:
+        events.append(event)
+        if event.type == "message_start":
             signal.cancel()
 
-    run = agent.start(
-        max_steps=3,
+    run = Agent(FakeModelClient(generate)).start(
+        max_steps=1,
         cancellation=signal,
-        on_event=events.append,
-        inherited_event_sink=cancel,
+        on_event=observe,
     )
     try:
         with pytest.raises(AgentCancelled):
@@ -187,11 +180,8 @@ def test_cancellation_stops_before_next_operation(event_type: str) -> None:
     finally:
         run.cancel()
         assert run.wait_for_idle(timeout=3)
-    last_event = events[-1]
-    assert last_event.type == "agent_end"
-    assert last_event.outcome == "cancelled"
-    if event_type in {"message_start", "message_end", "tool_start"}:
-        assert executed == []
+    assert events[-1].type == "agent_end"
+    assert events[-1].outcome == "cancelled"
 
 
 @pytest.mark.parametrize(
@@ -214,7 +204,7 @@ def test_invalid_calls_get_paired_errors(invalid: str) -> None:
         options.tool_choice = ToolChoiceOptions.NONE
     agent = Agent(scripted(message, answer()), tools=[echo()], options=options)
     run_agent(agent, runs=runs, max_steps=2)
-    tool_result = agent.context.messages[1]
+    tool_result = agent.state.messages[1]
     assert isinstance(tool_result, ToolResultMessage)
     assert tool_result.is_error and tool_result.tool_call_id == "0"
 
@@ -223,14 +213,14 @@ def test_context_transform_does_not_rewrite_durable_history() -> None:
     runs: list[Run] = []
     agent = Agent(
         scripted(answer()),
-        context=AgentContext(messages=[UserMessage(content="original")]),
+        state=AgentState(messages=[UserMessage(content="original")]),
         prepare_step=lambda _state: PreparedStep(
             assemble_messages=lambda _messages: []
         ),
     )
     run_agent(agent, runs=runs, max_steps=1)
-    assert isinstance(agent.context.messages[0], UserMessage)
-    assert agent.context.messages[0].content == "original"
+    assert isinstance(agent.state.messages[0], UserMessage)
+    assert agent.state.messages[0].content == "original"
 
 
 def test_tool_hooks_can_block_transform_and_report_progress() -> None:
@@ -256,7 +246,7 @@ def test_tool_hooks_can_block_transform_and_report_progress() -> None:
     run_agent(agent, runs=runs, listener=events.append, max_steps=2)
     assert [
         item.content
-        for item in agent.context.messages
+        for item in agent.state.messages
         if isinstance(item, ToolResultMessage)
     ] == ["raw!", "blocked!"]
     assert sorted(
@@ -440,7 +430,7 @@ def test_configured_cancellation_applies_unless_run_overrides_it(
 
     agent = Agent(
         FakeModelClient(reply),
-        execution=GenerationContext(cancellation=configured),
+        generation_context=GenerationContext(cancellation=configured),
     )
     if override:
         active = CancellationSignal()
@@ -502,7 +492,7 @@ def test_each_run_accepts_explicit_input_and_preserves_prior_history() -> None:
     assert requests == [["first task"], ["first task", "answer 1", "second task"]]
     assert first_snapshot.input_messages[0].text == "first task"
     assert [message.text for message in first_snapshot.messages] == ["answer 1"]
-    assert [message.text for message in agent.context.messages] == [
+    assert [message.text for message in agent.state.messages] == [
         "first task",
         "answer 1",
         "second task",
@@ -524,8 +514,10 @@ def test_busy_run_rejects_input_without_changing_history() -> None:
     agent = Agent(FakeModelClient(generate))
     with ThreadPoolExecutor(max_workers=1) as workers:
         running = workers.submit(
-            lambda: agent.execute(
-                messages=[UserMessage(content="accepted")], max_steps=1
+            lambda: agent.start(
+                background=False,
+                messages=[UserMessage(content="accepted")],
+                max_steps=1,
             ).result()
         )
         try:
@@ -540,14 +532,12 @@ def test_busy_run_rejects_input_without_changing_history() -> None:
         finally:
             release.set()
         running.result(timeout=2)
-    assert [message.text for message in agent.context.messages] == ["accepted", "done"]
+    assert [message.text for message in agent.state.messages] == ["accepted", "done"]
     # The rejected attempt must not leave the agent unusable.
-    assert agent.execute(max_steps=1).result().output.text == "done"
+    assert agent.start(background=False, max_steps=1).result().output.text == "done"
 
 
-def test_execute_uses_caller_thread_and_completes_storage_before_terminal_hook() -> (
-    None
-):
+def test_current_thread_start_completes_storage_before_return() -> None:
     caller = threading.current_thread()
     visited: list[str] = []
 
@@ -558,21 +548,42 @@ def test_execute_uses_caller_thread_and_completes_storage_before_terminal_hook()
         visited.append("model")
         return answer()
 
-    def save(_snapshot: RunSnapshot) -> None:
+    def save(_snapshot: RunState) -> None:
         assert threading.current_thread() is caller
         visited.append("save")
 
-    coordinator = AgentCoordinator(on_complete=save)
-
-    def terminal(run: Run) -> None:
+    def release(_run_id: str) -> None:
         assert threading.current_thread() is caller
-        assert coordinator.completion(run.id).done()
-        assert coordinator.completion(run.id).result().run_id == run.id
-        visited.append("terminal")
+        visited.append("release")
 
-    run = Agent(FakeModelClient(generate)).execute(
-        max_steps=1, coordinator=coordinator, on_terminal=terminal
+    coordinator = AgentCoordinator(
+        store=FakeRunStore(save=lambda run: save(run.snapshot()), release=release)
+    )
+
+    run = Agent(FakeModelClient(generate)).start(
+        background=False, max_steps=1, coordinator=coordinator
     )
     assert run.result(0).output.text == "done"
-    assert visited == ["model", "save", "terminal"]
+    assert coordinator.completion(run.id).result(0).run_id == run.id
+    assert visited == ["model", "save", "release"]
     assert coordinator.close(3)
+
+
+@pytest.mark.parametrize("error_type", [RuntimeError, TimeoutError])
+def test_release_failure_remains_observable_after_execution_drains(
+    error_type: type[Exception],
+) -> None:
+    def release(_run_id: str) -> None:
+        raise error_type("Ownership release failed")
+
+    coordinator = AgentCoordinator(store=FakeRunStore(release=release))
+    agent = Agent(FakeModelClient(lambda *_: answer()))
+    run = agent.start(background=False, max_steps=1, coordinator=coordinator)
+    assert run.result(0).output.text == "done"
+    assert coordinator.completion(run.id).result(0).run_id == run.id
+    assert run._idle.done()
+    with pytest.raises(error_type, match="Ownership release failed"):
+        run.wait_for_idle(0)
+    with pytest.raises(error_type, match="Ownership release failed"):
+        agent.start(max_steps=1, coordinator=coordinator)
+    assert coordinator.close(0)

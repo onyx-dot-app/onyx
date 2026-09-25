@@ -2,7 +2,7 @@
 
 import pytest
 
-from onyx.agents.models import AgentContext
+from onyx.agents.models import AgentState
 from onyx.agents.runtime import Agent
 from onyx.llm.models import (
     AssistantMessage,
@@ -13,7 +13,7 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
-from onyx.llm.multi_llm import LitellmLLM, LitellmTransport
+from onyx.llm.multi_llm import LitellmLLM
 from tests.utils.secret_names import TestSecret
 
 
@@ -22,12 +22,10 @@ def test_compacted_tool_history_preserves_answer_and_source(
     test_secrets: dict[TestSecret, str],
 ) -> None:
     model = LitellmLLM(
-        LitellmTransport(
-            api_key=test_secrets[TestSecret.OPENAI_API_KEY],
-            model_provider="openai",
-            model_name="gpt-5-mini",
-            max_input_tokens=6000,
-        )
+        api_key=test_secrets[TestSecret.OPENAI_API_KEY],
+        model_provider="openai",
+        model_name="gpt-5-mini",
+        max_input_tokens=6000,
     )
     history: list[Message] = [
         UserMessage(
@@ -63,10 +61,10 @@ def test_compacted_tool_history_preserves_answer_and_source(
         options=GenerationOptions(
             reasoning_effort=ReasoningEffort.LOW, max_tokens=2048
         ),
-        context=AgentContext(messages=history),
+        state=AgentState(messages=history),
     )
-    result = agent.execute(max_steps=1).result()
-    assert agent.context.checkpoint is not None
+    result = agent.start(background=False, max_steps=1).result()
+    assert agent.state.checkpoint is not None
     assert "731" in result.output.text
     assert "[1]" in result.output.text
-    assert agent.context.messages[: len(history)] == history
+    assert agent.state.messages[: len(history)] == history

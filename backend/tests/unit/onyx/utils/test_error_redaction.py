@@ -152,8 +152,8 @@ def test_chat_provider_tracebacks_only_reach_development_clients(
     setup.incognito_record_mode = None
     setup.initial_packets = []
     llm = setup.responses[0].llm
-    llm.info.model_name = "test-model"
-    llm.info.model_provider = "test-provider"
+    llm.config.model_name = "test-model"
+    llm.config.model_provider = "test-provider"
     llm.redact_error.side_effect = lambda text: text
     monkeypatch.setattr(process_message, "prepare_chat_turn", Mock(return_value=setup))
     monkeypatch.setattr(process_message, "StreamBufferWriter", MagicMock())

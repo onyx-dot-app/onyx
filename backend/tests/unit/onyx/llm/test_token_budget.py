@@ -21,7 +21,7 @@ def model_map(monkeypatch: pytest.MonkeyPatch) -> ModelMap:
 @pytest.fixture
 def llm() -> Mock:
     return Mock(
-        info=LLMConfig(
+        config=LLMConfig(
             model_provider="openai",
             model_name="model",
             temperature=0,
@@ -75,11 +75,11 @@ def test_model_budget(
         "max_context_tokens": limits[2],
     }
     input_cap, margin, expected_input, expected_safety = input_config
-    llm.info = llm.info.model_copy(update={"max_input_tokens": input_cap})
+    llm.config = llm.config.model_copy(update={"max_input_tokens": input_cap})
     monkeypatch.setattr(
         "onyx.llm.token_budget.GEN_AI_INPUT_TOKEN_SAFETY_MARGIN", margin
     )
-    budget = resolve_token_budget(llm.info)
+    budget = resolve_token_budget(llm.config)
     assert (budget.input_tokens, budget.safety_tokens) == (
         expected_input,
         expected_safety,
@@ -106,10 +106,10 @@ def test_missing_or_invalid_limits_keep_legacy_fallback(
 ) -> None:
     if metadata is not None:
         model_map["openai/model"] = metadata
-    llm.info = llm.info.model_copy(
+    llm.config = llm.config.model_copy(
         update={"max_input_tokens": GEN_AI_MODEL_FALLBACK_MAX_TOKENS}
     )
-    budget = resolve_token_budget(llm.info)
+    budget = resolve_token_budget(llm.config)
     assert budget == TokenBudget(
         input_tokens=30_400,
         max_output_tokens=None,
@@ -120,13 +120,13 @@ def test_missing_or_invalid_limits_keep_legacy_fallback(
 
 
 def test_deployment_alias(model_map: ModelMap, llm: Mock) -> None:
-    llm.info = llm.info.model_copy(update={"model_provider": "azure"})
-    llm.info = llm.info.model_copy(update={"deployment_name": "alias"})
+    llm.config = llm.config.model_copy(update={"model_provider": "azure"})
+    llm.config = llm.config.model_copy(update={"deployment_name": "alias"})
     model_map["azure/alias"] = {
         "max_input_tokens": 128_000,
         "max_output_tokens": 16_000,
     }
-    assert resolve_token_budget(llm.info) == TokenBudget(
+    assert resolve_token_budget(llm.config) == TokenBudget(
         input_tokens=950_000,
         max_output_tokens=16_000,
         context_tokens=128_000,
@@ -140,15 +140,15 @@ def test_provider_precedes_bare_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr("onyx.llm.token_budget.GEN_AI_INPUT_TOKEN_SAFETY_MARGIN", 0)
-    llm.info = llm.info.model_copy(update={"model_provider": "azure"})
-    llm.info = llm.info.model_copy(update={"model_name": "openai/model"})
+    llm.config = llm.config.model_copy(update={"model_provider": "azure"})
+    llm.config = llm.config.model_copy(update={"model_name": "openai/model"})
     model_map.update(
         {
             "azure/model": {"max_input_tokens": 100_000, "max_output_tokens": 10_000},
             "model": {"max_input_tokens": 200_000, "max_output_tokens": 20_000},
         }
     )
-    assert resolve_token_budget(llm.info) == TokenBudget(
+    assert resolve_token_budget(llm.config) == TokenBudget(
         input_tokens=1_000_000,
         max_output_tokens=10_000,
         context_tokens=100_000,
@@ -162,15 +162,15 @@ def test_partial_metadata_uses_complete_alias(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr("onyx.llm.token_budget.GEN_AI_INPUT_TOKEN_SAFETY_MARGIN", 0)
-    llm.info = llm.info.model_copy(update={"deployment_name": "alias"})
-    llm.info = llm.info.model_copy(update={"max_input_tokens": 100_000})
+    llm.config = llm.config.model_copy(update={"deployment_name": "alias"})
+    llm.config = llm.config.model_copy(update={"max_input_tokens": 100_000})
     model_map.update(
         {
             "openai/model": {"max_input_tokens": 100_000},
             "openai/alias": {"max_input_tokens": 200_000, "max_output_tokens": 20_000},
         }
     )
-    assert resolve_token_budget(llm.info) == TokenBudget(
+    assert resolve_token_budget(llm.config) == TokenBudget(
         input_tokens=100_000,
         max_output_tokens=20_000,
         context_tokens=200_000,

@@ -42,8 +42,8 @@ class LlmRequestPolicy(BaseModel):
     model_kwargs: dict[str, JsonValue] = {}
 
 
-class LLMInfo(BaseModel):
-    """Public settings and resolved capabilities of a configured LLM."""
+class LLMConfig(BaseModel):
+    """Provider settings and resolved capabilities, including credentials."""
 
     model_config = ConfigDict(frozen=True, protected_namespaces=())
 
@@ -59,10 +59,6 @@ class LLMInfo(BaseModel):
     reasoning_effort_user_default: ReasoningEffort | None = None
     reasoning_effort_max: ReasoningEffort | None = None
 
-
-class LLMConfig(LLMInfo):
-    """Provider connection settings, including credentials."""
-
     api_key: str | None = None
     api_version: str | None = None
     custom_config: dict[str, str] | None = None
@@ -73,7 +69,7 @@ class LLM(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def info(self) -> LLMInfo: ...
+    def config(self) -> LLMConfig: ...
 
     @abc.abstractmethod
     def redact_error(self, text: str) -> str: ...

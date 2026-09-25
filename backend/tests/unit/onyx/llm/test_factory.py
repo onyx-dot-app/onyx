@@ -90,7 +90,7 @@ def _build_provider_view(
 
 
 def test_get_llm_sets_ollama_num_ctx_model_kwarg() -> None:
-    with patch("onyx.llm.factory.LitellmTransport") as mock_litellm_llm:
+    with patch("onyx.llm.factory.LitellmLLM") as mock_litellm_llm:
         model = get_llm(
             provider=LlmProviderNames.OLLAMA_CHAT,
             model="test-model",
@@ -99,13 +99,13 @@ def test_get_llm_sets_ollama_num_ctx_model_kwarg() -> None:
             model_kwargs={"num_ctx": 8192},
         )
 
-        assert model.transport is mock_litellm_llm.return_value
+        assert model is mock_litellm_llm.return_value
         kwargs = mock_litellm_llm.call_args.kwargs
         assert kwargs["model_kwargs"] == {"num_ctx": 8192}
 
 
 def test_get_llm_does_not_set_ollama_num_ctx_for_non_ollama_provider() -> None:
-    with patch("onyx.llm.factory.LitellmTransport") as mock_litellm_llm:
+    with patch("onyx.llm.factory.LitellmLLM") as mock_litellm_llm:
         get_llm(
             provider=LlmProviderNames.OPENAI,
             model="gpt-4o-mini",
@@ -182,7 +182,7 @@ def test_get_llm_policy_headers_win_over_every_other_source() -> None:
     )
     header = BIFROST_DISABLE_CONTENT_LOGGING_HEADER
     with (
-        patch("onyx.llm.factory.LitellmTransport") as mock_litellm_llm,
+        patch("onyx.llm.factory.LitellmLLM") as mock_litellm_llm,
         patch("onyx.utils.headers.LITELLM_EXTRA_HEADERS", {header: "false"}),
     ):
         get_llm(
@@ -199,7 +199,7 @@ def test_get_llm_policy_headers_win_over_every_other_source() -> None:
 
 
 def test_get_llm_without_policy_headers_keeps_the_existing_merge() -> None:
-    with patch("onyx.llm.factory.LitellmTransport") as mock_litellm_llm:
+    with patch("onyx.llm.factory.LitellmLLM") as mock_litellm_llm:
         get_llm(
             provider="openai",
             model="gpt-4o",
@@ -358,8 +358,8 @@ class TestPolicyFnForwarding:
             )
 
 
-def test_client_metadata_resolves_capabilities_without_exposing_credentials() -> None:
-    from onyx.llm.multi_llm import LitellmLLM, LitellmTransport
+def test_client_config_resolves_capabilities() -> None:
+    from onyx.llm.multi_llm import LitellmLLM
 
     with patch(
         "onyx.llm.multi_llm.get_model_map",
@@ -368,24 +368,40 @@ def test_client_metadata_resolves_capabilities_without_exposing_credentials() ->
         },
     ):
         client = LitellmLLM(
-            LitellmTransport(
-                api_key="secret-key",
-                model_provider="openai",
-                model_name="custom-model",
-                max_input_tokens=1000,
-            )
+            api_key="secret-key",
+            model_provider="openai",
+            model_name="custom-model",
+            max_input_tokens=1000,
         )
-    metadata = client.info
-    assert client.info is metadata
+    metadata = client.config
+    assert client.config == metadata
+    assert client.config is not metadata
     assert metadata.supports_images is True
     assert metadata.max_output_tokens == 321
-    assert "api_key" not in metadata.model_dump()
-    assert "custom_config" not in metadata.model_dump()
+    assert metadata.api_key == "secret-key"
 
 
 def test_factory_carries_configured_vision_support_to_client() -> None:
     provider = _build_provider_view("openai", 4096)
     provider.model_configurations[0].supports_image_input = True
-    with patch("onyx.llm.factory.LitellmTransport") as create_client:
+    with patch("onyx.llm.factory.LitellmLLM") as create_client:
         llm_from_provider("test-model", provider)
     assert create_client.call_args.kwargs["supports_images"] is True
+
+
+def test_client_config_is_a_defensive_snapshot() -> None:
+    from onyx.llm.multi_llm import LitellmLLM
+
+    settings = {"custom_api_key": "original-key"}
+    client = LitellmLLM(
+        api_key="secret-key",
+        model_provider="openai",
+        model_name="gpt-5-mini",
+        max_input_tokens=1000,
+        custom_config=settings,
+    )
+    settings["custom_api_key"] = "changed-input"
+    snapshot = client.config
+    assert snapshot.custom_config == {"custom_api_key": "original-key"}
+    snapshot.custom_config["custom_api_key"] = "changed-snapshot"
+    assert client.config.custom_config == {"custom_api_key": "original-key"}

@@ -21,7 +21,7 @@ from onyx.db.models import ModelConfiguration, Persona, SearchSettings, User
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM, LlmRequestPolicy
 from onyx.llm.models import ReasoningEffort
-from onyx.llm.multi_llm import LitellmLLM, LitellmTransport
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.utils import (
     get_max_input_tokens_from_llm_provider,
@@ -163,7 +163,7 @@ def get_llm_for_persona(
     llm_override: LLMOverride | None = None,
     additional_headers: dict[str, str] | None = None,
     policy_fn: Callable[[str], LlmRequestPolicy] | None = None,
-) -> LitellmLLM:
+) -> LLM:
     """Get the appropriate LLM for a persona, with the following priority:
     1. LLM override (model configuration id, else provider + model version)
     2. Persona's model configuration override
@@ -386,7 +386,7 @@ def get_default_llm(
     additional_headers: dict[str, str] | None = None,
     policy_fn: Callable[[str], LlmRequestPolicy] | None = None,
     user_defaults: UserChatDefaults | None = None,
-) -> LitellmLLM:
+) -> LLM:
     with get_session_with_current_tenant() as db_session:
         model = fetch_default_llm_model(db_session)
 
@@ -444,23 +444,21 @@ def get_llm(
         merged_model_kwargs.update(policy_model_kwargs)
 
     return LitellmLLM(
-        LitellmTransport(
-            model_provider=provider,
-            model_name=model,
-            deployment_name=deployment_name,
-            api_key=api_key,
-            api_base=api_base,
-            api_version=api_version,
-            temperature=temperature,
-            custom_config=custom_config,
-            extra_headers=extra_headers,
-            model_kwargs=merged_model_kwargs,
-            max_input_tokens=max_input_tokens,
-            reasoning_effort_default=reasoning_effort_default,
-            reasoning_effort_user_default=reasoning_effort_user_default,
-            reasoning_effort_max=reasoning_effort_max,
-            supports_images=supports_images,
-        )
+        model_provider=provider,
+        model_name=model,
+        deployment_name=deployment_name,
+        api_key=api_key,
+        api_base=api_base,
+        api_version=api_version,
+        temperature=temperature,
+        custom_config=custom_config,
+        extra_headers=extra_headers,
+        model_kwargs=merged_model_kwargs,
+        max_input_tokens=max_input_tokens,
+        reasoning_effort_default=reasoning_effort_default,
+        reasoning_effort_user_default=reasoning_effort_user_default,
+        reasoning_effort_max=reasoning_effort_max,
+        supports_images=supports_images,
     )
 
 
@@ -473,8 +471,8 @@ def get_llm_tokenizer_encode_func(llm: LLM) -> Callable[[str], list[int]]:
     Returns:
         A callable that encodes a string into a list of token IDs
     """
-    llm_provider = llm.info.model_provider
-    llm_model_name = llm.info.model_name
+    llm_provider = llm.config.model_provider
+    llm_model_name = llm.config.model_name
 
     llm_tokenizer = get_tokenizer(
         model_name=llm_model_name,

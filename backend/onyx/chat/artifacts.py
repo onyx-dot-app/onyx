@@ -2,7 +2,7 @@ from collections.abc import Mapping
 
 from pydantic import BaseModel, field_serializer, field_validator
 
-from onyx.agents.models import RunSnapshot
+from onyx.agents.models import RunState
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
 from onyx.chat.citation_utils import (
     build_context_file_citation_mapping,
@@ -117,7 +117,7 @@ def _saved_tool_metadata(result: ToolResultMessage) -> BaseModel | None:
 
 
 def project_tool_artifacts(
-    snapshot: RunSnapshot,
+    snapshot: RunState,
     tool_ids: Mapping[str, int],
     initial_citations: CitationMapping | None = None,
 ) -> ChatArtifactSnapshot:
@@ -182,7 +182,7 @@ def _tool_record(
     output: AssistantMessage,
     tool_response: ToolResultMessage | None,
     tool_call: ToolCall,
-    snapshot: RunSnapshot,
+    snapshot: RunState,
     turn: int,
     index: int,
 ) -> ToolCallInfo:

@@ -5,10 +5,7 @@ from collections.abc import Sequence
 from onyx.llm.litellm_models import ChatCompletionMessage, LanguageModelInput
 from onyx.llm.prompt_cache.models import CacheMetadata
 from onyx.llm.prompt_cache.providers.base import PromptCacheProvider
-from onyx.llm.prompt_cache.utils import (
-    prepare_messages_with_cacheable_transform,
-    revalidate_message_from_original,
-)
+from onyx.llm.prompt_cache.utils import prepare_messages_with_cacheable_transform
 
 
 def _add_anthropic_cache_control(
@@ -22,10 +19,8 @@ def _add_anthropic_cache_control(
     Returns:
         Messages with cache_control added
     """
-    last_message_dict = dict(messages[-1])
-    last_message_dict["cache_control"] = {"type": "ephemeral"}
-    last_message = revalidate_message_from_original(
-        original=messages[-1], mutated=last_message_dict
+    last_message = messages[-1].model_copy(
+        update={"cache_control": {"type": "ephemeral"}}
     )
     return list(messages[:-1]) + [last_message]
 

@@ -119,7 +119,7 @@ def test_coding_bash_order_history_and_final_answer() -> None:
     assert bash.run.call_count == 2
     responses = [
         message
-        for message in harness.agent.context.messages
+        for message in harness.agent.state.messages
         if message.role == "tool_result"
     ]
     assert [(message.tool_call_id, message.text) for message in responses] == [
@@ -180,12 +180,12 @@ def test_research_think_steps_are_bounded_and_report_is_generated(render: bool) 
         listener=presentation.consume if presentation else None,
     )
     assert len(llm.requests) == 3
-    assert feature.report(result).intermediate_report == "Report"
+    assert result.output.text == "Report"
     assert (
         len(
             [
                 message
-                for message in feature.agent.context.messages
+                for message in feature.agent.state.messages
                 if message.role == "tool_result"
             ]
         )
@@ -286,7 +286,7 @@ def test_deep_research_composes_plan_child_and_report() -> None:
         all_injected_file_metadata=None,
         skip_clarification=True,
     )
-    feature.agent.execution.timeout = 11
+    feature.agent.generation_context.timeout = 11
     coordinator = AgentCoordinator()
     project = partial(
         project_response,
@@ -420,7 +420,7 @@ def test_deep_research_advances_phases_without_user_queue_messages() -> None:
     assert len(llm.requests) == 3
     assert [
         message.text
-        for message in feature.agent.context.messages
+        for message in feature.agent.state.messages
         if isinstance(message, UserMessage)
     ] == ["Research"]
 
@@ -465,7 +465,7 @@ def test_child_timeout_is_a_failed_tool_result(monkeypatch: pytest.MonkeyPatch) 
     assert result.output.text == "Report with remaining evidence"
     tool_results = [
         message
-        for message in feature.agent.context.messages
+        for message in feature.agent.state.messages
         if message.role == "tool_result"
     ]
     assert tool_results[0].is_error
@@ -609,7 +609,7 @@ def test_research_preserves_citation_identity_across_completion_and_call_order(
     )
     accepted = [
         message
-        for message in feature.agent.context.messages
+        for message in feature.agent.state.messages
         if isinstance(message, ToolResultMessage)
         and message.tool_name == RESEARCH_AGENT_TOOL_NAME
     ]
@@ -717,7 +717,7 @@ def test_coding_rejects_run_after_sandbox_cleanup() -> None:
     assert [message.text for message in failed.input_messages] == ["Continue"]
     assert failed.messages == []
     assert failed.operations == []
-    assert feature.agent.context.messages[:-1] == [
+    assert feature.agent.state.messages[:-1] == [
         *previous.input_messages,
         *previous.messages,
     ]
@@ -778,10 +778,10 @@ def test_restored_research_preserves_history_and_source_numbers(
         max_steps=1,
         messages=[UserMessage(content="Continue")],
     )
-    report = feature.report(result)
-    assert report.citation_mapping == {4: document}
+    assert isinstance(result.output.metadata, ResearchMessageMetadata)
+    assert result.output.metadata.sources == {4: document}
     assert feature.citation_processor.get_next_citation_number() == 5
-    assert feature.agent.context.messages[0].text == "Find evidence"
+    assert feature.agent.state.messages[0].text == "Find evidence"
     assert feature.citation_mapping == {4: "reference"}
 
 

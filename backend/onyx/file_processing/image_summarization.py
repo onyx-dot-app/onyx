@@ -134,7 +134,7 @@ def _summarize_image(
     try:
         # Call LLM with Braintrust tracing
         response = llm.invoke(
-            GenerationRequest(messages=prepare_model_messages(messages, llm.info)),
+            GenerationRequest(messages=prepare_model_messages(messages, llm.config)),
             context=GenerationContext(
                 flow=LLMFlow.IMAGE_SUMMARIZATION,
                 content_mode=TraceContentMode.METADATA_ONLY,

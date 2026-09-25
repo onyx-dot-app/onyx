@@ -11,19 +11,19 @@ import pytest
 from onyx.agents.checkpoint import CheckpointBinding, SnapshotCodec
 from onyx.agents.coordination import AgentCoordinator
 from onyx.agents.models import (
-    AgentContext,
+    AgentState,
     AgentStep,
     PreparedStep,
     RunProgress,
-    RunSnapshot,
+    RunState,
     StepInput,
 )
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import (
+    HumanToolAnswer,
     InputDecision,
     InputMode,
     PendingToolInput,
-    ToolAnswer,
     ToolInvocation,
 )
 from onyx.agents.transcript import RunStatus
@@ -125,7 +125,7 @@ def test_chat_json_restores_tool_context_from_feature_state() -> None:
     original.artifacts.citation_processor.citation_to_doc = {9: document()}
     original.artifacts.has_called_search_tool = True
     original.artifacts.chat_files = [ChatFile(filename="result.csv", content=b"1,2")]
-    snapshot = RunSnapshot(
+    snapshot = RunState(
         run_id="run",
         agent_id="agent",
         status=RunStatus.SUSPENDED,
@@ -137,13 +137,13 @@ def test_chat_json_restores_tool_context_from_feature_state() -> None:
     )
     encoded = SnapshotCodec(feature_payload_types()).encode(
         snapshot,
-        AgentContext(),
+        AgentState(),
         CheckpointBinding(tenant_id="tenant", branch_id="branch", context_version="1"),
     )
     del original, snapshot
     tool = CaptureContextTool()
     restored = chat(tool)
-    saved = SnapshotCodec(feature_payload_types()).decode(encoded).snapshot
+    saved = SnapshotCodec(feature_payload_types()).decode(encoded).run_state
     assert saved.progress is not None
     assert isinstance(saved.progress.feature_state, ChatFeatureState)
     restored.restore_state(saved.progress.feature_state)
@@ -237,10 +237,10 @@ def test_chat_suspends_and_resumes_with_fresh_feature_and_model() -> None:
     run = original.agent.start(max_steps=3, messages=[UserMessage(content="Check")])
     assert run.wait_until_settled(timeout=5).status == RunStatus.SUSPENDED
     assert run.wait_for_idle(timeout=5)
-    checkpoint = original.agent.capture()
+    checkpoint = run.capture()
     encoded = SnapshotCodec(feature_payload_types()).encode(
-        checkpoint.snapshot,
-        checkpoint.context,
+        checkpoint.run_state,
+        checkpoint.agent_state,
         CheckpointBinding(tenant_id="tenant", branch_id="branch", context_version="1"),
     )
     del original, run, checkpoint
@@ -249,7 +249,7 @@ def test_chat_suspends_and_resumes_with_fresh_feature_and_model() -> None:
     restored = chat(tool)
     checkpoint = SnapshotCodec(feature_payload_types()).decode(encoded)
     restored = ChatAgent(
-        messages=checkpoint.context.messages,
+        messages=checkpoint.agent_state.messages,
         tools=[tool],
         custom_agent_prompt=None,
         base_system_prompt="Help",
@@ -258,8 +258,8 @@ def test_chat_suspends_and_resumes_with_fresh_feature_and_model() -> None:
         user_memory_context=None,
         llm=model(),
         token_counter=len,
-        agent_id=checkpoint.snapshot.agent_id,
-        checkpoint=checkpoint.context.checkpoint,
+        agent_id=checkpoint.run_state.agent_id,
+        checkpoint=checkpoint.agent_state.checkpoint,
     )
     prepared_indices: list[int] = []
     prepare = restored.prepare_step
@@ -269,13 +269,13 @@ def test_chat_suspends_and_resumes_with_fresh_feature_and_model() -> None:
         return prepare(state)
 
     restored.agent.prepare_step = prepare_next
-    resumed = restored.agent.resume(checkpoint.snapshot)
+    resumed = restored.agent.resume(checkpoint.run_state)
     resumed.submit(
-        ToolAnswer(request_id="approve-echo", decision=InputDecision.APPROVE)
+        HumanToolAnswer(request_id="approve-echo", decision=InputDecision.APPROVE)
     )
     assert resumed.result(timeout=5).output.text == "done"
     assert resumed.wait_for_idle(timeout=5)
-    assert resumed.id == checkpoint.snapshot.run_id
+    assert resumed.id == checkpoint.run_state.run_id
     assert prepared_indices == [1]
     assert len(tool.contexts) == 1
 
@@ -284,9 +284,9 @@ def test_chat_suspends_and_resumes_with_fresh_feature_and_model() -> None:
 def test_real_feature_resumes_pending_control_call_after_json(kind: str) -> None:
 
     def build(
-        llm: LLM, agent_id: str | None = None, context: AgentContext | None = None
+        llm: LLM, agent_id: str | None = None, context: AgentState | None = None
     ) -> ResearchAgent | DeepResearchAgent:
-        context = context or AgentContext()
+        context = context or AgentState()
         if kind == "research":
             return ResearchAgent(
                 [],
@@ -333,10 +333,10 @@ def test_real_feature_resumes_pending_control_call_after_json(kind: str) -> None
     run = original.agent.start(max_steps=3, messages=[UserMessage(content="Research")])
     assert run.wait_until_settled(timeout=5).status == RunStatus.SUSPENDED
     assert run.wait_for_idle(timeout=5)
-    checkpoint = original.agent.capture()
+    checkpoint = run.capture()
     encoded = SnapshotCodec(feature_payload_types()).encode(
-        checkpoint.snapshot,
-        checkpoint.context,
+        checkpoint.run_state,
+        checkpoint.agent_state,
         CheckpointBinding(tenant_id="tenant", branch_id="branch", context_version="1"),
     )
     saved_id = run.id
@@ -345,16 +345,18 @@ def test_real_feature_resumes_pending_control_call_after_json(kind: str) -> None
     final_model = ScriptedLLM([Delta(content="Answer [6]")], 128000)
     restored = build(final_model)
     checkpoint = SnapshotCodec(feature_payload_types()).decode(encoded)
-    restored = build(final_model, checkpoint.snapshot.agent_id, checkpoint.context)
-    resumed = restored.agent.resume(checkpoint.snapshot)
-    resumed.submit(ToolAnswer(request_id="control", decision=InputDecision.APPROVE))
+    restored = build(final_model, checkpoint.run_state.agent_id, checkpoint.agent_state)
+    resumed = restored.agent.resume(checkpoint.run_state)
+    resumed.submit(
+        HumanToolAnswer(request_id="control", decision=InputDecision.APPROVE)
+    )
     result = resumed.result(timeout=5)
     assert resumed.wait_for_idle(timeout=5)
     assert result.run_id == saved_id
     assert result.output.text == "Answer [6]"
     assert len(final_model.requests) == 1
     if isinstance(restored, ResearchAgent):
-        assert restored.report(result).citation_mapping[6].document_id == "reference"
+        assert restored.citation_processor.citation_to_doc[6].document_id == "reference"
     elif isinstance(restored, DeepResearchAgent):
         assert restored.citation_mapping[6].document_id == "reference"
 
@@ -473,7 +475,7 @@ def test_coding_delegation_releases_parent_worker_without_deleting_waiting_works
         assert child.wait_for_idle(timeout=5)
         assert not deleted.is_set()
         child.submit(
-            ToolAnswer(request_id="allow-bash", decision=InputDecision.APPROVE)
+            HumanToolAnswer(request_id="allow-bash", decision=InputDecision.APPROVE)
         )
         assert run.result(timeout=5).output.text == "Parent answer"
         assert run.wait_for_idle(timeout=5)
@@ -510,7 +512,7 @@ def test_chat_checkpoint_preserves_lazy_file_references() -> None:
         )
     ]
     assert loads == []
-    snapshot = RunSnapshot(
+    snapshot = RunState(
         run_id="binary",
         agent_id="agent",
         status=RunStatus.SUSPENDED,
@@ -531,7 +533,7 @@ def test_chat_checkpoint_preserves_lazy_file_references() -> None:
     codec = SnapshotCodec(feature_payload_types())
     encoded = codec.encode(
         snapshot,
-        AgentContext(),
+        AgentState(),
         CheckpointBinding(
             tenant_id="tenant",
             branch_id="branch",
@@ -539,7 +541,7 @@ def test_chat_checkpoint_preserves_lazy_file_references() -> None:
         ),
     )
     del original, snapshot
-    restored = codec.decode(encoded).snapshot
+    restored = codec.decode(encoded).run_state
     assert restored.progress is not None
     saved = restored.progress.feature_state
     assert isinstance(saved, ChatFeatureState)
@@ -560,9 +562,7 @@ def test_chat_checkpoint_preserves_lazy_file_references() -> None:
     assert loads == []
 
 
-def test_chat_binary_checkpoint_resumes_transferred_handle_in_same_coordinator() -> (
-    None
-):
+def test_chat_binary_checkpoint_resumes_new_execution_in_same_coordinator() -> None:
     payload = b"\xff\x00file"
     coordinator = AgentCoordinator()
     original = chat(CaptureContextTool())
@@ -588,16 +588,16 @@ def test_chat_binary_checkpoint_resumes_transferred_handle_in_same_coordinator()
     try:
         assert run.wait_until_settled(timeout=5).status == RunStatus.SUSPENDED
         assert run.wait_for_idle(timeout=5)
-        checkpoint = original.agent.handoff()
+        checkpoint = run.handoff()
         codec = SnapshotCodec(feature_payload_types())
         binding = CheckpointBinding(
             tenant_id="tenant", branch_id="branch", context_version="1"
         )
-        encoded = codec.encode(checkpoint.snapshot, checkpoint.context, binding)
+        encoded = codec.encode(checkpoint.run_state, checkpoint.agent_state, binding)
         decoded = codec.decode(encoded, expected_binding=binding)
         tool = CaptureContextTool()
         restored = ChatAgent(
-            messages=decoded.context.messages,
+            messages=decoded.agent_state.messages,
             tools=[tool],
             custom_agent_prompt=None,
             base_system_prompt="Help",
@@ -606,11 +606,13 @@ def test_chat_binary_checkpoint_resumes_transferred_handle_in_same_coordinator()
             user_memory_context=None,
             llm=model(),
             token_counter=len,
-            agent_id=decoded.snapshot.agent_id,
+            agent_id=decoded.run_state.agent_id,
         )
-        resumed = restored.agent.resume(decoded.snapshot, coordinator=coordinator)
-        assert resumed is run
-        resumed.submit(ToolAnswer(request_id="echo", decision=InputDecision.APPROVE))
+        resumed = restored.agent.resume(decoded.run_state, coordinator=coordinator)
+        assert resumed is not run and resumed.id == run.id
+        resumed.submit(
+            HumanToolAnswer(request_id="echo", decision=InputDecision.APPROVE)
+        )
         assert resumed.result(timeout=5).output.text == "done"
         assert resumed.wait_for_idle(timeout=5)
         assert tool.contexts[0].chat_files[0].content == payload

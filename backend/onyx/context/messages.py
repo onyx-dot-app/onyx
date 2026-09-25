@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from onyx.configs.app_configs import ENABLE_AZURE_IMAGE_CAP, PROMPT_CACHE_CHAT_HISTORY
 from onyx.file_store.models import ChatFileType, ChatLoadedFile
-from onyx.llm.interfaces import LLMInfo
+from onyx.llm.interfaces import LLMConfig
 from onyx.llm.models import (
     AssistantMessage,
     ImageContentPart,
@@ -162,7 +162,7 @@ def _format_user_message(
 
 def prepare_model_messages(  # noqa: C901
     history: Sequence[Message],
-    llm_info: LLMInfo,
+    llm_config: LLMConfig,
 ) -> list[Message]:
     """Resolve application attachments and reminders into shared model messages."""
     messages: list[Message] = []
@@ -177,18 +177,18 @@ def prepare_model_messages(  # noqa: C901
         for msg in history
     ):
         supports_image_input = (
-            llm_info.supports_images
-            if llm_info.supports_images is not None
+            llm_config.supports_images
+            if llm_config.supports_images is not None
             else model_supports_image_input(
-                llm_info.model_name,
-                llm_info.model_provider,
-                llm_info.deployment_name,
+                llm_config.model_name,
+                llm_config.model_provider,
+                llm_config.deployment_name,
             )
         )
 
     # Native images and file attachments share one request limit. Text markers use no slots.
     image_cap = (
-        resolve_image_cap(llm_info.model_provider) if supports_image_input else None
+        resolve_image_cap(llm_config.model_provider) if supports_image_input else None
     )
     keep_image_indices: set[tuple[int, int]] | None = None
     image_drop_notice: str | None = None
@@ -199,8 +199,8 @@ def prepare_model_messages(  # noqa: C901
         if dropped_image_count > 0:
             logger.warning(
                 "Image cap enforced: provider=%s model=%s cap=%d dropped=%d",
-                llm_info.model_provider,
-                llm_info.model_name,
+                llm_config.model_provider,
+                llm_config.model_name,
                 image_cap,
                 dropped_image_count,
             )

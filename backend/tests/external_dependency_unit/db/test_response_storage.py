@@ -21,7 +21,7 @@ from onyx.agents.items import (
     build_response_items,
     messages_from_items,
 )
-from onyx.agents.models import RunSnapshot
+from onyx.agents.models import RunState
 from onyx.agents.tools import ToolProgress
 from onyx.agents.transcript import (
     CompactionCheckpoint,
@@ -804,7 +804,7 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
     db_session.flush()
     row = _response(db_session, conversation)
     agent_id, run_id = str(session.id), str(uuid4())
-    snapshot = RunSnapshot(
+    snapshot = RunState(
         agent_id=agent_id,
         run_id=run_id,
         status=RunStatus.COMPLETE,

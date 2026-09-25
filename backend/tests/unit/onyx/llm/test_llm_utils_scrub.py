@@ -7,9 +7,9 @@ from collections.abc import Iterable
 from typing import Any
 
 from onyx.llm.exceptions import ClassifiedLLMError, litellm_exception_to_safe_error
-from onyx.llm.interfaces import LLMConfig, LLMInfo
+from onyx.llm.interfaces import LLMConfig
 from onyx.llm.litellm_models import Choice, Message, ModelResponse
-from onyx.llm.multi_llm import LitellmLLM, LitellmTransport
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.utils import collect_credential_values, is_sensitive_custom_config_key
 from onyx.llm.utils import (
     test_llm as run_test_llm,
@@ -23,7 +23,7 @@ _SECRET_VERTEX_BLOB = (
 _CLASSIFIED_ERROR_CODE = "MODEL_REFUSAL"
 
 
-class _StubTransport(LitellmTransport):
+class _StubLLM(LitellmLLM):
     """Provider fixture that lets us drive `test_llm` through both success and
     failure paths without going anywhere near LiteLLM."""
 
@@ -40,29 +40,16 @@ class _StubTransport(LitellmTransport):
         self.invoke_calls = 0
 
     @property
-    def info(self) -> LLMInfo:
-        return LLMInfo.model_validate(self.config.model_dump())
-
-    @property
     def config(self) -> LLMConfig:
         return self._config
 
-    def invoke(self, *_: Any, **__: Any) -> ModelResponse:
+    def invoke_raw(self, *_: Any, **__: Any) -> ModelResponse:
         self.invoke_calls += 1
         if self._raise_on_invoke is not None:
             raise self._raise_on_invoke
         return ModelResponse(
             id="test", created="0", choice=Choice(message=Message(content="ok"))
         )
-
-
-class _StubLLM(LitellmLLM):
-    transport: _StubTransport
-
-    def __init__(
-        self, config: LLMConfig, *, raise_on_invoke: Exception | None = None
-    ) -> None:
-        super().__init__(_StubTransport(config, raise_on_invoke=raise_on_invoke))
 
 
 def _make_config(
@@ -236,7 +223,7 @@ def test_run_test_llm_returns_none_on_success() -> None:
     llm = _StubLLM(_make_config())
 
     assert run_test_llm(llm) is None
-    assert llm.transport.invoke_calls == 1
+    assert llm.invoke_calls == 1
 
 
 def test_run_test_llm_redacts_api_key_from_unknown_exception() -> None:
@@ -255,7 +242,7 @@ def test_run_test_llm_redacts_api_key_from_unknown_exception() -> None:
     assert error_msg is not None
     assert _SECRET_KEY not in error_msg
     # `test_llm` retries up to twice on failure.
-    assert llm.transport.invoke_calls == 2
+    assert llm.invoke_calls == 2
 
 
 def test_run_test_llm_redacts_litellm_authentication_error_payload() -> None:

@@ -1,6 +1,6 @@
 """Live guard for the Azure Responses API surface routing (#11420).
 
-`LitellmTransport` routes true OpenAI models on Azure through LiteLLM's responses
+`LitellmLLM` routes true OpenAI models on Azure through LiteLLM's responses
 bridge. The bridge must target the modern `/openai/v1/responses` surface even
 when the provider is configured with a dated api-version: dated versions make
 LiteLLM build the legacy `/openai/responses?api-version=<dated>` URL, which
@@ -21,7 +21,7 @@ from litellm.llms.custom_httpx.http_handler import HTTPHandler
 
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.litellm_models import LanguageModelInput, UserMessage
-from onyx.llm.multi_llm import _AZURE_V1_API_VERSIONS, LitellmTransport
+from onyx.llm.multi_llm import _AZURE_V1_API_VERSIONS, LitellmLLM
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.nightly
@@ -41,8 +41,8 @@ def _resource_base(azure_api_url: str) -> str:
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
-def _build_azure_llm(test_secrets: dict[TestSecret, str]) -> LitellmTransport:
-    return LitellmTransport(
+def _build_azure_llm(test_secrets: dict[TestSecret, str]) -> LitellmLLM:
+    return LitellmLLM(
         api_key=test_secrets[TestSecret.AZURE_API_KEY],
         model_provider=LlmProviderNames.AZURE,
         model_name=_CHAT_DEPLOYMENT,
@@ -85,7 +85,7 @@ def test_azure_responses_bridge_targets_v1_surface(
     llm = _build_azure_llm(test_secrets)
 
     messages: LanguageModelInput = [UserMessage(content="Say hello in three words")]
-    response = llm.invoke(messages, max_tokens=32)
+    response = llm.invoke_raw(messages, max_tokens=32)
 
     assert response.choice.message.content
     _assert_v1_surface(urls, _resource_base(test_secrets[TestSecret.AZURE_API_URL]))
@@ -102,7 +102,7 @@ def test_azure_responses_bridge_streams_on_v1_surface(
     messages: LanguageModelInput = [UserMessage(content="Say hello in three words")]
     content = "".join(
         chunk.choice.delta.content or ""
-        for chunk in llm.stream(messages, max_tokens=32)
+        for chunk in llm.stream_raw(messages, max_tokens=32)
     )
 
     assert content

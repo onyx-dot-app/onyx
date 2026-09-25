@@ -9,14 +9,14 @@ from onyx.chat.errors import (
     EmptyLLMResponseError,
     _build_empty_llm_response_error,
 )
-from onyx.llm.interfaces import LLMInfo
+from onyx.llm.interfaces import LLMConfig
 from onyx.llm.models import AssistantMessage, ThinkingContent, ToolChoiceOptions
 
 
 class TestEmptyLlmResponseClassification:
     def _make_llm(self, provider: str = "openai", model: str = "gpt-5.2") -> Mock:
         llm = Mock()
-        llm.info = LLMInfo(
+        llm.config = LLMConfig(
             model_provider=provider,
             model_name=model,
             temperature=0.0,

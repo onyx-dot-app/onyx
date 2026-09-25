@@ -1,6 +1,5 @@
 """The normalized model adapter works without Onyx chat types."""
 
-import json
 from collections.abc import Iterator
 
 import pytest
@@ -10,7 +9,7 @@ from onyx.agents.models import PreparedStep
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool
 from onyx.llm.cancellation import CancellationSignal
-from onyx.llm.litellm_conversion import normalized_stream, recover_tool_calls
+from onyx.llm.litellm_conversion import MessageAccumulator, recover_tool_calls
 from onyx.llm.litellm_models import (
     ChatCompletionDeltaToolCall,
     Delta,
@@ -89,7 +88,7 @@ def test_tool_recovery_happens_before_events() -> None:
     run = agent.start(max_steps=2, on_event=events.append)
     run.result()
     assert run.wait_for_idle(2)
-    response = agent.context.messages[1]
+    response = agent.state.messages[1]
     assert isinstance(response, ToolResultMessage) and response.content == "recovered"
     first = next(
         event.generation_event for event in events if event.type == "message_update"
@@ -126,15 +125,20 @@ def test_native_calls_keep_precedence_and_missing_id_is_stable() -> None:
                 ),
             )
 
-    result = list(
-        normalized_stream(chunks(), PreparedStep(tools=[tool()]).generation_request([]))
+    accumulator = MessageAccumulator()
+    events = list(
+        accumulator.consume(
+            chunks(), PreparedStep(tools=[tool()]).generation_request([])
+        )
     )
-    first, second = [chunk.choice.delta.tool_calls[0] for chunk in result]
-    assert first.id and first.id == second.id
-    assert first.function and second.function
-    assert json.loads(
-        (first.function.arguments or "") + (second.function.arguments or "")
-    ) == {"value": 3}
+    calls = [
+        event.tool_call
+        for event in events
+        if isinstance(event, GenerationToolCallEvent)
+    ]
+    assert calls and calls[0].id
+    assert {call.id for call in calls} == {calls[0].id}
+    assert accumulator.finish().tool_calls[0].arguments == {"value": 3}
 
 
 def test_model_honors_cancelled_signal() -> None:
@@ -145,7 +149,7 @@ def test_model_honors_cancelled_signal() -> None:
     from onyx.llm.cancellation import AgentCancelled
 
     with pytest.raises(AgentCancelled):
-        Agent(llm).execute(max_steps=1, cancellation=signal).result()
+        Agent(llm).start(background=False, max_steps=1, cancellation=signal).result()
     assert not llm.requests
 
 
@@ -222,7 +226,7 @@ def test_signed_thinking_survives_onyx_projection_and_details_serialize() -> Non
     from onyx.llm.litellm_models import AssistantMessage as WireAssistantMessage
 
     wire_message = serialize_request(
-        GenerationRequest(messages=history), ScriptedLLM([]).transport.config
+        GenerationRequest(messages=history), ScriptedLLM([]).config
     )[0]
     assert isinstance(wire_message, WireAssistantMessage)
     assert wire_message.thinking_blocks == [block]

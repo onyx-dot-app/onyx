@@ -10,8 +10,8 @@ from onyx.agents import concurrency, runtime
 from onyx.agents.concurrency import ExecutionWork
 from onyx.agents.coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent, AgentStartEvent
-from onyx.agents.models import AgentStep, RunSnapshot
 from onyx.agents.runtime import Agent, RunFailed
+from onyx.agents.tool_execution import ToolBatch
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.models import AssistantMessage, TextContent, ToolCall, ToolResult
@@ -39,7 +39,7 @@ def test_distinct_jobs_start_independently_and_preserve_context() -> None:
             finally:
                 tenant.reset(token)
         entered.wait(timeout=3)
-        assert not work.tracker.idle
+        assert not work.tracker.wait_idle(timeout=0)
     finally:
         release.set()
     assert [job.result(3) for job in jobs] == [str(index) for index in range(12)]
@@ -168,15 +168,13 @@ def test_thread_start_failure_releases_job_ownership(
         patch.setattr(concurrency, "start_thread_future", fail)
         with pytest.raises(RuntimeError, match="cannot start thread"):
             work.start(lambda: None)
-    assert work.tracker.idle
+    assert work.tracker.wait_idle(timeout=0)
     assert work.blocking(lambda: "usable", CancellationSignal()) == "usable"
 
 
 def test_child_thread_start_failure_rolls_back_registration(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from onyx.agents import runtime
-
     child = Agent(
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="child")])
@@ -268,10 +266,9 @@ def test_cancelled_callback_retains_late_provider_cleanup() -> None:
     assert work.tracker.wait_idle(2)
 
 
-def test_terminal_snapshot_rejects_tool_result_during_context_commit(
+def test_terminal_snapshot_rejects_late_tool_result(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    commit_entered, release_commit = threading.Event(), threading.Event()
     tool_entered, release_tool, recorded = (
         threading.Event(),
         threading.Event(),
@@ -301,46 +298,33 @@ def test_terminal_snapshot_rejects_tool_result_during_context_commit(
             AgentTool(name="fail", description="", parameters={}, execute=fail),
         ],
     )
-    original_commit = agent._commit
-    original_record = runtime._Execution._record_tool_result
-
-    def commit(record: RunSnapshot) -> None:
-        commit_entered.set()
-        assert release_commit.wait(5)
-        original_commit(record)
+    original_record = ToolBatch._record_tool_result
 
     def record_result(
-        execution: runtime._Execution,
+        execution: ToolBatch,
         result: ToolResult,
         call: ToolCall,
-        result_start: int,
-        call_indices: dict[str, int],
-        index: int,
-        step: AgentStep,
     ) -> None:
         try:
-            original_record(
-                execution, result, call, result_start, call_indices, index, step
-            )
+            original_record(execution, result, call)
         finally:
             recorded.set()
 
-    monkeypatch.setattr(agent, "_commit", commit)
-    monkeypatch.setattr(runtime._Execution, "_record_tool_result", record_result)
+    monkeypatch.setattr(ToolBatch, "_record_tool_result", record_result)
     run = agent.start(max_steps=1)
     try:
-        assert commit_entered.wait(3)
+        with pytest.raises(RunFailed):
+            run.result(3)
         terminal = run.snapshot()
         release_tool.set()
         assert recorded.wait(3)
         assert run.snapshot() == terminal
     finally:
         release_tool.set()
-        release_commit.set()
         assert run.wait_for_idle(3)
     with pytest.raises(RunFailed):
         run.result(1)
-    assert agent.context.messages == run.snapshot().messages
+    assert agent.state.messages == run.snapshot().messages
 
 
 def test_discovery_reads_run_status_without_holding_coordinator_lock(
@@ -425,11 +409,11 @@ def test_delivery_reuses_one_thread_between_events(
             assert received.wait(2)
     finally:
         delivery.close()
-    assert delivery.tracker.idle
+    assert delivery.tracker.wait_idle(timeout=0)
     assert started == ["agent-events"]
 
 
-def test_inherited_sink_failure_keeps_terminal_and_idle_results() -> None:
+def test_parent_listener_failure_keeps_child_result_and_idle() -> None:
     from onyx.agents.events import AgentEvent
 
     def fail(_event: AgentEvent) -> None:
@@ -440,10 +424,14 @@ def test_inherited_sink_failure_keeps_terminal_and_idle_results() -> None:
             lambda *_: AssistantMessage(content=[TextContent(text="answer")])
         )
     )
-    run = agent.start(max_steps=1, inherited_event_sink=fail)
+    parent = concurrency.EventDelivery()
+    parent.subscribe(fail)
+    run = agent.start(max_steps=1, _event_parent=parent)
     assert run.result(2).output.text == "answer"
     assert run.wait_for_idle(2)
-    assert run.delivery_failed
+    assert parent.failed.is_set()
+    assert not run.delivery_failed
+    parent.close()
 
 
 def test_paused_delivery_drains_late_child_events_without_retaining_worker() -> None:
@@ -503,8 +491,8 @@ def test_shared_dispatcher_keeps_channel_context_and_independent_completion() ->
         second.publish(AgentStartEvent(run_id="blocked"))
         assert entered.wait(2)
         first.close()
-        assert first.tracker.idle
-        assert not second.tracker.idle
+        assert first.tracker.wait_idle(timeout=0)
+        assert not second.tracker.wait_idle(timeout=0)
         second.tracker.on_idle(lambda: drained_contexts.append(tenant.get()))
         assert not first.failed.is_set()
         second.publish(AgentStartEvent(run_id="last"))
@@ -554,10 +542,45 @@ def test_shared_dispatcher_bounds_combined_backlog(
         first.close()
         second.close()
         assert received == ["blocked", "accepted"]
-        assert first.tracker.idle
-        assert second.tracker.idle
+        assert first.tracker.wait_idle(timeout=0)
+        assert second.tracker.wait_idle(timeout=0)
     finally:
         release.set()
         first.close()
         second.close()
+        dispatcher.close()
+
+
+def test_child_events_use_one_queue_entry_and_reach_late_parent_listener() -> None:
+    dispatcher = concurrency.EventDispatcher()
+    parent = concurrency.EventDelivery(dispatcher)
+    child = concurrency.EventDelivery(parent=parent)
+    entered = threading.Event()
+    release = threading.Event()
+    local: list[str] = []
+    ancestors: list[str] = []
+
+    def block_first(event: AgentEvent) -> None:
+        if event.run_id == "parent":
+            entered.set()
+            assert release.wait(2)
+
+    parent.subscribe(block_first)
+    child.subscribe(lambda event: local.append(event.run_id))
+    try:
+        parent.publish(AgentStartEvent(agent_id="parent", run_id="parent"))
+        assert entered.wait(2)
+        child.publish(AgentStartEvent(agent_id="child", run_id="child"))
+        with dispatcher._condition:
+            assert len(dispatcher._queue) == 1
+        parent.subscribe(lambda event: ancestors.append(event.run_id))
+        release.set()
+        assert child.tracker.wait_idle(2)
+        assert parent.tracker.wait_idle(2)
+        assert local == ["child"]
+        assert ancestors == ["child"]
+    finally:
+        release.set()
+        child.close()
+        parent.close()
         dispatcher.close()

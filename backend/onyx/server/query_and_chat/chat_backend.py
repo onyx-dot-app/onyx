@@ -197,7 +197,7 @@ def _get_available_tokens_for_persona(
         combined_prompt_tokens = token_counter(agent_prompt + system_prompt)
 
     return _get_non_reserved_input_tokens(
-        model_max_input_tokens=llm.info.max_input_tokens,
+        model_max_input_tokens=llm.config.max_input_tokens,
         system_and_agent_prompt_tokens=combined_prompt_tokens,
         num_tools=len(persona.tools),
     )
@@ -533,7 +533,7 @@ def _generate_or_fallback_chat_session_name(
             check_llm_cost_limit_for_provider(
                 db_session=db_session,
                 tenant_id=get_current_tenant_id(),
-                llm_provider_api_key=llm.transport.config.api_key,
+                llm_provider_api_key=llm.config.api_key,
             )
 
         token_counter = get_llm_token_counter(llm)

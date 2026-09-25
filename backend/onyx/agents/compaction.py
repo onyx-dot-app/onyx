@@ -87,7 +87,7 @@ def request_tokens(request: GenerationRequest) -> int:
 
 def context_budget(model: LLM) -> ContextBudget:
     # max_input_tokens is already an input ceiling, not the total context window.
-    limit = max(1, int(model.info.max_input_tokens * INPUT_SAFETY_RATIO))
+    limit = max(1, int(model.config.max_input_tokens * INPUT_SAFETY_RATIO))
     return ContextBudget(
         input_limit=limit,
         trigger=max(1, int(limit * COMPACTION_TRIGGER_RATIO)),
