@@ -287,12 +287,14 @@ def list_accepted_users(
             "group membership and is returned on each user as 'is_admin'.",
         )
 
+    include_ext = AccountType.EXT_PERM_USER in account_types
     filtered_accepted_users = get_page_of_filtered_users(
         db_session=db_session,
         page_size=page_size,
         page_num=page_num,
         email_filter_string=q,
         is_active_filter=is_active,
+        include_external=include_ext,
         account_type_filter=account_types or None,
     )
 
@@ -300,6 +302,7 @@ def list_accepted_users(
         db_session=db_session,
         email_filter_string=q,
         is_active_filter=is_active,
+        include_external=include_ext,
         account_type_filter=account_types or None,
     )
 
@@ -353,7 +356,10 @@ def list_all_accepted_users(
 ) -> list[FullUserSnapshot]:
     """Returns all accepted users without pagination.
     Used by the admin Users page for client-side filtering/sorting."""
-    users = get_all_accepted_users(db_session=db_session)
+    users = get_all_accepted_users(
+        db_session=db_session,
+        include_external=True,
+    )
 
     if not users:
         return []
