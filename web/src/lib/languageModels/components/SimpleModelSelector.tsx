@@ -106,6 +106,10 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
       disabled={disabled}
       onValueChange={(next) => {
         const id = fromSelectValue(next);
+        // The Global Default row stands for null, so picking it while
+        // nothing is chosen changes nothing; the family cannot tell, since
+        // the select's own value is empty then.
+        if (id === null && value === null) return;
         // SAFETY: a non-nullable select never emits an empty value, since
         // its own value is the default option.
         onChange(id as EmittedModelConfigurationId<Nullable>);
