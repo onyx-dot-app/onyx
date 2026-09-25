@@ -497,8 +497,8 @@ indexCapability:
 Each GPU goes to one pod. The composition's GPU pool is one node with one GPU,
 so these values need two GPUs and one pod stays pending. Give the GPU to one
 model server only, or use the `gke` module with `gpu_accelerator_count = 2`.
-Keep the CPU and memory requests and limits from the chart defaults when you
-set `resources`, because the chart replaces the whole block.
+Helm merges `resources` with the chart defaults, so the CPU and memory requests
+and limits stay.
 
 ## Testing
 
