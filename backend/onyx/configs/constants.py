@@ -193,13 +193,18 @@ CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT = 5 * 60  # 5 min
 # if we can get callbacks as object bytes download, we could lower this a lot.
 CELERY_PRUNING_LOCK_TIMEOUT = 3600  # 1 hour (in seconds)
 
-# Held for one connector's whole document permission sync and refreshed every
-# quarter of the generic beat TTL, so it must not be set below that TTL. A
-# connector silent longer than this loses it, so large tenants raise it.
+# One document permission update retries transient database errors this long
+# before it gives up, with no lock refresh in between.
+DOCUMENT_PERMISSIONS_UPDATE_STOP_AFTER = 10 * 60
+
+# Held for one connector's whole document permission sync and refreshed from the
+# progress callback every quarter of the generic beat TTL. Its longest silence is
+# one update's retry budget right after a missed refresh. Large tenants raise it.
 CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT: int = lock_timeout_from_env(
     "CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT",
     3600,
-    minimum=CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    minimum=DOCUMENT_PERMISSIONS_UPDATE_STOP_AFTER
+    + CELERY_GENERIC_BEAT_LOCK_TIMEOUT // 4,
 )
 
 # While this lock is held, duplicate dispatches for the same cc_pair exit
