@@ -63,7 +63,7 @@ from onyx.connectors.google_utils.shared_constants import (
 from onyx.db.connector import (
     create_connector,
     delete_connector,
-    delete_connector_if_unpaired,
+    discard_connector_if_unpaired,
     fetch_connector_by_id,
     fetch_connectors,
     fetch_unique_document_sources,
@@ -1674,11 +1674,12 @@ def _discard_unpaired_creation(
     """Both rows are committed before validation runs, so a failed creation has
     to remove them or the name stays taken for the retry."""
     db_session.rollback()
-    if connector_id is not None:
-        with db_session.begin():
-            if not delete_connector_if_unpaired(db_session, connector_id):
-                # Paired by another request meanwhile: the pair owns both rows now.
-                return
+    if connector_id is not None and not discard_connector_if_unpaired(
+        db_session, connector_id
+    ):
+        # Paired by another request meanwhile, or the delete itself failed and
+        # was logged: the caller must still get the validation error.
+        return
     if credential_id is not None:
         try:
             delete_credential(credential_id, db_session)

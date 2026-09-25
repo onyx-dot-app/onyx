@@ -22,7 +22,7 @@ from onyx.connectors.exceptions import ValidationError
 from onyx.connectors.factory import identify_connector_class, validate_ccpair_for_user
 from onyx.connectors.interfaces import Resolver
 from onyx.connectors.models import InputType
-from onyx.db.connector import delete_connector_if_unpaired
+from onyx.db.connector import discard_connector_if_unpaired
 from onyx.db.connector_credential_pair import (
     add_credential_to_connector,
     get_cc_pair_groups_for_ids,
@@ -932,8 +932,7 @@ def associate_credential_to_connector(
         # The connector row was committed by the create call before this one, so
         # an unpaired one is removed here or its name stays taken for the retry.
         db_session.rollback()
-        with db_session.begin():
-            removed = delete_connector_if_unpaired(db_session, connector_id)
+        removed = discard_connector_if_unpaired(db_session, connector_id)
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "Connector validation error: "

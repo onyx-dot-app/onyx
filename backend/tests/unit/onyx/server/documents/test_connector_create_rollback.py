@@ -54,7 +54,7 @@ def stubbed_creation(monkeypatch: pytest.MonkeyPatch) -> dict[str, MagicMock]:
             side_effect=ConnectorValidationError("no access to graph api")
         ),
         "delete_credential": MagicMock(),
-        "delete_connector_if_unpaired": MagicMock(return_value=True),
+        "discard_connector_if_unpaired": MagicMock(return_value=True),
     }
     for name, stub in stubs.items():
         monkeypatch.setattr(connector_server, name, stub)
@@ -73,7 +73,7 @@ def test_failed_validation_removes_both_rows(
 
     assert raised.value.status_code == 400
     assert "no access to graph api" in raised.value.detail
-    stubbed_creation["delete_connector_if_unpaired"].assert_called_once_with(
+    stubbed_creation["discard_connector_if_unpaired"].assert_called_once_with(
         db_session, 7
     )
     stubbed_creation["delete_credential"].assert_called_once_with(9, db_session)
@@ -92,14 +92,14 @@ def test_duplicate_name_removes_nothing(
         )
 
     assert raised.value.status_code == 400
-    stubbed_creation["delete_connector_if_unpaired"].assert_not_called()
+    stubbed_creation["discard_connector_if_unpaired"].assert_not_called()
     stubbed_creation["delete_credential"].assert_not_called()
 
 
 def test_connector_paired_meanwhile_keeps_the_credential(
     request_data: ConnectorUpdateRequest, stubbed_creation: dict[str, MagicMock]
 ) -> None:
-    stubbed_creation["delete_connector_if_unpaired"].return_value = False
+    stubbed_creation["discard_connector_if_unpaired"].return_value = False
 
     with pytest.raises(HTTPException):
         connector_server.create_connector_with_mock_credential(
@@ -119,7 +119,7 @@ def stubbed_association(monkeypatch: pytest.MonkeyPatch) -> dict[str, MagicMock]
             side_effect=ConnectorValidationError("no access to graph api")
         ),
         "add_credential_to_connector": MagicMock(),
-        "delete_connector_if_unpaired": MagicMock(return_value=True),
+        "discard_connector_if_unpaired": MagicMock(return_value=True),
     }
     for name, stub in stubs.items():
         monkeypatch.setattr(cc_pair_server, name, stub)
@@ -146,7 +146,7 @@ def test_failed_link_removes_the_unpaired_connector(
     assert raised.value.error_code == OnyxErrorCode.INVALID_INPUT
     assert "no access to graph api" in raised.value.detail
     assert "removed" in raised.value.detail
-    stubbed_association["delete_connector_if_unpaired"].assert_called_once_with(
+    stubbed_association["discard_connector_if_unpaired"].assert_called_once_with(
         db_session, 7
     )
     stubbed_association["add_credential_to_connector"].assert_not_called()
@@ -155,7 +155,7 @@ def test_failed_link_removes_the_unpaired_connector(
 def test_failed_link_keeps_a_connector_paired_meanwhile(
     stubbed_association: dict[str, MagicMock],
 ) -> None:
-    stubbed_association["delete_connector_if_unpaired"].return_value = False
+    stubbed_association["discard_connector_if_unpaired"].return_value = False
 
     with pytest.raises(OnyxError) as raised:
         cc_pair_server.associate_credential_to_connector(
