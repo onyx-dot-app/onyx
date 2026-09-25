@@ -9674,6 +9674,10 @@
       "closeButton": {
         "tooltip": "关闭侧边栏"
       },
+      "copyWithReferences": {
+        "label": "复制并附上参考来源",
+        "unavailableSource": "来源详情不可用"
+      },
       "foundSources": {
         "title": "找到的来源"
       },

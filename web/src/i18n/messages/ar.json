@@ -9674,6 +9674,10 @@
       "closeButton": {
         "tooltip": "إغلاق الشريط الجانبي"
       },
+      "copyWithReferences": {
+        "label": "نسخ مع المراجع",
+        "unavailableSource": "تفاصيل المصدر غير متاحة"
+      },
       "foundSources": {
         "title": "المصادر التي عُثر عليها"
       },

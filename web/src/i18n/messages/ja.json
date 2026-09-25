@@ -9674,6 +9674,10 @@
       "closeButton": {
         "tooltip": "サイドバーを閉じる"
       },
+      "copyWithReferences": {
+        "label": "参照元付きでコピー",
+        "unavailableSource": "参照元の詳細は利用できません"
+      },
       "foundSources": {
         "title": "見つかったソース"
       },

@@ -9674,6 +9674,10 @@
       "closeButton": {
         "tooltip": "Cerrar la barra lateral"
       },
+      "copyWithReferences": {
+        "label": "Copiar con referencias",
+        "unavailableSource": "Detalles de la fuente no disponibles"
+      },
       "foundSources": {
         "title": "Fuentes encontradas"
       },

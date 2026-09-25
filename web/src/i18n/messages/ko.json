@@ -9674,6 +9674,10 @@
       "closeButton": {
         "tooltip": "사이드바 닫기"
       },
+      "copyWithReferences": {
+        "label": "참조와 함께 복사",
+        "unavailableSource": "출처 세부 정보를 사용할 수 없습니다"
+      },
       "foundSources": {
         "title": "찾은 출처"
       },
