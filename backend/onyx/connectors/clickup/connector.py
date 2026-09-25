@@ -19,7 +19,10 @@ from onyx.connectors.models import (
     HierarchyNode,
     TextSection,
 )
+from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
+
+logger = setup_logger()
 
 CLICKUP_API_BASE_URL = "https://api.clickup.com/api/v2"
 
@@ -78,6 +81,89 @@ class ClickupConnector(LoadConnector, PollConnector):
 
         return comments
 
+    def _build_document_from_task(self, task: dict[str, Any]) -> Document:
+        creator = task.get("creator") or {}
+        primary_owners = [
+            BasicExpertInfo(
+                display_name=creator.get("username", "Unknown"),
+                email=creator.get("email"),
+            )
+        ]
+
+        secondary_owners = [
+            BasicExpertInfo(
+                display_name=assignee.get("username", "Unknown"),
+                email=assignee.get("email"),
+            )
+            for assignee in task.get("assignees") or []
+        ]
+
+        folder = task.get("folder") or {}
+        project = task.get("project") or {}
+        list_ = task.get("list") or {}
+        space = task.get("space") or {}
+        status = task.get("status") or {}
+        priority = task.get("priority") or {}
+
+        document = Document(
+            id=task["id"],
+            source=DocumentSource.CLICKUP,
+            semantic_identifier=task["name"],
+            doc_updated_at=(
+                datetime.fromtimestamp(
+                    round(float(task["date_updated"]) / 1000, 3),
+                    tz=timezone.utc,
+                )
+            ),
+            # NOTE: doc_created_at population not yet verified against live data
+            doc_created_at=datetime.fromtimestamp(
+                round(float(task["date_created"]) / 1000, 3),
+                tz=timezone.utc,
+            ),
+            primary_owners=primary_owners,
+            secondary_owners=secondary_owners,
+            title=task["name"],
+            sections=[
+                TextSection(
+                    link=task["url"],
+                    text=(
+                        task["markdown_description"]
+                        if "markdown_description" in task
+                        else task.get("description", "")
+                    ),
+                )
+            ],
+            metadata={
+                "id": task["id"],
+                "status": status.get("status", ""),
+                "list": list_.get("name", ""),
+                "project": project.get("name", ""),
+                "folder": folder.get("name", ""),
+                "space_id": space.get("id", ""),
+                "tags": [tag["name"] for tag in task.get("tags") or []],
+                "priority": priority.get("priority", "") if priority else "",
+            },
+        )
+
+        extra_fields = [
+            "date_created",
+            "date_updated",
+            "date_closed",
+            "date_done",
+            "due_date",
+        ]
+        for extra_field in extra_fields:
+            if extra_field in task and task[extra_field] is not None:
+                document.metadata[extra_field] = task[extra_field]
+
+        if self.retrieve_task_comments:
+            document.sections = [
+                *document.sections,
+                *self._get_task_comments(task["id"]),
+            ]
+
+        return document
+
     def _get_all_tasks_filtered(
         self,
         start: int | None = None,
@@ -114,77 +200,14 @@ class ClickupConnector(LoadConnector, PollConnector):
             params["page"] = page
 
             for task in response["tasks"]:
-                document = Document(
-                    id=task["id"],
-                    source=DocumentSource.CLICKUP,
-                    semantic_identifier=task["name"],
-                    doc_updated_at=(
-                        datetime.fromtimestamp(
-                            round(float(task["date_updated"]) / 1000, 3),
-                            tz=timezone.utc,
-                        )
-                    ),
-                    # NOTE: doc_created_at population not yet verified against live data
-                    doc_created_at=datetime.fromtimestamp(
-                        round(float(task["date_created"]) / 1000, 3),
-                        tz=timezone.utc,
-                    ),
-                    primary_owners=[
-                        BasicExpertInfo(
-                            display_name=task["creator"]["username"],
-                            email=task["creator"]["email"],
-                        )
-                    ],
-                    secondary_owners=[
-                        BasicExpertInfo(
-                            display_name=assignee["username"],
-                            email=assignee["email"],
-                        )
-                        for assignee in task["assignees"]
-                    ],
-                    title=task["name"],
-                    sections=[
-                        TextSection(
-                            link=task["url"],
-                            text=(
-                                task["markdown_description"]
-                                if "markdown_description" in task
-                                else task["description"]
-                            ),
-                        )
-                    ],
-                    metadata={
-                        "id": task["id"],
-                        "status": task["status"]["status"],
-                        "list": task["list"]["name"],
-                        "project": task["project"]["name"],
-                        "folder": task["folder"]["name"],
-                        "space_id": task["space"]["id"],
-                        "tags": [tag["name"] for tag in task["tags"]],
-                        "priority": (
-                            task["priority"]["priority"]
-                            if "priority" in task and task["priority"] is not None
-                            else ""
-                        ),
-                    },
-                )
-
-                extra_fields = [
-                    "date_created",
-                    "date_updated",
-                    "date_closed",
-                    "date_done",
-                    "due_date",
-                ]
-                for extra_field in extra_fields:
-                    if extra_field in task and task[extra_field] is not None:
-                        document.metadata[extra_field] = task[extra_field]
-
-                if self.retrieve_task_comments:
-                    document.sections = [
-                        *document.sections,
-                        *self._get_task_comments(task["id"]),
-                    ]
+                try:
+                    document = self._build_document_from_task(task)
+                except Exception:
+                    logger.exception(
+                        f"Failed to process Clickup task {task.get('id')!r}; "
+                        "skipping it."
+                    )
+                    continue
 
                 doc_batch.append(document)
 
