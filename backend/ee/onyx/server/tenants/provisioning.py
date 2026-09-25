@@ -1,10 +1,11 @@
 import asyncio
+import time
 import uuid
 
 import aiohttp  # Async HTTP client
 import httpx
 import requests
-from fastapi import HTTPException, Request
+from fastapi import Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -16,6 +17,7 @@ from ee.onyx.db.user_tenant_mapping import (
 )
 from ee.onyx.server.tenants.access import generate_data_plane_token
 from ee.onyx.server.tenants.models import (
+    PoolTenant,
     TenantByDomainResponse,
     TenantCreationPayload,
     TenantDeletionPayload,
@@ -23,8 +25,10 @@ from ee.onyx.server.tenants.models import (
 from ee.onyx.server.tenants.schema_management import (
     create_schema_if_not_exists,
     drop_schema,
+    get_alembic_head_revision,
     run_alembic_migrations,
 )
+from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import (
     ANTHROPIC_DEFAULT_API_KEY,
     AUTO_PROVISION_DEFAULT_LLM_PROVIDERS,
@@ -33,8 +37,14 @@ from onyx.configs.app_configs import (
     DEV_MODE,
     OPENAI_DEFAULT_API_KEY,
     OPENROUTER_DEFAULT_API_KEY,
+    TENANT_PROVISIONING_WAIT_SECONDS,
     VERTEXAI_DEFAULT_CREDENTIALS,
     VERTEXAI_DEFAULT_LOCATION,
+)
+from onyx.configs.constants import (
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
 )
 from onyx.db.engine.shard_routing import get_shard_for_new_tenant
 from onyx.db.engine.sql_engine import (
@@ -56,6 +66,8 @@ from onyx.db.models import (
     UserTenantMapping,
 )
 from onyx.db.tenant_shard import clear_tenant_placement, record_tenant_placement
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.llm.well_known_providers.constants import (
     ANTHROPIC_PROVIDER_NAME,
@@ -89,6 +101,9 @@ logger = setup_logger()
 # Matches billing.py. Without it a hung control plane pins the caller forever.
 _CONTROL_PLANE_TIMEOUT_S = 30
 
+# A signup polls for its worker-built tenant at this interval.
+_PROVISIONING_POLL_INTERVAL_S = 1.0
+
 
 async def get_or_provision_tenant(
     email: str,
@@ -104,6 +119,10 @@ async def get_or_provision_tenant(
 
     When the caller knows the IdP subject it is tried before the email, which is
     what stops a renamed user being treated as a brand new signup.
+
+    Alembic never runs in the api server. A pool tenant that is already at the
+    code's head revision is assigned here. Anything that needs a migration is
+    built by a worker while this request waits for the mapping to appear.
     """
     # Early return for non-multi-tenant mode
     if not MULTI_TENANT:
@@ -117,56 +136,94 @@ async def get_or_provision_tenant(
         return tenant_id
 
     try:
-        # Try to get a pre-provisioned tenant
-        tenant_id = await get_available_tenant()
-
-        if tenant_id:
-            # Run migrations to ensure the pre-provisioned tenant schema is current.
-            # Pool tenants may have been created before a new migration was deployed.
-            # Capture as a non-optional local so type-checking can type the lambda correctly.
-            _tenant_id: str = tenant_id
-            loop = asyncio.get_running_loop()
-            try:
-                await loop.run_in_executor(
-                    None, lambda: run_alembic_migrations(_tenant_id)
-                )
-            except Exception:
-                # The tenant was already dequeued from the pool — roll it back so
-                # it doesn't end up orphaned (schema exists, but not assigned to anyone).
-                logger.exception(
-                    "Migration failed for pre-provisioned tenant %s; rolling back",
-                    _tenant_id,
-                )
-                try:
-                    await rollback_tenant_provisioning(_tenant_id)
-                except Exception:
-                    logger.exception(
-                        "Failed to rollback orphaned tenant %s", _tenant_id
-                    )
-                raise
-            # If we have a pre-provisioned tenant, assign it to the user
+        pool_tenant = await get_available_tenant()
+        if pool_tenant is not None:
+            tenant_id = pool_tenant.tenant_id
             await assign_tenant_to_user(tenant_id, email, referral_source)
             logger.info(
                 "Assigned pre-provisioned tenant %s to user %s", tenant_id, email
             )
-        else:
-            # If no pre-provisioned tenant is available, create a new one on-demand
-            tenant_id = await create_tenant(email, referral_source)
+            if not DEV_MODE:
+                await notify_control_plane(tenant_id, email, referral_source)
+            return tenant_id
+    except Exception as e:
+        logger.error("Failed to provision tenant", exc_info=e)
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "Failed to provision tenant. Please try again later.",
+        )
 
-        # Notify control plane if we have created / assigned a new tenant
-        if not DEV_MODE:
-            await notify_control_plane(tenant_id, email, referral_source)
+    _enqueue_user_provisioning(email, referral_source)
+    return await _wait_for_tenant(email, oauth_name, account_id)
 
+
+def _enqueue_user_provisioning(email: str, referral_source: str | None) -> None:
+    client_app.send_task(
+        OnyxCeleryTask.CLOUD_PROVISION_TENANT_FOR_USER,
+        kwargs={"email": email, "referral_source": referral_source},
+        queue=OnyxCeleryQueues.MONITORING,
+        priority=OnyxCeleryPriority.HIGH,
+        # Past this the request has already failed, so the user retries and
+        # enqueues again; running the stale task too would build twice.
+        expires=TENANT_PROVISIONING_WAIT_SECONDS,
+    )
+
+
+async def _wait_for_tenant(
+    email: str, oauth_name: str | None, account_id: str | None
+) -> str:
+    deadline = time.monotonic() + TENANT_PROVISIONING_WAIT_SECONDS
+    while time.monotonic() < deadline:
+        tenant_id = resolve_tenant_id(email, oauth_name, account_id)
+        if tenant_id:
+            return tenant_id
+        await asyncio.sleep(_PROVISIONING_POLL_INTERVAL_S)
+    logger.warning("Timed out waiting for tenant provisioning for user %s", email)
+    raise OnyxError(
+        OnyxErrorCode.SERVICE_UNAVAILABLE,
+        "Your workspace is still being set up. Try again in a minute.",
+    )
+
+
+async def provision_user_tenant(email: str, referral_source: str | None) -> str:
+    """Worker side of a signup that found no current pool tenant.
+
+    Takes a stale pool tenant and migrates it, or builds a tenant from scratch,
+    then assigns it and tells the control plane. Returns the tenant id.
+    """
+    tenant_id = resolve_tenant_id(email)
+    if tenant_id:
         return tenant_id
 
-    except Exception as e:
-        # If we've encountered an error, log and raise an exception
-        error_msg = "Failed to provision tenant"
-        logger.error(error_msg, exc_info=e)
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to provision tenant. Please try again later.",
-        )
+    pool_tenant = await get_available_tenant(allow_stale=True)
+    if pool_tenant is not None:
+        tenant_id = pool_tenant.tenant_id
+        if pool_tenant.alembic_version != get_alembic_head_revision():
+            loop = asyncio.get_running_loop()
+            try:
+                await loop.run_in_executor(
+                    None, lambda: run_alembic_migrations(tenant_id)
+                )
+            except Exception:
+                # The tenant was already dequeued from the pool. Roll it back so
+                # it does not end up orphaned (schema exists, assigned to nobody).
+                logger.exception(
+                    "Migration failed for pre-provisioned tenant %s; rolling back",
+                    tenant_id,
+                )
+                try:
+                    await rollback_tenant_provisioning(tenant_id)
+                except Exception:
+                    logger.exception("Failed to rollback orphaned tenant %s", tenant_id)
+                raise
+        await assign_tenant_to_user(tenant_id, email, referral_source)
+        logger.info("Assigned pre-provisioned tenant %s to user %s", tenant_id, email)
+    else:
+        tenant_id = await create_tenant(email, referral_source)
+
+    if not DEV_MODE:
+        await notify_control_plane(tenant_id, email, referral_source)
+    return tenant_id
 
 
 async def create_tenant(
@@ -192,18 +249,20 @@ async def create_tenant(
             await rollback_tenant_provisioning(tenant_id)
         except Exception:
             logger.exception("Failed to rollback tenant provisioning for %s", tenant_id)
-        raise HTTPException(status_code=500, detail="Failed to provision tenant.")
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Failed to provision tenant.")
 
     return tenant_id
 
 
 async def provision_tenant(tenant_id: str, email: str) -> None:
     if not MULTI_TENANT:
-        raise HTTPException(status_code=403, detail="Multi-tenancy is not enabled")
+        raise OnyxError(
+            OnyxErrorCode.DEPLOYMENT_UNSUPPORTED, "Multi-tenancy is not enabled"
+        )
 
     if user_owns_a_tenant(email):
-        raise HTTPException(
-            status_code=409, detail="User already belongs to an organization"
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT, "User already belongs to an organization"
         )
 
     shard_name = get_shard_for_new_tenant()
@@ -229,8 +288,8 @@ async def provision_tenant(tenant_id: str, email: str) -> None:
 
     except Exception as e:
         logger.exception("Failed to create tenant %s", tenant_id)
-        raise HTTPException(
-            status_code=500, detail=f"Failed to create tenant: {str(e)}"
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR, f"Failed to create tenant: {str(e)}"
         )
 
 
@@ -690,12 +749,15 @@ def get_tenant_by_domain_from_control_plane(
         return None
 
 
-async def get_available_tenant() -> str | None:
+async def get_available_tenant(allow_stale: bool = False) -> PoolTenant | None:
     """
-    Get an available pre-provisioned tenant from the NewAvailableTenant table.
-    Returns the tenant_id if one is available, None otherwise.
-    Uses row-level locking to prevent race conditions when multiple processes
-    try to get an available tenant simultaneously.
+    Take the oldest pre-provisioned tenant out of the pool, or None if the pool
+    is empty. Uses row-level locking to prevent race conditions when multiple
+    processes try to get an available tenant simultaneously.
+
+    A tenant behind the code's head revision stays in the pool unless
+    ``allow_stale`` is set, since only a worker may migrate it. The refill task
+    migrates pool tenants on every run, so a stale head is short-lived.
     """
     if not MULTI_TENANT:
         return None
@@ -712,16 +774,31 @@ async def get_available_tenant() -> str | None:
                 .first()
             )
 
-            if available_tenant:
-                tenant_id = available_tenant.tenant_id
-                # Remove the tenant from the available tenants table
-                db_session.delete(available_tenant)
-                db_session.commit()
-                logger.info("Using pre-provisioned tenant %s", tenant_id)
-                return tenant_id
-            else:
+            if available_tenant is None:
                 db_session.rollback()
                 return None
+
+            pool_tenant = PoolTenant(
+                tenant_id=available_tenant.tenant_id,
+                alembic_version=available_tenant.alembic_version,
+            )
+            if (
+                not allow_stale
+                and pool_tenant.alembic_version != get_alembic_head_revision()
+            ):
+                db_session.rollback()
+                logger.info(
+                    "Pool tenant %s is at %s, not head; leaving it for a worker",
+                    pool_tenant.tenant_id,
+                    pool_tenant.alembic_version,
+                )
+                return None
+
+            # Remove the tenant from the available tenants table
+            db_session.delete(available_tenant)
+            db_session.commit()
+            logger.info("Using pre-provisioned tenant %s", pool_tenant.tenant_id)
+            return pool_tenant
         except Exception:
             logger.exception("Error getting available tenant")
             db_session.rollback()

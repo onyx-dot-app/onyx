@@ -1,9 +1,11 @@
 """
-Periodic tasks for tenant pre-provisioning.
+Periodic tasks for tenant pre-provisioning, plus the on-demand provisioning
+task the api server hands a signup to when the pool cannot serve it.
 """
 
 import asyncio
 import datetime
+import hashlib
 import uuid
 
 from celery import Task, shared_task
@@ -32,6 +34,66 @@ _MAX_TENANTS_PER_RUN = 15
 # (~90s each) plus migrating up to TARGET_AVAILABLE_TENANTS pool tenants (~90s each).
 _TENANT_PROVISIONING_SOFT_TIME_LIMIT = 60 * 40  # 40 minutes
 _TENANT_PROVISIONING_TIME_LIMIT = 60 * 45  # 45 minutes
+
+# One signup's tenant: migrate a pool tenant or build one (~90s), with margin.
+_USER_PROVISION_LOCK_TIMEOUT = 60 * 10
+
+
+def user_provision_lock_name(email: str) -> str:
+    digest = hashlib.sha256(email.strip().lower().encode()).hexdigest()
+    return f"{OnyxRedisLocks.CLOUD_PROVISION_TENANT_FOR_USER_LOCK_PREFIX}:{digest}"
+
+
+@shared_task(  # ty: ignore[invalid-argument-type]
+    name=OnyxCeleryTask.CLOUD_PROVISION_TENANT_FOR_USER,
+    queue=OnyxCeleryQueues.MONITORING,
+    ignore_result=True,
+    trail=False,
+    bind=True,
+)
+def provision_tenant_for_user(
+    self: Task,  # noqa: ARG001
+    *,
+    email: str,
+    referral_source: str | None = None,
+) -> bool:
+    """Build or migrate the tenant for one signup, off the api server.
+
+    The api server enqueues this when the pool has no tenant at the code's head
+    revision, then polls the user-tenant mapping until it appears. Alembic never
+    runs inside the api server: a hung migration there pins its thread pool and
+    takes every request down with it.
+    """
+    if not MULTI_TENANT:
+        return False
+
+    # Imported here: provisioning reaches every tool implementation (~75 MB).
+    from ee.onyx.server.tenants.provisioning import provision_user_tenant
+
+    r = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+    lock: RedisLock = r.lock(
+        user_provision_lock_name(email), timeout=_USER_PROVISION_LOCK_TIMEOUT
+    )
+    # A user who retries the signup page enqueues again. Only one run per email
+    # may build, or the retry creates a second workspace for the same person.
+    if not lock.acquire(blocking=False):
+        task_logger.info("Skipping provision_tenant_for_user: already running")
+        return False
+
+    try:
+        tenant_id = asyncio.run(provision_user_tenant(email, referral_source))
+        task_logger.info("Provisioned tenant %s for a signup", tenant_id)
+        return True
+    except Exception:
+        task_logger.exception("provision_tenant_for_user failed")
+        return False
+    finally:
+        try:
+            lock.release()
+        except Exception:
+            task_logger.warning(
+                "Could not release user provision lock (likely expired), continuing"
+            )
 
 
 @shared_task(  # ty: ignore[invalid-argument-type]

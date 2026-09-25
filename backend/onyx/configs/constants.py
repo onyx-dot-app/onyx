@@ -557,6 +557,8 @@ class OnyxRedisLocks:
     CHAT_TTL_CHAIN_ACTIVE = "da_lock:chat_ttl_chain_active"
     CHECK_AVAILABLE_TENANTS_LOCK = "da_lock:check_available_tenants"
     CLOUD_PRE_PROVISION_TENANT_LOCK = "da_lock:pre_provision_tenant"
+    # One provisioning run per signing-up user; the suffix is a hash of the email.
+    CLOUD_PROVISION_TENANT_FOR_USER_LOCK_PREFIX = "da_lock:provision_tenant_for_user"
 
     CONNECTOR_DOC_PERMISSIONS_SYNC_LOCK_PREFIX = (
         "da_lock:connector_doc_permissions_sync"
@@ -645,6 +647,9 @@ class OnyxCeleryTask:
     )
     CLOUD_CHECK_AVAILABLE_TENANTS = (
         f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_check_available_tenants"
+    )
+    CLOUD_PROVISION_TENANT_FOR_USER = (
+        f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_provision_tenant_for_user"
     )
     CLOUD_MONITOR_CELERY_PIDBOX = (
         f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor_celery_pidbox"

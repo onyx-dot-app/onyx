@@ -139,3 +139,11 @@ class ApproveUserRequest(BaseModel):
 
 class StripePublishableKeyResponse(BaseModel):
     publishable_key: str
+
+
+class PoolTenant(BaseModel):
+    """A pre-provisioned tenant taken out of the pool, with the alembic
+    revision its schema was last migrated to."""
+
+    tenant_id: str
+    alembic_version: str
