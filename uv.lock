@@ -4439,7 +4439,7 @@ backend = [
     { name = "rapidfuzz", specifier = "==3.14.5" },
     { name = "readerwriterlock", specifier = "==1.0.9" },
     { name = "redis", specifier = "==5.0.8" },
-    { name = "redis-lua-py", specifier = "==0.10.0" },
+    { name = "redis-lua-py", specifier = "==0.12.0" },
     { name = "reportlab", specifier = "==5.0.0" },
     { name = "requests", specifier = "==2.33.0" },
     { name = "requests-oauthlib", specifier = "==2.0.0" },
@@ -6099,11 +6099,11 @@ wheels = [
 
 [[package]]
 name = "redis-lua-py"
-version = "0.10.0"
+version = "0.12.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/36/9b/a3f6beb0f4d777726fcafa1b680060d72c6c26efbfddff611930dc058a6e/redis_lua_py-0.10.0.tar.gz", hash = "sha256:36b0a522c7d4b4a123bd13d895f17c1ffa081e22f6d0c6e073be6c79837bebbb", size = 311675, upload-time = "2026-09-14T07:52:37.303Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d4/c6/f01ab8e37cf381b10cb91327444d1cbc7657ed396864db8b78c1d7d8333d/redis_lua_py-0.12.0.tar.gz", hash = "sha256:97fe45193e8a05bdec4c358d5e8d8296cb00d48e5be1ba4aa72eae89981ca66d", size = 317661, upload-time = "2026-09-25T20:08:35.052Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a0/9a/2234e92ba402e60634a627467dc84ffea0fa512ef669c35dc11e661a06c2/redis_lua_py-0.10.0-py3-none-any.whl", hash = "sha256:c4e85dd6fde5d045e294bdf66578aa6869403417561cf56d02e1d6ce75121208", size = 106443, upload-time = "2026-09-14T07:52:35.922Z" },
+    { url = "https://files.pythonhosted.org/packages/ae/6e/e0f59e2128cdadc459a8d1cbd66f3c463b9caaab008a59725d962afe257a/redis_lua_py-0.12.0-py3-none-any.whl", hash = "sha256:9c91e6d84dfc0136b5194a64950a7cd8ef8a7cd37156c3991d84a88c14cbe3b6", size = 108759, upload-time = "2026-09-25T20:08:33.753Z" },
 ]
 
 [[package]]

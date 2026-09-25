@@ -54,21 +54,14 @@ _TOMBSTONE = b"tombstone"
 @script
 def _save_if_version(key: Key, version: int, payload: bytes, ttl: int) -> int:
     """Write ``payload`` if the stored version equals ``version``: 1 if written."""
-    current = redis.get(key)
+    current: str | None = redis.get(key)
     if current == "tombstone":
         return 0
     current_version = 0
     if current is not None:
         colon = current.find(":")
-        if 0 < colon <= _MAX_VERSION_DIGITS:
-            digits = current[:colon]
-            numeric = True
-            for i in range(colon):
-                char = digits[i : i + 1]
-                if char < "0" or char > "9":
-                    numeric = False
-            if numeric:
-                current_version = int(digits)
+        if 0 < colon <= _MAX_VERSION_DIGITS and current[:colon].isdigit():
+            current_version = int(current[:colon])
     if current_version != version:
         return 0
     redis.set(key, payload, "EX", ttl)
