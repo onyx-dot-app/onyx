@@ -5,10 +5,10 @@ from collections.abc import Generator
 import pytest
 
 from onyx.agents.compaction import context_budget, request_tokens
+from onyx.agents.execution_records import CompactionCheckpoint
 from onyx.agents.models import AgentState, PreparedStep, StepInput
 from onyx.agents.runtime import Agent, RunFailed
 from onyx.agents.tools import AgentTool, ToolInvocation
-from onyx.agents.transcript import CompactionCheckpoint
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.exceptions import LLMContextLimitError
 from onyx.llm.interfaces import LLM, GenerationContext, LLMConfig, LLMUserIdentity

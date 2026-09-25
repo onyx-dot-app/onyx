@@ -21,7 +21,11 @@ from onyx.chat.incognito import (
     content_free_file_descriptors,
     incognito_llm_request_policy,
 )
-from onyx.chat.incognito_context import append_incognito_message, load_incognito_context
+from onyx.chat.incognito_context import (
+    append_incognito_message,
+    get_or_create_incognito_root_id,
+    load_incognito_context,
+)
 from onyx.chat.llm_step import PromptMetadata
 from onyx.chat.models import (
     AnswerStreamPart,
@@ -710,6 +714,10 @@ def create_chat_agent(
         }:
             raise ValueError(f"Forced tool {setup.forced_tool_id} not found in tools")
 
+        agent_id = str(setup.chat_session_id)
+        if not record_mode_persists_content(setup.incognito_record_mode):
+            agent_id = get_or_create_incognito_root_id(setup.chat_session_id, agent_id)
+
         if len(setup.responses) == 1 and setup.new_msg_req.deep_research:
             if setup.chat_session_project_id:
                 raise RuntimeError("Deep research is not supported for projects")
@@ -720,6 +728,7 @@ def create_chat_agent(
                     "Deep research requires a model with at least 50,000 input tokens"
                 )
             return DeepResearchAgent(
+                agent_id=agent_id,
                 messages=list(setup.messages),
                 allowed_tools=tools,
                 llm=llm,
@@ -736,6 +745,7 @@ def create_chat_agent(
                 previous_run_id=setup.previous_run_id,
             )
         return ChatAgent(
+            agent_id=agent_id,
             messages=list(setup.messages),
             tools=tools,
             custom_agent_prompt=setup.custom_agent_prompt,

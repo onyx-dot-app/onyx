@@ -1,4 +1,4 @@
-"""Execution outcomes and conversation replay rules."""
+"""Recorded run outcomes, compaction checkpoints, and model-history replay rules."""
 
 from enum import Enum
 

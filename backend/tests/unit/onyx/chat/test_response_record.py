@@ -5,10 +5,10 @@ from collections.abc import Generator
 import pytest
 from pydantic import BaseModel
 
+from onyx.agents.execution_records import RunStatus
 from onyx.agents.models import AgentState, PreparedStep, RunState, ToolCallContext
 from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import AgentTool
-from onyx.agents.transcript import RunStatus
 from onyx.chat.models import ResponseRecord
 from onyx.chat.response import response_record, response_snapshot
 from onyx.chat.response_items import messages_from_items

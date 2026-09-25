@@ -3,7 +3,7 @@
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.agents.coordination import AgentCoordinator
+from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.models import RunState
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation

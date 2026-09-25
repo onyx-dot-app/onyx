@@ -11,8 +11,7 @@ from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import Message, ToolDefinition, ToolResult
 
 if TYPE_CHECKING:
-    from onyx.agents.coordination import AgentInfo
-    from onyx.agents.models import RunResult, RunState
+    from onyx.agents.models import AgentInfo, RunResult, RunState
     from onyx.agents.runtime import Agent
 
 

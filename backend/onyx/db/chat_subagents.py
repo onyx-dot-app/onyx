@@ -7,8 +7,8 @@ from sqlalchemy import Text, case, cast, func, literal, or_, select
 from sqlalchemy.orm import Session, aliased, joinedload, load_only, selectinload
 from sqlalchemy.sql.selectable import CTE
 
-from onyx.agents.coordination import AgentInfo
-from onyx.agents.transcript import RunStatus
+from onyx.agents.execution_records import RunStatus
+from onyx.agents.models import AgentInfo
 from onyx.chat.models import (
     MAX_DISCOVERED_AGENTS,
     MessageRendering,

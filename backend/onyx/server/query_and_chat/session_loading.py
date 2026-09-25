@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from pydantic import JsonValue, TypeAdapter
 from sqlalchemy.orm import Session
 
-from onyx.agents.transcript import RunStatus
+from onyx.agents.execution_records import RunStatus
 from onyx.chat.citation_utils import extract_citation_order_from_text
 from onyx.chat.models import (
     ChatExecutionRecord,
@@ -13,7 +13,7 @@ from onyx.chat.models import (
     PresentationMode,
     ResponseRecord,
 )
-from onyx.chat.renderer import MessageRenderer
+from onyx.chat.renderer import MessageRenderer, build_tool_item
 from onyx.chat.response_items import (
     ResponseGeneration,
     ResponseToolCall,
@@ -44,7 +44,6 @@ from onyx.server.query_and_chat.streaming_models import (
     RunUpdate,
     TextItem,
     ToolItem,
-    ToolMetadata,
     ToolStatus,
 )
 from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
@@ -54,7 +53,6 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
-_TOOL_METADATA = TypeAdapter(ToolMetadata)
 
 
 def _saved_tool_item(record: ToolCall, tool: Tool) -> ToolItem:
@@ -68,16 +66,11 @@ def _saved_tool_item(record: ToolCall, tool: Tool) -> ToolItem:
         record,
         tool,
     )
-    return ToolItem(
+    return build_tool_item(
         name=tool.name,
         tool_id=record.tool_id,
-        arguments={
-            key: value for key, value in arguments.items() if key != "requestBody"
-        },
-        output=result.text if result.details is None else "",
-        metadata=_TOOL_METADATA.validate_python(result.details.model_dump())
-        if result.details is not None
-        else None,
+        arguments=arguments,
+        result=result,
         status=ToolStatus.COMPLETE,
     )
 
@@ -300,22 +293,11 @@ def _response_packets(
                 Packet(
                     identity=call_identity,
                     obj=ItemUpdate(
-                        item=ToolItem(
+                        item=build_tool_item(
                             name=call.name,
                             tool_id=record.tool_id if record is not None else None,
-                            arguments={
-                                key: value
-                                for key, value in call.arguments.items()
-                                if key != "requestBody"
-                            },
-                            output=result.text
-                            if result is not None and result.details is None
-                            else "",
-                            metadata=_TOOL_METADATA.validate_python(
-                                result.details.model_dump()
-                            )
-                            if result is not None and result.details is not None
-                            else None,
+                            arguments=call.arguments,
+                            result=result,
                             status=ToolStatus(
                                 (item.content.status or response.status).value
                             ),

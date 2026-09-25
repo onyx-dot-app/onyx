@@ -7,7 +7,7 @@ PYTHONPATH=backend uv run python web/src/app/app/services/__fixtures__/generate_
 import json
 from pathlib import Path
 
-from onyx.agents.transcript import OperationSnapshot, RunStatus
+from onyx.agents.execution_records import OperationSnapshot, RunStatus
 from onyx.chat.models import ResponseRecord
 from onyx.chat.response_items import build_response_items
 from onyx.llm.models import (

@@ -6,10 +6,10 @@ from types import TracebackType
 
 import pytest
 
+from onyx.agents.execution_records import RunStatus
 from onyx.agents.models import PreparedStep, RunState, StepInput, ToolCallContext
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation
-from onyx.agents.transcript import RunStatus
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import (
     AssistantMessage,

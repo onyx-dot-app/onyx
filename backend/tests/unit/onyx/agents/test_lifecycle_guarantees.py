@@ -16,10 +16,10 @@ from litellm.exceptions import (
 from pydantic import BaseModel
 
 from onyx.agents.events import AgentEvent
+from onyx.agents.execution_records import RunFailureKind
 from onyx.agents.models import PreparedStep, StepInput, StepResult, ToolCallContext
 from onyx.agents.runtime import Agent, RunFailed
 from onyx.agents.tools import AgentTool, ToolInvocation
-from onyx.agents.transcript import RunFailureKind
 from onyx.chat.errors import chat_error
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.exceptions import ClassifiedLLMError, LLMRateLimitError, LLMTimeoutError

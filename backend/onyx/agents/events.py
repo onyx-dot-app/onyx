@@ -5,8 +5,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny
 
+from onyx.agents.execution_records import RunStatus
 from onyx.agents.tools import PendingToolInput, ToolProgress
-from onyx.agents.transcript import RunStatus
 from onyx.llm.models import (
     AssistantMessage,
     GenerationEvent,
@@ -86,12 +86,6 @@ class ToolStartEvent(_AgentEvent):
     tool_call: ToolCall
 
 
-class ToolResultEvent(_AgentEvent):
-    step_index: int = Field(ge=0)
-    tool_call: ToolCall
-    result: ToolResult
-
-
 class ToolUpdateEvent(_AgentEvent):
     type: Literal[AgentEventType.TOOL_UPDATE] = AgentEventType.TOOL_UPDATE
     step_index: int = Field(ge=0)
@@ -99,8 +93,11 @@ class ToolUpdateEvent(_AgentEvent):
     progress: ToolProgress
 
 
-class ToolEndEvent(ToolResultEvent):
+class ToolEndEvent(_AgentEvent):
     type: Literal[AgentEventType.TOOL_END] = AgentEventType.TOOL_END
+    step_index: int = Field(ge=0)
+    tool_call: ToolCall
+    result: ToolResult
 
 
 AgentEvent = Annotated[

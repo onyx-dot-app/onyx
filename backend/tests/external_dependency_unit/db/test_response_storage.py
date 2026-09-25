@@ -12,15 +12,15 @@ from sqlalchemy.orm import Session
 
 from onyx.agents.compaction import history_digest
 from onyx.agents.events import ToolEndEvent, ToolStartEvent, ToolUpdateEvent
-from onyx.agents.models import RunState
-from onyx.agents.tools import ToolProgress
-from onyx.agents.transcript import (
+from onyx.agents.execution_records import (
     CompactionCheckpoint,
     OperationSnapshot,
     RunFailure,
     RunFailureKind,
     RunStatus,
 )
+from onyx.agents.models import RunState
+from onyx.agents.tools import ToolProgress
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import ChatResponseSnapshot, MessageRendering, ResponseRecord
 from onyx.chat.presentation import ResponsePresenter, project_response

@@ -12,10 +12,10 @@ from onyx.agents.events import (
     ToolStartEvent,
     ToolUpdateEvent,
 )
+from onyx.agents.execution_records import OperationSnapshot, RunStatus
 from onyx.agents.models import RunState
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation, ToolProgress
-from onyx.agents.transcript import OperationSnapshot, RunStatus
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import ChatMessageMetadata, CitationMode, MessageRendering
 from onyx.chat.presentation import ResponsePresenter, project_response

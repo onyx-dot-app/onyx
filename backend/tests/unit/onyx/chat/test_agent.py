@@ -97,7 +97,7 @@ def test_chat_preserves_parallel_tool_history_forcing_and_packets(
         project_response,
         response_id=42,
         tool_ids={tool.name: tool.id for tool in agent.tools},
-        initial_citations=agent.artifacts.initial_citations,
+        initial_citations=agent.initial_citations,
     )
     run_agent(
         agent.agent,
@@ -282,7 +282,7 @@ def test_source_file_staging_does_not_block_cancelled_snapshot(
         project_response,
         response_id=42,
         tool_ids={tool.name: tool.id for tool in agent.tools},
-        initial_citations=agent.artifacts.initial_citations,
+        initial_citations=agent.initial_citations,
     )
     signal = CancellationSignal()
 
@@ -363,6 +363,6 @@ def test_chat_reuses_completed_search_artifacts_without_duplicate_documents() ->
             messages=[UserMessage(content="Explain the evidence")],
             max_steps=1,
         )
-        assert feature.artifacts.citation_mapping == {4: "reference"}
-        assert feature.artifacts.citation_processor.citation_to_doc == {4: document}
-        assert feature.artifacts.gathered_documents == [document]
+        assert feature.citation_mapping == {4: "reference"}
+        assert feature.citation_processor.citation_to_doc == {4: document}
+        assert feature.gathered_documents == [document]

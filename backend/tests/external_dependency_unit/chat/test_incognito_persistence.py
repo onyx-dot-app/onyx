@@ -294,7 +294,7 @@ def _load_agent_history(
 
 
 def test_temporary_agent_history_sources_and_lifetime() -> None:
-    from onyx.agents.transcript import RunStatus
+    from onyx.agents.execution_records import RunStatus
     from onyx.chat.incognito_context import (
         INCOGNITO_CONTEXT_TTL_SECONDS,
         get_or_create_incognito_root_id,
@@ -450,6 +450,7 @@ def test_incognito_response_restores_agents_without_database_content(
 
     from onyx.agents.runtime import Agent
     from onyx.agents.tools import AgentTool, ToolInvocation
+    from onyx.chat.incognito_context import get_or_create_incognito_root_id
     from onyx.chat.models import ChatResponseSnapshot, MessageRendering
     from onyx.chat.subagents import create_chat_agent_coordinator
     from onyx.db.chat_response import save_chat_response
@@ -490,6 +491,7 @@ def test_incognito_response_restores_agents_without_database_content(
 
     root = Agent(
         llm,
+        agent_id=str(session.id),
         tools=[
             AgentTool(
                 name="delegate",
@@ -504,6 +506,7 @@ def test_incognito_response_restores_agents_without_database_content(
         append_incognito_message(
             session.id, UserMessage(content="private root question")
         )
+        assert get_or_create_incognito_root_id(session.id, root.id) == root.id
         coordinator = create_chat_agent_coordinator(
             root,
             previous_run_id=None,
@@ -584,7 +587,7 @@ def test_incognito_response_restores_agents_without_database_content(
             == []
         )
 
-        restored_root = Agent(llm)
+        restored_root = Agent(llm, agent_id=root.id)
         restored_coordinator = create_chat_agent_coordinator(
             restored_root,
             previous_run_id=transcript.run_id,
@@ -618,7 +621,7 @@ def test_incognito_sibling_responses_keep_independent_agents_and_history(
     from concurrent.futures import ThreadPoolExecutor
     from threading import Barrier
 
-    from onyx.agents.transcript import RunStatus
+    from onyx.agents.execution_records import RunStatus
     from onyx.chat.incognito_context import (
         get_or_create_incognito_root_id,
         save_incognito_response,

@@ -3,9 +3,9 @@ from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
-from onyx.agents.transcript import (
+from onyx.agents.execution_records import (
     CompactionCheckpoint,
     RunFailure,
     RunStatus,
@@ -13,7 +13,7 @@ from onyx.agents.transcript import (
 from onyx.cache.interface import CacheBackend
 from onyx.chat.response_items import ResponseItem
 from onyx.configs.constants import MessageType
-from onyx.context.search.models import SearchDoc
+from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.db.enums import IncognitoRecordMode
 from onyx.db.memory import UserMemoryContext
 from onyx.deep_research.models import ResearchConfiguration
@@ -243,7 +243,29 @@ class ChatHistoryResult(BaseModel):
     all_injected_file_metadata: dict[str, FileToolMetadata]
 
 
-class ChatArtifactSnapshot(BaseModel):
+class ChatSearchResult(SearchDocsResponse):
+    """Search documents with files staged before the tool result is committed."""
+
+    staged_files: list[ChatFile]
+
+    @field_serializer("staged_files")
+    def serialize_staged_files(self, files: list[ChatFile]) -> list[SavedChatFile]:
+        return [SavedChatFile.capture(file) for file in files]
+
+    @field_validator("staged_files", mode="before")
+    @classmethod
+    def restore_staged_files(cls, value: object) -> list[ChatFile]:
+        if not isinstance(value, list):
+            raise ValueError("Staged files must be a list")
+        return [
+            file
+            if isinstance(file, ChatFile)
+            else SavedChatFile.model_validate(file).restore()
+            for file in value
+        ]
+
+
+class ToolHistorySnapshot(BaseModel):
     """Application records derived from accepted tool results."""
 
     model_config = ConfigDict(frozen=True)

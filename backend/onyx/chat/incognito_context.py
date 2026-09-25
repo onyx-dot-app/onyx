@@ -9,7 +9,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field, JsonValue, TypeAdapter, ValidationError
 from redis.exceptions import WatchError
 
-from onyx.agents.coordination import AgentInfo
+from onyx.agents.models import AgentInfo
 from onyx.cache.interface import CacheBackendType
 from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.llm_step import PromptMetadata, prompt_metadata

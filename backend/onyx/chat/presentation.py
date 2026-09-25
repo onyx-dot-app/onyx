@@ -2,9 +2,11 @@
 
 from collections.abc import Mapping, Sequence
 
-from pydantic import BaseModel, TypeAdapter
+from pydantic import BaseModel
 
-from onyx.agents.coordination import AgentCoordinator, AgentInfo
+from onyx.agents.agent_coordination import (
+    AgentCoordinator,
+)
 from onyx.agents.events import (
     AgentEndEvent,
     AgentEvent,
@@ -16,10 +18,10 @@ from onyx.agents.events import (
     ToolStartEvent,
     ToolUpdateEvent,
 )
-from onyx.agents.models import RunState
-from onyx.agents.transcript import RunStatus
-from onyx.chat.artifacts import project_tool_artifacts
-from onyx.chat.citation_processor import CitationMapping
+from onyx.agents.execution_records import RunStatus
+from onyx.agents.models import AgentInfo, RunState
+from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
+from onyx.chat.citation_utils import update_citation_processor_from_tool_result
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import (
     ChatMessageMetadata,
@@ -27,8 +29,9 @@ from onyx.chat.models import (
     CitationMode,
     MessageRendering,
     PresentationMode,
+    ToolHistorySnapshot,
 )
-from onyx.chat.renderer import MessageRenderer
+from onyx.chat.renderer import MessageRenderer, build_tool_item, tool_metadata
 from onyx.chat.response import response_record
 from onyx.chat.response_items import (
     ResponseText,
@@ -36,10 +39,14 @@ from onyx.chat.response_items import (
     group_response_items_by_step,
 )
 from onyx.coding_agent.tool_definitions import CODING_AGENT_TOOL_NAME
-from onyx.context.search.models import SearchDoc
-from onyx.deep_research.models import ResearchMessageMetadata, ResearchPhase
+from onyx.context.search.models import SearchDoc, SearchDocsResponse
+from onyx.deep_research.models import (
+    ResearchAgentCallResult,
+    ResearchMessageMetadata,
+    ResearchPhase,
+)
 from onyx.deep_research.tool_definitions import THINK_TOOL_NAME
-from onyx.llm.models import AssistantMessage
+from onyx.llm.models import AssistantMessage, ToolCall, ToolResultMessage
 from onyx.server.query_and_chat.streaming_models import (
     ItemDelta,
     ItemUpdate,
@@ -47,17 +54,149 @@ from onyx.server.query_and_chat.streaming_models import (
     Packet,
     PacketIdentity,
     RunUpdate,
-    ToolItem,
-    ToolMetadata,
     ToolOutputUpdate,
     ToolStatus,
 )
 from onyx.server.query_and_chat.streaming_models import (
     TextPurpose as DisplayTextPurpose,
 )
+from onyx.tools.models import (
+    CustomToolCallSummary,
+    CustomToolUserFileSnapshot,
+    LlmPythonExecutionResult,
+    ToolCallInfo,
+)
+from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def _saved_tool_metadata(result: ToolResultMessage) -> BaseModel | None:
+    data = result.details
+    if isinstance(data, SearchDocsResponse):
+        # Documents are stored through the tool call's search-document relation.
+        return SearchDocsResponse(
+            queries=data.queries,
+            sources=data.sources,
+            time_filter_start=data.time_filter_start,
+            time_filter_end=data.time_filter_end,
+            search_docs=[],
+            citation_mapping=data.citation_mapping,
+        )
+    return data
+
+
+def _collect_tool_history(
+    snapshot: RunState,
+    tool_ids: Mapping[str, int],
+    initial_citations: CitationMapping | None = None,
+) -> ToolHistorySnapshot:
+    """Project completed and interrupted operations from one execution tree."""
+    records: list[ToolCallInfo] = []
+    documents: dict[str, SearchDoc] = {}
+    citations = DynamicCitationProcessor(citation_mode=CitationMode.HYPERLINK)
+    citations.update_citation_mapping(initial_citations or {})
+    for operation in snapshot.operations:
+        if operation.tool_call_id is not None:
+            continue
+        message = snapshot.messages[operation.message_index]
+        if not isinstance(message, AssistantMessage):
+            raise ValueError(
+                "Message operation does not reference an assistant message"
+            )
+        results: dict[str, ToolResultMessage] = {}
+        for item in snapshot.messages[operation.message_index + 1 :]:
+            if isinstance(item, AssistantMessage):
+                break
+            if isinstance(item, ToolResultMessage):
+                results[item.tool_call_id] = item
+        for index, call in enumerate(message.tool_calls):
+            tool_id = tool_ids.get(call.name)
+            if tool_id is None:
+                continue
+            result = results.get(call.id)
+            records.append(
+                _tool_record(
+                    tool_id,
+                    message,
+                    result,
+                    call,
+                    snapshot,
+                    operation.step_index,
+                    index,
+                )
+            )
+            if result is None:
+                continue
+            if isinstance(result.details, SearchDocsResponse):
+                for document in result.details.search_docs:
+                    documents.setdefault(document.document_id, document)
+            if isinstance(result.details, ResearchAgentCallResult):
+                citations.update_citation_mapping(result.details.citation_mapping)
+                for document in result.details.citation_mapping.values():
+                    documents.setdefault(document.document_id, document)
+            update_citation_processor_from_tool_result(result, citations)
+    for child in snapshot.child_runs:
+        child_history = _collect_tool_history(child, tool_ids)
+        records.extend(child_history.tool_calls)
+        documents.update(child_history.all_search_docs)
+    return ToolHistorySnapshot(
+        tool_calls=records,
+        all_search_docs=documents,
+        citation_to_doc=citations.citation_to_doc,
+    )
+
+
+def _tool_record(
+    tool_id: int,
+    output: AssistantMessage,
+    tool_response: ToolResultMessage | None,
+    tool_call: ToolCall,
+    snapshot: RunState,
+    turn: int,
+    index: int,
+) -> ToolCallInfo:
+    data = tool_response.details if tool_response else None
+    search_docs = data.search_docs if isinstance(data, SearchDocsResponse) else None
+    displayed_docs = (
+        data.displayed_docs if isinstance(data, SearchDocsResponse) else None
+    )
+    generated_images = None
+    if isinstance(data, FinalImageGenerationResponse):
+        generated_images = data.generated_images
+
+    generated_files = None
+    if isinstance(data, LlmPythonExecutionResult):
+        generated_files = data.generated_files or None
+
+    # Custom tools save image/CSV blobs and return their ids.
+    generated_file_ids = None
+    if isinstance(data, CustomToolCallSummary) and isinstance(
+        data.tool_result, CustomToolUserFileSnapshot
+    ):
+        generated_file_ids = data.tool_result.file_ids or None
+
+    saved_metadata = _saved_tool_metadata(tool_response) if tool_response else None
+
+    return ToolCallInfo(
+        message_id=output.id or f"{snapshot.run_id}:{turn}",
+        parent_message_id=snapshot.parent_message_id,
+        parent_tool_call_id=snapshot.parent_tool_call_id,
+        turn_index=turn,
+        tab_index=index,
+        tool_name=tool_call.name,
+        tool_call_id=tool_call.id,
+        tool_id=tool_id,
+        reasoning_tokens=output.thinking,  # Calls from one assistant message share its thinking.
+        tool_call_arguments=tool_call.arguments,
+        tool_call_response=tool_response.text if tool_response else "",
+        result_metadata=saved_metadata,
+        search_docs=displayed_docs or search_docs,
+        generated_images=generated_images,
+        generated_files=generated_files,
+        generated_file_ids=generated_file_ids,
+    )
 
 
 def message_presentation(
@@ -156,16 +295,16 @@ def project_response(
         delivery_failed=False,
     )
     try:
-        artifacts = project_tool_artifacts(snapshot, tool_ids, initial_citations)
+        tool_history = _collect_tool_history(snapshot, tool_ids, initial_citations)
         response = response.model_copy(
             update={
-                "citation_to_doc": artifacts.citation_to_doc,
-                "tool_calls": artifacts.tool_calls,
-                "all_search_docs": artifacts.all_search_docs,
+                "citation_to_doc": tool_history.citation_to_doc,
+                "tool_calls": tool_history.tool_calls,
+                "all_search_docs": tool_history.all_search_docs,
             }
         )
     except Exception:
-        logger.exception("Could not project response artifacts: %s", snapshot.run_id)
+        logger.exception("Could not collect tool history: %s", snapshot.run_id)
     try:
         return _project_response_display(snapshot, response_id, response)
     except Exception:
@@ -250,9 +389,6 @@ def _project_response_display(
     return response.model_copy(update={"presentation": presentation})
 
 
-_TOOL_METADATA = TypeAdapter(ToolMetadata)
-
-
 class ResponsePresenter:
     """Publish item updates with stable identities across root and child runs."""
 
@@ -329,14 +465,11 @@ class ResponsePresenter:
                     Packet(
                         identity=identity,
                         obj=ItemUpdate(
-                            item=ToolItem(
+                            item=build_tool_item(
                                 name=event.tool_call.name,
                                 tool_id=self.tool_ids.get(event.tool_call.name),
-                                arguments={
-                                    key: value
-                                    for key, value in event.tool_call.arguments.items()
-                                    if key != "requestBody"
-                                },
+                                arguments=event.tool_call.arguments,
+                                status=ToolStatus.RUNNING,
                             )
                         ),
                     )
@@ -348,11 +481,7 @@ class ResponsePresenter:
                         obj=ItemDelta(
                             delta=ToolOutputUpdate(
                                 output=event.progress.content or None,
-                                metadata=_TOOL_METADATA.validate_python(
-                                    event.progress.details.model_dump()
-                                )
-                                if event.progress.details is not None
-                                else None,
+                                metadata=tool_metadata(event.progress.details),
                             )
                         ),
                     )
@@ -362,25 +491,14 @@ class ResponsePresenter:
                     Packet(
                         identity=identity,
                         obj=ItemUpdate(
-                            item=ToolItem(
+                            item=build_tool_item(
                                 name=event.tool_call.name,
                                 tool_id=self.tool_ids.get(event.tool_call.name),
-                                arguments={
-                                    key: value
-                                    for key, value in event.tool_call.arguments.items()
-                                    if key != "requestBody"
-                                },
+                                arguments=event.tool_call.arguments,
                                 status=ToolStatus.ERROR
                                 if event.result.is_error
                                 else ToolStatus.COMPLETE,
-                                output=event.result.text
-                                if event.result.details is None
-                                else "",
-                                metadata=_TOOL_METADATA.validate_python(
-                                    event.result.details.model_dump()
-                                )
-                                if event.result.details is not None
-                                else None,
+                                result=event.result,
                             )
                         ),
                     )

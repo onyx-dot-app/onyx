@@ -10,12 +10,12 @@ streaming events, cancellation, and record-keeping.
 | `runtime.py` | Agent configuration and history, run lifecycle, and model-step execution functions. |
 | `models.py` | Conversation context, step decisions, and run records. |
 | `concurrency.py` | Tracked threads, update acceptance, and event delivery. |
-| `coordination.py` | Optional child discovery, execution control, and archive access. |
+| `agent_coordination.py` | Optional child discovery, execution control, and archive access. |
 | `tool_execution.py` | Parallel tool execution, pending input, and ordered result completion. |
 | `tools.py` | `AgentTool`, `ToolInvocation`, and the `AgentControl` interface. |
 | `events.py` | Typed execution events. |
 | `compaction.py` | Token budgets, checkpoints, and history summarization. |
-| `transcript.py` | Run outcomes, compaction checkpoints, and model-history replay. |
+| `execution_records.py` | Run outcomes, compaction checkpoints, and model-history replay. |
 
 Message and request types, and `CancellationSignal`, come from [`onyx/llm`](../llm/README.md).
 
@@ -492,8 +492,8 @@ Stream-status failures log and retry. The processing marker uses its 30-minute e
 It remains active while background children or unfinished finalization retain ownership.
 
 `AgentDirectory` resolves agents and saved runs within an authorized conversation branch.
-`RunStore` registers execution, saves terminal output, and releases ownership after workers drain.
-Chat supplies both interfaces.
+`RunStore` saves terminal output. `RunOwnership` reserves execution and releases it after workers drain.
+Chat binds ownership when durable checkpoints are enabled. Saving output does not require ownership support.
 
 `ChatRunStore` uses the tenant-scoped cache for live ownership and Stop delivery.
 It allocates child responses before execution so another API pod can discover their history.

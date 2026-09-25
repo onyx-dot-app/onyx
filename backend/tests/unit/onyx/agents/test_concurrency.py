@@ -7,8 +7,8 @@ from contextvars import ContextVar
 import pytest
 
 from onyx.agents import concurrency, runtime
+from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.concurrency import ExecutionWork
-from onyx.agents.coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent, AgentStartEvent
 from onyx.agents.runtime import Agent, RunFailed
 from onyx.agents.tool_execution import ToolBatch
@@ -195,7 +195,7 @@ def test_child_thread_start_failure_rolls_back_registration(
                 )
         assert coordinator.registration(child.id) is None
         assert coordinator.active_run(child.id) is None
-        assert child.id not in coordinator._latest
+        assert child.id not in coordinator._state.latest
         spawned = invocation.agents.spawn_agent(
             child, name="child", description="", messages=[], max_steps=1
         )
@@ -330,9 +330,9 @@ def test_terminal_snapshot_rejects_late_tool_result(
 def test_discovery_reads_run_status_without_holding_coordinator_lock(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from onyx.agents.coordination import AgentInfo
+    from onyx.agents.execution_records import RunStatus
+    from onyx.agents.models import AgentInfo
     from onyx.agents.runtime import Run
-    from onyx.agents.transcript import RunStatus
 
     status_entered, release_status = threading.Event(), threading.Event()
     release_model = threading.Event()

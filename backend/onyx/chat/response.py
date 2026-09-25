@@ -2,9 +2,8 @@
 
 from collections.abc import Sequence
 
-from onyx.agents.coordination import AgentInfo
-from onyx.agents.models import RunState
-from onyx.agents.transcript import OperationSnapshot
+from onyx.agents.execution_records import OperationSnapshot
+from onyx.agents.models import AgentInfo, RunState
 from onyx.chat.models import ResponseRecord
 from onyx.chat.response_items import (
     ResponseGeneration,

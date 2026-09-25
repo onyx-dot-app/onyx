@@ -7,12 +7,14 @@ from unittest.mock import patch
 
 import pytest
 
-from onyx.agents.coordination import AgentCoordinator, AgentInfo
+from onyx.agents.agent_coordination import (
+    AgentCoordinator,
+)
 from onyx.agents.events import AgentEvent
-from onyx.agents.models import PreparedStep, RunState, StepInput, StepResult
+from onyx.agents.execution_records import OperationSnapshot, RunStatus
+from onyx.agents.models import AgentInfo, PreparedStep, RunState, StepInput, StepResult
 from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import AgentTool, ToolInvocation
-from onyx.agents.transcript import OperationSnapshot, RunStatus
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.models import (
     AssistantMessage,
@@ -240,7 +242,7 @@ def test_loaded_agent_bound_is_shared_across_parent_runs() -> None:
         assert len(coordinator.discovery(parent.id)) == 1
         assert coordinator.close(timeout=3)
 
-    with patch("onyx.agents.coordination.MAX_LOADED_AGENTS", 1):
+    with patch("onyx.agents.agent_coordination.MAX_LOADED_AGENTS", 1):
         exercise()
 
 

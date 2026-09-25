@@ -3,7 +3,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
-from onyx.agents.transcript import OperationSnapshot, RunStatus
+from onyx.agents.execution_records import OperationSnapshot, RunStatus
 from onyx.llm.models import (
     AssistantContent,
     AssistantMessage,

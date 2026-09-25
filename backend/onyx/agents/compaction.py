@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 from pydantic import BaseModel, Field
 
-from onyx.agents.transcript import CompactionCheckpoint, completed_tool_call_ids
+from onyx.agents.execution_records import CompactionCheckpoint, completed_tool_call_ids
 from onyx.llm.interfaces import LLM, GenerationContext
 from onyx.llm.models import (
     AssistantMessage,

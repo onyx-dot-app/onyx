@@ -5,7 +5,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, JsonValue
 
-from onyx.agents.transcript import RunStatus
+from onyx.agents.execution_records import RunStatus
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.deep_research.models import ResearchAgentCallResult

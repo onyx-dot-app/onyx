@@ -8,7 +8,7 @@ from pydantic import JsonValue
 from sqlalchemy import case, select
 from sqlalchemy.orm import Session, load_only, selectinload
 
-from onyx.agents.transcript import CompactionCheckpoint, messages_for_model
+from onyx.agents.execution_records import CompactionCheckpoint, messages_for_model
 from onyx.chat.files import build_file_context
 from onyx.chat.llm_step import PromptMetadata, count_message_tokens
 from onyx.chat.models import ChatHistoryMessage, ChatHistoryResult

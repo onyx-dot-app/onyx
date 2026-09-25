@@ -18,11 +18,11 @@ from uuid import uuid4
 import pytest
 from litellm.exceptions import ContextWindowExceededError
 
-from onyx.agents.coordination import AgentCoordinator
+from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent
+from onyx.agents.execution_records import RunStatus
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import AgentTool, InputMode, PendingToolInput
-from onyx.agents.transcript import RunStatus
 from onyx.chat.agent import ChatAgent
 from onyx.chat.emitter import Emitter
 from onyx.chat.errors import EmptyLLMResponseError
@@ -79,7 +79,7 @@ from onyx.utils.threadpool_concurrency import (
 )
 from onyx.utils.variable_functionality import global_version
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from tests.unit.onyx.agents.fakes import FakeModelClient, FakeRunStore
+from tests.unit.onyx.agents.fakes import FakeModelClient, FakeRunOwnership, FakeRunStore
 
 MODEL_REFUSAL_ERROR_CODE = "MODEL_REFUSAL"
 CONTENT_FILTER_FINISH_REASON = "content_filter"
@@ -1186,7 +1186,6 @@ def mock_model_execution(
         turn: ChatTurnExecution,
         index: int,
         emitter: Emitter,
-        auto_filters: bool,
         *,
         startup_error: BaseException | None = None,
     ) -> None:
@@ -1196,7 +1195,6 @@ def mock_model_execution(
             turn,
             index,
             emitter,
-            auto_filters,
             startup_error=startup_error,
         )
 
@@ -2103,7 +2101,7 @@ def test_stop_after_suspension_retains_root_cancellation_and_saves_once() -> Non
         runs.append(run)
         started.set()
 
-    coordinator = AgentCoordinator(store=FakeRunStore(register=register))
+    coordinator = AgentCoordinator(ownership=FakeRunOwnership(register=register))
     agent = Agent(
         FakeModelClient(
             lambda *_: AssistantMessage(
@@ -2126,9 +2124,8 @@ def test_stop_after_suspension_retains_root_cancellation_and_saves_once() -> Non
         patch(
             "onyx.chat.execution.create_chat_agent_coordinator",
             side_effect=lambda *_args, **kwargs: coordinator.view(
-                store=FakeRunStore(
-                    register=register, save=kwargs["response_store"].save
-                )
+                store=kwargs["response_store"],
+                ownership=FakeRunOwnership(register=register),
             ),
         ),
         patch("onyx.chat.persistence.save_chat_response") as save,
@@ -2295,3 +2292,89 @@ def test_processing_marker_failure_does_not_cancel_chat() -> None:
         turn._poll_stream_status()
         assert processing.call_count == 2
         assert not turn.cancellation.cancelled
+
+
+def test_last_response_drain_settles_turn_after_status_cleanup() -> None:
+    turn = ChatTurnExecution(_make_setup(), MagicMock())
+    turn._delivery_finished = True
+    turn._finish_response(0)
+    assert turn.finished.done()
+
+
+def test_control_failure_retains_turn_and_polls_ownership_until_workers_drain() -> None:
+    entered = threading.Event()
+    release = threading.Event()
+    polled_after_failure = threading.Event()
+    outcome = Future[ChatResponseOutcome]()
+    tasks = ActiveChatTurns()
+    store = MagicMock(spec=ChatRunStore)
+    store.has_owned_work = True
+    turn = ChatTurnExecution(_make_setup(), MagicMock(), outcome)
+    turn._register_store(store)
+    prepared = _chat_agent(
+        Agent(
+            FakeModelClient(
+                lambda *_: pytest.fail("Cancelled preparation must not generate")
+            )
+        )
+    )
+
+    def prepare(*_args: object) -> ChatAgent:
+        entered.set()
+        assert release.wait(5)
+        return prepared
+
+    failed = False
+    poll_control = turn._poll_control
+
+    def poll() -> None:
+        nonlocal failed
+        if entered.is_set() and not failed:
+            failed = True
+            raise RuntimeError("Control iteration failed")
+        poll_control()
+
+    def poll_ownership() -> None:
+        if turn.cancellation.cancelled:
+            polled_after_failure.set()
+        if outcome.done():
+            store.has_owned_work = False
+
+    store.poll_control.side_effect = poll_ownership
+    with (
+        patch("onyx.chat.execution.create_chat_agent", side_effect=prepare),
+        patch("onyx.chat.persistence.save_chat_response"),
+        patch.object(turn, "_poll_control", side_effect=poll),
+        patch("onyx.chat.execution._CANCEL_POLL_INTERVAL_S", 0.01),
+    ):
+        turn.begin()
+        tasks.start(turn)
+        try:
+            assert entered.wait(5)
+            assert polled_after_failure.wait(5)
+            assert not turn.finished.done()
+            assert not outcome.done()
+            release.set()
+            assert outcome.result(timeout=5).response.cancelled
+            turn.finished.result(timeout=5)
+        finally:
+            release.set()
+            turn.delivery.reader.close()
+            assert tasks.close()
+
+
+def test_failed_ownership_poll_does_not_starve_other_stores() -> None:
+    turn = ChatTurnExecution(_make_setup(), MagicMock())
+    turn._delivery_closed = True
+    failed = MagicMock(spec=ChatRunStore)
+    healthy = MagicMock(spec=ChatRunStore)
+    failed.poll_control.side_effect = RuntimeError("Ownership poll failed")
+    turn._register_store(failed)
+    turn._register_store(healthy)
+    turn._poll_control()
+    assert turn.cancellation.cancelled
+    healthy.poll_control.assert_called_once()
+    failed.poll_control.side_effect = None
+    turn._poll_control()
+    assert failed.poll_control.call_count == 2
+    assert healthy.poll_control.call_count == 2

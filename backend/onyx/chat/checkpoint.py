@@ -7,9 +7,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, JsonValue, TypeAdapter
 
+from onyx.agents.execution_records import RunStatus
 from onyx.agents.models import AgentState, ExecutionCheckpoint, RunProgress, RunState
 from onyx.agents.tools import HumanToolAnswer, InputDecision
-from onyx.agents.transcript import RunStatus
 from onyx.chat.models import ResponseRecord
 from onyx.chat.response import response_snapshot
 from onyx.chat.restoration import feature_payload_types

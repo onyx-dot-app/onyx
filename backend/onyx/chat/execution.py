@@ -5,7 +5,7 @@ import time
 from concurrent.futures import Future, wait
 from contextlib import ExitStack
 
-from onyx.agents.coordination import AgentCoordinator
+from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.models import RunState
 from onyx.agents.runtime import Run
 from onyx.chat.agent import ChatAgent
@@ -127,10 +127,9 @@ class ChatTurnExecution:
         self.setup = setup
         self.user = user
         self.delivery = ChatDelivery(stream_buffer)
-        self.events = self.delivery.events
         self._stores: list[ChatRunStore] = []
         self._stream_status: Future[None] | None = None
-        self._persistence: dict[int, ChatResponsePersistence] = {}
+        self._persistence: list[ChatResponsePersistence] = []
         self._delivery_closed = False
         self._completion_reported = False
         self.cancellation = CancellationSignal()
@@ -143,7 +142,6 @@ class ChatTurnExecution:
         ]
         self._lock = threading.Lock()
         self._unfinished = set(range(len(setup.responses)))
-        self._execution_drained: set[int] = set()
         self._delivery_finished = False
         self._changed = threading.Event()
         self._auto_filters = False
@@ -201,7 +199,6 @@ class ChatTurnExecution:
                     lambda index=index, emitter=emitter: self._run_response(
                         index,
                         emitter,
-                        self._auto_filters,
                         startup_error=startup_error,
                     ),
                     name="chat-response",
@@ -210,53 +207,59 @@ class ChatTurnExecution:
                 self._run_response(
                     index,
                     emitter,
-                    self._auto_filters,
                     startup_error=error,
                 )
         deadline = time.monotonic() + CHAT_RESPONSE_WAIT_TIMEOUT_S
         timed_out = False
         try:
             while True:
-                self._poll_control()
-                with self._lock:
-                    writers = tuple(self._persistence.values())
-                for writer in writers:
-                    writer.expire_save()
-                with self._lock:
-                    drained = len(self._execution_drained) == len(
-                        self._response_futures
+                try:
+                    self._poll_control()
+                    with self._lock:
+                        writers = tuple(self._persistence)
+                    for writer in writers:
+                        writer.expire_save()
+                    with self._lock:
+                        pending = bool(self._unfinished)
+                        save_overdue = any(writer.is_save_overdue for writer in writers)
+                    if (
+                        not self._delivery_closed
+                        and not timed_out
+                        and time.monotonic() >= deadline
+                    ):
+                        timed_out = True
+                        logger.error("Chat turn exceeded its response wait bound")
+                        self.cancellation.cancel()
+                    responses_done = all(
+                        future.done() for future in self._response_futures
                     )
-                    pending = bool(self._unfinished)
-                    save_overdue = any(writer.is_save_overdue for writer in writers)
-                    stores = tuple(self._stores)
-                if (
-                    not self._delivery_closed
-                    and not timed_out
-                    and time.monotonic() >= deadline
-                ):
-                    timed_out = True
-                    logger.error("Chat turn exceeded its response wait bound")
-                    self.cancellation.cancel()
-                responses_done = all(future.done() for future in self._response_futures)
-                if not self._delivery_closed and (
-                    (
-                        responses_done
-                        and (drained or self.cancellation.cancelled or save_overdue)
-                    )
-                    or timed_out
-                ):
-                    if self._stopped_by_user:
-                        self.delivery.publish(
-                            Packet(obj=OverallStop(stop_reason="user_cancelled"))
+                    if not self._delivery_closed and (
+                        (
+                            responses_done
+                            and (
+                                not pending
+                                or self.cancellation.cancelled
+                                or save_overdue
+                            )
                         )
+                        or timed_out
+                    ):
+                        if self._stopped_by_user:
+                            self.delivery.publish(
+                                Packet(obj=OverallStop(stop_reason="user_cancelled"))
+                            )
+                        self._close_delivery()
+                except Exception:
+                    self.cancellation.cancel()
+                    logger.exception("Chat turn control failed; draining active work")
                     self._close_delivery()
+                with self._lock:
+                    pending = bool(self._unfinished)
+                    stores = tuple(self._stores)
                 if not pending and not any(store.has_owned_work for store in stores):
                     break
                 self._changed.wait(timeout=_CANCEL_POLL_INTERVAL_S)
                 self._changed.clear()
-        except Exception:
-            self.cancellation.cancel()
-            logger.exception("Chat turn control failed")
         finally:
             self._close_delivery()
             self._maybe_finish()
@@ -311,13 +314,12 @@ class ChatTurnExecution:
         with self._lock:
             self._unfinished.remove(index)
         self._changed.set()
+        self._maybe_finish()
 
     def _retain_resources(self, index: int, run: Run | None) -> None:
         def drained() -> None:
             if run is not None and run.delivery_failed:
                 self.delivery.report_gap()
-            with self._lock:
-                self._execution_drained.add(index)
             self._finish_response(index)
 
         if run is None:
@@ -329,7 +331,6 @@ class ChatTurnExecution:
         self,
         index: int,
         emitter: Emitter,
-        auto_filters: bool,
         *,
         startup_error: BaseException | None = None,
     ) -> None:
@@ -346,14 +347,14 @@ class ChatTurnExecution:
             outcome=self._response_futures[index],
         )
         with self._lock:
-            self._persistence[index] = persistence
+            self._persistence.append(persistence)
 
         try:
             if startup_error is not None:
                 raise startup_error
             cancellation.check()
             chat_agent = create_chat_agent(
-                self.setup, self.user, index, cancellation, auto_filters
+                self.setup, self.user, index, cancellation, self._auto_filters
             )
             persistence.tool_ids = {tool.name: tool.id for tool in chat_agent.tools}
             if isinstance(chat_agent, DeepResearchAgent):
@@ -363,9 +364,7 @@ class ChatTurnExecution:
                     self.setup.research_tool_id
                 )
             else:
-                persistence.initial_citations = dict(
-                    chat_agent.artifacts.initial_citations
-                )
+                persistence.initial_citations = dict(chat_agent.initial_citations)
             coordinator = create_chat_agent_coordinator(
                 chat_agent.agent,
                 message_id=self.setup.responses[index].message_id,
@@ -399,7 +398,7 @@ class ChatTurnExecution:
                     max_steps=chat_agent.max_steps,
                     cancellation=cancellation,
                     coordinator=coordinator,
-                    event_dispatcher=self.events,
+                    event_dispatcher=self.delivery.events,
                     on_event=ResponsePresenter(
                         emitter,
                         coordinator,
@@ -425,18 +424,21 @@ class ChatTurnExecution:
                 links.close()
                 self._retain_resources(index, None)
 
-    def _poll_control(self) -> bool:
+    def _poll_control(self) -> None:
         with self._lock:
             stores = tuple(self._stores)
         for store in stores:
-            store.poll_control()
+            try:
+                store.poll_control()
+            except Exception:
+                self.cancellation.cancel()
+                logger.exception("Chat ownership control failed; will retry")
         if not self._delivery_closed and (
             self._stream_status is None or self._stream_status.done()
         ):
             self._stream_status = start_thread_future(
                 self._poll_stream_status, name="chat-stream-status"
             )
-        return self.cancellation.cancelled
 
     def _poll_stream_status(self) -> None:
         # Ordinary cache waits must not delay ownership deadlines.

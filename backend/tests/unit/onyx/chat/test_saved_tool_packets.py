@@ -1,16 +1,34 @@
 """Saved tool output supports historical summaries and current result metadata."""
 
 from datetime import datetime, timezone
+from queue import Queue
 
 import pytest
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
-from onyx.chat.artifacts import _saved_tool_metadata
+from onyx.agents.events import ToolEndEvent
+from onyx.agents.execution_records import OperationSnapshot, RunStatus
+from onyx.agents.models import RunState
+from onyx.chat.emitter import Emitter
+from onyx.chat.models import ChatSearchResult
+from onyx.chat.presentation import ResponsePresenter, _saved_tool_metadata
+from onyx.chat.response import response_record
 from onyx.context.search.models import SearchDocsResponse
 from onyx.db.models import Tool, ToolCall
-from onyx.llm.models import ToolResultMessage
-from onyx.server.query_and_chat.session_loading import _saved_tool_item
+from onyx.llm.models import AssistantMessage, ToolResultMessage
+from onyx.llm.models import ToolCall as ModelToolCall
+from onyx.server.query_and_chat.session_loading import (
+    _response_packets,
+    _saved_tool_item,
+)
+from onyx.server.query_and_chat.streaming_models import (
+    ItemUpdate,
+    Packet,
+    ToolItem,
+    ToolStatus,
+)
 from onyx.tools.models import (
+    ChatFile,
     CustomToolCallSummary,
     CustomToolUserFileSnapshot,
     LlmPythonExecutionResult,
@@ -130,3 +148,95 @@ def test_legacy_search_model_output_uses_saved_arguments() -> None:
     ).metadata
     assert isinstance(result, SearchDocsResponse)
     assert result.queries == ["question"]
+
+
+@pytest.mark.parametrize("kind", ["search", "custom", "error"])
+def test_live_and_saved_tool_cards_share_public_content(kind: str) -> None:
+    output: Queue[Packet] = Queue()
+    call = ModelToolCall(
+        id="call",
+        name="lookup",
+        arguments={"queries": ["question"], "requestBody": "private input"},
+    )
+    details: BaseModel | None
+    if kind == "search":
+        details = ChatSearchResult(
+            queries=["question"],
+            search_docs=[],
+            citation_mapping={},
+            staged_files=[ChatFile(filename="private.txt", content=b"private content")],
+        )
+    elif kind == "custom":
+        details = CustomToolCallSummary(
+            tool_name="lookup", response_type="json", tool_result={"value": "found"}
+        )
+    else:
+        details = None
+    result = ToolResultMessage(
+        tool_call_id=call.id,
+        tool_name=call.name,
+        content="lookup failed" if kind == "error" else "model output",
+        details=details,
+        is_error=kind == "error",
+    )
+    presenter = ResponsePresenter(
+        Emitter(output.put_nowait, response_id=42), tool_ids={call.name: 1}
+    )
+    presenter.consume(
+        ToolEndEvent(run_id="run", step_index=0, tool_call=call, result=result)
+    )
+    live = output.get_nowait()
+    assert isinstance(live.obj, ItemUpdate)
+    assert isinstance(live.obj.item, ToolItem)
+
+    metadata = _saved_tool_metadata(result)
+    record = ToolCall(
+        id=1,
+        tool_id=1,
+        tool_call_arguments=call.arguments,
+        tool_call_response=metadata.model_dump_json() if metadata else result.text,
+        search_docs=[],
+    )
+    status = RunStatus.ERROR if result.is_error else RunStatus.COMPLETE
+    response = response_record(
+        RunState(
+            run_id="run",
+            status=status,
+            messages=[AssistantMessage(id="run:0", content=[call]), result],
+            operations=[
+                OperationSnapshot(
+                    step_index=0, message_index=0, status=RunStatus.COMPLETE
+                ),
+                OperationSnapshot(
+                    step_index=0, message_index=0, tool_call_id=call.id, status=status
+                ),
+            ],
+        )
+    )
+    restored = _response_packets(
+        response,
+        42,
+        {("run:0", call.id): record},
+        {
+            1: Tool(
+                name=call.name,
+                in_code_tool_id=SearchTool.__name__ if kind == "search" else None,
+            )
+        },
+        {},
+        {},
+    )
+    saved_items = [
+        packet.obj for packet in restored if isinstance(packet.obj, ItemUpdate)
+    ]
+    assert saved_items == [live.obj]
+    assert live.obj.item.arguments == {"queries": ["question"]}
+    public_json = live.model_dump_json()
+    assert "staged_files" not in public_json
+    assert "private" not in public_json
+    if kind == "search":
+        assert isinstance(live.obj.item.metadata, SearchDocsResponse)
+        assert live.obj.item.metadata.queries == ["question"]
+    if kind == "error":
+        assert live.obj.item.output == "lookup failed"
+        assert live.obj.item.status == ToolStatus.ERROR

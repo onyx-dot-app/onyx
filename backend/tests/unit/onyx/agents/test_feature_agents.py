@@ -9,12 +9,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from onyx.agents.coordination import AgentCoordinator
+from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent, ToolEndEvent
+from onyx.agents.execution_records import RunFailureKind
 from onyx.agents.models import AgentStep, PreparedStep, StepInput
 from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import ToolInvocation
-from onyx.agents.transcript import RunFailureKind
 from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.citation_utils import collapse_citations
 from onyx.chat.emitter import Emitter

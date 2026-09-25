@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel, ValidationError
 
+from onyx.agents.execution_records import OperationSnapshot, RunStatus
 from onyx.agents.models import (
     AgentState,
     ExecutionCheckpoint,
@@ -26,7 +27,6 @@ from onyx.agents.tools import (
     PendingToolInput,
     ToolInvocation,
 )
-from onyx.agents.transcript import OperationSnapshot, RunStatus
 from onyx.chat.checkpoint import CheckpointBinding
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import (

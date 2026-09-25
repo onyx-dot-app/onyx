@@ -6,8 +6,8 @@ from pydantic import BaseModel, JsonValue, TypeAdapter
 from sqlalchemy import select
 from sqlalchemy.orm import Session, aliased, selectinload
 
-from onyx.agents.coordination import AgentInfo
-from onyx.agents.transcript import RunFailure, RunFailureKind, RunStatus
+from onyx.agents.execution_records import RunFailure, RunFailureKind, RunStatus
+from onyx.agents.models import AgentInfo
 from onyx.chat.checkpoint import ResponseCheckpoint
 from onyx.chat.models import ResponseRecord
 from onyx.chat.response_items import ResponseItemKind
