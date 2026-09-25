@@ -196,6 +196,21 @@ describe("InputSingleSelect", () => {
       expect(screen.getByText("OpenAI")).toBeInTheDocument();
     });
 
+    test("clicking a foldable divider's title keeps the list open", async () => {
+      const user = setupUser();
+      render(
+        <InputSingleSelect
+          placeholder="Model"
+          value=""
+          options={providerOptions}
+        />
+      );
+      await user.click(screen.getByRole("combobox", { name: "Model" }));
+      await user.click(screen.getByText("OpenAI"));
+      expect(screen.getByRole("listbox")).toBeInTheDocument();
+      expect(screen.getAllByRole("option")).toHaveLength(2);
+    });
+
     test("clicking a foldable divider's title toggles its rows", async () => {
       const user = setupUser();
       render(

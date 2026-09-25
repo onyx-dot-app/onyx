@@ -465,8 +465,23 @@ function SingleDropdown({
       data-trigger={trigger}
       // A button trigger is the whole field, padding included, so the
       // toggle lives on the root; the input inside carries the keyboard,
-      // and the chevron and rightChildren stop propagation.
-      onClick={typeIn ? undefined : toggleDropdown}
+      // and the chevron and rightChildren stop propagation. The listbox is
+      // portalled, so its clicks bubble here through React's tree too: a
+      // foldable title, the search field or the padding must not toggle
+      // the list. Only a pick closes it, and the rows do that themselves.
+      onClick={
+        typeIn
+          ? undefined
+          : (event) => {
+              if (
+                event.target instanceof Node &&
+                dropdownRef.current?.contains(event.target)
+              ) {
+                return;
+              }
+              toggleDropdown();
+            }
+      }
     >
       <>
         <InputTypeIn
