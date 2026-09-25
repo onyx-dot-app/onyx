@@ -159,8 +159,8 @@ CELERY_GENERIC_BEAT_LOCK_TIMEOUT = 120
 # Beat lock for one document-index sync pass, reacquired every quarter of its
 # TTL. A step that outruns it loses the lock and aborts the pass, so large
 # tenants raise it.
-CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT: int = lock_timeout_from_env(
-    "CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT", 120
+CELERY_DOCUMENT_SYNC_BEAT_LOCK_TIMEOUT: int = lock_timeout_from_env(
+    "CELERY_DOCUMENT_SYNC_BEAT_LOCK_TIMEOUT", 120
 )
 
 
