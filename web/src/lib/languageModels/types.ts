@@ -372,7 +372,7 @@ export interface DefaultLlmReference {
 }
 
 export interface LlmDefaults {
-  /** Raw provider list, passed through from `useLLMProviders`. */
+  /** Raw provider list, passed through from `useLanguageModels`. */
   llmProviders: LLMProviderDescriptor[] | undefined;
   /** True iff any provider exposes at least one visible model. */
   hasAnyLlm: boolean;

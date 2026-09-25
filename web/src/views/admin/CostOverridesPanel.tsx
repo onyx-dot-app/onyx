@@ -18,7 +18,7 @@ import { markdown } from "@opal/utils";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
 import { getProvider } from "@/lib/languageModels";
 import type { LLMOption } from "@/lib/languageModels/types";
-import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
+import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import {
   deleteCostOverride,
@@ -62,7 +62,7 @@ interface OverrideFormProps {
 function OverrideForm({ existing, onDone }: OverrideFormProps) {
   const t = useTranslations("admin.costOverrides");
   const { mutate } = useSWRConfig();
-  const { llmProviders } = useAdminLLMProviders();
+  const { llmProviders } = useAdminLanguageModels();
   const [model, setModel] = useState(existing?.model ?? "");
   const [provider, setProvider] = useState(existing?.provider ?? "");
   const [inputRate, setInputRate] = useState(

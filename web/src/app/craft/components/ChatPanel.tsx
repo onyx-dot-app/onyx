@@ -37,7 +37,7 @@ import CraftInputBar, {
   CraftInputBarHandle,
 } from "@/app/craft/components/CraftInputBar";
 import ModelPickerButton from "@/app/craft/components/ModelPickerButton";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { useLanguageModels } from "@/lib/languageModels/hooks";
 import {
   BuildLlmSelection,
   hasSupportedCraftProvider,
@@ -119,7 +119,7 @@ export default function BuildChatPanel({
   const toggleOutputPanel = useToggleOutputPanel();
   const onWakeIntent = useWakeOnIntent();
 
-  const { llmProviders, defaultText, defaultCraft } = useLLMProviders();
+  const { llmProviders, defaultText, defaultCraft } = useLanguageModels();
   // Sessions can outlive the org's supported providers — gate sends until one
   // exists (the model picker stays enabled so admins can connect from it).
   const hasProvider = hasSupportedCraftProvider(llmProviders);

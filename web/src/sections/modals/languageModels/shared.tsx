@@ -42,7 +42,7 @@ import {
 } from "@/sections/modals/languageModels/ModelSettingsPopover";
 import { setDefaultLlmModelAndRefresh } from "@/lib/languageModels/cache";
 import { modelDisplayName } from "@/lib/languageModels/utils";
-import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
+import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
 import { useSWRConfig } from "swr";
 import {
   SvgArrowExchange,
@@ -739,7 +739,7 @@ export function ModelSelectionField({
   const t = useTranslations("admin.languageModels.modals");
   const formikProps = useFormikContext<BaseLLMFormValues>();
   const { mutate } = useSWRConfig();
-  const { defaultText } = useAdminLLMProviders();
+  const { defaultText } = useAdminLanguageModels();
   const providerId = formikProps.values.id;
   const [newModelName, setNewModelName] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);

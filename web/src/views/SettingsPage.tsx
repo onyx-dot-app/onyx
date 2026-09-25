@@ -95,7 +95,7 @@ import { useCloudSubscription } from "@/hooks/useCloudSubscription";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
 import { hasPermission } from "@/lib/permissions";
 import { findModelConfigId } from "@/lib/languageModels/options";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { useLanguageModels } from "@/lib/languageModels/hooks";
 import { DOCS_BASE_URL } from "@/lib/constants";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import type { ErrorResponseBody } from "@/lib/fetcher";
@@ -1741,7 +1741,7 @@ function GatewayAccessSection({
   const t = useTranslations("settings");
   const { appName } = useSettings();
   const gatewayTier = useTierAtLeast(LLM_GATEWAY_MIN_TIER);
-  const { llmProviders } = useLLMProviders();
+  const { llmProviders } = useLanguageModels();
   const [gatewayUrl, setGatewayUrl] = useState("");
 
   useEffect(() => {

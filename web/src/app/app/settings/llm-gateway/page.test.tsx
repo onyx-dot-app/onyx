@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@tests/setup/test-utils";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { useLanguageModels } from "@/lib/languageModels/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import { Tier } from "@/lib/settings/types";
 import LLMGatewayPage from "@/app/app/settings/llm-gateway/page";
@@ -14,7 +14,7 @@ jest.mock("@/hooks/useTierAtLeast", () => ({
   useTierAtLeast: jest.fn(),
 }));
 jest.mock("@/lib/languageModels/hooks", () => ({
-  useLLMProviders: jest.fn(),
+  useLanguageModels: jest.fn(),
 }));
 jest.mock("@/lib/settings/hooks", () => ({
   useSettings: jest.fn(),
@@ -26,8 +26,8 @@ jest.mock("@/views/SettingsPage", () => ({
 const mockUseTierAtLeast = useTierAtLeast as jest.MockedFunction<
   typeof useTierAtLeast
 >;
-const mockUseLLMProviders = useLLMProviders as jest.MockedFunction<
-  typeof useLLMProviders
+const mockUseLanguageModels = useLanguageModels as jest.MockedFunction<
+  typeof useLanguageModels
 >;
 const mockUseSettings = useSettings as jest.MockedFunction<typeof useSettings>;
 
@@ -38,11 +38,11 @@ describe("LLMGatewayPage", () => {
     mockUseSettings.mockReturnValue({ isLoading: false } as ReturnType<
       typeof useSettings
     >);
-    mockUseLLMProviders.mockReturnValue({
+    mockUseLanguageModels.mockReturnValue({
       llmProviders: [{ model_configurations: [{ is_visible: true }] }],
       isLoading: false,
       error: undefined,
-    } as unknown as ReturnType<typeof useLLMProviders>);
+    } as unknown as ReturnType<typeof useLanguageModels>);
   });
 
   it("renders the Gateway for the Business minimum tier", () => {

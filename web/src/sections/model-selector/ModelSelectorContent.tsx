@@ -42,7 +42,7 @@ import {
   minReasoningStop,
   reasoningStopIndex,
 } from "@/sections/model-selector/setting-controls";
-import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
+import { useLanguageModelsForCurrentAgent } from "@/lib/languageModels/hooks";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
 import {
@@ -432,7 +432,7 @@ export default function ModelSelectorContent({
   const {
     llmProviders: currentAgentProviderOptions,
     isLoading: currentAgentProvidersLoading,
-  } = useCurrentAgentLLMProviders();
+  } = useLanguageModelsForCurrentAgent();
   const llmProviders = providerOptions ?? currentAgentProviderOptions;
   const isLoading =
     isLoadingProp ||

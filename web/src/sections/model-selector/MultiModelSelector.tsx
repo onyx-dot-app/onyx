@@ -14,7 +14,7 @@ import { SvgPlusCircle, SvgX } from "@opal/icons";
 import { cn } from "@opal/utils";
 import { useSettings } from "@/lib/settings/hooks";
 import { buildLlmOptions, llmOptionKey } from "@/lib/languageModels/options";
-import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
+import { useLanguageModelsForCurrentAgent } from "@/lib/languageModels/hooks";
 import ModelSelectorContent, {
   ReasoningManager,
   TemperatureManager,
@@ -66,7 +66,7 @@ export default function MultiModelSelector({
 
   // Mirror the data source used by `ModelSelectorContent` so the selector is
   // disabled precisely when the popover would render "No models found".
-  const { llmProviders, isLoading } = useCurrentAgentLLMProviders();
+  const { llmProviders, isLoading } = useLanguageModelsForCurrentAgent();
   const noModelsToSelect = useMemo(
     () => !isLoading && buildLlmOptions(llmProviders).length === 0,
     [isLoading, llmProviders]
