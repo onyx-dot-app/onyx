@@ -58,7 +58,7 @@ spec:
       {{- end }}
       containers:
       - name: {{ .Values.indexCapability.name }}
-        image: "{{ .Values.indexCapability.image.repository }}:{{ .Values.indexCapability.image.tag | default .Values.global.version }}"
+        image: "{{ .Values.indexCapability.image.repository }}:{{ include "onyx.imageTag" (list . .Values.indexCapability.image) }}"
         imagePullPolicy: {{ .Values.global.pullPolicy }}
         command: [ "uvicorn", "model_server.main:app", "--host", "{{ .Values.global.host }}", "--port", "{{ .Values.indexCapability.containerPorts.server }}", "--limit-concurrency", "{{ .Values.indexCapability.limitConcurrency }}" ]
         ports:
@@ -80,7 +80,7 @@ spec:
           {{- end }}
         {{- if .Values.indexCapability.securityContext }}
         securityContext:
-          {{- toYaml .Values.indexCapability.securityContext | nindent 10 }}
+          {{- include "onyx.containerSecurityContext" .Values.indexCapability.securityContext | nindent 10 }}
         {{- end }}
         {{- if .Values.indexCapability.resources }}
         resources:

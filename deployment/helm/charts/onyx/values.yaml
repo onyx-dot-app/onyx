@@ -8,12 +8,16 @@
 #     See /docs/craft/dev/local-kubernetes.md.
 
 global:
-  # Global version for all Onyx components (overrides .Chart.AppVersion)
+  # Image tag for all Onyx components. Empty uses the chart appVersion, which the
+  # published chart pins to the latest stable release (e.g. "v1.2.3") when it is
+  # packaged, so pods never float to a newer app version on restart. Set a tag
+  # here to choose the version yourself; a component's image.tag overrides it.
+  # Upgrading the app runs its database migrations, so change this on purpose.
   # Every Onyx image publishes a -dev twin for each of its tags (e.g. "latest-dev",
   # "v1.2.3-dev"), so this single value can select the dev variant of the whole
   # deployment. Today only the backend image actually differs: its -dev twin adds
   # debugging tools (vim, nano, curl, ps, psql) that the default image leaves out.
-  version: "latest"
+  version: ""
   # Global pull policy for all Onyx component images
   pullPolicy: "IfNotPresent"
   # Host for all Onyx components
@@ -242,6 +246,8 @@ inferenceCapability:
     runAsNonRoot: true
     runAsUser: 1001
     fsGroup: 1001
+    seccompProfile:
+      type: RuntimeDefault
   securityContext:
     capabilities:
       drop:
@@ -321,6 +327,8 @@ indexCapability:
     runAsNonRoot: true
     runAsUser: 1001
     fsGroup: 1001
+    seccompProfile:
+      type: RuntimeDefault
   securityContext:
     capabilities:
       drop:
@@ -452,12 +460,14 @@ webserver:
   podAnnotations: {}
   podLabels:
     scope: onyx-frontend
+  # Hardening defaults merge with your overrides; set a key to null to drop it.
   podSecurityContext:
-    {}
+    seccompProfile:
+      type: RuntimeDefault
     # fsGroup: 2000
 
   securityContext:
-    {}
+    allowPrivilegeEscalation: false
     # capabilities:
     #   drop:
     #   - ALL
@@ -569,12 +579,14 @@ api:
   # real, so size against CPU/memory.
   threadpoolSize: 0
 
+  # Hardening defaults merge with your overrides; set a key to null to drop it.
   podSecurityContext:
-    {}
+    seccompProfile:
+      type: RuntimeDefault
     # fsGroup: 2000
 
   securityContext:
-    {}
+    allowPrivilegeEscalation: false
     # capabilities:
     #   drop:
     #   - ALL
@@ -722,13 +734,18 @@ celery_shared:
     periodSeconds: 60
     failureThreshold: 5
     timeoutSeconds: 3
-  podSecurityContext: {}
+  # Hardening defaults merge with your overrides; set a key to null to drop it.
+  # allowPrivilegeEscalation is dropped automatically if you set privileged.
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
   securityContext:
     # `privileged` is not needed by this workload and is intentionally omitted.
     # root is kept only so the optional customCACerts feature can run
     # update-ca-certificates; to run non-root, override this and
     # podSecurityContext (see codeInterpreter below for the pattern).
     runAsUser: 0
+    allowPrivilegeEscalation: false
 
 celery_beat:
   extraEnv: []
@@ -1086,10 +1103,12 @@ discordbot:
     scope: onyx-backend
   deploymentLabels:
     app: discord-bot
+  # Hardening defaults merge with your overrides; set a key to null to drop it.
   podSecurityContext:
-    {}
+    seccompProfile:
+      type: RuntimeDefault
   securityContext:
-    {}
+    allowPrivilegeEscalation: false
   resources:
     requests:
       cpu: "500m"
@@ -1115,10 +1134,12 @@ slackbot:
     scope: onyx-backend
   deploymentLabels:
     app: slack-bot
+  # Hardening defaults merge with your overrides; set a key to null to drop it.
   podSecurityContext:
-    {}
+    seccompProfile:
+      type: RuntimeDefault
   securityContext:
-    {}
+    allowPrivilegeEscalation: false
   resources:
     requests:
       cpu: "500m"
@@ -1154,8 +1175,12 @@ mcpServer:
     servicePort: 8090
     targetPort: mcp-server-port
     portName: mcp-server-port
-  podSecurityContext: {}
-  securityContext: {}
+  # Hardening defaults merge with your overrides; set a key to null to drop it.
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
   resources:
     requests:
       cpu: "250m"

@@ -85,6 +85,31 @@ Create the name of the service account to use
 {{- end }}
 
 {{/*
+Image tag for Onyx-built images: image.tag, then global.version, then the
+chart appVersion (stamped with the latest stable release at publish time).
+Callers pass `(list . .Values.<component>.image)`.
+*/}}
+{{- define "onyx.imageTag" -}}
+{{- $ctx := index . 0 -}}
+{{- $image := index . 1 -}}
+{{- $image.tag | default $ctx.Values.global.version | default $ctx.Chart.AppVersion -}}
+{{- end }}
+
+{{/*
+Render a container securityContext. Kubernetes rejects
+allowPrivilegeEscalation=false alongside privileged or CAP_SYS_ADMIN, so the
+default is dropped when an override asks for either.
+*/}}
+{{- define "onyx.containerSecurityContext" -}}
+{{- $sc := deepCopy (. | default dict) -}}
+{{- $added := (get ($sc.capabilities | default dict) "add") | default list -}}
+{{- if or $sc.privileged (has "SYS_ADMIN" $added) (has "CAP_SYS_ADMIN" $added) -}}
+{{- $_ := unset $sc "allowPrivilegeEscalation" -}}
+{{- end -}}
+{{- toYaml $sc -}}
+{{- end }}
+
+{{/*
 Set secret name
 */}}
 {{- define "onyx.secretName" -}}
@@ -250,7 +275,7 @@ actually use if both resolve to the identical reference, and a drift here is
 invisible (the DaemonSet looks healthy while every sandbox still cold-pulls).
 */}}
 {{- define "onyx.sandboxImage" -}}
-{{- (index .Values.configMap "SANDBOX_CONTAINER_IMAGE") | default (printf "onyxdotapp/sandbox:%s" (.Values.global.version | default .Chart.AppVersion)) -}}
+{{- (index .Values.configMap "SANDBOX_CONTAINER_IMAGE") | default (printf "onyxdotapp/sandbox:%s" (include "onyx.imageTag" (list . dict))) -}}
 {{- end }}
 
 {{- define "onyx.sandboxImagePullPolicy" -}}

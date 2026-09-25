@@ -1,0 +1,18 @@
+Onyx {{ include "onyx.imageTag" (list . dict) }} is deployed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+{{- $pg := .Values.auth.postgresql }}
+{{- $redis := .Values.auth.redis }}
+{{- $pgDefault := and (ne (toString $pg.enabled) "false") (empty $pg.existingSecret) (eq (toString $pg.values.password) "postgres") }}
+{{- $redisDefault := and .Values.redis.enabled (ne (toString $redis.enabled) "false") (empty $redis.existingSecret) (eq (toString $redis.values.redis_password) "password") }}
+{{- if or $pgDefault $redisDefault }}
+
+WARNING: this release uses the chart's default credentials:
+{{- if $pgDefault }}
+  - PostgreSQL: auth.postgresql.values.password is "postgres"
+{{- end }}
+{{- if $redisDefault }}
+  - Redis: auth.redis.values.redis_password is "password"
+{{- end }}
+Anyone who can reach these services in the cluster can use these passwords.
+Set strong values, or point auth.<name>.existingSecret at a Secret you manage
+(for example the one that externalSecret creates).
+{{- end }}

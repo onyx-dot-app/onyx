@@ -63,8 +63,8 @@ spec:
       containers:
         - name: web-server
           securityContext:
-            {{- toYaml .Values.webserver.securityContext | nindent 12 }}
-          image: "{{ .Values.webserver.image.repository }}:{{ .Values.webserver.image.tag | default .Values.global.version }}"
+            {{- include "onyx.containerSecurityContext" .Values.webserver.securityContext | nindent 12 }}
+          image: "{{ .Values.webserver.image.repository }}:{{ include "onyx.imageTag" (list . .Values.webserver.image) }}"
           imagePullPolicy: {{ .Values.global.pullPolicy }}
           ports:
             - name: http
