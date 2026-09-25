@@ -112,6 +112,13 @@
   @apply flex flex-col gap-1;
 }
 
+/* Keyboard scrolling brings a stop to the nearest edge; the mask fade there
+   is 12px, so a stop keeps that much clear of the edge. */
+.opal-select-dropdown-scroll [role="option"],
+.opal-select-group > :first-child {
+  scroll-margin-block: 0.75rem;
+}
+
 .opal-select-create-icon {
   @apply ms-2 h-4 w-4 shrink-0 text-text-03;
 }

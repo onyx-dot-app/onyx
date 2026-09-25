@@ -112,9 +112,15 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
         ref.current &&
         highlightedIndex >= 0
       ) {
-        const highlightedElement = ref.current.querySelector(
+        const stop = ref.current.querySelector(
           `[data-index="${highlightedIndex}"]`
         );
+        // A foldable group's stop is its wrapper, title and rows together;
+        // "nearest" is satisfied while any of that tall block shows, so
+        // scroll the title itself.
+        const highlightedElement = stop?.classList.contains("opal-select-group")
+          ? stop.firstElementChild
+          : stop;
         if (highlightedElement) {
           highlightedElement.scrollIntoView({
             block: "nearest",
