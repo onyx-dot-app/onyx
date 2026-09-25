@@ -457,6 +457,10 @@ def construct_message_history(
 
     # If no history, build minimal context
     if not simple_chat_history:
+        if custom_agent_prompt:
+            custom_agent_prompt.should_cache = True
+        for msg in project_messages:
+            msg.should_cache = True
         result = [system_prompt] if system_prompt else []
         if custom_agent_prompt:
             result.append(custom_agent_prompt)
@@ -596,6 +600,22 @@ def construct_message_history(
                     forgotten_files_message = _create_file_tool_metadata_message(
                         forgotten_meta, token_counter, available_tool_names
                     )
+
+    # Everything below is stable within a turn (append-only history, fixed
+    # setup messages), so it belongs to the cacheable prefix. The reminder
+    # stays unmarked: its content changes between cycles and it must remain
+    # in the uncached suffix.
+    stable_tail: list[ChatMessageSimple] = [
+        *project_messages,
+        last_user_message,
+        *messages_after_last_user,
+    ]
+    if forgotten_files_message:
+        stable_tail.append(forgotten_files_message)
+    if custom_agent_prompt:
+        stable_tail.append(custom_agent_prompt)
+    for msg in stable_tail:
+        msg.should_cache = True
 
     # Build the final message list according to README ordering:
     # [system], [history_before_last_user], [custom_agent], [context_files],
@@ -966,7 +986,14 @@ def run_llm_loop(
             # The section below calculates the available tokens for history a bit more accurately
             # now that project files are loaded in.
             persona_datetime_aware = persona.datetime_aware if persona else True
-            cite_documents = should_cite_documents or always_cite_documents
+            # Prompt construction must be byte-stable across the turn: when
+            # should_cite_documents flips on mid-turn after a citeable tool
+            # call, injecting citation guidance into the system prompt would
+            # invalidate the cached prefix for every later request. The
+            # citation instruction rides in the tail reminder instead (see
+            # include_citation_reminder below); the system prompt only
+            # carries it when it holds for the whole turn.
+            cite_documents_in_system_prompt = always_cite_documents
             if persona and persona.replace_base_system_prompt:
                 # Handles the case where user has checked off the "Replace base system prompt" checkbox
                 processed_system_prompt = (
@@ -974,7 +1001,7 @@ def run_llm_loop(
                         persona_system_prompt,
                         datetime_aware=persona_datetime_aware,
                         append_datetime_if_aware=True,
-                        should_cite_documents=cite_documents,
+                        should_cite_documents=cite_documents_in_system_prompt,
                     )
                     if persona_system_prompt
                     else None
@@ -1006,7 +1033,7 @@ def run_llm_loop(
                         datetime_aware=persona_datetime_aware,
                         user_memory_context=prompt_memory_context,
                         tools=tools,
-                        should_cite_documents=cite_documents,
+                        should_cite_documents=cite_documents_in_system_prompt,
                     )
                     system_prompt = ChatMessageSimple(
                         message=system_prompt_str,
@@ -1018,7 +1045,7 @@ def run_llm_loop(
                             custom_agent_prompt,
                             datetime_aware=persona_datetime_aware,
                             append_datetime_if_aware=False,
-                            should_cite_documents=cite_documents,
+                            should_cite_documents=cite_documents_in_system_prompt,
                         )
                         if custom_agent_prompt
                         else None
@@ -1039,7 +1066,7 @@ def run_llm_loop(
                             custom_agent_prompt,
                             datetime_aware=persona_datetime_aware,
                             append_datetime_if_aware=True,
-                            should_cite_documents=cite_documents,
+                            should_cite_documents=cite_documents_in_system_prompt,
                         )
                         if custom_agent_prompt
                         else None
@@ -1060,7 +1087,7 @@ def run_llm_loop(
                     persona_task_prompt,
                     datetime_aware=persona_datetime_aware,
                     append_datetime_if_aware=False,
-                    should_cite_documents=cite_documents,
+                    should_cite_documents=cite_documents_in_system_prompt,
                 )
                 if persona_task_prompt
                 else None
@@ -1212,7 +1239,9 @@ def run_llm_loop(
             # Failure case, give something reasonable to the LLM to try again
             if tool_calls and not tool_responses:
                 failure_messages = create_tool_call_failure_messages(
-                    tool_calls, token_counter
+                    tool_calls,
+                    token_counter,
+                    thinking_blocks=llm_step_result.thinking_blocks,
                 )
                 simple_chat_history.extend(failure_messages)
                 continue
@@ -1427,6 +1456,12 @@ def run_llm_loop(
                     message_type=MessageType.ASSISTANT,
                     tool_calls=tool_calls_simple,
                     image_files=None,
+                    # Append-only within the turn, so it extends the
+                    # cacheable prefix on the next cycle.
+                    should_cache=True,
+                    # Replay signed thinking blocks so thinking-capable
+                    # providers accept the tool-call turn.
+                    thinking_blocks=llm_step_result.thinking_blocks,
                 )
                 simple_chat_history.append(assistant_with_tools)
 
@@ -1444,6 +1479,7 @@ def run_llm_loop(
                         message_type=MessageType.TOOL_CALL_RESPONSE,
                         tool_call_id=tc.tool_call_id,
                         image_files=None,
+                        should_cache=True,
                     )
                     simple_chat_history.append(tool_response_msg)
 

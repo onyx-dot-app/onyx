@@ -59,6 +59,7 @@ from onyx.kg.models import KGException
 from onyx.kg.setup.kg_default_entity_definitions import (
     populate_missing_default_entity_types__commit,
 )
+from onyx.llm.models import AnyThinkingBlock
 from onyx.prompts.chat_prompts import (
     ADDITIONAL_CONTEXT_PROMPT,
     TOOL_CALL_RESPONSE_CROSS_MESSAGE,
@@ -974,7 +975,9 @@ def is_last_assistant_message_clarification(chat_history: list[ChatMessage]) -> 
 
 
 def create_tool_call_failure_messages(
-    tool_calls: list[ToolCallKickoff], token_counter: Callable[[str], int]
+    tool_calls: list[ToolCallKickoff],
+    token_counter: Callable[[str], int],
+    thinking_blocks: list[AnyThinkingBlock] | None = None,
 ) -> list[ChatMessageSimple]:
     """Create ChatMessageSimple objects for failed tool calls.
 
@@ -1015,6 +1018,8 @@ def create_tool_call_failure_messages(
         message_type=MessageType.ASSISTANT,
         tool_calls=tool_calls_simple,
         image_files=None,
+        should_cache=True,
+        thinking_blocks=thinking_blocks,
     )
 
     messages: list[ChatMessageSimple] = [assistant_msg]
@@ -1027,6 +1032,7 @@ def create_tool_call_failure_messages(
             message_type=MessageType.TOOL_CALL_RESPONSE,
             tool_call_id=tool_call.tool_call_id,
             image_files=None,
+            should_cache=True,
         )
         messages.append(failure_response_msg)
 

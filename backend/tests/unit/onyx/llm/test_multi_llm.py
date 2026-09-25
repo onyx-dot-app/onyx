@@ -2859,8 +2859,32 @@ def test_bifrost_normalizes_api_base_in_model_kwargs() -> None:
     assert llm._model_kwargs["api_base"] == "https://bifrost.example.com/v1"
 
 
-def test_prompt_contains_tool_call_history_true() -> None:
-    from onyx.llm.multi_llm import _prompt_contains_tool_call_history
+def test_prompt_contains_unsigned_tool_call_history_signed_blocks() -> None:
+    """A tool-calling assistant message that still carries its signed
+    thinking blocks does not force thinking off."""
+    from onyx.llm.models import ThinkingBlock
+    from onyx.llm.multi_llm import _prompt_contains_unsigned_tool_call_history
+
+    messages: LanguageModelInput = [
+        UserMessage(content="What's the weather?"),
+        AssistantMessage(
+            content=None,
+            tool_calls=[
+                ToolCall(
+                    id="tc_1",
+                    function=FunctionCall(name="get_weather", arguments="{}"),
+                )
+            ],
+            thinking_blocks=[
+                ThinkingBlock(thinking="check weather", signature="sig-1")
+            ],
+        ),
+    ]
+    assert _prompt_contains_unsigned_tool_call_history(messages) is False
+
+
+def test_prompt_contains_unsigned_tool_call_history_true() -> None:
+    from onyx.llm.multi_llm import _prompt_contains_unsigned_tool_call_history
 
     messages: LanguageModelInput = [
         UserMessage(content="What's the weather?"),
@@ -2874,24 +2898,24 @@ def test_prompt_contains_tool_call_history_true() -> None:
             ],
         ),
     ]
-    assert _prompt_contains_tool_call_history(messages) is True
+    assert _prompt_contains_unsigned_tool_call_history(messages) is True
 
 
-def test_prompt_contains_tool_call_history_false_no_tools() -> None:
-    from onyx.llm.multi_llm import _prompt_contains_tool_call_history
+def test_prompt_contains_unsigned_tool_call_history_false_no_tools() -> None:
+    from onyx.llm.multi_llm import _prompt_contains_unsigned_tool_call_history
 
     messages: LanguageModelInput = [
         UserMessage(content="Hello"),
         AssistantMessage(content="Hi there!"),
     ]
-    assert _prompt_contains_tool_call_history(messages) is False
+    assert _prompt_contains_unsigned_tool_call_history(messages) is False
 
 
-def test_prompt_contains_tool_call_history_false_user_only() -> None:
-    from onyx.llm.multi_llm import _prompt_contains_tool_call_history
+def test_prompt_contains_unsigned_tool_call_history_false_user_only() -> None:
+    from onyx.llm.multi_llm import _prompt_contains_unsigned_tool_call_history
 
     messages: LanguageModelInput = [UserMessage(content="Hello")]
-    assert _prompt_contains_tool_call_history(messages) is False
+    assert _prompt_contains_unsigned_tool_call_history(messages) is False
 
 
 def test_bedrock_claude_drops_thinking_when_thinking_blocks_missing() -> None:

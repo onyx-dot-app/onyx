@@ -413,19 +413,27 @@ def _messages_contain_tool_content(messages: list[dict[str, Any]]) -> bool:
     return False
 
 
-def _prompt_contains_tool_call_history(prompt: LanguageModelInput) -> bool:
-    """Check if the prompt contains any assistant messages with tool_calls.
+def _prompt_contains_unsigned_tool_call_history(
+    prompt: LanguageModelInput,
+) -> bool:
+    """Check if the prompt contains any assistant messages with tool_calls
+    that lack signed thinking blocks.
 
     When Anthropic's extended thinking is enabled, the API requires every
     assistant message to start with a thinking block before any tool_use
-    blocks.  Since we don't preserve thinking_blocks (they carry
-    cryptographic signatures that can't be reconstructed), we must skip
-    the thinking param whenever history contains prior tool-calling turns.
+    blocks. Thinking blocks carry cryptographic signatures that cannot be
+    reconstructed, so we can only keep thinking enabled when every
+    tool-calling assistant message in the prompt still carries its original
+    blocks (in-turn agent history does; messages restored from older turns
+    or the DB do not).
     """
     from onyx.llm.models import AssistantMessage
 
     msgs = prompt if isinstance(prompt, list) else [prompt]
-    return any(isinstance(msg, AssistantMessage) and msg.tool_calls for msg in msgs)
+    return any(
+        isinstance(msg, AssistantMessage) and msg.tool_calls and not msg.thinking_blocks
+        for msg in msgs
+    )
 
 
 @lru_cache(maxsize=None)
@@ -901,7 +909,9 @@ class LitellmLLM(LLM):
                     # Only a gateway routes Claude here, and it still translates
                     # to Anthropic, so the signed-thinking-block constraint
                     # described below applies to these requests too.
-                    send_reasoning = not _prompt_contains_tool_call_history(prompt)
+                    send_reasoning = not _prompt_contains_unsigned_tool_call_history(
+                        prompt
+                    )
                 else:
                     # OpenAI API does not accept reasoning params for GPT 5 chat
                     # models (neither reasoning nor reasoning_effort are accepted)
@@ -927,12 +937,14 @@ class LitellmLLM(LLM):
             ):
                 # Anthropic requires every assistant message with tool_use
                 # blocks to start with a thinking block that carries a
-                # cryptographic signature.  We don't preserve those blocks
-                # across turns, so skip thinking when the history already
-                # contains tool-calling assistant messages.  LiteLLM's
+                # cryptographic signature.  We replay preserved blocks, so
+                # only skip thinking when the history contains tool-calling
+                # assistant messages that lost their blocks.  LiteLLM's
                 # modify_params workaround doesn't cover all providers
                 # (notably Bedrock).
-                has_tool_call_history = _prompt_contains_tool_call_history(prompt)
+                has_tool_call_history = _prompt_contains_unsigned_tool_call_history(
+                    prompt
+                )
 
                 if reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE:
                     # No signed blocks to lose, and without it Claude 5 picks

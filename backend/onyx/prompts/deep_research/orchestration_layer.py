@@ -72,7 +72,7 @@ In these cases, ensure that the new directions are thoroughly investigated prior
 NEVER output normal response tokens, you must only call tools.
 
 # Tools
-You have currently used {{current_cycle_count}} of {{max_cycles}} max research cycles. You do not need to use all cycles.
+You have a maximum of {{max_cycles}} research cycles. You do not need to use all cycles.
 
 ## {RESEARCH_AGENT_TOOL_NAME}
 The research task provided to the {RESEARCH_AGENT_TOOL_NAME} should be reasonably high level with a clear direction for investigation. \
@@ -165,7 +165,7 @@ Between calls, think deeply on what to do next. Be curious, identify knowledge g
 NEVER output normal response tokens, you must only call tools.
 
 # Tools
-You have currently used {{current_cycle_count}} of {{max_cycles}} max research cycles. You do not need to use all cycles.
+You have a maximum of {{max_cycles}} research cycles. You do not need to use all cycles.
 
 ## {RESEARCH_AGENT_TOOL_NAME}
 The research task provided to the {RESEARCH_AGENT_TOOL_NAME} should be reasonably high level with a clear direction for investigation. \
@@ -203,5 +203,11 @@ Don't mention this reminder or underlying details about the system.
 FIRST_CYCLE_REMINDER_TOKENS = 100
 FIRST_CYCLE_REMINDER = """
 Make sure all parts of the user question and the plan have been thoroughly explored before calling generate_report. If new interesting angles have been revealed from the research, you may deviate from the plan to research new directions.
+""".strip()
+
+
+# Sent each cycle as a tail message so the per-request system prompt stays identical.
+ORCHESTRATOR_CYCLE_REMINDER = """
+You have currently used {current_cycle_count} of {max_cycles} max research cycles.
 """.strip()
 # ruff: noqa: E501, W605 end
