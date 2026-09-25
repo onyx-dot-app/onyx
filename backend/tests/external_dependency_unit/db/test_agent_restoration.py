@@ -13,14 +13,13 @@ from onyx.agents.items import (
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.agents.transcript import (
-    AgentRestorationConfig,
     OperationSnapshot,
     RunStatus,
 )
 from onyx.chat.models import MessageRendering, ResponseRecord
+from onyx.chat.prompt_utils import prepare_prompt
 from onyx.chat.subagents import create_chat_agent_coordinator
 from onyx.configs.constants import DocumentSource, MessageType
-from onyx.context.prompt import prepare_prompt
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import create_db_search_doc
 from onyx.db.chat_history import (
@@ -34,7 +33,7 @@ from onyx.db.chat_subagents import (
 )
 from onyx.db.enums import IncognitoRecordMode
 from onyx.db.models import ChatMessage, ChatSession
-from onyx.deep_research.research_agent import ResearchConfiguration
+from onyx.deep_research.models import ResearchConfiguration
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.models import (
@@ -135,9 +134,7 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
                 agent_id=agent_id,
                 agent_path="/root/research",
                 agent_description="Check evidence",
-                restoration_config=AgentRestorationConfig(
-                    feature="research", settings=settings.model_dump(mode="json")
-                ),
+                restoration_config=settings,
                 status=RunStatus.COMPLETE,
                 input_messages=[UserMessage(content="Investigate cedar")],
                 items=build_response_items(

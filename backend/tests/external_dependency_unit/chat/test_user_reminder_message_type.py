@@ -10,7 +10,7 @@ These tests verify that:
 
 import pytest
 
-from onyx.context.messages import PromptMetadata, prepare_model_messages
+from onyx.chat.llm_step import PromptMetadata, prepare_model_messages
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.litellm_conversion import CODE_BLOCK_MARKDOWN, serialize_request
 from onyx.llm.litellm_models import ChatCompletionMessage, SystemMessage, UserMessage

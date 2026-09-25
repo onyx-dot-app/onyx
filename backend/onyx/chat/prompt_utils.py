@@ -1,13 +1,28 @@
+import json
 from collections.abc import Callable, Sequence
 from uuid import UUID
 
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
 from sqlalchemy.orm import Session
 
+from onyx.chat.llm_step import (
+    PromptMetadata,
+    count_message_tokens,
+    prepare_model_messages,
+    prompt_metadata,
+)
+from onyx.context.search.models import SearchDocsResponse
 from onyx.db.enums import SUPPORTED_LANGUAGE_ENGLISH_NAMES, SupportedLanguage
 from onyx.db.memory import UserMemoryContext
 from onyx.db.persona import get_default_behavior_persona
 from onyx.db.user_file import calculate_user_files_token_count
-from onyx.file_store.models import FileDescriptor
+from onyx.file_store.models import (
+    ExtractedContextFiles,
+    FileDescriptor,
+    FileToolMetadata,
+)
+from onyx.llm.interfaces import LLMConfig
+from onyx.llm.models import AssistantMessage, Message, ToolResultMessage, UserMessage
 from onyx.prompts.chat_prompts import (
     ANSWER_COMPLETENESS_REMINDER,
     ANSWER_COVERAGE_GUIDANCE,
@@ -18,6 +33,7 @@ from onyx.prompts.chat_prompts import (
     LAST_CYCLE_CITATION_REMINDER,
     OPEN_URL_REMINDER,
     REQUIRE_CITATION_GUIDANCE,
+    TOOL_CALL_RESPONSE_CROSS_MESSAGE,
 )
 from onyx.prompts.prompt_utils import apply_prompt_placeholders, get_company_context
 from onyx.prompts.tool_prompts import (
@@ -42,6 +58,7 @@ from onyx.prompts.user_info import (
     USER_PREFERENCES_PROMPT,
     USER_ROLE_PROMPT,
 )
+from onyx.tools.constants import FILE_READER_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
@@ -51,7 +68,33 @@ from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
+from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
+
+logger = setup_logger()
+
+
+class _ContextDocument(BaseModel):
+    document: int
+    title: str | None = None
+    contents: str
+
+
+class _ContextDocuments(BaseModel):
+    documents: list[_ContextDocument] = Field(default_factory=list)
+
+
+class _SearchPassage(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    __pydantic_extra__: dict[str, JsonValue] = Field(init=False)
+    document: int
+    content: str
+
+
+class _SearchPassages(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    __pydantic_extra__: dict[str, JsonValue] = Field(init=False)
+    results: list[_SearchPassage]
 
 
 def get_default_base_system_prompt(db_session: Session) -> str:
@@ -371,4 +414,243 @@ def select_reminder_text(
         include_citation_reminder=include_citation_reminder,
         include_file_reminder=include_file_reminder,
         is_last_cycle=out_of_cycles,
+    )
+
+
+def _deduplicate_search_passages(messages: list[Message]) -> None:
+    """Shorten exact repeats within a step in caller-owned prompt messages."""
+    seen: dict[tuple[str, str], str] = {}
+    for message in messages:
+        if isinstance(message, (AssistantMessage, UserMessage)):
+            seen.clear()
+            continue
+        if not isinstance(message, ToolResultMessage):
+            continue
+        if (
+            message.is_error
+            or not isinstance(message.content, str)
+            or prompt_metadata(message).omit_tool_result_content
+            or not isinstance(message.details, SearchDocsResponse)
+            or not message.details.citation_mapping
+        ):
+            continue
+        try:
+            passages = _SearchPassages.model_validate_json(message.text)
+        except ValidationError:
+            # Search metadata can accompany unstructured or historical tool output.
+            logger.debug(
+                "Search result has no structured passages: %s", message.tool_call_id
+            )
+            continue
+        changed = False
+        for passage in passages.results:
+            document_id = message.details.citation_mapping[passage.document]
+            key = (document_id, passage.content)
+            reference = seen.get(key)
+            if reference is not None:
+                if len(reference) < len(passage.content):
+                    passage.content = reference
+                    changed = True
+                continue
+            seen[key] = (
+                f"Same passage as document {passage.document} in tool result "
+                f"{message.tool_call_id}; use that result's content."
+            )
+        if changed:
+            message.content = passages.model_dump_json()
+
+
+def _build_project_message(
+    context_files: ExtractedContextFiles | None,
+    token_counter: Callable[[str], int] | None,
+    available_tool_names: set[str] | None = None,
+) -> list[Message]:
+    """Include file contents and metadata for files available through the reader tool."""
+    if not context_files:
+        return []
+
+    messages: list[Message] = []
+    if context_files.file_texts:
+        messages.append(_create_context_files_message(context_files))
+    if context_files.file_metadata_for_tool and token_counter:
+        messages.append(
+            _create_file_tool_metadata_message(
+                context_files.file_metadata_for_tool,
+                token_counter,
+                available_tool_names,
+            )
+        )
+    return messages
+
+
+def prepare_prompt(
+    messages: list[Message],
+    *,
+    system_prompt: Message | None,
+    custom_agent_prompt: Message | None,
+    reminder_message: Message | None,
+    context_files: ExtractedContextFiles | None,
+    token_counter: Callable[[str], int],
+    all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
+    llm_config: LLMConfig | None = None,
+    available_tool_names: set[str] | None = None,
+) -> list[Message]:
+    """Assemble instructions and file context without discarding execution history."""
+    history = [message.model_copy(deep=True) for message in messages]
+    _deduplicate_search_passages(history)
+    for message in history:
+        metadata = prompt_metadata(message)
+        if isinstance(message, ToolResultMessage) and metadata.omit_tool_result_content:
+            # Keep stored evidence intact; later questions use the existing placeholder.
+            message.content = TOOL_CALL_RESPONSE_CROSS_MESSAGE
+            metadata.token_count = None
+        metadata.token_count = count_message_tokens(message, token_counter)
+        message.metadata = metadata
+    insertion = next(
+        (
+            index
+            for index in range(len(history) - 1, -1, -1)
+            if isinstance(history[index], UserMessage)
+            and not prompt_metadata(history[index]).is_reminder
+        ),
+        len(history),
+    )
+    result: list[Message] = []
+    if system_prompt is not None:
+        system_prompt = system_prompt.model_copy(deep=True)
+        metadata = prompt_metadata(system_prompt)
+        metadata.should_cache = True
+        system_prompt.metadata = metadata
+        result.append(system_prompt)
+    result.extend(history[:insertion])
+    if custom_agent_prompt is not None:
+        result.append(custom_agent_prompt)
+    result.extend(
+        _build_project_message(context_files, token_counter, available_tool_names)
+    )
+    present_files = {prompt_metadata(message).file_id for message in history}
+    omitted_files = [
+        metadata
+        for file_id, metadata in (all_injected_file_metadata or {}).items()
+        if file_id not in present_files
+    ]
+    if omitted_files:
+        result.append(
+            _create_file_tool_metadata_message(
+                omitted_files, token_counter, available_tool_names
+            )
+        )
+    result.extend(history[insertion:])
+    if reminder_message is not None:
+        result.append(reminder_message)
+    return prepare_model_messages(result, llm_config) if llm_config else result
+
+
+def _create_file_tool_metadata_message(
+    file_metadata: list[FileToolMetadata],
+    token_counter: Callable[[str], int],
+    available_tool_names: set[str] | None = None,
+) -> Message:
+    """Build a lightweight metadata-only message listing files not held in context.
+
+    Name only a tool this step actually received. FileReaderTool is attached
+    only when the vector DB is disabled, and internal search can be absent even
+    when it is enabled (persona, ``allowed_tool_ids``, or a disabled search
+    usage setting). Naming a tool the model was never given makes it invent
+    workarounds — it searches the web for the document or guesses the contents.
+
+    Preference order is read_file, then internal search, then the python tool.
+    read_file pages through a file directly; search retrieves from the indexed
+    copy; the python tool is handed the files themselves, so prompt truncation
+    does not take them away from it.
+
+    The python tier applies only when every listed file actually reached
+    ``chat_files_for_tools`` (see ``FileToolMetadata.staged_for_tools``) —
+    summary-truncated files are listed for the LLM but never staged, so naming
+    python for them would send the model after bytes it does not have. The
+    notice also stops short of promising a path, because PythonTool normalizes
+    and de-duplicates filenames at staging time and applies its own count and
+    byte caps.
+
+    An unreported tool set names no tool. Steps that offer none are common (a
+    deep-research final report runs with no tools), and under-promising is the
+    safe direction to fail in.
+    """
+    offered: set[str] = available_tool_names or set()
+    if FILE_READER_TOOL_NAME in offered:
+        lines: list[str] = [
+            "You have access to the following files. Use the read_file tool to "
+            "read sections of any file. You MUST pass the file_id UUID (not the "
+            "filename) to read_file:"
+        ]
+        # The UUID is only meaningful to read_file, so it is listed only here.
+        lines.extend(
+            f'- file_id="{meta.file_id}" filename="{meta.filename}" (~{meta.approx_char_count:,} chars)'
+            for meta in file_metadata
+        )
+        return _finalize_file_metadata_message(lines, token_counter)
+
+    if SearchTool.NAME in offered:
+        lines = [
+            "These files are attached but too large to include in full. Their "
+            "contents are indexed — use internal search to find the relevant "
+            "passages. Do not guess them or search the web for them:"
+        ]
+    elif PythonTool.NAME in offered and all(
+        meta.staged_for_tools for meta in file_metadata
+    ):
+        lines = [
+            "These files are attached but too large to include in full. The "
+            "python tool receives them — read them there, listing the working "
+            "directory if a name does not resolve. Do not guess their contents "
+            "or search the web for them:"
+        ]
+    else:
+        lines = [
+            "These files are attached but too large to include in full, and no "
+            "tool here can read them. Do not guess their contents or search the "
+            "web for them — say they are too large to read in this conversation:"
+        ]
+    lines.extend(
+        f'- filename="{meta.filename}" (~{meta.approx_char_count:,} chars)'
+        for meta in file_metadata
+    )
+    return _finalize_file_metadata_message(lines, token_counter)
+
+
+def _finalize_file_metadata_message(
+    lines: list[str],
+    token_counter: Callable[[str], int],
+) -> Message:
+    message_content = "\n".join(lines)
+    return UserMessage(
+        content=message_content,
+        metadata=PromptMetadata(token_count=token_counter(message_content)),
+    )
+
+
+def _create_context_files_message(
+    context_files: ExtractedContextFiles,
+) -> Message:
+    """Build a user message with numbered document text and titles."""
+    documents: list[_ContextDocument] = []
+    for idx, file_text in enumerate(context_files.file_texts, start=1):
+        title = (
+            context_files.file_metadata[idx - 1].filename
+            if idx - 1 < len(context_files.file_metadata)
+            else None
+        )
+        documents.append(
+            _ContextDocument(document=idx, title=title or None, contents=file_text)
+        )
+
+    documents_json = json.dumps(
+        _ContextDocuments(documents=documents).model_dump(exclude_none=True), indent=2
+    )
+    message_content = f"Here are some documents provided for context, they may not all be relevant:\n{documents_json}"
+
+    # Use pre-calculated token count from context_files
+    return UserMessage(
+        content=message_content,
+        metadata=PromptMetadata(token_count=context_files.total_token_count),
     )

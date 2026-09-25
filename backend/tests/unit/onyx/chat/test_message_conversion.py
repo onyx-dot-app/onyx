@@ -2,8 +2,8 @@
 
 import pytest
 
-import onyx.context.messages as conversion_module
-from onyx.context.messages import PromptMetadata, prepare_model_messages
+import onyx.chat.llm_step as conversion_module
+from onyx.chat.llm_step import PromptMetadata, prepare_model_messages
 from onyx.file_store.models import ChatFileType, ChatLoadedFile
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLMConfig

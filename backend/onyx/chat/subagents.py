@@ -31,7 +31,7 @@ from onyx.db.chat_subagents import (
     load_session_agent_metadata,
     lookup_session_agent,
 )
-from onyx.deep_research.research_agent import ResearchAgent, ResearchConfiguration
+from onyx.deep_research.research_agent import ResearchAgent
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.tools.interface import Tool
@@ -84,9 +84,8 @@ class ChatAgentDirectory(AgentDirectory):
                 self.chat_session_id, self.visible_message_ids, saved.id
             )
         configuration = history.configuration
-        if configuration is None or configuration.feature != "research":
+        if configuration is None:
             raise ValueError("This agent's external resources are no longer available")
-        settings = ResearchConfiguration.model_validate(configuration.settings)
         agent = ResearchAgent(
             messages=history.messages,
             checkpoint=history.checkpoint,
@@ -96,8 +95,8 @@ class ChatAgentDirectory(AgentDirectory):
             llm=self.llm,
             token_counter=get_llm_token_counter(self.llm),
             user_identity=self.user_identity,
-            language_section=settings.language_section,
-            reasoning_effort=settings.reasoning_effort,
+            language_section=configuration.language_section,
+            reasoning_effort=configuration.reasoning_effort,
         ).agent
         agent.id = history.agent_id
         return agent

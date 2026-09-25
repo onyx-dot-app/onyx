@@ -155,8 +155,8 @@ agent = Agent(client, prepare_step=prepare_step)
 ```
 
 The example uses an existing client and executable `echo` tool.
-Onyx feature hooks use `context/messages.py` for attachments, reminders, and cache hints.
-`context/prompt.py` assembles instructions and file context. Agent owns compaction and the input budget.
+Onyx feature hooks use `chat/llm_step.py` for attachments, reminders, and cache hints.
+`chat/prompt_utils.py` assembles instructions and file context. Agent owns compaction and the input budget.
 Chat citation mapping stays in `chat/citation_utils.py`.
 The helper returns shared messages. Ordinary text calls can construct messages directly.
 

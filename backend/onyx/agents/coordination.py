@@ -8,7 +8,7 @@ from contextlib import ExitStack
 from typing import Literal, Protocol, overload
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, SerializeAsAny
 
 from onyx.agents.concurrency import (
     CLEANUP_SECONDS,
@@ -30,10 +30,7 @@ from onyx.agents.tools import (
     AgentLifetime,
     SpawnResult,
 )
-from onyx.agents.transcript import (
-    AgentRestorationConfig,
-    RunStatus,
-)
+from onyx.agents.transcript import RunStatus
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.models import Message
 from onyx.utils.logger import setup_logger
@@ -67,7 +64,7 @@ class AgentInfo(BaseModel):
     path: str
     parent_id: str | None
     description: str
-    restoration_config: AgentRestorationConfig | None
+    restoration_config: SerializeAsAny[BaseModel] | None
     latest_run_id: str | None = None
     status: RunStatus | None = None
 
@@ -540,7 +537,7 @@ class AgentCoordinator:
         parent_id: str,
         name: str,
         description: str,
-        restoration_config: AgentRestorationConfig | None,
+        restoration_config: BaseModel | None,
     ) -> AgentInfo:
         if not name or "/" in name:
             raise ValueError("Agent name must be a nonempty label without slashes")
@@ -976,7 +973,7 @@ class _ToolControl(AgentControl):
         description: str,
         max_steps: int,
         messages: Sequence[Message],
-        restoration_config: AgentRestorationConfig | None = None,
+        restoration_config: BaseModel | None = None,
         lifetime: AgentLifetime = AgentLifetime.FOREGROUND,
     ) -> SpawnResult:
         self._check()

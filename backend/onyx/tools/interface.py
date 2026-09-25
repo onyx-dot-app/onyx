@@ -5,8 +5,8 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.agents.tools import ToolExecutionMode, ToolInvocation, ToolOutcome
+from onyx.chat.llm_step import prompt_metadata
 from onyx.configs.constants import MessageType
-from onyx.context.messages import prompt_metadata
 from onyx.db.memory import UserMemoryContext
 from onyx.llm.models import Message, ToolDefinition, ToolResult
 from onyx.tools.models import ChatFile, ChatMinimalTextMessage, ToolCallException

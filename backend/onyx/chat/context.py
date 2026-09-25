@@ -2,13 +2,13 @@ from collections.abc import Sequence
 
 from pydantic import BaseModel, ConfigDict
 
+from onyx.chat.llm_step import PromptMetadata
 from onyx.chat.models import PersonaPromptConfig
 from onyx.chat.prompt_utils import (
     build_system_prompt,
     process_prompt_template,
     select_reminder_text,
 )
-from onyx.context.messages import PromptMetadata
 from onyx.context.search.models import SearchDocsResponse
 from onyx.db.memory import UserMemoryContext
 from onyx.file_store.models import ExtractedContextFiles

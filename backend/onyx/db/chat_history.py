@@ -11,9 +11,9 @@ from sqlalchemy.orm import Session, load_only, selectinload
 from onyx.agents.items import messages_from_items
 from onyx.agents.transcript import CompactionCheckpoint, messages_for_model
 from onyx.chat.files import build_file_context
+from onyx.chat.llm_step import PromptMetadata, count_message_tokens
 from onyx.chat.models import ChatHistoryMessage, ChatHistoryResult
 from onyx.configs.constants import MessageType
-from onyx.context.messages import PromptMetadata, count_message_tokens
 from onyx.db.chat import (
     get_chat_messages_by_session,
     get_or_create_root_message,

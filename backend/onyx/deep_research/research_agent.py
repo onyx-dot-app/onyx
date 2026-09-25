@@ -16,13 +16,13 @@ from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcess
 from onyx.chat.citation_utils import (
     update_citation_processor_from_tool_result,
 )
+from onyx.chat.llm_step import PromptMetadata
 from onyx.chat.models import CitationMode
-from onyx.chat.prompt_utils import with_language_section
+from onyx.chat.prompt_utils import prepare_prompt, with_language_section
 from onyx.configs.chat_configs import DR_REPORT_LLM_TIMEOUT_S
-from onyx.context.messages import PromptMetadata
-from onyx.context.prompt import prepare_prompt
 from onyx.context.search.models import SearchDocsResponse
 from onyx.deep_research.models import (
+    ResearchConfiguration,
     ResearchMessageMetadata,
     ResearchPhase,
 )
@@ -75,11 +75,6 @@ from onyx.tracing.flows import LLMFlow
 
 MAX_INTERMEDIATE_REPORT_LENGTH_TOKENS = 10000
 RESEARCH_STEP_OUTPUT_TOKENS = 1000
-
-
-class ResearchConfiguration(BaseModel):
-    language_section: str
-    reasoning_effort: ReasoningEffort
 
 
 class ResearchFeatureState(BaseModel):

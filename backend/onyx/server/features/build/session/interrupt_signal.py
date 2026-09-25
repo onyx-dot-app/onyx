@@ -6,7 +6,7 @@ request. An interrupt arriving during that window can't abort anything. This
 fence closes that race: the interrupt endpoint sets a flag the streaming flow
 checks at the point the opencode session becomes known and on every event
 thereafter, aborting itself when set. Backed by the tenant-aware cache so it
-works across api_server replicas (mirrors ``onyx.chat.cancellation``).
+works across api_server replicas (mirrors ``onyx.chat.stop_signal_checker``).
 """
 
 from uuid import UUID

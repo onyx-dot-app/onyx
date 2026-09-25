@@ -189,6 +189,18 @@ Application tools use `Tool.for_agent()` when binding to a conversation. Statefu
 return an isolated instance. SearchTool does this and declares sequential execution; its
 internal retrieval work still runs in parallel.
 
+Retrieval tools combine compatible query or URL lists before execution. One worker runs
+that batch; each original call retains its ID and receives the pooled result and progress.
+Other arguments must match. Sequential steps combine only adjacent calls, preserving order
+relative to other tools. Shared retrieval uses the tool's existing combined-result limits.
+
+`tool_runner.py` selects mergeable tools through `MERGEABLE_TOOL_FIELDS` and binds
+`merge_arguments`. The SDK does not inspect search fields.
+Steps with a `before_tool_call` hook and calls waiting for input execute individually.
+Batch results are recorded together before checkpoint capture; resumed runs skip completed calls.
+Prompt assembly replaces exact repeated passages within a step with references to earlier results.
+
+
 The most important rule: a tool that fails should return `ToolResult(is_error=True)` so the
 model can react. A raised exception is treated as a runtime bug and fails the whole run. The
 runtime produces error results on its own for unknown tool names, malformed arguments, and
@@ -390,6 +402,10 @@ restored = codec.decode(serialized, expected_binding=binding)
 The storage adapter uses `save` and `expected_revision` to save matching state before ownership is released.
 If saving fails, the local execution remains owned and can accept input or retry the save.
 Features with private state supply `FeatureRestoration` from `runtime.py` for typed state capture and restoration.
+This state lets a suspended run continue with its accumulated feature data.
+
+`spawn_agent(restoration_config=...)` accepts application-owned settings for rebuilding a saved child
+for another run. Chat stores `ResearchConfiguration` directly; the SDK passes these settings to the application.
 Register executable tools on `Agent.tools`; the runtime restores the saved step's selection.
 Onyx tools receive application context when invoked. Chat and research derive it from feature state,
 which changes after the tool phase.

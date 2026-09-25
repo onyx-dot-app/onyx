@@ -17,7 +17,7 @@ class TestChatFileConversion:
     def test_convert_loaded_files_to_chat_files(self) -> None:
         """Test conversion of ChatLoadedFile to ChatFile."""
         from onyx.chat.files import _convert_loaded_files_to_chat_files
-        from onyx.context.messages import ChatLoadedFile
+        from onyx.chat.llm_step import ChatLoadedFile
         from onyx.file_store.models import ChatFileType
 
         # Create sample ChatLoadedFile objects
@@ -59,7 +59,7 @@ class TestChatFileConversion:
         result and reacts), so passing zero-byte files through is intentional.
         """
         from onyx.chat.files import _convert_loaded_files_to_chat_files
-        from onyx.context.messages import ChatLoadedFile
+        from onyx.chat.llm_step import ChatLoadedFile
         from onyx.file_store.models import ChatFileType
 
         loaded_files = [
@@ -93,7 +93,7 @@ class TestChatFileConversion:
     def test_convert_files_with_missing_filename_uses_fallback(self) -> None:
         """Test that files without filename use file_id as fallback."""
         from onyx.chat.files import _convert_loaded_files_to_chat_files
-        from onyx.context.messages import ChatLoadedFile
+        from onyx.chat.llm_step import ChatLoadedFile
         from onyx.file_store.models import ChatFileType
 
         loaded_files = [

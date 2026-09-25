@@ -20,7 +20,6 @@ from onyx.agents.runtime import (
 )
 from onyx.agents.tools import AgentTool, ChildRunWait, ToolInvocation
 from onyx.agents.transcript import (
-    AgentRestorationConfig,
     CompactionCheckpoint,
     RunFailureKind,
 )
@@ -29,18 +28,18 @@ from onyx.chat.citation_utils import (
     collapse_citations,
     extract_citation_order_from_text,
 )
-from onyx.chat.prompt_utils import with_language_section
+from onyx.chat.llm_step import PromptMetadata
+from onyx.chat.prompt_utils import prepare_prompt, with_language_section
 from onyx.configs.chat_configs import (
     DR_REPORT_LLM_TIMEOUT_S,
 )
-from onyx.context.messages import PromptMetadata
-from onyx.context.prompt import prepare_prompt
 from onyx.deep_research.models import (
     ResearchAgentCallResult,
+    ResearchConfiguration,
     ResearchMessageMetadata,
     ResearchPhase,
 )
-from onyx.deep_research.research_agent import ResearchAgent, ResearchConfiguration
+from onyx.deep_research.research_agent import ResearchAgent
 from onyx.deep_research.tool_definitions import (
     GENERATE_REPORT_TOOL_NAME,
     RESEARCH_AGENT_TOOL_NAME,
@@ -385,14 +384,11 @@ class DeepResearchAgent(FeatureRestoration):
             description=task.task,
             max_steps=MAX_RESEARCH_CYCLES + 1,
             messages=[UserMessage(content=task.task)],
-            restoration_config=AgentRestorationConfig(
-                feature="research",
-                settings=ResearchConfiguration(
-                    language_section=self.language_section,
-                    reasoning_effort=self.reasoning_effort
-                    if self.reasoning_effort != ReasoningEffort.AUTO
-                    else ReasoningEffort.LOW,
-                ).model_dump(mode="json"),
+            restoration_config=ResearchConfiguration(
+                language_section=self.language_section,
+                reasoning_effort=self.reasoning_effort
+                if self.reasoning_effort != ReasoningEffort.AUTO
+                else ReasoningEffort.LOW,
             ),
         )
         return ChildRunWait(run_ids=[submission.run_id])

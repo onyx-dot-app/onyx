@@ -57,7 +57,7 @@ from onyx.agents.items import (
     ResponseReasoning,
     ResponseText,
 )
-from onyx.agents.transcript import AgentRestorationConfig, RunFailure, RunStatus
+from onyx.agents.transcript import RunFailure, RunStatus
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import (
     ANONYMOUS_USER_UUID,
@@ -132,6 +132,7 @@ from onyx.db.enums import (
 )
 from onyx.db.index_attempt_metrics_models import IndexAttemptStage
 from onyx.db.pydantic_type import PydanticListType, PydanticType
+from onyx.deep_research.models import ResearchConfiguration
 from onyx.external_apps.url_glob import UrlGlob
 from onyx.file_store.models import FileDescriptor
 from onyx.kg.models import KGEntityTypeAttributes, KGStage
@@ -3209,8 +3210,8 @@ class ChatSession(Base):
         ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True, index=True
     )
     agent_name: Mapped[str | None] = mapped_column(String, nullable=True)
-    restoration_config: Mapped[AgentRestorationConfig | None] = mapped_column(
-        PydanticType(AgentRestorationConfig), nullable=True
+    restoration_config: Mapped[ResearchConfiguration | None] = mapped_column(
+        PydanticType(ResearchConfiguration), nullable=True
     )
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="CASCADE"), nullable=True
