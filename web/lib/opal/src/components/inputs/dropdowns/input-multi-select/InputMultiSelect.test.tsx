@@ -72,6 +72,36 @@ describe("InputMultiSelect", () => {
       await user.keyboard("{Backspace}");
       expect(handleRemove).toHaveBeenCalledWith("banana");
     });
+
+    test("the arrows walk the chips and Tab leaves the field", async () => {
+      const user = setupUser();
+      render(
+        <>
+          <InputMultiSelect
+            tags={[
+              { id: "apple", label: "Apple" },
+              { id: "banana", label: "Banana" },
+            ]}
+            options={mockOptions}
+            placeholder="Pick"
+            onSelectOption={jest.fn()}
+            onRemoveTag={jest.fn()}
+          />
+          <button type="button">After</button>
+        </>
+      );
+      const field = screen.getByRole("combobox", { name: "Pick" });
+      field.focus();
+      await user.keyboard("{ArrowLeft}");
+      expect(screen.getByRole("button", { name: /Banana/ })).toHaveFocus();
+      await user.keyboard("{ArrowLeft}");
+      expect(screen.getByRole("button", { name: /Apple/ })).toHaveFocus();
+      await user.keyboard("{ArrowRight}{ArrowRight}");
+      expect(field).toHaveFocus();
+      // Chips are not Tab stops.
+      await user.keyboard("{Tab}");
+      expect(screen.getByRole("button", { name: "After" })).toHaveFocus();
+    });
   });
 
   describe("Rendering and picking", () => {

@@ -200,10 +200,16 @@ function TagField({
     removeButtons().at(-1)?.focus();
   }
 
-  // The button trigger has no text: Backspace arms the last chip directly.
+  // The button trigger has no text: Backspace or ArrowLeft arms the last
+  // chip directly.
   function handleTriggerKeyDown(event: React.KeyboardEvent<HTMLElement>) {
     onInputKeyDown?.(event);
     if (event.defaultPrevented) return;
+    if (event.key === "ArrowLeft" && tags.length > 0) {
+      event.preventDefault();
+      removeButtons().at(-1)?.focus();
+      return;
+    }
     armLastTag(event);
   }
 
@@ -224,6 +230,16 @@ function TagField({
       return;
     }
     if (value === "") armLastTag(event);
+    // ArrowLeft with the caret at the start walks back onto the chips.
+    if (
+      event.key === "ArrowLeft" &&
+      tags.length > 0 &&
+      event.currentTarget.selectionStart === 0 &&
+      event.currentTarget.selectionEnd === 0
+    ) {
+      event.preventDefault();
+      removeButtons().at(-1)?.focus();
+    }
   }
 
   // Backspace/Delete on an armed remove button deletes its tag. Enter and
@@ -232,11 +248,26 @@ function TagField({
   // so holding Backspace clears chips one by one; with none left, focus
   // returns to the field.
   function handleRootKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
-    if (event.key !== "Backspace" && event.key !== "Delete") return;
     const target = event.target as HTMLElement;
     if (!target.classList.contains(TAG_REMOVE_CLASS)) return;
+    const buttons = removeButtons();
+    const index = buttons.indexOf(target as HTMLButtonElement);
+    // The arrows walk the chips; Right off the last one returns to the
+    // field. Tab is free to leave the field, since chips are not stops.
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      buttons[index - 1]?.focus();
+      return;
+    }
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      const next = buttons[index + 1];
+      if (next) next.focus();
+      else focusField();
+      return;
+    }
+    if (event.key !== "Backspace" && event.key !== "Delete") return;
     event.preventDefault();
-    const index = removeButtons().indexOf(target as HTMLButtonElement);
     target.click();
     requestAnimationFrame(() => {
       const previous = index > 0 ? removeButtons()[index - 1] : undefined;
@@ -278,6 +309,7 @@ function TagField({
             icon={tag.icon}
             error={tag.error}
             disabled={disabled}
+            removeInTabOrder={false}
             onRemove={() => {
               onRemoveTag(tag.id);
               focusField();

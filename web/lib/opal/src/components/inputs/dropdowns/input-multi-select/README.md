@@ -11,9 +11,11 @@ type-in sibling is [InputMultiComboBox](../input-multi-combo-box/README.md).
 A chosen option becomes a tag whose `id` is the option's `value` (via
 `onSelectOption`); choosing it again, in the list or on the chip, removes it
 through `onRemoveTag`. A chip shows its option's `icon`, when it has one. A
-tag outside the set flags the chrome's error variant. Backspace on the
-focused field arms the last chip; Backspace again removes it and arms the one
-before, so repeated presses clear chips one by one. `search` and
+tag outside the set flags the chrome's error variant. Backspace or ArrowLeft
+on the focused field arms the last chip; ArrowLeft and ArrowRight walk the
+chips and ArrowRight off the last returns to the field; Backspace on an armed
+chip removes it and arms the one before, so repeated presses clear chips one
+by one. Chips are not Tab stops, so Tab leaves the field. `search` and
 foldable dividers work as on [InputSingleSelect](../input-single-select/README.md#search).
 
 ```tsx
