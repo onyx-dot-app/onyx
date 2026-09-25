@@ -17,11 +17,10 @@ from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.reset import reset_all
 from tests.integration.common_utils.test_models import DATestCCPair, DATestUser
 from tests.utils.onedrive_fixture import (
-    FIXTURE_EXCLUDED_PATHS,
     FixtureState,
     OneDriveFixtureReader,
     build_fixture_reader,
-    build_integration_fixture_config,
+    load_fixture_config,
 )
 from tests.utils.pytest_secrets import (
     pytest_collection_modifyitems as pytest_collection_modifyitems,
@@ -162,7 +161,7 @@ def _integration_environment(
                     state.owner.user_principal_name,
                     state.second_owner.user_principal_name,
                 ],
-                "excluded_paths": FIXTURE_EXCLUDED_PATHS,
+                "excluded_paths": state.excluded_paths,
                 "treat_organization_link_as_public": True,
             },
         )
@@ -175,10 +174,9 @@ def _integration_environment(
             name="OneDrive personal site overlap",
             credential_json=_sharepoint_credentials(test_secrets),
             connector_specific_config={
-                "sites": [state.site.web_url],
+                "sites": [state.root_item.web_url],
                 "include_site_pages": False,
                 "include_site_documents": True,
-                "excluded_paths": FIXTURE_EXCLUDED_PATHS,
                 "treat_sharing_link_as_public": True,
             },
         )
@@ -207,8 +205,6 @@ def _integration_environment(
 def onedrive_integration_environment(
     test_secrets: dict[TestSecret, str],
 ) -> Generator[OneDriveIntegrationEnvironment, None, None]:
-    fixture_reader: OneDriveFixtureReader = build_fixture_reader(
-        build_integration_fixture_config()
-    )
+    fixture_reader: OneDriveFixtureReader = build_fixture_reader(load_fixture_config())
     state = fixture_reader.load_state()
     yield from _integration_environment(test_secrets, state)

@@ -5,6 +5,7 @@ from collections.abc import Generator
 
 import pytest
 
+import onyx.connectors.onedrive.connector as onedrive_connector
 from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
@@ -24,15 +25,14 @@ from tests.daily.connectors.utils import (
 )
 from tests.utils.onedrive_fixture import (
     ANONYMOUS_LINK_SKIP_REASON,
-    DAILY_FIXTURE_ROOT_NAME,
-    FIXTURE_EXCLUDED_PATHS,
+    FIXTURE_ROOT_NAME,
     AnonymousLinkOutcome,
     FilePath,
     FixtureState,
     FolderPath,
     OneDriveFixtureReader,
-    build_daily_fixture_config,
     build_fixture_reader,
+    load_fixture_config,
 )
 from tests.utils.pytest_secrets import RedactedDict
 from tests.utils.secret_names import TestSecret
@@ -63,7 +63,21 @@ LIVE_PAGE_SIZE = 10
 
 @pytest.fixture(scope="module", autouse=True)
 def sql_engine() -> Generator[None, None, None]:
-    with SqlEngine.scoped_engine(pool_size=2, max_overflow=1):
+    try:
+        SqlEngine.get_engine()
+    except RuntimeError:
+        with SqlEngine.scoped_engine(pool_size=2, max_overflow=1):
+            yield
+        return
+    yield
+
+
+@pytest.fixture(scope="module", autouse=True)
+def live_page_size() -> Generator[None, None, None]:
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(
+            onedrive_connector, "DEFAULT_DRIVE_DELTA_PAGE_SIZE", LIVE_PAGE_SIZE
+        )
         yield
 
 
@@ -92,7 +106,7 @@ def onedrive_credentials(
 
 @pytest.fixture(scope="module")
 def fixture_reader() -> OneDriveFixtureReader:
-    return build_fixture_reader(build_daily_fixture_config())
+    return build_fixture_reader(load_fixture_config())
 
 
 @pytest.fixture(scope="module")
@@ -109,9 +123,8 @@ def _connector(
             state.owner.user_principal_name,
             state.second_owner.user_principal_name,
         ],
-        excluded_paths=FIXTURE_EXCLUDED_PATHS,
+        excluded_paths=state.excluded_paths,
         treat_organization_link_as_public=True,
-        batch_size=LIVE_PAGE_SIZE,
     )
     connector.load_credentials(credentials)
     return connector
@@ -131,13 +144,6 @@ def _load_corpus(
     )
 
 
-def _corpus_documents(output: ConnectorOutput, state: FixtureState) -> list[Document]:
-    fixture_ids = {item.id for item in state.files.values()} | {
-        state.second_drive_duplicate.id
-    }
-    return [document for document in output.documents if document.id in fixture_ids]
-
-
 def _metadata_path(document: Document) -> str:
     path = document.metadata.get("path")
     assert isinstance(path, str)
@@ -148,10 +154,8 @@ def _document_text(document: Document) -> str:
     return "\n".join(to_text_sections(to_sections([document])))
 
 
-def _documents_by_id(
-    output: ConnectorOutput, state: FixtureState
-) -> dict[str, Document]:
-    return {document.id: document for document in _corpus_documents(output, state)}
+def _documents_by_id(output: ConnectorOutput) -> dict[str, Document]:
+    return {document.id: document for document in output.documents}
 
 
 def _assert_access(
@@ -168,6 +172,26 @@ def _assert_access(
     )
 
 
+def _assert_group_access(
+    document: Document,
+    *,
+    owner_email: str,
+    group_id: str,
+    mail_nickname: str,
+) -> None:
+    access = document.external_access
+    assert access is not None
+    assert access.external_user_group_ids == {
+        build_ext_group_name_for_onyx(group_id, DocumentSource.ONEDRIVE)
+    }
+    assert access.is_public is False
+    owner_email = owner_email.lower()
+    assert owner_email in access.external_user_emails
+    group_emails = access.external_user_emails - {owner_email}
+    assert len(group_emails) == 1
+    assert {email.partition("@")[0] for email in group_emails} == {mail_nickname}
+
+
 def _node_by_id(nodes: list[HierarchyNode], raw_node_id: str) -> HierarchyNode:
     matches = [node for node in nodes if node.raw_node_id == raw_node_id]
     assert matches
@@ -179,8 +203,8 @@ def test_onedrive_fixed_corpus_indexing_identity_permissions_and_hierarchy(
     onedrive_credentials: dict[str, str],
 ) -> None:
     output = _load_corpus(baseline_state, onedrive_credentials)
-    documents = _corpus_documents(output, baseline_state)
-    documents_by_id = _documents_by_id(output, baseline_state)
+    documents = output.documents
+    documents_by_id = _documents_by_id(output)
     owner_email = baseline_state.owner.user_principal_name
     primary_email = baseline_state.primary_user.user_principal_name
     alternate_email = baseline_state.alternate_user.user_principal_name
@@ -189,9 +213,7 @@ def test_onedrive_fixed_corpus_indexing_identity_permissions_and_hierarchy(
         baseline_state.files[path].id for path in EXPECTED_BASELINE_FILES
     } | {baseline_state.second_drive_duplicate.id}
     assert {document.id for document in documents} == expected_ids
-    assert all(
-        DAILY_FIXTURE_ROOT_NAME in _metadata_path(document) for document in documents
-    )
+    assert all(FIXTURE_ROOT_NAME in _metadata_path(document) for document in documents)
     assert all(
         "Onyx OneDrive fixture:" in _document_text(document) for document in documents
     )
@@ -242,23 +264,17 @@ def test_onedrive_fixed_corpus_indexing_identity_permissions_and_hierarchy(
             documents_by_id[baseline_state.files[path].id],
             emails={owner_email, alternate_email},
         )
-    _assert_access(
+    _assert_group_access(
         documents_by_id[baseline_state.files[FilePath.VISIBLE_GROUP].id],
-        emails={owner_email},
-        group_ids={
-            build_ext_group_name_for_onyx(
-                baseline_state.visible_group.id, DocumentSource.ONEDRIVE
-            )
-        },
+        owner_email=owner_email,
+        group_id=baseline_state.visible_group.id,
+        mail_nickname=baseline_state.visible_group.mail_nickname,
     )
-    _assert_access(
+    _assert_group_access(
         documents_by_id[baseline_state.files[FilePath.HIDDEN_GROUP].id],
-        emails={owner_email},
-        group_ids={
-            build_ext_group_name_for_onyx(
-                baseline_state.hidden_group.id, DocumentSource.ONEDRIVE
-            )
-        },
+        owner_email=owner_email,
+        group_id=baseline_state.hidden_group.id,
+        mail_nickname=baseline_state.hidden_group.mail_nickname,
     )
     public_paths = [FilePath.ORGANIZATION_LINK]
     if baseline_state.anonymous_link_outcome is AnonymousLinkOutcome.CREATED:
@@ -304,9 +320,9 @@ def test_onedrive_anonymous_link_when_tenant_policy_allows_it(
     ):
         pytest.skip(ANONYMOUS_LINK_SKIP_REASON)
 
-    document = _documents_by_id(
-        _load_corpus(baseline_state, onedrive_credentials), baseline_state
-    )[baseline_state.files[FilePath.ANONYMOUS_LINK].id]
+    document = _documents_by_id(_load_corpus(baseline_state, onedrive_credentials))[
+        baseline_state.files[FilePath.ANONYMOUS_LINK].id
+    ]
     _assert_access(
         document,
         emails={baseline_state.owner.user_principal_name},

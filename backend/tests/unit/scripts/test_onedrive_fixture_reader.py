@@ -2,9 +2,11 @@
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from tests.utils.onedrive_fixture import (
-    DAILY_FIXTURE_ROOT_NAME,
-    INTEGRATION_FIXTURE_ROOT_NAME,
+    FIXTURE_EXCLUDED_PATHS,
+    FIXTURE_ROOT_NAME,
     FixtureGraphReader,
     GraphDrive,
     GraphItem,
@@ -12,30 +14,22 @@ from tests.utils.onedrive_fixture import (
     GraphUser,
     OneDriveFixtureReader,
     SharePointIds,
-    build_daily_fixture_config,
-    build_integration_fixture_config,
+    load_fixture_config,
 )
 
 
 def _reader() -> tuple[OneDriveFixtureReader, MagicMock]:
     graph = MagicMock(spec=FixtureGraphReader)
-    reader = OneDriveFixtureReader(build_daily_fixture_config(), graph)
+    reader = OneDriveFixtureReader(load_fixture_config(), graph)
     return reader, graph
 
 
-def test_read_only_suite_configs_use_distinct_corpora() -> None:
-    daily = build_daily_fixture_config().corpus
-    integration = build_integration_fixture_config().corpus
-
-    assert daily.root_name == DAILY_FIXTURE_ROOT_NAME
-    assert integration.root_name == INTEGRATION_FIXTURE_ROOT_NAME
-    assert daily.root_name != integration.root_name
-    assert daily.visible_group.mail_nickname != integration.visible_group.mail_nickname
-    assert daily.hidden_group.mail_nickname != integration.hidden_group.mail_nickname
+def test_read_only_config_targets_existing_corpus() -> None:
+    assert load_fixture_config().corpus.root_name == FIXTURE_ROOT_NAME
 
 
 def test_fixture_configs_are_immutable() -> None:
-    config = build_daily_fixture_config()
+    config = load_fixture_config()
 
     assert config.model_config.get("frozen") is True
     assert config.corpus.model_config.get("frozen") is True
@@ -46,6 +40,19 @@ def test_fixture_graph_reader_exposes_no_write_operations() -> None:
     assert not hasattr(FixtureGraphReader, "put")
     assert not hasattr(FixtureGraphReader, "patch")
     assert not hasattr(FixtureGraphReader, "delete")
+
+
+def test_fixture_graph_reader_rejects_repeated_collection_cursor() -> None:
+    graph = FixtureGraphReader(MagicMock(), "https://graph.example.test")
+    graph.get_json = MagicMock(
+        return_value={
+            "value": [],
+            "@odata.nextLink": "https://graph.example.test/v1.0/users",
+        }
+    )
+
+    with pytest.raises(RuntimeError, match="cursor did not advance"):
+        graph.get_collection("users")
 
 
 def test_load_state_reads_existing_fixture() -> None:
@@ -85,13 +92,34 @@ def test_load_state_reads_existing_fixture() -> None:
     )
     corpus = reader.config.corpus
     graph.get_collection.side_effect = [
+        [
+            {
+                "id": "fixture-root",
+                "name": corpus.root_name,
+                "webUrl": "https://example.test/fixture-root",
+                "folder": {},
+            },
+            {
+                "id": "other-folder",
+                "name": "Other folder",
+                "webUrl": "https://example.test/other-folder",
+                "folder": {},
+            },
+        ],
+        [
+            {
+                "id": "other-file",
+                "name": "other.docx",
+                "webUrl": "https://example.test/other.docx",
+                "file": {},
+            }
+        ],
         [],
         [
             {
                 "id": "visible",
                 "displayName": corpus.visible_group.display_name,
                 "mailNickname": corpus.visible_group.mail_nickname,
-                "description": corpus.ownership_description,
                 "visibility": corpus.visible_group.visibility.value,
             }
         ],
@@ -100,7 +128,6 @@ def test_load_state_reads_existing_fixture() -> None:
                 "id": "hidden",
                 "displayName": corpus.hidden_group.display_name,
                 "mailNickname": corpus.hidden_group.mail_nickname,
-                "description": corpus.ownership_description,
                 "visibility": corpus.hidden_group.visibility.value,
             }
         ],
@@ -110,3 +137,6 @@ def test_load_state_reads_existing_fixture() -> None:
 
     assert state.drive.id == "drive"
     assert state.second_drive.id == "second-drive"
+    assert state.excluded_paths == sorted(
+        [*FIXTURE_EXCLUDED_PATHS, "Other folder", "Other folder/*", "other.docx"]
+    )

@@ -3,6 +3,7 @@
 import os
 from collections.abc import Callable
 from enum import Enum
+from glob import escape as escape_glob
 from typing import Any, TypeVar
 from urllib.parse import quote
 
@@ -22,11 +23,6 @@ from onyx.connectors.microsoft_utils.graph_env import (
 from tests.utils.aws_secrets import get_secrets
 from tests.utils.secret_names import TestSecret
 
-GROUP_OWNERSHIP_MARKER_PREFIX = "onyx-fixture-owner:"
-DAILY_FIXTURE_OWNER = "onedrive-daily-v1"
-INTEGRATION_FIXTURE_OWNER = "onedrive-integration-v1"
-DAILY_FIXTURE_ROOT_NAME = "Onyx OneDrive Daily Tests"
-INTEGRATION_FIXTURE_ROOT_NAME = "Onyx OneDrive Integration Tests"
 VISIBLE_GROUP_NAME = "Onyx OneDrive Visible Test Group"
 VISIBLE_GROUP_ALIAS = "onyx-onedrive-visible-test"
 HIDDEN_GROUP_NAME = "Onyx OneDrive Hidden Test Group"
@@ -35,11 +31,11 @@ DEFAULT_OWNER_UPN = "test@danswerai.onmicrosoft.com"
 DEFAULT_PRIMARY_UPN = "subash@onyx.app"
 DEFAULT_SECOND_OWNER_UPN = DEFAULT_PRIMARY_UPN
 DEFAULT_ALTERNATE_UPN = "raunak@onyx.app"
-DEFAULT_FIXTURE_OWNER = "onedrive-spike-v1"
 FIXTURE_ROOT_NAME = "Onyx OneDrive Connector Tests"
 IDENTITY_FOLDER_NAME = "90-identity"
 IDENTITY_FILE_NAME = "cross-drive-duplicate.docx"
 GRAPH_API_VERSION = "v1.0"
+GRAPH_COLLECTION_MAX_PAGES = 1_000
 
 OWNER_UPN_ENV = "ONEDRIVE_TEST_OWNER_UPN"
 SECOND_OWNER_UPN_ENV = "ONEDRIVE_TEST_SECOND_OWNER_UPN"
@@ -144,6 +140,7 @@ class GraphItem(GraphIdentity):
     name: str
     web_url: str = Field(alias="webUrl")
     sharepoint_ids: SharePointIds | None = Field(default=None, alias="sharepointIds")
+    folder: dict[str, Any] | None = None
 
 
 class GraphSite(GraphIdentity):
@@ -153,7 +150,6 @@ class GraphSite(GraphIdentity):
 class GraphGroup(GraphIdentity):
     display_name: str = Field(alias="displayName")
     mail_nickname: str = Field(alias="mailNickname")
-    description: str | None = None
     visibility: str | None = None
 
 
@@ -182,51 +178,22 @@ class FixtureCorpusConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     root_name: str
-    owner_marker: str
     visible_group: FixtureGroupConfig
     hidden_group: FixtureGroupConfig
 
-    @property
-    def ownership_description(self) -> str:
-        return f"{GROUP_OWNERSHIP_MARKER_PREFIX}{self.owner_marker}"
 
-
-def _fixture_corpus_config(
-    *,
-    root_name: str,
-    owner_marker: str,
-    group_name_suffix: str = "",
-) -> FixtureCorpusConfig:
-    alias_suffix = "" if owner_marker == DEFAULT_FIXTURE_OWNER else f"-{owner_marker}"
-    return FixtureCorpusConfig(
-        root_name=root_name,
-        owner_marker=owner_marker,
-        visible_group=FixtureGroupConfig(
-            display_name=f"{VISIBLE_GROUP_NAME}{group_name_suffix}",
-            mail_nickname=f"{VISIBLE_GROUP_ALIAS}{alias_suffix}",
-            visibility=GroupVisibility.PRIVATE,
-        ),
-        hidden_group=FixtureGroupConfig(
-            display_name=f"{HIDDEN_GROUP_NAME}{group_name_suffix}",
-            mail_nickname=f"{HIDDEN_GROUP_ALIAS}{alias_suffix}",
-            visibility=GroupVisibility.HIDDEN_MEMBERSHIP,
-        ),
-    )
-
-
-DEFAULT_CORPUS_CONFIG = _fixture_corpus_config(
+DEFAULT_CORPUS_CONFIG = FixtureCorpusConfig(
     root_name=FIXTURE_ROOT_NAME,
-    owner_marker=DEFAULT_FIXTURE_OWNER,
-)
-DAILY_CORPUS_CONFIG = _fixture_corpus_config(
-    root_name=DAILY_FIXTURE_ROOT_NAME,
-    owner_marker=DAILY_FIXTURE_OWNER,
-    group_name_suffix=" (Daily)",
-)
-INTEGRATION_CORPUS_CONFIG = _fixture_corpus_config(
-    root_name=INTEGRATION_FIXTURE_ROOT_NAME,
-    owner_marker=INTEGRATION_FIXTURE_OWNER,
-    group_name_suffix=" (Integration)",
+    visible_group=FixtureGroupConfig(
+        display_name=VISIBLE_GROUP_NAME,
+        mail_nickname=VISIBLE_GROUP_ALIAS,
+        visibility=GroupVisibility.PRIVATE,
+    ),
+    hidden_group=FixtureGroupConfig(
+        display_name=HIDDEN_GROUP_NAME,
+        mail_nickname=HIDDEN_GROUP_ALIAS,
+        visibility=GroupVisibility.HIDDEN_MEMBERSHIP,
+    ),
 )
 
 
@@ -264,6 +231,7 @@ class FixtureState(BaseModel):
     hidden_group: GraphGroup
     second_drive_duplicate: GraphItem
     anonymous_link_outcome: AnonymousLinkOutcome
+    excluded_paths: list[str]
 
 
 GraphModel = TypeVar("GraphModel", bound=BaseModel)
@@ -298,12 +266,19 @@ class FixtureGraphReader(GraphApiClient):
     ) -> list[dict[str, Any]]:
         values: list[dict[str, Any]] = []
         page_url: str | None = self._url(path)
-        while page_url:
+        for _ in range(GRAPH_COLLECTION_MAX_PAGES):
+            if page_url is None:
+                return values
+            request_url = page_url
             page = GraphCollection.model_validate(self.get_json(page_url, params))
             values.extend(page.value)
             page_url = page.next_link
+            if page_url is None:
+                return values
+            if page_url == request_url:
+                raise RuntimeError("Graph collection cursor did not advance")
             params = None
-        return values
+        raise RuntimeError("Graph collection exceeded the page limit")
 
     def _url(self, path: str) -> str:
         return (
@@ -340,6 +315,7 @@ class OneDriveFixtureReader:
         second_drive_duplicate = self._require_item_by_path(
             second_drive.id, FilePath.IDENTITY
         )
+        excluded_paths = self._excluded_paths(drive.id, second_drive.id)
         anonymous_outcome = self._anonymous_link_outcome(
             drive.id, files[FilePath.ANONYMOUS_LINK].id
         )
@@ -358,7 +334,25 @@ class OneDriveFixtureReader:
             hidden_group=self._load_group(self.config.corpus.hidden_group),
             second_drive_duplicate=second_drive_duplicate,
             anonymous_link_outcome=anonymous_outcome,
+            excluded_paths=excluded_paths,
         )
+
+    def _excluded_paths(self, *drive_ids: str) -> list[str]:
+        excluded_paths = set(FIXTURE_EXCLUDED_PATHS)
+        for drive_id in dict.fromkeys(drive_ids):
+            children = self.graph.get_collection(
+                f"drives/{drive_id}/root/children",
+                {"$select": "id,name,webUrl,folder"},
+            )
+            for value in children:
+                item = GraphItem.model_validate(value)
+                if item.name == self.config.corpus.root_name:
+                    continue
+                escaped_name = escape_glob(item.name)
+                excluded_paths.add(escaped_name)
+                if item.folder is not None:
+                    excluded_paths.add(f"{escaped_name}/*")
+        return sorted(excluded_paths)
 
     def _get_user(self, upn: str) -> GraphUser:
         return self.graph.get_model(
@@ -398,7 +392,7 @@ class OneDriveFixtureReader:
             "groups",
             {
                 "$filter": f"mailNickname eq '{escaped_alias}'",
-                "$select": "id,displayName,mailNickname,description,visibility",
+                "$select": "id,displayName,mailNickname,visibility",
             },
         )
         if len(matches) != 1:
@@ -406,13 +400,12 @@ class OneDriveFixtureReader:
                 f"Expected one fixture group with alias {group_config.mail_nickname}"
             )
         group = GraphGroup.model_validate(matches[0])
-        if group.description != self.config.corpus.ownership_description:
+        if (
+            group.display_name != group_config.display_name
+            or group.visibility != group_config.visibility.value
+        ):
             raise RuntimeError(
                 f"Unexpected fixture group: {group_config.mail_nickname}"
-            )
-        if group.visibility != group_config.visibility.value:
-            raise RuntimeError(
-                f"Unexpected fixture group visibility: {group_config.mail_nickname}"
             )
         return group
 
@@ -461,14 +454,6 @@ def load_fixture_config(
         alternate_upn=os.environ.get(ALTERNATE_UPN_ENV, DEFAULT_ALTERNATE_UPN),
         corpus=corpus,
     )
-
-
-def build_daily_fixture_config() -> FixtureConfig:
-    return load_fixture_config(DAILY_CORPUS_CONFIG)
-
-
-def build_integration_fixture_config() -> FixtureConfig:
-    return load_fixture_config(INTEGRATION_CORPUS_CONFIG)
 
 
 def load_certificate_credentials() -> CertificateAppCredentials:
