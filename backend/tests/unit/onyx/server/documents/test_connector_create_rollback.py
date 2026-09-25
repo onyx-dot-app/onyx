@@ -45,7 +45,7 @@ def stubbed_creation(monkeypatch: pytest.MonkeyPatch) -> dict[str, MagicMock]:
         "validate_ccpair_for_user": MagicMock(
             side_effect=ConnectorValidationError("no access to graph api")
         ),
-        "delete_credential": MagicMock(),
+        "discard_credential_if_unpaired": MagicMock(),
         "discard_connector_if_unpaired": MagicMock(return_value=True),
     }
     for name, stub in stubs.items():
@@ -68,7 +68,9 @@ def test_failed_validation_removes_both_rows(
     stubbed_creation["discard_connector_if_unpaired"].assert_called_once_with(
         db_session, 7
     )
-    stubbed_creation["delete_credential"].assert_called_once_with(9, db_session)
+    stubbed_creation["discard_credential_if_unpaired"].assert_called_once_with(
+        db_session, 9
+    )
 
 
 def test_duplicate_name_removes_nothing(
@@ -85,7 +87,7 @@ def test_duplicate_name_removes_nothing(
 
     assert raised.value.error_code == OnyxErrorCode.INVALID_INPUT
     stubbed_creation["discard_connector_if_unpaired"].assert_not_called()
-    stubbed_creation["delete_credential"].assert_not_called()
+    stubbed_creation["discard_credential_if_unpaired"].assert_not_called()
 
 
 def test_connector_paired_meanwhile_still_drops_the_mock_credential(
@@ -99,7 +101,9 @@ def test_connector_paired_meanwhile_still_drops_the_mock_credential(
             connector_data=request_data, user=MagicMock(), db_session=db_session
         )
 
-    stubbed_creation["delete_credential"].assert_called_once_with(9, db_session)
+    stubbed_creation["discard_credential_if_unpaired"].assert_called_once_with(
+        db_session, 9
+    )
 
 
 def test_transient_validation_failure_also_frees_the_name(

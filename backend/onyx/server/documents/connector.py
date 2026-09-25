@@ -83,7 +83,7 @@ from onyx.db.connector_credential_pair import (
 )
 from onyx.db.credentials import (
     create_credential,
-    delete_credential,
+    discard_credential_if_unpaired,
     fetch_credential_by_id_for_user,
 )
 from onyx.db.deletion_attempt import check_deletion_attempt_is_allowed
@@ -1683,13 +1683,9 @@ def _discard_unpaired_creation(
         # then the delete below refuses and is logged.
         discard_connector_if_unpaired(db_session, connector_id)
     if credential_id is not None:
-        try:
-            delete_credential(credential_id, db_session)
-        except Exception:
-            # An empty mock credential nobody can see. The name is what matters,
-            # and the caller must get the validation error, not this one.
-            logger.warning("Left mock credential %s behind", credential_id)
-            db_session.rollback()
+        # An empty mock credential nobody can see. The name is what matters, so a
+        # refused or failed delete is only logged.
+        discard_credential_if_unpaired(db_session, credential_id)
 
 
 @router.patch("/admin/connector/{connector_id}", tags=PUBLIC_API_TAGS)

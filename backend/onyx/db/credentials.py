@@ -1,6 +1,6 @@
 from typing import Any
 
-from sqlalchemy import Select, select, update
+from sqlalchemy import Select, exists, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.expression import and_, or_
 
@@ -383,6 +383,41 @@ def delete_credential_for_user(
         )
 
     _delete_credential_internal(credential, credential_id, db_session, force)
+
+
+def discard_credential_if_unpaired(db_session: Session, credential_id: int) -> bool:
+    """The cleanup behind a failed creation validation: its own transaction, a
+    row lock so a pair landing concurrently is never cascaded, and it never
+    raises, because the caller's validation error is what the user needs."""
+    try:
+        with db_session.begin():
+            credential = db_session.execute(
+                select(Credential)
+                .where(Credential.id == credential_id)
+                .with_for_update()
+            ).scalar_one_or_none()
+            if credential is None:
+                return True
+            paired = db_session.scalar(
+                select(
+                    exists().where(
+                        ConnectorCredentialPair.credential_id == credential_id
+                    )
+                )
+            )
+            if paired:
+                return False
+            _cleanup_credential__user_group_relationships__no_commit(
+                db_session, credential_id
+            )
+            db_session.delete(credential)
+            return True
+    except Exception:
+        logger.exception(
+            "Left credential %s behind after a failed validation", credential_id
+        )
+        db_session.rollback()
+        return False
 
 
 def delete_credential(
