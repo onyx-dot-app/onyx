@@ -127,12 +127,13 @@ interface UseFoldedGroupsProps {
 /**
  * Fold state for foldable groups, per open session. A group starts closed
  * unless it holds the selection, and starts open while a search is on;
- * either way a click on its title toggles it. Those defaults are fixed
- * when the session starts (the list opens, or a search starts or stops);
- * after that only a title click changes a group, so a pick or a
- * deselection while the list is open never folds anything. Returns the
- * groups with folded rows withheld, so rendering and the keyboard order
- * agree.
+ * either way a click on its title toggles it. The selection those
+ * defaults read is the one from when the session started (the list
+ * opened, or a search started or stopped); after that only a title click
+ * changes a group, so a pick or a deselection while the list is open never
+ * folds anything, and a group that arrives mid-session starts as it would
+ * have at the start. Returns the groups with folded rows withheld, so
+ * rendering and the keyboard order agree.
  */
 export function useFoldedGroups({
   isOpen,
@@ -140,39 +141,31 @@ export function useFoldedGroups({
   isSelected,
   searching,
 }: UseFoldedGroupsProps) {
-  const [openByTitle, setOpenByTitle] = useState<ReadonlyMap<string, boolean>>(
+  // The selection as the session found it. Held as state, not derived,
+  // so the live selection cannot re-fold groups afterwards.
+  const [sessionIsSelected, setSessionIsSelected] = useState(() => isSelected);
+  const [toggled, setToggled] = useState<ReadonlyMap<string, boolean>>(
     new Map()
   );
 
-  const defaultOpen = useCallback(
-    (group: OptionGroup) => searching || group.options.some(isSelected),
-    [searching, isSelected]
-  );
-
-  // The session's starting point, read once when it starts; the live
-  // selection must not re-fold groups afterwards, so it is read via a ref.
-  const latest = useRef({ sections, defaultOpen });
+  const latestIsSelected = useRef(isSelected);
   useEffect(() => {
-    latest.current = { sections, defaultOpen };
+    latestIsSelected.current = isSelected;
   });
   useEffect(() => {
     if (!isOpen) return;
-    const snapshot = new Map<string, boolean>();
-    for (const group of latest.current.sections) {
-      if (!group.foldable || group.title === undefined) continue;
-      snapshot.set(group.title, latest.current.defaultOpen(group));
-    }
-    setOpenByTitle(snapshot);
+    setSessionIsSelected(() => latestIsSelected.current);
+    setToggled(new Map());
   }, [isOpen, searching]);
 
   const isGroupOpen = useCallback(
     (group: OptionGroup) => {
       if (!group.foldable || group.title === undefined) return true;
-      // A group the snapshot missed (it appeared mid-session) takes the
-      // default it would have taken at the start.
-      return openByTitle.get(group.title) ?? defaultOpen(group);
+      const choice = toggled.get(group.title);
+      if (choice !== undefined) return choice;
+      return searching || group.options.some(sessionIsSelected);
     },
-    [openByTitle, defaultOpen]
+    [toggled, searching, sessionIsSelected]
   );
 
   const toggleGroup = useCallback(
@@ -180,7 +173,7 @@ export function useFoldedGroups({
       if (group.title === undefined) return;
       const title = group.title;
       const open = isGroupOpen(group);
-      setOpenByTitle((prev) => new Map(prev).set(title, !open));
+      setToggled((prev) => new Map(prev).set(title, !open));
     },
     [isGroupOpen]
   );
