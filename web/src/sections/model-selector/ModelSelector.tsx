@@ -4,17 +4,17 @@ import React, { useState, useCallback, useMemo, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { Popover, OpenButton } from "@opal/components";
 import { getModelIcon } from "@/lib/languageModels";
-import {
-  GLOBAL_DEFAULT_LLM_OPTION,
-  LLMOption,
-  ModelOptionProvider,
-} from "@/lib/languageModels/options";
+import { GLOBAL_DEFAULT_LLM_OPTION } from "@/lib/languageModels/options";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
 import ModelSelectorContent, {
   ReasoningManager,
   TemperatureManager,
   useModelDetailManagers,
 } from "@/sections/model-selector/ModelSelectorContent";
+import type {
+  LLMOption,
+  ModelOptionProvider,
+} from "@/lib/languageModels/types";
 
 export interface ModelSelectorProps {
   /** The currently selected model, identified by model_configuration_id. */

@@ -13,17 +13,14 @@ import {
 import { SvgPlusCircle, SvgX } from "@opal/icons";
 import { cn } from "@opal/utils";
 import { useSettings } from "@/lib/settings/hooks";
-import {
-  LLMOption,
-  buildLlmOptions,
-  llmOptionKey,
-} from "@/lib/languageModels/options";
+import { buildLlmOptions, llmOptionKey } from "@/lib/languageModels/options";
 import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
 import ModelSelectorContent, {
   ReasoningManager,
   TemperatureManager,
   useModelDetailManagers,
 } from "@/sections/model-selector/ModelSelectorContent";
+import type { LLMOption } from "@/lib/languageModels/types";
 
 export const MAX_MODELS = 3;
 

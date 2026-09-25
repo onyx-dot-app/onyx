@@ -41,15 +41,9 @@ import OpenAICompatibleModal from "@/sections/modals/languageModels/OpenAICompat
 import NebiusTokenfactoryModal from "@/sections/modals/languageModels/NebiusTokenfactoryModal";
 import PortkeyModal from "@/sections/modals/languageModels/PortkeyModal";
 import VercelAIGatewayModal from "@/sections/modals/languageModels/VercelAIGatewayModal";
+import type { ProviderEntry } from "@/lib/languageModels/types";
 
 // ─── Text (LLM) providers ────────────────────────────────────────────────────
-
-export interface ProviderEntry {
-  icon: IconFunctionComponent;
-  productName: string;
-  companyName: string;
-  Modal: React.ComponentType<LLMProviderFormProps>;
-}
 
 const PROVIDERS: Record<string, ProviderEntry> = {
   [LLMProviderName.OPENAI]: {

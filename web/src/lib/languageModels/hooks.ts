@@ -15,6 +15,11 @@ import {
   ModelConfiguration,
   WellKnownLLMProviderDescriptor,
 } from "@/lib/languageModels/types";
+import type {
+  CustomProviderOption,
+  DefaultLlmReference,
+  LlmDefaults,
+} from "@/lib/languageModels/types";
 
 // ---------------------------------------------------------------------------
 // Raw API shapes — local to this module, never exposed to consumers.
@@ -270,11 +275,6 @@ export function useWellKnownLLMProvider(providerName: LLMProviderName) {
   };
 }
 
-export interface CustomProviderOption {
-  value: string;
-  label: string;
-}
-
 /**
  * Fetches the list of LiteLLM provider names available for custom provider
  * configuration (i.e. providers that don't have a dedicated well-known modal).
@@ -297,38 +297,6 @@ export function useCustomProviderNames() {
     isLoading,
     error,
   };
-}
-
-export interface DefaultLlmReference {
-  /**
-   * The provider row this default belongs to. `llm_provider.name` carries no
-   * unique constraint and is nullable, so it can neither identify a provider
-   * nor be relied on to exist. Always key off this.
-   */
-  providerId: number;
-  modelName: string;
-}
-
-export interface LlmDefaults {
-  /** Raw provider list, passed through from `useLLMProviders`. */
-  llmProviders: LLMProviderDescriptor[] | undefined;
-  /** True iff any provider exposes at least one visible model. */
-  hasAnyLlm: boolean;
-  /** True iff any provider exposes a visible model with `supports_image_input`. */
-  hasAnyVisionLlm: boolean;
-  /**
-   * The admin-configured default text model as `{ providerId, modelName }`.
-   * The backend stores `default_text` as `{ provider_id, model_name }`; this
-   * hook only confirms the provider is still in the list.
-   */
-  defaultLlm: DefaultLlmReference | null;
-  /**
-   * The admin-configured default *vision* model, in the same shape as
-   * `defaultLlm`. Used by indexing-time captioning and any other vision-only
-   * feature.
-   */
-  defaultVision: DefaultLlmReference | null;
-  isLoading: boolean;
 }
 
 /**

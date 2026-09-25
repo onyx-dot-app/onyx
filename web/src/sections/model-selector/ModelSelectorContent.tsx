@@ -26,8 +26,6 @@ import type { IconFunctionComponent, IconProps } from "@opal/types";
 import { Disabled, Hoverable, Interactive } from "@opal/core";
 import {
   GLOBAL_DEFAULT_LLM_OPTION,
-  LLMOption,
-  ModelOptionProvider,
   buildLlmOptions,
   groupLlmOptions,
   llmOptionKey,
@@ -52,6 +50,10 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/refresh-components/Collapsible";
+import type {
+  LLMOption,
+  ModelOptionProvider,
+} from "@/lib/languageModels/types";
 
 export interface TemperatureManager {
   temperature: number;
