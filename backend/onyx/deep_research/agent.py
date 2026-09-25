@@ -12,8 +12,12 @@ from onyx.agents.models import (
     StepInput,
     StepResult,
 )
-from onyx.agents.restoration import FeatureRestoration
-from onyx.agents.runtime import Agent, RunFailed, result_from_snapshot
+from onyx.agents.runtime import (
+    Agent,
+    FeatureRestoration,
+    RunFailed,
+    result_from_snapshot,
+)
 from onyx.agents.tools import AgentTool, ChildRunWait, ToolInvocation
 from onyx.agents.transcript import (
     AgentRestorationConfig,

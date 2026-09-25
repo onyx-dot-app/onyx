@@ -17,8 +17,7 @@ from onyx.agents.models import (
     StepResult,
     ToolCallContext,
 )
-from onyx.agents.restoration import FeatureRestoration
-from onyx.agents.runtime import Agent, Run, RunFailed, RunReleased
+from onyx.agents.runtime import Agent, FeatureRestoration, Run, RunFailed, RunReleased
 from onyx.agents.tools import (
     AgentTool,
     HumanToolAnswer,

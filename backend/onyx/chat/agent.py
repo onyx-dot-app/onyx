@@ -11,8 +11,7 @@ from onyx.agents.models import (
     StepResult,
     ToolCallContext,
 )
-from onyx.agents.restoration import FeatureRestoration
-from onyx.agents.runtime import Agent
+from onyx.agents.runtime import Agent, FeatureRestoration
 from onyx.agents.transcript import CompactionCheckpoint
 from onyx.chat.artifacts import ChatArtifacts, ChatSearchResult
 from onyx.chat.context import (

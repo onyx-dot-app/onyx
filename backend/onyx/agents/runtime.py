@@ -5,8 +5,10 @@ from collections.abc import Callable, Sequence
 from concurrent.futures import Future
 from contextlib import ExitStack, closing
 from contextvars import copy_context
-from typing import TYPE_CHECKING, Literal, TypedDict
+from typing import TYPE_CHECKING, Literal, Protocol, TypedDict
 from uuid import uuid4
+
+from pydantic import BaseModel
 
 from onyx.agents.compaction import (
     ContextLimitError,
@@ -91,7 +93,6 @@ from onyx.utils.threadpool_concurrency import start_thread_with_context
 
 if TYPE_CHECKING:
     from onyx.agents.coordination import AgentCoordinator, RunCoordination
-    from onyx.agents.restoration import FeatureRestoration
 
 logger = setup_logger()
 
@@ -185,6 +186,14 @@ def _capture_unsettled_child(state: RunState) -> RunState:
             if operation.status == RunStatus.RUNNING:
                 operation.status = RunStatus.ERROR
     return snapshot
+
+
+class FeatureRestoration(Protocol):
+    """Capture and restore feature-owned state at safe execution boundaries."""
+
+    def capture_state(self) -> BaseModel: ...
+
+    def restore_state(self, state: BaseModel) -> None: ...
 
 
 class Agent:
