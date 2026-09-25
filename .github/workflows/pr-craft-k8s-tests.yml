@@ -174,7 +174,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+      - uses: runs-on/action@efac073ea2507ec18797de3a81704201ade11d9d
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
@@ -316,7 +316,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+      - uses: runs-on/action@efac073ea2507ec18797de3a81704201ade11d9d
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
@@ -384,7 +384,7 @@ jobs:
       DISABLE_VECTOR_DB: "false"
 
     steps:
-      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+      - uses: runs-on/action@efac073ea2507ec18797de3a81704201ade11d9d
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
