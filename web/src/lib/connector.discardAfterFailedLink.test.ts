@@ -34,4 +34,11 @@ describe("discardConnectorAfterFailedLink", () => {
     await discardConnectorAfterFailedLink(7, 200);
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("resolves when the delete request itself fails", async () => {
+    fetchMock.mockRejectedValue(new Error("network down"));
+    await expect(
+      discardConnectorAfterFailedLink(7, 400)
+    ).resolves.toBeUndefined();
+  });
 });

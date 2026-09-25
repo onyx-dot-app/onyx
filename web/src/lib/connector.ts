@@ -96,7 +96,11 @@ export async function discardConnectorAfterFailedLink(
   if (linkStatus < 400 || linkStatus >= 500 || linkStatus === 409) {
     return;
   }
-  await deleteConnector(connectorId);
+  try {
+    await deleteConnector(connectorId);
+  } catch {
+    // The link error is what the user needs to see, not a failed cleanup.
+  }
 }
 
 export async function deleteConnector(

@@ -503,7 +503,9 @@ export default function AddConnector({
                   response.id,
                   linkCredentialResponse.status
                 );
-                connectorIdRef.current = null;
+                if (connectorIdRef.current === response.id) {
+                  connectorIdRef.current = null;
+                }
 
                 if (!timeoutErrorHappenedRef.current) {
                   // Only show error if timeout didn't happen

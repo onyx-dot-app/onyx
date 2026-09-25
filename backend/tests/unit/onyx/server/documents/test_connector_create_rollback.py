@@ -8,6 +8,8 @@ from fastapi import HTTPException
 
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.db.enums import AccessType
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents import connector as connector_server
 from onyx.server.documents.models import (
     ConnectorUpdateRequest,
@@ -43,6 +45,10 @@ def stubbed_creation(monkeypatch: pytest.MonkeyPatch) -> dict[str, MagicMock]:
         ),
         "delete_credential": MagicMock(),
         "delete_connector": MagicMock(),
+        "get_cc_pair_ids_for_connector": MagicMock(return_value=set()),
+        "verify_user_can_edit_all_cc_pairs": MagicMock(return_value=False),
+        "emit_audit_event": MagicMock(),
+        "actor_from_user": MagicMock(),
     }
     for name, stub in stubs.items():
         monkeypatch.setattr(connector_server, name, stub)
@@ -81,4 +87,48 @@ def test_duplicate_name_removes_nothing(
 
     assert raised.value.status_code == 400
     stubbed_creation["delete_credential"].assert_not_called()
+    stubbed_creation["delete_connector"].assert_not_called()
+
+
+def test_connector_paired_meanwhile_keeps_both_rows(
+    request_data: ConnectorUpdateRequest, stubbed_creation: dict[str, MagicMock]
+) -> None:
+    stubbed_creation["get_cc_pair_ids_for_connector"].return_value = {5}
+    db_session = MagicMock()
+
+    with pytest.raises(HTTPException):
+        connector_server.create_connector_with_mock_credential(
+            connector_data=request_data, user=MagicMock(), db_session=db_session
+        )
+
+    stubbed_creation["delete_credential"].assert_not_called()
+    stubbed_creation["delete_connector"].assert_not_called()
+
+
+def test_scoped_manager_deletes_an_unpaired_connector(
+    stubbed_creation: dict[str, MagicMock],
+) -> None:
+    db_session = MagicMock()
+
+    connector_server.delete_connector_by_id(
+        connector_id=7, user=MagicMock(), db_session=db_session
+    )
+
+    stubbed_creation["delete_connector"].assert_called_once_with(
+        db_session=db_session, connector_id=7
+    )
+
+
+def test_scoped_manager_cannot_delete_a_paired_connector_they_cannot_edit(
+    stubbed_creation: dict[str, MagicMock],
+) -> None:
+    stubbed_creation["get_cc_pair_ids_for_connector"].return_value = {5}
+    db_session = MagicMock()
+
+    with pytest.raises(OnyxError) as raised:
+        connector_server.delete_connector_by_id(
+            connector_id=7, user=MagicMock(), db_session=db_session
+        )
+
+    assert raised.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
     stubbed_creation["delete_connector"].assert_not_called()

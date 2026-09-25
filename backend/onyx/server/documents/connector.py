@@ -74,10 +74,12 @@ from onyx.db.connector_credential_pair import (
     add_credential_to_connector,
     fetch_connector_credential_pair_for_connector,
     get_cc_pair_groups_for_ids,
+    get_cc_pair_ids_for_connector,
     get_connector_credential_pair,
     get_connector_credential_pair_for_user,
     get_connector_credential_pairs_for_user,
     get_connector_credential_pairs_for_user_parallel,
+    verify_user_can_edit_all_cc_pairs,
     verify_user_has_access_to_cc_pair,
 )
 from onyx.db.credentials import (
@@ -1673,6 +1675,11 @@ def _discard_unpaired_creation(
     """Both rows are committed before validation runs, so a failed creation has
     to remove them or the name stays taken for the retry."""
     db_session.rollback()
+    if connector_id is not None and get_cc_pair_ids_for_connector(
+        db_session, connector_id
+    ):
+        # Paired by another request meanwhile: the pair owns both rows now.
+        return
     if credential_id is not None:
         delete_credential(credential_id, db_session)
     if connector_id is not None:
@@ -1734,9 +1741,23 @@ def update_connector_from_model(
 )
 def delete_connector_by_id(
     connector_id: int,
-    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
+    # GATE 2 as at association: a connector with no pairs is owned by nobody, so a
+    # scoped manager may remove one they just created. A paired connector needs
+    # edit rights on every pair.
+    existing_cc_pair_ids = get_cc_pair_ids_for_connector(db_session, connector_id)
+    if existing_cc_pair_ids and not verify_user_can_edit_all_cc_pairs(
+        existing_cc_pair_ids, db_session, user
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Connection not found for current user's permissions",
+        )
+
     try:
         with db_session.begin():
             result = delete_connector(
