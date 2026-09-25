@@ -3,9 +3,12 @@
 ## Status
 
 These modules pass validation against the `google` provider schema. Each one
-has a `terraform test` suite that plans it against a mocked provider. No one
-has applied them to a live project yet. Treat the first deployment as a first
-deployment.
+has a `terraform test` suite that plans it against a mocked provider.
+
+The `onyx` composition has been applied to a live project, and the Onyx Helm
+chart runs on it: GKE, Cloud SQL, Memorystore with TLS, and the GCS file store
+through Workload Identity. The Cloud Armor policy is created but not attached,
+because an L7 load balancer is needed for that (see `cloud-armor`).
 
 ## Overview
 
