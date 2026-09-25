@@ -221,15 +221,17 @@ async def _finish_tenant_assignment(
     """Notify the control plane, then write the mapping that makes the tenant
     visible. A failed notification then never leaves a workspace billing has not
     heard of. On failure both planes roll back, the tenant is already out of the pool."""
-    control_plane_notified = False
+    control_plane_may_know = False
     try:
         if not DEV_MODE:
+            # Once the request is on the wire the record may exist even if
+            # the response never arrives, so compensate from here on.
+            control_plane_may_know = True
             await notify_control_plane(tenant_id, email, referral_source)
-            control_plane_notified = True
         await assign_tenant_to_user(tenant_id, email, referral_source)
     except Exception:
         logger.exception("Failed to assign tenant %s, rolling it back", tenant_id)
-        if control_plane_notified:
+        if control_plane_may_know:
             await _remove_tenant_from_control_plane(tenant_id, email)
         try:
             await rollback_tenant_provisioning(tenant_id)
@@ -835,6 +837,10 @@ async def delete_user_from_control_plane(tenant_id: str, email: str) -> None:
             headers=headers,
             json=payload.model_dump(),
         ) as response:
+            # A compensating delete for a create whose response was lost may
+            # find nothing to delete, which is the outcome it wanted.
+            if response.status == 404:
+                return
             if response.status != 200:
                 error_text = await response.text()
                 logger.error("Control plane tenant creation failed: %s", error_text)

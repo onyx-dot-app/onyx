@@ -350,7 +350,7 @@ async def test_a_control_plane_delete_that_keeps_failing_is_reconciled_later(
 ) -> None:
     _add_pool_tenant(pool_tenant_id, get_alembic_head_revision())
     r = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
-    r.delete(ONYX_CLOUD_CONTROL_PLANE_ORPHANS_KEY)
+    orphan_entry = f"{pool_tenant_id} {email}"
 
     with (
         patch.object(provisioning, "_CONTROL_PLANE_DELETE_BACKOFF_S", 0),
@@ -369,15 +369,16 @@ async def test_a_control_plane_delete_that_keeps_failing_is_reconciled_later(
 
     control_plane.assert_called_once()
     assert undo.call_count == provisioning._CONTROL_PLANE_DELETE_ATTEMPTS
-    assert r.smembers(ONYX_CLOUD_CONTROL_PLANE_ORPHANS_KEY) == {
-        f"{pool_tenant_id} {email}".encode()
-    }
+    assert r.sismember(ONYX_CLOUD_CONTROL_PLANE_ORPHANS_KEY, orphan_entry)
 
     # The refill task retries later, once the control plane answers again.
-    with patch.object(provisioning, "delete_user_from_control_plane") as retry:
-        assert await provisioning.reconcile_control_plane_orphans() == 1
-    retry.assert_called_once_with(pool_tenant_id, email)
-    assert r.smembers(ONYX_CLOUD_CONTROL_PLANE_ORPHANS_KEY) == set()
+    try:
+        with patch.object(provisioning, "delete_user_from_control_plane") as retry:
+            assert await provisioning.reconcile_control_plane_orphans() >= 1
+        retry.assert_any_call(pool_tenant_id, email)
+        assert not r.sismember(ONYX_CLOUD_CONTROL_PLANE_ORPHANS_KEY, orphan_entry)
+    finally:
+        r.srem(ONYX_CLOUD_CONTROL_PLANE_ORPHANS_KEY, orphan_entry)
 
 
 def test_worker_migrates_a_stale_pool_tenant_and_assigns_it(

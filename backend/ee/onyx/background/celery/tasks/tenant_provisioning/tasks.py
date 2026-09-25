@@ -5,6 +5,7 @@ task the api server hands a signup to when the pool cannot serve it.
 
 import asyncio
 import datetime
+import threading
 import uuid
 
 from celery import Task, shared_task
@@ -83,6 +84,10 @@ def provision_tenant_for_user(
             "signup wait window"
         )
 
+    # Celery time limits do not work on thread pools, so a long migration could
+    # outlive the lock and let a retry build a second tenant. Keep it alive.
+    heartbeat = _LockHeartbeat(lock, _USER_PROVISION_LOCK_TIMEOUT)
+    heartbeat.start()
     try:
         new_tenant_id = asyncio.run(provision_user_tenant(email, referral_source))
         task_logger.info("Provisioned tenant %s for a signup", new_tenant_id)
@@ -97,12 +102,35 @@ def provision_tenant_for_user(
         )
         raise
     finally:
+        heartbeat.stop()
         try:
             lock.release()
         except Exception:
             task_logger.warning(
                 "Could not release user provision lock (likely expired), continuing"
             )
+
+
+class _LockHeartbeat(threading.Thread):
+    """Extends a Redis lock's TTL at a third of its timeout until stopped."""
+
+    def __init__(self, lock: RedisLock, timeout_seconds: int) -> None:
+        super().__init__(daemon=True, name="user-provision-lock-heartbeat")
+        self._lock = lock
+        self._interval = timeout_seconds / 3
+        self._timeout = timeout_seconds
+        self._stopped = threading.Event()
+
+    def run(self) -> None:
+        while not self._stopped.wait(self._interval):
+            try:
+                self._lock.extend(self._timeout, replace_ttl=True)
+            except Exception:
+                task_logger.exception("Could not extend the user provision lock")
+                return
+
+    def stop(self) -> None:
+        self._stopped.set()
 
 
 @shared_task(  # ty: ignore[invalid-argument-type]
