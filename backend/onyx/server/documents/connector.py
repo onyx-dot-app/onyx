@@ -1682,9 +1682,11 @@ def _discard_unpaired_creation(
     if credential_id is not None:
         try:
             delete_credential(credential_id, db_session)
-        except OnyxError:
-            # An empty mock credential nobody can see. The name is what matters.
+        except Exception:
+            # An empty mock credential nobody can see. The name is what matters,
+            # and the caller must get the validation error, not this one.
             logger.warning("Left mock credential %s behind", credential_id)
+            db_session.rollback()
 
 
 @router.patch("/admin/connector/{connector_id}", tags=PUBLIC_API_TAGS)

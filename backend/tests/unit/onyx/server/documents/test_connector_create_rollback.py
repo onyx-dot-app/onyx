@@ -170,3 +170,18 @@ def test_failed_link_keeps_a_connector_paired_meanwhile(
         )
 
     assert "removed" not in raised.value.detail
+
+
+def test_credential_cleanup_failure_keeps_the_validation_error(
+    request_data: ConnectorUpdateRequest, stubbed_creation: dict[str, MagicMock]
+) -> None:
+    stubbed_creation["delete_credential"].side_effect = RuntimeError("db down")
+    db_session = MagicMock()
+
+    with pytest.raises(HTTPException) as raised:
+        connector_server.create_connector_with_mock_credential(
+            connector_data=request_data, user=MagicMock(), db_session=db_session
+        )
+
+    assert "no access to graph api" in raised.value.detail
+    assert db_session.rollback.call_count == 2
