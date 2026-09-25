@@ -86,9 +86,12 @@ the command failed — surface the error rather than retrying blindly.
 
 ## Notes
 
-- **HTTPS only.** SSH and `github.com` git remotes are unreachable from here, so
-  `git clone`/`push` against GitHub and `gh repo clone` over SSH will fail. Stay
-  on the API commands above (and `gh api`).
+- **Git over HTTPS works; SSH does not.** `git clone`, `git fetch`, and
+  `git push` (incl. `--force-with-lease`) over HTTPS against `github.com` are
+  credentialed by the proxy and work. Use HTTPS remotes
+  (`https://github.com/OWNER/REPO.git`) — SSH remotes are unreachable.
+  `git push` is an approval-gated action, so it may pause for the user's
+  approval.
 - **Scopes are fixed** by the admin (repo, read:org, read:user). An operation
   needing a scope you don't have returns `403 / Resource not accessible` — tell
   the user rather than retrying.

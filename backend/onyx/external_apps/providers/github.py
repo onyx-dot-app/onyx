@@ -44,6 +44,8 @@ class GitHubAction(ExternalAppAction):
     CONTENTS_WRITE = "github.contents.write"
     REFS_WRITE = "github.refs.write"
     PULLS_CREATE = "github.pulls.create"
+    GIT_HTTP_READ = "github.git_http.read"
+    GIT_HTTP_WRITE = "github.git_http.write"
 
 
 # GitHub's REST API is a path-addressed JSON API rooted at
@@ -221,6 +223,38 @@ _ENDPOINTS: list[EndpointSpec] = [
             GraphQLOp(operation_type="mutation", field="createPullRequest"),
         ),
     ),
+    # Git smart-HTTP over github.com (not api.github.com): the endpoints
+    # `git clone` / `git fetch` / `git push` hit directly. The proxy drops the
+    # `?service=` query before matching, so the shared `info/refs` handshake is
+    # treated as a read; the distinct upload-pack (fetch) vs receive-pack (push)
+    # POST paths separate read from write. `{repo}` matches the `<name>.git`
+    # segment (the `.git` suffix is optional).
+    EndpointSpec(
+        id=GitHubAction.GIT_HTTP_READ,
+        normalised_name="Clone and fetch over HTTPS",
+        description=(
+            "Read a repository over git smart-HTTP on github.com — the ref "
+            "advertisement and upload-pack negotiation behind `git clone` and "
+            "`git fetch`."
+        ),
+        matches=(
+            RestRoute(method="GET", path="/{owner}/{repo}/info/refs"),
+            RestRoute(method="POST", path="/{owner}/{repo}/git-upload-pack"),
+        ),
+        default_policy=EndpointPolicy.ALWAYS,
+    ),
+    EndpointSpec(
+        id=GitHubAction.GIT_HTTP_WRITE,
+        normalised_name="Push over HTTPS",
+        description=(
+            "Write to a repository over git smart-HTTP on github.com — the "
+            "receive-pack upload behind `git push` (new commits, branch "
+            "updates, and force-pushes)."
+        ),
+        matches=(
+            RestRoute(method="POST", path="/{owner}/{repo}/git-receive-pack"),
+        ),
+    ),
 ]
 
 
@@ -235,7 +269,15 @@ class GitHubProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
             scope_param="scope",
         ),
         descriptor=AdminDescriptorSpec(
-            upstream_url_patterns=["https://api\\.github\\.com/.*"],
+            upstream_url_patterns=[
+                "https://api\\.github\\.com/.*",
+                # Git smart-HTTP on github.com so the proxy credentials
+                # `git clone` / `fetch` / `push` (ENG-4291), scoped to the git
+                # endpoints so ordinary github.com web traffic isn't claimed.
+                "https://github\\.com/[^/]+/[^/]+/info/refs\\?service=git-(?:upload|receive)-pack",
+                "https://github\\.com/[^/]+/[^/]+/git-upload-pack",
+                "https://github\\.com/[^/]+/[^/]+/git-receive-pack",
+            ],
             auth_template={"Authorization": "Bearer {access_token}"},
             required_org_credential_fields=[
                 OrgCredentialField(
@@ -262,7 +304,8 @@ class GitHubProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
                 "instance's callback URL (/craft/v1/apps/oauth/callback). Save, "
                 "then generate a client secret. Paste the Client ID and Client "
                 "Secret below. The agent is granted the repo, read:org, and "
-                "read:user scopes."
+                "read:user scopes. Git clone, fetch, and push over HTTPS are "
+                "also supported."
             ),
         ),
         endpoint_catalog=_ENDPOINTS,
