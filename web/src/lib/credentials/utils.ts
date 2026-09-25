@@ -232,7 +232,7 @@ export function getEditableCredentialFields(
 
 export function canEditCredentialWithForm(
   credential: Credential<any>,
-  sourceType: Credential<any>["source"] = credential.source
+  sourceType: ValidSources = credential.source
 ): boolean {
   return (
     Object.keys(getEditableCredentialFields(credential, sourceType)).length > 0
