@@ -1,6 +1,6 @@
 import datetime
 import json
-from typing import Annotated, Any, Literal, NotRequired
+from typing import Any, Literal, NotRequired
 from uuid import UUID, uuid4
 
 from fastapi_users_db_sqlalchemy import (
@@ -9,7 +9,7 @@ from fastapi_users_db_sqlalchemy import (
 )
 from fastapi_users_db_sqlalchemy.access_token import SQLAlchemyBaseAccessTokenTableUUID
 from fastapi_users_db_sqlalchemy.generics import TIMESTAMPAware
-from pydantic import BaseModel, Field, JsonValue, ValidationError
+from pydantic import BaseModel, JsonValue, ValidationError
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -53,12 +53,6 @@ from typing_extensions import TypedDict  # noreorder
 
 from onyx.agents.execution_records import RunFailure, RunStatus
 from onyx.auth.schemas import UserRole
-from onyx.chat.response_items import (
-    ResponseGeneration,
-    ResponseItemKind,
-    ResponseReasoning,
-    ResponseText,
-)
 from onyx.configs.constants import (
     ANONYMOUS_USER_UUID,
     DEFAULT_BOOST,
@@ -136,7 +130,7 @@ from onyx.deep_research.models import ResearchConfiguration
 from onyx.external_apps.url_glob import UrlGlob
 from onyx.file_store.models import FileDescriptor
 from onyx.kg.models import KGEntityTypeAttributes, KGStage
-from onyx.llm.models import ReasoningEffort, ToolResultMessage
+from onyx.llm.models import AssistantMessage, ReasoningEffort, ToolResultMessage
 from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.server.security.models import IncognitoAvailability, SSRFProtectionLevel
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
@@ -3347,10 +3341,10 @@ class ChatMessage(Base):
     )
     summary_covered_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     summary_covered_digest: Mapped[str | None] = mapped_column(String, nullable=True)
-    response_items: Mapped[list["ChatResponseItem"]] = relationship(
-        "ChatResponseItem",
+    response_messages: Mapped[list["ChatResponseMessage"]] = relationship(
+        "ChatResponseMessage",
         back_populates="response",
-        order_by="ChatResponseItem.position",
+        order_by="ChatResponseMessage.position",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
@@ -3480,21 +3474,28 @@ class ChatMessage(Base):
     )
 
 
-class StoredResponseContent(BaseModel):
-    value: Annotated[
-        ResponseGeneration | ResponseText | ResponseReasoning,
-        Field(discriminator="kind"),
-    ]
-
-
-class ChatResponseItem(Base):
-    __tablename__ = "chat_response_item"
+class ChatResponseMessage(Base):
+    __tablename__ = "chat_response_message"
     __table_args__ = (
         UniqueConstraint("chat_message_id", "position"),
-        UniqueConstraint("tool_call_id", "kind"),
+        UniqueConstraint("tool_call_id"),
         CheckConstraint("position >= 0 AND step_index >= 0"),
         CheckConstraint(
-            "(kind IN ('generation', 'text', 'reasoning') AND content IS NOT NULL AND tool_call_id IS NULL) OR (kind IN ('tool_call', 'tool_result') AND content IS NULL AND tool_call_id IS NOT NULL)"
+            "(content IS NOT NULL AND tool_call_id IS NULL AND operation_status IS NOT NULL) OR "
+            "(content IS NULL AND tool_call_id IS NOT NULL AND operation_status IS NULL AND NOT is_answer)"
+        ),
+        Index(
+            "uq_response_message_step",
+            "chat_message_id",
+            "step_index",
+            unique=True,
+            postgresql_where=text("content IS NOT NULL"),
+        ),
+        Index(
+            "uq_response_message_answer",
+            "chat_message_id",
+            unique=True,
+            postgresql_where=text("is_answer"),
         ),
     )
     id: Mapped[str] = mapped_column(String, primary_key=True)
@@ -3503,25 +3504,30 @@ class ChatResponseItem(Base):
     )
     position: Mapped[int] = mapped_column(Integer)
     step_index: Mapped[int] = mapped_column(Integer)
-    kind: Mapped[ResponseItemKind] = mapped_column(
+    content: Mapped[AssistantMessage | None] = mapped_column(
+        PydanticType(AssistantMessage, none_as_null=True), nullable=True
+    )
+    operation_status: Mapped[RunStatus | None] = mapped_column(
         Enum(
-            ResponseItemKind,
+            RunStatus,
             native_enum=False,
             values_callable=lambda values: [v.value for v in values],
-        )
+        ),
+        nullable=True,
     )
-    content: Mapped[StoredResponseContent | None] = mapped_column(
-        PydanticType(StoredResponseContent, none_as_null=True), nullable=True
+    is_answer: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
     )
     tool_call_id: Mapped[int | None] = mapped_column(
         ForeignKey("tool_call.id", ondelete="CASCADE"), nullable=True
     )
-    # Response readers validate display settings without coupling ORM models to chat.
     rendering: Mapped[dict[str, JsonValue] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
     response: Mapped["ChatMessage"] = relationship(
-        "ChatMessage", back_populates="response_items", foreign_keys=[chat_message_id]
+        "ChatMessage",
+        back_populates="response_messages",
+        foreign_keys=[chat_message_id],
     )
     tool_call: Mapped["ToolCall | None"] = relationship(
         "ToolCall", foreign_keys=[tool_call_id], lazy="selectin"

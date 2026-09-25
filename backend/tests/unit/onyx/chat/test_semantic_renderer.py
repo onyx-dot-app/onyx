@@ -8,6 +8,9 @@ from pydantic import BaseModel
 
 from onyx.agents.events import (
     AgentEndEvent,
+    MessageEndEvent,
+    MessageStartEvent,
+    MessageUpdateEvent,
     ToolEndEvent,
     ToolStartEvent,
     ToolUpdateEvent,
@@ -20,7 +23,6 @@ from onyx.chat.emitter import Emitter
 from onyx.chat.models import ChatMessageMetadata, CitationMode, MessageRendering
 from onyx.chat.presentation import ResponsePresenter, project_response
 from onyx.chat.renderer import MessageRenderer
-from onyx.chat.response_items import build_response_items, messages_from_items
 from onyx.context.search.models import SearchDoc
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.litellm_conversion import MessageAccumulator
@@ -31,8 +33,11 @@ from onyx.llm.litellm_models import (
 )
 from onyx.llm.models import (
     AssistantMessage,
+    GenerationDoneEvent,
+    GenerationErrorEvent,
     GenerationRequest,
     GenerationRequestParams,
+    GenerationStartEvent,
     Message,
     ReasoningEffort,
     TextContent,
@@ -151,9 +156,15 @@ def test_citation_display_keeps_raw_transcript(
                 choice=StreamingChoice(delta=Delta(content=fragment)),
             )
         ):
-            renderer.consume(event)
+            if not isinstance(
+                event, (GenerationStartEvent, GenerationDoneEvent, GenerationErrorEvent)
+            ):
+                renderer.consume(event)
     for event in accumulator.end():
-        renderer.consume(event)
+        if not isinstance(
+            event, (GenerationStartEvent, GenerationDoneEvent, GenerationErrorEvent)
+        ):
+            renderer.consume(event)
     renderer.complete(accumulator.message)
     assert renderer.answer == expected
     assert accumulator.message.text == "".join(fragments)
@@ -203,6 +214,7 @@ def test_child_progress_and_completion_keep_explicit_ancestry() -> None:
             parent_message_id="root:2",
             parent_tool_call_id="research",
             step_index=1,
+            message_id="child:1",
             tool_call=call,
         )
     )
@@ -213,6 +225,7 @@ def test_child_progress_and_completion_keep_explicit_ancestry() -> None:
             parent_message_id="root:2",
             parent_tool_call_id="research",
             step_index=1,
+            message_id="child:1",
             tool_call=call,
             progress=ToolProgress(
                 details=LlmPythonExecutionResult(
@@ -232,6 +245,7 @@ def test_child_progress_and_completion_keep_explicit_ancestry() -> None:
             parent_message_id="root:2",
             parent_tool_call_id="research",
             step_index=1,
+            message_id="child:1",
             tool_call=call,
             result=ToolResult(content="complete"),
         )
@@ -290,7 +304,7 @@ def test_formatting_failure_keeps_accepted_response(
     monkeypatch.setattr("onyx.chat.presentation.MessageRenderer", fail_formatting)
     response = project_response(run.snapshot(), response_id=42, tool_ids={})
     assert response.response is not None
-    assert messages_from_items(response.response.items)[-1].text == "Accepted answer"
+    assert response.response.messages[-1].text == "Accepted answer"
     assert response.answer == "Accepted answer"
     assert (
         response.error
@@ -312,13 +326,7 @@ def test_interrupted_item_stream_flushes_buffered_citation_like_reload(
     saved = MessageRenderer(
         MessageRendering(citation_mode=CitationMode.HYPERLINK), {}, identity
     )
-    saved_packets = saved.saved(
-        build_response_items(
-            "run",
-            [message],
-            [OperationSnapshot(step_index=0, message_index=0, status=status)],
-        )
-    )
+    saved_packets = saved.saved(message, status, is_answer=False)
     assert live.answer == saved.answer == "See [1"
     assert [
         p
@@ -372,3 +380,50 @@ def test_accepted_message_clears_superseded_streamed_text() -> None:
     assert text[0].text == ""
     assert text[0].status == RunStatus.COMPLETE
     assert text[0].purpose == TextPurpose.COMMENTARY
+
+
+@pytest.mark.parametrize("status", [RunStatus.CANCELLED, RunStatus.ERROR])
+def test_interrupted_message_identity_and_content_match_reload(
+    status: RunStatus,
+) -> None:
+    output: Queue[Packet] = Queue()
+    presenter = ResponsePresenter(Emitter(output.put_nowait, response_id=42))
+    message = AssistantMessage(
+        id="accepted-message", content=[TextContent(text="partial [1")]
+    )
+    presenter.consume(
+        MessageStartEvent(run_id="run", message_id="accepted-message", step_index=3)
+    )
+    presenter.consume(
+        MessageUpdateEvent(
+            run_id="run",
+            message_id="accepted-message",
+            step_index=3,
+            generation_event=TextDeltaEvent(content_index=0, text="partial [1"),
+        )
+    )
+    presenter.consume(
+        MessageEndEvent(
+            run_id="run",
+            message_id="accepted-message",
+            step_index=3,
+            message=message,
+            status=status,
+        )
+    )
+    live = [
+        packet
+        for packet in output.queue
+        if isinstance(packet.obj, ItemUpdate) and packet.obj.item.status == status
+    ]
+    saved = MessageRenderer(
+        MessageRendering(),
+        {},
+        PacketIdentity(response_id=42, run_id="run", message_id="accepted-message"),
+    ).saved(message, status, is_answer=False)
+    assert [(packet.identity, packet.obj) for packet in live] == [
+        (packet.identity, packet.obj) for packet in saved
+    ]
+    assert all(
+        packet.identity.message_id == "accepted-message" for packet in output.queue
+    )

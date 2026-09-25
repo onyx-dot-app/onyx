@@ -384,6 +384,16 @@ class ToolCallEndEvent(GenerationToolCallEvent):
     type: Literal["tool_call_end"] = "tool_call_end"
 
 
+GenerationContentEvent = Annotated[
+    TextDeltaEvent
+    | ThinkingDeltaEvent
+    | ToolCallStartEvent
+    | ToolCallDeltaEvent
+    | ToolCallEndEvent,
+    Field(discriminator="type"),
+]
+
+
 GenerationEvent = Annotated[
     GenerationStartEvent
     | GenerationDoneEvent

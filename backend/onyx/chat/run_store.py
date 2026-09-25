@@ -42,7 +42,7 @@ from onyx.db.chat_checkpoint import (
     release_checkpoint_claim__no_commit,
     save_response_record__no_commit,
 )
-from onyx.db.chat_response_items import finish_checkpoint__no_commit
+from onyx.db.chat_response_messages import finish_checkpoint__no_commit
 from onyx.db.chat_subagents import (
     load_agent_history,
     load_session_agent_metadata,

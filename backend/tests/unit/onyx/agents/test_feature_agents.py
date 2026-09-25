@@ -19,7 +19,6 @@ from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.citation_utils import collapse_citations
 from onyx.chat.emitter import Emitter
 from onyx.chat.presentation import ResponsePresenter, project_response
-from onyx.chat.response_items import messages_from_items
 from onyx.coding_agent.agent import CodingAgent
 from onyx.coding_agent.tool_definitions import BASH_TOOL_NAME, GENERATE_ANSWER_TOOL_NAME
 from onyx.configs.chat_configs import DR_REPORT_LLM_TIMEOUT_S
@@ -325,13 +324,10 @@ def test_deep_research_composes_plan_child_and_report() -> None:
     ]
     snapshot = project(runs[-1].snapshot(), registrations=coordinator.registrations())
     assert snapshot.response is not None
-    assert messages_from_items(snapshot.response.items)[0].text == "Plan"
-    assert messages_from_items(snapshot.response.items)[-1].text == "Final report"
+    assert snapshot.response.messages[0].text == "Plan"
+    assert snapshot.response.messages[-1].text == "Final report"
     assert len(snapshot.response.child_runs) == 1
-    assert (
-        messages_from_items(snapshot.response.child_runs[0].items)[-1].text
-        == "Child report"
-    )
+    assert snapshot.response.child_runs[0].messages[-1].text == "Child report"
     assert any(isinstance(item.obj, OverallStop) for item in list(output.queue))
 
 
@@ -382,7 +378,7 @@ def test_deep_research_prelude_cancellation_keeps_partial_output(
     snapshot = project(runs[-1].snapshot(), registrations=coordinator.registrations())
     assert snapshot.response is not None
     assert snapshot.response.status == "cancelled"
-    assert messages_from_items(snapshot.response.items)[-1].text == "Partial prelude"
+    assert snapshot.response.messages[-1].text == "Partial prelude"
 
 
 def test_deep_research_advances_phases_without_user_queue_messages() -> None:

@@ -52,13 +52,14 @@ During a run, the agent emits typed `AgentEvent` values to `on_event`:
 | --- | --- |
 | `agent_start`, `agent_end` | The run starts or ends. The end event includes its outcome. |
 | `input_required`, `agent_suspended` | A call awaits identified input, or execution releases its workers at a supported boundary. |
-| `message_start`, `message_update`, `message_end` | A model generation starts, produces updates, or finishes with an assistant message. |
+| `message_start`, `message_update`, `message_end` | An assistant message starts, receives content updates, or ends with its accepted content and outcome. |
 | `tool_start`, `tool_update`, `tool_end` | A tool call starts, reports progress, or returns a result. |
 
 Each event carries a run ID so consumers can distinguish concurrent executions.
 The run applies generation updates under its state lock before notifying listeners.
 Cancellation preserves accepted partial output; `snapshot()` copies that state for independent inspection.
-`message_start` and `message_end` own the agent's message lifecycle. Updates do not repeat generation start or done events.
+Message events carry an explicit message ID. Updates reuse the LLM content delta types.
+Provider retries happen within this message lifecycle; they do not start another agent message.
 Chat converts these events into frontend packets for text, reasoning, tool activity, and run status.
 It saves the response under a chat message ID. Generation and content item IDs connect streamed output to saved response data.
 
@@ -330,10 +331,9 @@ output), and per-operation status records that index into those messages.
 Message and operation changes are recorded together. Event listeners cannot change recorded data.
 Child records are collected when the parent finishes; a parent snapshot is not a live view of every child.
 
-Chat converts run messages and operation outcomes into response items with stable identities.
-It captures these items in a detached `ResponseRecord`, removing application metadata
-and tool details before persistence. Saved rendering reads items directly. Model-context
-loading converts items into messages and excludes unfinished tool calls.
+Chat captures shared messages, operation outcomes, and answer selection in a detached `ResponseRecord`.
+It removes application metadata and tool details before persistence.
+Saved rendering reads these messages directly. Model-context loading excludes unfinished tool calls without changing saved output.
 
 Archived child restoration rebuilds a conversation from messages, a compaction checkpoint, and the previous run identity.
 Resuming a suspended execution instead requires its saved execution position and feature state.
@@ -368,7 +368,7 @@ Use `run.capture()` to copy the active run and its preceding `AgentState` togeth
 `agent.state` includes active output, so using it as the resume prefix would duplicate that output.
 Only a suspended snapshot can resume. Wait for its workers to become idle before transferring execution ownership.
 
-Chat stores accepted output as response items. `chat/checkpoint.py` serializes the extra data needed to resume:
+Chat stores accepted output as shared messages. `chat/checkpoint.py` serializes the extra data needed to resume:
 step progress, application state, message metadata, and cache flags.
 `serialize_checkpoint()` builds this data. `deserialize_checkpoint()` validates it against the selected history and reconstructs `ExecutionCheckpoint`.
 The module registers the application models that can be restored. Each saved model includes a stable type tag and its fields.
@@ -411,7 +411,7 @@ The live coding task owns its sandbox until completion or cancellation.
 
 ### Chat archive
 
-Chat saves response items at execution boundaries and adds display data when the response finishes.
+Chat saves messages at execution boundaries and adds display data when the response finishes.
 Tool-call row identities remain stable, including links from child responses.
 A safely paused response also needs supplemental execution progress in `ChatResponseCheckpoint`.
 
@@ -423,13 +423,13 @@ and references the parent response that created it. The root controls access, sh
 The runtime agent ID identifies this session.
 
 An assistant `chat_message` owns one complete or partial response, its outcome, and feedback.
-Its user-message parent owns the input. Ordered `chat_response_item` rows preserve narration,
-reasoning, tool references, and final text. `tool_call` owns arguments and results.
-Generation boundary items retain status and provider metadata, including empty generations.
+Its user-message parent owns the input. Ordered `chat_response_message` rows store shared assistant messages or reference tool results.
+Assistant rows retain message identity, content, operation status, and provider metadata, including empty messages.
+`tool_call` stores the result payload, execution status, and a queryable copy of the call arguments.
 
 The runtime selects final-answer content when its completion decision finishes execution.
-The application derives formatted answer text for existing clients from those items.
-Chat rendering settings belong to generation items and do not affect model input.
+The application derives formatted answer text for existing clients from the selected assistant message.
+Chat rendering settings belong to assistant rows and do not affect model input.
 
 A child instruction references its parent tool invocation and the child response it continues.
 Restoring a child follows the selected root branch. Separate root branches can continue the
@@ -479,7 +479,7 @@ The response worker executes the run directly; these objects do not each create 
 Chat and research features supply prompts, tools, and step decisions to the SDK.
 Chat persistence receives the tool IDs and citation metadata needed to save their output.
 
-Chat keeps accepted output in `ChatMessage`, `ChatResponseItem`, and `ToolCall`.
+Chat keeps accepted output in `ChatMessage`, `ChatResponseMessage`, and `ToolCall`.
 A response's `run_id` connects live SDK handles to that same history.
 Chat uses one execution worker per active agent, one turn control worker, and one event-delivery worker.
 The event worker also writes replay batches to the configured cache. Slow cache writes delay later events, but control polling remains independent.
@@ -514,7 +514,7 @@ Before handoff, the adapter verifies that saved history can reconstruct the capt
 Unsupported input representations fail while the original run still owns execution.
 
 `resume(run_id, context=...)` requires authorized history reconstructed by the application.
-The adapter validates its digest and compaction boundary, then reconstructs the snapshot from saved response items.
+The adapter validates its digest and compaction boundary, then restores the snapshot from saved messages and operation outcomes.
 Only one process can claim a checkpoint. Conditional revision checks reject stale writers.
 Reconstruction failure before execution releases the claim for retry.
 Completion removes the checkpoint while preserving chat history.

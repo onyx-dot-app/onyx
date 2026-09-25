@@ -93,7 +93,7 @@ def test_response_status_reads_only_identity_and_status(db_session: Session) -> 
         assert len(statements) == 6
         sql = "\n".join(statements).lower()
         for forbidden in (
-            "chat_response_item",
+            "chat_response_message",
             "tool_call.result",
             "tool_call.tool_call_arguments",
             "chat_message.message,",

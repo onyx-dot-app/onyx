@@ -79,9 +79,9 @@ from onyx.llm.interfaces import LLM, GenerationContext
 from onyx.llm.models import (
     AssistantMessage,
     GenerationDoneEvent,
+    GenerationLifecycleEvent,
     GenerationOptions,
     GenerationRequest,
-    GenerationStartEvent,
     Message,
     ToolResult,
     ToolResultMessage,
@@ -873,6 +873,18 @@ class Run:
                     partial.stop_reason = (
                         "aborted" if outcome == RunStatus.CANCELLED else "error"
                     )
+                    if partial.id is None:
+                        raise RuntimeError("Recorded generation has no message ID")
+                    if self._delivery:
+                        self._delivery.publish(
+                            MessageEndEvent(
+                                **self._ancestry,
+                                message_id=partial.id,
+                                step_index=operation.step_index,
+                                message=partial.model_copy(deep=True),
+                                status=outcome,
+                            )
+                        )
             self._record_terminal_outcome(outcome)
         self._completed.set_result(None)
         if not self._settled.done():
@@ -1096,7 +1108,9 @@ def _generate_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) 
     )
     source = [*run._history.messages, *run._state.input_messages, *run._state.messages]
     request = _fit_context(run, llm, source, prepared, generation_context)
+    message_id = f"{run._state.run_id}:{step.index}"
     started = MessageStartEvent(
+        message_id=message_id,
         **run._ancestry,
         step_index=step.index,
         metadata=prepared.output_metadata,
@@ -1106,7 +1120,7 @@ def _generate_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) 
         start = len(run._state.messages)
         run._state.messages.append(
             AssistantMessage(
-                id=f"{run._state.run_id}:{step.index}",
+                id=message_id,
                 metadata=prepared.output_metadata.model_copy(deep=True)
                 if prepared.output_metadata
                 else None,
@@ -1141,10 +1155,11 @@ def _generate_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) 
                             )
                         apply_generation_event(message, event)
                         if run._delivery and not isinstance(
-                            event, (GenerationStartEvent, GenerationDoneEvent)
+                            event, GenerationLifecycleEvent
                         ):
                             run._delivery.publish(
                                 MessageUpdateEvent(
+                                    message_id=message_id,
                                     **run._ancestry,
                                     step_index=step.index,
                                     generation_event=event,
@@ -1174,10 +1189,16 @@ def _generate_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) 
         message = generate()
     with run._lock:
         cancellation_signal.check()
-        message.id = f"{run._state.run_id}:{step.index}"
+        message.id = message_id
         run._state.messages[start] = message.model_copy(deep=True)
         generation.status = RunStatus.COMPLETE
-        ended = MessageEndEvent(**run._ancestry, step_index=step.index, message=message)
+        ended = MessageEndEvent(
+            **run._ancestry,
+            message_id=message_id,
+            step_index=step.index,
+            message=message,
+            status=RunStatus.COMPLETE,
+        )
         if run._delivery:
             run._delivery.publish(ended)
     with run._lock:

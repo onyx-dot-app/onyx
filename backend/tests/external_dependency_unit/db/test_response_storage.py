@@ -25,15 +25,6 @@ from onyx.chat.emitter import Emitter
 from onyx.chat.history_store import get_chat_history_store
 from onyx.chat.models import ChatResponseSnapshot, MessageRendering, ResponseRecord
 from onyx.chat.presentation import ResponsePresenter, project_response
-from onyx.chat.response_items import (
-    ResponseGeneration,
-    ResponseItemKind,
-    ResponseText,
-    ResponseToolCall,
-    TextPurpose,
-    build_response_items,
-    messages_from_items,
-)
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.configs.constants import MessageType
 from onyx.db import chat_subagents
@@ -61,7 +52,10 @@ from onyx.db.chat_response import (
     save_chat_response_to_db,
     save_response_content,
 )
-from onyx.db.chat_response_items import read_response_items, write_response_items
+from onyx.db.chat_response_messages import (
+    read_response_messages,
+    write_response_messages,
+)
 from onyx.db.chat_subagents import (
     ChatBranch,
     _load_history,
@@ -70,7 +64,7 @@ from onyx.db.chat_subagents import (
     visible_message_ids,
 )
 from onyx.db.enums import IncognitoRecordMode
-from onyx.db.models import ChatMessage, ChatResponseItem, ChatSession, Tool
+from onyx.db.models import ChatMessage, ChatResponseMessage, ChatSession, Tool
 from onyx.db.models import ToolCall as StoredToolCall
 from onyx.file_store.models import ChatFileType, FileDescriptor
 from onyx.llm.models import (
@@ -100,6 +94,15 @@ from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
 )
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.utils.threadpool_concurrency import start_thread_future
+
+
+def _messages(run_id: str, messages: list[Message]) -> list[Message]:
+    step = 0
+    for message in messages:
+        if isinstance(message, AssistantMessage):
+            message.id = message.id or f"{run_id}:{step}"
+            step += 1
+    return messages
 
 
 @pytest.fixture
@@ -179,16 +182,13 @@ def _record(response: ChatMessage, answer: str = "Answer") -> ResponseRecord:
         run_id=run_id,
         status=RunStatus.COMPLETE,
         input_messages=[UserMessage(content=response.parent_message.message)],
-        items=build_response_items(
-            run_id,
-            [AssistantMessage(content=[TextContent(text=answer)])],
-            [
-                OperationSnapshot(
-                    step_index=0, message_index=0, status=RunStatus.COMPLETE
-                )
-            ],
-            answer_message_index=0,
+        messages=_messages(
+            run_id, [AssistantMessage(content=[TextContent(text=answer)])]
         ),
+        operations=[
+            OperationSnapshot(step_index=0, message_index=0, status=RunStatus.COMPLETE)
+        ],
+        answer_message_index=0,
     )
 
 
@@ -204,15 +204,17 @@ def _child_record(
     answer: str,
     previous: str | None = None,
 ) -> ResponseRecord:
-    parent.items = build_response_items(
+    parent.messages = _messages(
         parent.run_id,
         [
             AssistantMessage(
                 content=[ToolCall(id="delegate", name="delegate", arguments={})]
             )
         ],
-        [],
     )
+    parent.operations = [
+        OperationSnapshot(step_index=0, message_index=0, status=RunStatus.COMPLETE)
+    ]
     run_id = str(uuid4())
     child = ResponseRecord(
         agent_id=str(child_id),
@@ -224,16 +226,13 @@ def _child_record(
         parent_tool_call_id="delegate",
         status=RunStatus.COMPLETE,
         input_messages=[UserMessage(content=f"Find {answer}")],
-        items=build_response_items(
-            run_id,
-            [AssistantMessage(content=[TextContent(text=answer)])],
-            [
-                OperationSnapshot(
-                    step_index=0, message_index=0, status=RunStatus.COMPLETE
-                )
-            ],
-            answer_message_index=0,
+        messages=_messages(
+            run_id, [AssistantMessage(content=[TextContent(text=answer)])]
         ),
+        operations=[
+            OperationSnapshot(step_index=0, message_index=0, status=RunStatus.COMPLETE)
+        ],
+        answer_message_index=0,
     )
     parent.child_runs.append(child)
     return child
@@ -249,7 +248,7 @@ def test_response_tools_flush_together_and_keep_result_links(
         ToolResultMessage(tool_call_id=call.id, tool_name=call.name, content=call.id)
         for call in calls
     )
-    items = build_response_items(str(uuid4()), messages, [])
+    items = _messages(str(uuid4()), messages)
     flushes = 0
 
     def count_flush(**_event: object) -> None:
@@ -261,24 +260,37 @@ def test_response_tools_flush_together_and_keep_result_links(
         flushes = 0
         event.listen(db_session, "before_flush", count_flush, named=True)
         try:
-            tools = write_response_items(db_session, response, items, {})
+            tools = write_response_messages(
+                db_session,
+                response,
+                ResponseRecord(
+                    run_id="tools",
+                    status=RunStatus.COMPLETE,
+                    messages=items,
+                    operations=[
+                        OperationSnapshot(
+                            step_index=0, message_index=0, status=RunStatus.COMPLETE
+                        )
+                    ],
+                ),
+                {},
+            )
         finally:
             event.remove(db_session, "before_flush", count_flush)
         assert flushes == 1
         assert len({tool.id for tool in tools.values()}) == len(calls)
         db_session.expire_all()
-        assert read_response_items(response) == items
+        assert read_response_messages(response) == items
         for call in calls:
             linked = [
                 row.tool_call_id
-                for row in response.response_items
+                for row in response.response_messages
                 if row.tool_call is not None and row.tool_call.tool_call_id == call.id
             ]
-            assert len(linked) == 2
-            assert linked[0] == linked[1]
+            assert len(linked) == 1
 
 
-def test_response_items_preserve_order_provider_metadata_and_tool_identity(
+def test_response_messages_preserve_order_provider_metadata_and_tool_identity(
     db_session: Session, conversation: ChatSession
 ) -> None:
     response = _response(db_session, conversation)
@@ -315,28 +327,24 @@ def test_response_items_preserve_order_provider_metadata_and_tool_identity(
         )
         for step, index in enumerate([0, 2, 4])
     ]
-    record.items = build_response_items(
-        record.run_id, messages, operations, answer_message_index=answer_index
-    )
+    record.messages = _messages(record.run_id, messages)
+    record.operations = operations
+    record.answer_message_index = answer_index
     _save(db_session, response, record)
     restored = (
         execution.response if (execution := read_chat_execution(response)) else None
     )
     assert restored is not None
-    assert [message.text for message in messages_from_items(restored.items)] == [
-        message.text for message in messages_from_items(record.items)
+    assert [message.text for message in restored.messages] == [
+        message.text for message in record.messages
     ]
-    first = messages_from_items(restored.items)[0]
+    first = restored.messages[0]
     assert isinstance(first, AssistantMessage)
-    assert first.content[0] == messages_from_items(record.items)[0].content[0]
-    assert any(
-        isinstance(item.content, ResponseText)
-        and item.content.purpose == TextPurpose.ANSWER
-        and item.content.text == "Final answer"
-        for item in restored.items
-    )
-    items = read_response_items(response)
-    assert items == restored.items
+    assert first.content[0] == record.messages[0].content[0]
+    assert restored.answer_message_index == 4
+    assert restored.messages[4].text == "Final answer"
+    items = read_response_messages(response)
+    assert items == restored.messages
     tools = list(
         db_session.scalars(
             select(StoredToolCall).where(
@@ -350,18 +358,13 @@ def test_response_items_preserve_order_provider_metadata_and_tool_identity(
         "Second result",
     }
     assert all(tool.legacy_response == "" for tool in tools)
-    call_ids = [
-        row.tool_call_id
-        for row in response.response_items
-        if row.kind == ResponseItemKind.TOOL_CALL
-    ]
     result_ids = [
         row.tool_call_id
-        for row in response.response_items
-        if row.kind == ResponseItemKind.TOOL_RESULT
+        for row in response.response_messages
+        if row.tool_call_id is not None
     ]
-    assert call_ids == result_ids
-    assert len(set(call_ids)) == 2
+    assert set(result_ids) == {tool.id for tool in tools}
+    assert len(result_ids) == 2
 
 
 @pytest.mark.parametrize(
@@ -381,11 +384,10 @@ def test_empty_generation_retains_outcome_and_rendering(
         )
     ]
     record.status = status
-    record.items = build_response_items(
-        record.run_id,
-        messages,
-        [OperationSnapshot(step_index=0, message_index=0, status=status)],
-    )
+    record.messages = _messages(record.run_id, messages)
+    record.operations = [
+        OperationSnapshot(step_index=0, message_index=0, status=status)
+    ]
     record.failure = (
         RunFailure(kind=RunFailureKind.EXECUTION, message="Failed")
         if status == RunStatus.ERROR
@@ -396,7 +398,7 @@ def test_empty_generation_retains_outcome_and_rendering(
         record,
         db_session=db_session,
         persist_content=True,
-        presentation={record.items[0].id: MessageRendering(text_as_thinking=True)},
+        presentation={"empty-generation": MessageRendering(text_as_thinking=True)},
     )
     db_session.expire(response)
     restored = (
@@ -405,16 +407,15 @@ def test_empty_generation_retains_outcome_and_rendering(
     assert restored is not None
     assert restored.status == status
     assert restored.failure == record.failure
-    assert len(messages_from_items(restored.items)) == 1
-    restored_message = messages_from_items(restored.items)[0]
+    assert len(restored.messages) == 1
+    restored_message = restored.messages[0]
     assert isinstance(restored_message, AssistantMessage)
     assert restored_message.stop_reason == "error"
-    assert isinstance(restored.items[0].content, ResponseGeneration)
-    assert restored.items[0].content.outcome.status == status
+    assert restored.operations[0].status == status
     execution = read_chat_execution(response)
     assert execution is not None
     assert execution.presentation["empty-generation"].text_as_thinking
-    saved_settings = response.response_items[0].rendering
+    saved_settings = response.response_messages[0].rendering
     assert saved_settings is not None
     assert "run_id" not in saved_settings and "step_index" not in saved_settings
 
@@ -438,17 +439,23 @@ def test_partial_tool_arguments_survive_storage_without_executable_arguments(
             ]
         )
     ]
-    record.items = build_response_items(record.run_id, messages, [])
-    _save(db_session, response, record)
-    calls = [
-        item.content
-        for item in read_response_items(response)
-        if isinstance(item.content, ResponseToolCall)
+    record.messages = _messages(record.run_id, messages)
+    record.operations = [
+        OperationSnapshot(step_index=step, message_index=index, status=record.status)
+        for step, index in enumerate(
+            index
+            for index, message in enumerate(record.messages)
+            if isinstance(message, AssistantMessage)
+        )
     ]
+    _save(db_session, response, record)
+    assistant = read_response_messages(response)[0]
+    assert isinstance(assistant, AssistantMessage)
+    calls = assistant.tool_calls
     assert len(calls) == 1
-    assert calls[0].call.raw_arguments == '{"query": "half'
-    assert calls[0].call.arguments_complete is False
-    assert calls[0].call.arguments == {}
+    assert calls[0].raw_arguments == '{"query": "half'
+    assert calls[0].arguments_complete is False
+    assert calls[0].arguments == {}
 
 
 def test_content_free_response_does_not_write_items(
@@ -472,8 +479,8 @@ def test_content_free_response_does_not_write_items(
     assert (
         db_session.scalar(
             select(func.count())
-            .select_from(ChatResponseItem)
-            .where(ChatResponseItem.chat_message_id == response.id)
+            .select_from(ChatResponseMessage)
+            .where(ChatResponseMessage.chat_message_id == response.id)
         )
         == 0
     )
@@ -653,7 +660,7 @@ def test_multiple_child_requests_from_one_invocation_keep_distinct_predecessors(
     execution = read_chat_execution(response)
     assert execution is not None
     first_saved, second_saved = execution.response.child_runs
-    generation = messages_from_items(execution.response.items)[0]
+    generation = execution.response.messages[0]
     assert isinstance(generation, AssistantMessage)
     assert first_saved.parent_message_id == generation.id
     assert execution.tool_records[0].message_id == generation.id
@@ -859,7 +866,7 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
                 content=result.content,
                 details=result.details,
             ),
-            AssistantMessage(content=[TextContent(text="done")]),
+            AssistantMessage(id="final-generation", content=[TextContent(text="done")]),
         ],
         operations=[
             OperationSnapshot(step_index=0, message_index=0, status=RunStatus.COMPLETE),
@@ -875,12 +882,28 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
     db_session.commit()
     queue: Queue[Packet] = Queue()
     presenter = ResponsePresenter(Emitter(queue.put_nowait, response_id=row.id))
-    presenter.consume(ToolStartEvent(run_id=run_id, step_index=0, tool_call=call))
     presenter.consume(
-        ToolUpdateEvent(run_id=run_id, step_index=0, tool_call=call, progress=progress)
+        ToolStartEvent(
+            run_id=run_id, message_id="stable-generation", step_index=0, tool_call=call
+        )
     )
     presenter.consume(
-        ToolEndEvent(run_id=run_id, step_index=0, tool_call=call, result=result)
+        ToolUpdateEvent(
+            run_id=run_id,
+            message_id="stable-generation",
+            step_index=0,
+            tool_call=call,
+            progress=progress,
+        )
+    )
+    presenter.consume(
+        ToolEndEvent(
+            run_id=run_id,
+            message_id="stable-generation",
+            step_index=0,
+            tool_call=call,
+            result=result,
+        )
     )
     live: list[Packet] = []
     while not queue.empty():
@@ -893,7 +916,7 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
     get_chat_history_store(
         message_id=row.id, chat_session_id=conversation.id, persist_content=True
     ).save_response(projected)
-    db_session.refresh(row, ["response_items", "search_docs"])
+    db_session.refresh(row, ["response_messages", "search_docs"])
     assert (
         db_session.scalar(
             select(func.count())
@@ -990,8 +1013,8 @@ def test_session_delete_removes_reused_child_history_and_tool_items(
     assert (
         db_session.scalar(
             select(func.count())
-            .select_from(ChatResponseItem)
-            .where(ChatResponseItem.chat_message_id.in_(response_ids))
+            .select_from(ChatResponseMessage)
+            .where(ChatResponseMessage.chat_message_id.in_(response_ids))
         )
         == 0
     )
@@ -1016,7 +1039,7 @@ def test_unsettled_execution_is_rejected_before_saving(
     with pytest.raises(ValueError, match="terminal execution records"):
         _save(db_session, response, record)
     assert response.response_status is None
-    assert response.response_items == []
+    assert response.response_messages == []
 
 
 @pytest.mark.parametrize("child_count", [1, 4])
@@ -1048,7 +1071,7 @@ def test_discovery_batches_response_metadata(
     assert (
         sum("WITH RECURSIVE selected_responses" in query for query in executed_sql) == 2
     )
-    assert not any("chat_response_item" in query for query in executed_sql)
+    assert not any("chat_response_message" in query for query in executed_sql)
 
 
 def test_child_reload_batches_siblings(
@@ -1097,15 +1120,19 @@ def test_nested_reload_reuses_parent_identity(
     assert execution is not None
     saved_child = execution.response.child_runs[0]
     saved_grandchild = saved_child.child_runs[0]
-    assert saved_child.parent_message_id == record.items[0].id
-    assert saved_grandchild.parent_message_id == child.items[0].id
+    parent_message = record.messages[0]
+    child_message = child.messages[0]
+    assert isinstance(parent_message, AssistantMessage)
+    assert isinstance(child_message, AssistantMessage)
+    assert saved_child.parent_message_id == parent_message.id
+    assert saved_grandchild.parent_message_id == child_message.id
     assert saved_grandchild.agent_path == "/root/research/facts"
     assert (
         sum("WITH RECURSIVE session_ancestors" in query for query in executed_sql) == 1
     )
 
 
-def test_public_message_read_does_not_fetch_response_items(
+def test_public_message_read_does_not_fetch_response_messages(
     db_session: Session,
     conversation: ChatSession,
     executed_sql: list[str],
@@ -1119,7 +1146,7 @@ def test_public_message_read_does_not_fetch_response_items(
     message = get_chat_message(message_id, None, db_session)
 
     assert message.id == message_id
-    assert not any("chat_response_item" in query for query in executed_sql)
+    assert not any("chat_response_message" in query for query in executed_sql)
 
 
 def test_history_loads_items_only_for_selected_ancestry(
@@ -1149,12 +1176,12 @@ def test_history_loads_items_only_for_selected_ancestry(
 
     assert parent.id == selected_id
     assert [message.id for message in history] == [question.id, selected_id]
-    assert selected.response_items
-    assert "response_items" in inspect(sibling).unloaded
-    assert "response_items" in inspect(later).unloaded
+    assert selected.response_messages
+    assert "response_messages" in inspect(sibling).unloaded
+    assert "response_messages" in inspect(later).unloaded
     assert "tool_calls" in inspect(sibling).unloaded
     assert "tool_calls" in inspect(later).unloaded
-    assert sum("FROM chat_response_item" in query for query in executed_sql) == 1
+    assert sum("FROM chat_response_message" in query for query in executed_sql) == 1
 
 
 @pytest.mark.parametrize("invalid_character", ["\x00", "\ud800"])
@@ -1180,14 +1207,21 @@ def test_response_storage_sanitizes_postgres_text_without_mutating_input(
         ),
         AssistantMessage(content=[TextContent(text=original_text)]),
     ]
-    record.items = build_response_items(
-        record.run_id, messages, [], answer_message_index=2
-    )
+    record.messages = _messages(record.run_id, messages)
+    record.operations = [
+        OperationSnapshot(step_index=step, message_index=index, status=record.status)
+        for step, index in enumerate(
+            index
+            for index, message in enumerate(record.messages)
+            if isinstance(message, AssistantMessage)
+        )
+    ]
+    record.answer_message_index = 2
     original = record.model_copy(deep=True)
 
     _save(db_session, response, record)
 
-    replay = messages_from_items(read_response_items(response))
+    replay = read_response_messages(response)
     assert [message.text for message in replay] == ["beforeafter"] * 3
     first = replay[0]
     assert isinstance(first, AssistantMessage)
@@ -1211,7 +1245,13 @@ def test_lifecycle_and_display_saves_share_response_content(
     root_id = response.id
     root_session_id = conversation.id
     initial = record.model_copy(
-        update={"items": [], "child_runs": [], "status": RunStatus.RUNNING}
+        update={
+            "messages": [],
+            "operations": [],
+            "answer_message_index": None,
+            "child_runs": [],
+            "status": RunStatus.RUNNING,
+        }
     )
     save_response_record__no_commit(db_session, root_id, initial)
     db_session.commit()
@@ -1266,12 +1306,12 @@ def test_lifecycle_and_display_saves_share_response_content(
         saved_root = db_session.get(ChatMessage, root_id)
         assert saved_root is not None
         assert saved_root.message == "Answer"
-        assert read_response_items(saved_root) == record.items
+        assert read_response_messages(saved_root) == record.messages
         saved_child = read_response__no_commit(db_session, child.run_id)
         assert saved_child is not None
         assert saved_child.response.parent_run_id == record.run_id
         assert saved_child.response.checkpoint == child.checkpoint
-        assert saved_child.response.items == child.items
+        assert saved_child.response.messages == child.messages
         assert (
             db_session.scalar(
                 select(func.count())
@@ -1330,7 +1370,15 @@ def test_history_size_checks_all_payloads_in_one_query(
             content="x" * 2000 if large_field == "tool" else "",
         ),
     ]
-    record.items = build_response_items(record.run_id, messages, [])
+    record.messages = _messages(record.run_id, messages)
+    record.operations = [
+        OperationSnapshot(step_index=step, message_index=index, status=record.status)
+        for step, index in enumerate(
+            index
+            for index, message in enumerate(record.messages)
+            if isinstance(message, AssistantMessage)
+        )
+    ]
     _save(db_session, response, record)
     response_id = response.id
     monkeypatch.setattr(chat_subagents, "MAX_AGENT_HISTORY_BYTES", 1000)
@@ -1384,4 +1432,4 @@ def test_response_store_rejects_wrong_session_or_recording_mode_before_writes(
     db_session.refresh(row)
     assert row.message == ""
     assert row.error is None
-    assert not row.response_items
+    assert not row.response_messages

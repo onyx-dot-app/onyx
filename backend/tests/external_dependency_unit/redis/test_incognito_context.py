@@ -27,7 +27,6 @@ from onyx.chat.incognito_context import (
 )
 from onyx.chat.llm_step import PromptMetadata, prompt_metadata
 from onyx.chat.models import ResponseRecord
-from onyx.chat.response_items import build_response_items, messages_from_items
 from onyx.configs.constants import MessageType
 from onyx.file_store.models import ChatFileType, ChatLoadedFile
 from onyx.llm.models import (
@@ -296,9 +295,7 @@ def _terminal_record(
         run_id=str(uuid4()),
         status=RunStatus.COMPLETE,
         previous_run_id=previous_run_id,
-        items=build_response_items(
-            "test-generation", [AssistantMessage(content=[TextContent(text=text)])], []
-        ),
+        messages=[AssistantMessage(content=[TextContent(text=text)])],
     )
 
 
@@ -330,14 +327,14 @@ def test_response_retention_keeps_root_usable_and_reports_expired_child_history(
             first,
             {},
             message_id=1,
-            messages=messages_from_items(first.items),
+            messages=first.messages,
         )
         save_incognito_response(
             session_id,
             second,
             {},
             message_id=2,
-            messages=messages_from_items(second.items),
+            messages=second.messages,
         )
         with pytest.raises(ValueError, match="expired"):
             load_incognito_agent_history(session_id, [2, 1], child_id)
@@ -348,7 +345,7 @@ def test_response_retention_keeps_root_usable_and_reports_expired_child_history(
                 reply,
                 {},
                 message_id=message_id,
-                messages=messages_from_items(reply.items),
+                messages=reply.messages,
             )
         assert load_incognito_context(session_id).messages[-1].text == "answer 14"
         client = get_redis_client()
@@ -381,7 +378,7 @@ def test_terminal_write_rejects_oversize_without_changing_either_store() -> None
                 reply,
                 {},
                 message_id=1,
-                messages=messages_from_items(reply.items),
+                messages=reply.messages,
             )
     assert client.get(_context_key(session_id)) == before
     assert _archive(archive_key) == archive_before
@@ -428,7 +425,7 @@ def test_terminal_write_retries_conflicts_without_losing_root_or_child_records()
                             reply,
                             {},
                             message_id=index,
-                            messages=messages_from_items(reply.items),
+                            messages=reply.messages,
                         )
                     )
                 )
@@ -465,7 +462,7 @@ def test_teardown_during_terminal_commit_cannot_restore_replay_state() -> None:
                 reply,
                 {},
                 message_id=1,
-                messages=messages_from_items(reply.items),
+                messages=reply.messages,
             )
     assert get_redis_client().get(_context_key(session_id)) == b"tombstone"
     assert _archive(f"incognito_ctx:{session_id}:agents") == {}
@@ -484,7 +481,7 @@ def test_root_replay_is_stored_once_and_conflicting_retries_are_rejected() -> No
     append_incognito_message(session_id, UserMessage(content="question"))
     get_or_create_incognito_root_id(session_id, root_id)
     reply = _terminal_record(root_id, "accepted output " + "x" * 3000)
-    messages = messages_from_items(reply.items)
+    messages = reply.messages
     with patch("onyx.chat.incognito_context._MAX_CONTEXT_BYTES", 4096):
         save_incognito_response(session_id, reply, {}, message_id=1, messages=messages)
         before = get_redis_client().get(_context_key(session_id))

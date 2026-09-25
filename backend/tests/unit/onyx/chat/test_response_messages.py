@@ -1,4 +1,4 @@
-"""Accepted response items retain identity, completion, and explicit answer selection."""
+"""Saved messages retain identity, completion, and explicit answer selection."""
 
 import pytest
 
@@ -6,21 +6,13 @@ from onyx.agents.events import AgentEndEvent, AgentEvent
 from onyx.agents.execution_records import RunStatus
 from onyx.agents.models import StepResult
 from onyx.agents.runtime import Agent, Run
-from onyx.chat.response import response_record
-from onyx.chat.response_items import (
-    ResponseGeneration,
-    ResponseText,
-    TextPurpose,
-    answer_message_index,
-    build_response_items,
-    messages_from_items,
-)
+from onyx.chat.response import response_record, response_snapshot
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.models import AssistantMessage, GenerationRequest, TextContent
 from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
 
 
-def test_harness_selects_answer_and_item_ids_survive_restore() -> None:
+def test_harness_selects_answer_and_message_ids_survive_restore() -> None:
     replies = iter(
         [
             AssistantMessage(content=[TextContent(text="Checking the context")]),
@@ -38,32 +30,20 @@ def test_harness_selects_answer_and_item_ids_survive_restore() -> None:
     events: list[AgentEvent] = []
     run_agent(agent, max_steps=2, runs=runs, listener=events.append)
     snapshot = runs[0].snapshot()
-    items = response_record(snapshot).items
-    text_items = [
-        item.content for item in items if isinstance(item.content, ResponseText)
-    ]
-    assert [item.purpose for item in text_items] == [
-        TextPurpose.COMMENTARY,
-        TextPurpose.ANSWER,
-    ]
+    record = response_record(snapshot)
+    assert record.answer_message_index == 1
     terminal = next(event for event in events if isinstance(event, AgentEndEvent))
     answer = snapshot.messages[1]
     assert isinstance(answer, AssistantMessage)
     assert terminal.answer_message_id == answer.id
-    restored = messages_from_items(items)
-    assert (
-        build_response_items(
-            "different-execution-id",
-            restored,
-            snapshot.operations,
-            answer_message_index=answer_message_index(items),
-        )
-        == items
-    )
+    restored = response_snapshot(record)
+    assert restored.messages == snapshot.messages
+    assert restored.operations == snapshot.operations
+    assert restored.answer_message_index == snapshot.answer_message_index
     assert snapshot.answer_message_index == 1
 
 
-def test_empty_cancelled_generation_survives_item_round_trip() -> None:
+def test_empty_cancelled_generation_survives_storage_round_trip() -> None:
     def cancel(
         _request: GenerationRequest, _signal: CancellationSignal
     ) -> AssistantMessage:
@@ -73,10 +53,8 @@ def test_empty_cancelled_generation_survives_item_round_trip() -> None:
     with pytest.raises(AgentCancelled):
         run_agent(Agent(FakeModelClient(cancel)), max_steps=1, runs=runs)
     snapshot = runs[0].snapshot()
-    items = response_record(snapshot).items
-    assert snapshot.answer_message_index is None
-    assert len(items) == 1
-    boundary = items[0].content
-    assert isinstance(boundary, ResponseGeneration)
-    assert boundary.outcome.status == RunStatus.CANCELLED
-    assert messages_from_items(items) == snapshot.messages
+    record = response_record(snapshot)
+    assert record.answer_message_index is None
+    assert len(record.messages) == 1
+    assert record.operations[0].status == RunStatus.CANCELLED
+    assert response_snapshot(record).messages == snapshot.messages

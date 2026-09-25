@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, JsonValue, TypeAdapter
 
-from onyx.agents.execution_records import RunStatus
+from onyx.agents.execution_records import OperationSnapshot, RunStatus
 from onyx.agents.models import AgentState, ExecutionCheckpoint, RunProgress, RunState
 from onyx.agents.tools import HumanToolAnswer, InputDecision
 from onyx.chat.llm_step import PromptMetadata
@@ -208,11 +208,23 @@ def _digest(context: AgentState, serializer: _CheckpointSerializer) -> str:
     return hashlib.sha256(content.encode()).hexdigest()
 
 
+def _operation_key(operation: OperationSnapshot) -> tuple[int, str]:
+    # Parallel workers can record outcomes in a different order than storage reads them.
+    return operation.message_index, operation.tool_call_id or ""
+
+
 def _response_digest(response: ResponseRecord) -> str:
     return hashlib.sha256(
         json.dumps(
             {
-                "items": [item.model_dump(mode="json") for item in response.items],
+                "messages": [
+                    message.model_dump(mode="json") for message in response.messages
+                ],
+                "operations": [
+                    operation.model_dump(mode="json")
+                    for operation in sorted(response.operations, key=_operation_key)
+                ],
+                "answer_message_index": response.answer_message_index,
                 "checkpoint": response.checkpoint.model_dump(mode="json")
                 if response.checkpoint is not None
                 else None,
@@ -229,7 +241,12 @@ def _response_digest(response: ResponseRecord) -> str:
 def _serialized_run_state(
     state: RunState, serializer: _CheckpointSerializer
 ) -> dict[str, JsonValue]:
-    data = _dump(state, exclude={"input_messages", "messages", "progress"})
+    data = _dump(
+        state, exclude={"input_messages", "messages", "progress", "operations"}
+    )
+    data["operations"] = [
+        _dump(operation) for operation in sorted(state.operations, key=_operation_key)
+    ]
     data["input_messages"] = [
         serializer.encode_message(item) for item in state.input_messages
     ]

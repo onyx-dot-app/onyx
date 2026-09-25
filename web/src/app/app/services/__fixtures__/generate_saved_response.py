@@ -9,7 +9,6 @@ from pathlib import Path
 
 from onyx.agents.execution_records import OperationSnapshot, RunStatus
 from onyx.chat.models import ResponseRecord
-from onyx.chat.response_items import build_response_items
 from onyx.llm.models import (
     AssistantMessage,
     Message,
@@ -50,9 +49,9 @@ def record(
         )
     return ResponseRecord(
         run_id=run,
-        items=build_response_items(
-            run, messages, operations, answer_message_index=steps[-1][0]
-        ),
+        messages=messages,
+        operations=operations,
+        answer_message_index=steps[-1][0],
         status=RunStatus.COMPLETE,
         parent_run_id=parent_run_id,
         parent_message_id=parent_message_id,

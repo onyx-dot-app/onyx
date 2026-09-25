@@ -74,6 +74,9 @@ class ToolBatch:
         self.after_tool_call = after_tool_call
         self.step = completed.step
         self.message = completed.message
+        if self.message.id is None:
+            raise ValueError("Tool execution requires a message ID")
+        self.message_id = self.message.id
         self.options = completed.options
         self.context_messages = context_messages
         self.calls = self.message.tool_calls
@@ -347,6 +350,7 @@ class ToolBatch:
                         self.run._delivery.publish(
                             ToolStartEvent(
                                 **self.run._ancestry,
+                                message_id=self.message_id,
                                 step_index=step.index,
                                 tool_call=member,
                             )
@@ -387,6 +391,7 @@ class ToolBatch:
                         self.run._delivery.publish(
                             ToolUpdateEvent(
                                 **self.run._ancestry,
+                                message_id=self.message_id,
                                 step_index=step.index,
                                 tool_call=member,
                                 progress=progress,
@@ -451,6 +456,7 @@ class ToolBatch:
         )
         event = ToolUpdateEvent(
             **self.run._ancestry,
+            message_id=self.message_id,
             step_index=self.step.index,
             tool_call=call,
             progress=ToolProgress(content=result.text, details=result.details),
@@ -540,6 +546,7 @@ class ToolBatch:
         )
         event = ToolEndEvent(
             **self.run._ancestry,
+            message_id=self.message_id,
             step_index=self.step.index,
             tool_call=call,
             result=result,

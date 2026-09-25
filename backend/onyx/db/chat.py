@@ -738,7 +738,7 @@ def get_chat_messages_by_session(
 
     if prefetch_message_details:
         stmt = stmt.options(
-            selectinload(ChatMessage.response_items),
+            selectinload(ChatMessage.response_messages),
             selectinload(ChatMessage.chat_message_feedbacks),
             selectinload(ChatMessage.search_docs),
         )

@@ -10,13 +10,12 @@ from onyx.agents.execution_records import RunFailure, RunFailureKind, RunStatus
 from onyx.agents.models import AgentInfo
 from onyx.chat.checkpoint import ResponseCheckpoint
 from onyx.chat.models import ResponseRecord
-from onyx.chat.response_items import ResponseItemKind
 from onyx.db.chat_history import checkpoint_from_summary, find_summary_for_ancestry
 from onyx.db.chat_response import (
     _ResponseWriter,
     configure_response_transaction__no_commit,
 )
-from onyx.db.chat_response_items import (
+from onyx.db.chat_response_messages import (
     finish_checkpoint__no_commit,
     read_response_record,
 )
@@ -139,7 +138,10 @@ def find_response__no_commit(session: Session, run_id: str) -> ChatMessage | Non
     return session.scalar(
         select(ChatMessage)
         .where(predicate)
-        .options(selectinload(ChatMessage.response_items))
+        .options(
+            selectinload(ChatMessage.response_messages),
+            selectinload(ChatMessage.tool_calls),
+        )
     )
 
 
@@ -207,16 +209,16 @@ def save_response_record__no_commit(
             raise ValueError("Parent response is unavailable on this branch")
     writer = _ResponseWriter(session, root, {})
     if parent is not None:
-        generation_id = None
-        for item in parent.response_items:
-            if item.kind == ResponseItemKind.GENERATION:
-                generation_id = item.id
-            elif item.kind == ResponseItemKind.TOOL_CALL and item.tool_call is not None:
-                if generation_id is None:
-                    raise ValueError("Parent tool call has no generation")
-                writer.tools[(generation_id, item.tool_call.tool_call_id)] = (
-                    item.tool_call
-                )
+        message_ids_by_step = {
+            row.step_index: row.id
+            for row in parent.response_messages
+            if row.content is not None
+        }
+        for tool in parent.tool_calls or []:
+            assistant_message_id = message_ids_by_step.get(tool.turn_number)
+            if assistant_message_id is None:
+                raise ValueError("Parent tool call has no assistant message")
+            writer.tools[(assistant_message_id, tool.tool_call_id)] = tool
     writer.store(record, parent)
     session.flush()
     return writer.responses[record.run_id].id

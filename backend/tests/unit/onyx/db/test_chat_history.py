@@ -5,12 +5,6 @@ import pytest
 
 from onyx.agents.execution_records import RunStatus, messages_for_model
 from onyx.chat.llm_step import prompt_metadata
-from onyx.chat.response_items import (
-    GenerationOutcome,
-    ResponseGeneration,
-    ResponseItemKind,
-    ResponseText,
-)
 from onyx.configs.constants import MessageType
 from onyx.db.chat_history import (
     _build_tool_call_response_history_message,
@@ -19,9 +13,8 @@ from onyx.db.chat_history import (
 )
 from onyx.db.models import (
     ChatMessage,
-    ChatResponseItem,
+    ChatResponseMessage,
     ChatSession,
-    StoredResponseContent,
 )
 from onyx.file_store.models import ChatFileType, ChatLoadedFile
 from onyx.llm.models import AssistantMessage, TextContent, ToolCall, ToolResultMessage
@@ -195,27 +188,15 @@ def test_saved_response_history_preserves_generation_content() -> None:
         is_clarification=False,
         response_status=RunStatus.CANCELLED,
     )
-    response.response_items = [
-        ChatResponseItem(
+    response.response_messages = [
+        ChatResponseMessage(
             id="generation-1",
             chat_message_id=42,
             position=0,
             step_index=0,
-            kind=ResponseItemKind.GENERATION,
-            content=StoredResponseContent(
-                value=ResponseGeneration(
-                    outcome=GenerationOutcome(status=RunStatus.CANCELLED)
-                )
-            ),
-        ),
-        ChatResponseItem(
-            id="generation-1:0",
-            chat_message_id=42,
-            position=1,
-            step_index=0,
-            kind=ResponseItemKind.TEXT,
-            content=StoredResponseContent(
-                value=ResponseText(text="Accepted partial output")
+            operation_status=RunStatus.CANCELLED,
+            content=AssistantMessage(
+                id="generation-1", content=[TextContent(text="Accepted partial output")]
             ),
         ),
     ]

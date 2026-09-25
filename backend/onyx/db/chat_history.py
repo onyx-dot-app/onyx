@@ -12,13 +12,12 @@ from onyx.agents.execution_records import CompactionCheckpoint, messages_for_mod
 from onyx.chat.files import build_file_context
 from onyx.chat.llm_step import PromptMetadata, count_message_tokens
 from onyx.chat.models import ChatHistoryMessage, ChatHistoryResult
-from onyx.chat.response_items import messages_from_items
 from onyx.configs.constants import MessageType
 from onyx.db.chat import (
     get_chat_messages_by_session,
     get_or_create_root_message,
 )
-from onyx.db.chat_response_items import read_response_items
+from onyx.db.chat_response_messages import read_response_messages
 from onyx.db.enums import record_mode_persists_content
 from onyx.db.models import ChatMessage
 from onyx.file_store.models import (
@@ -269,7 +268,7 @@ def capture_chat_history(
                 message.chat_session.incognito_record_mode
             ):
                 response_messages = messages_for_model(
-                    messages_from_items(read_response_items(message)),
+                    read_response_messages(message),
                     copy_messages=False,
                 )
                 for response_message in response_messages:
@@ -463,7 +462,7 @@ def load_message_branch(
             .where(ChatMessage.id.in_(response_ids))
             .options(
                 load_only(ChatMessage.id),
-                selectinload(ChatMessage.response_items),
+                selectinload(ChatMessage.response_messages),
                 selectinload(ChatMessage.tool_calls),
             )
         ).all()

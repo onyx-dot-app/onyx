@@ -15,16 +15,15 @@ from onyx.chat.models import (
     ResponseRecord,
     SavedAgentContext,
 )
-from onyx.chat.response_items import messages_from_items
 from onyx.configs.constants import MessageType
 from onyx.db.chat import translate_db_search_doc_to_saved_search_doc
 from onyx.db.chat_history import checkpoint_from_summary, find_summary_for_ancestry
-from onyx.db.chat_response_items import (
-    read_response_items,
+from onyx.db.chat_response_messages import (
+    read_response_messages,
     read_response_record,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.models import ChatMessage, ChatResponseItem, ChatSession, ToolCall
+from onyx.db.models import ChatMessage, ChatResponseMessage, ChatSession, ToolCall
 from onyx.llm.models import Message, UserMessage
 
 MAX_AGENT_HISTORY_RUNS = 512
@@ -345,16 +344,16 @@ def _check_history_size(db_session: Session, response_ids: list[int]) -> None:
             func.coalesce(
                 func.sum(
                     func.coalesce(
-                        func.octet_length(cast(ChatResponseItem.content, Text)), 0
+                        func.octet_length(cast(ChatResponseMessage.content, Text)), 0
                     )
                     + func.coalesce(
-                        func.octet_length(cast(ChatResponseItem.rendering, Text)), 0
+                        func.octet_length(cast(ChatResponseMessage.rendering, Text)), 0
                     )
                 ),
                 0,
             )
         )
-        .where(ChatResponseItem.chat_message_id.in_(response_ids))
+        .where(ChatResponseMessage.chat_message_id.in_(response_ids))
         .scalar_subquery()
     )
     tool_bytes = (
@@ -401,7 +400,8 @@ def _load_history(
             .where(ChatMessage.id.in_(response_ids))
             .options(
                 joinedload(ChatMessage.parent_message),
-                selectinload(ChatMessage.response_items),
+                selectinload(ChatMessage.response_messages),
+                selectinload(ChatMessage.tool_calls),
             )
         )
     }
@@ -412,7 +412,7 @@ def _load_history(
         if question is None or question.message_type != MessageType.USER:
             raise ValueError("Child response has no user instruction")
         messages.append(UserMessage(content=question.message))
-        messages.extend(messages_from_items(read_response_items(response)))
+        messages.extend(read_response_messages(response))
     restored = SavedAgentContext(
         agent_id=str(agent.id),
         configuration=agent.restoration_config,
@@ -440,7 +440,7 @@ def _load_history(
         documents = roots.get(root_id)
         if documents is None:
             raise ValueError("Root response is unavailable")
-        for item in response.response_items:
+        for item in response.response_messages:
             if item.rendering:
                 rendering = MessageRendering.model_validate(item.rendering)
                 for number, document_id in rendering.citation_documents.items():
@@ -482,7 +482,8 @@ def load_saved_run(
             select(ChatMessage)
             .where(ChatMessage.id == int(run_id))
             .options(
-                selectinload(ChatMessage.response_items),
+                selectinload(ChatMessage.response_messages),
+                selectinload(ChatMessage.tool_calls),
                 joinedload(ChatMessage.parent_message).joinedload(
                     ChatMessage.parent_message
                 ),

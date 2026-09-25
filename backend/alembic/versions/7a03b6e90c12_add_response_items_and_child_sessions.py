@@ -92,7 +92,7 @@ def upgrade() -> None:
     ):
         op.add_column("tool_call", column)
     op.create_table(
-        "chat_response_item",
+        "chat_response_message",
         sa.Column("id", sa.String(), primary_key=True),
         sa.Column(
             "chat_message_id",
@@ -102,7 +102,8 @@ def upgrade() -> None:
         ),
         sa.Column("position", sa.Integer(), nullable=False),
         sa.Column("step_index", sa.Integer(), nullable=False),
-        sa.Column("kind", sa.String(), nullable=False),
+        sa.Column("operation_status", sa.String(), nullable=True),
+        sa.Column("is_answer", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column("content", postgresql.JSONB(), nullable=True),
         sa.Column(
             "tool_call_id",
@@ -112,21 +113,36 @@ def upgrade() -> None:
         ),
         sa.Column("rendering", postgresql.JSONB(), nullable=True),
         sa.UniqueConstraint(
-            "chat_message_id", "position", name="uq_response_item_position"
+            "chat_message_id", "position", name="uq_response_message_position"
         ),
-        sa.UniqueConstraint("tool_call_id", "kind", name="uq_response_item_tool_kind"),
+        sa.UniqueConstraint("tool_call_id", name="uq_response_message_tool"),
         sa.CheckConstraint(
-            "position >= 0 AND step_index >= 0", name="ck_response_item_position"
+            "position >= 0 AND step_index >= 0", name="ck_response_message_position"
         ),
         sa.CheckConstraint(
-            "(kind IN ('generation', 'text', 'reasoning') AND content IS NOT NULL AND tool_call_id IS NULL) OR (kind IN ('tool_call', 'tool_result') AND content IS NULL AND tool_call_id IS NOT NULL)",
-            name="ck_response_item_content",
+            "(content IS NOT NULL AND tool_call_id IS NULL AND operation_status IS NOT NULL) OR (content IS NULL AND tool_call_id IS NOT NULL AND operation_status IS NULL AND NOT is_answer)",
+            name="ck_response_message_content",
         ),
     )
     op.create_index(
-        "ix_chat_response_item_chat_message_id",
-        "chat_response_item",
+        "ix_chat_response_message_chat_message_id",
+        "chat_response_message",
         ["chat_message_id"],
+    )
+
+    op.create_index(
+        "uq_response_message_step",
+        "chat_response_message",
+        ["chat_message_id", "step_index"],
+        unique=True,
+        postgresql_where=sa.text("content IS NOT NULL"),
+    )
+    op.create_index(
+        "uq_response_message_answer",
+        "chat_response_message",
+        ["chat_message_id"],
+        unique=True,
+        postgresql_where=sa.text("is_answer"),
     )
 
     op.add_column("chat_message", sa.Column("run_id", sa.String(), nullable=True))
@@ -158,7 +174,7 @@ def downgrade() -> None:
                 WHERE block->>'type' = 'text'), '') END
         WHERE result IS NOT NULL AND result <> 'null'::jsonb
     """)
-    op.drop_table("chat_response_item")
+    op.drop_table("chat_response_message")
     op.execute("DELETE FROM chat_session WHERE spawned_by_message_id IS NOT NULL")
     op.execute("DELETE FROM tool_call WHERE tool_id IS NULL")
     op.alter_column("tool_call", "tool_id", existing_type=sa.Integer(), nullable=False)

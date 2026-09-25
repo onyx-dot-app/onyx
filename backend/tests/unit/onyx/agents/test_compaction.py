@@ -6,6 +6,7 @@ from unittest.mock import patch
 import pytest
 
 from onyx.agents.compaction import context_budget, history_digest, request_tokens
+from onyx.agents.events import AgentEvent
 from onyx.agents.execution_records import CompactionCheckpoint, RunStatus
 from onyx.agents.models import AgentState, PreparedStep, RunState, StepInput
 from onyx.agents.runtime import Agent, Run, RunFailed, _fit_context
@@ -16,6 +17,7 @@ from onyx.llm.interfaces import LLM, GenerationContext, LLMConfig, LLMUserIdenti
 from onyx.llm.models import (
     AssistantMessage,
     GenerationDoneEvent,
+    GenerationErrorEvent,
     GenerationEvent,
     GenerationOptions,
     GenerationRequest,
@@ -86,7 +88,14 @@ class ContextModel(LLM):
     def stream(
         self, request: GenerationRequest, context: GenerationContext | None = None
     ) -> Generator[GenerationEvent, None, None]:
-        yield GenerationDoneEvent(message=self.invoke(request, context))
+        try:
+            message = self.invoke(request, context)
+        except LLMContextLimitError:
+            yield GenerationErrorEvent(
+                message=AssistantMessage(error_message="Too much context")
+            )
+            raise
+        yield GenerationDoneEvent(message=message)
 
 
 def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> None:
@@ -186,7 +195,16 @@ def test_provider_context_rejection_preserves_execution_settings(
         ),
         prepare_step=prepare,
     )
-    result = agent.start(background=False, max_steps=1).result()
+    events: list[AgentEvent] = []
+    run = agent.start(background=False, max_steps=1, on_event=events.append)
+    result = run.result()
+    assert run.wait_for_idle(2)
+    starts = [event for event in events if event.type == "message_start"]
+    ends = [event for event in events if event.type == "message_end"]
+    assert len(starts) == len(ends) == 1
+    assert starts[0].message_id == ends[0].message_id == result.output.id
+    assert ends[0].status == RunStatus.COMPLETE
+    assert ends[0].message.error_message is None
     assert prepared == [0]
     assert [context.flow for context in model.contexts] == [
         LLMFlow.RESEARCH_AGENT,

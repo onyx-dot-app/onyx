@@ -183,7 +183,13 @@ def test_live_and_saved_tool_cards_share_public_content(kind: str) -> None:
         Emitter(output.put_nowait, response_id=42), tool_ids={call.name: 1}
     )
     presenter.consume(
-        ToolEndEvent(run_id="run", step_index=0, tool_call=call, result=result)
+        ToolEndEvent(
+            run_id="run",
+            message_id="run:0",
+            step_index=0,
+            tool_call=call,
+            result=result,
+        )
     )
     live = output.get_nowait()
     assert isinstance(live.obj, ItemUpdate)

@@ -15,9 +15,6 @@ from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.chat.models import MessageRendering, ResponseRecord
 from onyx.chat.prompt_utils import prepare_prompt
-from onyx.chat.response_items import (
-    build_response_items,
-)
 from onyx.chat.subagents import create_chat_agent_coordinator
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc
@@ -39,6 +36,7 @@ from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
+    Message,
     ReasoningEffort,
     TextContent,
     ToolCall,
@@ -48,6 +46,15 @@ from onyx.llm.models import (
 )
 from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
 from tests.unit.onyx.agents.fakes import FakeModelClient
+
+
+def _messages(run_id: str, messages: list[Message]) -> list[Message]:
+    step = 0
+    for message in messages:
+        if isinstance(message, AssistantMessage):
+            message.id = message.id or f"{run_id}:{step}"
+            step += 1
+    return messages
 
 
 def test_research_restores_across_request_contexts(db_session: Session) -> None:
@@ -114,20 +121,18 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
         agent_id=root_id,
         input_messages=[UserMessage(content="Investigate cedar")],
         status=RunStatus.COMPLETE,
-        items=build_response_items(
+        messages=_messages(
             run_id,
             [
                 AssistantMessage(
                     content=[ToolCall(id="delegate", name="delegate", arguments={})]
                 )
             ],
-            [
-                OperationSnapshot(
-                    step_index=0, message_index=0, status=RunStatus.COMPLETE
-                )
-            ],
-            answer_message_index=None,
         ),
+        operations=[
+            OperationSnapshot(step_index=0, message_index=0, status=RunStatus.COMPLETE)
+        ],
+        answer_message_index=None,
         child_runs=[
             ResponseRecord(
                 run_id=first_run,
@@ -137,35 +142,36 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
                 restoration_config=settings,
                 status=RunStatus.COMPLETE,
                 input_messages=[UserMessage(content="Investigate cedar")],
-                items=build_response_items(
+                messages=_messages(
                     first_run,
                     [
                         AssistantMessage(
                             content=[TextContent(text="Cedar evidence [1].")]
                         )
                     ],
-                    [
-                        OperationSnapshot(
-                            step_index=0, message_index=0, status=RunStatus.COMPLETE
-                        )
-                    ],
-                    answer_message_index=None,
                 ),
+                operations=[
+                    OperationSnapshot(
+                        step_index=0, message_index=0, status=RunStatus.COMPLETE
+                    )
+                ],
+                answer_message_index=None,
             )
         ],
     )
     transcript.child_runs[0].parent_run_id = transcript.run_id
     transcript.child_runs[0].parent_message_id = f"{transcript.run_id}:0"
     transcript.child_runs[0].parent_tool_call_id = "delegate"
+    child_message = transcript.child_runs[0].messages[0]
+    assert isinstance(child_message, AssistantMessage)
+    assert child_message.id is not None
     save_response_content(
         previous,
         transcript,
         db_session=db_session,
         persist_content=True,
         presentation={
-            transcript.child_runs[0].items[0].id: MessageRendering(
-                citation_documents={1: "source"}
-            )
+            child_message.id: MessageRendering(citation_documents={1: "source"})
         },
     )
     db_session.commit()
@@ -343,7 +349,7 @@ def test_saved_tools_filter_at_request_boundary(db_session: Session) -> None:
         agent_id=str(session.id),
         status=RunStatus.COMPLETE,
         input_messages=[UserMessage(content=question.message)],
-        items=build_response_items(
+        messages=_messages(
             run_id,
             [
                 AssistantMessage(
@@ -364,16 +370,12 @@ def test_saved_tools_filter_at_request_boundary(db_session: Session) -> None:
                 ),
                 AssistantMessage(content=[TextContent(text="Answer")]),
             ],
-            [
-                OperationSnapshot(
-                    step_index=0, message_index=0, status=RunStatus.COMPLETE
-                ),
-                OperationSnapshot(
-                    step_index=1, message_index=3, status=RunStatus.COMPLETE
-                ),
-            ],
-            answer_message_index=3,
         ),
+        operations=[
+            OperationSnapshot(step_index=0, message_index=0, status=RunStatus.COMPLETE),
+            OperationSnapshot(step_index=1, message_index=3, status=RunStatus.COMPLETE),
+        ],
+        answer_message_index=3,
     )
     session_id, question_id, response_id = session.id, question.id, response.id
     try:

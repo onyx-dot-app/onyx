@@ -7,20 +7,10 @@ from pydantic import BaseModel, JsonValue, TypeAdapter
 from onyx.agents.execution_records import RunStatus
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.models import MessageRendering, PresentationMode
-from onyx.chat.response_items import (
-    ResponseGeneration,
-    ResponseItem,
-    ResponseText,
-    messages_from_items,
-)
-from onyx.chat.response_items import (
-    TextPurpose as ResponseTextPurpose,
-)
 from onyx.context.search.models import SearchDoc
 from onyx.llm.models import (
     AssistantMessage,
-    GenerationErrorEvent,
-    GenerationEvent,
+    GenerationContentEvent,
     TextContent,
     TextDeltaEvent,
     ThinkingContent,
@@ -192,7 +182,7 @@ class MessageRenderer:
             )
         return packets
 
-    def consume(self, event: GenerationEvent) -> list[Packet]:
+    def consume(self, event: GenerationContentEvent) -> list[Packet]:
         if isinstance(event, TextDeltaEvent):
             return self._content(event.text)
         if isinstance(event, ThinkingDeltaEvent):
@@ -229,8 +219,6 @@ class MessageRenderer:
                     )
                 )
             return packets
-        if isinstance(event, GenerationErrorEvent):
-            return self.complete(event.message, RunStatus.ERROR)
         return []
 
     def complete(
@@ -288,34 +276,28 @@ class MessageRenderer:
             )
         return packets
 
-    def saved(self, items: list[ResponseItem]) -> list[Packet]:
-        """Format complete stored content with the same citation and purpose rules."""
-        boundary = items[0].content
-        if not isinstance(boundary, ResponseGeneration):
-            raise ValueError("Response has no generation boundary")
-        message = messages_from_items(items)[0]
-        if not isinstance(message, AssistantMessage):
-            raise ValueError("Response must begin with an assistant message")
+    def saved(
+        self,
+        message: AssistantMessage,
+        status: RunStatus,
+        *,
+        is_answer: bool,
+    ) -> list[Packet]:
+        """Render stored messages with the same citation and purpose rules as live output."""
         purpose = None
         if self.text.purpose == TextPurpose.ANSWER:
             purpose = (
                 TextPurpose.ANSWER
-                if any(
-                    isinstance(item.content, ResponseText)
-                    and item.content.purpose == ResponseTextPurpose.ANSWER
-                    for item in items
-                )
+                if is_answer
                 or (
-                    boundary.outcome.status in {RunStatus.CANCELLED, RunStatus.ERROR}
+                    status in {RunStatus.CANCELLED, RunStatus.ERROR}
                     and not message.tool_calls
                 )
                 else TextPurpose.COMMENTARY
             )
         return [
             packet
-            for packet in self.complete(
-                message, boundary.outcome.status, purpose=purpose
-            )
+            for packet in self.complete(message, status, purpose=purpose)
             if isinstance(packet.obj, ItemUpdate)
             and not isinstance(packet.obj.item, ToolItem)
         ]
