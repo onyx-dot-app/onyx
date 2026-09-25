@@ -1389,19 +1389,26 @@ DRUPAL_WIKI_ATTACHMENT_SIZE_THRESHOLD = int(
     os.environ.get("DRUPAL_WIKI_ATTACHMENT_SIZE_THRESHOLD", 10 * 1024 * 1024)
 )
 
-# Default size threshold for SharePoint files (20MB)
+# Largest file any Microsoft connector downloads and extracts, in bytes: SharePoint
+# drive items, Teams channel files and images, Outlook mail attachments. Each
+# connector's own variable below overrides it for that connector alone.
+MICROSOFT_CONNECTOR_SIZE_THRESHOLD = int(
+    os.environ.get("MICROSOFT_CONNECTOR_SIZE_THRESHOLD") or 20 * 1024 * 1024
+)
+
 SHAREPOINT_CONNECTOR_SIZE_THRESHOLD = int(
-    os.environ.get("SHAREPOINT_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
+    os.environ.get("SHAREPOINT_CONNECTOR_SIZE_THRESHOLD")
+    or MICROSOFT_CONNECTOR_SIZE_THRESHOLD
 )
 
-# Largest mail attachment the Outlook connector downloads and extracts.
 OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD = int(
-    os.environ.get("OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD", 20 * 1024 * 1024)
+    os.environ.get("OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD")
+    or MICROSOFT_CONNECTOR_SIZE_THRESHOLD
 )
 
-# Largest file posted in a channel that the Teams connector downloads and extracts.
 TEAMS_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD = int(
-    os.environ.get("TEAMS_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD", 20 * 1024 * 1024)
+    os.environ.get("TEAMS_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD")
+    or MICROSOFT_CONNECTOR_SIZE_THRESHOLD
 )
 
 # When True, group sync enumerates every Azure AD group in the tenant (expensive).
