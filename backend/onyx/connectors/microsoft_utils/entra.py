@@ -121,19 +121,12 @@ class EntraClient:
         self._get_json = get_json
         self._graph_api_base = graph_api_base.rstrip("/")
 
-    def _get(
-        self,
-        url: str,
-        params: dict[str, str] | None = None,
-    ) -> dict[str, Any]:
-        return self._get_json(url, params)
-
-    def _users_page(
+    def list_users_page(
         self,
         *,
-        next_link: str | None,
-        page_size: int,
-        enabled_only: bool,
+        next_link: str | None = None,
+        page_size: int = ENTRA_PAGE_SIZE,
+        enabled_only: bool = False,
     ) -> EntraUserPage:
         params: dict[str, str] | None = None
         url = next_link
@@ -145,49 +138,25 @@ class EntraClient:
             }
             if enabled_only:
                 params["$filter"] = ENABLED_USERS_FILTER
-        data = self._get(url, params)
+        data = self._get_json(url, params)
         return EntraUserPage(
             users=[EntraUser.model_validate(raw) for raw in data.get("value", [])],
             next_link=data.get("@odata.nextLink"),
         )
 
-    def list_users_page(
-        self,
-        *,
-        next_link: str | None = None,
-        page_size: int = ENTRA_PAGE_SIZE,
-    ) -> EntraUserPage:
-        return self._users_page(
-            next_link=next_link,
-            page_size=page_size,
-            enabled_only=False,
-        )
-
-    def list_enabled_users_page(
-        self,
-        *,
-        next_link: str | None = None,
-        page_size: int = ENTRA_PAGE_SIZE,
-    ) -> EntraUserPage:
-        return self._users_page(
-            next_link=next_link,
-            page_size=page_size,
-            enabled_only=True,
-        )
-
     def get_user(self, identifier: str) -> EntraUser:
-        data = self._get(
+        data = self._get_json(
             build_graph_user_url(self._graph_api_base, identifier),
             {"$select": ENTRA_USER_SELECT},
         )
         return EntraUser.model_validate(data)
 
-    def _groups_page(
+    def list_groups_page(
         self,
         *,
-        next_link: str | None,
-        page_size: int,
-        select_fields: str,
+        next_link: str | None = None,
+        page_size: int = ENTRA_PAGE_SIZE,
+        select_fields: str = ENTRA_GROUP_SELECT,
     ) -> EntraGroupPage:
         params: dict[str, str] | None = None
         url = next_link
@@ -197,55 +166,19 @@ class EntraClient:
                 "$select": select_fields,
                 "$top": str(page_size),
             }
-        data = self._get(url, params)
+        data = self._get_json(url, params)
         return EntraGroupPage(
             groups=[EntraGroup.model_validate(raw) for raw in data.get("value", [])],
             next_link=data.get("@odata.nextLink"),
         )
 
-    def list_group_ids_page(
-        self,
-        *,
-        next_link: str | None = None,
-        page_size: int = ENTRA_PAGE_SIZE,
-    ) -> EntraGroupPage:
-        return self._groups_page(
-            next_link=next_link,
-            page_size=page_size,
-            select_fields=ENTRA_GROUP_ID_SELECT,
-        )
-
-    def list_named_groups_page(
-        self,
-        *,
-        next_link: str | None = None,
-        page_size: int = ENTRA_PAGE_SIZE,
-    ) -> EntraGroupPage:
-        return self._groups_page(
-            next_link=next_link,
-            page_size=page_size,
-            select_fields=ENTRA_NAMED_GROUP_SELECT,
-        )
-
-    def list_groups_page(
-        self,
-        *,
-        next_link: str | None = None,
-        page_size: int = ENTRA_PAGE_SIZE,
-    ) -> EntraGroupPage:
-        return self._groups_page(
-            next_link=next_link,
-            page_size=page_size,
-            select_fields=ENTRA_GROUP_SELECT,
-        )
-
-    def _group_members_page(
+    def list_group_members_page(
         self,
         *,
         group_id: str,
-        next_link: str | None,
-        transitive: bool,
-        page_size: int,
+        next_link: str | None = None,
+        transitive: bool = False,
+        page_size: int = ENTRA_PAGE_SIZE,
     ) -> EntraDirectoryObjectPage:
         params: dict[str, str] | None = None
         url = next_link
@@ -260,7 +193,7 @@ class EntraClient:
                 "$select": ENTRA_GROUP_MEMBER_SELECT,
                 "$top": str(page_size),
             }
-        data = self._get(url, params)
+        data = self._get_json(url, params)
         return EntraDirectoryObjectPage(
             members=[
                 EntraDirectoryObject.model_validate(raw)
@@ -269,43 +202,17 @@ class EntraClient:
             next_link=data.get("@odata.nextLink"),
         )
 
-    def list_group_members_page(
-        self,
-        *,
-        group_id: str,
-        next_link: str | None = None,
-        page_size: int = ENTRA_PAGE_SIZE,
-    ) -> EntraDirectoryObjectPage:
-        return self._group_members_page(
-            group_id=group_id,
-            next_link=next_link,
-            transitive=False,
-            page_size=page_size,
-        )
-
-    def list_transitive_group_members_page(
-        self,
-        *,
-        group_id: str,
-        next_link: str | None = None,
-        page_size: int = ENTRA_PAGE_SIZE,
-    ) -> EntraDirectoryObjectPage:
-        return self._group_members_page(
-            group_id=group_id,
-            next_link=next_link,
-            transitive=True,
-            page_size=page_size,
-        )
-
     def iter_groups(
         self,
         *,
         page_size: int = ENTRA_PAGE_SIZE,
+        select_fields: str = ENTRA_NAMED_GROUP_SELECT,
     ) -> Generator[EntraGroup, None, None]:
         yield from iter_entra_groups(
-            lambda next_link: self.list_named_groups_page(
+            lambda next_link: self.list_groups_page(
                 next_link=next_link,
                 page_size=page_size,
+                select_fields=select_fields,
             )
         )
 
@@ -314,6 +221,7 @@ class EntraClient:
         group_id: str,
         *,
         page_size: int = ENTRA_PAGE_SIZE,
+        transitive: bool = False,
     ) -> Generator[EntraDirectoryObject, None, None]:
         yield from iter_entra_group_members(
             group_id,
@@ -321,5 +229,6 @@ class EntraClient:
                 group_id=group_id,
                 next_link=next_link,
                 page_size=page_size,
+                transitive=transitive,
             ),
         )
