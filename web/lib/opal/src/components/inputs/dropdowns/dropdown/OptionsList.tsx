@@ -68,8 +68,11 @@ export const OptionsList: React.FC<OptionsListProps> = ({
     (count, section) => count + section.options.length,
     0
   );
+  // A folded group withholds its rows but still shows its title, so a
+  // list of folded groups is not empty.
+  const hasFoldedGroups = sections.some((section) => section.folded);
 
-  if (totalOptions === 0 && !showCreateOption) {
+  if (totalOptions === 0 && !showCreateOption && !hasFoldedGroups) {
     // An empty SET gets the icon'd empty state; a filter that matched
     // nothing keeps the lightweight text row.
     if (emptySet) {

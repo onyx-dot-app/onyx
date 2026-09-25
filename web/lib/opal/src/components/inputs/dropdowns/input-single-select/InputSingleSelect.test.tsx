@@ -211,6 +211,23 @@ describe("InputSingleSelect", () => {
       expect(screen.getAllByRole("option")).toHaveLength(2);
     });
 
+    test("folding the group that holds the selection leaves every title in place", async () => {
+      const user = setupUser();
+      render(
+        <InputSingleSelect
+          placeholder="Model"
+          value="claude"
+          options={providerOptions}
+        />
+      );
+      await user.click(screen.getByRole("combobox", { name: "Model" }));
+      await user.click(screen.getByText("Anthropic"));
+      expect(screen.queryAllByRole("option")).toHaveLength(0);
+      expect(screen.getByText("OpenAI")).toBeInTheDocument();
+      expect(screen.getByText("Anthropic")).toBeInTheDocument();
+      expect(screen.queryByText("No options found")).not.toBeInTheDocument();
+    });
+
     test("clicking a foldable divider's title toggles its rows", async () => {
       const user = setupUser();
       render(
