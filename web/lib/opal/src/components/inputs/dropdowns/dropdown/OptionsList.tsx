@@ -173,7 +173,10 @@ export const OptionsList: React.FC<OptionsListProps> = ({
                 className="opal-select-group"
                 data-index={index}
                 data-highlighted={index === highlightedIndex || undefined}
-                onMouseEnter={() => onMouseEnter(index)}
+                // The title has Interactive's own hover; the pointer clears
+                // the keyboard highlight here rather than setting one, so
+                // a toggle under a still pointer leaves nothing stale.
+                onMouseEnter={() => onMouseEnter(-1)}
                 onMouseMove={onMouseMove}
               >
                 <Divider
