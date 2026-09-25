@@ -325,7 +325,9 @@ class FreshdeskConnector(PollConnector, LoadConnector):
             yield doc_batch
 
     def load_from_state(self) -> GenerateDocumentsOutput:
-        return self._process_tickets()
+        # Without updated_since, Freshdesk lists only tickets created in the
+        # last 30 days. Pruning uses this method, so it must see every ticket.
+        return self._process_tickets(start=datetime(1970, 1, 1, tzinfo=timezone.utc))
 
     def poll_source(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
