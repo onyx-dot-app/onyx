@@ -54,7 +54,9 @@ Escape closes and returns focus to the trigger. Disabled rows are passed
 over. Physical focus stays on the
 trigger or the search field, and `aria-activedescendant` follows the
 highlight. Typing in the search field never highlights a row; only walking
-the list does. A title stop has no highlight of its own yet: its hover and
+the list does. Highlighting is modal: while the keyboard drives it the
+pointer's hover is suppressed, and the first pointer movement over the list
+hands control back to the pointer. A title stop has no highlight of its own yet: its hover and
 press come from the Divider's `Interactive`.
 
 Foldable groups start closed, except the one holding the selection; with

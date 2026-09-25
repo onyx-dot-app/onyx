@@ -99,6 +99,14 @@
 
 /* 8px side padding: with the listbox 4px wider than the trigger on each
    side, a row's text and icon then sit exactly under the trigger's. */
+/* Keyboard mode: rows and titles ignore the pointer, so the pointer's hover
+   cannot paint a second highlight beside the keyboard's. A pointer movement
+   over the list drops the flag and hover returns. */
+.opal-select-dropdown[data-keyboard-nav] [role="option"],
+.opal-select-dropdown[data-keyboard-nav] .opal-select-group {
+  pointer-events: none;
+}
+
 /* A foldable group wraps its title and rows; the same row gap as the list. */
 .opal-select-group {
   @apply flex flex-col gap-1;

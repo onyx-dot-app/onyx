@@ -25,8 +25,6 @@ interface OptionsListProps {
   highlightedIndex: number;
   fieldId: string;
   onSelect: (option: SelectOption) => void;
-  /** The pointer moved over a stop: the keyboard highlight yields. */
-  onMouseMove: () => void;
   isExactMatch: (option: SelectOption) => boolean;
   /** Current input value for creating new option */
   inputValue: string;
@@ -52,7 +50,6 @@ export const OptionsList: React.FC<OptionsListProps> = ({
   highlightedIndex,
   fieldId,
   onSelect,
-  onMouseMove,
   isExactMatch,
   inputValue,
   allowCreate,
@@ -121,7 +118,6 @@ export const OptionsList: React.FC<OptionsListProps> = ({
           onMouseDown={(e) => {
             e.preventDefault();
           }}
-          onMouseMove={onMouseMove}
         />
       )}
 
@@ -153,7 +149,6 @@ export const OptionsList: React.FC<OptionsListProps> = ({
                 }
                 isExact={isExact}
                 onSelect={onSelect}
-                onMouseMove={onMouseMove}
               />
             );
           });

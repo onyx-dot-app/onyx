@@ -11,8 +11,6 @@ interface OptionItemProps {
   isSelected: boolean;
   isExact: boolean;
   onSelect: (option: SelectOption) => void;
-  /** The pointer moved over the row: the keyboard highlight yields. */
-  onMouseMove: () => void;
 }
 
 /**
@@ -31,7 +29,6 @@ export const OptionItem = React.memo(
     isSelected,
     isExact,
     onSelect,
-    onMouseMove,
   }: OptionItemProps) => {
     return (
       <LineItemButton
@@ -58,7 +55,6 @@ export const OptionItem = React.memo(
         onMouseDown={(e) => {
           e.preventDefault();
         }}
-        onMouseMove={onMouseMove}
       />
     );
   }

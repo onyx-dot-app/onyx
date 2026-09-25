@@ -24,6 +24,7 @@ interface SelectDropdownProps {
   markAllMatches?: boolean;
   highlightedIndex: number;
   onSelect: (option: SelectOption) => void;
+  /** The pointer moved inside the list: the keyboard highlight yields. */
   onMouseMove: () => void;
   isExactMatch: (option: SelectOption) => boolean;
   /** Current input value for creating new option */
@@ -160,6 +161,11 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
         // Closed while exiting: invisible to AT and to the pointer.
         aria-hidden={presence.state === "closed" || undefined}
         data-state={presence.state}
+        // Highlighting is modal: while the keyboard drives it, rows and
+        // titles ignore the pointer so no hover paints beside the keyboard
+        // stop. The first pointer movement hands control back.
+        data-keyboard-nav={keyboardNav || undefined}
+        onMouseMove={onMouseMove}
         className="opal-select-dropdown"
         style={floatingStyles}
         onAnimationEnd={presence.onAnimationEnd}
@@ -225,7 +231,6 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
             highlightedIndex={highlightedIndex}
             fieldId={fieldId}
             onSelect={onSelect}
-            onMouseMove={onMouseMove}
             isExactMatch={isExactMatch}
             inputValue={inputValue}
             allowCreate={allowCreate}
