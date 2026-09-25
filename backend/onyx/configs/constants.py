@@ -322,6 +322,7 @@ class DocumentSource(str, Enum):
     TESTRAIL = "testrail"
     BRAINTRUST = "braintrust"
     LUMAPPS = "lumapps"
+    JIRA_SERVICE_MANAGEMENT = "jira_service_management"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
@@ -804,6 +805,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.OUTLINE: "Documentation and knowledge base pages",
     DocumentSource.CONFLUENCE: "Wiki pages, spaces, and documentation",
     DocumentSource.JIRA: "Issues, tickets, and project tracking",
+    DocumentSource.JIRA_SERVICE_MANAGEMENT: "Service desk tickets and requests",
     DocumentSource.SLAB: "Documentation and knowledge base pages",
     DocumentSource.PRODUCTBOARD: "Product management boards and insights",
     DocumentSource.FILE: "Uploaded files",

@@ -260,6 +260,13 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     docs: `${DOCS_ADMINS_PATH}/connectors/official/jira`,
     isPopular: true,
   },
+  jira_service_management: {
+    icon: SvgJira,
+    displayName: "Jira Service Management",
+    category: SourceCategory.TicketingAndTaskManagement,
+    // NOTE: no dedicated docs page yet — one will be added to the
+    // onyx-dot-app/documentation repo alongside this connector.
+  },
   zendesk: {
     icon: SvgZendesk,
     displayName: "Zendesk",
