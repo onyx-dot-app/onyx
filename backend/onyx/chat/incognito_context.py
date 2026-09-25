@@ -16,6 +16,7 @@ from collections.abc import Collection
 from uuid import UUID
 
 from pydantic import BaseModel, TypeAdapter, ValidationError
+from redis_lua_py import Key, redis, script
 
 from onyx.cache.interface import CacheBackendType
 from onyx.chat.models import ChatMessageSimple
@@ -44,28 +45,27 @@ _MESSAGES_ADAPTER: TypeAdapter[list[ChatMessageSimple]] = TypeAdapter(
     list[ChatMessageSimple]
 )
 
-# Stored value grammar: ``<version>:<messages json>``. Lua and Python agree
-# only on the digits-before-colon prefix, mirrored by _parse_version_prefix.
-# Non-matching values read as version 0. Applies when stored version == ARGV[1].
+# Stored value grammar: ``<version>:<messages json>``. The save script and
+# _parse_version_prefix agree only on the digits-before-colon prefix.
+# Non-matching values read as version 0.
 _TOMBSTONE = b"tombstone"
-_CAS_SCRIPT = """
-local cur = redis.call('GET', KEYS[1])
-if cur == 'tombstone' then
-  return 0
-end
-local cur_version = 0
-if cur then
-  local v = string.match(cur, '^(%d+):')
-  if v ~= nil and #v <= 15 then
-    cur_version = tonumber(v)
-  end
-end
-if cur_version ~= tonumber(ARGV[1]) then
-  return 0
-end
-redis.call('SET', KEYS[1], ARGV[2], 'EX', tonumber(ARGV[3]))
-return 1
-"""
+
+
+@script
+def _save_if_version(key: Key, version: int, payload: bytes, ttl: int) -> int:
+    """Write ``payload`` if the stored version equals ``version``: 1 if written."""
+    current: str | None = redis.get(key)
+    if current == "tombstone":
+        return 0
+    current_version = 0
+    if current is not None:
+        colon = current.find(":")
+        if 0 < colon <= _MAX_VERSION_DIGITS and current[:colon].isdigit():
+            current_version = int(current[:colon])
+    if current_version != version:
+        return 0
+    redis.set(key, payload, "EX", ttl)
+    return 1
 
 
 class IncognitoContext(BaseModel):
@@ -155,15 +155,12 @@ def save_incognito_context(chat_session_id: UUID, context: IncognitoContext) -> 
         body = _MESSAGES_ADAPTER.dump_json(trimmed)
     payload = f"{context.version + 1}:".encode() + body
 
-    client = get_redis_client()
-    result = client.eval(
-        _CAS_SCRIPT,
-        keys=[_context_key(chat_session_id)],
-        args=[
-            str(context.version).encode(),
-            payload,
-            str(INCOGNITO_CONTEXT_TTL_SECONDS).encode(),
-        ],
+    result = _save_if_version(
+        get_redis_client(),
+        key=_context_key(chat_session_id),
+        version=context.version,
+        payload=payload,
+        ttl=INCOGNITO_CONTEXT_TTL_SECONDS,
     )
     return bool(result)
 

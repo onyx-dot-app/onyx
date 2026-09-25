@@ -100,6 +100,7 @@ backend = [
     "pywikibot==11.4.2",
     "readerwriterlock==1.0.9",
     "redis==5.0.8",
+    "redis-lua-py==0.12.0",
     # PDF generation for the usage report review pack.
     "reportlab==5.0.0",
     "requests==2.33.0",
