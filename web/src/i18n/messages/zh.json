@@ -8962,6 +8962,10 @@
         },
         "public": {
           "label": "对您的组织公开"
+        },
+        "uploads": {
+          "modelLoading": "模型设置仍在加载。请稍后再试。",
+          "visionUnsupported": "当前模型不支持图片输入。请选择支持视觉的模型。"
         }
       }
     },

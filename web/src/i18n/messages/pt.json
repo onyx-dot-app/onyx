@@ -8962,6 +8962,10 @@
         },
         "public": {
           "label": "Público para a sua organização"
+        },
+        "uploads": {
+          "modelLoading": "As configurações do modelo ainda estão a carregar. Tente novamente daqui a pouco.",
+          "visionUnsupported": "O modelo atual não suporta entrada de imagem. Selecione um modelo com suporte a visão."
         }
       }
     },

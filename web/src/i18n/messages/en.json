@@ -8962,6 +8962,10 @@
         },
         "public": {
           "label": "Public to your organization"
+        },
+        "uploads": {
+          "modelLoading": "Model settings are still loading. Please try again in a moment.",
+          "visionUnsupported": "The current model does not support image input. Select a model with vision support."
         }
       }
     },

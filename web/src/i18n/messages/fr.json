@@ -8962,6 +8962,10 @@
         },
         "public": {
           "label": "Public dans votre organisation"
+        },
+        "uploads": {
+          "modelLoading": "Les paramètres du modèle sont encore en cours de chargement. Réessayez dans un instant.",
+          "visionUnsupported": "Le modèle actuel ne prend pas en charge les images. Sélectionnez un modèle avec prise en charge de la vision."
         }
       }
     },

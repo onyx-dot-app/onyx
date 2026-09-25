@@ -8962,6 +8962,10 @@
         },
         "public": {
           "label": "Öffentlich für Ihre Organisation"
+        },
+        "uploads": {
+          "modelLoading": "Die Modelleinstellungen werden noch geladen. Bitte versuchen Sie es in einem Moment erneut.",
+          "visionUnsupported": "Das aktuelle Modell unterstützt keine Bildeingabe. Wählen Sie ein Modell mit Vision-Unterstützung."
         }
       }
     },
