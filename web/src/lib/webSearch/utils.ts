@@ -39,6 +39,11 @@ export const SEARCH_PROVIDER_DETAILS: Record<
     logo: SvgSerper,
     apiKeyUrl: "https://serper.dev/api-key",
   },
+  litescrape: {
+    label: "Litescrape",
+    subtitle: "Litescrape.com",
+    apiKeyUrl: "https://litescrape.com/dashboard",
+  },
   brave: {
     label: "Brave",
     subtitle: "Brave Search API",
@@ -104,6 +109,7 @@ const SEARCH_PROVIDER_CAPABILITIES: Record<
 > = {
   exa: { requiresApiKey: true, requiredConfigKeys: [] },
   serper: { requiresApiKey: true, requiredConfigKeys: [] },
+  litescrape: { requiresApiKey: true, requiredConfigKeys: [] },
   brave: { requiresApiKey: true, requiredConfigKeys: [] },
   google_pse: {
     requiresApiKey: true,
