@@ -262,19 +262,13 @@ def _resync_key(
     bucket: str,
     key: str,
     marker: "ObjectTypeDef",
-) -> None:
+) -> str | None:
+    """Returns the marker's action."""
     action = target.head_object(Bucket=bucket, Key=marker["Key"])["Metadata"].get(
         LEGACY_OUT_OF_SYNC_ACTION_KEY
     )
-    source_head = _head(source, bucket, key)
-    # A legacy object newer than the marker came from an older release writing
-    # it again, and the forward copy takes it. A tie counts as the app's own
-    # write, since a save and delete within one second is far likelier.
-    if source_head is not None and source_head["LastModified"] > marker["LastModified"]:
-        return
     if action == "delete":
-        if source_head is not None:
-            source.delete_object(Bucket=bucket, Key=key)
+        # The MinIO copy stays, held back from the forward copy by the marker.
         # A copy that raced the delete left an orphan, which its metadata shows.
         target_head = _head(target, bucket, key)
         if (
@@ -282,7 +276,12 @@ def _resync_key(
             and _COPIED_FROM_METADATA_KEY in target_head["Metadata"]
         ):
             target.delete_object(Bucket=bucket, Key=key, IfMatch=target_head["ETag"])
-        return
+        return action
+    source_head = _head(source, bucket, key)
+    # A legacy object newer than the marker came from an older release writing
+    # it again, and the forward copy takes it.
+    if source_head is not None and source_head["LastModified"] > marker["LastModified"]:
+        return action
     obj: "GetObjectOutputTypeDef | None" = None
     try:
         obj = target.get_object(Bucket=bucket, Key=key)
@@ -291,7 +290,7 @@ def _resync_key(
             raise
     if obj is None:
         # Deleted since, and that delete's legacy half went through.
-        return
+        return action
     with _spooled_body(obj) as (buffer, _):
         # The dual-write mark stops the forward copy from treating this as a
         # newer legacy version.
@@ -302,20 +301,26 @@ def _resync_key(
             ContentType=_content_type(obj),
             Metadata={DUAL_WRITE_METADATA_KEY: "1"},
         )
+    return action
 
 
 def _resync_out_of_sync(
     source: "S3Client", target: "S3Client", bucket: str
-) -> set[str]:
+) -> tuple[dict[str, datetime], int]:
     """Make the legacy store match the object store for every key that a failed
-    app write or delete marked. Returns the keys still out of sync."""
-    still_out_of_sync: set[str] = set()
+    app write or delete marked. A delete marker stays as a tombstone, and the
+    forward copy skips MinIO objects no newer than it. Returns the tombstones
+    and the number of keys still out of sync."""
+    tombstones: dict[str, datetime] = {}
+    failed = 0
     paginator = target.get_paginator("list_objects_v2")
     for page in paginator.paginate(Bucket=bucket, Prefix=LEGACY_OUT_OF_SYNC_PREFIX):
         for marker in page.get("Contents", []):
             key = marker["Key"].removeprefix(LEGACY_OUT_OF_SYNC_PREFIX)
             try:
-                _resync_key(source, target, bucket, key, marker)
+                if _resync_key(source, target, bucket, key, marker) == "delete":
+                    tombstones[key] = marker["LastModified"]
+                    continue
                 target.delete_object(
                     Bucket=bucket, Key=marker["Key"], IfMatch=marker["ETag"]
                 )
@@ -326,8 +331,21 @@ def _resync_out_of_sync(
                     key,
                     exc_info=True,
                 )
-                still_out_of_sync.add(key)
-    return still_out_of_sync
+                # Held back until it is resynced, whatever its age.
+                tombstones[key] = datetime.max.replace(tzinfo=timezone.utc)
+                failed += 1
+    return tombstones, failed
+
+
+# MinIO lists with milliseconds and SeaweedFS with seconds, so a same-second
+# write and tombstone compare equal, and the tombstone wins.
+def _held_back(obj: "ObjectTypeDef", tombstones: dict[str, datetime]) -> bool:
+    tombstone = tombstones.get(obj["Key"])
+    if tombstone is None:
+        return False
+    return obj["LastModified"].replace(microsecond=0) <= tombstone.replace(
+        microsecond=0
+    )
 
 
 def run_pass(
@@ -344,15 +362,15 @@ def run_pass(
     with ThreadPoolExecutor(max_workers=workers) as pool:
         for bucket in buckets:
             # Runs before the listing, so a key that a failed delete left in
-            # MinIO is gone or skipped, never copied back.
-            out_of_sync = _resync_out_of_sync(source, target, bucket)
-            stats.failed += len(out_of_sync)
+            # MinIO is held back, never copied back.
+            tombstones, failed = _resync_out_of_sync(source, target, bucket)
+            stats.failed += failed
             copy_key = partial(_copy_object_logged, source, target, bucket)
             for page in paginator.paginate(Bucket=bucket):
                 keys = [
                     obj["Key"]
                     for obj in page.get("Contents", [])
-                    if obj["Key"] not in out_of_sync
+                    if not _held_back(obj, tombstones)
                     and (
                         modified_since is None or obj["LastModified"] >= modified_since
                     )

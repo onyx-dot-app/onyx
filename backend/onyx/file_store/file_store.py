@@ -91,8 +91,9 @@ def is_missing_object(e: ClientError) -> bool:
 
 
 # A failed legacy write or delete leaves a marker at this prefix plus the key in
-# the object store, and the legacy copy makes MinIO match the object store for it.
-# The marker's metadata names the action that failed.
+# the object store. The legacy copy replays a failed write into MinIO, and keeps
+# a failed delete's marker as a tombstone that holds MinIO's copy back. The
+# marker's metadata names the action that failed.
 LEGACY_OUT_OF_SYNC_PREFIX = "onyx-legacy-out-of-sync/"
 LEGACY_OUT_OF_SYNC_ACTION_KEY = "onyx-legacy-action"
 
