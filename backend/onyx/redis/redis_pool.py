@@ -62,7 +62,7 @@ logger = setup_logger()
 SCAN_ITER_COUNT_DEFAULT = 4096
 
 
-def _pool_retry_kwargs() -> dict[str, Any]:
+def _pool_retry_kwargs(operation_timeout: float | None = None) -> dict[str, Any]:
     """Connection retry settings for a pool.
 
     redis-py reads retries from the pool's connections and ignores ``retry``
@@ -75,10 +75,18 @@ def _pool_retry_kwargs() -> dict[str, Any]:
     check PINGs and Sentinel reconnects retry ConnectionError; they send no
     command. The health check PINGs connections idle longer than
     REDIS_HEALTH_CHECK_INTERVAL, so dropped idle connections reconnect.
+
+    Timeout pools scale the backoff so that all retry sleeps take less than
+    the operation timeout.
     """
+    backoff = (
+        ExponentialBackoff(cap=2.0, base=0.1)
+        if operation_timeout is None
+        else ExponentialBackoff(cap=operation_timeout / 4, base=operation_timeout / 20)
+    )
     return {
         "retry": Retry(
-            ExponentialBackoff(cap=2.0, base=0.1),
+            backoff,
             retries=3,
             supported_errors=(RedisConnectionError,),
         ),
@@ -223,15 +231,18 @@ class RedisPool:
         behavior and aligned with how we want to use Redis (Sentinel mode uses
         redis-py's SentinelConnectionPool instead)."""
 
-        # Timeout pools fail fast: retries would multiply the caller's deadline.
-        connection_settings = (
+        socket_timeouts = (
             {
                 "socket_timeout": operation_timeout,
                 "socket_connect_timeout": operation_timeout,
             }
             if operation_timeout is not None
-            else {**REDIS_SOCKET_TIMEOUT_KWARGS, **_pool_retry_kwargs()}
+            else REDIS_SOCKET_TIMEOUT_KWARGS
         )
+        connection_settings = {
+            **socket_timeouts,
+            **_pool_retry_kwargs(operation_timeout),
+        }
         # Using ConnectionPool is not well documented.
         # Useful examples: https://github.com/redis/redis-py/issues/780
 
@@ -313,10 +324,9 @@ class RedisPool:
             for kwargs in (connection_kwargs, sentinel_kwargs):
                 kwargs["socket_timeout"] = operation_timeout
                 kwargs["socket_connect_timeout"] = operation_timeout
-        else:
-            # Data connections only: discover_master already moves on to the
-            # next sentinel node on errors.
-            connection_kwargs.update(_pool_retry_kwargs())
+        # Data connections only: discover_master already moves on to the next
+        # sentinel node on errors.
+        connection_kwargs.update(_pool_retry_kwargs(operation_timeout))
         sentinel = Sentinel(
             REDIS_SENTINEL_HOSTS,
             sentinel_kwargs=sentinel_kwargs,

@@ -67,11 +67,8 @@ def test_default_pool_does_not_replay_commands_that_may_have_run(
     assert len(calls) == 1
 
 
-def test_timeout_pool_does_not_retry(key: str) -> None:
+def test_timeout_pool_retries_busy_loading(key: str) -> None:
     client = _connected_client(operation_timeout=1)
-    with (
-        _fail_first_send(BusyLoadingError("loading")) as calls,
-        pytest.raises(BusyLoadingError),
-    ):
+    with _fail_first_send(BusyLoadingError("loading")):
         client.incr(key)
-    assert len(calls) == 1
+    assert client.get(key) == b"1"
