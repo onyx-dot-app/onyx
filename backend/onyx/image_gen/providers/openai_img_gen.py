@@ -31,17 +31,15 @@ class OpenAIImageGenerationProvider(ImageGenerationProvider):
         cls,
         credentials: ImageGenerationProviderCredentials,
     ) -> bool:
-        return bool(credentials.api_key)
+        return bool(credentials.api_key or credentials.api_base)
 
     @classmethod
     def _build_from_credentials(
         cls,
         credentials: ImageGenerationProviderCredentials,
     ) -> OpenAIImageGenerationProvider:
-        assert credentials.api_key
-
         return cls(
-            api_key=credentials.api_key,
+            api_key=credentials.api_key or "",
             api_base=credentials.api_base,
         )
 
@@ -58,6 +56,8 @@ class OpenAIImageGenerationProvider(ImageGenerationProvider):
         return model.rsplit("/", 1)[-1]
 
     def _model_supports_image_edits(self, model: str) -> bool:
+        if self._api_base:
+            return True
         normalized_model = self._normalize_model_name(model)
         return (
             normalized_model.startswith(self._GPT_IMAGE_MODEL_PREFIX)
@@ -106,7 +106,7 @@ class OpenAIImageGenerationProvider(ImageGenerationProvider):
                     image=[image.data for image in reference_images],
                     prompt=prompt,
                     model=litellm_model,
-                    api_key=self._api_key,
+                    api_key=self._api_key or "not-needed",
                     api_base=self._api_base,
                     size=size,
                     n=n,
@@ -126,7 +126,7 @@ class OpenAIImageGenerationProvider(ImageGenerationProvider):
             return image_generation(
                 prompt=prompt,
                 model=litellm_model,
-                api_key=self._api_key,
+                api_key=self._api_key or "not-needed",
                 api_base=self._api_base,
                 size=size,
                 n=n,
