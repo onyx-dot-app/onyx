@@ -20,6 +20,7 @@ from onyx.background.celery.tasks.shared.tasks import document_by_cc_pair_cleanu
 from onyx.connectors.models import Document, IndexAttemptMetadata
 from onyx.db.document import (
     delete_all_documents_for_connector_credential_pair,
+    get_document_connector_count,
     upsert_document_by_connector_credential_pair,
 )
 from onyx.db.models import ConnectorCredentialPair
@@ -263,6 +264,65 @@ class TestDocumentByCcPairCleanupTask:
             "onyx.background.celery.tasks.shared.tasks.get_all_document_indices",
             return_value=[],
         ):
+            results = [
+                document_by_cc_pair_cleanup_task.apply(
+                    args=(
+                        doc.id,
+                        cc_pair.connector_id,
+                        cc_pair.credential_id,
+                        POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+                    ),
+                )
+                for _ in range(2)
+            ]
+
+        assert all(result.successful() for result in results)
+        # Document row still exists (other cc_pair owns it).
+        assert get_doc_row(db_session, doc.id) is not None
+        # File MUST still exist.
+        record = get_filerecord(db_session, file_id)
+        assert record is not None
+
+    def test_shared_doc_removes_relationship_before_index_update(
+        self,
+        db_session: Session,
+        cc_pair: ConnectorCredentialPair,
+        second_cc_pair: ConnectorCredentialPair,
+        attempt_metadata: IndexAttemptMetadata,
+        full_deployment_setup: None,  # noqa: ARG002
+    ) -> None:
+        doc = make_doc(f"doc-{uuid4().hex[:8]}")
+        _index_doc(db_session, doc, attempt_metadata)
+        upsert_document_by_connector_credential_pair(
+            db_session,
+            second_cc_pair.connector_id,
+            second_cc_pair.credential_id,
+            [doc.id],
+        )
+        db_session.commit()
+        indexed_doc = get_doc_row(db_session, doc.id)
+        assert indexed_doc is not None
+        assert indexed_doc.last_modified is not None
+        indexed_at = indexed_doc.last_modified
+
+        def assert_relationship_removed(_update_requests: object) -> None:
+            db_session.expire_all()
+            stored_doc = get_doc_row(db_session, doc.id)
+            assert stored_doc is not None
+            assert stored_doc.last_modified is not None
+            assert get_document_connector_count(db_session, doc.id) == 1
+            assert stored_doc.last_modified > indexed_at
+
+        with (
+            patch(
+                "onyx.background.celery.tasks.shared.tasks.get_all_document_indices",
+                return_value=[object()],
+            ),
+            patch(
+                "onyx.background.celery.tasks.shared.tasks.RetryDocumentIndex.update",
+                side_effect=assert_relationship_removed,
+            ),
+        ):
             result = document_by_cc_pair_cleanup_task.apply(
                 args=(
                     doc.id,
@@ -273,8 +333,3 @@ class TestDocumentByCcPairCleanupTask:
             )
 
         assert result.successful(), result.traceback
-        # Document row still exists (other cc_pair owns it).
-        assert get_doc_row(db_session, doc.id) is not None
-        # File MUST still exist.
-        record = get_filerecord(db_session, file_id)
-        assert record is not None

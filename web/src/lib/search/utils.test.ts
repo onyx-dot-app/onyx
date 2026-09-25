@@ -1,6 +1,11 @@
 import { ValidSources } from "../types";
 import { OnyxDocument } from "@/lib/search/types";
-import { openDocument } from "./utils";
+import {
+  countDocumentsBySource,
+  documentMatchesAnySource,
+  getDocumentSourceTypes,
+  openDocument,
+} from "./utils";
 
 function makeDocument(overrides: Partial<OnyxDocument>): OnyxDocument {
   return {
@@ -98,5 +103,69 @@ describe("openDocument", () => {
 
     expect(() => openDocument(document)).not.toThrow();
     expect(windowOpen).not.toHaveBeenCalled();
+  });
+});
+
+describe("getDocumentSourceTypes", () => {
+  it("returns all unique source types when present", () => {
+    const document = makeDocument({
+      source_type: ValidSources.GoogleDrive,
+      source_types: [
+        ValidSources.GoogleDrive,
+        ValidSources.Sharepoint,
+        ValidSources.GoogleDrive,
+      ],
+    });
+
+    expect(getDocumentSourceTypes(document)).toEqual([
+      ValidSources.GoogleDrive,
+      ValidSources.Sharepoint,
+    ]);
+  });
+
+  it("falls back to the display source for old responses", () => {
+    const document = makeDocument({
+      source_type: ValidSources.Web,
+      source_types: null,
+    });
+
+    expect(getDocumentSourceTypes(document)).toEqual([ValidSources.Web]);
+  });
+
+  it("matches any full source and falls back to the display source", () => {
+    const multiSourceDocument = makeDocument({
+      source_type: ValidSources.GoogleDrive,
+      source_types: [ValidSources.GoogleDrive, ValidSources.Sharepoint],
+    });
+    const oldDocument = makeDocument({
+      source_type: ValidSources.Web,
+    });
+
+    expect(
+      documentMatchesAnySource(multiSourceDocument, [ValidSources.Sharepoint])
+    ).toBe(true);
+    expect(
+      documentMatchesAnySource(multiSourceDocument, [ValidSources.Slack])
+    ).toBe(false);
+    expect(documentMatchesAnySource(oldDocument, [ValidSources.Web])).toBe(
+      true
+    );
+  });
+
+  it("counts a multi-source document in each source facet", () => {
+    const counts = countDocumentsBySource([
+      makeDocument({
+        source_type: ValidSources.GoogleDrive,
+        source_types: [ValidSources.GoogleDrive, ValidSources.Sharepoint],
+      }),
+      makeDocument({ source_type: ValidSources.GoogleDrive }),
+    ]);
+
+    expect(counts).toEqual(
+      new Map([
+        [ValidSources.GoogleDrive, 2],
+        [ValidSources.Sharepoint, 1],
+      ])
+    );
   });
 });

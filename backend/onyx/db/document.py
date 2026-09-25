@@ -721,6 +721,57 @@ def fetch_document_ids_by_links(
     return {link: doc_id for link, doc_id in rows if link}
 
 
+def get_document_source_types(
+    db_session: Session,
+    document_ids: list[str],
+) -> dict[str, tuple[DocumentSource, ...]]:
+    if not document_ids:
+        return {}
+
+    rows = db_session.execute(
+        select(DocumentByConnectorCredentialPair.id, Connector.source)
+        .join(
+            Connector,
+            DocumentByConnectorCredentialPair.connector_id == Connector.id,
+        )
+        .where(DocumentByConnectorCredentialPair.id.in_(document_ids))
+        .distinct()
+    ).all()
+
+    sources_by_document: dict[str, set[DocumentSource]] = {}
+    for document_id, source in rows:
+        sources_by_document.setdefault(document_id, set()).add(source)
+    return {
+        document_id: tuple(sorted(sources, key=lambda source: source.value))
+        for document_id, sources in sources_by_document.items()
+    }
+
+
+def get_document_source_types_after_cc_pair_removal(
+    db_session: Session,
+    document_id: str,
+    connector_id: int,
+    credential_id: int,
+) -> tuple[DocumentSource, ...]:
+    sources = db_session.execute(
+        select(Connector.source)
+        .select_from(DocumentByConnectorCredentialPair)
+        .join(
+            Connector,
+            DocumentByConnectorCredentialPair.connector_id == Connector.id,
+        )
+        .where(
+            DocumentByConnectorCredentialPair.id == document_id,
+            ~and_(
+                DocumentByConnectorCredentialPair.connector_id == connector_id,
+                DocumentByConnectorCredentialPair.credential_id == credential_id,
+            ),
+        )
+        .distinct()
+    ).scalars()
+    return tuple(sorted(set(sources), key=lambda source: source.value))
+
+
 def get_document_connector_count(
     db_session: Session,
     document_id: str,
@@ -1016,8 +1067,20 @@ def upsert_document_by_connector_credential_pair(
     # this must be `on_conflict_do_nothing` rather than `on_conflict_do_update`
     # since we don't want to update the `has_been_indexed` field for documents
     # that already exist
-    on_conflict_stmt = insert_stmt.on_conflict_do_nothing()
-    db_session.execute(on_conflict_stmt)
+    on_conflict_stmt = insert_stmt.on_conflict_do_nothing().returning(
+        DocumentByConnectorCredentialPair.id
+    )
+    inserted_document_ids = list(db_session.scalars(on_conflict_stmt))
+    if inserted_document_ids:
+        # Relationship changes use metadata sync for chunks that already exist.
+        db_session.execute(
+            update(DbDocument)
+            .where(
+                DbDocument.id.in_(inserted_document_ids),
+                DbDocument.chunk_count.is_not(None),
+            )
+            .values(last_modified=datetime.now(timezone.utc))
+        )
     db_session.commit()
 
 
@@ -1134,17 +1197,25 @@ def update_docs_content_hash__no_commit(
         doc.content_hash = ids_to_new_hash[doc.id]
 
 
-def mark_document_as_modified(
+def mark_document_as_modified__no_commit(
     document_id: str,
     db_session: Session,
-) -> None:
+) -> datetime:
     stmt = select(DbDocument).where(DbDocument.id == document_id)
     doc = db_session.scalar(stmt)
     if doc is None:
         raise ValueError(f"No document with ID: {document_id}")
 
-    # update last_synced
-    doc.last_modified = datetime.now(timezone.utc)
+    modified_at = datetime.now(timezone.utc)
+    doc.last_modified = modified_at
+    return modified_at
+
+
+def mark_document_as_modified(
+    document_id: str,
+    db_session: Session,
+) -> None:
+    mark_document_as_modified__no_commit(document_id, db_session)
     db_session.commit()
 
 
@@ -1532,6 +1603,14 @@ def get_document(
     stmt = select(DbDocument).where(DbDocument.id == document_id)
     doc: DbDocument | None = db_session.execute(stmt).scalar_one_or_none()
     return doc
+
+
+def get_document_for_update(
+    document_id: str,
+    db_session: Session,
+) -> DbDocument | None:
+    stmt = select(DbDocument).where(DbDocument.id == document_id).with_for_update()
+    return db_session.scalar(stmt)
 
 
 def get_cc_pairs_for_document(
