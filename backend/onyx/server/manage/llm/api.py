@@ -304,6 +304,23 @@ def _restore_masked_custom_config_values(
     return restored_config
 
 
+def _reuses_stored_secret(
+    existing_api_key: str | None,
+    effective_api_key: str | None,
+    existing_custom_config: dict[str, str] | None,
+    effective_custom_config: dict[str, str] | None,
+) -> bool:
+    if existing_api_key and existing_api_key == effective_api_key:
+        return True
+    effective = effective_custom_config or {}
+    return any(
+        is_sensitive_custom_config_key(key)
+        and bool(value)
+        and effective.get(key) == value
+        for key, value in (existing_custom_config or {}).items()
+    )
+
+
 def _validate_llm_provider_change(
     existing_api_base: str | None,
     existing_custom_config: dict[str, str] | None,
@@ -337,9 +354,7 @@ def _validate_llm_provider_change(
         }
 
     api_base_changed = normalized_new_api_base != normalized_existing_api_base
-    # Gate on the raw config (empty submissions are never persisted); compare
-    # stripped dicts so dropping stored non-surface entries is still rejected.
-    custom_config_changed = bool(new_custom_config) and _without_surface_keys(
+    custom_config_changed = _without_surface_keys(
         new_custom_config
     ) != _without_surface_keys(existing_custom_config)
 
@@ -465,22 +480,39 @@ def test_llm_configuration(
                 existing_custom_config=existing_provider.custom_config,
                 new_custom_config=test_custom_config,
             )
-        # if an API key is not provided, use the existing provider's API key
-        if existing_provider and not test_llm_request.api_key_changed:
-            _validate_llm_provider_change(
-                existing_api_base=existing_provider.api_base,
-                existing_custom_config=existing_provider.custom_config,
-                new_api_base=test_llm_request.api_base,
-                new_custom_config=test_custom_config,
-                api_key_changed=False,
-            )
-            test_api_key = (
+            # if an API key is not provided, use the existing provider's API key
+            if not test_llm_request.api_key_changed:
+                test_api_key = (
+                    existing_provider.api_key.get_value(apply_mask=False)
+                    if existing_provider.api_key
+                    else None
+                )
+            if not test_llm_request.custom_config_changed:
+                test_custom_config = existing_provider.custom_config
+
+            if _reuses_stored_secret(
                 existing_provider.api_key.get_value(apply_mask=False)
                 if existing_provider.api_key
-                else None
-            )
-        if existing_provider and not test_llm_request.custom_config_changed:
-            test_custom_config = existing_provider.custom_config
+                else None,
+                test_api_key,
+                existing_provider.custom_config,
+                test_custom_config,
+            ):
+                if (
+                    MULTI_TENANT
+                    and test_llm_request.provider != existing_provider.provider
+                ):
+                    raise OnyxError(
+                        OnyxErrorCode.VALIDATION_ERROR,
+                        "Re-enter credentials to change provider type.",
+                    )
+                _validate_llm_provider_change(
+                    existing_api_base=existing_provider.api_base,
+                    existing_custom_config=existing_provider.custom_config,
+                    new_api_base=test_llm_request.api_base,
+                    new_custom_config=test_custom_config,
+                    api_key_changed=False,
+                )
 
     test_custom_config = _validate_and_normalize_vertex_auth(
         provider=test_llm_request.provider,
@@ -621,20 +653,12 @@ def put_llm_provider(
             f"LLM Provider with name {llm_provider_upsert_request.name} and id={llm_provider_upsert_request.id} does not exist",
         )
 
-    # SSRF Protection: Validate api_base and custom_config match stored values
     if existing_provider:
         llm_provider_upsert_request.custom_config = (
             _restore_masked_custom_config_values(
                 existing_custom_config=existing_provider.custom_config,
                 new_custom_config=llm_provider_upsert_request.custom_config,
             )
-        )
-        _validate_llm_provider_change(
-            existing_api_base=existing_provider.api_base,
-            existing_custom_config=existing_provider.custom_config,
-            new_api_base=llm_provider_upsert_request.api_base,
-            new_custom_config=llm_provider_upsert_request.custom_config,
-            api_key_changed=llm_provider_upsert_request.api_key_changed,
         )
 
     persona_ids = llm_provider_upsert_request.personas
@@ -666,6 +690,30 @@ def put_llm_provider(
         )
     if existing_provider and not llm_provider_upsert_request.custom_config_changed:
         llm_provider_upsert_request.custom_config = existing_provider.custom_config
+
+    if existing_provider and _reuses_stored_secret(
+        existing_provider.api_key.get_value(apply_mask=False)
+        if existing_provider.api_key
+        else None,
+        llm_provider_upsert_request.api_key,
+        existing_provider.custom_config,
+        llm_provider_upsert_request.custom_config,
+    ):
+        if (
+            MULTI_TENANT
+            and llm_provider_upsert_request.provider != existing_provider.provider
+        ):
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "Re-enter credentials to change provider type.",
+            )
+        _validate_llm_provider_change(
+            existing_api_base=existing_provider.api_base,
+            existing_custom_config=existing_provider.custom_config,
+            new_api_base=llm_provider_upsert_request.api_base,
+            new_custom_config=llm_provider_upsert_request.custom_config,
+            api_key_changed=False,
+        )
 
     llm_provider_upsert_request.custom_config = _validate_and_normalize_vertex_auth(
         provider=llm_provider_upsert_request.provider,

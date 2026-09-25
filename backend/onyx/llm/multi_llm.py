@@ -97,6 +97,34 @@ STANDARD_MAX_TOKENS_KWARG = "max_completion_tokens"
 # LiteLLM's BaseAzureLLM._is_azure_v1_api_version.
 _AZURE_V1_API_VERSIONS = frozenset({"preview", "latest", "v1"})
 
+# Provider settings must not change process-wide networking or code loading.
+_DENIED_ENV_ONLY_CONFIG_KEYS: frozenset[str] = frozenset(
+    {
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "NO_PROXY",
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+        "REQUESTS_CA_BUNDLE",
+        "CURL_CA_BUNDLE",
+        "AWS_CA_BUNDLE",
+        "LD_PRELOAD",
+        "LD_LIBRARY_PATH",
+        "DYLD_INSERT_LIBRARIES",
+        "DYLD_LIBRARY_PATH",
+        "PATH",
+        "PYTHONPATH",
+        "PYTHONHOME",
+        "PYTHONSTARTUP",
+        "AWS_CONFIG_FILE",
+        "AWS_SHARED_CREDENTIALS_FILE",
+        "AWS_WEB_IDENTITY_TOKEN_FILE",
+        "AWS_EC2_METADATA_SERVICE_ENDPOINT",
+        "GOOGLE_APPLICATION_CREDENTIALS",
+    }
+)
+
 _VERTEX_ANTHROPIC_MODELS_REJECTING_STREAM_OPTIONS = (
     "claude-opus-4-5",
     "claude-opus-4-6",
@@ -545,12 +573,15 @@ class LitellmLLM(LLM):
         # the call on deployments that allow it; dropped (with a warning at call
         # time) otherwise. UI-only form-state keys are neither injected nor
         # warned about.
-        self._env_only_custom_config: dict[str, str] = {
-            k: v
-            for k, v in (custom_config or {}).items()
-            if k not in custom_config_mapping.consumed_keys
-            and k not in UI_ONLY_CONFIG_KEYS
-        }
+        self._env_only_custom_config: dict[str, str] = {}
+        for key, value in (custom_config or {}).items():
+            if key in custom_config_mapping.consumed_keys or key in UI_ONLY_CONFIG_KEYS:
+                continue
+            if key.upper() in _DENIED_ENV_ONLY_CONFIG_KEYS:
+                raise ValueError(
+                    f"Process environment key is not allowed in custom_config: {key}"
+                )
+            self._env_only_custom_config[key] = value
 
         # LM Studio: LiteLLM defaults to "fake-api-key" when no key is provided,
         # which LM Studio rejects. Ensure we always pass an explicit key (or empty
