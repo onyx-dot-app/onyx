@@ -11,6 +11,7 @@ import { SvgXCircle, SvgCheckCircle, SvgXOctagon } from "@opal/icons";
 import { uploadLicense } from "@/lib/billing/svc";
 import { LicenseStatus } from "@/lib/billing/interfaces";
 import { formatDateShort } from "@/lib/dateUtils";
+import { useSettings } from "@/lib/settings/hooks";
 
 const BILLING_HELP_URL = "https://docs.onyx.app/admins/billing/overview";
 
@@ -30,6 +31,7 @@ export default function LicenseActivationCard({
   hideClose,
 }: LicenseActivationCardProps) {
   const t = useTranslations("admin.billing");
+  const { appName } = useSettings();
   const locale = useLocale();
   const [licenseKey, setLicenseKey] = useState("");
   const [isActivating, setIsActivating] = useState(false);
@@ -170,7 +172,7 @@ export default function LicenseActivationCard({
             </Button>
           </Section>
           <Text secondaryBody text03>
-            {t("license.description")}
+            {t("license.description", { appName })}
           </Text>
         </Section>
 

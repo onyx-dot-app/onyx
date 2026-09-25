@@ -933,15 +933,13 @@ class JiraConnector(
                             yield attachment_output
                             continue
                         if include_permissions:
-                            attachment_output.external_access = (
-                                document.external_access
-                            )
+                            attachment_output.external_access = document.external_access
                         yield attachment_output
 
             except Exception as e:
                 yield ConnectorFailure(
                     failed_document=DocumentFailure(
-                        document_id=issue_key,
+                        document_id=build_jira_url(self.jira_base, issue_key),
                         document_link=build_jira_url(self.jira_base, issue_key),
                     ),
                     failure_message=f"Failed to process Jira issue: {str(e)}",

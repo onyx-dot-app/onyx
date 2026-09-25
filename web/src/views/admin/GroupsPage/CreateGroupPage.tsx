@@ -93,22 +93,15 @@ function CreateGroupPage() {
     }
   }
 
-  const headerActions = (
-    <Section flexDirection="row" gap={2} width="auto" height="auto">
-      <Button
-        prominence="secondary"
-        onClick={() => router.push("/admin/groups")}
-      >
-        {t("form.cancel.label")}
-      </Button>
-      <Button
-        onClick={handleCreate}
-        disabled={!groupName.trim() || isSubmitting}
-      >
-        {t("create.submit.label")}
-      </Button>
-    </Section>
-  );
+  const headerActions = [
+    <Button
+      key="submit"
+      onClick={handleCreate}
+      disabled={!groupName.trim() || isSubmitting}
+    >
+      {t("create.submit.label")}
+    </Button>,
+  ];
 
   return (
     <SettingsLayouts.Root>
@@ -116,7 +109,8 @@ function CreateGroupPage() {
         icon={SvgUsers}
         title={t("create.header.title")}
         divider
-        rightChildren={headerActions}
+        cancel={() => router.push("/admin/groups")}
+        actions={headerActions}
       />
 
       <SettingsLayouts.Body>

@@ -501,7 +501,13 @@ def log_http_error(request: Request, exc: Exception) -> JSONResponse:
         error_msg += "".join(traceback.format_tb(exc.__traceback__))
         logger.error(error_msg)
 
-    detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+    if isinstance(exc, HTTPException):
+        detail = exc.detail
+    elif status_code >= 500:
+        # Unhandled exception text can carry SQL, hostnames, or URLs. It is logged above.
+        detail = "An internal server error occurred."
+    else:
+        detail = str(exc)
     # Routes that raise HTTPException name no error code, so derive the
     # canonical one for the status. Clients reading "detail" are unaffected.
     return JSONResponse(

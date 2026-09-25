@@ -112,3 +112,39 @@ def test_hierarchy_helpers_fetch_permissions_when_requested(
         HierarchyNodeType.DRIVE,
         HierarchyNodeType.FOLDER,
     ]
+
+
+@patch(
+    "onyx.connectors.sharepoint.connector.get_sharepoint_hierarchy_node_external_access"
+)
+def test_folder_permissions_use_library_url_not_display_name(
+    mock_get_access: MagicMock,
+) -> None:
+    """SharePoint strips "&" from the library URL, so "R&D Docs" lives at "RD Docs"."""
+    mock_get_access.return_value = ExternalAccess.empty()
+    connector = SharepointConnector()
+    connector._graph_client = MagicMock()
+    site_url = "https://contoso.sharepoint.com/sites/eng"
+
+    with patch.object(
+        connector, "_create_rest_client_context", return_value=MagicMock()
+    ):
+        nodes = list(
+            connector._yield_folder_hierarchy_nodes(
+                site_url,
+                f"{site_url}/RD%20Docs",
+                "R&D Docs",
+                "Plans/Q1%20%26%20Q2",
+                SharepointConnectorCheckpoint(has_more=True),
+                include_permissions=True,
+            )
+        )
+
+    assert [
+        call.kwargs["folder_server_relative_path"]
+        for call in mock_get_access.call_args_list
+    ] == ["/sites/eng/RD Docs/Plans", "/sites/eng/RD Docs/Plans/Q1 & Q2"]
+    assert [node.raw_node_id for node in nodes] == [
+        f"{site_url}/R&D Docs/Plans",
+        f"{site_url}/R&D Docs/Plans/Q1%20%26%20Q2",
+    ]

@@ -1,5 +1,5 @@
 import { ValidSources } from "../types";
-import { OnyxDocument } from "./interfaces";
+import { OnyxDocument } from "@/lib/search/types";
 import { openDocument } from "./utils";
 
 function makeDocument(overrides: Partial<OnyxDocument>): OnyxDocument {

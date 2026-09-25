@@ -596,7 +596,7 @@ def delete_persona(
         # not forbidden. Only checked once the delete has already failed, so the
         # happy path costs no extra query.
         try:
-            get_persona_by_id(
+            persona = get_persona_by_id(
                 persona_id=persona_id,
                 user=user,
                 db_session=db_session,
@@ -609,10 +609,18 @@ def delete_persona(
                 persona_id,
             )
         else:
-            raise OnyxError(
-                OnyxErrorCode.PERSONA_NOT_FOUND,
-                f"Agent with ID {persona_id} is already deleted",
-            ) from e
+            if persona.deleted:
+                raise OnyxError(
+                    OnyxErrorCode.PERSONA_NOT_FOUND,
+                    f"Agent with ID {persona_id} is already deleted",
+                ) from e
+            if persona.builtin_persona:
+                # Editable by everyone and deletable by no one — mark_persona_as_deleted
+                # is the only other ValueError source that reaches this branch.
+                raise OnyxError(
+                    OnyxErrorCode.BAD_REQUEST,
+                    "Built-in agents cannot be deleted.",
+                ) from e
         # A non-owner failed the ownership check; its ValueError would 400 via the global
         # handler, so surface the real authorization failure as a 403.
         raise OnyxError(

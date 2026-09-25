@@ -22,6 +22,12 @@ The key differences:
 - SelectCard has no `foldable` prop — use `Interactive.Foldable` directly inside children.
 - SelectCard's children are fully composable — use `CardHeaderLayout`, `ContentAction`, `Content`, buttons, etc. inside.
 
+## Keyboard
+
+The root is a `<div>` so children can be buttons and links, which HTML forbids inside a `<button>`. A card with `onClick` joins the tab order and fires `onClick` on Enter or Space. While keyboard-focused it paints exactly like hover, so pointer and keyboard users see the same affordance. Keys pressed on a nested control never reach the card. A nested button that only repeats the card's action can leave the tab order with `tabIndex={-1}`.
+
+The card takes no ARIA role of its own. A role such as `button` would fold every nested button into the card's accessible name, which is wrong for cards that host their own actions. A card that is one action can pass `role` and `aria-label` itself; a caller's `tabIndex` also wins over the default.
+
 ## Architecture
 
 ```

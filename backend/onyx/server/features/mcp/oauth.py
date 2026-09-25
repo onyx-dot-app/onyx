@@ -8,16 +8,15 @@ Route orchestration lives in `oauth_flow.py`.
 
 import json
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import Any, TypedDict
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse
 from uuid import uuid4
 
 import httpx
 from mcp.client.auth import OAuthClientProvider, PKCEParameters, TokenStorage
-from mcp.client.auth.exceptions import OAuthFlowError, OAuthTokenError
+from mcp.client.auth.exceptions import OAuthFlowError
 from mcp.client.auth.oauth2 import OAuthContext
-from mcp.client.auth.utils import handle_token_response_scopes
 from mcp.shared.auth import (
     OAuthClientInformationFull,
     OAuthClientMetadata,
@@ -29,7 +28,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_token_manager import ensure_offline_access_auth_params
 from onyx.cache.interface import CacheLockAcquisitionError
-from onyx.cache.locks import cache_shared_lock
+from onyx.cache.locks import async_cache_shared_lock, cache_shared_lock
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import MCPOAuthProviderMode
 from onyx.db.mcp import (
@@ -89,6 +88,10 @@ _REFRESH_LOCK_LEASE_S = 60.0
 REQUESTED_SCOPE: str | None = None
 
 OAUTH_HTTP_TIMEOUT_SECONDS = 30.0
+
+
+def _refresh_lock_name(connection_config_id: int) -> str:
+    return f"mcp_token_refresh:{get_current_tenant_id()}:{connection_config_id}"
 
 
 class MCPRefreshLogContext(TypedDict):
@@ -212,7 +215,7 @@ def refresh_mcp_oauth_token_if_expired(
     lock still can't be acquired *and* the stored token is expired does it return
     None; the caller then falls back to its existing header.
     """
-    lock_name = f"mcp_token_refresh:{get_current_tenant_id()}:{connection_config_id}"
+    lock_name = _refresh_lock_name(connection_config_id)
     try:
         with cache_shared_lock(
             lock_name,
@@ -693,6 +696,63 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
         # invalid_grant discard against wiping a concurrently stored grant.
         self.redeemed_refresh_token: str | None = None
 
+    async def async_auth_flow(
+        self, request: httpx.Request
+    ) -> AsyncGenerator[httpx.Request, httpx.Response]:
+        """Single-flight the refresh, then delegate to the SDK flow.
+
+        The SDK serializes refreshes with a per-instance context lock, but every
+        tool call builds its own provider — so concurrent calls each refresh on
+        their own and providers that rotate refresh tokens (Snowflake, GitHub)
+        reject the second redemption with invalid_grant, which can discard the
+        grant entirely. Refresh here under the cross-process cache lock first;
+        the SDK flow below then sees a valid token and skips its own refresh.
+        """
+        storage = self.context.storage
+        connection_config_id = (
+            storage.connection_config_id
+            if isinstance(storage, OnyxTokenStorage)
+            else None
+        )
+        if connection_config_id is not None:
+            await self._initialize()
+            if not self.context.is_token_valid() and self.context.can_refresh_token():
+                try:
+                    async with async_cache_shared_lock(
+                        _refresh_lock_name(connection_config_id),
+                        max_time_lock_held_s=_REFRESH_LOCK_LEASE_S,
+                        wait_for_lock_s=_REFRESH_LOCK_WAIT_S,
+                        logger=logger,
+                    ):
+                        # The lock holder may have already refreshed; re-read
+                        # the stored grant before redeeming the refresh token.
+                        await self._initialize()
+                        if (
+                            not self.context.is_token_valid()
+                            and self.context.can_refresh_token()
+                        ):
+                            refresh_request = await self._refresh_token()
+                            refresh_response = yield refresh_request
+                            await self._handle_refresh_response(refresh_response)
+                except CacheLockAcquisitionError:
+                    # Contention outlasted the wait; the SDK flow below retries
+                    # its own refresh, no worse than the unlocked status quo.
+                    logger.info(
+                        "mcp_token_refresh.lock_contended config_id=%s",
+                        connection_config_id,
+                    )
+
+        sdk_flow = super().async_auth_flow(request)
+        try:
+            pending = await sdk_flow.__anext__()
+            while True:
+                try:
+                    pending = await sdk_flow.asend((yield pending))
+                except StopAsyncIteration:
+                    return
+        finally:
+            await sdk_flow.aclose()
+
     def build_resumable_authorization_request(
         self,
     ) -> MCPPendingOAuthAuthorization:
@@ -806,13 +866,14 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
                 detail,
             )
 
+        body = await response.aread()
         try:
-            tokens = await handle_token_response_scopes(response)
-        except OAuthTokenError as error:
+            tokens = _oauth_token_from_response(body)
+        except ValidationError:
             raise OnyxError(
                 OnyxErrorCode.BAD_GATEWAY,
                 "MCP OAuth token endpoint returned an invalid token response.",
-            ) from error
+            ) from None
         self.context.current_tokens = tokens
         self.context.update_token_expiry(tokens)
         storage = self.context.storage

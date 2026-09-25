@@ -48,6 +48,10 @@ spec:
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.indexCapability.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- with .Values.indexCapability.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
@@ -86,9 +90,8 @@ spec:
         startupProbe:
           {{- toYaml . | nindent 10 }}
         {{- end }}
-        {{- with .Values.indexCapability.readinessProbe }}
-        readinessProbe:
-          {{- toYaml . | nindent 10 }}
+        {{- with include "onyx.readinessProbe" (dict "values" .Values.indexCapability "handler" (dict "tcpSocket" (dict "port" "model-server"))) | trim }}
+        {{- . | nindent 8 }}
         {{- end }}
         {{- with .Values.indexCapability.livenessProbe }}
         livenessProbe:

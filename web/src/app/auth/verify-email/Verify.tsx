@@ -6,7 +6,7 @@ import { Text } from "@opal/components";
 import { Spacer } from "@opal/components";
 import { RequestNewVerificationEmail } from "../waiting-on-verification/RequestNewVerificationEmail";
 import { User } from "@/lib/types";
-import { Logo } from "@/lib/app/components";
+import { FoldableLogo } from "@/lib/app/components";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { useTranslations } from "next-intl";
 
@@ -62,7 +62,11 @@ export default function Verify({ user }: VerifyProps) {
   return (
     <main>
       <div className="min-h-screen flex flex-col items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-        <Logo folded size={64} className="mx-auto w-fit animate-pulse" />
+        <FoldableLogo
+          folded
+          size={64}
+          className="mx-auto w-fit animate-pulse"
+        />
         {!error ? (
           <>
             <Spacer rem={0.5} />

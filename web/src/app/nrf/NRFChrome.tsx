@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ensureHrefProtocol, noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import type { Components } from "react-markdown";
@@ -18,6 +18,8 @@ import { Tier } from "@/lib/settings/types";
 import { useSidebarState } from "@opal/layouts";
 import useScreenSize from "@/hooks/useScreenSize";
 import { useTranslations } from "next-intl";
+
+const NRF_FOOTER_HEIGHT_VAR = "--nrf-footer-height";
 
 const footerMarkdownComponents = {
   p: ({ children }: { children?: React.ReactNode }) => (
@@ -66,6 +68,28 @@ export default function NRFChrome() {
   const { setFolded } = useSidebarState();
   const appPosition = useAppPosition();
   const [modePopoverOpen, setModePopoverOpen] = useState(false);
+  const footerRef = useRef<HTMLElement>(null);
+
+  // Publishes the footer height so NRFPage can keep scrollable content clear of it
+  useEffect(() => {
+    const footer = footerRef.current;
+    const host = footer?.parentElement;
+    if (!footer || !host) return;
+
+    const update = () =>
+      host.style.setProperty(
+        NRF_FOOTER_HEIGHT_VAR,
+        `${footer.getBoundingClientRect().height}px`
+      );
+    update();
+
+    const observer = new ResizeObserver(update);
+    observer.observe(footer);
+    return () => {
+      observer.disconnect();
+      host.style.removeProperty(NRF_FOOTER_HEIGHT_VAR);
+    };
+  }, []);
 
   const effectiveMode: AppMode =
     appPosition.isNewSession() && state.phase === "idle"
@@ -142,7 +166,10 @@ export default function NRFChrome() {
       )}
 
       {/* Footer — bottom-center, transparent background */}
-      <footer className="absolute bottom-0 start-0 w-full z-10 flex flex-row justify-center items-center gap-2 px-2 pb-2 pointer-events-auto">
+      <footer
+        ref={footerRef}
+        className="absolute bottom-0 start-0 w-full z-10 flex flex-row justify-center items-center gap-2 px-2 pb-2 pointer-events-auto"
+      >
         <MinimalMarkdown
           content={customFooterContent}
           className="max-w-full text-center"

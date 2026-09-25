@@ -3,7 +3,7 @@
 import React, { useRef, useState } from "react";
 import InputTypeIn, {
   type InputTypeInProps,
-} from "@opal/components/inputs/input-type-in/components";
+} from "@opal/components/inputs/texts/input-type-in/components";
 import { Button } from "@opal/components/buttons/button/components";
 import { SvgPaperclip, SvgX } from "@opal/icons";
 import { noProp } from "@opal/utils";

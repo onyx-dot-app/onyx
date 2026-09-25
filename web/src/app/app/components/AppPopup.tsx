@@ -82,7 +82,7 @@ export function AppPopup() {
       <Modal.Content width="sm" height="lg">
         <Modal.Header
           icon={headerIcon}
-          title={popupTitle || t("header.title")}
+          title={popupTitle || t("header.title", { appName: settings.appName })}
         />
         <Modal.Body>
           <div className="overflow-y-auto text-start">

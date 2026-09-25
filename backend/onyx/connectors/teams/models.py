@@ -34,7 +34,6 @@ class From(BaseModel):
 
 
 class ChannelMember(BaseModel):
-    display_name: str | None = None
     email: str | None = None
     user_id: str | None = None
 
@@ -78,12 +77,14 @@ class ChannelRef(BaseModel):
     team_id: str
     id: str
     display_name: str
+    # "standard" is read by the whole team, anything else has a member list of
+    # its own. A checkpoint saved without it reads it from Graph before a walk.
+    membership_type: str | None = None
 
 
 class ChannelFilesFolder(BaseModel):
-    """The SharePoint folder a channel's files are posted into, and the site
-    and document library it belongs to."""
+    """The SharePoint folder a channel's files are posted into, and the
+    document library it belongs to."""
 
-    site_id: str
     drive_id: str
     id: str

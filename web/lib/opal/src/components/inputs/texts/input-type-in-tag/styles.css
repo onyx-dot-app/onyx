@@ -1,0 +1,81 @@
+@reference "#reference.css";
+
+/* ---------------------------------------------------------------------------
+   InputTypeInTag (Figma Input/Tags), shared with InputMultiSelect
+
+   Chips-in-input built on the .opal-input chrome and the editable Tag.
+   Overrides the wrapper's justify-between/items-center: wrapped tag rows
+   must pack from the top-left.
+   --------------------------------------------------------------------------- */
+
+.opal-input-type-in-tag {
+  @apply cursor-text items-start justify-start;
+  gap: 4px;
+  min-width: 160px;
+}
+
+.opal-input-type-in-tag[data-variant="disabled"] {
+  cursor: not-allowed;
+}
+
+/* Read-only, the chips are the whole field: the trigger element fills the
+   rest of the row so the whole chrome is the click target, and the wrapper's
+   focus-within ring stands in for its own outline. */
+.opal-input-type-in-tag[data-read-only] {
+  @apply cursor-pointer;
+}
+
+.opal-input-type-in-tag-trigger {
+  @apply flex min-w-0 flex-1 items-center outline-none;
+  min-height: var(--opal-input-type-in-tag-row-height);
+}
+
+.opal-input-type-in-tag-icon-container {
+  @apply flex shrink-0 items-center justify-center;
+  width: 24px;
+  height: 24px;
+  padding: 4px;
+}
+
+.opal-input-type-in-tag-icon {
+  @apply text-text-04;
+  width: 100%;
+  height: 100%;
+}
+
+/* Chip rows pack from the top, grow the field up to --max-rows, then scroll
+   inside it. The 2px bleed (negative margin, matching padding) keeps an armed
+   chip's outer ring inside the scroll clip. */
+.opal-input-type-in-tag-tags {
+  --opal-input-type-in-tag-row-height: 24px;
+  --opal-input-type-in-tag-row-gap: 4px;
+  --opal-input-type-in-tag-rows: 1;
+  --opal-input-type-in-tag-max-rows: 2;
+  --opal-input-type-in-tag-bleed: 2px;
+  @apply flex min-w-0 flex-1 flex-wrap content-start items-center overflow-y-auto overscroll-contain;
+  gap: var(--opal-input-type-in-tag-row-gap);
+  margin: calc(-1 * var(--opal-input-type-in-tag-bleed));
+  padding: var(--opal-input-type-in-tag-bleed);
+  min-height: calc(
+    var(--opal-input-type-in-tag-rows) *
+      var(--opal-input-type-in-tag-row-height) +
+      (var(--opal-input-type-in-tag-rows) - 1) *
+      var(--opal-input-type-in-tag-row-gap) + 2 *
+      var(--opal-input-type-in-tag-bleed)
+  );
+  max-height: calc(
+    var(--opal-input-type-in-tag-max-rows) *
+      var(--opal-input-type-in-tag-row-height) +
+      (var(--opal-input-type-in-tag-max-rows) - 1) *
+      var(--opal-input-type-in-tag-row-gap) + 2 *
+      var(--opal-input-type-in-tag-bleed)
+  );
+}
+
+.opal-input-type-in-tag-field {
+  /* Keep the family's 24px inner rhythm: h-6 like every .opal-input-field.
+     Vertical padding here made the field 28px and the whole input 42px,
+     4px taller than its siblings. */
+  @apply h-6 w-auto min-w-20 flex-1;
+  padding: 0 4px;
+}

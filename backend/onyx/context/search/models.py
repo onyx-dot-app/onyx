@@ -177,9 +177,6 @@ class ChunkSearchRequest(BasicChunkRequest):
     # Final filters are calculated from these
     user_selected_filters: BaseFilters | None = None
 
-    # Use with caution!
-    bypass_acl: bool = False
-
 
 # From the Chat Session we know what project (if any) this search should include
 # From the user uploads and persona uploaded files, we know which of those to include
@@ -401,48 +398,6 @@ class SearchDoc(BaseModel):
         return initial_dict
 
 
-class RetrievalCandidateChunk(BaseModel):
-    document_id: str
-    chunk_id: int
-    # 1-based position in the lane's ranked result list
-    rank: int
-
-
-class RetrievalCandidateLane(BaseModel):
-    """One executed retrieval query, captured before rank fusion.
-
-    Lanes are not deduplicated: the same query text can run with a different
-    hybrid alpha.
-    """
-
-    query: str
-    hybrid_alpha: float | None
-    returned_chunks: list[RetrievalCandidateChunk]
-
-
-class SearchReceiptScope(BaseModel):
-    """Scope facts reported in a search receipt. Only set when every filter
-    that narrowed retrieval is representable by these three fields."""
-
-    user_filters: dict[str, Any] | None
-    persona_document_sets: list[str]
-    acl_enforced: bool
-
-
-class SearchRetrievalDiagnostics(BaseModel):
-    """Optional retrieval metadata, only collected when requested via
-    `SearchToolOverrideKwargs.include_retrieval_candidates`."""
-
-    retrieval_candidates: list[RetrievalCandidateLane]
-    # Distinct document ids, in order, after fusion + adjacent-chunk merge + the
-    # num_hits cap, before LLM section selection.
-    merged_candidate_document_ids_after_cap: list[str]
-    # None when the effective scope has parts SearchReceiptScope cannot express
-    # (auto-detected source/time filters, project or persona-attached scope,
-    # federated sources).
-    receipt_scope: SearchReceiptScope | None
-
-
 class SearchDocsResponse(BaseModel):
     search_docs: list[SearchDoc]
     # Maps the citation number to the document id
@@ -453,9 +408,6 @@ class SearchDocsResponse(BaseModel):
     # For cases where the frontend only needs to display a subset of the search docs
     # The whole list is typically still needed for later steps but this set should be saved separately
     displayed_docs: list[SearchDoc] | None = None
-
-    # Never sent to the model directly; consumed by onyx.chat.search_receipts.
-    retrieval_diagnostics: SearchRetrievalDiagnostics | None = None
 
     @field_validator("displayed_docs", mode="before")
     @classmethod

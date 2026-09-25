@@ -21,11 +21,15 @@ export default function AgentsPage() {
         title={t("header.title")}
         description={t("header.description")}
         icon={SvgOnyxOctagon}
-        rightChildren={
-          <Button href="/app/agents/create?admin=true" icon={SvgPlus}>
+        actions={[
+          <Button
+            key="primary"
+            href="/app/agents/create?admin=true"
+            icon={SvgPlus}
+          >
             {t("newAgentButton.label")}
-          </Button>
-        }
+          </Button>,
+        ]}
       />
       <SettingsLayouts.Body>
         <AgentsTable />

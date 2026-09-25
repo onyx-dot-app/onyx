@@ -1,0 +1,65 @@
+{
+  "aliases": {},
+  "models": {
+    "gpt-oss-120b": {
+      "attachment": false,
+      "cost": {
+        "input": 0.35,
+        "output": 0.75
+      },
+      "family": "gpt-oss",
+      "limit": {
+        "context": 131072,
+        "output": 40960
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GPT OSS 120B",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-08-05",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "qwen-3.8-27b": {
+      "attachment": true,
+      "cost": {
+        "input": 0.99,
+        "output": 1.49
+      },
+      "family": "qwen",
+      "limit": {
+        "context": 65536,
+        "output": 32768
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Qwen3.8 27B",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-14",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    }
+  },
+  "models_dev_providers": [
+    "cerebras"
+  ]
+}

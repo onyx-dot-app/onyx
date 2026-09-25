@@ -1,6 +1,7 @@
 import ipaddress
 import socket
 import unicodedata
+from collections.abc import Iterator
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
@@ -26,6 +27,14 @@ BLOCKED_HOSTNAMES = {
     "kubernetes.default.svc",
     "kubernetes.default.svc.cluster.local",
 }
+
+
+# Always part of the targeted-block floor. The AWS IPv6 IMDS
+# address is a ULA (fc00::/7), not link-local, so the class checks miss it.
+_CLOUD_METADATA_NETWORKS: tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...] = (
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("fd00:ec2::254/128"),
+)
 
 
 class SSRFException(Exception):
@@ -63,10 +72,14 @@ def _is_targeted_blocked_ip(
     block_link_local: bool,
 ) -> bool:
     """IP classes to reject even when private networks are allowed. Unspecified
-    (0.0.0.0, ::) always — the kernel aliases it to loopback. Loopback and
-    link-local (169.254.0.0/16, the cloud-metadata range) per flag, so MCP
-    opt-ins can permit loopback while IMDS stays unreachable."""
+    (0.0.0.0, ::) and cloud metadata always — the kernel aliases unspecified to
+    loopback. Loopback and link-local per flag, so MCP opt-ins can permit
+    loopback while IMDS stays unreachable."""
     if ip_obj.is_unspecified:
+        return True
+    if isinstance(ip_obj, ipaddress.IPv6Address) and ip_obj.ipv4_mapped:
+        ip_obj = ip_obj.ipv4_mapped
+    if any(ip_obj in network for network in _CLOUD_METADATA_NETWORKS):
         return True
     if block_loopback and ip_obj.is_loopback:
         return True
@@ -325,6 +338,15 @@ class _PinnedHostAdapter(HTTPAdapter):
         super().init_poolmanager(*args, **kwargs)
 
 
+class _NoRedirectSession(requests.Session):
+    """With ``allow_redirects=False`` requests still reads the full body of a
+    3xx response to build ``Response.next``, even when streaming. The caller
+    follows redirects itself, so skip that read."""
+
+    def resolve_redirects(self, *_args: Any, **_kwargs: Any) -> Iterator[Any]:
+        return iter(())
+
+
 def _pinned_get(
     url: str,
     validated_ip: str,
@@ -346,17 +368,9 @@ def _pinned_get(
     request_headers = headers.copy() if headers else {}
     request_headers["Host"] = f"{hostname}:{port}" if port != default_port else hostname
 
-    if parsed.scheme != "https":
-        return requests.get(
-            request_url,
-            headers=request_headers,
-            timeout=timeout,
-            allow_redirects=False,
-            **kwargs,
-        )
-
-    with requests.Session() as session:
-        session.mount("https://", _PinnedHostAdapter(hostname))
+    with _NoRedirectSession() as session:
+        if parsed.scheme == "https":
+            session.mount("https://", _PinnedHostAdapter(hostname))
         return session.get(
             request_url,
             headers=request_headers,
@@ -512,41 +526,45 @@ def ssrf_safe_get(
     redirect_count = 0
     current_url = url
 
-    while response.is_redirect and redirect_count < MAX_REDIRECTS:
-        redirect_count += 1
+    # Callers may stream; close whichever response we hold if we don't return it.
+    try:
+        while response.is_redirect and redirect_count < MAX_REDIRECTS:
+            redirect_count += 1
 
-        # Get the redirect location
-        redirect_url = response.headers.get("Location")
-        if not redirect_url:
-            break
+            # Get the redirect location
+            redirect_url = response.headers.get("Location")
+            if not redirect_url:
+                break
 
-        # Handle relative redirects
-        if not redirect_url.startswith(("http://", "https://")):
-            parsed_current = urlparse(current_url)
-            if redirect_url.startswith("/"):
-                redirect_url = (
-                    f"{parsed_current.scheme}://{parsed_current.netloc}{redirect_url}"
-                )
-            else:
-                # Relative path
-                base_path = parsed_current.path.rsplit("/", 1)[0]
-                redirect_url = f"{parsed_current.scheme}://{parsed_current.netloc}{base_path}/{redirect_url}"
+            # Handle relative redirects
+            if not redirect_url.startswith(("http://", "https://")):
+                parsed_current = urlparse(current_url)
+                if redirect_url.startswith("/"):
+                    redirect_url = f"{parsed_current.scheme}://{parsed_current.netloc}{redirect_url}"
+                else:
+                    # Relative path
+                    base_path = parsed_current.path.rsplit("/", 1)[0]
+                    redirect_url = f"{parsed_current.scheme}://{parsed_current.netloc}{base_path}/{redirect_url}"
 
-        # Validate and follow the redirect (this will raise SSRFException if invalid)
-        current_url = redirect_url
-        response = _make_ssrf_safe_request(
-            redirect_url,
-            headers,
-            timeout,
-            allow_private_network=allow_private_network,
-            block_loopback_and_link_local=block_loopback_and_link_local,
-            block_link_local_only=block_link_local_only,
-            https_only=https_only,
-            **kwargs,
-        )
+            # Validate and follow the redirect (this will raise SSRFException if invalid)
+            response.close()
+            current_url = redirect_url
+            response = _make_ssrf_safe_request(
+                redirect_url,
+                headers,
+                timeout,
+                allow_private_network=allow_private_network,
+                block_loopback_and_link_local=block_loopback_and_link_local,
+                block_link_local_only=block_link_local_only,
+                https_only=https_only,
+                **kwargs,
+            )
 
-    if response.is_redirect and redirect_count >= MAX_REDIRECTS:
-        raise SSRFException(f"Too many redirects (max {MAX_REDIRECTS})")
+        if response.is_redirect and redirect_count >= MAX_REDIRECTS:
+            raise SSRFException(f"Too many redirects (max {MAX_REDIRECTS})")
+    except BaseException:
+        response.close()
+        raise
 
     return response
 

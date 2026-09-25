@@ -548,6 +548,8 @@ def test_manager_reads_detail_of_managed_cc_pair(env: _ScopedEnv) -> None:
         f"/manage/admin/cc-pair/{cc_pair.id}",
         f"/manage/admin/cc-pair/{cc_pair.id}/index-attempts?page_num=0&page_size=10",
         f"/manage/admin/cc-pair/{cc_pair.id}/last_pruned",
+        f"/manage/admin/cc-pair/{cc_pair.id}/errors?page_num=0&page_size=10",
+        f"/manage/admin/cc-pair/{cc_pair.id}/get-docs-sync-status",
     ]:
         resp = call_endpoint(
             "GET", path, None, env.manager.headers, env.manager.cookies
@@ -596,6 +598,24 @@ def test_manager_cannot_read_stage_metrics_of_unmanaged_cc_pair(
     path = f"/manage/admin/index-attempt/{attempt.id}/stage-metrics"
     resp = call_endpoint("GET", path, None, env.manager.headers, env.manager.cookies)
     assert_response(resp, "GET", path, "manager", "denied")
+
+
+def test_manager_cannot_read_errors_of_unmanaged_cc_pair(env: _ScopedEnv) -> None:
+    """allow_scope lets the manager reach the route; the row filter must still hide
+    a connector outside their groups."""
+    admin_cc_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.admin,
+        access_type=AccessType.PRIVATE,
+        groups=[env.other_group.id],
+    )
+    for path in [
+        f"/manage/admin/cc-pair/{admin_cc_pair.id}/errors?page_num=0&page_size=10",
+        f"/manage/admin/cc-pair/{admin_cc_pair.id}/get-docs-sync-status",
+    ]:
+        resp = call_endpoint(
+            "GET", path, None, env.manager.headers, env.manager.cookies
+        )
+        assert_response(resp, "GET", path, "manager", "denied")
 
 
 def test_manager_reads_credentials_for_connector_form(env: _ScopedEnv) -> None:
@@ -734,6 +754,8 @@ def test_manager_reads_detail_of_own_groupless_cc_pair(env: _ScopedEnv) -> None:
         f"/manage/admin/cc-pair/{cc_pair.id}/index-attempts?page_num=0&page_size=10",
         f"/manage/admin/cc-pair/{cc_pair.id}/last_pruned",
         f"/manage/admin/cc-pair/{cc_pair.id}/permission-sync-attempts",
+        f"/manage/admin/cc-pair/{cc_pair.id}/errors?page_num=0&page_size=10",
+        f"/manage/admin/cc-pair/{cc_pair.id}/get-docs-sync-status",
     ]:
         resp = call_endpoint(
             "GET", path, None, env.manager.headers, env.manager.cookies

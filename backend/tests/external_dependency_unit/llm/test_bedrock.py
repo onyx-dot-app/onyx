@@ -53,7 +53,6 @@ def test_nova_streaming_does_not_leak_thinking_tags(
         model_provider=LlmProviderNames.BEDROCK,
         model_name=_NOVA_THINKING_MODEL,
         max_input_tokens=128_000,
-        timeout=60,
         custom_config={"AWS_REGION_NAME": _BEDROCK_REGION},
     )
 

@@ -150,6 +150,9 @@
 .interactive[data-interactive-variant="select-card"][data-interactive-state="empty"]:hover:not(
   [data-disabled]
 ),
+.interactive[data-interactive-variant="select-card"][data-interactive-state="empty"]:focus-visible:not(
+  [data-disabled]
+),
 .interactive[data-interactive-variant="select-card"][data-interactive-state="empty"][data-interaction="hover"]:not(
   [data-disabled]
 ) {
@@ -183,6 +186,9 @@
 .interactive[data-interactive-variant="select-card"][data-interactive-state="filled"]:hover:not(
   [data-disabled]
 ),
+.interactive[data-interactive-variant="select-card"][data-interactive-state="filled"]:focus-visible:not(
+  [data-disabled]
+),
 .interactive[data-interactive-variant="select-card"][data-interactive-state="filled"][data-interaction="hover"]:not(
   [data-disabled]
 ) {
@@ -214,6 +220,9 @@
   --interactive-foreground-icon: var(--action-selection-05);
 }
 .interactive[data-interactive-variant="select-card"][data-interactive-state="selected"]:hover:not(
+  [data-disabled]
+),
+.interactive[data-interactive-variant="select-card"][data-interactive-state="selected"]:focus-visible:not(
   [data-disabled]
 ),
 .interactive[data-interactive-variant="select-card"][data-interactive-state="selected"][data-interaction="hover"]:not(

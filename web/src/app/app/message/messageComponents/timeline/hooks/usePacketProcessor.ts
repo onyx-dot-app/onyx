@@ -8,7 +8,7 @@ import {
   StopReason,
 } from "@/app/app/services/streamingModels";
 import { CitationMap } from "@/app/app/interfaces";
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/types";
 import {
   ProcessorState,
   GroupedPacket,

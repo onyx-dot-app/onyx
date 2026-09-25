@@ -26,17 +26,15 @@ def _provision_slack_channels(
         )
     admin_user_id = user_map[SLACK_ADMIN_EMAIL]
 
-    (
-        public_channel,
-        private_channel,
-        run_id,
-    ) = SlackManager.get_and_provision_available_slack_channels(
+    public_channel, private_channel = SlackManager.create_test_channels(
         slack_client=slack_client, admin_user_id=admin_user_id
     )
 
     yield public_channel, private_channel
 
-    SlackManager.cleanup_after_test(slack_client=slack_client, test_id=run_id)
+    SlackManager.archive_channels(
+        slack_client=slack_client, channels=[public_channel, private_channel]
+    )
 
 
 @pytest.fixture()

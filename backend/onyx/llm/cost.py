@@ -1,4 +1,12 @@
-"""LLM cost calculation utilities."""
+"""LLM cost calculation utilities.
+
+Pricing comes from the vendored model catalog (see `onyx.llm.model_catalog`),
+which the weekly sync aggregates from models.dev, litellm's cost map, and
+OpenRouter. litellm's model_cost table is not consulted at runtime.
+Catalog rates are USD per million tokens.
+"""
+
+from typing import Any
 
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -9,10 +17,39 @@ from onyx.configs.app_configs import (
     DEFAULT_LLM_OUTPUT_COST_PER_MTOK,
 )
 from onyx.llm import cost_overrides
+from onyx.llm.constants import LlmProviderNames
+from onyx.llm.model_catalog import find_model_cost
 from onyx.tracing.flows import IMAGE_FLOWS, LLMFlow
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+# Catalog cost blocks carry a context_over_200k tier when a provider charges
+# more past a large-context threshold. The threshold is always 200k tokens.
+_LONG_CONTEXT_THRESHOLD_TOKENS = 200_000
+
+_LOCALLY_HOSTED_PROVIDERS = frozenset(
+    {
+        LlmProviderNames.OLLAMA_CHAT.value,
+        LlmProviderNames.LM_STUDIO.value,
+        LlmProviderNames.OLLAMA.value,
+    }
+)
+# Ollama Cloud serves hosted, billable inference under the same provider names
+# as local Ollama, distinguished only by a "-cloud" or ":cloud" tag on the model.
+_OLLAMA_CLOUD_MODEL_SUFFIXES = ("-cloud", ":cloud")
+
+
+def _is_locally_hosted(model: str, provider: str | None) -> bool:
+    """Whether inference runs on the deployment's own hardware.
+
+    Self-hosted inference has no per-token vendor charge, so zero is the real
+    price rather than a missing one. Hosted models served by these providers
+    are billable and must price normally.
+    """
+    if provider not in _LOCALLY_HOSTED_PROVIDERS:
+        return False
+    return not model.endswith(_OLLAMA_CLOUD_MODEL_SUFFIXES)
 
 
 class ModelPrice(BaseModel):
@@ -21,6 +58,7 @@ class ModelPrice(BaseModel):
     input_per_mtok: float | None
     output_per_mtok: float | None
     cache_per_mtok: float | None
+    cache_write_per_mtok: float | None = None
 
 
 def get_model_price_per_million(
@@ -44,30 +82,21 @@ def get_model_price_per_million(
                 cache_per_mtok=rates.cache_read_cost_per_mtok,
             )
 
-    try:
-        import litellm
-
-        entry = litellm.get_model_info(model=model, custom_llm_provider=provider)
-        input_per_tok = entry.get("input_cost_per_token")
-        output_per_tok = entry.get("output_cost_per_token")
-        cache_per_tok = entry.get("cache_read_input_token_cost")
+    if _is_locally_hosted(model, provider):
         return ModelPrice(
             model=model,
             provider=provider,
-            input_per_mtok=(
-                float(input_per_tok) * 1_000_000 if input_per_tok is not None else None
-            ),
-            output_per_mtok=(
-                float(output_per_tok) * 1_000_000
-                if output_per_tok is not None
-                else None
-            ),
-            cache_per_mtok=(
-                float(cache_per_tok) * 1_000_000 if cache_per_tok is not None else None
-            ),
+            input_per_mtok=0.0,
+            output_per_mtok=0.0,
+            cache_per_mtok=None,
         )
+
+    try:
+        cost = find_model_cost(provider or "", model)
     except Exception:
-        logger.debug("No price-per-million for model %s (provider %s)", model, provider)
+        logger.exception("Catalog lookup failed for model %s", model)
+        cost = None
+    if cost is None:
         return ModelPrice(
             model=model,
             provider=provider,
@@ -76,27 +105,32 @@ def get_model_price_per_million(
             cache_per_mtok=None,
         )
 
+    def _to_float(value: Any) -> float | None:
+        return float(value) if value is not None else None
 
-def _image_cost_cents(model: str, provider: str | None) -> float:
-    """Per-image cents from litellm, else DEFAULT_IMAGE_COST_CENTS."""
+    return ModelPrice(
+        model=model,
+        provider=provider,
+        input_per_mtok=_to_float(cost.get("input")),
+        output_per_mtok=_to_float(cost.get("output")),
+        cache_per_mtok=_to_float(cost.get("cache_read")),
+        cache_write_per_mtok=_to_float(cost.get("cache_write")),
+    )
+
+
+def _image_cost_cents(model: str, provider: str | None, image_count: int) -> float:
+    """Per-image pricing comes from the catalog (litellm-derived `image`/`image_input`
+    cost fields, USD per image); models without one bill the configured flat rate."""
     try:
-        import litellm
-
-        try:
-            entry = litellm.get_model_info(model=model, custom_llm_provider=provider)
-        except Exception:
-            entry = litellm.model_cost.get(model) or {}
-        # litellm prices images per-image under either of these keys. Use an
-        # explicit None check so a genuinely free (0.0) model is billed 0, not
-        # silently bumped to the flat fallback.
-        per_image_usd = entry.get("output_cost_per_image")
-        if per_image_usd is None:
-            per_image_usd = entry.get("input_cost_per_image")
-        if per_image_usd is not None:
-            return float(per_image_usd) * 100
+        cost = find_model_cost(provider or "", model)
     except Exception:
-        logger.exception("Image price lookup failed for model %s", model)
-    return DEFAULT_IMAGE_COST_CENTS
+        logger.exception("Catalog lookup failed for model %s", model)
+        cost = None
+    if cost:
+        per_image = cost.get("image") or cost.get("image_input")
+        if per_image is not None:
+            return float(per_image) * max(image_count, 1) * 100
+    return DEFAULT_IMAGE_COST_CENTS * max(image_count, 1)
 
 
 def _override_cost_cents(
@@ -104,6 +138,7 @@ def _override_cost_cents(
     prompt_tokens: int,
     completion_tokens: int,
     cache_read_tokens: int,
+    cache_creation_tokens: int,
 ) -> tuple[float, float]:
     """Apply admin per-Mtok rates. Cache reads bill at the admin cache rate when
     set, otherwise at the input rate. Cache cost is folded into the input half.
@@ -114,12 +149,62 @@ def _override_cost_cents(
     output_per_mtok = rates.output_cost_per_mtok
     cache_per_mtok = rates.cache_read_cost_per_mtok
     cache_rate = cache_per_mtok if cache_per_mtok is not None else input_per_mtok
-    non_cached_prompt = max(prompt_tokens - cache_read_tokens, 0)
+    non_cached_prompt = max(
+        prompt_tokens - cache_read_tokens - cache_creation_tokens, 0
+    )
     input_cents = (
         non_cached_prompt / 1_000_000 * input_per_mtok * 100
         + cache_read_tokens / 1_000_000 * cache_rate * 100
+        + cache_creation_tokens / 1_000_000 * input_per_mtok * 100
     )
     output_cents = completion_tokens / 1_000_000 * output_per_mtok * 100
+    return input_cents, output_cents
+
+
+def _catalog_cost_cents(
+    cost: dict[str, Any],
+    prompt_tokens: int,
+    completion_tokens: int,
+    cache_read_tokens: int,
+    cache_creation_tokens: int,
+) -> tuple[float, float]:
+    """Price a call from a catalog cost block (USD per million tokens).
+
+    Cache reads bill at cache_read (missing rate = undiscounted, bills at
+    input); cache writes bill at cache_write (missing rate = no write
+    premium, bills at input). Providers charging a long-context premium get
+    their context_over_200k rates applied to every bucket.
+    """
+    rates = cost
+    if prompt_tokens > _LONG_CONTEXT_THRESHOLD_TOKENS:
+        tier = cost.get("context_over_200k")
+        if tier:
+            rates = tier
+
+    def _rate(key: str, fallback: float | None = None) -> float:
+        value = rates.get(key)
+        if value is None:
+            value = cost.get(key)
+        return float(value) if value is not None else (fallback or 0.0)
+
+    input_rate = _rate("input")
+    output_rate = _rate("output")
+    read_rate = _rate("cache_read", input_rate)
+    write_rate = _rate("cache_write", input_rate)
+
+    non_cached_prompt = max(
+        prompt_tokens - cache_read_tokens - cache_creation_tokens, 0
+    )
+    input_cents = (
+        (
+            non_cached_prompt * input_rate
+            + cache_read_tokens * read_rate
+            + cache_creation_tokens * write_rate
+        )
+        / 1_000_000
+        * 100
+    )
+    output_cents = completion_tokens * output_rate / 1_000_000 * 100
     return input_cents, output_cents
 
 
@@ -140,10 +225,10 @@ def compute_cost_cents(
     prompt_tokens is the cache-inclusive provider total; the cache counts are
     subsets of it, not additions to it.
 
-    Resolution order: image pricing → admin override → litellm → default
+    Resolution order: image pricing → admin override → model catalog → default
     fallback rates (0 unless set). Never raises (usage hot path)."""
     if flow in IMAGE_FLOWS:
-        return 0.0, _image_cost_cents(model, provider) * max(image_count, 1)
+        return 0.0, _image_cost_cents(model, provider, image_count)
 
     if cache_read_tokens + cache_creation_tokens > prompt_tokens:
         logger.warning(
@@ -169,42 +254,37 @@ def compute_cost_cents(
                 prompt_tokens,
                 completion_tokens,
                 cache_read_tokens,
+                cache_creation_tokens,
             )
+
+    if _is_locally_hosted(model, provider):
+        return 0.0, 0.0
 
     try:
-        import litellm
-
-        # custom_llm_provider is required for non-self-identifying model names
-        # (bedrock/vertex/anthropic-plain) — without it litellm raises and we'd
-        # record $0 for entire provider classes.
-        # litellm re-prices the cache subsets of prompt_tokens at the model's own
-        # cache rates (reads discounted, writes at a premium), never as output.
-        prompt_cost_usd, completion_cost_usd = litellm.cost_per_token(
-            model=model,
-            custom_llm_provider=provider,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            cache_read_input_tokens=cache_read_tokens,
-            cache_creation_input_tokens=cache_creation_tokens,
-        )
-        return prompt_cost_usd * 100, completion_cost_usd * 100
+        cost = find_model_cost(provider or "", model)
     except Exception:
-        # Unpriced model: configurable default rates; debug log distinguishes
-        # transient litellm failure from a genuinely unpriced model.
-        logger.debug(
-            "litellm pricing failed for model %s (provider %s); using default rates",
+        logger.exception("Catalog lookup failed for model %s", model)
+        cost = None
+
+    if cost is not None:
+        return _catalog_cost_cents(
+            cost,
+            prompt_tokens,
+            completion_tokens,
+            cache_read_tokens,
+            cache_creation_tokens,
+        )
+
+    # Unpriced model: configurable default rates; warning distinguishes a
+    # genuinely unpriced model from a transient lookup failure above.
+    input_cents = prompt_tokens / 1_000_000 * DEFAULT_LLM_INPUT_COST_PER_MTOK * 100
+    output_cents = (
+        completion_tokens / 1_000_000 * DEFAULT_LLM_OUTPUT_COST_PER_MTOK * 100
+    )
+    if not (DEFAULT_LLM_INPUT_COST_PER_MTOK or DEFAULT_LLM_OUTPUT_COST_PER_MTOK):
+        logger.warning(
+            "No price for model %s (provider %s); recording 0 cost.",
             model,
             provider,
-            exc_info=True,
         )
-        input_cents = prompt_tokens / 1_000_000 * DEFAULT_LLM_INPUT_COST_PER_MTOK * 100
-        output_cents = (
-            completion_tokens / 1_000_000 * DEFAULT_LLM_OUTPUT_COST_PER_MTOK * 100
-        )
-        if not (DEFAULT_LLM_INPUT_COST_PER_MTOK or DEFAULT_LLM_OUTPUT_COST_PER_MTOK):
-            logger.warning(
-                "No price for model %s (provider %s); recording 0 cost.",
-                model,
-                provider,
-            )
-        return input_cents, output_cents
+    return input_cents, output_cents

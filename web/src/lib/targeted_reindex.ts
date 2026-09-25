@@ -5,11 +5,11 @@
  * on the errors endpoint reflects per-row resolution as the backend
  * task lands docs. No client-side polling of job status.
  */
-import {
+import type {
   IndexAttemptError,
   PaginatedIndexAttemptErrors,
   TargetedReindexResponse,
-} from "@/app/admin/connector/[ccPairId]/types";
+} from "@/lib/connectors/types";
 
 /** Server-enforced cap. Keep in sync with `MAX_TARGETS_PER_REQUEST`
  * in `backend/onyx/db/targeted_reindex.py`. */

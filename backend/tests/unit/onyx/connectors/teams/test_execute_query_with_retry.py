@@ -50,7 +50,7 @@ def test_returns_result_without_retry_on_success() -> None:
     query = _query_returning(sentinel)
 
     with patch(_SLEEP) as mock_sleep:
-        result = execute_query_with_retry(query, method_name="test")
+        result = execute_query_with_retry(lambda: query, method_name="test")
 
     assert result is sentinel
     assert query.execute_query.call_count == 1
@@ -63,7 +63,7 @@ def test_retries_transient_status_then_succeeds(status: int) -> None:
     query = _query_returning(_client_request_exception(status), sentinel)
 
     with patch(_SLEEP) as mock_sleep:
-        result = execute_query_with_retry(query, method_name="test")
+        result = execute_query_with_retry(lambda: query, method_name="test")
 
     assert result is sentinel
     assert query.execute_query.call_count == 2
@@ -76,7 +76,7 @@ def test_does_not_retry_non_retryable_status(status: int) -> None:
 
     with patch(_SLEEP) as mock_sleep:
         with pytest.raises(ClientRequestException):
-            execute_query_with_retry(query, method_name="test")
+            execute_query_with_retry(lambda: query, method_name="test")
 
     assert query.execute_query.call_count == 1
     mock_sleep.assert_not_called()
@@ -91,7 +91,7 @@ def test_reraises_after_exhausting_retries() -> None:
 
     with patch(_SLEEP) as mock_sleep:
         with pytest.raises(ClientRequestException):
-            execute_query_with_retry(query, method_name="test", max_retries=2)
+            execute_query_with_retry(lambda: query, method_name="test", max_retries=2)
 
     # max_retries=2 => 3 total attempts, sleeping between each of the first two.
     assert query.execute_query.call_count == 3
@@ -108,7 +108,7 @@ def test_does_not_retry_when_response_is_missing() -> None:
 
     with patch(_SLEEP) as mock_sleep:
         with pytest.raises(ClientRequestException):
-            execute_query_with_retry(query, method_name="test")
+            execute_query_with_retry(lambda: query, method_name="test")
 
     assert query.execute_query.call_count == 1
     mock_sleep.assert_not_called()
@@ -122,7 +122,7 @@ def test_retries_transport_drop_then_succeeds() -> None:
     )
 
     with patch(_SLEEP) as mock_sleep:
-        result = execute_query_with_retry(query, method_name="test")
+        result = execute_query_with_retry(lambda: query, method_name="test")
 
     assert result is sentinel
     assert query.execute_query.call_count == 2
@@ -151,3 +151,18 @@ def test_backoff_ignores_unparseable_retry_after() -> None:
     # Genuinely unparseable values fall through to jittered exponential backoff.
     delay = backoff_seconds(attempt=0, retry_after="not-a-date")
     assert 2.5 <= delay <= 5
+
+
+def test_each_attempt_runs_a_query_built_for_it() -> None:
+    # The SDK drops a query once it is sent, so a retry needs a new one.
+    sentinel = object()
+    first = _query_returning(_client_request_exception(429))
+    second = _query_returning(sentinel)
+    built = iter([first, second])
+
+    with patch(_SLEEP):
+        result = execute_query_with_retry(lambda: next(built), method_name="test")
+
+    assert result is sentinel
+    assert first.execute_query.call_count == 1
+    assert second.execute_query.call_count == 1

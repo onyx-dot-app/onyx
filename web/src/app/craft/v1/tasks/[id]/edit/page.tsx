@@ -39,7 +39,7 @@ export default function EditScheduledTaskPage() {
         <SettingsLayouts.Header
           icon={SvgClock}
           title={t("fallbackTitle")}
-          backButton={handleBack}
+          cancel={handleBack}
           divider
         />
         <SettingsLayouts.Body>
@@ -57,7 +57,7 @@ export default function EditScheduledTaskPage() {
         <SettingsLayouts.Header
           icon={SvgClock}
           title={data ? t("title", { name: data.name }) : t("fallbackTitle")}
-          backButton={handleBack}
+          cancel={handleBack}
           divider
         />
         <SettingsLayouts.Body>

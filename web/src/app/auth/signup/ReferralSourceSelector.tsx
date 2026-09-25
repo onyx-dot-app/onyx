@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelect } from "@opal/components";
 import { Label } from "@/components/Field";
 import { useTranslations } from "next-intl";
 
@@ -63,19 +63,15 @@ export default function ReferralSourceSelector({
       <Label className="text-text-950" small={false}>
         {t("signup.referralQuestion.label")}
       </Label>
-      <InputSelect value={referralSource} onValueChange={handleChange}>
-        <InputSelect.Trigger
-          placeholder={t("signup.referralPlaceholder.placeholder")}
-        />
-
-        <InputSelect.Content>
-          {referralOptions.map((option) => (
-            <InputSelect.Item key={option.value} value={option.value}>
-              {option.label}
-            </InputSelect.Item>
-          ))}
-        </InputSelect.Content>
-      </InputSelect>
+      <InputSingleSelect
+        value={referralSource ?? ""}
+        onValueChange={handleChange}
+        placeholder={t("signup.referralPlaceholder.placeholder")}
+        options={referralOptions.map((option) => ({
+          value: option.value,
+          title: option.label,
+        }))}
+      />
     </div>
   );
 }

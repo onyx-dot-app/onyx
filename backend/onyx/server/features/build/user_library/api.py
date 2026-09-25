@@ -22,6 +22,7 @@ from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.pdf_image_utils import count_pdf_embedded_images
+from onyx.file_processing.zip_limits import ZipSizeLimitError, read_zip_member
 from onyx.server.features.build.configs import (
     USER_LIBRARY_MAX_FILE_SIZE_BYTES,
     USER_LIBRARY_MAX_FILES_PER_UPLOAD,
@@ -327,8 +328,14 @@ async def upload_zip(
                 if zip_info.is_dir():
                     continue
 
-                file_content = zip_file.read(zip_info.filename)
-                file_size = len(file_content)
+                try:
+                    file_content: bytes = read_zip_member(
+                        zip_file, zip_info, max_bytes=USER_LIBRARY_MAX_FILE_SIZE_BYTES
+                    )
+                except ZipSizeLimitError as e:
+                    logger.warning("Skipping '%s' - %s", zip_info.filename, e)
+                    continue
+                file_size: int = len(file_content)
 
                 if file_size > USER_LIBRARY_MAX_FILE_SIZE_BYTES:
                     logger.warning(

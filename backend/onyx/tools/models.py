@@ -191,10 +191,6 @@ class SearchToolOverrideKwargs(BaseModel):
     max_llm_chunks: int | None = MAX_CHUNKS_FED_TO_CHAT
     include_link: bool = False
 
-    # Collect per-query retrieval candidates and post-cap document ids into
-    # SearchDocsResponse.retrieval_diagnostics. Off unless a caller wants search receipts.
-    include_retrieval_candidates: bool = False
-
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 

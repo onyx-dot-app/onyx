@@ -422,7 +422,11 @@ class TestCheckpointing:
         assert documents[0].id == f"{TEST_BASE_URL}/browse/HELP-1"
         assert len(failures) == 1
         assert failures[0].failed_document is not None
-        assert failures[0].failed_document.document_id == "HELP-2"
+        # A failure stands in for the document it replaces, so it carries the
+        # same id the document would have had, not the bare issue key.
+        assert (
+            failures[0].failed_document.document_id == f"{TEST_BASE_URL}/browse/HELP-2"
+        )
 
     def test_retrieve_all_slim_docs(
         self, jsm_connector: JiraServiceManagementConnector

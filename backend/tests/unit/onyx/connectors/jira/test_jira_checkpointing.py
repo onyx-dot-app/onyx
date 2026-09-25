@@ -287,7 +287,12 @@ def test_load_from_checkpoint_with_issue_processing_error(
         # Second item should be a failure
         assert isinstance(first_batch.items[1], ConnectorFailure)
         assert first_batch.items[1].failed_document is not None
-        assert first_batch.items[1].failed_document.document_id == "TEST-2"
+        # Must match the Document.id shape the success path emits above, since
+        # consumers correlate failures to documents by this value.
+        assert (
+            first_batch.items[1].failed_document.document_id
+            == "https://jira.example.com/browse/TEST-2"
+        )
         assert "Failed to process Jira issue" in first_batch.items[1].failure_message
         # Check checkpoint indicates more items (full batch)
         assert first_batch.next_checkpoint.has_more is True
@@ -302,7 +307,10 @@ def test_load_from_checkpoint_with_issue_processing_error(
         # Second item should be a failure
         assert isinstance(second_batch.items[1], ConnectorFailure)
         assert second_batch.items[1].failed_document is not None
-        assert second_batch.items[1].failed_document.document_id == "TEST-4"
+        assert (
+            second_batch.items[1].failed_document.document_id
+            == "https://jira.example.com/browse/TEST-4"
+        )
         assert "Failed to process Jira issue" in second_batch.items[1].failure_message
         # Check checkpoint indicates more items
         assert second_batch.next_checkpoint.has_more is True

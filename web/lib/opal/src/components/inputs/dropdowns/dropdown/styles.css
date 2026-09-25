@@ -1,0 +1,124 @@
+@reference "#reference.css";
+
+/* ============================================================================
+   Select dropdown — the family-internal listbox
+
+   State styling rides data attributes set by the components:
+     Rows are presentational LineItemButtons: selection, hover, press and
+     the keyboard highlight are its palette. This file carries the box,
+     the search field, the groups and the create row's icon.
+   ============================================================================ */
+
+.opal-select-dropdown {
+  @apply z-10000 overflow-hidden border bg-background-neutral-00 rounded-12 shadow-box-01 pointer-events-auto touch-auto;
+}
+
+/* The search field pinned above the rows: a borderless input on its own
+   row, with the same 4px inset as the rows below it. */
+.opal-select-search {
+  @apply p-1 pb-0;
+}
+
+/* The inner padding sits inside the ShadowDiv, so its scroll gradients span
+   the bordered box edge to edge instead of stopping at the padding. The
+   list scrolls without a visible scrollbar: the mask fade at each edge
+   already says there is more. */
+.opal-select-dropdown-scroll {
+  @apply flex flex-col gap-1 overflow-x-hidden p-1;
+  scrollbar-width: none;
+}
+.opal-select-dropdown-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* Open and close animations. floating-ui positions the root with a
+   transform, so the root only fades; the rise and settle run on the
+   ShadowDiv's non-scrolling wrapper, never on the scroller itself (a
+   transform there makes Chromium repaint it at scroll offset 0 for a
+   frame). `data-state="closed"` is the exit, kept mounted by usePresence
+   until the animation ends. */
+.opal-select-dropdown[data-state="open"] {
+  animation: opal-select-dropdown-in 120ms ease-out;
+}
+
+.opal-select-dropdown[data-state="open"] .opal-select-dropdown-content {
+  animation: opal-select-dropdown-content-in 120ms ease-out;
+}
+
+.opal-select-dropdown[data-state="closed"] {
+  animation: opal-select-dropdown-out 80ms ease-in forwards;
+  pointer-events: none;
+}
+
+.opal-select-dropdown[data-state="closed"] .opal-select-dropdown-content {
+  animation: opal-select-dropdown-content-out 80ms ease-in forwards;
+}
+
+@keyframes opal-select-dropdown-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes opal-select-dropdown-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes opal-select-dropdown-content-in {
+  from {
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+@keyframes opal-select-dropdown-content-out {
+  to {
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opal-select-dropdown[data-state],
+  .opal-select-dropdown[data-state] .opal-select-dropdown-content {
+    animation: none;
+  }
+}
+
+.opal-select-empty-set {
+  @apply p-2;
+}
+
+.opal-select-no-match {
+  @apply px-2 py-2 text-text-02 font-secondary-body;
+}
+
+/* ---------------------------------------------------------------------------
+   Option rows
+   --------------------------------------------------------------------------- */
+
+/* 8px side padding: with the listbox 4px wider than the trigger on each
+   side, a row's text and icon then sit exactly under the trigger's. */
+/* Keyboard mode: rows and titles ignore the pointer, so the pointer's hover
+   cannot paint a second highlight beside the keyboard's. A pointer movement
+   over the list drops the flag and hover returns. */
+.opal-select-dropdown[data-keyboard-nav] [role="option"],
+.opal-select-dropdown[data-keyboard-nav] .opal-select-group {
+  pointer-events: none;
+}
+
+/* A foldable group wraps its title and rows; the same row gap as the list. */
+.opal-select-group {
+  @apply flex flex-col gap-1;
+}
+
+/* Keyboard scrolling brings a stop to the nearest edge; the mask fade there
+   is 12px, so a stop keeps that much clear of the edge. */
+.opal-select-dropdown-scroll [role="option"],
+.opal-select-group > :first-child {
+  scroll-margin-block: 0.75rem;
+}
+
+.opal-select-create-icon {
+  @apply ms-2 h-4 w-4 shrink-0 text-text-03;
+}

@@ -1,5 +1,6 @@
-"""Channel files carry the SharePoint groups of their channel sites, so those
-groups are expanded the way the SharePoint connector expands them."""
+"""A thread names the group of its channel's members, and a channel file the
+SharePoint groups of its channel site, which are expanded the way the
+SharePoint connector expands them."""
 
 from collections.abc import Generator
 
@@ -21,11 +22,16 @@ def teams_group_sync(
 ) -> Generator[ExternalUserGroup, None, None]:
     connector = TeamsConnector(**cc_pair.connector.connector_specific_config)
     connector.load_credentials(credential_json(cc_pair))
-    # Only channel files name groups: threads are read by their members.
-    if not connector.include_attachments:
-        return
     if connector.graph_client is None:
         raise RuntimeError("Graph client not initialized in connector")
+
+    for group_id, emails in connector.channel_member_groups():
+        logger.info("Group %s has %s members", group_id, len(emails))
+        yield ExternalUserGroup(id=group_id, user_emails=emails)
+
+    # Only channel files name the groups of a site.
+    if not connector.include_attachments:
+        return
 
     for site_url in connector.channel_site_urls():
         groups = get_sharepoint_external_groups(

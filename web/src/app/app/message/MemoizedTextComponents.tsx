@@ -2,7 +2,7 @@ import React, { memo, JSX, useMemo, useCallback } from "react";
 import type { ExtraProps } from "react-markdown";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
-import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
+import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/types";
 import { SubQuestionDetail, CitationMap } from "../interfaces";
 import { ValidSources } from "@/lib/types";
 import { ProjectFile } from "@/lib/projects/types";

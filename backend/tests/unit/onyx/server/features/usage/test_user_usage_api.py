@@ -491,11 +491,11 @@ class TestGetModelPricePerMillion:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         def _boom(*_a: object, **_k: object) -> None:
-            raise RuntimeError("litellm exploded")
+            raise RuntimeError("catalog exploded")
 
-        import litellm
+        from onyx.llm import cost as cost_mod
 
-        monkeypatch.setattr(litellm, "get_model_info", _boom)
+        monkeypatch.setattr(cost_mod, "find_model_cost", _boom)
         assert get_model_price_per_million("gpt-4o", "openai") == ModelPrice(
             model="gpt-4o",
             provider="openai",

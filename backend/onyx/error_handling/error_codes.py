@@ -79,6 +79,9 @@ class OnyxErrorCode(Enum):
     # A write refused because a background sync is still applying the last one.
     # Retryable, unlike NOT_FOUND, which these routes used to report instead.
     RESOURCE_SYNCING = ("RESOURCE_SYNCING", 409)
+    # A re-index refused because an earlier generation still holds the index name it
+    # wants. Reclamation is draining that index now, so the same request works shortly.
+    INDEX_NAME_RECLAIMING = ("INDEX_NAME_RECLAIMING", 409)
 
     # --------------------------------------------------------------------------
     # Rate Limiting / Quotas (429 / 402)

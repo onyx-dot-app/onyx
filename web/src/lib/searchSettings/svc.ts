@@ -1,0 +1,309 @@
+import type { ErrorResponseBody } from "@/lib/fetcher";
+import type { Settings } from "@/lib/settings/types";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import {
+  EmbeddingModelSpec,
+  EmbeddingProviderName,
+  ImageProcessingSettings,
+  ReindexErrorRow,
+  SavedSearchSettings,
+  SwitchoverType,
+} from "@/lib/searchSettings/types";
+import { isCloudBased } from "@/lib/searchSettings";
+
+interface TestEmbeddingArgs {
+  provider_type: string;
+  modelName: string;
+  apiKey: string | null;
+  apiUrl: string | null;
+  apiVersion: string | null;
+  deploymentName: string | null;
+}
+
+export async function testEmbedding({
+  provider_type,
+  modelName,
+  apiKey,
+  apiUrl,
+  apiVersion,
+  deploymentName,
+}: TestEmbeddingArgs) {
+  const testModelName =
+    provider_type === "openai" ? "text-embedding-3-small" : modelName;
+
+  return await fetch("/api/admin/embedding/test-embedding", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      provider_type: provider_type,
+      api_key: apiKey,
+      api_url: apiUrl,
+      model_name: testModelName,
+      api_version: apiVersion,
+      deployment_name: deploymentName,
+    }),
+  });
+}
+
+/**
+ * Tests and saves embedding provider credentials.
+ * Tests the connection first, then persists the credentials.
+ * Throws on failure with a user-facing error message.
+ *
+ * `apiVersion` and `deploymentName` are Azure-specific — backend's
+ * `CloudEmbeddingProviderCreationRequest` accepts them as optional, and
+ * non-Azure providers should pass `null`.
+ */
+export async function connectEmbeddingProvider({
+  providerType,
+  apiKey,
+  apiUrl,
+  modelName = "",
+  apiVersion,
+  deploymentName,
+}: {
+  providerType: string;
+  apiKey: string | null;
+  apiUrl: string;
+  modelName?: string;
+  apiVersion: string | null;
+  deploymentName: string | null;
+}): Promise<void> {
+  if (apiKey !== null) {
+    const testResponse = await testEmbedding({
+      provider_type: providerType,
+      modelName,
+      apiKey,
+      apiUrl,
+      apiVersion,
+      deploymentName,
+    });
+
+    if (!testResponse.ok) {
+      const err: ErrorResponseBody = await testResponse.json();
+      throw new Error(err.detail ?? "Embedding test failed");
+    }
+  }
+
+  const body: Record<string, unknown> = {
+    provider_type: providerType,
+    api_url: apiUrl,
+    api_version: apiVersion,
+    deployment_name: deploymentName,
+    is_default_provider: false,
+    is_configured: true,
+  };
+  // Explicit, so the backend never has to infer intent from the masked value:
+  // null means the admin left the stored key alone.
+  body.api_key_changed = apiKey !== null;
+  if (apiKey !== null) body.api_key = apiKey;
+
+  const saveResponse = await fetch(SWR_KEYS.embeddingProviders, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!saveResponse.ok) {
+    const err: ErrorResponseBody = await saveResponse.json();
+    throw new Error(err.detail ?? "Failed to save provider");
+  }
+}
+
+/**
+ * Disconnects an embedding provider by deleting its credentials.
+ * Throws on failure with a user-facing error message.
+ */
+export async function disconnectEmbeddingProvider(
+  providerType: string
+): Promise<void> {
+  const response = await fetch(
+    `${SWR_KEYS.embeddingProviders}/${providerType}`,
+    { method: "DELETE" }
+  );
+
+  if (!response.ok) {
+    const err: ErrorResponseBody = await response.json();
+    throw new Error(err.detail ?? "Failed to disconnect provider");
+  }
+}
+
+export async function saveAdminSettings(settings: Settings) {
+  const response = await fetch("/api/admin/settings", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings),
+  });
+
+  if (!response.ok) {
+    const errorMsg = (await response.json()).detail;
+    throw new Error(errorMsg);
+  }
+}
+
+/**
+ * Cancels an in-flight embedding-model switchover. Marks the FUTURE search
+ * settings row as PAST, expires its index attempts, and drops the secondary
+ * vector index.
+ */
+export async function cancelNewEmbedding(): Promise<Response> {
+  return await fetch("/api/search-settings/cancel-new-embedding", {
+    method: "POST",
+  });
+}
+
+/**
+ * Resume a paused re-index unit from its cursor. Throws on a hard failure; a 503
+ * (resumed but the queue is down) is treated as success — the scheduler re-dispatches it.
+ */
+export async function resumePausedPort(
+  row: Pick<ReindexErrorRow, "cc_pair_id" | "user_id">
+): Promise<void> {
+  const response = await fetch("/api/search-settings/reindex/port/resume", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cc_pair_id: row.cc_pair_id, user_id: row.user_id }),
+  });
+  if (response.status === 503) {
+    return;
+  }
+  if (!response.ok) {
+    let detail: string | undefined;
+    try {
+      detail = ((await response.json()) as { detail?: string }).detail;
+    } catch (e) {
+      // non-JSON error body (e.g. a 502 HTML page): log so the failure is traceable
+      console.error(`resumePausedPort failed (${response.status}):`, e);
+    }
+    throw new Error(detail ?? "Failed to resume the paused unit.");
+  }
+}
+
+interface SetNewSearchSettingsArgs {
+  model: EmbeddingModelSpec;
+  providerName: EmbeddingProviderName;
+  switchoverType: SwitchoverType;
+  enableContextualRag: boolean;
+  contextualRagModelConfigurationId: number | null;
+  // The server recomputes this set itself and rejects the reindex if its own set contains
+  // a cc_pair the admin never acknowledged.
+  acknowledgedWontPortCcPairIds: number[];
+}
+
+export async function setNewSearchSettings({
+  model,
+  providerName,
+  switchoverType,
+  enableContextualRag,
+  contextualRagModelConfigurationId,
+  acknowledgedWontPortCcPairIds,
+}: SetNewSearchSettingsArgs): Promise<Response> {
+  // The backend's EmbeddingProvider enum only contains cloud providers
+  // (openai/cohere/voyage/google/litellm/azure). Self-hosted models live
+  // under the frontend's EmbeddingProviderName for UI grouping (icon,
+  // docs link), but the backend expects provider_type=null for them.
+  const providerType = isCloudBased(providerName) ? providerName : null;
+
+  return await fetch("/api/search-settings/set-new-search-settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model_name: model.modelName,
+      model_dim: model.modelDim,
+      normalize: model.normalize,
+      query_prefix: model.queryPrefix,
+      passage_prefix: model.passagePrefix,
+      provider_type: providerType,
+      api_key: null,
+      api_url: null,
+      index_name: null,
+      multipass_indexing: false,
+      enable_contextual_rag: enableContextualRag,
+      contextual_rag_model_configuration_id: contextualRagModelConfigurationId,
+      switchover_type: switchoverType,
+      acknowledged_wont_port_cc_pair_ids: acknowledgedWontPortCcPairIds,
+    }),
+  });
+}
+
+/**
+ * Switches the Contextual Retrieval LLM on the current index. Contextual
+ * Retrieval must already be enabled; all other settings must stay unchanged.
+ */
+export async function updateInferenceSettings(
+  settings: SavedSearchSettings
+): Promise<Response> {
+  return await fetch("/api/search-settings/update-inference-settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings),
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Image processing
+// ═══════════════════════════════════════════════════════════════════════════
+
+interface EnableImageProcessingArgs {
+  modelConfigurationId: number;
+  maxSizeMb: number;
+}
+
+/**
+ * A failed image processing request. `detail` is the server's reason when
+ * the body carried one, else null; the caller chooses a translated fallback.
+ */
+export class ImageProcessingRequestError extends Error {
+  constructor(
+    readonly status: number,
+    readonly detail: string | null
+  ) {
+    super(detail ?? `Image processing request failed with status ${status}`);
+    this.name = "ImageProcessingRequestError";
+  }
+}
+
+async function throwOnError(response: Response): Promise<void> {
+  if (response.ok) return;
+  let detail: string | null = null;
+  try {
+    const body: unknown = await response.json();
+    if (
+      typeof body === "object" &&
+      body !== null &&
+      "detail" in body &&
+      typeof body.detail === "string"
+    ) {
+      detail = body.detail;
+    }
+  } catch (error) {
+    // A non-JSON body (a proxy page, a truncated response) is worth a trace.
+    console.error("Image processing error response was not JSON:", error);
+  }
+  throw new ImageProcessingRequestError(response.status, detail);
+}
+
+/** Turns image processing on with this model, or repoints it. */
+export async function enableImageProcessing({
+  modelConfigurationId,
+  maxSizeMb,
+}: EnableImageProcessingArgs): Promise<ImageProcessingSettings> {
+  const response = await fetch(SWR_KEYS.imageProcessingSettings, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model_configuration_id: modelConfigurationId,
+      max_size_mb: maxSizeMb,
+    }),
+  });
+  await throwOnError(response);
+  return (await response.json()) as ImageProcessingSettings;
+}
+
+/** Turns image processing off. */
+export async function disableImageProcessing(): Promise<void> {
+  const response = await fetch(SWR_KEYS.imageProcessingSettings, {
+    method: "DELETE",
+  });
+  await throwOnError(response);
+}
