@@ -10,11 +10,13 @@ from unittest.mock import MagicMock
 
 import requests
 
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftGraphError as OutlookGraphError,
+)
 from onyx.connectors.outlook.models import (
     OutlookAttachment,
     OutlookEvent,
     OutlookFolder,
-    OutlookGraphError,
     OutlookMailbox,
     OutlookMessage,
     OutlookMessageChange,

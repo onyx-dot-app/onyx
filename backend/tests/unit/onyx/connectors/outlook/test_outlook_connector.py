@@ -15,6 +15,12 @@ from onyx.configs.app_configs import OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
 from onyx.connectors.connector_runner import ConnectorRunner
 from onyx.connectors.exceptions import ConnectorValidationError, CredentialInvalidError
 from onyx.connectors.microsoft_utils.drive_items import SizeCapExceeded
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftAuthError as OutlookAuthError,
+)
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftGraphError as OutlookGraphError,
+)
 from onyx.connectors.models import (
     ConnectorFailure,
     ConnectorMissingCredentialError,
@@ -46,13 +52,11 @@ from onyx.connectors.outlook.connector import (
     mailbox_node_id,
 )
 from onyx.connectors.outlook.models import (
-    OutlookAuthError,
     OutlookDeltaPage,
     OutlookEvent,
     OutlookEventPage,
     OutlookFolder,
     OutlookFolderPage,
-    OutlookGraphError,
     OutlookMailboxPage,
     OutlookMessagePage,
     OutlookRecipient,

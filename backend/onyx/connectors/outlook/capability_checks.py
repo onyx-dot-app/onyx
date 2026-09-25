@@ -33,12 +33,18 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     UnexpectedValidationError,
 )
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftAuthError as OutlookAuthError,
+)
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftGraphError as OutlookGraphError,
+)
+from onyx.connectors.microsoft_utils.graph_errors import raise_for_auth_error
 from onyx.connectors.outlook.errors import (
     CALENDAR_READ_REMEDIATION,
     EXCHANGE_SCOPE_REMEDIATION,
     MAILBOX_UNAVAILABLE_REMEDIATION,
     USER_LISTING_DENIED,
-    raise_for_auth_error,
     raise_for_graph_error,
 )
 from onyx.connectors.outlook.mailboxes import (
@@ -48,11 +54,9 @@ from onyx.connectors.outlook.mailboxes import (
     resolve_mailbox_for_validation,
 )
 from onyx.connectors.outlook.models import (
-    OutlookAuthError,
     OutlookEvent,
     OutlookEventPage,
     OutlookFolder,
-    OutlookGraphError,
     OutlookMailbox,
 )
 from onyx.connectors.outlook.source_operations import OutlookSourceOperations

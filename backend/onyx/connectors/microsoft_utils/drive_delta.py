@@ -1,8 +1,8 @@
 """Typed Microsoft Graph drive delta pages and checkpoint-safe fetching."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import quote, urljoin, urlsplit
 
 import requests
 from pydantic import BaseModel, ConfigDict, Field
@@ -12,12 +12,12 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+_EPOCH = datetime.fromtimestamp(0, tz=timezone.utc)
 ODATA_VALUE_PROPERTY = "value"
 ODATA_NEXT_LINK_PROPERTY = "@odata.nextLink"
 ODATA_DELTA_LINK_PROPERTY = "@odata.deltaLink"
 ODATA_REMOVED_PROPERTY = "@removed"
 GRAPH_SHARED_CHANGED_PROPERTY = "@microsoft.graph.sharedChanged"
-
 DRIVE_ITEM_ID_PROPERTY = "id"
 DRIVE_ITEM_NAME_PROPERTY = "name"
 DRIVE_ITEM_WEB_URL_PROPERTY = "webUrl"
@@ -33,6 +33,7 @@ DRIVE_ITEM_PARENT_REFERENCE_PROPERTY = "parentReference"
 DRIVE_ITEM_SHAREPOINT_IDS_PROPERTY = "sharepointIds"
 DRIVE_ITEM_DOWNLOAD_URL_PROPERTY = "@microsoft.graph.downloadUrl"
 DRIVE_ITEM_DOWNLOAD_URL_SELECT = "content.downloadUrl"
+DEFAULT_DRIVE_DELTA_PAGE_SIZE = 200
 
 HTTP_GONE_STATUS = 410
 LOCATION_HEADER = "Location"
@@ -200,17 +201,18 @@ def build_onedrive_delta_request_headers() -> dict[str, str]:
     return {PREFER_HEADER: ", ".join(preferences)}
 
 
-def build_drive_delta_full_resync_url(
+def build_delta_start_url(
     graph_api_base: str,
     drive_id: str,
+    start: datetime | None = None,
     *,
-    page_size: int = 200,
+    page_size: int = DEFAULT_DRIVE_DELTA_PAGE_SIZE,
     select_fields: str = DRIVE_DELTA_SELECT_FIELDS,
 ) -> str:
-    return (
-        f"{graph_api_base}/drives/{drive_id}/root/delta?"
-        f"$top={page_size}&$select={select_fields}"
-    )
+    params = [f"$top={page_size}", f"$select={select_fields}"]
+    if start is not None and start > _EPOCH:
+        params.append(f"token={quote(start.isoformat(timespec='seconds'))}")
+    return f"{graph_api_base}/drives/{drive_id}/root/delta?{'&'.join(params)}"
 
 
 def _same_delta_endpoint(candidate: str, expected: str) -> bool:
@@ -257,7 +259,7 @@ def fetch_drive_delta_checkpoint_page(
     drive_id: str,
     request_headers: dict[str, str] | None = None,
     query_params: dict[str, str] | None = None,
-    page_size: int = 200,
+    page_size: int = DEFAULT_DRIVE_DELTA_PAGE_SIZE,
     select_fields: str = DRIVE_DELTA_SELECT_FIELDS,
     allow_full_resync: bool = True,
 ) -> DriveDeltaFetchResult:
@@ -273,7 +275,7 @@ def fetch_drive_delta_checkpoint_page(
         ):
             raise
 
-        fallback = build_drive_delta_full_resync_url(
+        fallback = build_delta_start_url(
             client.graph_api_base,
             drive_id,
             page_size=page_size,
