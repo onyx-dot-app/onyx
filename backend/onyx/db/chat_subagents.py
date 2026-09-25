@@ -341,51 +341,49 @@ def root_response_id(db_session: Session, response: ChatMessage) -> int:
 
 def _check_history_size(db_session: Session, response_ids: list[int]) -> None:
     item_bytes = (
-        db_session.scalar(
-            select(
-                func.coalesce(
-                    func.sum(
-                        func.coalesce(
-                            func.octet_length(cast(ChatResponseItem.content, Text)), 0
-                        )
-                        + func.coalesce(
-                            func.octet_length(cast(ChatResponseItem.rendering, Text)), 0
-                        )
-                    ),
-                    0,
-                )
-            ).where(ChatResponseItem.chat_message_id.in_(response_ids))
+        select(
+            func.coalesce(
+                func.sum(
+                    func.coalesce(
+                        func.octet_length(cast(ChatResponseItem.content, Text)), 0
+                    )
+                    + func.coalesce(
+                        func.octet_length(cast(ChatResponseItem.rendering, Text)), 0
+                    )
+                ),
+                0,
+            )
         )
-        or 0
+        .where(ChatResponseItem.chat_message_id.in_(response_ids))
+        .scalar_subquery()
     )
     tool_bytes = (
-        db_session.scalar(
-            select(
-                func.coalesce(
-                    func.sum(
-                        func.coalesce(func.octet_length(cast(ToolCall.result, Text)), 0)
-                        + func.coalesce(
-                            func.octet_length(cast(ToolCall.tool_call_arguments, Text)),
-                            0,
-                        )
-                    ),
-                    0,
-                )
-            ).where(ToolCall.parent_chat_message_id.in_(response_ids))
+        select(
+            func.coalesce(
+                func.sum(
+                    func.coalesce(func.octet_length(cast(ToolCall.result, Text)), 0)
+                    + func.coalesce(
+                        func.octet_length(cast(ToolCall.tool_call_arguments, Text)), 0
+                    )
+                ),
+                0,
+            )
         )
-        or 0
+        .where(ToolCall.parent_chat_message_id.in_(response_ids))
+        .scalar_subquery()
     )
     question = aliased(ChatMessage)
     input_bytes = (
-        db_session.scalar(
-            select(func.coalesce(func.sum(func.octet_length(question.message)), 0))
-            .select_from(ChatMessage)
-            .join(question, ChatMessage.parent_message_id == question.id)
-            .where(ChatMessage.id.in_(response_ids))
-        )
-        or 0
+        select(func.coalesce(func.sum(func.octet_length(question.message)), 0))
+        .select_from(ChatMessage)
+        .join(question, ChatMessage.parent_message_id == question.id)
+        .where(ChatMessage.id.in_(response_ids))
+        .scalar_subquery()
     )
-    if item_bytes + tool_bytes + input_bytes > MAX_AGENT_HISTORY_BYTES:
+    total_bytes = db_session.execute(
+        select(item_bytes + tool_bytes + input_bytes)
+    ).scalar_one()
+    if total_bytes > MAX_AGENT_HISTORY_BYTES:
         raise ValueError("Agent history exceeds its content limit")
 
 

@@ -6,7 +6,7 @@ from concurrent.futures import Future
 
 from onyx.agents.agent_coordination import AgentCoordinator, RunStore
 from onyx.agents.models import RunState
-from onyx.agents.runtime import Run, result_from_snapshot
+from onyx.agents.runtime import Run, validate_run_completion
 from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.errors import chat_error
 from onyx.chat.models import (
@@ -57,7 +57,7 @@ class ChatResponsePersistence(RunStore):
             return
         error: BaseException | None = None
         try:
-            result_from_snapshot(snapshot)
+            validate_run_completion(snapshot)
         except BaseException as failure:
             error = failure
         self._save(snapshot, error, delivery_failed=run.delivery_failed)

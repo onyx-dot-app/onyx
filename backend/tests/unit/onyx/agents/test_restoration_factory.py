@@ -134,6 +134,10 @@ def test_factory_rebuilds_feature_and_preserves_saved_context(name: str) -> None
         )
         assert rebuilt.restoration.context.custom_prompt == "Hello {{user.role}}"
     assert checkpoint == saved
+    message = checkpoint.agent_state.messages[0]
+    assert isinstance(message, UserMessage)
+    message.content = "Changed after restoration"
+    assert rebuilt.state == saved.agent_state
 
 
 def test_factory_rejects_checkpoint_without_supported_feature_state() -> None:
