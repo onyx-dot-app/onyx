@@ -5,6 +5,7 @@ from collections.abc import Callable, Generator
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
 
@@ -57,6 +58,7 @@ from onyx.db.engine.sql_engine import (  # noqa: E402
     get_session_with_current_tenant,
 )
 from onyx.db.search_settings import get_current_search_settings  # noqa: E402
+from onyx.llm import multi_llm  # noqa: E402
 from onyx.utils.variable_functionality import (  # noqa: E402
     fetch_versioned_implementation,
 )
@@ -76,6 +78,10 @@ from tests.integration.common_utils.managers.image_generation import (  # noqa: 
 from tests.integration.common_utils.managers.llm_provider import (  # noqa: E402
     LLMProviderManager,
 )
+from tests.integration.common_utils.managers.mock_llm import (  # noqa: E402
+    MOCK_LLM_MODEL_NAME,
+    MockLLMManager,
+)
 from tests.integration.common_utils.managers.user import (  # noqa: E402
     DEFAULT_PASSWORD,
     UserManager,
@@ -84,6 +90,7 @@ from tests.integration.common_utils.managers.user import (  # noqa: E402
 from tests.integration.common_utils.managers.user_group import (  # noqa: E402
     UserGroupManager,
 )
+from tests.integration.common_utils.ports import available_port  # noqa: E402
 from tests.integration.common_utils.reset import (  # noqa: E402
     _seed_dev_license_if_set,
     reset_all,
@@ -97,6 +104,15 @@ from tests.integration.common_utils.test_models import (  # noqa: E402
     SimpleTestDocument,
 )
 from tests.integration.common_utils.vespa import vespa_fixture  # noqa: E402
+from tests.integration.mock_services.mock_llm_server.handle import (  # noqa: E402
+    ScriptHandle,
+)
+from tests.integration.mock_services.mock_llm_server.registry import (  # noqa: E402
+    ScriptRegistry,
+)
+from tests.integration.mock_services.mock_llm_server.server import (  # noqa: E402
+    MockLLMServerThread,
+)
 
 BASIC_USER_NAME = "basic_user"
 
@@ -449,6 +465,64 @@ def reset_multitenant() -> None:
 @pytest.fixture
 def llm_provider(admin_user: DATestUser) -> DATestLLMProvider:
     return LLMProviderManager.create(user_performing_action=admin_user)
+
+
+@pytest.fixture(scope="session")
+def mock_llm_server() -> Generator[MockLLMServerThread, None, None]:
+    server = MockLLMServerThread(ScriptRegistry(), port=available_port())
+    server.start()
+    try:
+        yield server
+    finally:
+        server.stop()
+
+
+@pytest.fixture
+def mock_llm_model_name() -> str:
+    """Override (or parametrize) to run `mock_llm` under another model name."""
+    return MOCK_LLM_MODEL_NAME
+
+
+@pytest.fixture
+def mock_llm(
+    mock_llm_server: MockLLMServerThread,
+    admin_user: DATestUser,
+    mock_llm_model_name: str,
+) -> Generator[ScriptHandle, None, None]:
+    """Make the scripted mock LLM server the default LLM for one test.
+
+    Do not combine with `mock_llm_response`: it answers inside LiteLLM, so the
+    server never sees the request. Teardown restores the previous default
+    provider and fails on unmatched requests or unconsumed required steps.
+    """
+    assert not multi_llm.MOCK_LLM_RESPONSE, (
+        "MOCK_LLM_RESPONSE is set, so LiteLLM would answer in-process and the "
+        "mock LLM server would never be called."
+    )
+    script_id = uuid4().hex
+    handle = ScriptHandle(
+        mock_llm_server.registry, script_id, mock_llm_server.api_base(script_id)
+    )
+    try:
+        previous_default = LLMProviderManager.get_default_model(admin_user)
+        provider = MockLLMManager.create(
+            api_base=handle.api_base,
+            user_performing_action=admin_user,
+            model_name=mock_llm_model_name,
+        )
+    except Exception:
+        handle.close()
+        raise
+    handle.provider_id = provider.id
+    handle.model_name = mock_llm_model_name
+
+    yield handle
+
+    try:
+        MockLLMManager.delete(provider, previous_default, admin_user)
+        handle.verify()
+    finally:
+        handle.close()
 
 
 @pytest.fixture

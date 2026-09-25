@@ -231,6 +231,9 @@ class StreamedResponse(BaseModel):
     # Track heartbeat packets for image generation and other tools
     heartbeat_packets: list[dict[str, Any]]
 
+    # Every placed packet in stream order, as {"placement": {...}, "obj": {...}}
+    packets: list[dict[str, Any]] = Field(default_factory=list)
+
 
 class DATestGatingType(str, Enum):
     FULL = "full"

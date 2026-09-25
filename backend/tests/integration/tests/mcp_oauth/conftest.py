@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import ipaddress
 import os
-import socket
 import subprocess
 import sys
 import threading
-import time
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -30,42 +28,15 @@ from tests.integration.common_utils.cimd_oauth import (
     CimdOAuthTestServices,
     OAuthHttpsEndpoint,
 )
+from tests.integration.common_utils.ports import available_port, wait_for_port
 
 NGINX_COMMAND = "nginx"
-STARTUP_TIMEOUT_SECONDS = 30.0
 
 MOCK_SERVER_DIR = (
     Path(__file__).resolve().parents[2] / "mock_services" / "mcp_test_server"
 )
 MOCK_OIDC_SCRIPT = MOCK_SERVER_DIR / "run_mock_oidc_idp.py"
 MCP_OAUTH_SERVER_SCRIPT = MOCK_SERVER_DIR / "run_mcp_server_oauth.py"
-
-
-def _available_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(("0.0.0.0", 0))
-        return int(sock.getsockname()[1])
-
-
-def _wait_for_port(
-    host: str,
-    port: int,
-    process: subprocess.Popen[bytes] | None = None,
-) -> None:
-    deadline = time.monotonic() + STARTUP_TIMEOUT_SECONDS
-    while time.monotonic() < deadline:
-        if process is not None and process.poll() is not None:
-            raise RuntimeError(
-                f"Process exited during startup with code {process.returncode}"
-            )
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.settimeout(0.5)
-            try:
-                sock.connect((host, port))
-                return
-            except OSError:
-                time.sleep(0.1)
-    raise TimeoutError(f"Timed out waiting for {host}:{port}")
 
 
 def _stop_process(process: subprocess.Popen[bytes]) -> None:
@@ -155,7 +126,7 @@ def _https_proxy(
     tmp_path_factory: pytest.TempPathFactory,
 ) -> Generator[OAuthHttpsEndpoint, None, None]:
     public_host = "127.0.0.1"
-    https_port = _available_port()
+    https_port = available_port("0.0.0.0")
     directory = tmp_path_factory.mktemp(directory_name)
     certificate_path, key_path = _write_certificate(directory, public_host)
     config_path = directory / "nginx.conf"
@@ -184,7 +155,7 @@ def _https_proxy(
 
     try:
         try:
-            _wait_for_port(public_host, https_port, process)
+            wait_for_port(public_host, https_port, process)
         except (RuntimeError, TimeoutError) as error:
             log_file.flush()
             logs = log_path.read_text(encoding="utf-8", errors="replace")
@@ -204,7 +175,7 @@ def _https_proxy(
 def cimd_api_server(
     _test_client: TestClient,
 ) -> Generator[int, None, None]:
-    port = _available_port()
+    port = available_port("0.0.0.0")
     server = uvicorn.Server(
         uvicorn.Config(
             _test_client.app,
@@ -216,7 +187,7 @@ def cimd_api_server(
     )
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
-    _wait_for_port("127.0.0.1", port)
+    wait_for_port("127.0.0.1", port)
 
     try:
         yield port
@@ -256,8 +227,8 @@ def cimd_oauth_services(
     cimd_https_endpoint: OAuthHttpsEndpoint,
     tmp_path_factory: pytest.TempPathFactory,
 ) -> Generator[CimdOAuthTestServices, None, None]:
-    oidc_port = _available_port()
-    mcp_port = _available_port()
+    oidc_port = available_port("0.0.0.0")
+    mcp_port = available_port("0.0.0.0")
     oidc_issuer = f"http://127.0.0.1:{oidc_port}"
     mcp_server_url = f"http://127.0.0.1:{mcp_port}/mcp"
     client_metadata_url = f"{cimd_https_endpoint.origin}/api/mcp/oauth/client-metadata"
@@ -284,7 +255,7 @@ def cimd_oauth_services(
 
     mcp_process: subprocess.Popen[bytes] | None = None
     try:
-        _wait_for_port("127.0.0.1", oidc_port, oidc_process)
+        wait_for_port("127.0.0.1", oidc_port, oidc_process)
         mcp_env = {
             **os.environ,
             "MCP_SERVER_HOST": "0.0.0.0",
@@ -301,7 +272,7 @@ def cimd_oauth_services(
             stdout=mcp_log,
             stderr=subprocess.STDOUT,
         )
-        _wait_for_port("127.0.0.1", mcp_port, mcp_process)
+        wait_for_port("127.0.0.1", mcp_port, mcp_process)
 
         yield CimdOAuthTestServices(
             mcp_server_url=mcp_server_url,
