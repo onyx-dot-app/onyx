@@ -49,6 +49,7 @@ from onyx.llm.model_capabilities import (
     anthropic_omits_sampling_params,
     anthropic_supports_thinking,
     anthropic_uses_adaptive_thinking,
+    bedrock_hosts_openai_gpt,
     gemini_lowest_thinking_level_is_low,
     is_true_openai_model,
     model_is_reasoning_model,
@@ -798,15 +799,18 @@ class LitellmLLM(LLM):
 
         # Temperature
         # Some models (e.g. Claude Opus 4.7/4.8) reject a non-default
-        # temperature with a 400 invalid_request_error. For those models we
-        # must omit the param entirely.
+        # temperature with a 400 invalid_request_error, and Bedrock's Converse
+        # rejects the field at any value for GPT-5+. For those models we must
+        # omit the param entirely.
         # LiteLLM's drop_params is not reliable here because the upstream
         # provider config can still claim the param is supported.
         # https://github.com/BerriAI/litellm/issues/26444
         # TODO(acaprau): Consider removing this once the above is resolved,
         # although this assumes users have upgraded their litellm if relevant.
         omits_sampling_params = any(
-            anthropic_omits_sampling_params(name) for name in model_identity_names
+            anthropic_omits_sampling_params(name)
+            or bedrock_hosts_openai_gpt(self.config.model_provider, name)
+            for name in model_identity_names
         )
         if not omits_sampling_params:
             optional_kwargs["temperature"] = 1 if is_reasoning else self._temperature
