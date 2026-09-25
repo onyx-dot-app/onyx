@@ -129,8 +129,9 @@ class _LockHeartbeat(threading.Thread):
             try:
                 self._lock.extend(self._timeout, replace_ttl=True)
             except Exception:
+                # Keep trying: one failed extension leaves two thirds of the
+                # TTL, and a later one may still land before it runs out.
                 task_logger.exception("Could not extend the user provision lock")
-                return
 
     def stop(self) -> None:
         self._stopped.set()

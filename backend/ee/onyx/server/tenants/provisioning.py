@@ -257,9 +257,19 @@ async def _remove_tenant_from_control_plane(tenant_id: str, email: str) -> None:
                 _CONTROL_PLANE_DELETE_ATTEMPTS,
             )
             await asyncio.sleep(_CONTROL_PLANE_DELETE_BACKOFF_S * attempt)
-    get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID).sadd(
-        ONYX_CLOUD_CONTROL_PLANE_ORPHANS_KEY, f"{tenant_id} {email}"
-    )
+    # Best effort: the caller still has the data plane to roll back.
+    try:
+        get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID).sadd(
+            ONYX_CLOUD_CONTROL_PLANE_ORPHANS_KEY, f"{tenant_id} {email}"
+        )
+    except Exception:
+        logger.exception(
+            "Control plane still has tenant %s for %s and it could not be queued "
+            "for reconciliation",
+            tenant_id,
+            email,
+        )
+        return
     logger.error(
         "Control plane still has tenant %s for %s, queued for reconciliation",
         tenant_id,
@@ -907,13 +917,10 @@ async def get_available_tenant(allow_stale: bool = False) -> PoolTenant | None:
     if not MULTI_TENANT:
         return None
 
+    # A query failure raises: treating it as an empty pool would build a tenant
+    # from scratch while a ready one sits in the pool.
     at_revision = None if allow_stale else get_alembic_head_revision()
-    try:
-        taken = take_available_tenant(at_revision)
-    except Exception:
-        logger.exception("Error getting available tenant")
-        return None
-
+    taken = take_available_tenant(at_revision)
     if taken is None:
         return None
     tenant_id, alembic_version = taken
