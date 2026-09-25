@@ -9,7 +9,7 @@ import pytest
 
 from onyx.configs.constants import lock_timeout_from_env
 
-NAME = "CELERY_TEST_LOCK_TIMEOUT"
+NAME: str = "CELERY_TEST_LOCK_TIMEOUT"
 
 
 def test_unset_uses_the_default(monkeypatch: pytest.MonkeyPatch) -> None:

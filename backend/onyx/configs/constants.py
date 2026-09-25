@@ -158,9 +158,11 @@ CELERY_GENERIC_BEAT_LOCK_TIMEOUT = 120
 
 # Beat lock for one document-index sync pass, reacquired every quarter of its
 # TTL. A step that outruns it loses the lock and aborts the pass, so large
-# tenants raise it.
+# tenants raise it. Never lowered: the default already fits a small tenant's steps.
 CELERY_DOCUMENT_SYNC_BEAT_LOCK_TIMEOUT: int = lock_timeout_from_env(
-    "CELERY_DOCUMENT_SYNC_BEAT_LOCK_TIMEOUT", 120
+    "CELERY_DOCUMENT_SYNC_BEAT_LOCK_TIMEOUT",
+    CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    minimum=CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
 )
 
 
@@ -195,7 +197,7 @@ CELERY_PRUNING_LOCK_TIMEOUT = 3600  # 1 hour (in seconds)
 
 # One document permission update retries transient database errors this long
 # before it gives up, with no lock refresh in between.
-DOCUMENT_PERMISSIONS_UPDATE_STOP_AFTER = 10 * 60
+DOCUMENT_PERMISSIONS_UPDATE_STOP_AFTER: int = 10 * 60
 
 # Held for one connector's whole document permission sync and refreshed from the
 # progress callback every quarter of the generic beat TTL. Its longest silence is
