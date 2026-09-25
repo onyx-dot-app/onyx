@@ -11494,6 +11494,9 @@
         "label": "Bereitgestellt von Onyx"
       }
     },
+    "modelSelectors": {
+      "placeholder": "Modell auswählen"
+    },
     "nonSelectableConnectors": {
       "unavailable": {
         "label": "Nicht verfügbare Konnektoren:"

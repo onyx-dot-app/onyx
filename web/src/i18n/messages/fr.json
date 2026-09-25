@@ -11494,6 +11494,9 @@
         "label": "Propulsé par Onyx"
       }
     },
+    "modelSelectors": {
+      "placeholder": "Sélectionner un modèle"
+    },
     "nonSelectableConnectors": {
       "unavailable": {
         "label": "Connecteurs indisponibles :"

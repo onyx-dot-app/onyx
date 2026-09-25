@@ -11494,6 +11494,9 @@
         "label": "Desenvolvido com Onyx"
       }
     },
+    "modelSelectors": {
+      "placeholder": "Selecionar modelo"
+    },
     "nonSelectableConnectors": {
       "unavailable": {
         "label": "Conectores indisponíveis:"

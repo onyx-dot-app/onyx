@@ -11494,6 +11494,9 @@
         "label": "Powered by Onyx"
       }
     },
+    "modelSelectors": {
+      "placeholder": "モデルを選択"
+    },
     "nonSelectableConnectors": {
       "unavailable": {
         "label": "利用できないコネクタ:"

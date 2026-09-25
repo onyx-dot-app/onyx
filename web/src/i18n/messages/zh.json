@@ -11494,6 +11494,9 @@
         "label": "由 Onyx 提供支持"
       }
     },
+    "modelSelectors": {
+      "placeholder": "选择模型"
+    },
     "nonSelectableConnectors": {
       "unavailable": {
         "label": "不可用的连接器："

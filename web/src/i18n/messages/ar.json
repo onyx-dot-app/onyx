@@ -11494,6 +11494,9 @@
         "label": "مدعوم من Onyx"
       }
     },
+    "modelSelectors": {
+      "placeholder": "اختر نموذجًا"
+    },
     "nonSelectableConnectors": {
       "unavailable": {
         "label": "الموصّلات غير المتاحة:"

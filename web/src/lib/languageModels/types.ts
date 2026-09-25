@@ -356,6 +356,15 @@ export interface LLMOptionGroup {
   Icon: FunctionComponent<IconProps>;
 }
 
+export interface FilterModelConfigurationsOptions {
+  /** Drop models an admin hid from users. Defaults to true. */
+  visibleOnly?: boolean;
+  /** Keep only models that accept image input. */
+  imageInput?: boolean;
+  /** A configuration id kept regardless: the current value stays listed. */
+  keep?: number | null;
+}
+
 export interface CustomProviderOption {
   value: string;
   label: string;
