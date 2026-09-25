@@ -4,8 +4,10 @@ Signup provisioning never runs alembic inside the api server.
 A pool tenant at the code's head revision is assigned in the request. When no
 such tenant exists the request hands off to the `provision_tenant_for_user`
 worker task and waits for the mapping to appear. The worker task migrates a
-stale pool tenant, assigns it, and refuses to run twice for one email. The
-control plane hears about a tenant before its mapping is written.
+stale pool tenant, assigns it, and waits on the per-email lock rather than
+running alongside another holder. The control plane hears about a tenant
+before its mapping is written, and a delete that keeps failing is queued for
+the refill task to retry.
 
 Uses real PostgreSQL for the pool and mapping tables and real Redis for the
 per-user lock. Alembic and the control plane are the only mocks. Multi-tenant
@@ -29,7 +31,11 @@ from ee.onyx.db import user_tenant_mapping
 from ee.onyx.db.user_tenant_mapping import add_users_to_tenant
 from ee.onyx.server.tenants import provisioning
 from ee.onyx.server.tenants.schema_management import get_alembic_head_revision
-from onyx.configs.constants import ONYX_CLOUD_TENANT_ID, OnyxCeleryTask
+from onyx.configs.constants import (
+    ONYX_CLOUD_CONTROL_PLANE_ORPHANS_KEY,
+    ONYX_CLOUD_TENANT_ID,
+    OnyxCeleryTask,
+)
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_shared_schema
 from onyx.db.models import AvailableTenant, PublicBase, UserTenantMapping
 from onyx.redis.redis_pool import get_redis_client
@@ -65,7 +71,7 @@ def email() -> str:
 
 @pytest.fixture
 def pool_tenant_ids() -> Generator[list[str], None, None]:
-    """Tenant ids this test may put in the pool; rows are removed afterwards."""
+    """Tenant ids this test may put in the pool. Rows are removed afterwards."""
     tenant_ids = [TENANT_ID_PREFIX + str(uuid.uuid4()) for _ in range(2)]
     yield tenant_ids
     with get_session_with_shared_schema() as db_session:
@@ -126,7 +132,7 @@ def _mapped_tenant(email: str) -> str | None:
 
 @pytest.fixture
 def no_alembic() -> Generator[MagicMock, None, None]:
-    """The api path must never reach alembic; the worker path records the call."""
+    """The api path must never reach alembic. The worker path records the call."""
     with patch.object(provisioning, "run_alembic_migrations") as migrate:
         yield migrate
 
@@ -333,6 +339,45 @@ async def test_a_failed_assignment_undoes_the_control_plane_record(
     undo.assert_called_once_with(pool_tenant_id, email)
     assert _mapped_tenant(email) is None
     assert not _pool_has(pool_tenant_id)
+
+
+@pytest.mark.asyncio
+async def test_a_control_plane_delete_that_keeps_failing_is_reconciled_later(
+    email: str,
+    pool_tenant_id: str,
+    no_alembic: MagicMock,  # noqa: ARG001
+    control_plane: MagicMock,
+) -> None:
+    _add_pool_tenant(pool_tenant_id, get_alembic_head_revision())
+    r = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+    r.delete(ONYX_CLOUD_CONTROL_PLANE_ORPHANS_KEY)
+
+    with (
+        patch.object(provisioning, "_CONTROL_PLANE_DELETE_BACKOFF_S", 0),
+        patch.object(provisioning.client_app, "send_task"),
+        patch.object(
+            provisioning, "assign_tenant_to_user", side_effect=RuntimeError("seats")
+        ),
+        patch.object(
+            provisioning,
+            "delete_user_from_control_plane",
+            side_effect=RuntimeError("down"),
+        ) as undo,
+        pytest.raises(provisioning.OnyxError),
+    ):
+        await provisioning.get_or_provision_tenant(email)
+
+    control_plane.assert_called_once()
+    assert undo.call_count == provisioning._CONTROL_PLANE_DELETE_ATTEMPTS
+    assert r.smembers(ONYX_CLOUD_CONTROL_PLANE_ORPHANS_KEY) == {
+        f"{pool_tenant_id} {email}".encode()
+    }
+
+    # The refill task retries later, once the control plane answers again.
+    with patch.object(provisioning, "delete_user_from_control_plane") as retry:
+        assert await provisioning.reconcile_control_plane_orphans() == 1
+    retry.assert_called_once_with(pool_tenant_id, email)
+    assert r.smembers(ONYX_CLOUD_CONTROL_PLANE_ORPHANS_KEY) == set()
 
 
 def test_worker_migrates_a_stale_pool_tenant_and_assigns_it(

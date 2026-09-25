@@ -635,6 +635,9 @@ ONYX_CLOUD_TENANT_ID = "cloud"
 # marks a signup whose worker-side tenant provisioning failed
 ONYX_CLOUD_PROVISION_FAILURE_KEY_PREFIX = "cloud_provision_failed"
 
+# "<tenant_id> <email>" pairs whose control-plane record outlived a rollback
+ONYX_CLOUD_CONTROL_PLANE_ORPHANS_KEY = "cloud_control_plane_orphans"
+
 # the redis namespace for runtime variables
 ONYX_CLOUD_REDIS_RUNTIME = "runtime"
 CLOUD_BUILD_FENCE_LOOKUP_TABLE_INTERVAL_DEFAULT = 600

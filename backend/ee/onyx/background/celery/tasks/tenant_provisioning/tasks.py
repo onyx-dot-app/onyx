@@ -41,6 +41,8 @@ _TENANT_PROVISIONING_TIME_LIMIT = 60 * 45  # 45 minutes
 _USER_PROVISION_LOCK_TIMEOUT = 60 * 10
 
 
+# Shares the monitoring queue with the refill task, which holds at most one
+# slot at a time. Cloud runs the monitoring worker at concurrency 8 on 3 pods.
 @shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CLOUD_PROVISION_TENANT_FOR_USER,
     queue=OnyxCeleryQueues.MONITORING,
@@ -56,13 +58,9 @@ def provision_tenant_for_user(
     attempt_id: str,
     referral_source: str | None = None,
 ) -> bool:
-    """Build or migrate the tenant for one signup, off the api server.
-
-    The api server enqueues this when the pool has no tenant at the code's head
-    revision, then polls the user-tenant mapping until it appears. Alembic never
-    runs inside the api server: a hung migration there pins its thread pool and
-    takes every request down with it.
-    """
+    """Build or migrate the tenant for one signup, off the api server. The api
+    server enqueues this when the pool has no tenant at head, then polls the
+    mapping. Alembic never runs there: a hung migration pins its thread pool."""
     if not MULTI_TENANT:
         return False
 
@@ -79,17 +77,15 @@ def provision_tenant_for_user(
     )
     # Wait rather than skip: a request may hold this while assigning a pool
     # tenant, and if it fails this run is the signup's only remaining chance.
-    if not lock.acquire(
-        blocking=True, blocking_timeout=TENANT_PROVISIONING_WAIT_SECONDS
-    ):
+    if not lock.acquire(blocking_timeout=TENANT_PROVISIONING_WAIT_SECONDS):
         raise RuntimeError(
             "provision_tenant_for_user: the per-user lock stayed held past the "
             "signup wait window"
         )
 
     try:
-        tenant_id = asyncio.run(provision_user_tenant(email, referral_source))
-        task_logger.info("Provisioned tenant %s for a signup", tenant_id)
+        new_tenant_id = asyncio.run(provision_user_tenant(email, referral_source))
+        task_logger.info("Provisioned tenant %s for a signup", new_tenant_id)
         return True
     except Exception:
         # The request that enqueued this attempt reads the marker and fails
@@ -185,6 +181,8 @@ def check_available_tenants(self: Task) -> None:  # noqa: ARG001
         # Migrate any pool tenants that were provisioned before a new migration was deployed
         _migrate_stale_pool_tenants()
 
+        _reconcile_control_plane_orphans()
+
     except Exception:
         task_logger.exception("Error in check_available_tenants task")
 
@@ -195,6 +193,19 @@ def check_available_tenants(self: Task) -> None:  # noqa: ARG001
             task_logger.warning(
                 "Could not release check lock (likely expired), continuing"
             )
+
+
+def _reconcile_control_plane_orphans() -> None:
+    """Retry control-plane deletes that a signup rollback could not complete."""
+    from ee.onyx.server.tenants.provisioning import reconcile_control_plane_orphans
+
+    try:
+        removed = asyncio.run(reconcile_control_plane_orphans())
+    except Exception:
+        task_logger.exception("Control plane orphan reconciliation failed")
+        return
+    if removed:
+        task_logger.info("Removed %s orphaned control plane tenants", removed)
 
 
 def _migrate_stale_pool_tenants() -> None:

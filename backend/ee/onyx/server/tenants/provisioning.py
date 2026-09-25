@@ -45,6 +45,7 @@ from onyx.configs.app_configs import (
     VERTEXAI_DEFAULT_LOCATION,
 )
 from onyx.configs.constants import (
+    ONYX_CLOUD_CONTROL_PLANE_ORPHANS_KEY,
     ONYX_CLOUD_PROVISION_FAILURE_KEY_PREFIX,
     ONYX_CLOUD_TENANT_ID,
     OnyxCeleryPriority,
@@ -111,11 +112,22 @@ _CONTROL_PLANE_TIMEOUT_S = 30
 # A signup polls for its worker-built tenant at this interval.
 _PROVISIONING_POLL_INTERVAL_S = 1.0
 
-# Covers a pool assignment plus the control plane call (30s timeout).
-_REQUEST_PROVISION_LOCK_TIMEOUT_S = 60
-
 _CONTROL_PLANE_DELETE_ATTEMPTS = 3
 _CONTROL_PLANE_DELETE_BACKOFF_S = 2.0
+
+
+def _provisioning_failed_error() -> OnyxError:
+    return OnyxError(
+        OnyxErrorCode.INTERNAL_ERROR,
+        "Failed to provision tenant. Please try again later.",
+    )
+
+
+def _still_provisioning_error() -> OnyxError:
+    return OnyxError(
+        OnyxErrorCode.SERVICE_UNAVAILABLE,
+        "Your workspace is still being set up. Try again in a minute.",
+    )
 
 
 async def get_or_provision_tenant(
@@ -150,9 +162,10 @@ async def get_or_provision_tenant(
 
     # The same lock the worker task takes. Two overlapping signups for one
     # email (a double submit, two tabs) must not each take a pool tenant.
+    # Held for the whole signup budget so a slow control plane cannot outlive it.
     deadline = time.monotonic() + TENANT_PROVISIONING_WAIT_SECONDS
     lock = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID).lock(
-        user_provision_lock_name(email), timeout=_REQUEST_PROVISION_LOCK_TIMEOUT_S
+        user_provision_lock_name(email), timeout=TENANT_PROVISIONING_WAIT_SECONDS
     )
     await _acquire_signup_lock(lock, deadline)
 
@@ -163,7 +176,7 @@ async def get_or_provision_tenant(
             return tenant_id
         pool_tenant = await get_available_tenant()
         if pool_tenant is not None:
-            await finish_tenant_assignment(
+            await _finish_tenant_assignment(
                 pool_tenant.tenant_id, email, referral_source
             )
             return pool_tenant.tenant_id
@@ -172,10 +185,7 @@ async def get_or_provision_tenant(
         raise
     except Exception as e:
         logger.error("Failed to provision tenant", exc_info=e)
-        raise OnyxError(
-            OnyxErrorCode.INTERNAL_ERROR,
-            "Failed to provision tenant. Please try again later.",
-        )
+        raise _provisioning_failed_error()
     finally:
         try:
             lock.release()
@@ -189,19 +199,14 @@ async def _acquire_signup_lock(lock: RedisLock, deadline: float) -> None:
     """Poll for the lock without blocking the event loop."""
     while not lock.acquire(blocking=False):
         if time.monotonic() >= deadline:
-            raise OnyxError(
-                OnyxErrorCode.SERVICE_UNAVAILABLE,
-                "Your workspace is still being set up. Try again in a minute.",
-            )
+            raise _still_provisioning_error()
         await asyncio.sleep(_PROVISIONING_POLL_INTERVAL_S)
 
 
-def _email_digest(email: str) -> str:
-    return hashlib.sha256(email.strip().lower().encode()).hexdigest()
-
-
 def user_provision_lock_name(email: str) -> str:
-    return f"{OnyxRedisLocks.CLOUD_PROVISION_TENANT_FOR_USER_LOCK_PREFIX}:{_email_digest(email)}"
+    # Lowercased like the mapping table, so one person means one lock.
+    digest = hashlib.sha256(email.lower().encode()).hexdigest()
+    return f"{OnyxRedisLocks.CLOUD_PROVISION_TENANT_FOR_USER_LOCK_PREFIX}:{digest}"
 
 
 def provision_attempt_failure_key(attempt_id: str) -> str:
@@ -210,14 +215,12 @@ def provision_attempt_failure_key(attempt_id: str) -> str:
     return f"{ONYX_CLOUD_PROVISION_FAILURE_KEY_PREFIX}:{attempt_id}"
 
 
-async def finish_tenant_assignment(
+async def _finish_tenant_assignment(
     tenant_id: str, email: str, referral_source: str | None
 ) -> None:
-    """Tell the control plane, then write the mapping that makes the tenant
-    visible to the user. In this order a failed notification never leaves a
-    workspace the user can log in to but billing has never heard of. On
-    failure both planes are rolled back, since the tenant is already out of
-    the pool."""
+    """Notify the control plane, then write the mapping that makes the tenant
+    visible. A failed notification then never leaves a workspace billing has not
+    heard of. On failure both planes roll back, the tenant is already out of the pool."""
     control_plane_notified = False
     try:
         if not DEV_MODE:
@@ -238,7 +241,7 @@ async def finish_tenant_assignment(
 
 async def _remove_tenant_from_control_plane(tenant_id: str, email: str) -> None:
     """Compensate a control-plane record for a tenant that is being rolled back.
-    Retries a few times, then leaves a clear reconciliation message: the
+    Retries a few times, then queues the pair for the refill task to retry: the
     control plane is the billing record, so a leftover charges for nothing."""
     for attempt in range(1, _CONTROL_PLANE_DELETE_ATTEMPTS + 1):
         try:
@@ -252,12 +255,34 @@ async def _remove_tenant_from_control_plane(tenant_id: str, email: str) -> None:
                 _CONTROL_PLANE_DELETE_ATTEMPTS,
             )
             await asyncio.sleep(_CONTROL_PLANE_DELETE_BACKOFF_S * attempt)
+    get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID).sadd(
+        ONYX_CLOUD_CONTROL_PLANE_ORPHANS_KEY, f"{tenant_id} {email}"
+    )
     logger.error(
-        "RECONCILE: control plane still has tenant %s for %s after the data plane "
-        "rolled it back",
+        "Control plane still has tenant %s for %s, queued for reconciliation",
         tenant_id,
         email,
     )
+
+
+async def reconcile_control_plane_orphans() -> int:
+    """Retry the control-plane deletes that failed during a rollback.
+    Run by the refill task. Returns how many records were removed."""
+    redis_client = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+    removed = 0
+    for member in redis_client.smembers(ONYX_CLOUD_CONTROL_PLANE_ORPHANS_KEY):
+        entry = member.decode() if isinstance(member, bytes) else str(member)
+        tenant_id, email = entry.split(" ", 1)
+        try:
+            await delete_user_from_control_plane(tenant_id, email)
+        except Exception:
+            logger.exception(
+                "Control plane delete for tenant %s still failing", tenant_id
+            )
+            continue
+        redis_client.srem(ONYX_CLOUD_CONTROL_PLANE_ORPHANS_KEY, member)
+        removed += 1
+    return removed
 
 
 def _enqueue_user_provisioning(email: str, referral_source: str | None) -> str:
@@ -294,16 +319,10 @@ async def _wait_for_tenant(
         if tenant_id:
             return tenant_id
         if redis_client.get(failure_key) is not None:
-            raise OnyxError(
-                OnyxErrorCode.INTERNAL_ERROR,
-                "Failed to provision tenant. Please try again later.",
-            )
+            raise _provisioning_failed_error()
         await asyncio.sleep(_PROVISIONING_POLL_INTERVAL_S)
     logger.warning("Timed out waiting for tenant provisioning for user %s", email)
-    raise OnyxError(
-        OnyxErrorCode.SERVICE_UNAVAILABLE,
-        "Your workspace is still being set up. Try again in a minute.",
-    )
+    raise _still_provisioning_error()
 
 
 async def provision_user_tenant(email: str, referral_source: str | None) -> str:
@@ -320,28 +339,28 @@ async def provision_user_tenant(email: str, referral_source: str | None) -> str:
     if pool_tenant is not None:
         tenant_id = pool_tenant.tenant_id
         if pool_tenant.alembic_version != get_alembic_head_revision():
-            loop = asyncio.get_running_loop()
-            try:
-                await loop.run_in_executor(
-                    None, lambda: run_alembic_migrations(tenant_id)
-                )
-            except Exception:
-                # The tenant was already dequeued from the pool. Roll it back so
-                # it does not end up orphaned (schema exists, assigned to nobody).
-                logger.exception(
-                    "Migration failed for pre-provisioned tenant %s; rolling back",
-                    tenant_id,
-                )
-                try:
-                    await rollback_tenant_provisioning(tenant_id)
-                except Exception:
-                    logger.exception("Failed to rollback orphaned tenant %s", tenant_id)
-                raise
+            await _migrate_pool_tenant(tenant_id)
     else:
         tenant_id = await create_tenant(email, referral_source)
 
-    await finish_tenant_assignment(tenant_id, email, referral_source)
+    await _finish_tenant_assignment(tenant_id, email, referral_source)
     return tenant_id
+
+
+async def _migrate_pool_tenant(tenant_id: str) -> None:
+    """Bring a pool tenant to head. It is already out of the pool, so a failed
+    migration rolls it back rather than leaving a schema assigned to nobody."""
+    try:
+        await asyncio.to_thread(run_alembic_migrations, tenant_id)
+    except Exception:
+        logger.exception(
+            "Migration failed for pre-provisioned tenant %s, rolling back", tenant_id
+        )
+        try:
+            await rollback_tenant_provisioning(tenant_id)
+        except Exception:
+            logger.exception("Failed to rollback orphaned tenant %s", tenant_id)
+        raise
 
 
 async def create_tenant(
@@ -422,7 +441,9 @@ async def notify_control_plane(
         tenant_id=tenant_id, email=email, referral_source=referral_source
     )
 
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(
+        timeout=aiohttp.ClientTimeout(total=_CONTROL_PLANE_TIMEOUT_S)
+    ) as session:
         async with session.post(
             f"{CONTROL_PLANE_API_BASE_URL}/tenants/create",
             headers=headers,
@@ -806,7 +827,9 @@ async def delete_user_from_control_plane(tenant_id: str, email: str) -> None:
     }
     payload = TenantDeletionPayload(tenant_id=tenant_id, email=email)
 
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(
+        timeout=aiohttp.ClientTimeout(total=_CONTROL_PLANE_TIMEOUT_S)
+    ) as session:
         async with session.delete(
             f"{CONTROL_PLANE_API_BASE_URL}/tenants/delete",
             headers=headers,
@@ -873,20 +896,17 @@ async def get_available_tenant(allow_stale: bool = False) -> PoolTenant | None:
 
     A tenant behind the code's head revision stays in the pool unless
     ``allow_stale`` is set, since only a worker may migrate it. The refill task
-    migrates pool tenants on every run, so a stale head is short-lived.
+    migrates pool tenants every run, so a stale pool is short-lived.
     """
     if not MULTI_TENANT:
         return None
 
     at_revision = None if allow_stale else get_alembic_head_revision()
-    with get_session_with_shared_schema() as db_session:
-        try:
-            db_session.begin()
-            taken = take_available_tenant(db_session, at_revision)
-        except Exception:
-            logger.exception("Error getting available tenant")
-            db_session.rollback()
-            return None
+    try:
+        taken = take_available_tenant(at_revision)
+    except Exception:
+        logger.exception("Error getting available tenant")
+        return None
 
     if taken is None:
         return None
