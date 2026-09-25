@@ -88,3 +88,23 @@ func (c *Cluster) ExecOnPod(pod string, command ...string) (string, error) {
 
 	return stdout.String(), nil
 }
+
+// ExecOnPodWithStdin runs a command on a pod, feeding stdin to it, and returns its
+// stdout. Used to pipe a script into an interpreter without quoting it into argv.
+func (c *Cluster) ExecOnPodWithStdin(pod string, stdin string, command ...string) (string, error) {
+	args := append(c.kubectlArgs(), "exec", "-i", pod, "--")
+	args = append(args, command...)
+	log.Debugf("Running: kubectl %s", strings.Join(args, " "))
+
+	cmd := exec.Command("kubectl", args...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdin = strings.NewReader(stdin)
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("kubectl exec failed: %w\n%s", err, stderr.String())
+	}
+
+	return stdout.String(), nil
+}
