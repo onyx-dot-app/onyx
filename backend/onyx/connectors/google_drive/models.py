@@ -132,8 +132,12 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
     # timestamp part is not used for folder crawling.
     completion_map: ThreadSafeDict[str, StageCompletion]
 
-    # all file ids that have been retrieved
-    all_retrieved_file_ids: set[str] = set()
+    # Drive file ids already yielded this run, used only for dedup. Previously
+    # keyed on the document URL under the name `all_retrieved_file_ids`; the
+    # rename is deliberate so checkpoints written by the old code deserialize
+    # with an empty set rather than a set of keys in the other format.
+    # Capped at MAX_DEDUP_DRIVE_FILE_IDS, so it is not a completeness record.
+    retrieved_drive_file_ids: set[str] = set()
 
     # cached version of the drive and folder ids to retrieve
     drive_ids_to_retrieve: list[str] | None = None

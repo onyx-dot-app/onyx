@@ -48,8 +48,11 @@ class DriveFileFieldType(Enum):
     WITH_PERMISSIONS = "with_permissions"  # Full fields including permissions
 
 
+# `role` is needed to pick a shared drive organizer, who is the one principal
+# guaranteed to see every item in that drive.
 PERMISSION_FULL_DESCRIPTION = (
-    "permissions(id, emailAddress, type, domain, allowFileDiscovery, permissionDetails)"
+    "permissions(id, emailAddress, type, domain, allowFileDiscovery, role, "
+    "permissionDetails)"
 )
 FILE_FIELDS = (
     "nextPageToken, files(mimeType, id, name, driveId, parents, "
