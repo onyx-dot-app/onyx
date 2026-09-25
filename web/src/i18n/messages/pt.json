@@ -8562,6 +8562,31 @@
           "description": "A URL base da sua API do Firecrawl."
         }
       }
+    },
+    "llmGateway": {
+      "header": {
+        "title": "LLM Gateway",
+        "description": "Controle o acesso direto por API aos modelos de linguagem do workspace a partir de ferramentas externas."
+      },
+      "access": {
+        "title": "Acesso direto a modelos por API",
+        "description": "Permite que os usuários chamem os modelos de linguagem do workspace a partir de ferramentas externas como Claude Code ou Cursor. As chamadas usam tokens de acesso com escopo e são cobradas dos seus provedores configurados.",
+        "toggle": {
+          "title": "Ativar LLM Gateway",
+          "description": "Quando desativado, todos os endpoints do gateway rejeitam solicitações, os tokens existentes param de funcionar e o escopo do gateway fica oculto no seletor de tokens. O tráfego do sandbox do Craft é controlado separadamente nas configurações do Craft."
+        }
+      },
+      "businessPlanTag": {
+        "label": "Plano Business"
+      },
+      "tierTooltip": "O LLM Gateway requer o plano Business ou Enterprise.",
+      "scopeNote": {
+        "title": "Cada usuário configura seu próprio token e os dados de conexão em Configurações → LLM Gateway."
+      },
+      "toasts": {
+        "settingsUpdated": "Configurações atualizadas",
+        "settingsUpdateFailed": "Falha ao atualizar as configurações"
+      }
     }
   },
   "agents": {
@@ -13327,6 +13352,10 @@
       "title": "Zona de perigo"
     },
     "gateway": {
+      "adminDisabled": {
+        "description": "Um administrador desativou o LLM Gateway para este workspace. Contate um administrador para reativá-lo.",
+        "title": "O LLM Gateway está desativado"
+      },
       "accessToken": {
         "button": "Novo token",
         "description": "Crie um token com escopo definido antes de conectar um aplicativo.",
@@ -13637,6 +13666,9 @@
         },
         "languageModels": {
           "label": "Modelos de linguagem"
+        },
+        "llmGateway": {
+          "label": "LLM Gateway"
         },
         "mcpActions": {
           "label": "Ações MCP"

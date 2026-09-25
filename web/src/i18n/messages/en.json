@@ -8562,6 +8562,31 @@
           "description": "Your Firecrawl API base URL."
         }
       }
+    },
+    "llmGateway": {
+      "header": {
+        "title": "LLM Gateway",
+        "description": "Control direct API access to workspace language models from external tools."
+      },
+      "access": {
+        "title": "Direct model API access",
+        "description": "Allow users to call workspace language models from external tools such as Claude Code or Cursor. Calls use scoped access tokens and are billed to your configured providers.",
+        "toggle": {
+          "title": "Enable LLM Gateway",
+          "description": "When off, every gateway endpoint rejects requests, existing tokens stop working, and the gateway scope is hidden from the token picker. Craft sandbox traffic is controlled separately by the Craft settings."
+        }
+      },
+      "businessPlanTag": {
+        "label": "Business Plan"
+      },
+      "tierTooltip": "The LLM Gateway requires the Business or Enterprise plan.",
+      "scopeNote": {
+        "title": "Each user configures their own token and connection details under Settings → LLM Gateway."
+      },
+      "toasts": {
+        "settingsUpdated": "Settings updated",
+        "settingsUpdateFailed": "Failed to update settings"
+      }
     }
   },
   "agents": {
@@ -13327,6 +13352,10 @@
       "title": "Danger Zone"
     },
     "gateway": {
+      "adminDisabled": {
+        "description": "An admin turned off the LLM gateway for this workspace. Contact an admin to turn it back on.",
+        "title": "LLM Gateway is off"
+      },
       "accessToken": {
         "button": "New token",
         "description": "Create a scoped token before you connect an application.",
@@ -13637,6 +13666,9 @@
         },
         "languageModels": {
           "label": "Language Models"
+        },
+        "llmGateway": {
+          "label": "LLM Gateway"
         },
         "mcpActions": {
           "label": "MCP Actions"

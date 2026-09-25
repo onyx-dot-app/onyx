@@ -8562,6 +8562,31 @@
           "description": "Firecrawl API 기본 URL입니다."
         }
       }
+    },
+    "llmGateway": {
+      "header": {
+        "title": "LLM 게이트웨이",
+        "description": "외부 도구에서 워크스페이스 언어 모델에 대한 직접 API 액세스를 제어합니다."
+      },
+      "access": {
+        "title": "모델 직접 API 액세스",
+        "description": "워크스페이스의 언어 모델을 Claude Code나 Cursor 같은 외부 도구에서 범위 지정 액세스 토큰으로 호출할 수 있게 합니다. 호출은 구성된 제공업체에 청구됩니다.",
+        "toggle": {
+          "title": "LLM 게이트웨이 활성화",
+          "description": "끄면 모든 게이트웨이 엔드포인트가 요청을 거부하고, 기존 토큰이 작동을 멈추며, 토큰 선택기에서 게이트웨이 범위가 숨겨집니다. Craft 샌드박스 트래픽은 Craft 설정에서 별도로 제어됩니다."
+        }
+      },
+      "businessPlanTag": {
+        "label": "Business 플랜"
+      },
+      "tierTooltip": "LLM 게이트웨이는 Business 또는 Enterprise 플랜이 필요합니다.",
+      "scopeNote": {
+        "title": "각 사용자는 설정 → LLM 게이트웨이에서 자체 토큰과 연결 정보를 구성합니다."
+      },
+      "toasts": {
+        "settingsUpdated": "설정을 업데이트했습니다",
+        "settingsUpdateFailed": "설정을 업데이트하지 못했습니다"
+      }
     }
   },
   "agents": {
@@ -13327,6 +13352,10 @@
       "title": "위험 구역"
     },
     "gateway": {
+      "adminDisabled": {
+        "description": "관리자가 이 워크스페이스의 LLM 게이트웨이를 껐습니다. 다시 켜려면 관리자에게 문의하세요.",
+        "title": "LLM 게이트웨이가 꺼져 있습니다"
+      },
       "accessToken": {
         "button": "새 token",
         "description": "애플리케이션을 연결하기 전에 범위를 지정한 token을 생성하세요.",
@@ -13637,6 +13666,9 @@
         },
         "languageModels": {
           "label": "언어 모델"
+        },
+        "llmGateway": {
+          "label": "LLM 게이트웨이"
         },
         "mcpActions": {
           "label": "MCP 액션"

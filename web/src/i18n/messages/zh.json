@@ -8562,6 +8562,31 @@
           "description": "您的 Firecrawl API 基础 URL。"
         }
       }
+    },
+    "llmGateway": {
+      "header": {
+        "title": "LLM 网关",
+        "description": "控制外部工具对工作区语言模型的直接 API 访问。"
+      },
+      "access": {
+        "title": "直接访问模型的 API",
+        "description": "允许工作区成员通过 Claude Code 或 Cursor 等外部工具，使用限定范围的访问令牌调用工作区的语言模型。调用将计入您配置的提供商。",
+        "toggle": {
+          "title": "启用 LLM 网关",
+          "description": "关闭后，所有网关端点都会拒绝请求，现有令牌将失效，令牌选择器中也会隐藏网关范围。Craft 沙箱流量由 Craft 设置单独控制。"
+        }
+      },
+      "businessPlanTag": {
+        "label": "商业版套餐"
+      },
+      "tierTooltip": "LLM 网关需要商业版或企业版套餐。",
+      "scopeNote": {
+        "title": "每个用户在 设置 → LLM 网关 中配置自己的令牌和连接信息。"
+      },
+      "toasts": {
+        "settingsUpdated": "设置已更新",
+        "settingsUpdateFailed": "更新设置失败"
+      }
     }
   },
   "agents": {
@@ -13327,6 +13352,10 @@
       "title": "危险区域"
     },
     "gateway": {
+      "adminDisabled": {
+        "description": "管理员已为此工作区关闭 LLM 网关。请联系管理员重新开启。",
+        "title": "LLM 网关已关闭"
+      },
       "accessToken": {
         "button": "新建 token",
         "description": "在连接应用之前，请先创建一个限定范围的 token。",
@@ -13637,6 +13666,9 @@
         },
         "languageModels": {
           "label": "语言模型"
+        },
+        "llmGateway": {
+          "label": "LLM 网关"
         },
         "mcpActions": {
           "label": "MCP 操作"

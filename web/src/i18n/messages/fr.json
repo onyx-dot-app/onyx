@@ -8562,6 +8562,31 @@
           "description": "L'URL de base de votre API Firecrawl."
         }
       }
+    },
+    "llmGateway": {
+      "header": {
+        "title": "LLM Gateway",
+        "description": "Contrôlez l'accès direct par API aux modèles de langue de l'espace de travail depuis des outils externes."
+      },
+      "access": {
+        "title": "Accès direct aux modèles par API",
+        "description": "Autorisez les utilisateurs à appeler les modèles de langue de l'espace de travail depuis des outils externes comme Claude Code ou Cursor. Les appels utilisent des jetons d'accès à portée limitée et sont facturés à vos fournisseurs configurés.",
+        "toggle": {
+          "title": "Activer LLM Gateway",
+          "description": "Lorsque cette option est désactivée, tous les points de terminaison de la passerelle rejettent les requêtes, les jetons existants cessent de fonctionner et la portée de la passerelle est masquée dans le sélecteur de jetons. Le trafic du sandbox Craft est contrôlé séparément par les paramètres Craft."
+        }
+      },
+      "businessPlanTag": {
+        "label": "Forfait Business"
+      },
+      "tierTooltip": "LLM Gateway nécessite le forfait Business ou Enterprise.",
+      "scopeNote": {
+        "title": "Chaque utilisateur configure son propre jeton et les détails de connexion sous Paramètres → LLM Gateway."
+      },
+      "toasts": {
+        "settingsUpdated": "Paramètres mis à jour",
+        "settingsUpdateFailed": "Échec de la mise à jour des paramètres"
+      }
     }
   },
   "agents": {
@@ -13327,6 +13352,10 @@
       "title": "Zone de danger"
     },
     "gateway": {
+      "adminDisabled": {
+        "description": "Un administrateur a désactivé LLM Gateway pour cet espace de travail. Contactez un administrateur pour le réactiver.",
+        "title": "LLM Gateway est désactivé"
+      },
       "accessToken": {
         "button": "Nouveau jeton",
         "description": "Créez un jeton à portée limitée avant de connecter une application.",
@@ -13637,6 +13666,9 @@
         },
         "languageModels": {
           "label": "Modèles de langage"
+        },
+        "llmGateway": {
+          "label": "LLM Gateway"
         },
         "mcpActions": {
           "label": "Actions MCP"

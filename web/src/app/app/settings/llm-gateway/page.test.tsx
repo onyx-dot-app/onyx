@@ -63,4 +63,17 @@ describe("LLMGatewayPage", () => {
       expect(mockReplace).toHaveBeenCalledWith("/app/settings/general")
     );
   });
+
+  it("shows the disabled notice instead of redirecting when an admin turned the gateway off", async () => {
+    mockUseSettings.mockReturnValue({
+      isLoading: false,
+      llm_gateway_enabled: false,
+    } as ReturnType<typeof useSettings>);
+
+    render(<LLMGatewayPage />);
+
+    expect(screen.queryByText("Gateway settings")).not.toBeInTheDocument();
+    expect(await screen.findByText("LLM Gateway is off")).toBeInTheDocument();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
 });

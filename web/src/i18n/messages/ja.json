@@ -8562,6 +8562,31 @@
           "description": "Firecrawl API のベース URL。"
         }
       }
+    },
+    "llmGateway": {
+      "header": {
+        "title": "LLM ゲートウェイ",
+        "description": "外部ツールからワークスペースの言語モデルへの直接 API アクセスを制御します。"
+      },
+      "access": {
+        "title": "モデルへの直接 API アクセス",
+        "description": "ワークスペースの言語モデルを Claude Code や Cursor などの外部ツールからスコープ付きアクセストークンで呼び出せるようにします。呼び出しは設定済みのプロバイダーに課金されます。",
+        "toggle": {
+          "title": "LLM ゲートウェイを有効化",
+          "description": "オフにすると、すべてのゲートウェイエンドポイントがリクエストを拒否し、既存のトークンは動作しなくなり、トークン選択からゲートウェイスコープが非表示になります。Craft サンドボックスのトラフィックは Craft 設定で個別に制御されます。"
+        }
+      },
+      "businessPlanTag": {
+        "label": "Business プラン"
+      },
+      "tierTooltip": "LLM ゲートウェイには Business プランまたは Enterprise プランが必要です。",
+      "scopeNote": {
+        "title": "各ユーザーは設定 → LLM ゲートウェイで独自のトークンと接続情報を設定します。"
+      },
+      "toasts": {
+        "settingsUpdated": "設定を更新しました",
+        "settingsUpdateFailed": "設定の更新に失敗しました"
+      }
     }
   },
   "agents": {
@@ -13327,6 +13352,10 @@
       "title": "危険な操作"
     },
     "gateway": {
+      "adminDisabled": {
+        "description": "管理者がこのワークスペースの LLM ゲートウェイをオフにしました。再度有効にするには管理者にお問い合わせください。",
+        "title": "LLM ゲートウェイはオフです"
+      },
       "accessToken": {
         "button": "新しいトークン",
         "description": "アプリケーションを接続する前に、スコープを設定したトークンを作成してください。",
@@ -13637,6 +13666,9 @@
         },
         "languageModels": {
           "label": "言語モデル"
+        },
+        "llmGateway": {
+          "label": "LLM ゲートウェイ"
         },
         "mcpActions": {
           "label": "MCP アクション"

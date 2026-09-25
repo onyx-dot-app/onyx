@@ -114,6 +114,7 @@ from onyx.server.gateway.models import (
 )
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
+from onyx.server.settings.store import load_settings
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import trace
@@ -152,6 +153,18 @@ def _authorize_gateway_request(http_request: Request, user: User) -> LLMFlow:
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "This credential is not authorized to use the Onyx LLM gateway.",
+        )
+    # The workspace switch only gates third-party PAT traffic. Craft sandbox
+    # tokens keep working — admins control those via the Craft setting.
+    # Fail closed: a settings-read error must not silently re-enable a
+    # feature the admin switched off.
+    if (
+        flow is LLMFlow.LLM_GATEWAY
+        and not load_settings(raise_on_error=True).llm_gateway_enabled
+    ):
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_DISABLED,
+            "The Onyx LLM gateway is disabled by an administrator.",
         )
     return flow
 
