@@ -2097,7 +2097,7 @@ S3_VERIFY_SSL = os.environ.get("S3_VERIFY_SSL", "").lower() == "true"
 S3_AWS_ACCESS_KEY_ID = os.environ.get("S3_AWS_ACCESS_KEY_ID")
 S3_AWS_SECRET_ACCESS_KEY = os.environ.get("S3_AWS_SECRET_ACCESS_KEY")
 
-# Well-known MinIO default; deployments left on it expose all stored files.
+# Well-known default of the bundled object store. Deployments left on it expose all stored files.
 DEFAULT_OBJECT_STORAGE_CREDENTIAL = "minioadmin"
 
 
@@ -2106,7 +2106,7 @@ def _uses_default_object_storage_credentials(
     access_key: str | None,
     secret_key: str | None,
 ) -> bool:
-    # Only for self-hosted MinIO (has an endpoint URL); real AWS S3 has none.
+    # Only for a self-hosted object store, which has an endpoint URL. Real AWS S3 has none.
     if not s3_endpoint_url:
         return False
     return DEFAULT_OBJECT_STORAGE_CREDENTIAL in (access_key, secret_key)
@@ -2117,16 +2117,34 @@ if _uses_default_object_storage_credentials(
 ):
     logger.warning(
         "Object storage is using the well-known default 'minioadmin' credentials. "
-        "Anyone who can reach the MinIO/S3 endpoint can read or modify stored files "
+        "Anyone who can reach the S3 endpoint can read or modify stored files "
         "(uploaded documents, file-store objects). Set S3_AWS_ACCESS_KEY_ID / "
-        "S3_AWS_SECRET_ACCESS_KEY (and MINIO_ROOT_USER / MINIO_ROOT_PASSWORD) to "
-        "strong, unique values before deploying to production."
+        "S3_AWS_SECRET_ACCESS_KEY to strong, unique values before deploying to "
+        "production."
     )
 
 # Should we force S3 local checksumming
 S3_GENERATE_LOCAL_CHECKSUM = (
     os.environ.get("S3_GENERATE_LOCAL_CHECKSUM", "").lower() == "true"
 )
+
+# The MinIO store earlier releases wrote to. While set, writes and deletes reach
+# both stores and reads that miss fall back to it. The same endpoint as
+# S3_ENDPOINT_URL (an upgrade that kept its old settings) leaves nothing to fall back to.
+_legacy_endpoint_url = os.environ.get("S3_LEGACY_ENDPOINT_URL") or None
+S3_LEGACY_ENDPOINT_URL = (
+    _legacy_endpoint_url if _legacy_endpoint_url != S3_ENDPOINT_URL else None
+)
+S3_LEGACY_AWS_ACCESS_KEY_ID = (
+    os.environ.get("S3_LEGACY_AWS_ACCESS_KEY_ID") or S3_AWS_ACCESS_KEY_ID
+)
+S3_LEGACY_AWS_SECRET_ACCESS_KEY = (
+    os.environ.get("S3_LEGACY_AWS_SECRET_ACCESS_KEY") or S3_AWS_SECRET_ACCESS_KEY
+)
+# The legacy copy stops once a pass copies nothing and this long has passed,
+# so writes from app pods still on the old release are picked up too.
+LEGACY_COPY_SETTLE_SECONDS = int(os.environ.get("LEGACY_COPY_SETTLE_SECONDS") or 600)
+LEGACY_COPY_WORKERS = int(os.environ.get("LEGACY_COPY_WORKERS") or 16)
 
 # GCS (Google Cloud Storage) Configuration
 GCS_FILE_STORE_BUCKET_NAME = os.environ.get("GCS_FILE_STORE_BUCKET_NAME") or None

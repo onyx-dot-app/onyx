@@ -15,12 +15,12 @@
 #                  -f docker-compose.dev.yml up -d --wait
 #
 # This overlay:
-#   - Moves both model servers, OpenSearch, MinIO, Redis (cache), and the
-#     background worker to profiles so they do not start by default
+#   - Moves both model servers, OpenSearch, the object store, Redis (cache),
+#     and the background worker to profiles so they do not start by default
 #   - Makes depends_on references to removed services optional
 #   - Sets DISABLE_VECTOR_DB=true on the api_server
 #   - Uses PostgreSQL for caching and auth instead of Redis
-#   - Uses PostgreSQL for file storage instead of S3/MinIO
+#   - Uses PostgreSQL for file storage instead of the S3 object store
 #
 # To selectively bring services back:
 #   --profile vectordb          Indexing model server
@@ -28,7 +28,7 @@
 #   --profile background        Background worker (Celery) — also needs redis
 #   --profile redis             Redis cache
 #   --profile opensearch        OpenSearch
-#   --profile s3-filestore      MinIO (S3-compatible file store)
+#   --profile s3-filestore      Object store, legacy MinIO and the copy between them
 # =============================================================================
 
 name: onyx
@@ -45,8 +45,11 @@ services:
       inference_model_server:
         condition: service_started
         required: false
+      object-store:
+        condition: service_healthy
+        required: false
       minio:
-        condition: service_started
+        condition: service_healthy
         required: false
     environment:
       - DISABLE_VECTOR_DB=true
@@ -83,6 +86,12 @@ services:
   opensearch:
     profiles: ["opensearch"]
 
-  # MinIO is not needed in lite mode (Postgres handles file storage).
+  # The object store is not needed in lite mode (Postgres handles file storage).
+  object-store:
+    profiles: ["s3-filestore"]
+
   minio:
+    profiles: ["s3-filestore"]
+
+  object-store-copy:
     profiles: ["s3-filestore"]

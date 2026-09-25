@@ -189,9 +189,8 @@ func TestQueryContainerPorts_usesRunningContainersOnly(t *testing.T) {
 	resolved := queryContainerPorts("proj")
 
 	wantEnv := map[string]string{
-		"POSTGRES_HOST_PORT":      "35432",
-		"MINIO_API_HOST_PORT":     "39000",
-		"MINIO_CONSOLE_HOST_PORT": "39001",
+		"POSTGRES_HOST_PORT":  "35432",
+		"MINIO_API_HOST_PORT": "39000",
 	}
 	if got := resolved.ComposeEnv(); !maps.Equal(got, wantEnv) {
 		t.Fatalf("expected %v, got %v", wantEnv, got)
@@ -201,8 +200,8 @@ func TestQueryContainerPorts_usesRunningContainersOnly(t *testing.T) {
 		"port proj-cache-1 6379",
 		"port proj-opensearch-1 9200",
 		"port proj-inference_model_server-1 9000",
+		"port proj-object-store-1 8333",
 		"port proj-minio-1 9000",
-		"port proj-minio-1 9001",
 		"port proj-code-interpreter-1 8000",
 	}
 	if got := composeCalls(t, bin, "docker"); !slices.Equal(got, wantCalls) {
@@ -211,6 +210,7 @@ func TestQueryContainerPorts_usesRunningContainersOnly(t *testing.T) {
 	wantLogs := "level=warning msg=cache: container not running, skipping getting its port.\n" +
 		"level=warning msg=opensearch: container not running, skipping getting its port.\n" +
 		"level=warning msg=inference_model_server: container not running, skipping getting its port.\n" +
+		"level=warning msg=object-store: container not running, skipping getting its port.\n" +
 		"level=warning msg=code-interpreter: container not running, skipping getting its port.\n"
 	if logs.String() != wantLogs {
 		t.Fatalf("expected logs %q, got %q", wantLogs, logs.String())
@@ -224,7 +224,8 @@ var composeAppEnv = map[string]string{
 	"REDIS_PORT":                "16379",
 	"OPENSEARCH_REST_API_PORT":  "19200",
 	"MODEL_SERVER_PORT":         "19000",
-	"S3_ENDPOINT_URL":           "http://localhost:19000",
+	"S3_ENDPOINT_URL":           "http://localhost:18333",
+	"S3_LEGACY_ENDPOINT_URL":    "http://localhost:19000",
 	"CODE_INTERPRETER_BASE_URL": "http://localhost:18000",
 }
 

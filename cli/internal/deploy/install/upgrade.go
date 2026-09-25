@@ -243,7 +243,11 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 	if err := os.WriteFile(envPath, []byte(env), 0600); err != nil {
 		return fmt.Errorf("failed to write .env: %w", err)
 	}
-	in.successf("Updated IMAGE_TAG to %s in .env file (all other settings preserved)", targetTag)
+	in.successf("Updated IMAGE_TAG to %s in .env file", targetTag)
+	if err := in.alignObjectStoreEndpoint(envPath); err != nil {
+		in.rollbackEnv(envPath, envBytes)
+		return err
+	}
 
 	if err := in.pullImages(ctx, targetTag, hostPort); err != nil {
 		in.rollbackEnv(envPath, envBytes)

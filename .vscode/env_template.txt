@@ -52,8 +52,10 @@ PYTHONUNBUFFERED=1
 ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=False
 
 
-# S3 File Store Configuration (MinIO for local development)
+# S3 File Store Configuration (the bundled object store for local development)
 S3_ENDPOINT_URL=http://localhost:9004
+# The legacy MinIO when one runs (ods compose publishes it on 9005)
+# S3_LEGACY_ENDPOINT_URL=http://localhost:9005
 S3_FILE_STORE_BUCKET_NAME=onyx-file-store-bucket
 S3_AWS_ACCESS_KEY_ID=minioadmin
 S3_AWS_SECRET_ACCESS_KEY=minioadmin

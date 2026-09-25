@@ -62,7 +62,7 @@ func composeEnvFile(t *testing.T, content string) map[string]string {
 	return env
 }
 
-const composeInfraServices = "relational_db cache opensearch inference_model_server minio indexing_model_server code-interpreter"
+const composeInfraServices = "relational_db cache opensearch inference_model_server object-store minio indexing_model_server code-interpreter"
 
 func TestComposeCommand(t *testing.T) {
 	tests := []struct {
@@ -95,7 +95,7 @@ func TestComposeCommand(t *testing.T) {
 				"OPENSEARCH_HOST_PORT":                    "29200",
 				"MODEL_SERVER_HOST_PORT":                  "29000",
 				"MINIO_API_HOST_PORT":                     "29000",
-				"MINIO_CONSOLE_HOST_PORT":                 "29001",
+				"OBJECT_STORE_HOST_PORT":                  "28333",
 				"CODE_INTERPRETER_HOST_PORT":              "28000",
 			},
 			wantTag:   "edge",
