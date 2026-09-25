@@ -1,1 +1,4 @@
-export { ModelIcon } from "@/lib/languageModels/components/ModelIcon";
+export {
+  ModelIcon,
+  type ModelIconProps,
+} from "@/lib/languageModels/components/ModelIcon";
