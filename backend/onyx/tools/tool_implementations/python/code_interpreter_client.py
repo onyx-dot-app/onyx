@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import math
 import re
 import time
 from collections.abc import Callable, Generator
@@ -13,6 +12,7 @@ from pydantic import BaseModel
 
 from onyx.configs.app_configs import CODE_INTERPRETER_BASE_URL
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_after import parse_retry_after_seconds
 
 logger = setup_logger()
 
@@ -25,6 +25,8 @@ _ADMISSION_RETRY_STATUSES = frozenset({429, 503})
 _ADMISSION_MAX_ATTEMPTS = 3
 _ADMISSION_RETRY_AFTER_CAP_SECONDS = 10.0
 _ADMISSION_RETRY_AFTER_FALLBACK_SECONDS = 2.0
+# A retry needs at least this much of the budget left to be worth sending.
+_ADMISSION_MIN_ATTEMPT_SECONDS = 5.0
 
 
 class CodeInterpreterBusyError(RuntimeError):
@@ -40,15 +42,10 @@ class CodeInterpreterBusyError(RuntimeError):
 
 
 def _parse_retry_after(value: str | None) -> float:
-    """Seconds from a delta-seconds ``Retry-After``, capped. HTTP-date and
-    invalid values use the fallback."""
-    if value is None:
-        return _ADMISSION_RETRY_AFTER_FALLBACK_SECONDS
-    try:
-        seconds = float(value.strip())
-    except ValueError:
-        return _ADMISSION_RETRY_AFTER_FALLBACK_SECONDS
-    if not math.isfinite(seconds) or seconds < 0:
+    """Seconds to wait from ``Retry-After`` (delay-seconds or HTTP-date),
+    capped. Missing or invalid values use the fallback."""
+    seconds = parse_retry_after_seconds(value)
+    if seconds is None:
         return _ADMISSION_RETRY_AFTER_FALLBACK_SECONDS
     return min(seconds, _ADMISSION_RETRY_AFTER_CAP_SECONDS)
 
@@ -276,25 +273,27 @@ class CodeInterpreterClient:
     def _send_with_admission_retry(
         self,
         operation: str,
-        send: Callable[[], requests.Response],
+        send: Callable[[float], requests.Response],
         budget_seconds: float,
     ) -> requests.Response:
-        """Call ``send`` and retry 429/503 admission rejections, honoring
-        ``Retry-After``, within ``budget_seconds`` total. Any other response is
-        returned unchanged for the caller to handle."""
+        """Call ``send(timeout)`` and retry 429/503 admission rejections,
+        honoring ``Retry-After``. The whole call, retries included, stays
+        within ``budget_seconds``. Any other response is returned unchanged."""
         deadline = time.monotonic() + budget_seconds
         attempt = 1
+        timeout = budget_seconds
         while True:
-            response = send()
+            response = send(timeout)
             if response.status_code not in _ADMISSION_RETRY_STATUSES:
                 return response
 
             status_code = response.status_code
             wait = _parse_retry_after(response.headers.get("Retry-After"))
             response.close()
+            remaining_after_wait = deadline - time.monotonic() - wait
             if (
                 attempt >= _ADMISSION_MAX_ATTEMPTS
-                or time.monotonic() + wait >= deadline
+                or remaining_after_wait < _ADMISSION_MIN_ATTEMPT_SECONDS
             ):
                 logger.warning(
                     "Code Interpreter %s rejected with HTTP %s after %d attempt(s)",
@@ -314,6 +313,7 @@ class CodeInterpreterClient:
             )
             time.sleep(wait)
             attempt += 1
+            timeout = max(deadline - time.monotonic(), _ADMISSION_MIN_ATTEMPT_SECONDS)
 
     def health(self, use_cache: bool = False) -> HealthResponse:
         """Check if the Code Interpreter service is healthy
@@ -411,7 +411,9 @@ class CodeInterpreterClient:
 
         response = self._send_with_admission_retry(
             "execute",
-            lambda: self.session.post(url, json=payload, timeout=timeout),
+            lambda attempt_timeout: self.session.post(
+                url, json=payload, timeout=attempt_timeout
+            ),
             budget_seconds=timeout,
         )
         response.raise_for_status()
@@ -440,7 +442,9 @@ class CodeInterpreterClient:
         # Admission errors arrive as HTTP statuses before any SSE bytes.
         response = self._send_with_admission_retry(
             "execute_stream",
-            lambda: self.session.post(url, json=payload, stream=True, timeout=timeout),
+            lambda attempt_timeout: self.session.post(
+                url, json=payload, stream=True, timeout=attempt_timeout
+            ),
             budget_seconds=timeout,
         )
 
@@ -537,7 +541,9 @@ class CodeInterpreterClient:
 
         response = self._send_with_admission_retry(
             "create_session",
-            lambda: self.session.post(url, json=payload, timeout=30),
+            lambda attempt_timeout: self.session.post(
+                url, json=payload, timeout=attempt_timeout
+            ),
             budget_seconds=30,
         )
         response.raise_for_status()
@@ -571,7 +577,9 @@ class CodeInterpreterClient:
 
         response = self._send_with_admission_retry(
             "session_bash",
-            lambda: self.session.post(url, json=payload, timeout=timeout),
+            lambda attempt_timeout: self.session.post(
+                url, json=payload, timeout=attempt_timeout
+            ),
             budget_seconds=timeout,
         )
         response.raise_for_status()

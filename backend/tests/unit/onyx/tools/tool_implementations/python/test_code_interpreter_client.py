@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import time
 from collections.abc import Generator
+from datetime import datetime, timedelta, timezone
+from email.utils import format_datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -847,8 +849,8 @@ def test_create_session_retries_503() -> None:
         ("2", 2.0),
         ("0", 0.0),
         ("120", cic._ADMISSION_RETRY_AFTER_CAP_SECONDS),
-        ("Wed, 21 Oct 2026 07:28:00 GMT", cic._ADMISSION_RETRY_AFTER_FALLBACK_SECONDS),
-        ("-5", cic._ADMISSION_RETRY_AFTER_FALLBACK_SECONDS),
+        ("Wed, 21 Oct 2015 07:28:00 GMT", 0.0),
+        ("-5", 0.0),
         ("nan", cic._ADMISSION_RETRY_AFTER_FALLBACK_SECONDS),
         (None, cic._ADMISSION_RETRY_AFTER_FALLBACK_SECONDS),
     ],
@@ -893,3 +895,34 @@ def test_execute_invalid_retry_after_uses_fallback() -> None:
         client.execute(code="print(1)")
 
     sleep.assert_called_once_with(cic._ADMISSION_RETRY_AFTER_FALLBACK_SECONDS)
+
+
+def test_parse_retry_after_future_http_date_is_capped() -> None:
+    retry_at = datetime.now(timezone.utc) + timedelta(hours=1)
+    assert cic._parse_retry_after(format_datetime(retry_at, usegmt=True)) == (
+        cic._ADMISSION_RETRY_AFTER_CAP_SECONDS
+    )
+
+
+def test_execute_retry_gets_only_the_remaining_budget() -> None:
+    """A retry must not get a fresh full timeout: the whole call stays within
+    timeout_ms / 1000 + 10."""
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+    clock = iter([100.0, 100.0, 130.0])
+    timeouts: list[float] = []
+
+    def fake_post(*_args: object, **kwargs: object) -> MagicMock:
+        timeouts.append(kwargs["timeout"])  # ty: ignore[invalid-argument-type]
+        if len(timeouts) == 1:
+            return _make_status_response(429, retry_after="3")
+        return _make_batch_response()
+
+    with (
+        patch.object(client.session, "post", side_effect=fake_post),
+        patch.object(cic.time, "sleep"),
+        patch.object(cic.time, "monotonic", side_effect=lambda: next(clock, 130.0)),
+    ):
+        client.execute(code="print(1)", timeout_ms=30000)
+
+    # Budget is 40s from t=100; the retry starts at t=130 with 10s left.
+    assert timeouts == [40.0, 10.0]
