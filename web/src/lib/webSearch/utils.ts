@@ -63,6 +63,12 @@ export const SEARCH_PROVIDER_DETAILS: Record<
     apiKeyUrl: "https://app.tavily.com/home",
     logo: SvgTavily,
   },
+  firecrawl: {
+    label: "Firecrawl",
+    subtitle: "Firecrawl Search",
+    apiKeyUrl: "https://www.firecrawl.dev/app/api-keys",
+    logo: SvgFirecrawl,
+  },
 };
 
 export const SEARCH_PROVIDER_ORDER = Object.keys(
@@ -120,6 +126,10 @@ const SEARCH_PROVIDER_CAPABILITIES: Record<
   tavily: {
     requiresApiKey: true,
     requiredConfigKeys: [],
+  },
+  firecrawl: {
+    requiresApiKey: true,
+    requiredConfigKeys: ["base_url"],
   },
 };
 
@@ -381,6 +391,14 @@ export function getSearchConfigField(
       title: t("configFields.searxngBaseUrl.label"),
       placeholder: "https://your-searxng-instance.com",
       subDescription: markdown(t("configFields.searxngBaseUrl.description")),
+    };
+  }
+  if (providerType === "firecrawl") {
+    return {
+      title: t("configFields.firecrawlBaseUrl.label"),
+      placeholder: "https://api.firecrawl.dev/v2/search",
+      defaultValue: "https://api.firecrawl.dev/v2/search",
+      subDescription: t("configFields.firecrawlBaseUrl.description"),
     };
   }
   return undefined;

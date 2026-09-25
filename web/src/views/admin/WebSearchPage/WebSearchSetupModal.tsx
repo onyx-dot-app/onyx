@@ -153,12 +153,17 @@ export function WebSearchSetupModal({ state }: WebSearchSetupModalProps) {
   });
 
   async function mutate() {
+    // Providers whose key the backend syncs to the other side need both lists
+    // refreshed so the sibling card leaves the disconnected state.
+    const syncsSiblingSide = ["exa", "tavily", "firecrawl"].includes(
+      providerType
+    );
     if (category === "search") {
       await mutateSearchProviders();
-      if (providerType === "exa") await mutateContentProviders();
+      if (syncsSiblingSide) await mutateContentProviders();
     } else {
       await mutateContentProviders();
-      if (providerType === "exa") await mutateSearchProviders();
+      if (syncsSiblingSide) await mutateSearchProviders();
     }
   }
 
