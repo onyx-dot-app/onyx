@@ -37,7 +37,7 @@ T = TypeVar("T")
 logger = setup_logger()
 
 # List of directories/Files to exclude
-exclude_patterns = [
+DEFAULT_EXCLUDE_PATTERNS = [
     "logs",
     ".github/",
     ".gitlab/",
@@ -145,7 +145,7 @@ def _convert_code_to_document(
     return doc
 
 
-def _should_exclude(path: str) -> bool:
+def _should_exclude(path: str, exclude_patterns: list[str]) -> bool:
     """Check if a path matches any of the exclude patterns."""
     return any(fnmatch.fnmatch(path, pattern) for pattern in exclude_patterns)
 
@@ -160,6 +160,7 @@ class GitlabConnector(LoadConnector, PollConnector):
         include_mrs: bool = True,
         include_issues: bool = True,
         include_code_files: bool = GITLAB_CONNECTOR_INCLUDE_CODE_FILES,
+        exclude_patterns: list[str] | None = None,
     ) -> None:
         self.project_owner = project_owner
         self.project_name = project_name
@@ -169,6 +170,7 @@ class GitlabConnector(LoadConnector, PollConnector):
         self.include_issues = include_issues
         self.include_code_files = include_code_files
         self.gitlab_client: gitlab.Gitlab | None = None
+        self.exclude_patterns = DEFAULT_EXCLUDE_PATTERNS + (exclude_patterns or [])
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self.gitlab_client = gitlab.Gitlab(
@@ -195,7 +197,7 @@ class GitlabConnector(LoadConnector, PollConnector):
                 for file_batch in _batch_gitlab_objects(files, self.batch_size):
                     code_doc_batch: list[Document | HierarchyNode] = []
                     for file in file_batch:
-                        if _should_exclude(file["path"]):
+                        if _should_exclude(file["path"], self.exclude_patterns):
                             continue
 
                         if file["type"] == "blob":
