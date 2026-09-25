@@ -140,7 +140,7 @@ def upgrade() -> None:
             primary_key=True,
         ),
         sa.Column("revision", sa.BigInteger(), server_default="0", nullable=False),
-        sa.Column("progress", postgresql.JSONB(), nullable=False),
+        sa.Column("state", postgresql.JSONB(), nullable=False),
     )
 
 

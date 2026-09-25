@@ -1,4 +1,4 @@
-"""Explicit payload types used by feature-owned execution checkpoints."""
+"""Rebuild chat agents and persist file resources needed to resume them."""
 
 import hashlib
 from io import BytesIO
@@ -10,16 +10,9 @@ from onyx.agents.models import ExecutionCheckpoint, RunState
 from onyx.agents.runtime import Agent
 from onyx.chat.agent import ChatAgent
 from onyx.chat.context import ChatReminders
-from onyx.chat.llm_step import PromptMetadata
-from onyx.chat.models import ChatFeatureState, ChatMessageMetadata, ChatSearchResult
-from onyx.coding_agent.models import CodingAgentCallResult
+from onyx.chat.models import ChatFeatureState, ChatSearchResult
 from onyx.configs.constants import FileOrigin
-from onyx.context.search.models import SearchDocsResponse
 from onyx.deep_research.agent import DeepResearchAgent, DeepResearchFeatureState
-from onyx.deep_research.models import (
-    ResearchAgentCallResult,
-    ResearchMessageMetadata,
-)
 from onyx.deep_research.research_agent import ResearchAgent, ResearchFeatureState
 from onyx.file_store.constants import AGENT_CHECKPOINT_FILE_PREFIX
 from onyx.file_store.file_store import get_default_file_store
@@ -28,37 +21,6 @@ from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.models import Message, ToolResult
 from onyx.tools.file_snapshot import SavedChatFile
 from onyx.tools.interface import Tool
-from onyx.tools.models import (
-    CustomToolCallSummary,
-    FileReadResult,
-    LlmBashExecutionResult,
-    LlmPythonExecutionResult,
-    MemoryUpdated,
-)
-from onyx.tools.tool_implementations.images.models import (
-    FinalImageGenerationResponse,
-)
-
-
-def feature_payload_types() -> dict[str, type[BaseModel]]:
-    return {
-        "chat.state.v1": ChatFeatureState,
-        "research.state.v1": ResearchFeatureState,
-        "deep_research.state.v1": DeepResearchFeatureState,
-        "prompt.metadata.v1": PromptMetadata,
-        "chat.metadata.v1": ChatMessageMetadata,
-        "chat.search.v1": ChatSearchResult,
-        "search.results.v1": SearchDocsResponse,
-        "research.metadata.v1": ResearchMessageMetadata,
-        "research.result.v1": ResearchAgentCallResult,
-        "coding.result.v1": CodingAgentCallResult,
-        "tool.custom.v1": CustomToolCallSummary,
-        "tool.file_read.v1": FileReadResult,
-        "tool.bash.v1": LlmBashExecutionResult,
-        "tool.python.v1": LlmPythonExecutionResult,
-        "tool.memory.v1": MemoryUpdated,
-        "tool.image.v1": FinalImageGenerationResponse,
-    }
 
 
 def restore_chat_agent(

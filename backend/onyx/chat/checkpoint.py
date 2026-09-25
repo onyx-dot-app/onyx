@@ -1,4 +1,4 @@
-"""Supplemental resume data bound to canonical response items and selected history."""
+"""Serialize paused-run state and validate it against saved chat history during restoration."""
 
 import hashlib
 import json
@@ -10,10 +10,28 @@ from pydantic import BaseModel, ConfigDict, JsonValue, TypeAdapter
 from onyx.agents.execution_records import RunStatus
 from onyx.agents.models import AgentState, ExecutionCheckpoint, RunProgress, RunState
 from onyx.agents.tools import HumanToolAnswer, InputDecision
-from onyx.chat.models import ResponseRecord
+from onyx.chat.llm_step import PromptMetadata
+from onyx.chat.models import (
+    ChatFeatureState,
+    ChatMessageMetadata,
+    ChatSearchResult,
+    ResponseRecord,
+)
 from onyx.chat.response import response_snapshot
-from onyx.chat.restoration import feature_payload_types
+from onyx.coding_agent.models import CodingAgentCallResult
+from onyx.context.search.models import SearchDocsResponse
+from onyx.deep_research.agent import DeepResearchFeatureState
+from onyx.deep_research.models import ResearchAgentCallResult, ResearchMessageMetadata
+from onyx.deep_research.research_agent import ResearchFeatureState
 from onyx.llm.models import GenerationRequestParams, Message, ToolResult
+from onyx.tools.models import (
+    CustomToolCallSummary,
+    FileReadResult,
+    LlmBashExecutionResult,
+    LlmPythonExecutionResult,
+    MemoryUpdated,
+)
+from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 
 _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
 
@@ -25,6 +43,27 @@ class CheckpointBinding(BaseModel):
     tenant_id: str
     branch_id: str
     context_version: str
+
+
+def _checkpoint_model_types() -> dict[str, type[BaseModel]]:
+    return {
+        "chat.state.v1": ChatFeatureState,
+        "research.state.v1": ResearchFeatureState,
+        "deep_research.state.v1": DeepResearchFeatureState,
+        "prompt.metadata.v1": PromptMetadata,
+        "chat.metadata.v1": ChatMessageMetadata,
+        "chat.search.v1": ChatSearchResult,
+        "search.results.v1": SearchDocsResponse,
+        "research.metadata.v1": ResearchMessageMetadata,
+        "research.result.v1": ResearchAgentCallResult,
+        "coding.result.v1": CodingAgentCallResult,
+        "tool.custom.v1": CustomToolCallSummary,
+        "tool.file_read.v1": FileReadResult,
+        "tool.bash.v1": LlmBashExecutionResult,
+        "tool.python.v1": LlmPythonExecutionResult,
+        "tool.memory.v1": MemoryUpdated,
+        "tool.image.v1": FinalImageGenerationResponse,
+    }
 
 
 class _Payload(BaseModel):
@@ -48,11 +87,10 @@ def _object(value: JsonValue) -> dict[str, JsonValue]:
     return _JSON_OBJECT.validate_python(value)
 
 
-class CheckpointPayloadCodec:
-    """Encode known execution fields and explicitly registered feature payloads.
+class _CheckpointSerializer:
+    """Serialize execution progress and application models with stable type tags.
 
-    Feature schemas own their nested serialization. Unknown payloads fail closed;
-    saved data cannot name a Python class or import a decoder.
+    Only registered models can be reconstructed from saved data.
     """
 
     def __init__(self, payload_types: Mapping[str, type[BaseModel]]) -> None:
@@ -157,10 +195,12 @@ class ResponseCheckpoint(BaseModel):
     input_payloads: list[MessagePayload]
 
 
-def _digest(context: AgentState, codec: CheckpointPayloadCodec) -> str:
+def _digest(context: AgentState, serializer: _CheckpointSerializer) -> str:
     content = "\n".join(
-        # The codec preserves typed metadata that BaseMessage excludes from JSON.
-        json.dumps(codec.encode_message(message), sort_keys=True, separators=(",", ":"))
+        # The serializer preserves typed metadata that BaseMessage excludes from JSON.
+        json.dumps(
+            serializer.encode_message(message), sort_keys=True, separators=(",", ":")
+        )
         for message in context.messages
     )
     if context.checkpoint is not None:
@@ -187,25 +227,27 @@ def _response_digest(response: ResponseRecord) -> str:
 
 
 def _serialized_run_state(
-    state: RunState, codec: CheckpointPayloadCodec
+    state: RunState, serializer: _CheckpointSerializer
 ) -> dict[str, JsonValue]:
     data = _dump(state, exclude={"input_messages", "messages", "progress"})
     data["input_messages"] = [
-        codec.encode_message(item) for item in state.input_messages
+        serializer.encode_message(item) for item in state.input_messages
     ]
-    data["messages"] = [codec.encode_message(item) for item in state.messages]
+    data["messages"] = [serializer.encode_message(item) for item in state.messages]
     data["progress"] = (
-        codec.encode_progress(state.progress) if state.progress is not None else None
+        serializer.encode_progress(state.progress)
+        if state.progress is not None
+        else None
     )
     return data
 
 
-def save_checkpoint_data(
+def serialize_checkpoint(
     checkpoint: ExecutionCheckpoint,
     response: ResponseRecord,
     binding: CheckpointBinding,
 ) -> ResponseCheckpoint:
-    """Strip canonical message content; retain callback payloads only for resumption."""
+    """Build resume data for storage alongside the response and verify it can reconstruct the run."""
     snapshot = checkpoint.run_state
     if snapshot.status != RunStatus.SUSPENDED or snapshot.progress is None:
         raise ValueError("Checkpoint requires a safely suspended run")
@@ -213,61 +255,64 @@ def save_checkpoint_data(
         raise ValueError("Save each child response independently before checkpointing")
     if snapshot.run_id != response.run_id:
         raise ValueError("Checkpoint belongs to another response")
-    codec = CheckpointPayloadCodec(feature_payload_types())
+    serializer = _CheckpointSerializer(_checkpoint_model_types())
 
     def payload(message: Message) -> MessagePayload:
         return MessagePayload(
-            metadata=codec.encode_payload(message.metadata),
-            details=codec.encode_payload(message.details)
+            metadata=serializer.encode_payload(message.metadata),
+            details=serializer.encode_payload(message.details)
             if isinstance(message, ToolResult)
             else None,
             cacheable=message.cacheable,
         )
 
     data = ResponseCheckpoint(
-        history_digest=_digest(checkpoint.agent_state, codec),
+        history_digest=_digest(checkpoint.agent_state, serializer),
         response_digest=_response_digest(response),
         binding=binding,
         revision=snapshot.revision,
-        progress=codec.encode_progress(snapshot.progress),
+        progress=serializer.encode_progress(snapshot.progress),
         request_params=snapshot.request_params,
         message_payloads=[payload(message) for message in snapshot.messages],
         input_payloads=[payload(message) for message in snapshot.input_messages],
     )
-    restored = _restore_checkpoint_state(data, response, checkpoint.agent_state, codec)
-    if _serialized_run_state(restored.run_state, codec) != _serialized_run_state(
-        snapshot, codec
+    restored = _restore_checkpoint_state(
+        data, response, checkpoint.agent_state, serializer
+    )
+    if _serialized_run_state(restored.run_state, serializer) != _serialized_run_state(
+        snapshot, serializer
     ):
         raise ValueError("Response history cannot reconstruct this checkpoint")
     return data
 
 
-def restore_checkpoint_data(
+def deserialize_checkpoint(
     data: ResponseCheckpoint,
     response: ResponseRecord,
     context: AgentState,
     binding: CheckpointBinding,
 ) -> ExecutionCheckpoint:
-    codec = CheckpointPayloadCodec(feature_payload_types())
-    if _digest(context, codec) != data.history_digest:
+    """Validate saved resume data against the selected history and rebuild execution state."""
+    serializer = _CheckpointSerializer(_checkpoint_model_types())
+    if _digest(context, serializer) != data.history_digest:
         raise ValueError("Checkpoint history changed")
     if _response_digest(response) != data.response_digest:
         raise ValueError("Checkpoint response changed")
     if data.binding != binding:
         raise ValueError("Checkpoint does not match the selected context")
-    return _restore_checkpoint_state(data, response, context, codec)
+    return _restore_checkpoint_state(data, response, context, serializer)
 
 
 def _restore_checkpoint_state(
     data: ResponseCheckpoint,
     response: ResponseRecord,
     context: AgentState,
-    codec: CheckpointPayloadCodec,
+    serializer: _CheckpointSerializer,
 ) -> ExecutionCheckpoint:
     snapshot = response_snapshot(response)
     snapshot.status = RunStatus.SUSPENDED
     snapshot.revision = data.revision
-    snapshot.progress = codec.decode_progress(data.progress)
+    snapshot.progress = serializer.decode_progress(data.progress)
     snapshot.request_params = data.request_params
 
     def restore_payloads(
@@ -276,10 +321,10 @@ def _restore_checkpoint_state(
         if len(messages) != len(payloads):
             raise ValueError("Checkpoint message boundaries changed")
         for message, payload in zip(messages, payloads, strict=True):
-            message.metadata = codec.decode_payload(payload.metadata)
+            message.metadata = serializer.decode_payload(payload.metadata)
             message.cacheable = payload.cacheable
             if isinstance(message, ToolResult):
-                message.details = codec.decode_payload(payload.details)
+                message.details = serializer.decode_payload(payload.details)
             elif payload.details is not None:
                 raise ValueError("Only tool results can have tool details")
 

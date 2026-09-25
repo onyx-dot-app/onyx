@@ -9,10 +9,10 @@ from onyx.agents.execution_records import RunStatus
 from onyx.agents.models import AgentState, ExecutionCheckpoint, RunState
 from onyx.chat.checkpoint import (
     CheckpointBinding,
-    CheckpointPayloadCodec,
     ResponseCheckpoint,
-    restore_checkpoint_data,
-    save_checkpoint_data,
+    _CheckpointSerializer,
+    deserialize_checkpoint,
+    serialize_checkpoint,
 )
 from onyx.chat.models import ResponseRecord
 from onyx.chat.response import response_record, response_snapshot
@@ -30,7 +30,7 @@ class SavedCheckpoint(BaseModel):
 class CheckpointStorage:
     def __init__(self, payload_types: Mapping[str, type[BaseModel]]) -> None:
         self.payload_types = payload_types
-        self.codec = CheckpointPayloadCodec(payload_types)
+        self.serializer = _CheckpointSerializer(payload_types)
 
     def save(
         self, run_state: RunState, agent_state: AgentState, binding: CheckpointBinding
@@ -39,11 +39,11 @@ class CheckpointStorage:
         run_state = run_state.model_copy(deep=True, update={"child_runs": []})
         response = response_record(run_state)
         with patch(
-            "onyx.chat.checkpoint.feature_payload_types",
+            "onyx.chat.checkpoint._checkpoint_model_types",
             return_value=self.payload_types,
         ):
             checkpoint = (
-                save_checkpoint_data(
+                serialize_checkpoint(
                     ExecutionCheckpoint(run_state=run_state, agent_state=agent_state),
                     response,
                     binding,
@@ -56,7 +56,8 @@ class CheckpointStorage:
             checkpoint=checkpoint,
             context=agent_state.model_copy(update={"messages": []}),
             history=[
-                self.codec.encode_message(message) for message in agent_state.messages
+                self.serializer.encode_message(message)
+                for message in agent_state.messages
             ],
             binding=binding,
         ).model_dump_json()
@@ -70,19 +71,19 @@ class CheckpointStorage:
             metadata = raw.pop("metadata", None)
             details = raw.pop("details", None)
             message = TypeAdapter(Message).validate_python(raw)
-            message.metadata = self.codec.decode_payload(metadata)
+            message.metadata = self.serializer.decode_payload(metadata)
             if isinstance(message, ToolResult):
-                message.details = self.codec.decode_payload(details)
+                message.details = self.serializer.decode_payload(details)
             context.messages.append(message)
         if saved.checkpoint is None:
             return ExecutionCheckpoint(
                 agent_state=context, run_state=response_snapshot(saved.response)
             )
         with patch(
-            "onyx.chat.checkpoint.feature_payload_types",
+            "onyx.chat.checkpoint._checkpoint_model_types",
             return_value=self.payload_types,
         ):
-            return restore_checkpoint_data(
+            return deserialize_checkpoint(
                 saved.checkpoint,
                 saved.response,
                 context,

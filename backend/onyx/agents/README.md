@@ -368,12 +368,13 @@ Use `run.capture()` to copy the active run and its preceding `AgentState` togeth
 `agent.state` includes active output, so using it as the resume prefix would duplicate that output.
 Only a suspended snapshot can resume. Wait for its workers to become idle before transferring execution ownership.
 
-Chat stores accepted output as response items. `chat/checkpoint.py` stores the extra data needed to resume:
-step progress, typed feature state, message metadata, and cache flags.
-It validates the saved data against the selected history and response before restoring `ExecutionCheckpoint`.
-`chat.restoration.feature_payload_types()` registers the allowed feature schemas; unknown payload tags fail before execution.
+Chat stores accepted output as response items. `chat/checkpoint.py` serializes the extra data needed to resume:
+step progress, application state, message metadata, and cache flags.
+`serialize_checkpoint()` builds this data. `deserialize_checkpoint()` validates it against the selected history and reconstructs `ExecutionCheckpoint`.
+The module registers the application models that can be restored. Each saved model includes a stable type tag and its fields.
+Unknown tags are rejected. `chat/restoration.py` constructs agents and persists the file resources needed for resumption.
 
-`ChatRunStore.handoff()` saves this data before releasing ownership.
+`ChatRunStore.handoff()` saves this data in `ChatResponseCheckpoint.state` (JSONB) before releasing ownership.
 `ChatRunStore.resume()` loads it, rebuilds the feature, and resumes the saved run.
 
 `Run.handoff()` releases suspended execution. Discard the original Agent and Run afterward.
