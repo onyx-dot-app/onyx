@@ -519,16 +519,38 @@ def test_resync_keeps_a_rewrite_that_follows_its_failed_delete(
     old_release, new_release = stores
     key = _delete_during_outage(new_release, b"deleted while MinIO was down")
     source, target = old_release._get_s3_client(), new_release._get_s3_client()
-    time.sleep(1.1)
-    # A rolled-back release writes the key again, in MinIO only.
+    # A rolled-back release writes the key again, in MinIO only, within the
+    # same second as the failed delete.
     source.put_object(Bucket=BUCKET, Key=key, Body=b"written after the rollback")
 
-    assert run_pass(source, target, [BUCKET], workers=4).failed == 0
+    for _ in range(3):
+        assert run_pass(source, target, [BUCKET], workers=4).failed == 0
+        assert (
+            target.get_object(Bucket=BUCKET, Key=key)["Body"].read()
+            == b"written after the rollback"
+        )
+    assert not _object_exists(target, LEGACY_OUT_OF_SYNC_PREFIX + key)
 
-    assert (
-        target.get_object(Bucket=BUCKET, Key=key)["Body"].read()
-        == b"written after the rollback"
-    )
+
+def test_a_tombstone_for_a_copied_file_holds_its_minio_original_back(
+    stores: tuple[S3BackedFileStore, S3BackedFileStore],
+) -> None:
+    old_release, new_release = stores
+    file_id = _save(old_release, b"from before the upgrade")
+    key = new_release.read_file_record(file_id).object_key
+    source, target = old_release._get_s3_client(), new_release._get_s3_client()
+    assert copy_object(source, target, BUCKET, key)[0] == CopyOutcome.COPIED
+    legacy = new_release._get_legacy_s3_client()
+    assert legacy is not None
+    outage = ClientError({"Error": {"Code": "503"}}, "DeleteObject")
+    with patch.object(legacy, "delete_object", side_effect=outage):
+        new_release.delete_file(file_id)
+
+    for _ in range(2):
+        assert run_pass(source, target, [BUCKET], workers=4).failed == 0
+
+    assert _object_exists(source, key)
+    assert not _object_exists(target, key)
 
 
 def test_a_delete_marker_removes_the_orphan_a_racing_copy_left(

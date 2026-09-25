@@ -96,6 +96,11 @@ def is_missing_object(e: ClientError) -> bool:
 # marker's metadata names the action that failed.
 LEGACY_OUT_OF_SYNC_PREFIX = "onyx-legacy-out-of-sync/"
 LEGACY_OUT_OF_SYNC_ACTION_KEY = "onyx-legacy-action"
+# The ETag MinIO's copy had when the delete failed, so the copy holds back that
+# version and nothing an older release writes afterwards.
+LEGACY_OUT_OF_SYNC_STALE_ETAG_KEY = "onyx-legacy-stale-etag"
+# On a copied object, the MinIO ETag the copy came from.
+LEGACY_COPIED_FROM_METADATA_KEY = "onyx-legacy-etag"
 
 
 # `legacy_copy --retire` writes this object once MinIO holds nothing the object
@@ -481,9 +486,25 @@ class S3BackedFileStore(FileStore):
             logger.warning(
                 "Failed to delete %s from the legacy MinIO store", key, exc_info=True
             )
-            self._mark_legacy_out_of_sync(bucket, key, "delete")
+            self._mark_legacy_out_of_sync(
+                bucket, key, "delete", self._legacy_etag_of(bucket, key)
+            )
 
-    def _mark_legacy_out_of_sync(self, bucket: str, key: str, action: str) -> None:
+    # Same bytes give the same ETag in both stores, and a copied object records
+    # the MinIO ETag it came from.
+    def _legacy_etag_of(self, bucket: str, key: str) -> str | None:
+        try:
+            head = self._get_s3_client().head_object(Bucket=bucket, Key=key)
+        except Exception:
+            return None
+        return head["Metadata"].get(LEGACY_COPIED_FROM_METADATA_KEY) or head["ETag"]
+
+    def _mark_legacy_out_of_sync(
+        self, bucket: str, key: str, action: str, stale_etag: str | None = None
+    ) -> None:
+        metadata = {LEGACY_OUT_OF_SYNC_ACTION_KEY: action}
+        if stale_etag is not None:
+            metadata[LEGACY_OUT_OF_SYNC_STALE_ETAG_KEY] = stale_etag
         try:
             # A unique body gives each marker its own ETag, so the copy removes
             # only a marker it resynced.
@@ -491,7 +512,7 @@ class S3BackedFileStore(FileStore):
                 Bucket=bucket,
                 Key=LEGACY_OUT_OF_SYNC_PREFIX + key,
                 Body=uuid.uuid4().hex.encode(),
-                Metadata={LEGACY_OUT_OF_SYNC_ACTION_KEY: action},
+                Metadata=metadata,
             )
         except Exception:
             logger.warning(
