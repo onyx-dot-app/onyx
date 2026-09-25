@@ -17,6 +17,9 @@ from onyx.tools.tool_implementations.web_search.clients.exa_client import ExaCli
 from onyx.tools.tool_implementations.web_search.clients.google_pse_client import (
     GooglePSEClient,
 )
+from onyx.tools.tool_implementations.web_search.clients.keenable_client import (
+    KeenableClient,
+)
 from onyx.tools.tool_implementations.web_search.clients.searxng_client import (
     SearXNGClient,
 )
@@ -63,8 +66,14 @@ def provider_requires_api_key(provider_type: WebSearchProviderType) -> bool:
     """Return True if the given provider type requires an API key.
     This list is most likely just going to contain SEARXNG. The way it works is that it uses public search engines that do not
     require an API key. You can also set it up in a way which requires a key but SearXNG itself does not require a key.
+
+    Keenable is also keyless by default (it falls back to its public endpoint); a
+    key is optional and only lifts rate limits.
     """
-    return provider_type != WebSearchProviderType.SEARXNG
+    return provider_type not in (
+        WebSearchProviderType.SEARXNG,
+        WebSearchProviderType.KEENABLE,
+    )
 
 
 def build_search_provider_from_config(
@@ -83,6 +92,14 @@ def build_search_provider_from_config(
         return SearXNGClient(
             searxng_base_url,
             num_results=num_results,
+        )
+
+    # Keenable is keyless by default; an API key is optional (lifts rate limits)
+    if provider_type == WebSearchProviderType.KEENABLE:
+        return KeenableClient(
+            api_key=api_key,
+            num_results=num_results,
+            base_url=config.get("base_url") or config.get("keenable_base_url"),
         )
 
     # All other providers require an API key
