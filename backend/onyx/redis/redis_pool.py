@@ -139,15 +139,34 @@ class RedisPool:
 
     def _init_pools(self) -> None:
         self._pool = RedisPool.create_pool(ssl=REDIS_SSL)
+        self._timeout_pools: dict[float, redis.ConnectionPool] = {}
+        self._timeout_pool_lock = threading.Lock()
         self._replica_pool = RedisPool.create_pool(
             host=REDIS_REPLICA_HOST, ssl=REDIS_SSL, replica=True
         )
 
-    def get_client(self, tenant_id: str) -> TenantRedisClient:
-        return TenantRedisClient(
-            tenant_id,
-            redis.Redis(connection_pool=self._pool, **_client_retry_kwargs()),
+    def get_client(
+        self, tenant_id: str, *, operation_timeout_s: float | None = None
+    ) -> TenantRedisClient:
+        pool = (
+            self._pool
+            if operation_timeout_s is None
+            else self._get_timeout_pool(operation_timeout_s)
         )
+        return TenantRedisClient(
+            tenant_id, redis.Redis(connection_pool=pool, **_client_retry_kwargs())
+        )
+
+    def _get_timeout_pool(self, operation_timeout_s: float) -> redis.ConnectionPool:
+        """One pool per timeout value, since socket timeouts are set per connection."""
+        with self._timeout_pool_lock:
+            pool = self._timeout_pools.get(operation_timeout_s)
+            if pool is None:
+                pool = RedisPool.create_pool(
+                    ssl=REDIS_SSL, operation_timeout=operation_timeout_s
+                )
+                self._timeout_pools[operation_timeout_s] = pool
+            return pool
 
     def get_replica_client(self, tenant_id: str) -> TenantRedisClient:
         return TenantRedisClient(
@@ -183,6 +202,7 @@ class RedisPool:
         ssl_keyfile: str | None = REDIS_SSL_KEYFILE,
         ssl: bool = False,
         replica: bool = False,
+        operation_timeout: float | None = None,
     ) -> redis.ConnectionPool:
         """
         Create a Redis connection pool with appropriate SSL configuration.
@@ -200,13 +220,24 @@ class RedisPool:
         behavior and aligned with how we want to use Redis (Sentinel mode uses
         redis-py's SentinelConnectionPool instead)."""
 
+        socket_timeouts = (
+            {
+                "socket_timeout": operation_timeout,
+                "socket_connect_timeout": operation_timeout,
+            }
+            if operation_timeout is not None
+            else REDIS_SOCKET_TIMEOUT_KWARGS
+        )
         # Using ConnectionPool is not well documented.
         # Useful examples: https://github.com/redis/redis-py/issues/780
 
         # Handle Sentinel (HA) first — it owns master/replica discovery.
         if REDIS_SENTINEL_HOSTS:
             return RedisPool._create_sentinel_pool(
-                db=db, max_connections=max_connections, replica=replica
+                db=db,
+                max_connections=max_connections,
+                replica=replica,
+                operation_timeout=operation_timeout,
             )
 
         # Handle IAM authentication
@@ -220,13 +251,13 @@ class RedisPool:
                 db=db,
                 password=None,  # No password with IAM auth
                 max_connections=max_connections,
-                timeout=None,
+                timeout=operation_timeout,
                 health_check_interval=REDIS_HEALTH_CHECK_INTERVAL,
                 socket_keepalive=True,
                 socket_keepalive_options=REDIS_SOCKET_KEEPALIVE_OPTIONS,
                 connection_class=redis.SSLConnection,
                 ssl_context=ssl_context,  # Use IAM auth SSL context
-                **REDIS_SOCKET_TIMEOUT_KWARGS,
+                **socket_timeouts,
             )
 
         if ssl:
@@ -236,7 +267,7 @@ class RedisPool:
                 db=db,
                 password=password,
                 max_connections=max_connections,
-                timeout=None,
+                timeout=operation_timeout,
                 health_check_interval=REDIS_HEALTH_CHECK_INTERVAL,
                 socket_keepalive=True,
                 socket_keepalive_options=REDIS_SOCKET_KEEPALIVE_OPTIONS,
@@ -246,7 +277,7 @@ class RedisPool:
                 ssl_check_hostname=ssl_check_hostname,
                 ssl_certfile=ssl_certfile,
                 ssl_keyfile=ssl_keyfile,
-                **REDIS_SOCKET_TIMEOUT_KWARGS,
+                **socket_timeouts,
             )
 
         return redis.BlockingConnectionPool(
@@ -255,22 +286,29 @@ class RedisPool:
             db=db,
             password=password,
             max_connections=max_connections,
-            timeout=None,
+            timeout=operation_timeout,
             health_check_interval=REDIS_HEALTH_CHECK_INTERVAL,
             socket_keepalive=True,
             socket_keepalive_options=REDIS_SOCKET_KEEPALIVE_OPTIONS,
-            **REDIS_SOCKET_TIMEOUT_KWARGS,
+            **socket_timeouts,
         )
 
     @staticmethod
     def _create_sentinel_pool(
-        db: int, max_connections: int, replica: bool
+        db: int,
+        max_connections: int,
+        replica: bool,
+        operation_timeout: float | None = None,
     ) -> redis.ConnectionPool:
         """Return a SentinelConnectionPool for the master (or a replica) of
         REDIS_SENTINEL_MASTER_NAME. Sentinel discovers the node and re-resolves
         it on failover; the pool plugs into ``redis.Redis(connection_pool=...)``
         like the direct pool."""
         connection_kwargs, sentinel_kwargs = _sentinel_connection_kwargs()
+        if operation_timeout is not None:
+            for kwargs in (connection_kwargs, sentinel_kwargs):
+                kwargs["socket_timeout"] = operation_timeout
+                kwargs["socket_connect_timeout"] = operation_timeout
         sentinel = Sentinel(
             REDIS_SENTINEL_HOSTS,
             sentinel_kwargs=sentinel_kwargs,

@@ -70,3 +70,31 @@ def test_deadlines_apply_to_the_broker_client() -> None:
         kwargs = redis_cls.from_url.call_args.kwargs
     assert kwargs["socket_timeout"] == 30.0
     assert kwargs["socket_connect_timeout"] == 10.0
+
+
+def test_timeout_pools_are_reused_without_changing_default_pool() -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    with (
+        patch.object(redis_pool.RedisPool, "_instance", None),
+        patch.object(redis_pool.RedisPool, "create_pool") as create_pool,
+        patch.object(redis_pool.redis, "Redis") as redis_client,
+    ):
+        pool = redis_pool.RedisPool()
+        default_pool = pool._pool
+        create_pool.reset_mock()
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            clients = list(
+                executor.map(
+                    lambda _: pool.get_client("tenant", operation_timeout_s=0.5),
+                    range(8),
+                )
+            )
+        assert len(clients) == 8
+        create_pool.assert_called_once_with(
+            ssl=redis_pool.REDIS_SSL, operation_timeout=0.5
+        )
+        pool.get_client("tenant", operation_timeout_s=2)
+        assert create_pool.call_count == 2
+        pool.get_client("tenant")
+        assert redis_client.call_args.kwargs["connection_pool"] is default_pool
