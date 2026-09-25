@@ -18,6 +18,7 @@ from types import ModuleType
 import pytest
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.engine import Connection
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.pool import NullPool
 
 from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
@@ -110,14 +111,25 @@ def test_valid_index_is_left_alone(
 def test_invalid_index_is_rebuilt(
     engine: Engine, migration: ModuleType, schema: str
 ) -> None:
-    _repair(engine, migration, schema)
+    # A CONCURRENTLY build that fails leaves an INVALID index behind. Two rows
+    # with one session id make a unique build under the migration's name fail.
     with engine.begin() as connection:
-        before = _index_oid_and_validity(connection, schema, migration.INDEX_NAME)
-        assert before is not None
         connection.execute(
-            text("UPDATE pg_index SET indisvalid = false WHERE indexrelid = :oid"),
-            {"oid": before[0]},
+            text(
+                f'INSERT INTO "{schema}".chat_message (chat_session_id) '
+                "VALUES (:sid), (:sid)"
+            ),
+            {"sid": str(uuid.uuid4())},
         )
+    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        with pytest.raises(IntegrityError):
+            conn.exec_driver_sql(
+                f'CREATE UNIQUE INDEX CONCURRENTLY "{migration.INDEX_NAME}" '
+                f'ON "{schema}".chat_message (chat_session_id)'
+            )
+    with engine.connect() as connection:
+        before = _index_oid_and_validity(connection, schema, migration.INDEX_NAME)
+    assert before is not None and before[1] is False
 
     _repair(engine, migration, schema)
 
