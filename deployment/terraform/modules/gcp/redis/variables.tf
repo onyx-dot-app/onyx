@@ -68,15 +68,16 @@ variable "redis_version" {
   }
 }
 
-# Off by default. TLS can only be chosen at creation, so toggling it replaces
-# the instance and loses its data. With TLS on, set REDIS_SSL=true, and mount
-# server_ca_certs into the pods with REDIS_SSL_CA_CERTS and
+# On by default, as in the AWS module. TLS can only be chosen at creation, so
+# toggling it replaces the instance and loses its data; the secure default has
+# to be right on day one. Onyx then needs REDIS_SSL=true and port 6378. To
+# verify the server, mount server_ca_certs with REDIS_SSL_CA_CERTS and set
 # REDIS_SSL_CERT_REQS=required, or Onyx's default of "none" encrypts without
 # checking who it is talking to.
 variable "transit_encryption_enabled" {
   type        = bool
   description = "Serve TLS on port 6378 instead of plaintext on 6379. Changing this replaces the instance."
-  default     = false
+  default     = true
 }
 
 variable "maxmemory_policy" {
