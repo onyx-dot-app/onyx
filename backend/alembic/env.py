@@ -1,4 +1,6 @@
 from onyx.db.engine.iam_auth import make_provide_iam_token_async
+from onyx.db.engine.migration_search_path import install_search_path_reapply
+from onyx.db.engine.migration_search_path import pin_search_path_to_schema
 from onyx.db.engine.pg_ssl import create_pg_ssl_context
 from onyx.configs.app_configs import USE_IAM_AUTH
 from onyx.configs.app_configs import POSTGRES_HOST
@@ -250,7 +252,7 @@ def do_run_migrations(
     if create_schema:
         connection.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}"'))
 
-    connection.execute(text(f'SET search_path TO "{schema_name}"'))
+    pin_search_path_to_schema(connection, schema_name)
 
     context.configure(
         connection=connection,
@@ -285,6 +287,7 @@ def create_migration_engine(target_url: str) -> AsyncEngine:
         poolclass=pool.NullPool,
         connect_args={"ssl": create_pg_ssl_context()},
     )
+    install_search_path_reapply(engine.sync_engine)
     if USE_IAM_AUTH:
         url = make_url(target_url)
         event.listen(
