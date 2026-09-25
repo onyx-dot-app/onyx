@@ -4,11 +4,11 @@ from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.microsoft_utils.entra_groups import normalize_email
 from ee.onyx.external_permissions.utils import credential_json
 from onyx.connectors.microsoft_utils.entra import (
-    EntraDirectoryObjectPage,
+    EntraDirectoryObject,
     EntraDirectoryObjectType,
     EntraGroup,
-    iter_entra_group_members,
-    iter_entra_groups,
+    EntraPage,
+    iter_entra_items,
 )
 from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftGraphError as OneDriveGraphError,
@@ -30,7 +30,7 @@ def _member_page(
     connector: OneDriveConnector,
     group: EntraGroup,
     next_link: str | None,
-) -> EntraDirectoryObjectPage:
+) -> EntraPage[EntraDirectoryObject]:
     try:
         return connector.ops.list_transitive_group_members(
             group_id=group.id,
@@ -51,9 +51,9 @@ def _member_page(
 def _group_members(connector: OneDriveConnector, group: EntraGroup) -> list[str]:
     emails: set[str] = set()
     try:
-        members = iter_entra_group_members(
-            group.id,
+        members = iter_entra_items(
             lambda next_link: _member_page(connector, group, next_link),
+            f"Entra group `{group.id}` members",
         )
         for member in members:
             if member.odata_type not in (None, EntraDirectoryObjectType.USER):
@@ -77,8 +77,9 @@ def onedrive_group_sync(
     connector = OneDriveConnector(**cc_pair.connector.connector_specific_config)
     connector.load_credentials(credential_json(cc_pair))
 
-    groups = iter_entra_groups(
-        lambda next_link: connector.ops.list_groups(next_link=next_link)
+    groups = iter_entra_items(
+        lambda next_link: connector.ops.list_groups(next_link=next_link),
+        "Entra group listing",
     )
     for group in groups:
         yield ExternalUserGroup(

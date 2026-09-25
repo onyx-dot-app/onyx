@@ -1,4 +1,5 @@
 from typing import Any
+from urllib.parse import quote
 
 import requests
 
@@ -16,11 +17,16 @@ from onyx.connectors.microsoft_utils.drive_items import (
     extract_drive_item_content,
 )
 from onyx.connectors.microsoft_utils.entra import (
+    ENTRA_GROUP_MEMBER_SELECT,
+    ENTRA_GROUP_SELECT,
     ENTRA_PAGE_SIZE,
-    EntraClient,
-    EntraDirectoryObjectPage,
-    EntraGroupPage,
+    ENTRA_USER_SELECT,
+    EntraDirectoryObject,
+    EntraGroup,
+    EntraPage,
     EntraUser,
+    fetch_entra_page,
+    fetch_entra_user,
 )
 from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
 from onyx.connectors.microsoft_utils.graph_env import (
@@ -135,9 +141,6 @@ class OneDriveSourceOperations(SourceOperations):
     def _client(self) -> GraphApiClient:
         return self._gateway().client
 
-    def _entra(self) -> EntraClient:
-        return EntraClient(self._gateway().get_json, self._base())
-
     def _get(self, url: str, params: dict[str, str] | None = None) -> dict[str, Any]:
         return self._gateway().get_json(url, params)
 
@@ -159,11 +162,15 @@ class OneDriveSourceOperations(SourceOperations):
     def list_users(
         self, *, next_link: str | None = None, page_size: int = ENTRA_PAGE_SIZE
     ) -> OneDriveUserPage:
-        page = self._entra().list_users_page(
+        page = fetch_entra_page(
+            self._gateway().get_json,
+            url=f"{self._base()}/users",
+            item_model=EntraUser,
+            select_fields=ENTRA_USER_SELECT,
             next_link=next_link,
             page_size=page_size,
         )
-        users = [user for item in page.users if (user := _user(item))]
+        users = [user for item in page.items if (user := _user(item))]
         return OneDriveUserPage(users=users, next_link=page.next_link)
 
     @source_operation(
@@ -176,7 +183,11 @@ class OneDriveSourceOperations(SourceOperations):
     )
     def get_user(self, *, identifier: str) -> OneDriveUser | None:
         try:
-            user = self._entra().get_user(identifier)
+            user = fetch_entra_user(
+                self._gateway().get_json,
+                self._base(),
+                identifier,
+            )
         except OneDriveGraphError as error:
             if error.status == 404:
                 return None
@@ -280,8 +291,12 @@ class OneDriveSourceOperations(SourceOperations):
     )
     def list_groups(
         self, *, next_link: str | None = None, page_size: int = ENTRA_PAGE_SIZE
-    ) -> EntraGroupPage:
-        return self._entra().list_groups_page(
+    ) -> EntraPage[EntraGroup]:
+        return fetch_entra_page(
+            self._gateway().get_json,
+            url=f"{self._base()}/groups",
+            item_model=EntraGroup,
+            select_fields=ENTRA_GROUP_SELECT,
             next_link=next_link,
             page_size=page_size,
         )
@@ -296,9 +311,11 @@ class OneDriveSourceOperations(SourceOperations):
     )
     def list_transitive_group_members(
         self, *, group_id: str, next_link: str | None = None
-    ) -> EntraDirectoryObjectPage:
-        return self._entra().list_group_members_page(
-            group_id=group_id,
+    ) -> EntraPage[EntraDirectoryObject]:
+        return fetch_entra_page(
+            self._gateway().get_json,
+            url=f"{self._base()}/groups/{quote(group_id)}/transitiveMembers",
+            item_model=EntraDirectoryObject,
+            select_fields=ENTRA_GROUP_MEMBER_SELECT,
             next_link=next_link,
-            transitive=True,
         )

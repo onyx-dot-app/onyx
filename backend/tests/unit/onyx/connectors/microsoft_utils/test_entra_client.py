@@ -4,18 +4,16 @@ import pytest
 
 from onyx.connectors.microsoft_utils.entra import (
     ENABLED_USERS_FILTER,
-    ENTRA_GROUP_MEMBER_SELECT,
     ENTRA_GROUP_SELECT,
     ENTRA_USER_SELECT,
-    EntraClient,
-    EntraDirectoryObjectType,
+    EntraGroup,
+    EntraUser,
+    fetch_entra_page,
+    fetch_entra_user,
+    iter_entra_items,
 )
 
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
-
-
-def _client(get_json: MagicMock) -> EntraClient:
-    return EntraClient(get_json, GRAPH_BASE)
 
 
 def test_entra_user_operations_share_models_and_query_shape() -> None:
@@ -37,12 +35,17 @@ def test_entra_user_operations_share_models_and_query_shape() -> None:
             },
         ]
     )
-    client = _client(get_json)
+    page = fetch_entra_page(
+        get_json,
+        url=f"{GRAPH_BASE}/users",
+        item_model=EntraUser,
+        select_fields=ENTRA_USER_SELECT,
+        page_size=5,
+        filter_expression=ENABLED_USERS_FILTER,
+    )
+    user = fetch_entra_user(get_json, GRAPH_BASE, "mail@example.com")
 
-    page = client.list_users_page(page_size=5, enabled_only=True)
-    user = client.get_user("mail@example.com")
-
-    assert page.users[0].user_principal_name == "user@example.com"
+    assert page.items[0].user_principal_name == "user@example.com"
     assert page.next_link == "users-next"
     assert user.mail == "mail@example.com"
     assert get_json.call_args_list[0].args == (
@@ -59,69 +62,21 @@ def test_entra_user_operations_share_models_and_query_shape() -> None:
     )
 
 
-def test_entra_group_operations_distinguish_direct_and_transitive_members() -> None:
-    get_json = MagicMock(
-        side_effect=[
-            {
-                "value": [
-                    {
-                        "id": "group-1",
-                        "displayName": "Group",
-                        "visibility": "Public",
-                    }
-                ]
-            },
-            {
-                "value": [
-                    {
-                        "id": "user-1",
-                        "@odata.type": "#microsoft.graph.user",
-                        "mail": "user@example.com",
-                    }
-                ]
-            },
-            {
-                "value": [
-                    {
-                        "id": "user-2",
-                        "@odata.type": "#microsoft.graph.user",
-                        "userPrincipalName": "nested@example.com",
-                    }
-                ]
-            },
-        ]
-    )
-    client = _client(get_json)
-
-    group = client.list_groups_page().groups[0]
-    direct = client.list_group_members_page(group_id=group.id).members[0]
-    transitive = client.list_group_members_page(
-        group_id=group.id,
-        transitive=True,
-    ).members[0]
-
-    assert group.display_name == "Group"
-    assert direct.odata_type == EntraDirectoryObjectType.USER
-    assert transitive.user_principal_name == "nested@example.com"
-    assert get_json.call_args_list[0].args == (
-        f"{GRAPH_BASE}/groups",
-        {"$select": ENTRA_GROUP_SELECT, "$top": "999"},
-    )
-    assert get_json.call_args_list[1].args == (
-        f"{GRAPH_BASE}/groups/group-1/members",
-        {"$select": ENTRA_GROUP_MEMBER_SELECT, "$top": "999"},
-    )
-    assert get_json.call_args_list[2].args == (
-        f"{GRAPH_BASE}/groups/group-1/transitiveMembers",
-        {"$select": ENTRA_GROUP_MEMBER_SELECT, "$top": "999"},
-    )
-
-
 def test_entra_group_iterator_rejects_repeated_cursor() -> None:
     get_json = MagicMock(return_value={"value": [], "@odata.nextLink": "groups-next"})
-    client = _client(get_json)
 
     with pytest.raises(RuntimeError, match="repeated cursor"):
-        list(client.iter_groups())
+        list(
+            iter_entra_items(
+                lambda next_link: fetch_entra_page(
+                    get_json,
+                    url=f"{GRAPH_BASE}/groups",
+                    item_model=EntraGroup,
+                    select_fields=ENTRA_GROUP_SELECT,
+                    next_link=next_link,
+                ),
+                "Entra group listing",
+            )
+        )
 
     assert get_json.call_count == 2

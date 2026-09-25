@@ -52,7 +52,11 @@ from onyx.connectors.microsoft_utils.drive_items import (
     parse_graph_datetime,
     timestamp_in_window,
 )
-from onyx.connectors.microsoft_utils.entra import ENTRA_GROUP_ID_SELECT, EntraClient
+from onyx.connectors.microsoft_utils.entra import (
+    ENTRA_GROUP_ID_SELECT,
+    EntraGroup,
+    fetch_entra_page,
+)
 from onyx.connectors.microsoft_utils.graph_auth import (
     MicrosoftAuthMethod,
     acquire_graph_token,
@@ -802,13 +806,12 @@ class SharepointConnector(
         if not self.msal_app:
             return
         try:
-            entra = EntraClient(
+            fetch_entra_page(
                 self.graph_api.get_json,
-                self.graph_api_base,
-            )
-            entra.list_groups_page(
-                page_size=1,
+                url=f"{self.graph_api_base}/groups",
+                item_model=EntraGroup,
                 select_fields=ENTRA_GROUP_ID_SELECT,
+                page_size=1,
             )
         except requests.HTTPError as error:
             status = error.response.status_code if error.response is not None else None

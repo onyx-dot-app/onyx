@@ -637,13 +637,13 @@ class OneDriveConnector(
         )
         return checkpoint
 
-    def _load_from_checkpoint(
+    def load_from_checkpoint(
         self,
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: OneDriveCheckpoint,
         *,
-        include_permissions: bool,
+        include_permissions: bool = False,
     ) -> CheckpointOutput[OneDriveCheckpoint]:
         for item in self._discover_from_checkpoint(
             start,
@@ -664,26 +664,13 @@ class OneDriveConnector(
                 yield output
         return checkpoint
 
-    def load_from_checkpoint(
-        self,
-        start: SecondsSinceUnixEpoch,
-        end: SecondsSinceUnixEpoch,
-        checkpoint: OneDriveCheckpoint,
-    ) -> CheckpointOutput[OneDriveCheckpoint]:
-        return self._load_from_checkpoint(
-            start,
-            end,
-            checkpoint,
-            include_permissions=False,
-        )
-
     def load_from_checkpoint_with_perm_sync(
         self,
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: OneDriveCheckpoint,
     ) -> CheckpointOutput[OneDriveCheckpoint]:
-        return self._load_from_checkpoint(
+        return self.load_from_checkpoint(
             start,
             end,
             checkpoint,
@@ -705,29 +692,10 @@ class OneDriveConnector(
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
-    ) -> GenerateSlimDocumentOutput:
-        del start, end
-        yield from self._retrieve_all_slim_docs(
-            callback=callback, include_permissions=False
-        )
-
-    def retrieve_all_slim_docs_perm_sync(
-        self,
-        start: SecondsSinceUnixEpoch | None = None,
-        end: SecondsSinceUnixEpoch | None = None,
-        callback: IndexingHeartbeatInterface | None = None,
-    ) -> GenerateSlimDocumentOutput:
-        del start, end
-        yield from self._retrieve_all_slim_docs(
-            callback=callback, include_permissions=True
-        )
-
-    def _retrieve_all_slim_docs(
-        self,
         *,
-        callback: IndexingHeartbeatInterface | None,
-        include_permissions: bool,
+        include_permissions: bool = False,
     ) -> GenerateSlimDocumentOutput:
+        del start, end
         checkpoint = self.build_dummy_checkpoint()
         while checkpoint.has_more:
             if callback and callback.should_stop():
@@ -755,3 +723,16 @@ class OneDriveConnector(
                 yield batch
             if callback:
                 callback.progress("onedrive_slim_retrieval", 1)
+
+    def retrieve_all_slim_docs_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        yield from self.retrieve_all_slim_docs(
+            start,
+            end,
+            callback,
+            include_permissions=True,
+        )

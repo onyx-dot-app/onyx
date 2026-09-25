@@ -23,9 +23,12 @@ from onyx.connectors.microsoft_utils.drive_items import (
     parse_graph_datetime,
 )
 from onyx.connectors.microsoft_utils.entra import (
+    ENABLED_USERS_FILTER,
     ENTRA_PAGE_SIZE,
-    EntraClient,
+    ENTRA_USER_SELECT,
     EntraUser,
+    fetch_entra_page,
+    fetch_entra_user,
 )
 from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
 from onyx.connectors.microsoft_utils.graph_env import (
@@ -155,17 +158,7 @@ def _body_text(raw: dict[str, Any] | None) -> str:
     return " ".join(soup.stripped_strings)
 
 
-def _parse_mailbox(raw: dict[str, Any]) -> OutlookMailbox | None:
-    user_id = raw.get("id")
-    address = raw.get("mail") or raw.get("userPrincipalName")
-    if not user_id or not address:
-        return None
-    return OutlookMailbox(
-        id=user_id, address=address, display_name=raw.get("displayName")
-    )
-
-
-def _mailbox_from_entra(user: EntraUser) -> OutlookMailbox | None:
+def _mailbox(user: EntraUser) -> OutlookMailbox | None:
     address = user.mail or user.user_principal_name
     if not address:
         return None
@@ -372,9 +365,6 @@ class OutlookSourceOperations(SourceOperations):
     ) -> dict[str, Any]:
         return self._gateway().get_json(url, params, headers)
 
-    def _entra(self) -> EntraClient:
-        return EntraClient(self._gateway().get_json, self._graph_base())
-
     def _first_item(
         self,
         url: str,
@@ -430,16 +420,20 @@ class OutlookSourceOperations(SourceOperations):
         Needs ``User.Read.All``. Whether a user actually has a mailbox is only
         known once :meth:`probe_mailbox` is called for it.
         """
-        page = self._entra().list_users_page(
+        page = fetch_entra_page(
+            self._gateway().get_json,
+            url=f"{self._graph_base()}/users",
+            item_model=EntraUser,
+            select_fields=ENTRA_USER_SELECT,
             next_link=next_link,
             page_size=page_size,
-            enabled_only=True,
+            filter_expression=ENABLED_USERS_FILTER,
         )
         mailboxes = [
             mailbox
-            for user in page.users
+            for user in page.items
             if user.mail
-            if (mailbox := _mailbox_from_entra(user)) is not None
+            if (mailbox := _mailbox(user)) is not None
         ]
         return OutlookMailboxPage(
             mailboxes=mailboxes,
@@ -459,13 +453,19 @@ class OutlookSourceOperations(SourceOperations):
         """Find the user behind an address: by UPN or object id, then by primary SMTP."""
         params = {"$select": MAILBOX_SELECT}
         try:
-            return _mailbox_from_entra(self._entra().get_user(address))
+            return _mailbox(
+                fetch_entra_user(
+                    self._gateway().get_json,
+                    self._graph_base(),
+                    address,
+                )
+            )
         except OutlookGraphError as e:
             if e.status != 404:
                 raise
         params["$filter"] = f"mail eq '{_odata_quote(address)}'"
         user = self._first_item(f"{self._graph_base()}/users", params)
-        return _parse_mailbox(user) if user else None
+        return _mailbox(EntraUser.model_validate(user)) if user else None
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
