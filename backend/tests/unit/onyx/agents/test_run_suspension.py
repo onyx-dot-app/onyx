@@ -8,8 +8,9 @@ import pytest
 from pydantic import BaseModel
 
 import onyx.agents.runtime as runtime
-from onyx.agents.coordination import AgentCoordinator
+from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent, AgentSuspendedEvent, InputRequiredEvent
+from onyx.agents.execution_records import RunFailureKind, RunStatus
 from onyx.agents.models import (
     AgentState,
     ExecutionCheckpoint,
@@ -25,7 +26,6 @@ from onyx.agents.tools import (
     PendingToolInput,
     ToolInvocation,
 )
-from onyx.agents.transcript import RunFailureKind, RunStatus
 from onyx.chat.checkpoint import CheckpointBinding
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import (

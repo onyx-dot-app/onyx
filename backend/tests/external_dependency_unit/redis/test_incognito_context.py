@@ -13,7 +13,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from onyx.agents.transcript import RunStatus
+from onyx.agents.execution_records import RunStatus
 from onyx.cache.interface import CacheBackendType
 from onyx.chat.incognito_context import (
     INCOGNITO_CONTEXT_TTL_SECONDS,

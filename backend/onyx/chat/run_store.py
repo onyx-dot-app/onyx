@@ -10,16 +10,16 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel
 
-from onyx.agents.concurrency import OPERATION_TIMEOUT_SECONDS
-from onyx.agents.coordination import (
+from onyx.agents.agent_coordination import (
     AgentCoordinator,
     AgentDirectory,
-    AgentInfo,
+    RunOwnership,
     RunStore,
 )
-from onyx.agents.models import AgentState, ExecutionCheckpoint, RunState
+from onyx.agents.concurrency import OPERATION_TIMEOUT_SECONDS
+from onyx.agents.execution_records import RunStatus
+from onyx.agents.models import AgentInfo, AgentState, ExecutionCheckpoint, RunState
 from onyx.agents.runtime import Agent, Run, RunNotTransferable
-from onyx.agents.transcript import RunStatus
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.chat.checkpoint import (
@@ -98,7 +98,7 @@ class _OwnedRun:
         self.owner = lease.owner
 
 
-class ChatRunStore(RunStore):
+class ChatRunStore(RunStore, RunOwnership):
     """Persist runs on one authorized branch. The application polls control while ownership remains."""
 
     def __init__(
@@ -178,7 +178,9 @@ class ChatRunStore(RunStore):
         if self._coordinator is not None:
             raise ValueError("Response store is already bound")
         self._build_agent = build_agent
-        self._coordinator = coordinator.view(directory=directory, store=self)
+        self._coordinator = coordinator.view(
+            directory=directory, store=self, ownership=self
+        )
         return self._coordinator
 
     def _load_status(self, run_id: str, parent_id: str | None = None) -> ResponseStatus:

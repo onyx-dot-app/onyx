@@ -13,6 +13,7 @@ from onyx.agents.events import (
     ToolStartEvent,
     ToolUpdateEvent,
 )
+from onyx.agents.execution_records import OperationSnapshot, RunStatus
 from onyx.agents.models import (
     ExecutionRequest,
     PreparedStep,
@@ -31,7 +32,6 @@ from onyx.agents.tools import (
     ToolOutcome,
     ToolProgress,
 )
-from onyx.agents.transcript import OperationSnapshot, RunStatus
 from onyx.llm.cancellation import AgentCancelled
 from onyx.llm.models import (
     Message,

@@ -12,8 +12,9 @@ import pytest
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from onyx.agents.agent_coordination import AgentCoordinator, RunStore
 from onyx.agents.compaction import history_digest
-from onyx.agents.coordination import AgentCoordinator, RunStore
+from onyx.agents.execution_records import CompactionCheckpoint, RunStatus
 from onyx.agents.models import (
     AgentState,
     ExecutionCheckpoint,
@@ -29,7 +30,6 @@ from onyx.agents.tools import (
     PendingToolInput,
     ToolInvocation,
 )
-from onyx.agents.transcript import CompactionCheckpoint, RunStatus
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.agent import ChatAgent
 from onyx.chat.checkpoint import CheckpointBinding

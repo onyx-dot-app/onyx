@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from pydantic import ValidationError
 
-from onyx.agents.coordination import AgentCoordinator
+from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent, AgentEventType
 from onyx.agents.models import AgentState, PreparedStep, RunState
 from onyx.agents.runtime import Agent, Run, RunFailed
@@ -32,7 +32,12 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
-from tests.unit.onyx.agents.fakes import FakeModelClient, FakeRunStore, run_agent
+from tests.unit.onyx.agents.fakes import (
+    FakeModelClient,
+    FakeRunOwnership,
+    FakeRunStore,
+    run_agent,
+)
 
 
 def scripted(*messages: AssistantMessage) -> FakeModelClient:
@@ -553,7 +558,8 @@ def test_current_thread_start_completes_storage_before_return() -> None:
         visited.append("release")
 
     coordinator = AgentCoordinator(
-        store=FakeRunStore(save=lambda run: save(run.snapshot()), release=release)
+        store=FakeRunStore(save=lambda run: save(run.snapshot())),
+        ownership=FakeRunOwnership(release=release),
     )
 
     run = Agent(FakeModelClient(generate)).start(
@@ -572,7 +578,7 @@ def test_release_failure_remains_observable_after_execution_drains(
     def release(_run_id: str) -> None:
         raise error_type("Ownership release failed")
 
-    coordinator = AgentCoordinator(store=FakeRunStore(release=release))
+    coordinator = AgentCoordinator(ownership=FakeRunOwnership(release=release))
     agent = Agent(FakeModelClient(lambda *_: answer()))
     run = agent.start(background=False, max_steps=1, coordinator=coordinator)
     assert run.result(0).output.text == "done"
@@ -583,3 +589,34 @@ def test_release_failure_remains_observable_after_execution_drains(
     with pytest.raises(error_type, match="Ownership release failed"):
         agent.start(max_steps=1, coordinator=coordinator)
     assert coordinator.close(0)
+
+
+@pytest.mark.parametrize("replace_ownership", [False, True])
+def test_coordinator_view_inherits_ownership_independently_of_store(
+    replace_ownership: bool,
+) -> None:
+    events: list[str] = []
+    owner = AgentCoordinator(
+        ownership=FakeRunOwnership(
+            register=lambda _run: events.append("owner.register"),
+            release=lambda _run_id: events.append("owner.release"),
+        )
+    )
+    view = owner.view(
+        store=FakeRunStore(save=lambda _run: events.append("save")),
+        ownership=FakeRunOwnership(
+            register=lambda _run: events.append("view.register"),
+            release=lambda _run_id: events.append("view.release"),
+        )
+        if replace_ownership
+        else None,
+    )
+    try:
+        run = Agent(FakeModelClient(lambda *_: answer())).start(
+            background=False, max_steps=1, coordinator=view
+        )
+        assert run.result(0).output.text == "done"
+        scope = "view" if replace_ownership else "owner"
+        assert events == [f"{scope}.register", "save", f"{scope}.release"]
+    finally:
+        assert owner.close(3)

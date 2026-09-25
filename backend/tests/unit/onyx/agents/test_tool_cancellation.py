@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from onyx.agents.coordination import AgentCoordinator
+from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent
 from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import AgentTool, ToolInvocation

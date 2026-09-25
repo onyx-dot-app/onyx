@@ -3,18 +3,16 @@
 from collections.abc import Callable
 from uuid import UUID
 
-from onyx.agents.coordination import (
+from onyx.agents.agent_coordination import (
     AgentCoordinator,
     AgentDirectory,
-    AgentInfo,
     RunStore,
 )
-from onyx.agents.models import RunState
+from onyx.agents.execution_records import RunStatus
+from onyx.agents.models import AgentInfo, RunState
 from onyx.agents.runtime import Agent
-from onyx.agents.transcript import RunStatus
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.incognito_context import (
-    get_or_create_incognito_root_id,
     load_incognito_agent_history,
     load_incognito_agent_metadata,
     load_incognito_saved_run,
@@ -85,7 +83,8 @@ class ChatAgentDirectory(AgentDirectory):
         configuration = history.configuration
         if configuration is None:
             raise ValueError("This agent's external resources are no longer available")
-        agent = ResearchAgent(
+        return ResearchAgent(
+            agent_id=history.agent_id,
             messages=history.messages,
             checkpoint=history.checkpoint,
             previous_run_id=history.previous_run_id,
@@ -97,8 +96,6 @@ class ChatAgentDirectory(AgentDirectory):
             language_section=configuration.language_section,
             reasoning_effort=configuration.reasoning_effort,
         ).agent
-        agent.id = history.agent_id
-        return agent
 
     def read_run(self, run_id: str, parent_id: str) -> RunState | None:
         if self.store is not None:
@@ -160,11 +157,9 @@ def create_chat_agent_coordinator(
     )
     if durable is not None and register_store is not None:
         register_store(durable)
-    root.id = str(chat_session_id)
     if persist_content:
         saved_agents = load_session_agent_metadata(message_id)
     else:
-        root.id = get_or_create_incognito_root_id(chat_session_id, root.id)
         saved_agents = load_incognito_agent_metadata(
             chat_session_id, branch.message_ids
         )

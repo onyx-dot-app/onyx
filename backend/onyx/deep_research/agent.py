@@ -5,6 +5,10 @@ from threading import Lock
 
 from pydantic import BaseModel
 
+from onyx.agents.execution_records import (
+    CompactionCheckpoint,
+    RunFailureKind,
+)
 from onyx.agents.models import (
     AgentState,
     PreparedStep,
@@ -19,10 +23,6 @@ from onyx.agents.runtime import (
     result_from_snapshot,
 )
 from onyx.agents.tools import AgentTool, ChildRunWait, ToolInvocation
-from onyx.agents.transcript import (
-    CompactionCheckpoint,
-    RunFailureKind,
-)
 from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.citation_utils import (
     collapse_citations,

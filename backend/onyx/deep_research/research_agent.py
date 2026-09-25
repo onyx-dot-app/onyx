@@ -3,6 +3,7 @@ from functools import partial
 
 from pydantic import BaseModel
 
+from onyx.agents.execution_records import CompactionCheckpoint
 from onyx.agents.models import (
     AgentState,
     PreparedStep,
@@ -11,7 +12,6 @@ from onyx.agents.models import (
 )
 from onyx.agents.runtime import Agent, FeatureRestoration
 from onyx.agents.tools import AgentTool
-from onyx.agents.transcript import CompactionCheckpoint
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
 from onyx.chat.citation_utils import (
     update_citation_processor_from_tool_result,

@@ -8,7 +8,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from onyx.agents.coordination import AgentCoordinator
+from onyx.agents.agent_coordination import AgentCoordinator
+from onyx.agents.execution_records import OperationSnapshot, RunStatus
 from onyx.agents.models import (
     AgentState,
     AgentStep,
@@ -25,11 +26,9 @@ from onyx.agents.tools import (
     PendingToolInput,
     ToolInvocation,
 )
-from onyx.agents.transcript import OperationSnapshot, RunStatus
 from onyx.chat.agent import ChatAgent
-from onyx.chat.artifacts import ChatSearchResult
 from onyx.chat.checkpoint import CheckpointBinding
-from onyx.chat.models import ChatFeatureState
+from onyx.chat.models import ChatFeatureState, ChatSearchResult
 from onyx.chat.restoration import feature_payload_types
 from onyx.coding_agent.agent import CodingAgent
 from onyx.coding_agent.tool_definitions import BASH_TOOL_NAME
@@ -122,10 +121,10 @@ class CaptureContextTool(EchoTool):
 
 def test_chat_json_restores_tool_context_from_feature_state() -> None:
     original = chat(CaptureContextTool())
-    original.artifacts.citation_mapping = {9: "new"}
-    original.artifacts.citation_processor.citation_to_doc = {9: document()}
-    original.artifacts.has_called_search_tool = True
-    original.artifacts.chat_files = [ChatFile(filename="result.csv", content=b"1,2")]
+    original.citation_mapping = {9: "new"}
+    original.citation_processor.citation_to_doc = {9: document()}
+    original.has_called_search_tool = True
+    original.chat_files = [ChatFile(filename="result.csv", content=b"1,2")]
     snapshot = RunState(
         run_id="run",
         agent_id="agent",
@@ -160,9 +159,9 @@ def test_chat_json_restores_tool_context_from_feature_state() -> None:
     assert tool.contexts[0].skip_search_query_expansion
     assert tool.contexts[0].next_citation_num == 10
     assert tool.contexts[0].chat_files[0].content == b"1,2"
-    assert restored.artifacts.citation_mapping == {9: "new"}
-    assert restored.artifacts.citation_processor.get_next_citation_number() == 10
-    assert restored.artifacts.has_called_search_tool
+    assert restored.citation_mapping == {9: "new"}
+    assert restored.citation_processor.get_next_citation_number() == 10
+    assert restored.has_called_search_tool
 
 
 def test_research_json_restores_next_citation_number() -> None:
@@ -505,7 +504,7 @@ def test_chat_checkpoint_preserves_lazy_file_references() -> None:
             loader=lambda: load("image"),
         )
     ]
-    original.artifacts.chat_files = [
+    original.chat_files = [
         ChatFile.lazy_from_filename(
             filename="table.xlsx",
             file_id="table",
@@ -571,7 +570,7 @@ def test_chat_binary_checkpoint_resumes_new_execution_in_same_coordinator() -> N
     payload = b"\xff\x00file"
     coordinator = AgentCoordinator()
     original = chat(CaptureContextTool())
-    original.artifacts.chat_files = [
+    original.chat_files = [
         ChatFile.lazy_from_filename(
             filename="input.bin",
             loader=lambda: payload,

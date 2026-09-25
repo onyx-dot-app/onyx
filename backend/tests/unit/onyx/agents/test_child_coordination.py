@@ -11,9 +11,13 @@ from unittest.mock import patch
 
 import pytest
 
-from onyx.agents.coordination import AgentCoordinator, AgentInfo, RunCoordination
+from onyx.agents.agent_coordination import (
+    AgentCoordinator,
+    RunCoordination,
+)
 from onyx.agents.events import AgentEvent, MessageEndEvent
-from onyx.agents.models import PreparedStep, RunState, StepInput
+from onyx.agents.execution_records import RunFailureKind, RunStatus
+from onyx.agents.models import AgentInfo, PreparedStep, RunState, StepInput
 from onyx.agents.runtime import Agent, Run, RunFailed, RunNotTransferable, RunReleased
 from onyx.agents.tools import (
     AgentControl,
@@ -26,7 +30,6 @@ from onyx.agents.tools import (
     SpawnResult,
     ToolInvocation,
 )
-from onyx.agents.transcript import RunFailureKind, RunStatus
 from onyx.chat.checkpoint import CheckpointBinding
 from onyx.chat.presentation import project_response
 from onyx.chat.response_items import messages_from_items
@@ -49,12 +52,15 @@ from tests.unit.onyx.agents.checkpoint_storage import CheckpointStorage
 from tests.unit.onyx.agents.fakes import (
     FakeAgentDirectory,
     FakeModelClient,
+    FakeRunOwnership,
     FakeRunStore,
     run_agent,
 )
 
 
-def parent_agent(execute: Callable[[ToolInvocation], ToolResult]) -> Agent:
+def parent_agent(
+    execute: Callable[[ToolInvocation], ToolResult], *, agent_id: str | None = None
+) -> Agent:
     responses = iter(
         [
             AssistantMessage(
@@ -69,6 +75,7 @@ def parent_agent(execute: Callable[[ToolInvocation], ToolResult]) -> Agent:
     )
     return Agent(
         FakeModelClient(lambda *_: next(responses)),
+        agent_id=agent_id,
         tools=[
             AgentTool(
                 name="coordinate",
@@ -430,8 +437,8 @@ def test_cancelled_parent_waits_for_child_terminal_record_before_snapshot() -> N
 
         coordinator = AgentCoordinator()
         with (
-            patch("onyx.agents.coordination.CLEANUP_SECONDS", 0.01),
-            patch("onyx.agents.coordination.CHILD_TERMINAL_TIMEOUT_SECONDS", 0.5),
+            patch("onyx.agents.agent_coordination.CLEANUP_SECONDS", 0.01),
+            patch("onyx.agents.agent_coordination.CHILD_TERMINAL_TIMEOUT_SECONDS", 0.5),
         ):
             run = parent_agent(delegate).start(max_steps=2, coordinator=coordinator)
             try:
@@ -478,7 +485,9 @@ def test_child_terminal_timeout_fails_parent_and_retains_cleanup_ownership() -> 
 
         parent = parent_agent(delegate)
         coordinator = AgentCoordinator()
-        with patch("onyx.agents.coordination.CHILD_TERMINAL_TIMEOUT_SECONDS", 0.01):
+        with patch(
+            "onyx.agents.agent_coordination.CHILD_TERMINAL_TIMEOUT_SECONDS", 0.01
+        ):
             run = parent.start(max_steps=2, coordinator=coordinator)
             try:
                 assert entered.wait(2)
@@ -738,9 +747,9 @@ def test_fresh_coordinator_view_rebinds_idle_child_and_checks_visibility() -> No
         replacement = Agent(
             FakeModelClient(
                 lambda *_: AssistantMessage(content=[TextContent(text="new binding")])
-            )
+            ),
+            agent_id=agent_id,
         )
-        replacement.id = agent_id
         return replacement
 
     current = coordinator.view(
@@ -830,8 +839,7 @@ def test_views_authorize_runs_independently_for_the_same_child() -> None:
                 invocation.agents.start_run(child.id, messages=[], max_steps=1)
             return ToolResult(content="rejected")
 
-        branch_parent = parent_agent(reject_stale_context)
-        branch_parent.id = parent.id
+        branch_parent = parent_agent(reject_stale_context, agent_id=parent.id)
         branch_run = branch_parent.start(max_steps=2, coordinator=branch_a)
         branch_run.result(3)
         assert branch_run.wait_for_idle(3)
@@ -1050,13 +1058,14 @@ def test_parent_child_wait_releases_worker_while_sibling_continues() -> None:
 def test_cold_restore_rejects_existing_owner_and_missing_child_rolls_back() -> None:
     from onyx.agents.tools import InputMode, PendingToolInput
 
-    def create() -> Agent:
+    def create(agent_id: str | None = None) -> Agent:
         return Agent(
             FakeModelClient(
                 lambda *_: AssistantMessage(
                     content=[ToolCall(id="q", name="q", arguments={})]
                 )
             ),
+            agent_id=agent_id,
             tools=[
                 AgentTool(
                     name="q",
@@ -1077,8 +1086,7 @@ def test_cold_restore_rejects_existing_owner_and_missing_child_rolls_back() -> N
     try:
         snapshot = run.wait_until_settled(2)
         assert snapshot.status == RunStatus.SUSPENDED
-        replacement = create()
-        replacement.id = agent.id
+        replacement = create(agent_id=agent.id)
         with pytest.raises(RuntimeError, match="already running or draining"):
             replacement.resume(snapshot, coordinator=coordinator)
         assert coordinator.run(run.id) is run
@@ -1700,7 +1708,7 @@ def test_registration_failure_prevents_model_and_thread_failure_rolls_back() -> 
         assert agent.id == run.agent_id
         raise ValueError("registration failed")
 
-    coordinator = AgentCoordinator(store=FakeRunStore(register=fail_start))
+    coordinator = AgentCoordinator(ownership=FakeRunOwnership(register=fail_start))
     with pytest.raises(ValueError, match="registration failed"):
         agent.start(max_steps=1, coordinator=coordinator)
     assert not invoked.is_set()
@@ -1710,9 +1718,9 @@ def test_registration_failure_prevents_model_and_thread_failure_rolls_back() -> 
         assert agent.id == run.agent_id
         captured.append(run)
 
-    coordinator = AgentCoordinator(store=FakeRunStore(register=fail_start)).view(
-        store=FakeRunStore(register=start, abort_start=rolled_back.append)
-    )
+    coordinator = AgentCoordinator(
+        ownership=FakeRunOwnership(register=fail_start)
+    ).view(ownership=FakeRunOwnership(register=start, abort_start=rolled_back.append))
     with patch(
         "onyx.agents.runtime.start_thread_with_context",
         side_effect=RuntimeError("thread failed"),
@@ -1733,12 +1741,12 @@ def test_registration_releases_execution_locks_during_spawn_and_resume() -> None
         agent = agents[run.agent_id]
 
         def probe() -> None:
-            with agent._lock, run._lock, coordinator._lock:
-                binding = coordinator._bindings[run.id]
+            with agent._lock, run._lock, coordinator._state.lock:
+                binding = coordinator._state.bindings[run.id]
                 with binding._lock:
                     parent_id = run.snapshot().parent_run_id
                     if parent_id is not None:
-                        with coordinator._bindings[parent_id]._lock:
+                        with coordinator._state.bindings[parent_id]._lock:
                             checked.append(run.id)
                     else:
                         checked.append(run.id)
@@ -1760,7 +1768,7 @@ def test_registration_releases_execution_locks_during_spawn_and_resume() -> None
 
     parent = parent_agent(spawn)
     agents.update({parent.id: parent, child.id: child})
-    coordinator = AgentCoordinator(store=FakeRunStore(register=register))
+    coordinator = AgentCoordinator(ownership=FakeRunOwnership(register=register))
     run_agent(parent, max_steps=2, coordinator=coordinator)
     assert len(checked) == 2
     assert coordinator.close(timeout=3)
@@ -1781,7 +1789,7 @@ def test_registration_releases_execution_locks_during_spawn_and_resume() -> None
         ),
         tools=[tool],
     )
-    coordinator = AgentCoordinator(store=FakeRunStore(register=register))
+    coordinator = AgentCoordinator(ownership=FakeRunOwnership(register=register))
     agents[original.id] = original
     run = original.start(max_steps=2, coordinator=coordinator)
     assert run.wait_until_settled(timeout=3).status == RunStatus.SUSPENDED
@@ -1865,7 +1873,7 @@ def test_saved_completion_notifies_dependencies_without_execution_locks() -> Non
 
     def completion(_future: Future[RunState]) -> None:
         def probe() -> None:
-            with coordinator._lock:
+            with coordinator._state.lock:
                 checked.set()
 
         start_thread_future(probe, name="completion-lock-probe").result(timeout=2)
@@ -1907,7 +1915,9 @@ def test_failed_resume_can_retry_with_a_new_execution() -> None:
         with pytest.raises(ValueError, match="execution resources"):
             restored.resume(
                 saved.run_state,
-                coordinator=coordinator.view(store=FakeRunStore(register=reject_start)),
+                coordinator=coordinator.view(
+                    ownership=FakeRunOwnership(register=reject_start)
+                ),
             )
         with pytest.raises(ValueError, match="not owned"):
             coordinator.run(run.id)
@@ -1954,3 +1964,88 @@ def test_shutdown_reservation_prevents_handoff_before_cancellation_callbacks() -
     with patch.object(run, "cancel", side_effect=attempt_transfer_then_cancel):
         assert coordinator.close(3)
     assert run.status == RunStatus.CANCELLED
+
+
+@pytest.mark.parametrize("restore_on_other_branch", [False, True])
+def test_restoring_history_preserves_branch_latest_run(
+    restore_on_other_branch: bool,
+) -> None:
+    archived = RunState(
+        run_id="old",
+        agent_id="child",
+        status=RunStatus.COMPLETE,
+        messages=[],
+        operations=[],
+    )
+    current = AgentInfo(
+        id="child",
+        path="/root/child",
+        parent_id="root",
+        description="",
+        restoration_config=None,
+        latest_run_id="new",
+        status=RunStatus.COMPLETE,
+    )
+    owner = AgentCoordinator()
+    branch = owner.view(
+        directory=FakeAgentDirectory(
+            read_run=lambda run_id, _: archived if run_id == archived.run_id else None
+        )
+    )
+    other = owner.view(directory=FakeAgentDirectory())
+    branch.register(current)
+    other.register(current.model_copy(update={"latest_run_id": archived.run_id}))
+    try:
+        if restore_on_other_branch:
+            restored = other.restore_completed(archived)
+            assert branch.child_run(archived.run_id, "root") is restored
+        else:
+            saved = branch.saved_run(archived.run_id, "root")
+            restored = branch.restore_completed(saved)
+        assert branch.child_run(archived.run_id, "root") is restored
+        assert branch.completion(archived.run_id).result(0) == archived
+        assert branch.discovery("root")[0].latest_run_id == current.latest_run_id
+        assert other.discovery("root")[0].latest_run_id == archived.run_id
+    finally:
+        assert owner.close(3)
+
+
+def test_same_scope_view_observes_completion_of_a_running_child() -> None:
+    entered = threading.Event()
+    finish = threading.Event()
+
+    def reply(
+        _request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        entered.set()
+        assert finish.wait(3)
+        return AssistantMessage(content=[TextContent(text="done")])
+
+    child = Agent(FakeModelClient(reply))
+    owner = AgentCoordinator(
+        agents=[
+            AgentInfo(
+                id=child.id,
+                path="/root/child",
+                parent_id="root",
+                description="",
+                restoration_config=None,
+                latest_run_id="previous",
+                status=RunStatus.COMPLETE,
+            )
+        ]
+    )
+    try:
+        run = child.start(max_steps=1, coordinator=owner)
+        assert entered.wait(3)
+        view = owner.view()
+        assert view.discovery("root")[0].latest_run_id == run.id
+        finish.set()
+        assert run.result(3).output.text == "done"
+        assert run.wait_for_idle(3)
+        info = view.discovery("root")[0]
+        assert info.latest_run_id == run.id
+        assert info.status == RunStatus.COMPLETE
+    finally:
+        finish.set()
+        assert owner.close(3)

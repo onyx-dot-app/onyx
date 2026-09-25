@@ -3,17 +3,17 @@
 from collections.abc import Callable, Generator, Iterator, Sequence
 from typing import Any
 
-from onyx.agents.coordination import (
+from onyx.agents.agent_coordination import (
     AgentCoordinator,
     AgentDirectory,
-    AgentInfo,
+    RunOwnership,
     RunStore,
 )
 from onyx.agents.events import AgentEvent
-from onyx.agents.models import RunResult, RunState
+from onyx.agents.execution_records import RunStatus
+from onyx.agents.models import AgentInfo, RunResult, RunState
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import ToolInvocation
-from onyx.agents.transcript import RunStatus
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import LLM, GenerationContext, LLMConfig
 from onyx.llm.litellm_models import (
@@ -77,26 +77,28 @@ class FakeAgentDirectory(AgentDirectory):
 
 
 class FakeRunStore(RunStore):
+    def __init__(self, *, save: Callable[[Run], None]) -> None:
+        self._save = save
+
+    def save(self, run: Run) -> None:
+        self._save(run)
+
+
+class FakeRunOwnership(RunOwnership):
     def __init__(
         self,
         *,
         register: Callable[[Run], None] | None = None,
-        save: Callable[[Run], None] | None = None,
         release: Callable[[str], None] | None = None,
         abort_start: Callable[[str], None] | None = None,
     ) -> None:
         self._register = register
-        self._save = save
         self._release = release
         self._abort_start = abort_start
 
     def register(self, run: Run) -> None:
         if self._register is not None:
             self._register(run)
-
-    def save(self, run: Run) -> None:
-        if self._save is not None:
-            self._save(run)
 
     def release(self, run_id: str) -> None:
         if self._release is not None:

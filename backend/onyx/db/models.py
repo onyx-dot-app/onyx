@@ -51,7 +51,7 @@ from sqlalchemy.orm import (
 from sqlalchemy.types import LargeBinary, TypeDecorator
 from typing_extensions import TypedDict  # noreorder
 
-from onyx.agents.transcript import RunFailure, RunStatus
+from onyx.agents.execution_records import RunFailure, RunStatus
 from onyx.auth.schemas import UserRole
 from onyx.chat.response_items import (
     ResponseGeneration,

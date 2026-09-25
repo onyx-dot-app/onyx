@@ -4,14 +4,14 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny
 
-from onyx.agents.tools import AgentTool, ChildRunWait, HumanToolAnswer, PendingToolInput
-from onyx.agents.transcript import (
+from onyx.agents.execution_records import (
     CompactionCheckpoint,
     OperationSnapshot,
     RunFailure,
     RunStatus,
     messages_for_model,
 )
+from onyx.agents.tools import AgentTool, ChildRunWait, HumanToolAnswer, PendingToolInput
 from onyx.llm.models import (
     AssistantMessage,
     GenerationOptions,
@@ -22,6 +22,19 @@ from onyx.llm.models import (
     ToolDefinition,
     ToolResultMessage,
 )
+
+
+class AgentInfo(BaseModel):
+    """Visible identity and latest run status, without conversation content."""
+
+    model_config = ConfigDict(frozen=True)
+    id: str
+    path: str
+    parent_id: str | None
+    description: str
+    restoration_config: SerializeAsAny[BaseModel] | None
+    latest_run_id: str | None = None
+    status: RunStatus | None = None
 
 
 class AgentStep(BaseModel):
@@ -55,11 +68,13 @@ class PreparedStep(BaseModel):
     assemble_messages: Callable[[list[Message]], list[Message]] | None = None
 
     def generation_request(self, messages: list[Message]) -> GenerationRequest:
-        history = [message.model_copy(deep=True) for message in messages]
+        history = messages
+        if self.assemble_messages is not None:
+            history = self.assemble_messages(
+                [message.model_copy(deep=True) for message in messages]
+            )
         return GenerationRequest(
-            messages=messages_for_model(
-                self.assemble_messages(history) if self.assemble_messages else history
-            ),
+            messages=messages_for_model(history),
             system_prompt=self.system_prompt,
             tools=[tool.definition.model_copy(deep=True) for tool in self.tools],
             options=self.options.model_copy(deep=True),

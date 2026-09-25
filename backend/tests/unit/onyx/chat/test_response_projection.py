@@ -6,11 +6,10 @@ from concurrent.futures import Future
 
 import pytest
 
-from onyx.agents.coordination import AgentInfo
 from onyx.agents.events import AgentEvent, MessageEndEvent
-from onyx.agents.models import PreparedStep, RunState
+from onyx.agents.execution_records import OperationSnapshot, RunStatus
+from onyx.agents.models import AgentInfo, PreparedStep, RunState
 from onyx.agents.runtime import Agent, Run
-from onyx.agents.transcript import OperationSnapshot, RunStatus
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import (
     AnswerStreamPart,

@@ -5,8 +5,8 @@ from unittest.mock import patch
 
 from pydantic import BaseModel, JsonValue, TypeAdapter
 
+from onyx.agents.execution_records import RunStatus
 from onyx.agents.models import AgentState, ExecutionCheckpoint, RunState
-from onyx.agents.transcript import RunStatus
 from onyx.chat.checkpoint import (
     CheckpointBinding,
     CheckpointPayloadCodec,

@@ -422,3 +422,42 @@ def test_live_and_completed_history_match_and_are_isolated() -> None:
     assert agent.state == live_state
     live_state.messages.clear()
     assert len(agent.state.messages) == 3
+
+
+@pytest.mark.parametrize("with_assembly", [False, True])
+def test_prepared_request_isolates_nested_tool_arguments(with_assembly: bool) -> None:
+    original = AssistantMessage(
+        content=[
+            ToolCall(id="call", name="lookup", arguments={"filters": {"q": "original"}})
+        ]
+    )
+    messages: list[Message] = [
+        original,
+        ToolResultMessage(tool_call_id="call", tool_name="lookup", content="found"),
+    ]
+    retained: list[Message] = []
+
+    def assemble(history: list[Message]) -> list[Message]:
+        assistant = history[0]
+        assert isinstance(assistant, AssistantMessage)
+        assistant.tool_calls[0].arguments["filters"] = {"q": "assembled"}
+        retained.extend(history)
+        return history
+
+    request = PreparedStep(
+        assemble_messages=assemble if with_assembly else None
+    ).generation_request(messages)
+    assert original.tool_calls[0].arguments == {"filters": {"q": "original"}}
+    output = request.messages[0]
+    assert isinstance(output, AssistantMessage)
+    filters = output.tool_calls[0].arguments["filters"]
+    assert isinstance(filters, dict)
+    assert filters["q"] == ("assembled" if with_assembly else "original")
+    filters["q"] = "changed"
+    request.messages.clear()
+    assert len(messages) == 2
+    assert original.tool_calls[0].arguments == {"filters": {"q": "original"}}
+    if with_assembly:
+        assembled = retained[0]
+        assert isinstance(assembled, AssistantMessage)
+        assert assembled.tool_calls[0].arguments == {"filters": {"q": "assembled"}}

@@ -33,6 +33,12 @@ from onyx.agents.events import (
     MessageStartEvent,
     MessageUpdateEvent,
 )
+from onyx.agents.execution_records import (
+    OperationSnapshot,
+    RunFailure,
+    RunFailureKind,
+    RunStatus,
+)
 from onyx.agents.models import (
     AgentState,
     AgentStep,
@@ -54,12 +60,6 @@ from onyx.agents.tools import (
     InputDecision,
     InputMode,
     PendingToolInput,
-)
-from onyx.agents.transcript import (
-    OperationSnapshot,
-    RunFailure,
-    RunFailureKind,
-    RunStatus,
 )
 from onyx.llm.cancellation import (
     AgentCancelled,
@@ -92,7 +92,7 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_with_context
 
 if TYPE_CHECKING:
-    from onyx.agents.coordination import AgentCoordinator, RunCoordination
+    from onyx.agents.agent_coordination import AgentCoordinator, RunCoordination
 
 logger = setup_logger()
 
@@ -220,7 +220,7 @@ class Agent:
         previous_run_id: str | None = None,
         restoration: "FeatureRestoration | None" = None,
     ) -> None:
-        self.id = agent_id or str(uuid4())
+        self._id = agent_id or str(uuid4())
         self.llm = llm
         self.tools = list(tools)
         self.system_prompt = system_prompt
@@ -235,6 +235,10 @@ class Agent:
         self._previous_run_id = previous_run_id
         self._lock = threading.RLock()
         self._latest_run: Run | None = None
+
+    @property
+    def id(self) -> str:
+        return self._id
 
     @property
     def state(self) -> AgentState:

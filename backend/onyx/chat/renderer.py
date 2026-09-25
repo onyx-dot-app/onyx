@@ -1,8 +1,10 @@
-"""Format model text and citations into public items and direct text deltas."""
+"""Format model text, citations, and tool output into public items and updates."""
 
 from collections.abc import Mapping
 
-from onyx.agents.transcript import RunStatus
+from pydantic import BaseModel, JsonValue, TypeAdapter
+
+from onyx.agents.execution_records import RunStatus
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.models import MessageRendering, PresentationMode
 from onyx.chat.response_items import (
@@ -25,6 +27,7 @@ from onyx.llm.models import (
     ThinkingDeltaEvent,
     ToolCallDeltaEvent,
     ToolCallStartEvent,
+    ToolResult,
 )
 from onyx.server.query_and_chat.streaming_models import (
     CitationInfo,
@@ -38,8 +41,44 @@ from onyx.server.query_and_chat.streaming_models import (
     TextPurpose,
     ToolArgumentsDelta,
     ToolItem,
+    ToolMetadata,
     ToolStatus,
 )
+from onyx.tools.tool_implementations.custom.openapi_parsing import REQUEST_BODY
+
+_TOOL_METADATA = TypeAdapter(ToolMetadata)
+
+
+def visible_tool_arguments[T](arguments: Mapping[str, T]) -> dict[str, T]:
+    return {key: value for key, value in arguments.items() if key != REQUEST_BODY}
+
+
+def tool_metadata(details: BaseModel | None) -> ToolMetadata | None:
+    """Project tool details onto public fields, excluding private subclass state."""
+    return (
+        _TOOL_METADATA.validate_python(details.model_dump())
+        if details is not None
+        else None
+    )
+
+
+def build_tool_item(
+    *,
+    name: str,
+    arguments: Mapping[str, JsonValue],
+    status: ToolStatus,
+    result: ToolResult | None = None,
+    tool_id: int | None = None,
+) -> ToolItem:
+    """Apply the same argument and result visibility rules to live and saved tools."""
+    return ToolItem(
+        name=name,
+        arguments=visible_tool_arguments(arguments),
+        status=status,
+        tool_id=tool_id,
+        output=result.text if result is not None and result.details is None else "",
+        metadata=tool_metadata(result.details) if result is not None else None,
+    )
 
 
 class MessageRenderer:
@@ -176,11 +215,7 @@ class MessageRenderer:
                     )
                 )
                 self._tool_calls.add(call.id)
-            arguments = {
-                key: value
-                for key, value in event.argument_deltas.items()
-                if key != "requestBody"
-            }
+            arguments = visible_tool_arguments(event.argument_deltas)
             if arguments:
                 packets.append(
                     self._packet(
@@ -239,13 +274,9 @@ class MessageRenderer:
             packets.append(
                 self._packet(
                     ItemUpdate(
-                        item=ToolItem(
+                        item=build_tool_item(
                             name=call.name,
-                            arguments={
-                                key: value
-                                for key, value in call.arguments.items()
-                                if key != "requestBody"
-                            },
+                            arguments=call.arguments,
                             status=ToolStatus.PENDING
                             if status == RunStatus.COMPLETE
                             else ToolStatus(status),

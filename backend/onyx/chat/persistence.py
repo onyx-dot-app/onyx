@@ -4,7 +4,7 @@ import threading
 import time
 from concurrent.futures import Future
 
-from onyx.agents.coordination import AgentCoordinator, RunStore
+from onyx.agents.agent_coordination import AgentCoordinator, RunStore
 from onyx.agents.runtime import Run
 from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.errors import chat_error
@@ -49,16 +49,6 @@ class ChatResponsePersistence(RunStore):
         self.coordinator: AgentCoordinator | None = None
         self._lock = threading.Lock()
         self._pending_save: PendingChatResponseSave | None = None
-
-    def register(self, run: Run) -> None:
-        # Durable ownership is optional; ChatRunStore supplies it when enabled.
-        del run
-
-    def release(self, run_id: str) -> None:
-        del run_id
-
-    def abort_start(self, run_id: str) -> None:
-        del run_id
 
     def save(self, run: Run) -> None:
         if run.snapshot().parent_run_id is not None:

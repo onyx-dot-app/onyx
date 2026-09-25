@@ -9,10 +9,9 @@ from pydantic import BaseModel
 from onyx.agents.models import ExecutionCheckpoint, RunState
 from onyx.agents.runtime import Agent
 from onyx.chat.agent import ChatAgent
-from onyx.chat.artifacts import ChatSearchResult
 from onyx.chat.context import ChatReminders
 from onyx.chat.llm_step import PromptMetadata
-from onyx.chat.models import ChatFeatureState, ChatMessageMetadata
+from onyx.chat.models import ChatFeatureState, ChatMessageMetadata, ChatSearchResult
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.configs.constants import FileOrigin
 from onyx.context.search.models import SearchDocsResponse

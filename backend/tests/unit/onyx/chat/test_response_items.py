@@ -3,9 +3,9 @@
 import pytest
 
 from onyx.agents.events import AgentEndEvent, AgentEvent
+from onyx.agents.execution_records import RunStatus
 from onyx.agents.models import StepResult
 from onyx.agents.runtime import Agent, Run
-from onyx.agents.transcript import RunStatus
 from onyx.chat.response import response_record
 from onyx.chat.response_items import (
     ResponseGeneration,

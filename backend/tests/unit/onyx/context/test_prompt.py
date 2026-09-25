@@ -3,7 +3,7 @@
 import pytest
 
 from onyx.agents.compaction import checkpoint_matches, history_digest, working_messages
-from onyx.agents.transcript import CompactionCheckpoint
+from onyx.agents.execution_records import CompactionCheckpoint
 from onyx.chat.llm_step import PromptMetadata, prompt_metadata
 from onyx.chat.prompt_utils import prepare_prompt
 from onyx.file_store.models import (

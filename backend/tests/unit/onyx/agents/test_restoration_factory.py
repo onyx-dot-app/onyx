@@ -2,13 +2,13 @@
 
 import pytest
 
+from onyx.agents.execution_records import RunStatus
 from onyx.agents.models import (
     AgentState,
     ExecutionCheckpoint,
     RunProgress,
     RunState,
 )
-from onyx.agents.transcript import RunStatus
 from onyx.chat.agent import ChatAgent
 from onyx.chat.context import ChatReminders
 from onyx.chat.models import PersonaPromptConfig
@@ -61,7 +61,7 @@ def feature(
             reminders=ChatReminders(enabled=False),
             agent_id="retained-agent",
         )
-        chat.artifacts.has_called_search_tool = True
+        chat.has_called_search_tool = True
         return chat
     if name == "research":
         research = ResearchAgent(

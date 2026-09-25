@@ -5,10 +5,10 @@ from uuid import uuid4
 
 import pytest
 
+from onyx.agents.execution_records import OperationSnapshot, RunStatus
 from onyx.agents.models import RunState
 from onyx.agents.tools import ToolInvocation
-from onyx.agents.transcript import OperationSnapshot, RunStatus
-from onyx.chat.artifacts import project_tool_artifacts
+from onyx.chat.presentation import _collect_tool_history
 from onyx.db.memory import UserInfo, UserMemoryContext
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import LLM
@@ -92,7 +92,7 @@ def test_memory_outcome_is_final_before_serialization(
             ),
         ],
     )
-    projected = project_tool_artifacts(snapshot, {"memory": 1})
+    projected = _collect_tool_history(snapshot, {"memory": 1})
     assert projected.tool_calls[0].tool_call_response == result.text
     assert projected.tool_calls[0].result_metadata == result.details
     assert write.call_count == (0 if outcome in {"incognito", "missing_user"} else 1)
