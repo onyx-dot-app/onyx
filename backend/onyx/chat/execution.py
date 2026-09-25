@@ -37,6 +37,7 @@ from onyx.deep_research.agent import DeepResearchAgent
 from onyx.deep_research.tool_definitions import RESEARCH_AGENT_TOOL_NAME
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.cancellation import CancellationSignal
+from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
 from onyx.server.settings.store import load_settings
 from onyx.tracing.framework.create import ChatTraceMetadata, trace
@@ -192,9 +193,7 @@ class ChatTurnExecution:
                 )
             )
         for index in range(len(self._response_futures)):
-            emitter = Emitter(
-                self._publish, self.setup.responses[index].message_id, index
-            )
+            emitter = Emitter(self._publish, index)
             try:
                 start_thread_future(
                     lambda index=index, emitter=emitter: self._run_response(
@@ -247,7 +246,10 @@ class ChatTurnExecution:
                     ):
                         if self._stopped_by_user:
                             self.delivery.publish(
-                                Packet(obj=OverallStop(stop_reason="user_cancelled"))
+                                Packet(
+                                    placement=Placement(turn_index=0),
+                                    obj=OverallStop(stop_reason="user_cancelled"),
+                                )
                             )
                         self._close_delivery()
                 except Exception:
@@ -408,7 +410,6 @@ class ChatTurnExecution:
                     event_dispatcher=self.delivery.events,
                     on_event=ResponsePresenter(
                         emitter,
-                        coordinator,
                         tool_ids={tool.name: tool.id for tool in chat_agent.tools},
                     ).consume,
                 )

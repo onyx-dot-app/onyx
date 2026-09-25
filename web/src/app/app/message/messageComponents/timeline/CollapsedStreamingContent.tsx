@@ -2,15 +2,12 @@
 
 import React, { useCallback } from "react";
 import { StopReason } from "@/app/app/services/streamingModels";
-import {
-  FullChatState,
-  RenderType,
-} from "@/app/app/message/messageComponents/interfaces";
-import { TransformedStep } from "@/app/app/message/messageComponents/timeline/transformers";
+import { FullChatState, RenderType } from "../interfaces";
+import { TransformedStep } from "./transformers";
 import {
   TimelineRendererComponent,
   TimelineRendererOutput,
-} from "@/app/app/message/messageComponents/timeline/TimelineRendererComponent";
+} from "./TimelineRendererComponent";
 import { TimelineRow } from "@/app/app/message/messageComponents/timeline/primitives/TimelineRow";
 import { TimelineSurface } from "@/app/app/message/messageComponents/timeline/primitives/TimelineSurface";
 
@@ -44,7 +41,7 @@ export const CollapsedStreamingContent = React.memo(
         <TimelineSurface className="px-2 pb-2" roundedBottom>
           <TimelineRendererComponent
             key={`${step.key}-compact`}
-            items={step.items}
+            packets={step.packets}
             chatState={chatState}
             animate={true}
             stopPacketSeen={false}

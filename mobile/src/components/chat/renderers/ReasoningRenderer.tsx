@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useRef } from "react";
 import { View } from "react-native";
 
-import { getToolKey } from "@/chat/timeline/toolDisplay";
-import { ResponseItem } from "@/chat/streamingModels";
+import { getGroupKey } from "@/chat/messageProcessor";
+import { Packet } from "@/chat/streamingModels";
 import {
   constructCurrentReasoningState,
   extractFirstParagraph,
@@ -24,13 +24,16 @@ const bodyStyle = { paddingLeft: timelineTokens.timelineCommonTextPadding };
 
 // `supportsCollapsible` is deliberately unset, matching web: no per-step collapse control, and a
 // reasoning-only turn therefore renders with no step header.
-export const ReasoningRenderer: MessageRenderer<
-  ResponseItem,
-  FullChatState
-> = ({ items, state, onComplete, animate, children }) => {
+export const ReasoningRenderer: MessageRenderer<Packet, FullChatState> = ({
+  packets,
+  state,
+  onComplete,
+  animate,
+  children,
+}) => {
   const { hasStart, hasEnd, content } = useMemo(
-    () => constructCurrentReasoningState(items),
-    [items],
+    () => constructCurrentReasoningState(packets),
+    [packets],
   );
   const { title, remainingContent } = useMemo(
     () => extractFirstParagraph(content),
@@ -43,16 +46,10 @@ export const ReasoningRenderer: MessageRenderer<
 
   // The reader is opened by group key so the row can re-derive the text as the step streams on.
   const openFullText = state.openFullText;
-  const firstPacket = items[0];
+  const firstPacket = packets[0];
   const handleExpand =
     openFullText && firstPacket
-      ? () =>
-          openFullText(
-            getToolKey(
-              firstPacket.placement.turn_index,
-              firstPacket.placement.tab_index ?? 0,
-            ),
-          )
+      ? () => openFullText(getGroupKey(firstPacket))
       : undefined;
 
   // Web holds the start time in state across two effects; mobile's lint forbids setState in an

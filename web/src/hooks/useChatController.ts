@@ -6,7 +6,6 @@ import {
   nameChatSession,
   setPreferredResponse,
   updateLlmOverrideForChatSession,
-  createChatSession,
 } from "@/app/app/services/lib";
 import {
   applyPreferredResponse,
@@ -17,11 +16,7 @@ import {
 } from "@/app/app/message/multiModel";
 import { getMaxSelectedDocumentTokens } from "@/lib/projects/svc";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
-import {
-  StreamStopInfo,
-  OnyxDocument,
-  StreamStopReason,
-} from "@/lib/search/types";
+import { StreamStopInfo } from "@/lib/search/types";
 import type { SourceMetadata } from "@/lib/search/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";
@@ -37,6 +32,7 @@ import {
 import { MinimalAgent } from "@/lib/agents/types";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
+import { OnyxDocument } from "@/lib/search/types";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import {
   BackendMessage,
@@ -53,6 +49,8 @@ import {
   ToolCallMetadata,
   UserKnowledgeFilePacket,
 } from "@/app/app/interfaces";
+import { StreamStopReason } from "@/lib/search/types";
+import { createChatSession } from "@/app/app/services/lib";
 import {
   getFinalLLM,
   modelSupportsImageInput,
@@ -85,7 +83,7 @@ import {
   useCurrentChatState,
   useCurrentMessageHistory,
 } from "@/app/app/stores/useChatSessionStore";
-import { Packet } from "@/app/app/services/streamingModels";
+import { Packet, MessageStart } from "@/app/app/services/streamingModels";
 import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
@@ -135,48 +133,13 @@ interface UseChatControllerProps {
   resetInputBar: () => void;
 }
 
-const STOP_ID_WAIT_MS = 10_000;
-
-async function waitForStreamId(sessionId: string): Promise<number | undefined> {
-  const initial = useChatSessionStore.getState().sessions.get(sessionId);
-  if (!initial || initial.streamId !== undefined) return initial?.streamId;
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      unsubscribe();
-      resolve(undefined);
-    }, STOP_ID_WAIT_MS);
-    const unsubscribe = useChatSessionStore.subscribe((state) => {
-      const session = state.sessions.get(sessionId);
-      if (
-        !session ||
-        session.abortController !== initial.abortController ||
-        session.streamId !== undefined
-      ) {
-        clearTimeout(timeout);
-        unsubscribe();
-        resolve(
-          session?.abortController === initial.abortController
-            ? session.streamId
-            : undefined
-        );
-      }
-    });
+async function stopChatSession(chatSessionId: string): Promise<void> {
+  const response = await fetch(`/api/chat/stop-chat-session/${chatSessionId}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
   });
-}
-
-async function stopChatSession(
-  chatSessionId: string,
-  streamId: number
-): Promise<void> {
-  const response = await fetch(
-    `/api/chat/stop-chat-session/${chatSessionId}?stream_id=${streamId}`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    }
-  );
 
   if (!response.ok) {
     throw new Error(`Failed to stop chat session: ${response.statusText}`);
@@ -410,28 +373,15 @@ export default function useChatController({
     const currentSession = getCurrentSessionId();
     const lastMessage = currentMessageHistory[currentMessageHistory.length - 1];
 
-    const controller = useChatSessionStore
-      .getState()
-      .sessions.get(currentSession)?.abortController;
-    const streamId = await waitForStreamId(currentSession);
-    if (streamId === undefined) {
-      console.warn("Stop request has no active execution identity", {
-        sessionId: currentSession,
-      });
-      return;
-    }
+    // Call the backend stop endpoint to set the Redis fence
+    // This signals the backend to stop processing as soon as possible
+    // The backend will emit a STOP packet when it detects the fence
     try {
-      await stopChatSession(currentSession, streamId);
+      await stopChatSession(currentSession);
     } catch (error) {
       console.error("Failed to stop chat session:", error);
       // Continue with UI cleanup even if backend call fails
     }
-
-    if (
-      useChatSessionStore.getState().sessions.get(currentSession)
-        ?.abortController !== controller
-    )
-      return;
 
     // Clean up incomplete tool calls for immediate UI feedback
     if (
@@ -676,9 +626,6 @@ export default function useChatController({
       // set the ability to cancel the request
       const controller = new AbortController();
       setAbortController(currChatSessionId, controller);
-      useChatSessionStore.getState().updateSessionData(currChatSessionId, {
-        streamId: undefined,
-      });
 
       const messageToResend = currentHistory.find(
         (message) => message.messageId === messageIdToResend
@@ -1252,11 +1199,6 @@ export default function useChatController({
             ) {
               newAgentMessageId = (packet as MessageResponseIDInfo)
                 .reserved_assistant_message_id;
-              useChatSessionStore
-                .getState()
-                .updateSessionData(frozenSessionId, {
-                  streamId: newAgentMessageId,
-                });
             }
 
             // Multi-model: handle reserved IDs for N parallel model responses.
@@ -1271,11 +1213,6 @@ export default function useChatController({
               const multiPacket = packet as MultiModelMessageResponseIDInfo;
               newUserMessageId =
                 multiPacket.user_message_id ?? newUserMessageId;
-              useChatSessionStore
-                .getState()
-                .updateSessionData(frozenSessionId, {
-                  streamId: newUserMessageId ?? undefined,
-                });
               for (let mi = 0; mi < multiPacket.responses.length; mi++) {
                 const slot = multiPacket.responses[mi]!;
                 assistantMessageIds[mi] = slot.message_id;
@@ -1284,12 +1221,6 @@ export default function useChatController({
                 }
               }
               userNodeDirty = true;
-              pendingFlush = true;
-              continue;
-            }
-
-            if ("reserved_assistant_message_id" in packet) {
-              singleModelDirty = true;
               pendingFlush = true;
               continue;
             }
@@ -1398,13 +1329,14 @@ export default function useChatController({
               const packetObj = typedPacket.obj;
 
               if (isMultiModel) {
-                // Multi-model: route packet by model_index.
+                // Multi-model: route packet by placement.model_index.
                 // OverallStop (type "stop") has model_index=null — it's a
                 // global terminal packet that must be delivered to ALL
                 // models so each panel's AgentMessage sees the stop and
                 // exits "Thinking..." state.
                 const isGlobalStop =
-                  packetObj.type === "stop" && typedPacket.model_index == null;
+                  packetObj.type === "stop" &&
+                  typedPacket.placement?.model_index == null;
 
                 if (isGlobalStop) {
                   for (let mi = 0; mi < packetsPerModel.length; mi++) {
@@ -1416,7 +1348,7 @@ export default function useChatController({
                   }
                 }
 
-                const modelIndex = typedPacket.model_index ?? 0;
+                const modelIndex = typedPacket.placement?.model_index ?? 0;
                 if (
                   !isGlobalStop &&
                   modelIndex >= 0 &&
@@ -1427,22 +1359,21 @@ export default function useChatController({
                     dirtyModelIndices.add(modelIndex);
                   }
 
-                  if (
-                    packetObj.type === "item_update" &&
-                    packetObj.item.kind === "text"
-                  ) {
-                    const item = packetObj.item;
+                  if (packetObj.type === "citation_info") {
+                    const citationInfo = packetObj as {
+                      type: "citation_info";
+                      citation_number: number;
+                      document_id: string;
+                    };
                     citationsPerModel[modelIndex] = {
                       ...citationsPerModel[modelIndex],
-                      ...Object.fromEntries(
-                        item.citations.map((citation) => [
-                          citation.citation_number,
-                          citation.document_id,
-                        ])
-                      ),
+                      [citationInfo.citation_number]: citationInfo.document_id,
                     };
-                    if (item.documents.length) {
-                      documentsPerModel[modelIndex] = item.documents;
+                  } else if (packetObj.type === "message_start") {
+                    const messageStart = packetObj as MessageStart;
+                    if (messageStart.final_documents) {
+                      documentsPerModel[modelIndex] =
+                        messageStart.final_documents;
                       if (modelIndex === 0 && initialAssistantNodes[0]) {
                         updateSelectedNodeForDocDisplay(
                           frozenSessionId,
@@ -1458,22 +1389,20 @@ export default function useChatController({
                 packetsVersion++;
                 singleModelDirty = true;
 
-                if (
-                  packetObj.type === "item_update" &&
-                  packetObj.item.kind === "text"
-                ) {
-                  const item = packetObj.item;
+                if (packetObj.type === "citation_info") {
+                  const citationInfo = packetObj as {
+                    type: "citation_info";
+                    citation_number: number;
+                    document_id: string;
+                  };
                   citations = {
                     ...citations,
-                    ...Object.fromEntries(
-                      item.citations.map((citation) => [
-                        citation.citation_number,
-                        citation.document_id,
-                      ])
-                    ),
+                    [citationInfo.citation_number]: citationInfo.document_id,
                   };
-                  if (item.documents.length) {
-                    documents = item.documents;
+                } else if (packetObj.type === "message_start") {
+                  const messageStart = packetObj as MessageStart;
+                  if (messageStart.final_documents) {
+                    documents = messageStart.final_documents;
                     updateSelectedNodeForDocDisplay(
                       frozenSessionId,
                       initialAgentNode.nodeId

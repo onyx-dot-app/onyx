@@ -5,7 +5,7 @@ import json
 import pytest
 
 from onyx.chat.models import MessageRendering
-from onyx.chat.renderer import MessageRenderer
+from onyx.chat.renderer import MessageRenderer, ResponseLayout
 from onyx.llm.litellm_conversion import MessageAccumulator
 from onyx.llm.litellm_models import (
     ChatCompletionDeltaToolCall,
@@ -15,11 +15,7 @@ from onyx.llm.litellm_models import (
     StreamingChoice,
 )
 from onyx.llm.models import GenerationLifecycleEvent, ToolCallDeltaEvent
-from onyx.server.query_and_chat.streaming_models import (
-    ItemDelta,
-    PacketIdentity,
-    ToolArgumentsDelta,
-)
+from onyx.server.query_and_chat.streaming_models import ToolCallArgumentDelta
 
 
 def chunk(fragment: str, index: int = 0) -> ModelResponseStream:
@@ -32,7 +28,9 @@ def chunk(fragment: str, index: int = 0) -> ModelResponseStream:
                     ChatCompletionDeltaToolCall(
                         index=index,
                         id=f"call-{index}",
-                        function=ResponseFunctionCall(name="code", arguments=fragment),
+                        function=ResponseFunctionCall(
+                            name="run_python", arguments=fragment
+                        ),
                     )
                 ]
             )
@@ -68,7 +66,7 @@ def test_decoded_strings_survive_arbitrary_fragment_boundaries(
     renderer = MessageRenderer(
         MessageRendering(),
         {},
-        PacketIdentity(response_id=1, run_id="root", message_id="root:0"),
+        ResponseLayout(),
     )
     emitted: list[str] = []
     for offset in range(0, len(raw), size):
@@ -76,10 +74,9 @@ def test_decoded_strings_survive_arbitrary_fragment_boundaries(
             if isinstance(event, GenerationLifecycleEvent):
                 continue
             emitted.extend(
-                packet.obj.delta.arguments.get("code", "")
+                packet.obj.argument_deltas.get("code", "")
                 for packet in renderer.consume(event)
-                if isinstance(packet.obj, ItemDelta)
-                and isinstance(packet.obj.delta, ToolArgumentsDelta)
+                if isinstance(packet.obj, ToolCallArgumentDelta)
             )
     for event in accumulator.end():
         if not isinstance(event, GenerationLifecycleEvent):
@@ -93,7 +90,7 @@ def test_interleaved_calls_have_independent_arguments_and_identities() -> None:
     renderer = MessageRenderer(
         MessageRendering(),
         {},
-        PacketIdentity(response_id=1, run_id="root", message_id="root:0"),
+        ResponseLayout(),
     )
     contents: dict[str, str] = {}
     for index, fragment in [
@@ -106,17 +103,13 @@ def test_interleaved_calls_have_independent_arguments_and_identities() -> None:
             if isinstance(event, GenerationLifecycleEvent):
                 continue
             for packet in renderer.consume(event):
-                if isinstance(packet.obj, ItemDelta) and isinstance(
-                    packet.obj.delta, ToolArgumentsDelta
-                ):
-                    assert packet.identity is not None
-                    call_id = packet.identity.tool_call_id
-                    assert call_id is not None
+                if isinstance(packet.obj, ToolCallArgumentDelta):
+                    call_id = str(packet.placement.tab_index)
                     contents[call_id] = contents.get(
                         call_id, ""
-                    ) + packet.obj.delta.arguments.get("code", "")
+                    ) + packet.obj.argument_deltas.get("code", "")
     accumulator.end()
-    assert contents == {"call-0": "ac", "call-1": "bd"}
+    assert contents == {"0": "ac", "1": "bd"}
     assert [call.arguments for call in accumulator.message.tool_calls] == [
         {"code": "ac"},
         {"code": "bd"},

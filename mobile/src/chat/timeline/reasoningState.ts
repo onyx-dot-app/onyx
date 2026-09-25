@@ -1,6 +1,6 @@
 // Ported from web's `ReasoningRenderer` helpers; kept out of the renderer so it stays
 // reanimated-free and unit-testable.
-import { ResponseItem } from "@/chat/streamingModels";
+import { Packet, PacketType, ReasoningDelta } from "@/chat/streamingModels";
 
 // Longer headings are prose, not titles, and overflow the step header.
 const MAX_TITLE_LENGTH = 60;
@@ -43,32 +43,36 @@ export function extractFirstParagraph(content: string): FirstParagraph {
   };
 }
 
-// Resolves one step's reasoning text from the processor's grouped items. The message row re-runs
+// Resolves one step's reasoning text from the processor's grouped packets. The message row re-runs
 // this every flush so an open full-text reader tracks the stream instead of freezing at open time.
 export function resolveGroupReasoning(
-  groupedItemsMap: Map<string, ResponseItem[]>,
+  groupedPacketsMap: Map<string, Packet[]>,
   groupKey: string | null,
 ): string | null {
   if (groupKey === null) {
     return null;
   }
-  const group = groupedItemsMap.get(groupKey);
+  const group = groupedPacketsMap.get(groupKey);
   return group ? constructCurrentReasoningState(group).content : null;
 }
 
 export function constructCurrentReasoningState(
-  items: ResponseItem[],
+  packets: Packet[],
 ): ReasoningState {
-  const reasoning = items.filter((item) => item.content.kind === "reasoning");
-  return {
-    hasStart: reasoning.length > 0,
-    hasEnd:
-      reasoning.length > 0 &&
-      reasoning.every((item) => item.content.status !== "running"),
-    content: reasoning
-      .map((item) =>
-        item.content.kind === "reasoning" ? item.content.text : "",
-      )
-      .join(""),
-  };
+  const hasStart = packets.some(
+    (packet) => packet.obj.type === PacketType.REASONING_START,
+  );
+  // section_end is client-synthesized and closes most groups; reasoning_done is the backend's own.
+  const hasEnd = packets.some(
+    (packet) =>
+      packet.obj.type === PacketType.SECTION_END ||
+      packet.obj.type === PacketType.ERROR ||
+      packet.obj.type === PacketType.REASONING_DONE,
+  );
+  const content = packets
+    .filter((packet) => packet.obj.type === PacketType.REASONING_DELTA)
+    .map((packet) => (packet.obj as ReasoningDelta).reasoning)
+    .join("");
+
+  return { hasStart, hasEnd, content };
 }

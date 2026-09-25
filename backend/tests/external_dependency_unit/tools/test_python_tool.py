@@ -29,8 +29,11 @@ from onyx.llm.litellm_models import (
 from onyx.server.features.projects.api import upload_user_files
 from onyx.server.query_and_chat.chat_backend import get_chat_session
 from onyx.server.query_and_chat.models import SendMessageRequest
-from onyx.server.query_and_chat.streaming_models import ItemUpdate, Packet, ToolItem
-from onyx.tools.models import LlmPythonExecutionResult
+from onyx.server.query_and_chat.streaming_models import (
+    Packet,
+    PythonToolDelta,
+    PythonToolStart,
+)
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from tests.external_dependency_unit.answer.stream_test_utils import (
     create_chat_session,
@@ -402,18 +405,17 @@ def test_code_interpreter_replay_packets_include_code_and_output(
     )
     packets = chat_detail.packets[0]
 
-    results = [
-        packet.obj.item
-        for packet in packets
-        if isinstance(packet.obj, ItemUpdate)
-        and isinstance(packet.obj.item, ToolItem)
-        and isinstance(packet.obj.item.metadata, LlmPythonExecutionResult)
+    starts = [
+        packet.obj for packet in packets if isinstance(packet.obj, PythonToolStart)
     ]
-    assert len(results) == 1
-    result = results[0]
-    assert result.arguments["code"] == code
-    assert isinstance(result.metadata, LlmPythonExecutionResult)
-    assert "mock output" in result.metadata.stdout
+    assert len(starts) == 1
+    assert starts[0].code == code
+    output = "".join(
+        packet.obj.stdout
+        for packet in packets
+        if isinstance(packet.obj, PythonToolDelta)
+    )
+    assert "mock output" in output
 
 
 def test_code_interpreter_streaming_fallback_to_batch(
@@ -486,13 +488,9 @@ def test_code_interpreter_streaming_fallback_to_batch(
     )
     assert len(mock_ci_server.get_requests(method="POST", path="/v1/execute")) == 1
 
-    results = [
-        packet.obj.item.metadata
+    output = "".join(
+        packet.obj.stdout
         for packet in packets
-        if isinstance(packet, Packet)
-        and isinstance(packet.obj, ItemUpdate)
-        and isinstance(packet.obj.item, ToolItem)
-        and isinstance(packet.obj.item.metadata, LlmPythonExecutionResult)
-    ]
-    assert results
-    assert "mock output" in results[-1].stdout
+        if isinstance(packet, Packet) and isinstance(packet.obj, PythonToolDelta)
+    )
+    assert "mock output" in output

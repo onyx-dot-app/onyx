@@ -1,12 +1,12 @@
 import { JSX } from "react";
 import { MinimalAgent } from "@/lib/agents/types";
-import { StopReason, ResponseItem } from "@/app/app/services/streamingModels";
+import { Packet, StopReason } from "../../services/streamingModels";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
 import { ProjectFile } from "@/lib/projects/types";
 import { LlmDescriptor } from "@/lib/hooks";
 import { IconType } from "react-icons";
 import type { IconFunctionComponent } from "@opal/types";
-import { CitationMap } from "@/app/app/interfaces";
+import { CitationMap } from "../../interfaces";
 import { TimelineSurfaceBackground } from "@/app/app/message/messageComponents/timeline/primitives/TimelineSurface";
 
 export enum RenderType {
@@ -65,10 +65,10 @@ export interface RendererResult {
 export type RendererOutput = RendererResult[];
 
 export type MessageRenderer<
-  T extends ResponseItem,
+  T extends Packet,
   S extends Partial<FullChatState>,
-> = React.FunctionComponent<{
-  items: T[];
+> = React.ComponentType<{
+  packets: T[];
   state: S;
   /** Node id for the message currently being rendered */
   messageNodeId?: number;

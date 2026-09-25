@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 
 from onyx.chat.models import CreateChatSessionID
 from onyx.configs.constants import DocumentSource
-from onyx.context.search.models import SearchDocsResponse
 from onyx.llm.litellm_models import (
     ChatCompletionDeltaToolCall,
     Delta,
@@ -16,13 +15,14 @@ from onyx.llm.litellm_models import (
 )
 from onyx.server.query_and_chat.models import MessageResponseIDInfo
 from onyx.server.query_and_chat.streaming_models import (
-    ItemUpdate,
+    ImageGenerationFinal,
+    OpenUrlDocuments,
     OverallStop,
     Packet,
-    ReasoningItem,
-    ToolItem,
+    ReasoningDelta,
+    SearchToolDocumentsDelta,
+    SearchToolStart,
 )
-from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
 from tests.external_dependency_unit.answer.stream_test_utils import (
     create_chat_session,
@@ -129,33 +129,18 @@ def test_stream_chat_with_search_and_openurl_tools(db_session: Session) -> None:
         )
         parts = list(submit_query("What is the weather in Sydney?", session.id, user))
     assert "Sydney is sunny" in final_answer(parts)
-    tools = [
-        part
+    documents = [
+        part.obj.documents
         for part in parts
         if isinstance(part, Packet)
-        and isinstance(part.obj, ItemUpdate)
-        and isinstance(part.obj.item, ToolItem)
-        and part.obj.item.status == "complete"
+        and isinstance(part.obj, (SearchToolDocumentsDelta, OpenUrlDocuments))
     ]
-    names = []
-    for part in tools:
-        assert isinstance(part.obj, ItemUpdate) and isinstance(part.obj.item, ToolItem)
-        names.append(part.obj.item.name)
-    assert names == ["web_search", "open_url"]
-    for packet in tools:
-        assert isinstance(packet.obj, ItemUpdate) and isinstance(
-            packet.obj.item, ToolItem
-        )
-        assert isinstance(packet.obj.item.metadata, SearchDocsResponse)
-        assert packet.obj.item.metadata.search_docs[0].link == url
-        assert packet.identity and packet.identity.tool_call_id
+    assert len(documents) == 2
+    assert all(docs[0].link == url for docs in documents)
     reasoning = [
-        part.obj.item.text
+        part.obj.reasoning
         for part in parts
-        if isinstance(part, Packet)
-        and isinstance(part.obj, ItemUpdate)
-        and isinstance(part.obj.item, ReasoningItem)
-        and part.obj.item.status == "complete"
+        if isinstance(part, Packet) and isinstance(part.obj, ReasoningDelta)
     ]
     assert reasoning == ["I need current weather.", "Read the weather source."]
     assert len(llm.requests) == 3
@@ -189,16 +174,13 @@ def test_image_generation_tool(db_session: Session) -> None:
         parts = list(submit_query("Draw a dog on a rocketship", session.id, user))
     assert final_answer(parts) == "Here is the image."
     images = [
-        part.obj.item.metadata
+        part.obj.images
         for part in parts
-        if isinstance(part, Packet)
-        and isinstance(part.obj, ItemUpdate)
-        and isinstance(part.obj.item, ToolItem)
-        and isinstance(part.obj.item.metadata, FinalImageGenerationResponse)
+        if isinstance(part, Packet) and isinstance(part.obj, ImageGenerationFinal)
     ]
     assert len(images) == 1
-    assert len(images[0].generated_images) == 1
-    assert images[0].generated_images[0].url == "/api/chat/file/123"
+    assert len(images[0]) == 1
+    assert images[0][0].url == "/api/chat/file/123"
 
 
 def test_parallel_internal_and_web_search_tool_calls(db_session: Session) -> None:
@@ -254,23 +236,20 @@ def test_parallel_internal_and_web_search_tool_calls(db_session: Session) -> Non
     tools = [
         part
         for part in parts
-        if isinstance(part, Packet)
-        and isinstance(part.obj, ItemUpdate)
-        and isinstance(part.obj.item, ToolItem)
-        and part.obj.item.status == "complete"
+        if isinstance(part, Packet) and isinstance(part.obj, SearchToolStart)
     ]
-    names = set()
-    for part in tools:
-        assert isinstance(part.obj, ItemUpdate) and isinstance(part.obj.item, ToolItem)
-        names.add(part.obj.item.name)
-    assert names == {"internal_search", "web_search"}
     assert len(tools) == 2
-    assert {part.identity.tool_call_id for part in tools if part.identity} == {
-        "internal",
-        "web",
-    }
-    assert len({part.identity.message_id for part in tools if part.identity}) == 1
-    for part in tools:
-        assert isinstance(part.obj, ItemUpdate) and isinstance(part.obj.item, ToolItem)
-        assert isinstance(part.obj.item.metadata, SearchDocsResponse)
-        assert part.obj.item.metadata.search_docs
+    assert {
+        part.obj.is_internet_search
+        for part in tools
+        if isinstance(part.obj, SearchToolStart)
+    } == {True, False}
+    assert len({part.placement.turn_index for part in tools}) == 1
+    assert len({part.placement.tab_index for part in tools}) == 2
+    documents = [
+        part.obj.documents
+        for part in parts
+        if isinstance(part, Packet) and isinstance(part.obj, SearchToolDocumentsDelta)
+    ]
+    assert len(documents) == 2
+    assert all(documents)

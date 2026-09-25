@@ -32,7 +32,7 @@ export const ParallelStreamingHeader = memo(function ParallelStreamingHeader({
       new Map(
         steps.map((step) => [
           step.key,
-          step.items.length > 0 && !isToolComplete(step.items),
+          step.packets.length > 0 && !isToolComplete(step.packets),
         ]),
       ),
     [steps],
@@ -59,10 +59,10 @@ export const ParallelStreamingHeader = memo(function ParallelStreamingHeader({
           <Tabs.Trigger
             key={step.key}
             value={step.key}
-            icon={getToolIcon(step.items)}
+            icon={getToolIcon(step.packets)}
             isLoading={loadingStates.get(step.key)}
           >
-            {getToolName(step.items)}
+            {getToolName(step.packets)}
           </Tabs.Trigger>
         ))}
       </Tabs.List>

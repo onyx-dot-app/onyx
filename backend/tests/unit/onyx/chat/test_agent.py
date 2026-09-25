@@ -73,7 +73,7 @@ def test_chat_preserves_parallel_tool_history_forcing_and_packets(
         ]
     )
     output: queue.Queue[Packet] = queue.Queue()
-    emitter = Emitter(model_idx=0, publish=output.put_nowait, response_id=42)
+    emitter = Emitter(model_idx=0, publish=output.put_nowait)
     history: list[Message] = [
         UserMessage(content="Hello", metadata=PromptMetadata(token_count=1))
     ]
@@ -98,7 +98,6 @@ def test_chat_preserves_parallel_tool_history_forcing_and_packets(
     )
     project = partial(
         project_response,
-        response_id=42,
         tool_ids={tool.name: tool.id for tool in agent.tools},
         initial_citations=agent.initial_citations,
     )
@@ -217,9 +216,7 @@ def test_chat_preserves_search_filters_in_accepted_result_and_projection(
     )
     assert isinstance(accepted.details, SearchDocsResponse)
     assert accepted.details.model_dump(exclude={"staged_files"}) == search.model_dump()
-    projected = project_response(
-        runs[-1].snapshot(), response_id=42, tool_ids={"echo": 1}
-    )
+    projected = project_response(runs[-1].snapshot(), tool_ids={"echo": 1})
     assert projected.tool_calls[0].result_metadata == search
 
 
@@ -283,7 +280,6 @@ def test_source_file_staging_does_not_block_cancelled_snapshot(
     )
     project = partial(
         project_response,
-        response_id=42,
         tool_ids={tool.name: tool.id for tool in agent.tools},
         initial_citations=agent.initial_citations,
     )

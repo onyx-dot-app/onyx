@@ -1,21 +1,19 @@
+import React from "react";
 import { useTranslations } from "next-intl";
 import { SvgSearch, SvgGlobe } from "@opal/icons";
-import { ResponseItem } from "@/app/app/services/streamingModels";
+import { SearchToolPacket } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
   RenderType,
 } from "@/app/app/message/messageComponents/interfaces";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { ValidSources } from "@/lib/types";
-import {
-  SearchChipList,
-  SourceInfo,
-} from "@/app/app/message/messageComponents/timeline/renderers/search/SearchChipList";
+import { SearchChipList, SourceInfo } from "./SearchChipList";
 import {
   constructCurrentSearchState,
   INITIAL_QUERIES_TO_SHOW,
   QUERIES_PER_EXPANSION,
-} from "@/app/app/message/messageComponents/timeline/renderers/search/searchStateUtils";
+} from "./searchStateUtils";
 import Text from "@/refresh-components/texts/Text";
 
 const queryToSourceInfo = (query: string, index: number): SourceInfo => ({
@@ -36,8 +34,8 @@ const queryToSourceInfo = (query: string, index: number): SourceInfo => ({
  *              No StepContainer wrapper. Used for parallel streaming preview.
  * - INLINE: Shows queries for collapsed streaming view.
  */
-export const WebSearchToolRenderer: MessageRenderer<ResponseItem, {}> = ({
-  items,
+export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
+  packets,
   onComplete,
   animate,
   stopPacketSeen,
@@ -45,7 +43,7 @@ export const WebSearchToolRenderer: MessageRenderer<ResponseItem, {}> = ({
   children,
 }) => {
   const t = useTranslations("chat.messages.timeline");
-  const searchState = constructCurrentSearchState(items);
+  const searchState = constructCurrentSearchState(packets);
   const { queries } = searchState;
 
   const isHighlight = renderType === RenderType.HIGHLIGHT;

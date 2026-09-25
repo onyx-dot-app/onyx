@@ -60,8 +60,8 @@ The run applies generation updates under its state lock before notifying listene
 Cancellation preserves accepted partial output; `snapshot()` copies that state for independent inspection.
 Message events carry an explicit message ID. Updates reuse the LLM content delta types.
 Provider retries happen within this message lifecycle; they do not start another agent message.
-Chat converts these events into frontend packets for text, reasoning, tool activity, and run status.
-It saves the response under a chat message ID. Generation and content item IDs connect streamed output to saved response data.
+Chat converts these events into frontend packets for text, reasoning, tool activity, and response completion.
+It saves the response under a chat message ID. Message IDs connect SDK events to saved response messages.
 
 ## Quick start
 
@@ -292,35 +292,19 @@ from the snapshot. Already queued callbacks may still drain.
 ## Chat stream
 
 Model events describe one LLM request. Agent events add tool execution and run boundaries.
-`ResponsePresenter` converts these events into the public chat stream.
-It attaches message and parent identities, validates tool metadata, and formats citations.
-The frontend chooses cards, tabs, and grouping from these identities and content.
-The envelope’s `model_index` routes responses to the correct model panel. Layout coordinates exist only in the frontend.
+`ResponsePresenter` translates these events into chat browser packets.
+It formats citations and assigns sections, tool tabs, and child sections through `Placement`.
+The SDK does not use browser packets or layout coordinates.
 
-The public content types are text, reasoning, and tool items:
+Text and reasoning use start, delta, and end packets.
+Tools use packets for their content: search queries and documents, Python output, images, or custom results.
+`placement.model_index` selects the model panel. A root `stop` packet closes the response.
+`chat_heartbeat` keeps the connection active during quiet work.
 
-| Item | Contents |
-| --- | --- |
-| Text | Text, purpose, citations, source documents, and status. |
-| Reasoning | Reasoning text and status. |
-| Tool | Name, arguments, status, output, and typed result metadata. |
-
-`item_update` supplies the complete current item and replaces its previous value.
-`item_delta` appends text or string argument fragments, or replaces partial tool output and metadata.
-Tool items progress from `pending` arguments to `running` execution, then a terminal status.
-`run_update` closes unfinished items when a run ends, including cancellation and failure.
-A root `stop` packet closes the response. `chat_heartbeat` keeps the connection active during quiet work.
-
-Tools supply partial and final results using the same metadata model.
-For example, search metadata contains queries, filters, and documents.
-Python metadata contains stdout, stderr, generated files, and execution errors.
-Tools with plain text results use the tool item's `output` field.
-
-Live streams send deltas followed by a complete item.
-History loading builds complete items directly from accepted content and saved tool metadata.
-Both paths use the same citation formatter and frontend item reducer.
-Partial tool updates are transient. History retains accepted tool results; cancellation before a result can leave live-only tool output.
-Provider-only fields, such as reasoning signatures, remain outside the public stream.
+Tools return structured progress and results. Chat converts those values into browser packets.
+`MessageRenderer` and `ToolRenderer` format both live output and saved response steps.
+They exclude private tool state and provider-only fields, such as reasoning signatures.
+Partial tool updates are transient. Saved history contains accepted tool results.
 
 ## Saving and restoring
 

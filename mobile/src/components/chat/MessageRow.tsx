@@ -110,16 +110,12 @@ function AssistantMessage({
   // Which step's text the full-text reader is showing. Owned here, not in the step: the timeline
   // auto-collapses when the answer starts, which would unmount the step mid-read.
   const [fullTextKey, setFullTextKey] = useState<string | null>(null);
-  const visibleContentGroups = [
-    ...processed.narrationGroups,
-    ...pacedDisplayGroups,
-  ];
-  const hasDisplayContent = visibleContentGroups.length > 0;
+  const hasDisplayContent = pacedDisplayGroups.length > 0;
 
   // Re-derived every flush so the reader keeps up with a step that is still streaming; parking the
   // string at open time would freeze the body and make Copy yield a truncated prefix.
   const fullText = useMemo(
-    () => resolveGroupReasoning(processed.groupedItemsMap, fullTextKey),
+    () => resolveGroupReasoning(processed.groupedPacketsMap, fullTextKey),
     [fullTextKey, processed],
   );
 
@@ -162,17 +158,16 @@ function AssistantMessage({
       {hasDisplayContent ? (
         // px-12 aligns the answer under the avatar rail (web's px-3).
         <View className="gap-12 px-12">
-          {visibleContentGroups.map((displayGroup, groupIndex) => (
+          {pacedDisplayGroups.map((displayGroup, groupIndex) => (
             <RendererComponent
               key={`${displayGroup.turn_index}-${displayGroup.tab_index}`}
-              items={displayGroup.items}
+              packets={displayGroup.packets}
               chatState={chatState}
               messageNodeId={node.nodeId}
               hasTimelineThinking={pacedTurnGroups.length > 0 || hasSteps}
               // Only the last group completes the message.
               onComplete={
-                pacedDisplayGroups.length > 0 &&
-                groupIndex === visibleContentGroups.length - 1
+                groupIndex === pacedDisplayGroups.length - 1
                   ? onRenderComplete
                   : NOOP
               }

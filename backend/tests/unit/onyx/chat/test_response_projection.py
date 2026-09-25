@@ -106,9 +106,7 @@ def test_snapshot_retains_partial_output_after_producer_continues() -> None:
         future = executor.submit(lambda: _run_observed(agent, started.set_result))
         try:
             assert partial_ready.wait(2)
-            saved = project_response(
-                started.result(timeout=2).snapshot(), response_id=42, tool_ids={}
-            )
+            saved = project_response(started.result(timeout=2).snapshot(), tool_ids={})
             params.sent_kwargs["temperature"] = 0.7
         finally:
             finish.set()
@@ -122,13 +120,11 @@ def test_snapshot_retains_partial_output_after_producer_continues() -> None:
     assert saved.response is not None
     assert saved.response.status == RunStatus.RUNNING
     assert (
-        project_response(
-            started.result(timeout=2).snapshot(), response_id=42, tool_ids={}
-        ).answer
+        project_response(started.result(timeout=2).snapshot(), tool_ids={}).answer
         == "complete"
     )
     assert project_response(
-        started.result(timeout=2).snapshot(), response_id=42, tool_ids={}
+        started.result(timeout=2).snapshot(), tool_ids={}
     ).is_clarification
 
 
@@ -155,7 +151,7 @@ def test_snapshot_does_not_wait_for_slow_stream_observer() -> None:
             assert updating.wait(2)
             saving = executor.submit(
                 lambda: project_response(
-                    started.result(timeout=2).snapshot(), response_id=42, tool_ids={}
+                    started.result(timeout=2).snapshot(), tool_ids={}
                 )
             )
             result = saving.result(timeout=0.5)
@@ -209,14 +205,13 @@ def test_full_response_content_survives_delivery_gaps(
 
     def observe(run: Run) -> None:
         if delivery != "detached":
-            run.subscribe(ResponsePresenter(Emitter(output.publish, 42)).consume)
+            run.subscribe(ResponsePresenter(Emitter(output.publish)).consume)
 
     run = _run_observed(agent, observe)
     response_future.set_result(
         ChatResponseOutcome(
             response=project_response(
                 run.snapshot(),
-                response_id=42,
                 tool_ids={},
                 initial_citations={1: documents[0], 2: documents[1]},
             ),
@@ -254,9 +249,9 @@ def test_response_projection_uses_the_selected_run_after_agent_reuse() -> None:
         )
     )
     first_run = _run_observed(agent)
-    first = project_response(first_run.snapshot(), response_id=42, tool_ids={})
+    first = project_response(first_run.snapshot(), tool_ids={})
     latest = agent.start(background=False, max_steps=1).result()
-    assert project_response(first_run.snapshot(), response_id=42, tool_ids={}) == first
+    assert project_response(first_run.snapshot(), tool_ids={}) == first
     assert first.answer == "First response"
     assert latest.output.text == "Second response"
 
@@ -286,7 +281,6 @@ def test_projection_retains_unfinished_descendant_for_inspection() -> None:
     )
     response = project_response(
         snapshot,
-        response_id=42,
         tool_ids={},
         registrations=[
             AgentInfo(
@@ -331,7 +325,7 @@ def test_full_response_reads_canonical_tool_output() -> None:
         ],
         answer_step_index=1,
     )
-    projected = project_response(snapshot, response_id=42, tool_ids={"echo": 1})
+    projected = project_response(snapshot, tool_ids={"echo": 1})
     assert projected.tool_calls[0].tool_call_response == "tool output"
     assert projected.tool_calls[0].result_metadata is None
     future: Future[ChatResponseOutcome] = Future()

@@ -307,9 +307,7 @@ export async function* resumeStream(
     throw new Error(data.detail ?? `HTTP error! status: ${response.status}`);
   }
 
-  for await (const packet of handleSSEStream<PacketType>(response, signal)) {
-    yield packet;
-  }
+  yield* handleSSEStream<PacketType>(response, signal);
 }
 
 export async function setPreferredResponse(

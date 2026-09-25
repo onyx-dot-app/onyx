@@ -10,7 +10,7 @@ import React, {
 import { Packet, StopReason } from "@/app/app/services/streamingModels";
 import CustomToolAuthCard from "@/app/app/message/messageComponents/CustomToolAuthCard";
 import { FullChatState } from "@/app/app/message/messageComponents/interfaces";
-import { FeedbackType, Message } from "@/app/app/interfaces";
+import { FeedbackType } from "@/app/app/interfaces";
 import { handleCopy } from "@/app/app/message/copyingUtils";
 import { useAuthErrors } from "@/app/app/message/messageComponents/hooks/useAuthErrors";
 import { useMessageSwitching } from "@/app/app/message/messageComponents/hooks/useMessageSwitching";
@@ -19,6 +19,7 @@ import { usePacketProcessor } from "@/app/app/message/messageComponents/timeline
 import { usePacedTurnGroups } from "@/app/app/message/messageComponents/timeline/hooks/usePacedTurnGroups";
 import MessageToolbar from "@/app/app/message/messageComponents/MessageToolbar";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
+import { Message } from "@/app/app/interfaces";
 import Text from "@/refresh-components/texts/Text";
 import { AgentTimeline } from "@/app/app/message/messageComponents/timeline/AgentTimeline";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
@@ -36,7 +37,6 @@ export type RegenerationFactory = (regenerationRequest: {
 
 export interface AgentMessageProps {
   rawPackets: Packet[];
-  skipReplayAnimation?: boolean;
   packetCount?: number; // Tracked separately for React memo comparison (avoids reading from mutated array)
   chatState: FullChatState;
   nodeId: number;
@@ -74,8 +74,6 @@ function arePropsEqual(
     // Compare packetCount (primitive) instead of rawPackets.length
     // The array is mutated in place, so reading .length from prev and next would return same value
     prev.packetCount === next.packetCount &&
-    prev.rawPackets === next.rawPackets &&
-    prev.skipReplayAnimation === next.skipReplayAnimation &&
     prev.chatState.agent?.id === next.chatState.agent?.id &&
     prev.chatState.docs === next.chatState.docs &&
     prev.chatState.citations === next.chatState.citations &&
@@ -97,7 +95,6 @@ function arePropsEqual(
 const AgentMessage = React.memo(function AgentMessage({
   rawPackets,
   packetCount,
-  skipReplayAnimation = false,
   chatState,
   nodeId,
   messageId,
@@ -123,7 +120,6 @@ const AgentMessage = React.memo(function AgentMessage({
     citationMap,
     documentMap,
     toolGroups,
-    narrationGroups,
     toolTurnGroups,
     displayGroups,
     hasSteps,
@@ -144,11 +140,8 @@ const AgentMessage = React.memo(function AgentMessage({
       displayGroups,
       stopPacketSeen,
       nodeId,
-      finalAnswerComing,
-      skipReplayAnimation
+      finalAnswerComing
     );
-
-  const visibleContentGroups = [...narrationGroups, ...pacedDisplayGroups];
 
   // Merge streaming citation/document data with chatState props.
   // NOTE: citationMap and documentMap from usePacketProcessor are mutated in
@@ -196,7 +189,7 @@ const AgentMessage = React.memo(function AgentMessage({
     ]
   );
 
-  const authErrors = useAuthErrors(toolGroups);
+  const authErrors = useAuthErrors(rawPackets);
 
   // Message switching logic
   const {
@@ -320,7 +313,7 @@ const AgentMessage = React.memo(function AgentMessage({
           }
         }}
       >
-        {visibleContentGroups.length > 0 && (
+        {pacedDisplayGroups.length > 0 && (
           <div ref={finalAnswerRef} className="flex flex-col gap-3">
             {authErrors.map((authError, i) => (
               <CustomToolAuthCard
@@ -331,29 +324,21 @@ const AgentMessage = React.memo(function AgentMessage({
                 agentId={effectiveChatState.agent.id}
               />
             ))}
-            {visibleContentGroups.map((displayGroup, index) => (
+            {pacedDisplayGroups.map((displayGroup, index) => (
               <RendererComponent
                 key={`${displayGroup.turn_index}-${displayGroup.tab_index}`}
-                items={displayGroup.items}
+                packets={displayGroup.packets}
                 chatState={effectiveChatState}
-                messageNodeId={
-                  displayGroup.items.some(
-                    (item) =>
-                      item.content.kind === "text" &&
-                      item.content.purpose === "answer"
-                  )
-                    ? nodeId
-                    : undefined
-                }
+                messageNodeId={nodeId}
                 hasTimelineThinking={pacedTurnGroups.length > 0 || hasSteps}
                 onComplete={() => {
                   // Only mark complete on the last display group
                   // Hook handles the finalAnswerComing check internally
-                  if (index === visibleContentGroups.length - 1) {
+                  if (index === pacedDisplayGroups.length - 1) {
                     onRenderComplete();
                   }
                 }}
-                animate={!stopPacketSeen && !skipReplayAnimation}
+                animate={!stopPacketSeen}
                 stopPacketSeen={stopPacketSeen}
                 stopReason={stopReason}
               >

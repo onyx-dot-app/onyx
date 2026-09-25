@@ -9,12 +9,18 @@ class Emitter:
     def __init__(
         self,
         publish: Callable[[Packet], None],
-        response_id: int,
         model_idx: int = 0,
     ) -> None:
         self._model_idx = model_idx
-        self.response_id = response_id
         self._publish = publish
 
     def emit(self, packet: Packet) -> None:
-        self._publish(packet.model_copy(update={"model_index": self._model_idx}))
+        self._publish(
+            packet.model_copy(
+                update={
+                    "placement": packet.placement.model_copy(
+                        update={"model_index": self._model_idx}
+                    )
+                }
+            )
+        )

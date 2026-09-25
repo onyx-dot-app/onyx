@@ -10,19 +10,16 @@ from onyx.agents.events import (
     AgentEndEvent,
     MessageEndEvent,
     MessageStartEvent,
-    MessageUpdateEvent,
-    ToolEndEvent,
     ToolStartEvent,
-    ToolUpdateEvent,
 )
 from onyx.agents.execution_records import ExecutionStatus, RunStatus
 from onyx.agents.models import RunState, StepRecord
 from onyx.agents.runtime import Agent
-from onyx.agents.tools import AgentTool, ToolInvocation, ToolProgress
+from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import ChatMessageMetadata, CitationMode, MessageRendering
 from onyx.chat.presentation import ResponsePresenter, project_response
-from onyx.chat.renderer import MessageRenderer
+from onyx.chat.renderer import MessageRenderer, ResponseLayout
 from onyx.context.search.models import SearchDoc
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.litellm_conversion import MessageAccumulator
@@ -47,17 +44,12 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.server.query_and_chat.streaming_models import (
-    ItemDelta,
-    ItemUpdate,
+    AgentResponseDelta,
+    AgentResponseStart,
     OverallStop,
     Packet,
-    PacketIdentity,
-    RunUpdate,
-    TextItem,
-    TextPurpose,
-    ToolOutputUpdate,
+    SectionEnd,
 )
-from onyx.tools.models import LlmPythonExecutionResult
 from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
 
 
@@ -103,9 +95,7 @@ def test_rendering_does_not_change_requests_transcript_or_execution() -> None:
         )
         listener = None
         if render:
-            presentation = ResponsePresenter(
-                Emitter(Queue[Packet]().put_nowait, response_id=42)
-            )
+            presentation = ResponsePresenter(Emitter(Queue[Packet]().put_nowait))
             listener = presentation.consume
         run_agent(
             agent,
@@ -146,7 +136,7 @@ def test_citation_display_keeps_raw_transcript(
     renderer = MessageRenderer(
         MessageRendering(citation_mode=CitationMode.REMOVE),
         {},
-        PacketIdentity(response_id=1, run_id="run", message_id="run:0"),
+        ResponseLayout(),
     )
     for fragment in fragments:
         for event in accumulator.add(
@@ -196,91 +186,11 @@ def test_snapshot_projects_partial_output_before_observers_receive_it() -> None:
     before = snapshot.model_dump()
     response = project_response(
         snapshot,
-        response_id=42,
         tool_ids={},
     )
     assert response.answer == "partial"
     assert response.request_params == snapshot.request_params
     assert snapshot.model_dump() == before
-
-
-def test_child_progress_and_completion_keep_explicit_ancestry() -> None:
-    output: Queue[Packet] = Queue()
-    view = ResponsePresenter(Emitter(output.put_nowait, response_id=42))
-    call = ToolCall(id="leaf", name="search", arguments={})
-    view.consume(
-        ToolStartEvent(
-            run_id="child",
-            parent_run_id="root",
-            parent_message_id="root:2",
-            parent_tool_call_id="research",
-            step_index=1,
-            message_id="child:1",
-            tool_call=call,
-        )
-    )
-    view.consume(
-        ToolUpdateEvent(
-            run_id="child",
-            parent_run_id="root",
-            parent_message_id="root:2",
-            parent_tool_call_id="research",
-            step_index=1,
-            message_id="child:1",
-            tool_call=call,
-            progress=ToolProgress(
-                details=LlmPythonExecutionResult(
-                    stdout="progress",
-                    stderr="",
-                    exit_code=None,
-                    timed_out=False,
-                    generated_files=[],
-                )
-            ),
-        )
-    )
-    view.consume(
-        ToolEndEvent(
-            run_id="child",
-            parent_run_id="root",
-            parent_message_id="root:2",
-            parent_tool_call_id="research",
-            step_index=1,
-            message_id="child:1",
-            tool_call=call,
-            result=ToolResult(content="complete"),
-        )
-    )
-    view.consume(
-        AgentEndEvent(
-            run_id="child",
-            parent_run_id="root",
-            parent_message_id="root:2",
-            parent_tool_call_id="research",
-            outcome=RunStatus.COMPLETE,
-        )
-    )
-    packets = list(output.queue)
-    progress = [
-        packet
-        for packet in packets
-        if isinstance(packet.obj, ItemDelta)
-        and isinstance(packet.obj.delta, ToolOutputUpdate)
-    ]
-    assert len(progress) == 1
-    assert progress[0].identity == PacketIdentity(
-        response_id=42,
-        run_id="child",
-        message_id="child:1",
-        parent_run_id="root",
-        parent_message_id="root:2",
-        parent_tool_call_id="research",
-        tool_call_id="leaf",
-        part_id="tool",
-    )
-    assert not any(isinstance(packet.obj, OverallStop) for packet in packets)
-    assert isinstance(packets[-1].obj, RunUpdate)
-    assert packets[-1].obj.status == "complete"
 
 
 def test_formatting_failure_keeps_accepted_response(
@@ -289,7 +199,7 @@ def test_formatting_failure_keeps_accepted_response(
     def fail_formatting(
         _presentation: MessageRendering,
         _documents: Mapping[str, SearchDoc],
-        _identity: PacketIdentity,
+        _layout: ResponseLayout,
     ) -> MessageRenderer:
         raise ValueError("Invalid display metadata")
 
@@ -303,7 +213,7 @@ def test_formatting_failure_keeps_accepted_response(
     run = agent.start(messages=[UserMessage(content="Question")], max_steps=1)
     run.result(timeout=10)
     monkeypatch.setattr("onyx.chat.presentation.MessageRenderer", fail_formatting)
-    response = project_response(run.snapshot(), response_id=42, tool_ids={})
+    response = project_response(run.snapshot(), tool_ids={})
     assert response.response is not None
     assert response.response.messages[-1].text == "Accepted answer"
     assert response.answer == "Accepted answer"
@@ -313,118 +223,85 @@ def test_formatting_failure_keeps_accepted_response(
     )
 
 
-@pytest.mark.parametrize("status", [RunStatus.CANCELLED, RunStatus.ERROR])
-def test_interrupted_item_stream_flushes_buffered_citation_like_reload(
-    status: RunStatus,
-) -> None:
+def test_interrupted_text_is_not_duplicated_and_matches_reload() -> None:
     message = AssistantMessage(content=[TextContent(text="See [1")])
-    identity = PacketIdentity(response_id=42, run_id="run", message_id="run:0")
-    live = MessageRenderer(
-        MessageRendering(citation_mode=CitationMode.HYPERLINK), {}, identity
-    )
-    live.consume(TextDeltaEvent(content_index=0, text="See [1"))
-    live_packets = live.finish(status)
-    saved = MessageRenderer(
-        MessageRendering(citation_mode=CitationMode.HYPERLINK), {}, identity
-    )
-    saved_packets = saved.saved(message, ExecutionStatus(status.value), is_answer=False)
+    settings = MessageRendering(citation_mode=CitationMode.HYPERLINK)
+    live = MessageRenderer(settings, {}, ResponseLayout())
+    output = live.consume(TextDeltaEvent(content_index=0, text="See [1"))
+    output += live.complete(message)
+    output += live.finish()
+    saved = MessageRenderer(settings, {}, ResponseLayout())
+    restored = saved.complete(message)
     assert live.answer == saved.answer == "See [1"
-    assert [
-        p
-        for p in live_packets
-        if isinstance(p.obj, ItemUpdate) and p.obj.item.status == status
-    ] == saved_packets
-    assert live.finish(status) == []
-
-
-def test_complete_only_model_stream_publishes_answer_and_demotes_earlier_text() -> None:
-    responses = iter(
-        [
-            AssistantMessage(content=[TextContent(text="Checking")]),
-            AssistantMessage(content=[TextContent(text="The answer")]),
-        ]
+    assert (
+        "".join(p.obj.content for p in output if isinstance(p.obj, AgentResponseDelta))
+        == "See [1"
     )
-    output: Queue[Packet] = Queue()
-    presenter = ResponsePresenter(Emitter(output.put_nowait, response_id=42))
-    agent = Agent(
-        FakeModelClient(lambda _request, _signal: next(responses)),
-        after_step=lambda step: step.message.text != "The answer",
-    )
-    run_agent(agent, max_steps=2, listener=presenter.consume)
-    items: dict[str, TextItem] = {}
-    for packet in output.queue:
-        if (
-            packet.identity
-            and isinstance(packet.obj, ItemUpdate)
-            and isinstance(packet.obj.item, TextItem)
-        ):
-            items[packet.identity.message_id] = packet.obj.item
-    assert [(item.text, item.purpose, item.status) for item in items.values()] == [
-        ("Checking", TextPurpose.COMMENTARY, RunStatus.COMPLETE),
-        ("The answer", TextPurpose.ANSWER, RunStatus.COMPLETE),
-    ]
-
-
-def test_accepted_message_clears_superseded_streamed_text() -> None:
-    identity = PacketIdentity(response_id=42, run_id="run", message_id="run:0")
-    renderer = MessageRenderer(MessageRendering(), {}, identity)
-    renderer.consume(TextDeltaEvent(content_index=0, text="preview"))
-    final = renderer.complete(
-        AssistantMessage(content=[ToolCall(id="call", name="echo", arguments={})])
-    )
-    text = [
-        packet.obj.item
-        for packet in final
-        if isinstance(packet.obj, ItemUpdate) and isinstance(packet.obj.item, TextItem)
-    ]
-    assert len(text) == 1
-    assert text[0].text == ""
-    assert text[0].status == RunStatus.COMPLETE
-    assert text[0].purpose == TextPurpose.COMMENTARY
-
-
-@pytest.mark.parametrize("status", [RunStatus.CANCELLED, RunStatus.ERROR])
-def test_interrupted_message_identity_and_content_match_reload(
-    status: RunStatus,
-) -> None:
-    output: Queue[Packet] = Queue()
-    presenter = ResponsePresenter(Emitter(output.put_nowait, response_id=42))
-    message = AssistantMessage(
-        id="accepted-message", content=[TextContent(text="partial [1")]
-    )
-    presenter.consume(
-        MessageStartEvent(run_id="run", message_id="accepted-message", step_index=3)
-    )
-    presenter.consume(
-        MessageUpdateEvent(
-            run_id="run",
-            message_id="accepted-message",
-            step_index=3,
-            generation_event=TextDeltaEvent(content_index=0, text="partial [1"),
+    assert (
+        "".join(
+            p.obj.content for p in restored if isinstance(p.obj, AgentResponseDelta)
         )
+        == "See [1"
+    )
+    assert sum(isinstance(p.obj, AgentResponseStart) for p in output) == 1
+    assert isinstance(output[-1].obj, SectionEnd)
+
+
+def test_parallel_child_packets_stay_in_parent_tabs() -> None:
+    output: list[Packet] = []
+    presenter = ResponsePresenter(Emitter(output.append))
+    calls = [
+        ToolCall(id=str(i), name="research_agent", arguments={"task": str(i)})
+        for i in range(2)
+    ]
+    presenter.consume(
+        MessageStartEvent(run_id="root", message_id="parent", step_index=0)
     )
     presenter.consume(
         MessageEndEvent(
-            run_id="run",
-            message_id="accepted-message",
-            step_index=3,
-            message=message,
-            status=ExecutionStatus(status.value),
+            run_id="root",
+            message_id="parent",
+            step_index=0,
+            message=AssistantMessage(content=calls),
+            status=ExecutionStatus.COMPLETE,
         )
     )
-    live = [
-        packet
-        for packet in output.queue
-        if isinstance(packet.obj, ItemUpdate) and packet.obj.item.status == status
-    ]
-    saved = MessageRenderer(
-        MessageRendering(),
-        {},
-        PacketIdentity(response_id=42, run_id="run", message_id="accepted-message"),
-    ).saved(message, ExecutionStatus(status.value), is_answer=False)
-    assert [(packet.identity, packet.obj) for packet in live] == [
-        (packet.identity, packet.obj) for packet in saved
-    ]
-    assert all(
-        packet.identity.message_id == "accepted-message" for packet in output.queue
-    )
+    for i, call in enumerate(calls):
+        presenter.consume(
+            ToolStartEvent(
+                run_id="root", message_id="parent", step_index=0, tool_call=call
+            )
+        )
+        presenter.consume(
+            MessageStartEvent(
+                run_id=str(i),
+                message_id=f"child-{i}",
+                step_index=0,
+                parent_run_id="root",
+                parent_message_id="parent",
+                parent_tool_call_id=call.id,
+            )
+        )
+        presenter.consume(
+            MessageEndEvent(
+                run_id=str(i),
+                message_id=f"child-{i}",
+                step_index=0,
+                parent_run_id="root",
+                parent_message_id="parent",
+                parent_tool_call_id=call.id,
+                message=AssistantMessage(content=[TextContent(text=str(i))]),
+                status=ExecutionStatus.COMPLETE,
+            )
+        )
+        presenter.consume(
+            AgentEndEvent(
+                run_id=str(i), parent_run_id="root", outcome=RunStatus.COMPLETE
+            )
+        )
+    text = [p for p in output if isinstance(p.obj, AgentResponseDelta)]
+    assert [
+        (p.placement.turn_index, p.placement.tab_index, p.placement.sub_turn_index)
+        for p in text
+    ] == [(0, 0, 0), (0, 1, 0)]
+    assert not any(isinstance(p.obj, OverallStop) for p in output)

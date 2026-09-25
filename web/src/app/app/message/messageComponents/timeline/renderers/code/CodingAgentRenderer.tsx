@@ -9,7 +9,15 @@ import {
 } from "@opal/icons";
 import hljs from "highlight.js/lib/core";
 import bash from "highlight.js/lib/languages/bash";
-import { ResponseItem } from "@/app/app/services/streamingModels";
+import {
+  BashToolDelta,
+  BashToolStart,
+  CodingAgentFinal,
+  CodingAgentPacket,
+  CodingAgentStart,
+  CodingAgentThinkingDelta,
+  PacketType,
+} from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
   RenderType,
@@ -19,12 +27,6 @@ import { CodeBlock } from "@/app/app/message/CodeBlock";
 import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisplay";
 import { Text } from "@opal/components";
 import { IoBlockLabel } from "@/app/app/message/messageComponents/IoBlockLabel";
-import {
-  firstTool,
-  isComplete as itemsComplete,
-  stringArgument,
-  toolMetadata,
-} from "@/app/app/services/responseItems";
 
 // Timeline copy is looked up in components and threaded into the plain step
 // helpers below, which cannot call hooks themselves.
@@ -77,27 +79,57 @@ interface BashStepView {
 
 type AgentStep = ThinkingStepView | BashStepView;
 
-function buildAgentSteps(items: ResponseItem[]): AgentStep[] {
-  return items.flatMap((item): AgentStep[] => {
-    if (item.content.kind === "text" || item.content.kind === "reasoning") {
-      return item.content.text
-        ? [{ kind: "thinking", content: item.content.text }]
-        : [];
+function buildAgentSteps(packets: CodingAgentPacket[]): AgentStep[] {
+  const steps: AgentStep[] = [];
+  const findOpenBash = (): BashStepView | undefined => {
+    for (let i = steps.length - 1; i >= 0; i--) {
+      const c = steps[i];
+      if (c?.kind === "bash" && !c.isComplete) return c;
     }
-    if (item.content.name !== "bash") return [];
-    const output = toolMetadata([item], "bash_execution").at(-1);
-    return [
-      {
+    return undefined;
+  };
+
+  for (const packet of packets) {
+    if (packet.obj.type === PacketType.BASH_TOOL_DELTA) {
+      // Fold output; finalization waits for the next non-delta packet.
+      const delta = packet.obj as BashToolDelta;
+      const open = findOpenBash();
+      if (open) {
+        open.stdout += delta.stdout || "";
+        open.stderr += delta.stderr || "";
+        open.exit_code = delta.exit_code;
+        open.timed_out = delta.timed_out;
+      }
+      continue;
+    }
+
+    // Any non-delta packet (thinking, next bash, FINAL, ERROR, …) closes the open bash.
+    const open = findOpenBash();
+    if (open) open.isComplete = true;
+
+    if (packet.obj.type === PacketType.CODING_AGENT_THINKING_DELTA) {
+      const delta = packet.obj as CodingAgentThinkingDelta;
+      const last = steps[steps.length - 1];
+      if (last && last.kind === "thinking") {
+        last.content += delta.content;
+      } else {
+        steps.push({ kind: "thinking", content: delta.content });
+      }
+    } else if (packet.obj.type === PacketType.BASH_TOOL_START) {
+      const start = packet.obj as BashToolStart;
+      steps.push({
         kind: "bash",
-        cmd: stringArgument(item.content, "cmd"),
-        stdout: output?.stdout ?? "",
-        stderr: output?.stderr ?? "",
-        exit_code: output?.exit_code ?? null,
-        timed_out: output?.timed_out ?? false,
-        isComplete: itemsComplete([item]),
-      },
-    ];
-  });
+        cmd: start.cmd,
+        stdout: "",
+        stderr: "",
+        exit_code: null,
+        timed_out: false,
+        isComplete: false,
+      });
+    }
+  }
+
+  return steps;
 }
 
 interface ThinkingStepProps {
@@ -293,32 +325,34 @@ function ResponseStep({ answer, isLastStep, isHover }: ResponseStepProps) {
   );
 }
 
-export const CodingAgentRenderer: MessageRenderer<ResponseItem, {}> = ({
-  items,
+export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
+  packets,
   renderType,
   stopPacketSeen,
   isHover = false,
   children,
 }) => {
   const t = useTranslations("chat.messages.timeline");
-  const tool = firstTool(items);
-  const taskArguments = tool
-    ? {
-        query: stringArgument(tool, "query"),
-        repo: stringArgument(tool, "repo"),
-      }
-    : undefined;
-  const codingResult = toolMetadata(items, "coding_result").at(-1);
-  const steps = useMemo(() => buildAgentSteps(items), [items]);
-  const isComplete = itemsComplete(items);
+  const startPacket = packets.find(
+    (p) => p.obj.type === PacketType.CODING_AGENT_START
+  )?.obj as CodingAgentStart | undefined;
+  const finalPacket = packets.find(
+    (p) => p.obj.type === PacketType.CODING_AGENT_FINAL
+  )?.obj as CodingAgentFinal | undefined;
+  const hasFinal = finalPacket !== undefined;
+  const errored = packets.some((p) => p.obj.type === PacketType.ERROR);
 
-  const taskText = taskArguments
-    ? taskArguments.repo
+  const steps = useMemo(() => buildAgentSteps(packets), [packets]);
+
+  const isComplete = hasFinal || errored;
+
+  const taskText = startPacket
+    ? startPacket.repo
       ? t("codingAgent.taskWithRepo.text", {
-          query: taskArguments.query,
-          repo: taskArguments.repo,
+          query: startPacket.query,
+          repo: startPacket.repo,
         })
-      : taskArguments.query
+      : startPacket.query
     : "";
 
   const wrap = (content: JSX.Element) =>
@@ -340,11 +374,11 @@ export const CodingAgentRenderer: MessageRenderer<ResponseItem, {}> = ({
     let header: string | null = null;
     let body: JSX.Element | null = null;
 
-    if (codingResult) {
+    if (finalPacket) {
       header = t("codingAgent.response.header");
       body = (
         <Text as="p" font="main-ui-muted" color="text-02">
-          {codingResult.answer}
+          {finalPacket.answer}
         </Text>
       );
     } else if (latestStep?.kind === "bash") {
@@ -378,10 +412,10 @@ export const CodingAgentRenderer: MessageRenderer<ResponseItem, {}> = ({
   }
 
   if (renderType === RenderType.COMPACT) {
-    if (codingResult) {
+    if (finalPacket) {
       return wrap(
         <ResponseStep
-          answer={codingResult.answer}
+          answer={finalPacket.answer}
           isLastStep={true}
           isHover={isHover}
         />
@@ -392,7 +426,7 @@ export const CodingAgentRenderer: MessageRenderer<ResponseItem, {}> = ({
         renderAgentStep(latestStep, "latest", lastStepIsActive, isHover)
       );
     }
-    if (taskArguments) {
+    if (startPacket) {
       return wrap(
         <CodingTaskStep
           taskText={taskText}
@@ -406,10 +440,10 @@ export const CodingAgentRenderer: MessageRenderer<ResponseItem, {}> = ({
 
   return wrap(
     <div className="flex flex-col">
-      {taskArguments && (
+      {startPacket && (
         <CodingTaskStep
           taskText={taskText}
-          isLastStep={lastStepIsActive && steps.length === 0 && !codingResult}
+          isLastStep={lastStepIsActive && steps.length === 0 && !finalPacket}
           isHover={isHover}
         />
       )}
@@ -417,13 +451,13 @@ export const CodingAgentRenderer: MessageRenderer<ResponseItem, {}> = ({
         renderAgentStep(
           step,
           idx,
-          lastStepIsActive && idx === steps.length - 1 && !codingResult,
+          lastStepIsActive && idx === steps.length - 1 && !finalPacket,
           isHover
         )
       )}
-      {codingResult && (
+      {finalPacket && (
         <ResponseStep
-          answer={codingResult.answer}
+          answer={finalPacket.answer}
           isLastStep={true}
           isHover={isHover}
         />

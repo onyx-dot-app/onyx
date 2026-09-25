@@ -13,28 +13,25 @@ from onyx.server.query_and_chat.models import (
     SendMessageRequest,
 )
 from onyx.server.query_and_chat.streaming_models import (
-    ItemUpdate,
+    AgentResponseDelta,
+    AgentResponseStart,
     Packet,
-    TextItem,
-    TextPurpose,
 )
 
 
 def final_answer(parts: list[AnswerStreamPart]) -> str:
     errors = [part for part in parts if isinstance(part, StreamingError)]
     assert not errors, errors
-    answers = [
-        part.obj.item.text
-        for part in parts
-        if isinstance(part, Packet)
-        and isinstance(part.obj, ItemUpdate)
-        and isinstance(part.obj.item, TextItem)
-        and part.obj.item.purpose == TextPurpose.ANSWER
-        and part.identity is not None
-        and part.identity.parent_run_id is None
-    ]
-    assert answers, "Expected an assistant answer item"
-    return answers[-1]
+    answer = ""
+    for part in parts:
+        if not isinstance(part, Packet) or part.placement.sub_turn_index is not None:
+            continue
+        if isinstance(part.obj, AgentResponseStart):
+            answer = ""
+        elif isinstance(part.obj, AgentResponseDelta):
+            answer += part.obj.content
+    assert answer, "Expected assistant answer content"
+    return answer
 
 
 def submit_query(

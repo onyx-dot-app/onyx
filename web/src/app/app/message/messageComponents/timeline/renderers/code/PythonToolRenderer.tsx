@@ -1,6 +1,14 @@
 import { useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
-import { ResponseItem } from "@/app/app/services/streamingModels";
+import {
+  PacketType,
+  PythonToolPacket,
+  PythonToolStart,
+  PythonToolDelta,
+  ToolCallArgumentDelta,
+  SectionEnd,
+  isCodeInterpreterToolType,
+} from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
   RenderType,
@@ -10,12 +18,6 @@ import hljs from "highlight.js/lib/core";
 import python from "highlight.js/lib/languages/python";
 import { SvgTerminal } from "@opal/icons";
 import FadingEdgeContainer from "@/refresh-components/FadingEdgeContainer";
-import {
-  firstTool,
-  isComplete as itemsComplete,
-  stringArgument,
-  toolMetadata,
-} from "@/app/app/services/responseItems";
 
 // Register Python language for highlighting
 hljs.registerLanguage("python", python);
@@ -38,25 +40,63 @@ function HighlightedPythonCode({ code }: { code: string }) {
   );
 }
 
-function constructCurrentPythonState(items: ResponseItem[]) {
-  const tool = firstTool(items);
-  const output = toolMetadata(items, "python_execution").at(-1);
-  const stdout = output?.stdout ?? "";
-  const stderr = output?.stderr ?? "";
+// Helper function to construct current Python execution state
+function constructCurrentPythonState(packets: PythonToolPacket[]) {
+  // Accumulate streaming code from argument deltas (arrives before PythonToolStart)
+  const streamingCode = packets
+    .filter(
+      (packet) =>
+        packet.obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
+        isCodeInterpreterToolType(
+          (packet.obj as ToolCallArgumentDelta).tool_type
+        )
+    )
+    .map((packet) =>
+      String((packet.obj as ToolCallArgumentDelta).argument_deltas.code ?? "")
+    )
+    .join("");
+  const pythonStart = packets.find(
+    (packet) => packet.obj.type === PacketType.PYTHON_TOOL_START
+  )?.obj as PythonToolStart | null;
+  const pythonDeltas = packets
+    .filter((packet) => packet.obj.type === PacketType.PYTHON_TOOL_DELTA)
+    .map((packet) => packet.obj as PythonToolDelta);
+  const pythonEnd = packets.find(
+    (packet) =>
+      packet.obj.type === PacketType.SECTION_END ||
+      packet.obj.type === PacketType.ERROR
+  )?.obj as SectionEnd | null;
+
+  // Use complete code from PythonToolStart if available, else use streamed code.
+  const code = pythonStart?.code || streamingCode;
+  const stdout = pythonDeltas
+    .map((delta) => delta?.stdout || "")
+    .filter((s) => s)
+    .join("");
+  const stderr = pythonDeltas
+    .map((delta) => delta?.stderr || "")
+    .filter((s) => s)
+    .join("");
+  const fileIds = pythonDeltas.flatMap((delta) => delta?.file_ids || []);
+  const isStreaming = !pythonStart && streamingCode.length > 0;
+  const isExecuting = pythonStart && !pythonEnd;
+  const isComplete = pythonStart && pythonEnd;
+  const hasError = stderr.length > 0;
+
   return {
-    code: stringArgument(tool, "code"),
+    code,
     stdout,
     stderr,
-    generatedFileCount: output?.generated_files.length ?? 0,
-    isStreaming: tool?.status === "pending",
-    isExecuting: tool?.status === "running",
-    isComplete: itemsComplete(items),
-    hasError: !!output?.error || stderr.length > 0 || tool?.status === "error",
+    fileIds,
+    isStreaming,
+    isExecuting,
+    isComplete,
+    hasError,
   };
 }
 
-export const PythonToolRenderer: MessageRenderer<ResponseItem, {}> = ({
-  items,
+export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
+  packets,
   onComplete,
   renderType,
   children,
@@ -66,12 +106,12 @@ export const PythonToolRenderer: MessageRenderer<ResponseItem, {}> = ({
     code,
     stdout,
     stderr,
-    generatedFileCount,
+    fileIds,
     isStreaming,
     isExecuting,
     isComplete,
     hasError,
-  } = constructCurrentPythonState(items);
+  } = constructCurrentPythonState(packets);
 
   useEffect(() => {
     if (isComplete) {
@@ -154,9 +194,9 @@ export const PythonToolRenderer: MessageRenderer<ResponseItem, {}> = ({
       )}
 
       {/* File count */}
-      {generatedFileCount > 0 && (
+      {fileIds.length > 0 && (
         <div className="text-sm text-text-03">
-          {t("python.generatedFiles.label", { count: generatedFileCount })}
+          {t("python.generatedFiles.label", { count: fileIds.length })}
         </div>
       )}
 

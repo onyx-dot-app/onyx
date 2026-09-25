@@ -1,17 +1,18 @@
 import { describe, expect, it } from "@jest/globals";
 import { renderHook } from "@testing-library/react-native";
 
+import { PacketType } from "@/chat/streamingModels";
 import { TurnGroup } from "@/chat/timeline/transformers";
 import { useTimelineStepState } from "@/hooks/timeline/useTimelineStepState";
 
-import { makeItem, makeStep, makeTurn } from "./testHelpers";
+import { makePacket, makeStep, makeTurn } from "./testHelpers";
 
 function run(turnGroups: TurnGroup[]) {
   return renderHook(() => useTimelineStepState(turnGroups)).result.current;
 }
 
-const memoryStep = makeStep(0, 0, [makeItem("add_memory")]);
-const reasoningStep = makeStep(0, 0, [makeItem("reasoning")]);
+const memoryStep = makeStep(0, 0, [makePacket(PacketType.MEMORY_TOOL_START)]);
+const reasoningStep = makeStep(0, 0, [makePacket(PacketType.REASONING_START)]);
 
 describe("useTimelineStepState (dormant in 9b)", () => {
   it("leaves memory content null until the memory renderer phase", () => {
@@ -28,7 +29,9 @@ describe("useTimelineStepState (dormant in 9b)", () => {
       run([
         makeTurn(0, [memoryStep]),
         makeTurn(1, [
-          makeStep(1, 0, [makeItem("add_memory", { turn_index: 1 })]),
+          makeStep(1, 0, [
+            makePacket(PacketType.MEMORY_TOOL_NO_ACCESS, { turn_index: 1 }),
+          ]),
         ]),
       ]).isMemoryOnly,
     ).toBe(true);

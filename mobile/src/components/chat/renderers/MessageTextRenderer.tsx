@@ -2,25 +2,48 @@
 // markdown to `children`. 9a inline citations ride along as `[[n]](url)` markers opened by openUrl.
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { ResponseItem } from "@/chat/streamingModels";
-import { textContent, isComplete } from "@/chat/responseItems";
+import {
+  MessageDelta,
+  MessageStart,
+  Packet,
+  PacketType,
+} from "@/chat/streamingModels";
 import { openUrl } from "@/chat/openSource";
 import { StreamingMarkdown } from "@/components/chat/StreamingMarkdown";
 import { useTypewriter } from "@/hooks/useTypewriter";
 
 import type { FullChatState, MessageRenderer } from "./timelineContract";
 
-export const MessageTextRenderer: MessageRenderer<
-  ResponseItem,
-  FullChatState
-> = ({ items, onComplete, animate, stopPacketSeen, children }) => {
-  // Stable across packet flushes so the typewriter target grows only when content does.
-  const content = useMemo(
-    () => textContent(items) + textContent(items, "commentary"),
-    [items],
-  );
+function accumulateContent(packets: Packet[]): string {
+  let content = "";
+  for (const packet of packets) {
+    if (
+      packet.obj.type === PacketType.MESSAGE_START ||
+      packet.obj.type === PacketType.MESSAGE_DELTA
+    ) {
+      // message_start can arrive with no content; guard prevents appending literal "undefined".
+      content += (packet.obj as MessageStart | MessageDelta).content ?? "";
+    }
+  }
+  return content;
+}
 
-  const messageEndSeen = useMemo(() => isComplete(items), [items]);
+export const MessageTextRenderer: MessageRenderer<Packet, FullChatState> = ({
+  packets,
+  onComplete,
+  animate,
+  stopPacketSeen,
+  children,
+}) => {
+  // Stable across packet flushes so the typewriter target grows only when content does.
+  const content = useMemo(() => accumulateContent(packets), [packets]);
+
+  // Reproduces the processor's `isComplete` (MESSAGE_END or STOP) from the contract props — the signal
+  // that tells the typewriter to drain to the end and snap.
+  const messageEndSeen = useMemo(
+    () => packets.some((packet) => packet.obj.type === PacketType.MESSAGE_END),
+    [packets],
+  );
   const isStreamFinished = stopPacketSeen || messageEndSeen;
 
   // Captured once at mount: live messages animate; historical ones snap.

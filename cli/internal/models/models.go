@@ -145,6 +145,13 @@ type SearchDoc struct {
 	SourceType         string  `json:"source_type"`
 }
 
+// Placement indicates where a stream event belongs in the conversation.
+type Placement struct {
+	TurnIndex    int  `json:"turn_index"`
+	TabIndex     int  `json:"tab_index"`
+	SubTurnIndex *int `json:"sub_turn_index"`
+}
+
 // SearchRequest is the request body for POST /api/search.
 type SearchRequest struct {
 	Query        string   `json:"query"`

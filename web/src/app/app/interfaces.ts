@@ -175,7 +175,6 @@ export interface Message {
 
   // new gen
   packets: Packet[];
-  skipReplayAnimation?: boolean;
   packetCount?: number; // Tracks packet count for React memo comparison (avoids reading from mutated array)
 
   // cached values for easy access
@@ -204,7 +203,7 @@ export interface BackendChatSession {
 
   owner_name: string | null;
   packets: Packet[][];
-  // Buffered work can be live or interrupted.
+  // Set while a run is in flight and resumable via the resume-stream endpoint
   current_stream?: { stream_id: number; is_running: boolean } | null;
   // True for sessions pinned to an incognito record mode.
   incognito?: boolean;

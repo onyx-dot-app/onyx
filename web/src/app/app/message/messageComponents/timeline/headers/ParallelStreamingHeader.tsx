@@ -2,12 +2,12 @@ import React, { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { SvgFold, SvgExpand } from "@opal/icons";
 import { Button, Tabs } from "@opal/components";
-import { TurnGroup } from "@/app/app/message/messageComponents/timeline/transformers";
+import { TurnGroup } from "../transformers";
 import {
   getToolIcon,
   getToolName,
   isToolComplete,
-} from "@/app/app/message/messageComponents/toolDisplayHelpers";
+} from "../../toolDisplayHelpers";
 
 export interface ParallelStreamingHeaderProps {
   steps: TurnGroup["steps"];
@@ -36,7 +36,7 @@ export const ParallelStreamingHeader = React.memo(
         new Map(
           steps.map((step) => [
             step.key,
-            step.items.length > 0 && !isToolComplete(step.items),
+            step.packets.length > 0 && !isToolComplete(step.packets),
           ])
         ),
       [steps]
@@ -70,8 +70,8 @@ export const ParallelStreamingHeader = React.memo(
               isLoading={loadingStates.get(step.key)}
             >
               <span className="flex items-center gap-1.5">
-                {getToolIcon(step.items)}
-                {getToolName(step.items, t)}
+                {getToolIcon(step.packets)}
+                {getToolName(step.packets, t)}
               </span>
             </Tabs.Trigger>
           ))}

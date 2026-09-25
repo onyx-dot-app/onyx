@@ -104,7 +104,6 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 			var sessionID string
 			var lastErr error
 			gotStop := false
-			responseState := &models.ResponseState{}
 
 			// Overflow writer: tees to stdout and optionally to a temp file.
 			// In quiet mode, buffer everything and print once at the end.
@@ -143,28 +142,36 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 					continue
 				}
 
-				change, err := responseState.Apply(event)
-				if err != nil {
-					return err
-				}
-				if change != nil {
-					if !askQuiet {
-						ow.Write(sanitize.Terminal(change.TextDelta()))
-					}
+				switch e := event.(type) {
+				case models.MessageDeltaEvent:
+					ow.Write(sanitize.Terminal(e.Content))
+				case models.SearchStartEvent:
 					if isTTY && !askQuiet {
-						activity, err := change.Activity()
-						if err != nil {
-							return err
-						}
-						for _, line := range activity {
-							fmt.Fprintf(ios.ErrOut, "\033[2m%s\033[0m\n", sanitize.Terminal(line))
+						if e.IsInternetSearch {
+							fmt.Fprintf(ios.ErrOut, "\033[2mSearching the web...\033[0m\n")
+						} else {
+							fmt.Fprintf(ios.ErrOut, "\033[2mSearching documents...\033[0m\n")
 						}
 					}
-				}
-				if e, ok := event.(models.ErrorEvent); ok {
-					if askQuiet {
-						ow.Write(sanitize.Terminal(responseState.Text()))
+				case models.SearchQueriesEvent:
+					if isTTY && !askQuiet {
+						for _, q := range e.Queries {
+							fmt.Fprintf(ios.ErrOut, "\033[2m  → %s\033[0m\n", sanitize.Terminal(q))
+						}
 					}
+				case models.SearchDocumentsEvent:
+					if isTTY && !askQuiet && len(e.Documents) > 0 {
+						fmt.Fprintf(ios.ErrOut, "\033[2mFound %d documents\033[0m\n", len(e.Documents))
+					}
+				case models.ReasoningStartEvent:
+					if isTTY && !askQuiet {
+						fmt.Fprintf(ios.ErrOut, "\033[2mThinking...\033[0m\n")
+					}
+				case models.ToolStartEvent:
+					if isTTY && !askQuiet && e.ToolName != "" {
+						fmt.Fprintf(ios.ErrOut, "\033[2mUsing %s...\033[0m\n", sanitize.Terminal(e.ToolName))
+					}
+				case models.ErrorEvent:
 					ow.Finish()
 					if e.StatusCode != 0 {
 						return exitcodes.Newf(exitcodes.ForHTTPStatus(e.StatusCode), "%s", sanitize.Terminal(e.Error))
@@ -174,9 +181,6 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 			}
 
 			if !askJSON {
-				if askQuiet {
-					ow.Write(sanitize.Terminal(responseState.Text()))
-				}
 				ow.Finish()
 			}
 

@@ -15,7 +15,7 @@ import time
 from uuid import UUID
 
 from onyx.configs.constants import MessageType
-from onyx.server.query_and_chat.streaming_models import ItemUpdate, Packet, TextItem
+from onyx.server.query_and_chat.streaming_models import AgentResponseDelta, Packet
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.chat import ChatSessionManager
@@ -129,9 +129,7 @@ def test_resume_replays_and_tails_in_flight_run(admin_user: DATestUser) -> None:
     assert lines is not None, "in-flight run should be resumable"
     packets = [Packet.model_validate(line) for line in lines if "obj" in line]
     assert any(
-        isinstance(packet.obj, ItemUpdate)
-        and isinstance(packet.obj.item, TextItem)
-        and packet.obj.item.text
+        isinstance(packet.obj, AgentResponseDelta) and packet.obj.content
         for packet in packets
     ), "Resume must include answer content"
 

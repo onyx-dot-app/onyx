@@ -42,7 +42,6 @@ type Model struct {
 	streamCancel    context.CancelFunc
 	streamCh        <-chan models.StreamEvent
 	citations       map[int]string
-	responseState   models.ResponseState
 	attachedFiles   []models.FileDescriptorPayload
 
 	// Configure state
@@ -398,7 +397,6 @@ func (m Model) sendMessage(message string) (Model, tea.Cmd) {
 	m.isStreaming = true
 	m.agentStarted = false
 	m.citations = make(map[int]string)
-	m.responseState = models.ResponseState{}
 	m.status.setStreaming(true)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -432,6 +430,65 @@ func (m Model) handleStreamEvent(msg StreamEventMsg) (tea.Model, tea.Cmd) {
 	case models.MessageIDEvent:
 		m.parentMessageID = &e.ReservedAgentMessageID
 
+	case models.MessageStartEvent:
+		m.agentStarted = true
+
+	case models.MessageDeltaEvent:
+		m.agentStarted = true
+		m.viewport.appendToken(e.Content)
+
+	case models.SearchStartEvent:
+		if e.IsInternetSearch {
+			m.viewport.addInfo("Web search…")
+		} else {
+			m.viewport.addInfo("Searching…")
+		}
+
+	case models.SearchQueriesEvent:
+		if len(e.Queries) > 0 {
+			queries := e.Queries
+			if len(queries) > 3 {
+				queries = queries[:3]
+			}
+			parts := make([]string, len(queries))
+			for i, q := range queries {
+				parts[i] = "\"" + q + "\""
+			}
+			m.viewport.addInfo("Searching: " + strings.Join(parts, ", "))
+		}
+
+	case models.SearchDocumentsEvent:
+		count := len(e.Documents)
+		suffix := "s"
+		if count == 1 {
+			suffix = ""
+		}
+		m.viewport.addInfo("Found " + strconv.Itoa(count) + " document" + suffix)
+
+	case models.ReasoningStartEvent:
+		m.viewport.addInfo("Thinking…")
+
+	case models.ReasoningDeltaEvent:
+		// We don't display reasoning text, just the indicator
+
+	case models.ReasoningDoneEvent:
+		// No-op
+
+	case models.CitationEvent:
+		m.citations[e.CitationNumber] = e.DocumentID
+
+	case models.ToolStartEvent:
+		m.viewport.addInfo("Using " + e.ToolName + "…")
+
+	case models.ResearchAgentStartEvent:
+		m.viewport.addInfo("Researching: " + e.ResearchTask)
+
+	case models.DeepResearchPlanDeltaEvent:
+		m.viewport.appendToken(e.Content)
+
+	case models.IntermediateReportDeltaEvent:
+		m.viewport.appendToken(e.Content)
+
 	case models.StopEvent:
 		return m.finishStream(nil)
 
@@ -440,25 +497,6 @@ func (m Model) handleStreamEvent(msg StreamEventMsg) (tea.Model, tea.Cmd) {
 		return m.finishStream(nil)
 	}
 
-	change, err := m.responseState.Apply(msg.Event)
-	if err != nil {
-		m.viewport.addError(err.Error())
-		return m.finishStream(nil)
-	}
-	if change != nil {
-		text := m.responseState.Text()
-		m.viewport.setResponseText(text)
-		m.agentStarted = text != ""
-		m.citations = m.responseState.Citations()
-		activity, err := change.Activity()
-		if err != nil {
-			m.viewport.addError(err.Error())
-			return m.finishStream(nil)
-		}
-		for _, line := range activity {
-			m.viewport.addInfo(line)
-		}
-	}
 	return m, WaitForStreamEvent(m.streamCh)
 }
 
