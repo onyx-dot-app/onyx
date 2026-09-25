@@ -1316,7 +1316,11 @@ codeInterpreter:
   service:
     port: 8000
 
-# Values passed through to the code-interpreter subchart.
+# Values passed through to the code-interpreter subchart. Notable options:
+# code-interpreter.codeInterpreter.kubernetesExecutor.{securityContext.mode,pod,podResources},
+# code-interpreter.capacity.* and code-interpreter.fileStorage.shared (required for
+# replicaCount > 1). The top-level codeInterpreter.enabled only turns the subchart on. See
+# https://github.com/onyx-dot-app/python-sandbox/tree/main/kubernetes/code-interpreter
 code-interpreter:
   # API container resources. Workspace archives staged into sandboxes are
   # routinely tens of MB and the base64-encoded snapshot path roughly doubles
