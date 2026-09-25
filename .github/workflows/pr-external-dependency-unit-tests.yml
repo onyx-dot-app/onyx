@@ -30,8 +30,9 @@ env:
   S3_AWS_ACCESS_KEY_ID_FOR_TEST: ${{ secrets.S3_AWS_ACCESS_KEY_ID }}
   S3_AWS_SECRET_ACCESS_KEY_FOR_TEST: ${{ secrets.S3_AWS_SECRET_ACCESS_KEY }}
 
-  # MinIO
+  # Object store (dev overlay publishes it on 9004) and the legacy MinIO (9005)
   S3_ENDPOINT_URL: "http://localhost:9004"
+  S3_LEGACY_ENDPOINT_URL: "http://localhost:9005"
   S3_AWS_ACCESS_KEY_ID: "minioadmin"
   S3_AWS_SECRET_ACCESS_KEY: "minioadmin"
 
@@ -150,6 +151,7 @@ jobs:
             -f docker-compose.yml \
             -f docker-compose.dev.yml \
             up -d \
+            object-store \
             minio \
             relational_db \
             cache \
