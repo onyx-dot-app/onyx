@@ -132,6 +132,7 @@ from onyx.server.documents.models import (
     ConnectorCredentialPairIdentifier,
     ConnectorFileInfo,
     ConnectorFilesResponse,
+    ConnectorGroupRestrictionsStatus,
     ConnectorIndexingStatusLite,
     ConnectorIndexingStatusLiteResponse,
     ConnectorRequestSubmission,
@@ -224,6 +225,19 @@ def upsert_gmail_service_account_credential(
         credential_data=credential_base, user=user, db_session=db_session
     )
     return ObjectCreationIdResponse(id=credential.id)
+
+
+@router.get("/connector-group-restrictions")
+def get_connector_group_restrictions_status(
+    _: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+) -> ConnectorGroupRestrictionsStatus:
+    """Whether connector forms offer the data-access group restriction. Scoped
+    managers read it here because the security settings API is admin-only."""
+    return ConnectorGroupRestrictionsStatus(
+        enabled=get_security_settings().allow_connector_group_restrictions
+    )
 
 
 @router.get("/admin/connector/google-drive/check-auth/{credential_id}")
@@ -1416,6 +1430,9 @@ def _apply_connector_status_filters(
 ) -> list[ConnectorIndexingStatusLite]:
     """Apply filters to a list of ConnectorIndexingStatusLite objects"""
     filtered_statuses: list[ConnectorIndexingStatusLite] = []
+    # The "sync" filter covers restricted perm-synced pairs too.
+    if AccessType.SYNC in access_type_filters:
+        access_type_filters = [*access_type_filters, AccessType.SYNC_RESTRICTED]
 
     for status in statuses:
         # Filter by access type
@@ -1555,6 +1572,14 @@ def create_connector_with_mock_credential(
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     tenant_id = get_current_tenant_id()
+
+    if connector_data.access_type == AccessType.SYNC_RESTRICTED:
+        # Perm sync needs a real credential; the restriction's groups are only
+        # accepted where the pair is associated with one.
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Restricted perm-synced connectors must be created with a credential.",
+        )
 
     # GATE 2 write authorization (see assert_within_scope).
     assert_within_scope(

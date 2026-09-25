@@ -2155,12 +2155,29 @@
           "title": "Group Membership Sync Error"
         }
       },
+      "groupRestriction": {
+        "empty": {
+          "description": "Everyone keeps the access synced from the source.",
+          "title": "No restriction until groups are added"
+        },
+        "memberCount": "{count, plural, one {# member} other {# members}}",
+        "picker": {
+          "placeholder": "Add groups to restrict access to this connector"
+        },
+        "remove": {
+          "tooltip": "Remove {name}"
+        },
+        "toggle": {
+          "description": "Limit access to members of selected groups. Synced permissions still apply.",
+          "title": "Restrict Access to Groups"
+        }
+      },
       "groupSelector": {
         "assignGroupAccess": {
           "title": "Assign group access for this Connector"
         },
         "assignToGroup": {
-          "title": "Assign this Connector to a group"
+          "title": "Groups that can manage this Connector"
         },
         "scopedManagerGroups": {
           "description": "Select one or more of the groups you manage to give access to this Connector"
@@ -7513,11 +7530,6 @@
       "appName": {
         "description": "This name will show across the app and replace \"Onyx\" in the UI.",
         "label": "Application Display Name"
-      },
-      "branding": {
-        "description": "Remove “powered by Onyx” and other Onyx branding presence in the app.",
-        "enterpriseTooltip": "Hiding Onyx branding is an Enterprise Plan feature.",
-        "label": "Hide Onyx Branding"
       },
       "chatFooter": {
         "description": "Add markdown content for disclaimers or additional information.",
@@ -13074,7 +13086,8 @@
     },
     "select": {
       "emptySet": "No items found",
-      "invalidOption": "Please select a valid option from the list"
+      "invalidOption": "Please select a valid option from the list",
+      "searchPlaceholder": "Search"
     },
     "settingsHeader": {
       "cancel": "Cancel"

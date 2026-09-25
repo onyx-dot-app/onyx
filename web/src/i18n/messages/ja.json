@@ -2155,12 +2155,29 @@
           "title": "グループメンバーシップの同期エラー"
         }
       },
+      "groupRestriction": {
+        "empty": {
+          "description": "全員がソースから同期されたアクセス権を保持します。",
+          "title": "グループを追加するまで制限はありません"
+        },
+        "memberCount": "{count, plural, other {#人のメンバー}}",
+        "picker": {
+          "placeholder": "このコネクタへのアクセスを制限するグループを追加"
+        },
+        "remove": {
+          "tooltip": "{name}を削除"
+        },
+        "toggle": {
+          "description": "選択したグループのメンバーにアクセスを限定します。同期された権限も引き続き適用されます。",
+          "title": "グループへのアクセス制限"
+        }
+      },
       "groupSelector": {
         "assignGroupAccess": {
           "title": "このコネクタへのグループアクセスを割り当てる"
         },
         "assignToGroup": {
-          "title": "このコネクタをグループに割り当てる"
+          "title": "このコネクタを管理できるグループ"
         },
         "scopedManagerGroups": {
           "description": "このコネクタへのアクセスを付与するには、管理しているグループを1つ以上選択してください"
@@ -7513,11 +7530,6 @@
       "appName": {
         "description": "この名前はアプリ全体に表示され、UI内の「Onyx」を置き換えます。",
         "label": "アプリケーションの表示名"
-      },
-      "branding": {
-        "description": "アプリ内の「powered by Onyx」やその他のOnyxブランディングを削除します。",
-        "enterpriseTooltip": "Onyxブランディングの非表示はEnterpriseプランの機能です。",
-        "label": "Onyxブランディングを非表示"
       },
       "chatFooter": {
         "description": "免責事項や追加情報のためのマークダウンコンテンツを追加します。",
@@ -13074,7 +13086,8 @@
     },
     "select": {
       "emptySet": "項目が見つかりません",
-      "invalidOption": "リストから有効なオプションを選択してください"
+      "invalidOption": "リストから有効なオプションを選択してください",
+      "searchPlaceholder": "検索"
     },
     "settingsHeader": {
       "cancel": "キャンセル"

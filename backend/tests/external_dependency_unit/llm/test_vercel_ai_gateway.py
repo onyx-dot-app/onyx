@@ -110,7 +110,6 @@ def test_streaming_completion_through_the_gateway(
         model_provider=LlmProviderNames.VERCEL_AI_GATEWAY,
         model_name=_TEST_MODEL,
         max_input_tokens=128_000,
-        timeout=60,
     )
 
     prompt: list[ChatCompletionMessage] = [

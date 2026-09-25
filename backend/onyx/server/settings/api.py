@@ -10,6 +10,7 @@ from onyx.auth.users import is_user_admin
 from onyx.configs.app_configs import (
     DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB,
     DISABLE_VECTOR_DB,
+    HIDE_ONYX_BRANDING,
     MAX_ALLOWED_UPLOAD_SIZE_MB,
     POSTHOG_API_KEY,
     POSTHOG_HOST,
@@ -170,6 +171,11 @@ def fetch_settings(
         apply_license_status_to_settings,
     )
     general_settings = apply_fn(general_settings)
+    # The EE apply_fn resolves tier on every path. On CE the stored value is
+    # client-writable, so it never counts.
+    resolved_tier = (
+        general_settings.tier if global_version.is_ee_version() else Tier.COMMUNITY
+    )
 
     # Craft workspace instructions are visible to authenticated users (they
     # appear in sandbox AGENTS.md anyway) but not to anonymous visitors.
@@ -202,6 +208,8 @@ def fetch_settings(
         onyx_craft_available=onyx_craft_available,
         opencode_debugging_enabled=ENABLE_OPENCODE_DEBUGGING,
         vector_db_enabled=not DISABLE_VECTOR_DB,
+        hide_onyx_branding=HIDE_ONYX_BRANDING
+        and tier_at_least(resolved_tier, Tier.ENTERPRISE),
         hooks_enabled=not MULTI_TENANT,
         version=onyx_version,
         max_allowed_upload_size_mb=MAX_ALLOWED_UPLOAD_SIZE_MB,

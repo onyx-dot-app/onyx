@@ -1277,6 +1277,14 @@ minio:
   mode: standalone
   replicas: 1
   drivesPerNode: 1
+  # Docker Hub and quay.io no longer serve minio/minio or minio/mc, so both come
+  # from our mirror of the newest multi-arch build we kept, which ships mc too.
+  image:
+    repository: onyxdotapp/minio
+    tag: RELEASE.2025-07-23T15-54-02Z-cpuv1@sha256:7330be2e7320a7a699b36f72bd06a94d8a21ec9f6f397345d9c38fc6751141f5
+  mcImage:
+    repository: onyxdotapp/minio
+    tag: RELEASE.2025-07-23T15-54-02Z-cpuv1@sha256:7330be2e7320a7a699b36f72bd06a94d8a21ec9f6f397345d9c38fc6751141f5
   existingSecret: onyx-objectstorage
   buckets:
     - name: onyx-file-store-bucket

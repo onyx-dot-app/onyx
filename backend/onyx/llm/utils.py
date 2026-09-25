@@ -38,6 +38,9 @@ if TYPE_CHECKING:
 
 logger = setup_logger()
 
+# An admin watches a spinner while this runs, and test_llm makes two attempts.
+LLM_PROBE_TIMEOUT_S = 10
+
 MAX_CONTEXT_TOKENS = 100
 ONE_MILLION = 1_000_000
 CHUNKS_PER_DOC_ESTIMATE = 5
@@ -410,7 +413,7 @@ def litellm_exception_to_safe_error(
     )
 
 
-def test_llm(llm: LLM) -> str | None:
+def test_llm(llm: LLM, total_timeout_s: float = LLM_PROBE_TIMEOUT_S) -> str | None:
     """Probe an LLM and return either `None` (success) or a sanitized error.
 
     The returned message is intended to be safe to surface to admin callers:
@@ -423,10 +426,14 @@ def test_llm(llm: LLM) -> str | None:
     The full raw error is still logged at WARNING for ops debugging.
     """
     error_msg: str | None = None
-    # try for up to 2 timeouts (e.g. 10 seconds in total)
+    # Two attempts, so the caller waits at most 2 * total_timeout_s.
     for _ in range(2):
         try:
-            llm.invoke(UserMessage(content="Do not respond"), max_tokens=50)
+            llm.invoke(
+                UserMessage(content="Do not respond"),
+                max_tokens=50,
+                total_timeout_s=total_timeout_s,
+            )
             return None
         except Exception as e:
             logger.warning("Failed to call LLM with the following error: %s", e)

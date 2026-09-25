@@ -79,6 +79,10 @@ DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() ==
 # are disabled but core chat, tools, user file uploads, and Projects still work.
 DISABLE_VECTOR_DB = os.environ.get("DISABLE_VECTOR_DB", "").lower() == "true"
 
+# Hides the "Powered by Onyx" tagline on Enterprise deployments. Do not set
+# without explicit permission from Onyx.
+HIDE_ONYX_BRANDING = os.environ.get("HIDE_ONYX_BRANDING", "").lower() == "true"
+
 # TEMPORARY (will be removed soon): operator-forced Search-UI scope (self-hosted only) —
 # comma-separated document set NAMES. When set, the Onyx Search UI is restricted to those sets
 # (AND'd on top of any persona/user scope; ACL still enforced) — chat/other flows are unaffected,

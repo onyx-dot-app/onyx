@@ -34,6 +34,13 @@ interface TagProps {
    */
   onRemove?: () => void;
 
+  /**
+   * Editable only: whether the remove button is a Tab stop. A chip field
+   * walks its chips with the arrows and keeps Tab for leaving the field.
+   * @default true
+   */
+  removeInTabOrder?: boolean;
+
   /** Editable only: dims the tag and hides the remove button. */
   disabled?: boolean;
 
@@ -67,6 +74,7 @@ function Tag({
   color = "gray",
   size = "sm",
   onRemove,
+  removeInTabOrder = true,
   disabled = false,
   value,
   truncate = false,
@@ -128,6 +136,7 @@ function Tag({
           <button
             type="button"
             className={TAG_REMOVE_CLASS}
+            tabIndex={removeInTabOrder ? undefined : -1}
             aria-label={
               typeof title === "string"
                 ? strings.removeItem(title)

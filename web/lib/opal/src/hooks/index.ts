@@ -24,3 +24,4 @@ export {
   type UseImageDropzoneOptions,
   type UseImageDropzoneReturn,
 } from "@opal/hooks/useImageDropzone";
+export { default as usePresence } from "@opal/hooks/usePresence";

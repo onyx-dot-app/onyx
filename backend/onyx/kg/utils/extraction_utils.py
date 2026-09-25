@@ -46,6 +46,10 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+# Deep extraction returns a full JSON entity/relationship graph per chunk batch,
+# so it needs more than the default invoke timeout.
+_DEEP_EXTRACTION_TIMEOUT_S = 300
+
 KG_DOCUMENT_PROCESSING_TRACE_NAME = "kg_document_processing"
 
 
@@ -453,7 +457,7 @@ def kg_classify_document(
             input_messages=[prompt_msg],
             content_mode=TraceContentMode.METADATA_ONLY,
         ) as span_generation:
-            response = llm.invoke(prompt_msg, stream=True)
+            response = llm.invoke(prompt_msg)
             record_llm_response(span_generation, response)
             raw_classification_result = llm_response_to_string(response)
 
@@ -529,7 +533,10 @@ def kg_deep_extract_chunks(
             input_messages=[prompt_msg],
             content_mode=TraceContentMode.METADATA_ONLY,
         ) as span_generation:
-            response = llm.invoke(prompt_msg, stream=True)
+            response = llm.invoke(
+                prompt_msg,
+                total_timeout_s=_DEEP_EXTRACTION_TIMEOUT_S,
+            )
             record_llm_response(span_generation, response)
             raw_extraction_result = llm_response_to_string(response)
 

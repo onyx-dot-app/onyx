@@ -35,7 +35,7 @@ import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTyp
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import SwitchField from "@/refresh-components/form/SwitchField";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelect } from "@opal/components";
 import { Modal } from "@opal/components";
 import { useModalClose } from "@opal/components";
 
@@ -357,38 +357,28 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                     )}
                     withLabel="provider_type"
                   >
-                    <InputSelect
+                    <InputSingleSelect
                       value={values.provider_type}
                       onValueChange={(value) => {
                         void setFieldValue("provider_type", value);
                       }}
                       disabled={isEditing || providerTypesLoading}
-                      error={Boolean(
+                      isError={Boolean(
                         touched.provider_type && errors.provider_type
                       )}
-                    >
-                      <InputSelect.Trigger
-                        placeholder={t(
-                          "modals.provider.providerTypeField.placeholder"
-                        )}
-                      />
-                      <InputSelect.Content>
-                        {providerTypes.map((type) => {
-                          const detail = SSO_PROVIDER_DETAILS[type];
-                          return (
-                            <InputSelect.Item
-                              key={type}
-                              value={type}
-                              icon={detail.icon}
-                              description={t(detail.descriptionKey)}
-                              wrapDescription
-                            >
-                              {detail.label}
-                            </InputSelect.Item>
-                          );
-                        })}
-                      </InputSelect.Content>
-                    </InputSelect>
+                      placeholder={t(
+                        "modals.provider.providerTypeField.placeholder"
+                      )}
+                      options={providerTypes.map((type) => {
+                        const detail = SSO_PROVIDER_DETAILS[type];
+                        return {
+                          value: type,
+                          title: detail.label,
+                          description: t(detail.descriptionKey),
+                          icon: detail.icon,
+                        };
+                      })}
+                    />
                   </InputVertical>
 
                   <InputVertical

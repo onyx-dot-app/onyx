@@ -1,6 +1,6 @@
 """Microsoft Graph transport: retry policies, the authenticated GET, paging.
 
-Two status sets live here because callers disagree about 5xx.
+Two retry status sets live here because callers disagree about 5xx.
 :data:`RETRYABLE_HTTP_STATUSES` is the narrow set and the default of
 :func:`sleep_and_retry`. :data:`GRAPH_API_RETRYABLE_STATUSES` adds the gateway
 5xx codes and is what the raw GET and Teams use. A caller that wants the wide
@@ -42,6 +42,24 @@ TRANSIENT_TRANSPORT_EXCEPTIONS: tuple[type[BaseException], ...] = (
     requests.exceptions.ChunkedEncodingError,
     requests.exceptions.ContentDecodingError,
 )
+
+# No grant (403), gone (404), admin-locked or M365-archived (423): true of one
+# entity whatever the caller does next, so a walk records it and moves on. 410
+# stays out, since Graph also answers it for an expired delta or page token.
+PERMANENT_REFUSAL_STATUSES: frozenset[int] = frozenset({403, 404, 423})
+
+
+def is_permanent_refusal_status(status: int | None) -> bool:
+    """Whether Graph refused this one entity for good. A missing status is a
+    transport failure, never a refusal."""
+    return status in PERMANENT_REFUSAL_STATUSES
+
+
+def is_permanent_refusal(error: requests.RequestException) -> bool:
+    """The requests form, for the raw GET's HTTPError and the SDK's exception."""
+    if error.response is None:
+        return False
+    return is_permanent_refusal_status(error.response.status_code)
 
 
 def backoff_seconds(attempt: int, retry_after: str | None) -> float:

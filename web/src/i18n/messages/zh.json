@@ -2155,12 +2155,29 @@
           "title": "用户组成员同步错误"
         }
       },
+      "groupRestriction": {
+        "empty": {
+          "description": "所有人保留从源系统同步的访问权限。",
+          "title": "添加群组前不设限制"
+        },
+        "memberCount": "{count, plural, other {# 名成员}}",
+        "picker": {
+          "placeholder": "添加群组以限制对此连接器的访问"
+        },
+        "remove": {
+          "tooltip": "移除 {name}"
+        },
+        "toggle": {
+          "description": "仅允许所选群组的成员访问。同步的权限仍然适用。",
+          "title": "限制为群组访问"
+        }
+      },
       "groupSelector": {
         "assignGroupAccess": {
           "title": "为此连接器分配组访问权限"
         },
         "assignToGroup": {
-          "title": "将此连接器分配给一个组"
+          "title": "可以管理此连接器的群组"
         },
         "scopedManagerGroups": {
           "description": "选择一个或多个您管理的组以授予对此连接器的访问权限"
@@ -7513,11 +7530,6 @@
       "appName": {
         "description": "此名称将在整个应用中显示,并替换界面中的\"Onyx\"。",
         "label": "应用显示名称"
-      },
-      "branding": {
-        "description": "移除应用中的\"powered by Onyx\"及其他 Onyx 品牌标识。",
-        "enterpriseTooltip": "隐藏 Onyx 品牌标识是企业版套餐的功能。",
-        "label": "隐藏 Onyx 品牌标识"
       },
       "chatFooter": {
         "description": "添加用于免责声明或附加信息的 markdown 内容。",
@@ -13074,7 +13086,8 @@
     },
     "select": {
       "emptySet": "未找到任何项目",
-      "invalidOption": "请从列表中选择有效选项"
+      "invalidOption": "请从列表中选择有效选项",
+      "searchPlaceholder": "搜索"
     },
     "settingsHeader": {
       "cancel": "取消"

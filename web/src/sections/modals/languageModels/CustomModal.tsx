@@ -31,9 +31,9 @@ import {
   InputKeyValue as KeyValueInput,
   type KeyValue,
 } from "@opal/components";
-import { InputSingleSelect } from "@opal/components";
+import { InputSingleComboBox } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelect } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Button, Card, EmptyMessageCard } from "@opal/components";
 import { SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
@@ -93,24 +93,18 @@ function ModelConfigurationItem({
         value={model.display_name}
         onChange={(e) => onChange({ ...model, display_name: e.target.value })}
       />
-      <InputSelect
+      <InputSingleSelect
         value={model.supports_image_input ? "text-image" : "text-only"}
         onValueChange={(value) =>
           onChange({ ...model, supports_image_input: value === "text-image" })
         }
-      >
-        <InputSelect.Trigger
-          placeholder={t("custom.modelRow.inputTypePlaceholder")}
-        />
-        <InputSelect.Content>
-          <InputSelect.Item value="text-only">
-            {t("custom.modelRow.textOnly.label")}
-          </InputSelect.Item>
-          <InputSelect.Item value="text-image">
-            {t("custom.modelRow.textImage.label")}
-          </InputSelect.Item>
-        </InputSelect.Content>
-      </InputSelect>
+        defaultOption="text-only"
+        placeholder={t("custom.modelRow.inputTypePlaceholder")}
+        options={[
+          { value: "text-only", title: t("custom.modelRow.textOnly.label") },
+          { value: "text-image", title: t("custom.modelRow.textImage.label") },
+        ]}
+      />
       <InputTypeIn
         placeholder={t("custom.modelRow.maxTokensPlaceholder")}
         value={model.max_input_tokens?.toString() ?? ""}
@@ -235,14 +229,14 @@ function ProviderNameSelect({ disabled }: { disabled?: boolean }) {
     () =>
       (customProviderNames ?? []).map((opt) => ({
         value: opt.value,
-        label: opt.value,
+        title: opt.value,
         description: opt.label,
       })),
     [customProviderNames]
   );
 
   return (
-    <InputSingleSelect
+    <InputSingleComboBox
       mode="open"
       value={values.provider}
       onValueChange={(value) => setFieldValue("provider", value)}

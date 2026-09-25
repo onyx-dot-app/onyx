@@ -796,10 +796,18 @@ def test_validation_maps_token_refusal_to_invalid_credential() -> None:
         _connector(gateway).validate_connector_settings()
 
 
-def test_validation_lists_unreachable_configured_mailboxes() -> None:
+@pytest.mark.parametrize(
+    ("status", "code"),
+    [(404, "MailboxNotEnabledForRESTAPI"), (423, "ErrorMailboxLocked")],
+)
+def test_validation_lists_unreachable_configured_mailboxes(
+    status: int, code: str
+) -> None:
+    """A denied, missing or locked mailbox is the mailbox's own problem, so it is
+    named in the validation error rather than failing the check outright."""
     gateway = _happy_gateway()
     gateway.resolve_mailbox.side_effect = [None, mailbox(id="user-2")]
-    gateway.probe_mailbox.side_effect = graph_error(404, "MailboxNotEnabledForRESTAPI")
+    gateway.probe_mailbox.side_effect = graph_error(status, code)
 
     with pytest.raises(ConnectorValidationError) as exc_info:
         _connector(
@@ -807,7 +815,7 @@ def test_validation_lists_unreachable_configured_mailboxes() -> None:
         ).validate_connector_settings()
 
     assert "ghost@contoso.com (no such user)" in str(exc_info.value)
-    assert "unlicensed@contoso.com (MailboxNotEnabledForRESTAPI)" in str(exc_info.value)
+    assert f"unlicensed@contoso.com ({code})" in str(exc_info.value)
 
 
 def test_validation_in_every_mailbox_mode_probes_the_user_listing() -> None:

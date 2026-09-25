@@ -6,8 +6,7 @@ import { useEffect } from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import InputSelectField from "@/refresh-components/form/InputSelectField";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelectField } from "@opal/form";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
   LLMProviderFormProps,
@@ -79,9 +78,20 @@ function BedrockModalInternals({
   isOnboarding,
 }: BedrockModalInternalsProps) {
   const t = useTranslations("admin.languageModels.modals");
+  const tInputSelect = useTranslations("common.inputSelect");
   const { appName } = useSettings();
   const formikProps = useFormikContext<BedrockModalValues>();
   const authMethod = formikProps.values.custom_config?.BEDROCK_AUTH_METHOD;
+  // A provider saved with a region outside the list (a newer AWS region)
+  // keeps it as an option, so the saved value shows instead of an error.
+  const savedRegion = formikProps.values.custom_config?.AWS_REGION_NAME;
+  const regionOptions = AWS_REGION_OPTIONS.map((option) => ({
+    value: option.value,
+    title: option.name,
+  }));
+  if (savedRegion && !AWS_REGION_OPTIONS.some((o) => o.value === savedRegion)) {
+    regionOptions.push({ value: savedRegion, title: savedRegion });
+  }
 
   useEffect(() => {
     if (authMethod === AUTH_METHOD_IAM) {
@@ -133,18 +143,11 @@ function BedrockModalInternals({
             title={t("bedrock.regionField.title")}
             subDescription={t("bedrock.regionField.description")}
           >
-            <InputSelectField name={FIELD_AWS_REGION_NAME}>
-              <InputSelect.Trigger
-                placeholder={t("bedrock.regionField.placeholder")}
-              />
-              <InputSelect.Content>
-                {AWS_REGION_OPTIONS.map((option) => (
-                  <InputSelect.Item key={option.value} value={option.value}>
-                    {option.name}
-                  </InputSelect.Item>
-                ))}
-              </InputSelect.Content>
-            </InputSelectField>
+            <InputSingleSelectField
+              name={FIELD_AWS_REGION_NAME}
+              placeholder={t("bedrock.regionField.placeholder")}
+              options={regionOptions}
+            />
           </InputVertical>
 
           <InputVertical
@@ -154,33 +157,32 @@ function BedrockModalInternals({
               appName,
             })}
           >
-            <InputSelectField name={FIELD_BEDROCK_AUTH_METHOD}>
-              <InputSelect.Trigger />
-              <InputSelect.Content>
-                <InputSelect.Item
-                  value={AUTH_METHOD_IAM}
-                  description={t("bedrock.authMethodField.iam.description")}
-                >
-                  {t("bedrock.authMethodField.iam.label")}
-                </InputSelect.Item>
-                <InputSelect.Item
-                  value={AUTH_METHOD_ACCESS_KEY}
-                  description={t(
+            <InputSingleSelectField
+              name={FIELD_BEDROCK_AUTH_METHOD}
+              defaultOption={AUTH_METHOD_IAM}
+              placeholder={tInputSelect("placeholder.fallback")}
+              options={[
+                {
+                  value: AUTH_METHOD_IAM,
+                  title: t("bedrock.authMethodField.iam.label"),
+                  description: t("bedrock.authMethodField.iam.description"),
+                },
+                {
+                  value: AUTH_METHOD_ACCESS_KEY,
+                  title: t("bedrock.authMethodField.accessKey.label"),
+                  description: t(
                     "bedrock.authMethodField.accessKey.description"
-                  )}
-                >
-                  {t("bedrock.authMethodField.accessKey.label")}
-                </InputSelect.Item>
-                <InputSelect.Item
-                  value={AUTH_METHOD_LONG_TERM_API_KEY}
-                  description={t(
+                  ),
+                },
+                {
+                  value: AUTH_METHOD_LONG_TERM_API_KEY,
+                  title: t("bedrock.authMethodField.longTermApiKey.label"),
+                  description: t(
                     "bedrock.authMethodField.longTermApiKey.description"
-                  )}
-                >
-                  {t("bedrock.authMethodField.longTermApiKey.label")}
-                </InputSelect.Item>
-              </InputSelect.Content>
-            </InputSelectField>
+                  ),
+                },
+              ]}
+            />
           </InputVertical>
         </Section>
       </InputPadder>

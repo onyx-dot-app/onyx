@@ -10,7 +10,7 @@ import {
   TableHeader,
 } from "@/components/ui/table";
 import Text from "@/refresh-components/texts/Text";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelect } from "@opal/components";
 import SvgSimpleLoader from "@opal/icons/simple-loader";
 import { ChatSessionMinimal } from "@/app/ee/admin/performance/usage/types";
 import { Section } from "@/layouts/general-layouts";
@@ -104,32 +104,28 @@ function SelectFeedbackType({
   onValueChange: (value: Feedback | "all") => void;
 }) {
   const t = useTranslations("admin.queryHistory");
+  const tInputSelect = useTranslations("common.inputSelect");
   return (
     <Section alignItems="start" gap={1}>
       <Text as="p" className="font-medium">
         {t("filters.feedbackType.label")}
       </Text>
-      <InputSelect
+      <InputSingleSelect
         value={value}
         onValueChange={onValueChange as (value: string) => void}
-      >
-        <InputSelect.Trigger />
-
-        <InputSelect.Content>
-          <InputSelect.Item value="all" icon={SvgMinusCircle}>
-            {t("filters.any.label")}
-          </InputSelect.Item>
-          <InputSelect.Item value="like" icon={SvgThumbsUp}>
-            {t("feedback.like.label")}
-          </InputSelect.Item>
-          <InputSelect.Item value="dislike" icon={SvgThumbsDown}>
-            {t("feedback.dislike.label")}
-          </InputSelect.Item>
-          <InputSelect.Item value="mixed" icon={SvgMinus}>
-            {t("feedback.mixed.label")}
-          </InputSelect.Item>
-        </InputSelect.Content>
-      </InputSelect>
+        defaultOption="all"
+        placeholder={tInputSelect("placeholder.fallback")}
+        options={[
+          { value: "all", title: t("filters.any.label"), icon: SvgMinusCircle },
+          { value: "like", title: t("feedback.like.label"), icon: SvgThumbsUp },
+          {
+            value: "dislike",
+            title: t("feedback.dislike.label"),
+            icon: SvgThumbsDown,
+          },
+          { value: "mixed", title: t("feedback.mixed.label"), icon: SvgMinus },
+        ]}
+      />
     </Section>
   );
 }

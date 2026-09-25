@@ -194,7 +194,7 @@ def require_business_tier_for_sync_access(access_type: AccessType) -> None:
     LICENSE_ENFORCEMENT_ENABLED=False, treat the tenant as ENTERPRISE so
     legacy EE deployments without a license aren't broken.
     """
-    if access_type != AccessType.SYNC:
+    if not access_type.is_perm_synced():
         return
     if not LICENSE_ENFORCEMENT_ENABLED:
         return

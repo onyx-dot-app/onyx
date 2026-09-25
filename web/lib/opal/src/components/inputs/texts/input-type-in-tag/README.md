@@ -7,8 +7,8 @@ Free tagging, the Figma `Input/Tags` component: editable `Tag`s rendered inline 
 Interaction model:
 
 - Enter adds the trimmed input text via `onAdd`.
-- Backspace on an empty input arms the last tag (its dark keyboard-selection state).
-- Backspace or Delete on an armed tag removes it and focus returns to the input. Enter and Space also activate the armed remove button.
+- Backspace on an empty input, or ArrowLeft with the caret at the start, arms the last tag (its dark keyboard-selection state). ArrowLeft and ArrowRight walk the armed tags; ArrowRight off the last returns to the input. Tags are not Tab stops, so Tab leaves the field.
+- Backspace or Delete on an armed tag removes it and arms the tag before it, so repeated presses clear tags one by one; with none left, focus returns to the input. Enter and Space also activate the armed remove button.
 - Clicking the field focuses the input.
 
 ## Props
@@ -26,11 +26,12 @@ Interaction model:
 | `icon`         | `IconFunctionComponent`              | —              | Leading icon (24px container)                                                     |
 | `onClear`      | `() => void`                         | —              | Renders the clear action button                                                   |
 | `minRows`      | `number`                             | `1`            | Tag rows the field is tall enough to show before it grows. Rows pack from the top |
+| `maxRows`      | `number`                             | `2`            | Tag rows the field grows to before the chips scroll inside it. A new chip scrolls the input row into view |
 | `focusOnMount` | `boolean`                            | `false`        | Focuses the text input on mount                                                   |
 
 ### `TagItem`
 
-`TagItem` is `{ id: string; label: string; error?: boolean }`. `error` shows the warning indicator on that tag.
+`TagItem` is `{ id: string; label: string; icon?: IconFunctionComponent; error?: boolean }`. `icon` leads the tag; `error` shows the warning indicator on it.
 
 ## Usage
 
