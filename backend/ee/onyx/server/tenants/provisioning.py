@@ -114,6 +114,9 @@ _PROVISIONING_POLL_INTERVAL_S = 1.0
 # Covers a pool assignment plus the control plane call (30s timeout).
 _REQUEST_PROVISION_LOCK_TIMEOUT_S = 60
 
+_CONTROL_PLANE_DELETE_ATTEMPTS = 3
+_CONTROL_PLANE_DELETE_BACKOFF_S = 2.0
+
 
 async def get_or_provision_tenant(
     email: str,
@@ -224,18 +227,37 @@ async def finish_tenant_assignment(
     except Exception:
         logger.exception("Failed to assign tenant %s, rolling it back", tenant_id)
         if control_plane_notified:
-            try:
-                await delete_user_from_control_plane(tenant_id, email)
-            except Exception:
-                logger.exception(
-                    "Failed to remove tenant %s from the control plane", tenant_id
-                )
+            await _remove_tenant_from_control_plane(tenant_id, email)
         try:
             await rollback_tenant_provisioning(tenant_id)
         except Exception:
             logger.exception("Failed to rollback tenant %s", tenant_id)
         raise
     logger.info("Assigned tenant %s to user %s", tenant_id, email)
+
+
+async def _remove_tenant_from_control_plane(tenant_id: str, email: str) -> None:
+    """Compensate a control-plane record for a tenant that is being rolled back.
+    Retries a few times, then leaves a clear reconciliation message: the
+    control plane is the billing record, so a leftover charges for nothing."""
+    for attempt in range(1, _CONTROL_PLANE_DELETE_ATTEMPTS + 1):
+        try:
+            await delete_user_from_control_plane(tenant_id, email)
+            return
+        except Exception:
+            logger.exception(
+                "Control plane delete for tenant %s failed (attempt %s of %s)",
+                tenant_id,
+                attempt,
+                _CONTROL_PLANE_DELETE_ATTEMPTS,
+            )
+            await asyncio.sleep(_CONTROL_PLANE_DELETE_BACKOFF_S * attempt)
+    logger.error(
+        "RECONCILE: control plane still has tenant %s for %s after the data plane "
+        "rolled it back",
+        tenant_id,
+        email,
+    )
 
 
 def _enqueue_user_provisioning(email: str, referral_source: str | None) -> str:

@@ -189,7 +189,10 @@ async def test_request_waits_for_the_lock_then_assigns(
 ) -> None:
     _add_pool_tenant(pool_tenant_id, get_alembic_head_revision())
     r = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
-    lock = r.lock(provisioning.user_provision_lock_name(email), timeout=30)
+    # Not thread-local, so the timer thread may release it.
+    lock = r.lock(
+        provisioning.user_provision_lock_name(email), timeout=30, thread_local=False
+    )
     assert lock.acquire(blocking=False)
     # Released while the request polls for it, as a finishing holder would.
     threading.Timer(0.5, lock.release).start()
