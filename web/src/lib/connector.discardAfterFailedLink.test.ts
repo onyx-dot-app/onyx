@@ -1,4 +1,4 @@
-import { discardConnectorAfterFailedLink } from "./connector";
+import { discardConnectorAfterFailedLink } from "@/lib/connector";
 
 describe("discardConnectorAfterFailedLink", () => {
   const fetchMock = jest.fn();
