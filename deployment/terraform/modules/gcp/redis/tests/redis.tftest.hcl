@@ -99,35 +99,35 @@ run "persistence_can_be_turned_off" {
   }
 }
 
-run "plaintext_by_default" {
+run "tls_by_default" {
   command = plan
-
-  assert {
-    condition     = google_redis_instance.this.transit_encryption_mode == "DISABLED"
-    error_message = "TLS is off by default."
-  }
-
-  assert {
-    condition     = output.redis_url_scheme == "redis"
-    error_message = "Without TLS the scheme is redis."
-  }
-}
-
-run "tls_switches_the_scheme" {
-  command = plan
-
-  variables {
-    transit_encryption_enabled = true
-  }
 
   assert {
     condition     = google_redis_instance.this.transit_encryption_mode == "SERVER_AUTHENTICATION"
-    error_message = "Enabling TLS should reach the instance."
+    error_message = "TLS is create-only, so it must be on from the first apply."
   }
 
   assert {
     condition     = output.redis_url_scheme == "rediss"
     error_message = "Celery needs the rediss scheme to speak TLS."
+  }
+}
+
+run "plaintext_can_be_asked_for" {
+  command = plan
+
+  variables {
+    transit_encryption_enabled = false
+  }
+
+  assert {
+    condition     = google_redis_instance.this.transit_encryption_mode == "DISABLED"
+    error_message = "Turning TLS off should reach the instance."
+  }
+
+  assert {
+    condition     = output.redis_url_scheme == "redis"
+    error_message = "Without TLS the scheme is redis."
   }
 }
 
