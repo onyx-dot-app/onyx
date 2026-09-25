@@ -80,7 +80,7 @@ def _assert_baseline_acl(environment: OneDriveIntegrationEnvironment) -> None:
     expected_ids = {state.files[path].id for path in INDEXED_BASELINE_PATHS} | {
         state.second_drive_duplicate.id
     }
-    assert expected_ids.issubset(document_ids)
+    assert document_ids == expected_ids
     assert state.files[FilePath.EXCLUDED].id not in document_ids
     assert state.files[FilePath.OVER_SIZE].id not in document_ids
     assert state.files[FilePath.UNSUPPORTED].id not in document_ids
