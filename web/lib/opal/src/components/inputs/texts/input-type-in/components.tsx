@@ -91,8 +91,8 @@ export default function InputTypeIn({
       onClick={(e) => e.currentTarget.querySelector("input")?.focus()}
     >
       {searchIcon && (
-        <div className="px-1">
-          <SvgSearch className="w-4 h-4 stroke-text-02" />
+        <div className="opal-input-leading-icon">
+          <SvgSearch className="opal-input-leading-icon-svg" />
         </div>
       )}
 

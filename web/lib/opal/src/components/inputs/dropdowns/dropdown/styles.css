@@ -77,15 +77,17 @@
 }
 
 .opal-select-no-match {
-  @apply px-3 py-2 text-text-02 font-secondary-body;
+  @apply px-2 py-2 text-text-02 font-secondary-body;
 }
 
 /* ---------------------------------------------------------------------------
    Option rows
    --------------------------------------------------------------------------- */
 
+/* 8px side padding: with the listbox 4px wider than the trigger on each
+   side, a row's text and icon then sit exactly under the trigger's. */
 .opal-select-option {
-  @apply flex cursor-pointer flex-col px-3 py-2 rounded-08 transition-colors;
+  @apply flex cursor-pointer flex-col px-2 py-2 rounded-08 transition-colors;
 }
 .opal-select-option[data-exact] {
   @apply bg-[var(--action-selection-01)];
@@ -143,7 +145,7 @@
    --------------------------------------------------------------------------- */
 
 .opal-select-create {
-  @apply flex cursor-pointer items-center justify-between px-3 py-2 rounded-08 transition-colors hover:bg-background-tint-02;
+  @apply flex cursor-pointer items-center justify-between px-2 py-2 rounded-08 transition-colors hover:bg-background-tint-02;
 }
 .opal-select-create[data-highlighted] {
   @apply bg-background-tint-02;
