@@ -4,7 +4,7 @@ The background jobs take care of:
 
 1. Pulling/Indexing documents (from connectors)
 2. Updating document metadata (from connectors)
-3. Cleaning up checkpoints and logic around indexing work (indexing indexing checkpoints and index attempt metadata)
+3. Cleaning up checkpoints and logic around indexing work (indexing checkpoints and index attempt metadata)
 4. Handling user uploaded files and deletions (from the Projects feature and uploads via the Chat)
 5. Reporting metrics on things like queue length for monitoring purposes
 
