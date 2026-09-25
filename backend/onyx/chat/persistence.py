@@ -9,6 +9,7 @@ from onyx.agents.models import RunState
 from onyx.agents.runtime import Run, validate_run_completion
 from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.errors import chat_error
+from onyx.chat.history_store import ChatHistoryStore
 from onyx.chat.models import (
     PERSISTENCE_ERROR_MESSAGES,
     ChatResponseOutcome,
@@ -19,7 +20,6 @@ from onyx.chat.models import (
 )
 from onyx.chat.presentation import project_response
 from onyx.chat.stream_buffer import ChatDelivery
-from onyx.db.chat_response import save_chat_response
 from onyx.llm.cancellation import AgentCancelled
 from onyx.llm.interfaces import LLM
 from onyx.utils.logger import setup_logger
@@ -34,13 +34,14 @@ class ChatResponsePersistence(RunStore):
     def __init__(
         self,
         *,
-        message_id: int,
+        history_store: ChatHistoryStore,
         model_index: int,
         llm: LLM,
         delivery: ChatDelivery,
         outcome: Future[ChatResponseOutcome],
     ) -> None:
-        self.message_id = message_id
+        self.message_id = history_store.message_id
+        self.history_store = history_store
         self.model_index = model_index
         self.llm = llm
         self.delivery = delivery
@@ -154,7 +155,7 @@ class ChatResponsePersistence(RunStore):
                     deadline=time.monotonic() + PERSISTENCE_WAIT_SECONDS,
                 )
             try:
-                save_chat_response(message_id=self.message_id, response=response)
+                self.history_store.save_response(response)
             except Exception:
                 with self._lock:
                     self._report(

@@ -15,6 +15,7 @@ from onyx.chat.chat_processing_checker import (
 )
 from onyx.chat.emitter import Emitter
 from onyx.chat.errors import chat_error
+from onyx.chat.history_store import get_chat_history_store
 from onyx.chat.models import (
     ChatResponseOutcome,
     ChatTurnSetup,
@@ -340,7 +341,13 @@ class ChatTurnExecution:
         chat_agent: ChatAgent | DeepResearchAgent | None = None
         coordinator: AgentCoordinator | None = None
         persistence = ChatResponsePersistence(
-            message_id=self.setup.responses[index].message_id,
+            history_store=get_chat_history_store(
+                message_id=self.setup.responses[index].message_id,
+                chat_session_id=self.setup.chat_session_id,
+                persist_content=record_mode_persists_content(
+                    self.setup.incognito_record_mode
+                ),
+            ),
             model_index=index,
             llm=self.setup.responses[index].llm,
             delivery=self.delivery,

@@ -1,7 +1,3 @@
-import json
-from collections.abc import Callable
-from typing import Any
-
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import AZURE_IMAGE_API_KEY
@@ -24,25 +20,6 @@ def explicit_tool_calling_supported(model_provider: str, model_name: str) -> boo
     if not model_obj:
         return False
     return bool(model_obj.get("supports_function_calling"))
-
-
-def compute_tool_tokens(tool: Tool, token_counter: Callable[[str], int]) -> int:
-    return token_counter(json.dumps(tool.tool_definition().model_dump()))
-
-
-def compute_all_tool_tokens(
-    tools: list[Tool], token_counter: Callable[[str], int]
-) -> int:
-    return sum(compute_tool_tokens(tool, token_counter) for tool in tools)
-
-
-def compute_tool_definition_tokens(
-    tool_definitions: list[dict[str, Any]], token_counter: Callable[[str], int]
-) -> int:
-    return sum(
-        token_counter(json.dumps(tool_definition))
-        for tool_definition in tool_definitions
-    )
 
 
 def is_image_generation_available(db_session: Session) -> bool:

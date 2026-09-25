@@ -5,7 +5,6 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, aliased, joinedload, object_session, selectinload
 
 from onyx.agents.compaction import count_tokens
-from onyx.chat.incognito_context import save_incognito_response
 from onyx.chat.models import (
     ChatExecutionRecord,
     ChatResponseSnapshot,
@@ -17,7 +16,6 @@ from onyx.chat.response_items import (
     ResponseItemKind,
     ResponseText,
     TextPurpose,
-    messages_from_items,
 )
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc
@@ -50,9 +48,7 @@ from onyx.db.models import (
 )
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.models import (
-    AssistantMessage,
     GenerationRequestParams,
-    TextContent,
     UserMessage,
 )
 from onyx.natural_language_processing.utils import get_tokenizer
@@ -329,8 +325,14 @@ def configure_response_transaction__no_commit(session: Session) -> None:
     )
 
 
-def save_chat_response(*, message_id: int, response: ChatResponseSnapshot) -> None:
-    """Persist one terminal response and its accepted artifacts from a stable snapshot."""
+def save_chat_response_to_db(
+    *,
+    message_id: int,
+    chat_session_id: UUID,
+    expected_persist_content: bool,
+    response: ChatResponseSnapshot,
+) -> str:
+    """Save response rows under the session's recording policy and return the final answer."""
     if response.error is not None:
         answer = response.answer or ""
     elif response.cancelled:
@@ -346,10 +348,15 @@ def save_chat_response(*, message_id: int, response: ChatResponseSnapshot) -> No
         message = session.get(ChatMessage, message_id)
         if message is None:
             raise ValueError("Chat response is unavailable")
-        chat_session_id = message.chat_session_id
+        if message.chat_session_id != chat_session_id:
+            raise ValueError("Response belongs to another chat session")
         keeps_content = record_mode_persists_content(
             message.chat_session.incognito_record_mode
         )
+        if keeps_content != expected_persist_content:
+            raise ValueError(
+                "Chat history store does not match the session recording mode"
+            )
         message.error = (
             (
                 sanitize_string(response.error)
@@ -378,37 +385,7 @@ def save_chat_response(*, message_id: int, response: ChatResponseSnapshot) -> No
             response_record=response.response,
             presentation=response.presentation,
         )
-    if not keeps_content:
-        messages = (
-            messages_from_items(response.response.items)
-            if response.response and response.response.items
-            else [AssistantMessage(content=[TextContent(text=answer)])]
-        )
-        sources_by_run: dict[str, dict[int, SearchDoc]] = {}
-        if response.response is not None:
-            documents = {
-                **{doc.document_id: doc for doc in response.citation_to_doc.values()},
-                **response.all_search_docs,
-            }
-            pending = list(response.response.child_runs)
-            while pending:
-                record = pending.pop()
-                sources = sources_by_run.setdefault(record.run_id, {})
-                for item in record.items:
-                    setting = response.presentation.get(item.id)
-                    if setting is None:
-                        continue
-                    for number, document_id in setting.citation_documents.items():
-                        if document_id in documents:
-                            sources[number] = documents[document_id]
-                pending.extend(record.child_runs)
-        save_incognito_response(
-            chat_session_id,
-            response.response,
-            sources_by_run,
-            message_id=message_id,
-            messages=messages,
-        )
+    return answer
 
 
 def _child_responses(db_session: Session, response_ids: list[int]) -> list[ChatMessage]:

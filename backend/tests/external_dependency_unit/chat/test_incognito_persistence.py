@@ -450,10 +450,10 @@ def test_incognito_response_restores_agents_without_database_content(
 
     from onyx.agents.runtime import Agent
     from onyx.agents.tools import AgentTool, ToolInvocation
+    from onyx.chat.history_store import get_chat_history_store
     from onyx.chat.incognito_context import get_or_create_incognito_root_id
     from onyx.chat.models import ChatResponseSnapshot, MessageRendering
     from onyx.chat.subagents import create_chat_agent_coordinator
-    from onyx.db.chat_response import save_chat_response
     from onyx.db.enums import IncognitoRecordMode
     from onyx.db.models import ChatResponseItem
     from onyx.llm.interfaces import LLMUserIdentity
@@ -554,19 +554,20 @@ def test_incognito_response_restores_agents_without_database_content(
             },
             cancelled=False,
         )
+        history_store = get_chat_history_store(
+            message_id=assistant.id, chat_session_id=session.id, persist_content=False
+        )
         if history_full:
             before = load_incognito_context(session.id)
             with patch("onyx.chat.incognito_context._MAX_CONTEXT_BYTES", 1):
                 with pytest.raises(ValueError, match="storage limit"):
-                    save_chat_response(
-                        message_id=assistant.id, response=response_snapshot
-                    )
+                    history_store.save_response(response_snapshot)
             after = load_incognito_context(session.id)
             assert after.messages == before.messages
             assert after.previous_run_id == before.previous_run_id
             assert load_incognito_agent_metadata(session.id, [assistant.id]) == []
             return
-        save_chat_response(message_id=assistant.id, response=response_snapshot)
+        history_store.save_response(response_snapshot)
         assert load_incognito_context(session.id).previous_run_id == transcript.run_id
         db_session.expire_all()
         assert assistant.message == "" and not assistant.response_items

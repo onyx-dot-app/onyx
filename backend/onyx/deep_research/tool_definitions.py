@@ -94,7 +94,6 @@ RESEARCH_AGENT_GENERATE_REPORT_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition
 
 
 THINK_TOOL_RESPONSE_MESSAGE = "Acknowledged, please continue."
-THINK_TOOL_RESPONSE_TOKEN_COUNT = 10
 
 
 def get_clarification_tool_definitions() -> list[ToolDefinition]:

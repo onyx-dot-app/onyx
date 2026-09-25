@@ -33,6 +33,7 @@ from onyx.agents.tools import (
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.agent import ChatAgent
 from onyx.chat.checkpoint import CheckpointBinding, _checkpoint_model_types
+from onyx.chat.history_store import get_chat_history_store
 from onyx.chat.models import ChatFeatureState
 from onyx.chat.presentation import project_response
 from onyx.chat.restoration import persist_checkpoint_files
@@ -44,7 +45,6 @@ from onyx.db.chat_checkpoint import (
     claim_checkpoint__no_commit,
     release_checkpoint_claim__no_commit,
 )
-from onyx.db.chat_response import save_chat_response
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
 from onyx.db.models import ChatMessage, ChatResponseCheckpoint, ChatSession
 from onyx.file_store.models import ExtractedContextFiles
@@ -171,15 +171,13 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
     if scenario in {"slow_release", "slow_resume", "ownership_lock"}:
         monkeypatch.setattr("onyx.chat.run_store.OWNER_TTL_SECONDS", 1)
         monkeypatch.setattr("onyx.chat.run_store.OWNER_REFRESH_SECONDS", 0.1)
-        monkeypatch.setattr("onyx.chat.run_store.OWNER_POLL_SECONDS", 0.05)
     saved_roots: list[str] = []
 
     def save_root(snapshot: RunState) -> None:
         saved_roots.append(snapshot.run_id)
-        save_chat_response(
-            message_id=branch[1],
-            response=project_response(snapshot, response_id=branch[1], tool_ids={}),
-        )
+        get_chat_history_store(
+            message_id=branch[1], chat_session_id=branch[0], persist_content=True
+        ).save_response(project_response(snapshot, response_id=branch[1], tool_ids={}))
 
     owner = store(branch)
     remote = store(
@@ -726,10 +724,9 @@ def test_owner_cleanup_failure_releases_local_control(
     def save_root(snapshot: RunState) -> None:
         if save_fails:
             raise ValueError("response save failed")
-        save_chat_response(
-            message_id=branch[1],
-            response=project_response(snapshot, response_id=branch[1], tool_ids={}),
-        )
+        get_chat_history_store(
+            message_id=branch[1], chat_session_id=branch[0], persist_content=True
+        ).save_response(project_response(snapshot, response_id=branch[1], tool_ids={}))
 
     owner = store(
         branch, root_response=FakeRunStore(save=lambda run: save_root(run.snapshot()))
