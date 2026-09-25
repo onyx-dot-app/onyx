@@ -114,6 +114,19 @@ def _get_readable_cc_pair(
     )
 
 
+def _get_readable_cc_pair_or_raise(
+    cc_pair_id: int, db_session: Session, user: User
+) -> ConnectorCredentialPair:
+    """Same as _get_readable_cc_pair, but 403s when the caller cannot read the pair."""
+    cc_pair = _get_readable_cc_pair(cc_pair_id, db_session, user)
+    if cc_pair is None:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "CC Pair not found for current user permissions",
+        )
+    return cc_pair
+
+
 @router.get("/admin/cc-pair/{cc_pair_id}/index-attempts", tags=PUBLIC_API_TAGS)
 def get_cc_pair_index_attempts(
     cc_pair_id: int,
@@ -124,11 +137,7 @@ def get_cc_pair_index_attempts(
     ),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[IndexAttemptSnapshot]:
-    if _get_readable_cc_pair(cc_pair_id, db_session, user) is None:
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "CC Pair not found for current user permissions",
-        )
+    _get_readable_cc_pair_or_raise(cc_pair_id, db_session, user)
 
     total_count = count_index_attempts_for_cc_pair(
         db_session=db_session,
@@ -671,13 +680,7 @@ def get_cc_pair_last_pruned(
     ),
     db_session: Session = Depends(get_session),
 ) -> datetime | None:
-    cc_pair = _get_readable_cc_pair(cc_pair_id, db_session, user)
-    if not cc_pair:
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "CC Pair not found for current user's permissions",
-        )
-
+    cc_pair = _get_readable_cc_pair_or_raise(cc_pair_id, db_session, user)
     return cc_pair.last_pruned
 
 
@@ -740,9 +743,13 @@ def prune_cc_pair(
 @router.get("/admin/cc-pair/{cc_pair_id}/get-docs-sync-status")
 def get_docs_sync_status(
     cc_pair_id: int,
-    _: User = Depends(require_permission(Permission.READ_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.READ_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> list[DocumentSyncStatus]:
+    _get_readable_cc_pair_or_raise(cc_pair_id, db_session, user)
+
     all_docs_for_cc_pair = get_documents_for_cc_pair(
         db_session=db_session,
         cc_pair_id=cc_pair_id,
@@ -756,7 +763,9 @@ def get_cc_pair_indexing_errors(
     include_resolved: bool = Query(False),
     page_num: int = Query(0, ge=0),
     page_size: int = Query(10, ge=1, le=100),
-    _: User = Depends(require_permission(Permission.READ_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.READ_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[IndexAttemptErrorPydantic]:
     """Gives back all errors for a given CC Pair. Allows pagination based on page and page_size params.
@@ -766,12 +775,14 @@ def get_cc_pair_indexing_errors(
         include_resolved: Whether to include resolved errors in the results
         page_num: Page number for pagination, starting at 0
         page_size: Number of errors to return per page
-        _: Current user, must be curator or admin
+        user: Current user; must be able to read this CC pair
         db_session: Database session
 
     Returns:
         Paginated list of indexing errors for the CC pair.
     """
+    _get_readable_cc_pair_or_raise(cc_pair_id, db_session, user)
+
     total_count = count_index_attempt_errors_for_cc_pair(
         db_session=db_session,
         cc_pair_id=cc_pair_id,
