@@ -359,6 +359,7 @@ class ChatSessionManager:
                 message=msg["message"],
                 message_type=msg.get("message_type"),
                 files=msg.get("files"),
+                reasoning_tokens=msg.get("reasoning_tokens"),
             )
             for msg in response.json()["messages"]
         ]
