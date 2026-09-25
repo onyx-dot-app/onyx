@@ -13,6 +13,7 @@ from onyx.utils.logger import setup_logger
 MEMBER_READ_HIDDEN_SCOPE = "Member.Read.Hidden"
 MAX_GROUP_LISTING_PAGES = 100_000
 MAX_GROUP_MEMBER_PAGES = 100_000
+MAX_GROUP_MEMBERS = 1_000_000
 logger = setup_logger()
 
 
@@ -38,9 +39,13 @@ def _group_members(connector: OneDriveConnector, group: OneDriveGroup) -> list[s
         for member in page.members:
             if member.odata_type not in (None, GraphDirectoryObjectType.USER):
                 continue
-            email = member.user_principal_name or member.mail
+            email: str | None = member.user_principal_name or member.mail
             if email:
                 emails.add(email.lower())
+        if len(emails) > MAX_GROUP_MEMBERS:
+            raise ValueError(
+                f"Entra group `{group.id}` exceeds the member count limit."
+            )
         next_link = page.next_link
         if next_link is None:
             return sorted(emails)

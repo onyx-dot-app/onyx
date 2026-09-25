@@ -2,6 +2,7 @@ from collections.abc import Callable
 from typing import cast
 
 from onyx.access.models import ExternalAccess
+from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.onedrive.models import OneDrivePermission
 from onyx.utils.variable_functionality import (
@@ -35,9 +36,12 @@ def get_onedrive_external_access(
     )
 
 
-def onedrive_external_group_id(group_id: str, *, add_prefix: bool) -> str:
-    if not add_prefix:
-        return group_id
-    from onyx.access.utils import build_ext_group_name_for_onyx
-
-    return build_ext_group_name_for_onyx(group_id, DocumentSource.ONEDRIVE)
+def prefix_onedrive_external_groups(access: ExternalAccess) -> ExternalAccess:
+    return ExternalAccess(
+        external_user_emails=access.external_user_emails,
+        external_user_group_ids={
+            build_ext_group_name_for_onyx(group_id, DocumentSource.ONEDRIVE)
+            for group_id in access.external_user_group_ids
+        },
+        is_public=access.is_public,
+    )

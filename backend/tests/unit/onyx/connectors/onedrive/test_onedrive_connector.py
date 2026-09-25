@@ -9,6 +9,7 @@ from ee.onyx.external_permissions.onedrive.permission_mapper import (
     map_onedrive_permissions,
 )
 from onyx.access.models import ExternalAccess
+from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import CapabilityCheckContext
 from onyx.connectors.exceptions import (
@@ -684,6 +685,65 @@ def test_onedrive_permission_pagination_rejects_page_limit(
     assert gateway.list_permissions.call_count == 2
 
 
+def test_onedrive_file_permission_transient_error_fails_attempt() -> None:
+    connector, gateway = _connector()
+    gateway.get_delta_page.return_value = OneDriveDeltaResult(
+        page=DriveDeltaPage(items=[_file_item()])
+    )
+    gateway.list_permissions.side_effect = OneDriveGraphError(
+        429, "tooManyRequests", "retry later"
+    )
+    checkpoint = OneDriveCheckpoint(
+        has_more=True,
+        current_user=_user(),
+        current_drive=_drive(),
+    )
+
+    with pytest.raises(OneDriveGraphError, match="tooManyRequests"):
+        _run_perm_step(connector, checkpoint)
+
+
+def test_onedrive_slim_folder_access_prefixes_external_groups(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connector, gateway = _connector()
+    monkeypatch.setattr(
+        "onyx.connectors.onedrive.connector.get_onedrive_external_access",
+        map_onedrive_permissions,
+    )
+    folder = _folder_item()
+    gateway.get_delta_page.return_value = OneDriveDeltaResult(
+        page=DriveDeltaPage(items=[folder])
+    )
+    gateway.list_permissions.return_value = _fixture_permissions("visible_group")
+    checkpoint = OneDriveCheckpoint(
+        has_more=True,
+        current_user=_user(),
+        current_drive=_drive(),
+    )
+
+    output = list(
+        connector._discover_from_checkpoint(
+            0,
+            0,
+            checkpoint,
+            include_permissions=True,
+            add_group_prefix=False,
+        )
+    )
+
+    node = next(
+        item
+        for item in output
+        if isinstance(item, HierarchyNode)
+        and item.raw_node_id == hierarchy_item_id("drive-1", folder.id)
+    )
+    assert node.external_access is not None
+    assert node.external_access.external_user_group_ids == {
+        build_ext_group_name_for_onyx("<visible-group-id>", DocumentSource.ONEDRIVE)
+    }
+
+
 def test_onedrive_fixture_child_before_parent_reads_child_permissions(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1163,6 +1223,38 @@ def test_onedrive_permission_check_accepts_empty_drive_at_end_cursor() -> None:
     gateway.list_permissions.assert_not_called()
 
 
+def test_onedrive_permission_check_probes_past_empty_drive() -> None:
+    gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
+    gateway.get_user.side_effect = [
+        _user("empty@example.com"),
+        _user("populated@example.com"),
+    ]
+    gateway.get_default_drive.side_effect = [
+        OneDriveDrive(id="empty-drive", name="Empty"),
+        OneDriveDrive(id="populated-drive", name="Populated"),
+    ]
+    gateway.get_delta_page.side_effect = [
+        OneDriveDeltaResult(page=DriveDeltaPage()),
+        OneDriveDeltaResult(page=DriveDeltaPage(items=[_file_item()])),
+    ]
+    gateway.list_permissions.return_value = OneDrivePermissionPage(permissions=[])
+    context = CapabilityCheckContext(
+        source=DocumentSource.ONEDRIVE,
+        credential_json={},
+        connector_specific_config={
+            "users": ["empty@example.com", "populated@example.com"]
+        },
+        source_operations=gateway,
+    )
+
+    build_onedrive_doc_permission_sync_checks()[0].run(context)
+
+    assert gateway.get_delta_page.call_count == 2
+    gateway.list_permissions.assert_called_once_with(
+        drive_id="populated-drive", item_id="raw-item-id"
+    )
+
+
 def test_onedrive_permission_check_bounds_empty_delta_pages() -> None:
     gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
     gateway.get_user.return_value = _user()
@@ -1187,7 +1279,7 @@ def test_onedrive_permission_check_bounds_empty_delta_pages() -> None:
     gateway.list_permissions.assert_not_called()
 
 
-def test_onedrive_hidden_group_check_names_optional_scope() -> None:
+def test_onedrive_hidden_group_check_does_not_require_optional_scope() -> None:
     gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
     gateway.list_groups.return_value = OneDriveGroupPage(
         groups=[
@@ -1195,9 +1287,6 @@ def test_onedrive_hidden_group_check_names_optional_scope() -> None:
                 id="hidden", displayName="Hidden", visibility="HiddenMembership"
             )
         ]
-    )
-    gateway.list_transitive_group_members.side_effect = OneDriveGraphError(
-        403, "Authorization_RequestDenied", "denied"
     )
     context = CapabilityCheckContext(
         source=DocumentSource.ONEDRIVE,
@@ -1210,17 +1299,14 @@ def test_onedrive_hidden_group_check_names_optional_scope() -> None:
         if check.check_id == "onedrive_group_members"
     )
 
-    with pytest.raises(InsufficientPermissionsError, match=r"Member\.Read\.Hidden"):
-        check.run(context)
+    check.run(context)
+
+    gateway.list_transitive_group_members.assert_not_called()
 
 
-def test_onedrive_hidden_group_check_scans_later_group_pages() -> None:
+def test_onedrive_group_check_skips_hidden_group_for_later_visible_group() -> None:
     gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
     gateway.list_groups.side_effect = [
-        OneDriveGroupPage(
-            groups=[OneDriveGroup(id="visible", displayName="Visible")],
-            next_link="next-groups",
-        ),
         OneDriveGroupPage(
             groups=[
                 OneDriveGroup(
@@ -1228,8 +1314,10 @@ def test_onedrive_hidden_group_check_scans_later_group_pages() -> None:
                     displayName="Hidden",
                     visibility="HiddenMembership",
                 )
-            ]
+            ],
+            next_link="next-groups",
         ),
+        OneDriveGroupPage(groups=[OneDriveGroup(id="visible", displayName="Visible")]),
     ]
     gateway.list_transitive_group_members.return_value = OneDriveGroupMemberPage(
         members=[]
@@ -1248,10 +1336,10 @@ def test_onedrive_hidden_group_check_scans_later_group_pages() -> None:
     check.run(context)
 
     assert gateway.list_groups.call_count == 2
-    gateway.list_transitive_group_members.assert_called_once_with(group_id="hidden")
+    gateway.list_transitive_group_members.assert_called_once_with(group_id="visible")
 
 
-def test_onedrive_group_check_uses_visible_group_after_bounded_scan() -> None:
+def test_onedrive_group_check_uses_first_visible_group() -> None:
     gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
     gateway.list_groups.side_effect = [
         OneDriveGroupPage(
@@ -1276,13 +1364,20 @@ def test_onedrive_group_check_uses_visible_group_after_bounded_scan() -> None:
 
     check.run(context)
 
+    assert gateway.list_groups.call_count == 1
     gateway.list_transitive_group_members.assert_called_once_with(group_id="visible")
 
 
 def test_onedrive_group_check_bounds_hidden_group_discovery() -> None:
     gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
     gateway.list_groups.return_value = OneDriveGroupPage(
-        groups=[OneDriveGroup(id="visible", displayName="Visible")],
+        groups=[
+            OneDriveGroup(
+                id="hidden",
+                displayName="Hidden",
+                visibility="HiddenMembership",
+            )
+        ],
         next_link="another-group-page",
     )
     gateway.list_transitive_group_members.return_value = OneDriveGroupMemberPage(
@@ -1302,7 +1397,7 @@ def test_onedrive_group_check_bounds_hidden_group_discovery() -> None:
     check.run(context)
 
     assert gateway.list_groups.call_count == 20
-    gateway.list_transitive_group_members.assert_called_once_with(group_id="visible")
+    gateway.list_transitive_group_members.assert_not_called()
 
 
 def test_onedrive_hybrid_permissions_inherit_known_parent_and_read_shared_child(
