@@ -8,7 +8,8 @@ multi-tenant isolation depends:
     prefixed key, and never see another tenant's keys.
   * Methods that return keys (``scan_iter``, ``blpop``) strip the prefix on the
     way out, so callers don't see the tenant id leaked back.
-  * Lua scripts run via ``EVAL`` see prefixed keys but unmodified ARGV.
+  * Lua scripts run via ``EVAL`` or ``register_script`` see prefixed keys but
+    unmodified ARGV.
 
 Each test uses a unique tenant id so concurrent / repeated runs cannot collide;
 per-test cleanup wipes every key under that tenant's namespace.
@@ -21,6 +22,7 @@ from uuid import uuid4
 
 import pytest
 from redis import Redis
+from redis_lua_py import Key, redis, script
 
 from onyx.redis.redis_pool import get_raw_redis_client, redis_pool
 from onyx.redis.tenant_redis_client import TenantRedisClient
@@ -403,6 +405,42 @@ class TestEval:
         sentinel = "argv_value_not_a_key"
         result = tenant_redis.eval("return ARGV[1]", keys=[], args=[sentinel])
         assert result == sentinel.encode()
+
+
+# ------------------------------------------------------------------------------
+# register_script — redis_lua_py scripts see prefixed keys; ARGV is untouched
+# ------------------------------------------------------------------------------
+
+
+@script
+def _swap(key: Key, value: str) -> bytes | None:
+    previous = redis.get(key)
+    redis.set(key, value)
+    return previous
+
+
+class TestRegisterScript:
+    def test_script_reads_and_writes_prefixed_key(
+        self,
+        tenant_redis: TenantRedisClient,
+        tenant_id: str,
+        raw_redis: Redis,
+    ) -> None:
+        key = _unique_key("script")
+        tenant_redis.set(key, "old")
+        assert _swap(tenant_redis, key=key, value="new") == b"old"
+        assert raw_redis.get(f"{tenant_id}:{key}") == b"new"
+        assert raw_redis.get(key) is None
+
+    def test_script_refuses_another_client(
+        self, tenant_redis: TenantRedisClient
+    ) -> None:
+        # A script registered for one tenant must not run with the keys of a
+        # client that has a different prefix.
+        other = redis_pool.get_client(_unique_tenant())
+        registered = tenant_redis.register_script("return 1")
+        with pytest.raises(ValueError):
+            registered(keys=[], client=other)
 
 
 # ------------------------------------------------------------------------------

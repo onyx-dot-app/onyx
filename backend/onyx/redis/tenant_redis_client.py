@@ -17,6 +17,7 @@ from typing import Any, cast
 
 import redis
 from redis.client import Pipeline
+from redis.commands.core import Script
 from redis.lock import Lock as RedisLock
 
 KeyArg = str | bytes | memoryview
@@ -1140,6 +1141,20 @@ class TenantRedisClient:
         prefixed_keys = [_prefix_key(self._prefix, k) for k in keys]
         return self._r.evalsha(sha, len(prefixed_keys), *prefixed_keys, *(args or []))
 
+    def register_script(self, script: str) -> TenantScript:
+        """Registers a Lua script that tenant-prefixes its keys on every call.
+
+        Scripts written with ``redis_lua_py.script`` run through this method,
+        so they get the same key scoping as ``eval``.
+
+        Args:
+            script: The Lua script source.
+
+        Returns:
+            A :class:`TenantScript` that runs the script with EVALSHA.
+        """
+        return TenantScript(self, self._r.register_script(script))
+
     # --------------------------------------------------------------------------
     # Pipeline
     # --------------------------------------------------------------------------
@@ -1187,6 +1202,43 @@ class TenantRedisClient:
         Closes the underlying redis-py client and releases its connection pool.
         """
         self._r.close()
+
+
+class TenantScript:
+    """A registered Lua script that tenant-prefixes every entry in ``keys``.
+
+    Has the call shape of ``redis.commands.core.Script``, which
+    ``redis_lua_py`` uses to run a script on a client.
+    """
+
+    def __init__(self, owner: TenantRedisClient, script: Script) -> None:
+        self._owner = owner
+        self._script = script
+
+    def __call__(
+        self,
+        keys: Sequence[KeyArg] = (),
+        args: Sequence[Any] = (),
+        client: TenantRedisClient | None = None,
+    ) -> Any:
+        """Runs the script, with EVAL as the fallback when it is not cached.
+
+        Args:
+            keys: Keys in ``KEYS[i]`` order. Each is tenant-prefixed.
+            args: Non-key arguments in ``ARGV[i]`` order, passed through.
+            client: The client that registered this script, or ``None``.
+
+        Raises:
+            ValueError: If ``client`` is a different client. Its tenant prefix
+                could differ from the one this script was registered with.
+
+        Returns:
+            Whatever the script returns, encoded per redis-py conventions.
+        """
+        if client is not None and client is not self._owner:
+            raise ValueError("TenantScript must run on the client that registered it.")
+        prefixed_keys = [_prefix_key(self._owner.tenant_id, k) for k in keys]
+        return self._script(keys=prefixed_keys, args=list(args))
 
 
 class TenantRedisPipeline:
