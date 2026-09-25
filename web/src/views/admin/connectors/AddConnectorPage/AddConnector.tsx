@@ -497,6 +497,18 @@ export default function AddConnector({
               } else {
                 const errorData = await linkCredentialResponse.json();
 
+                // The connector row was created in this submit and nothing is
+                // linked to it now. Delete it like the timeout path does, or a
+                // retry with the same name fails on the duplicate name check.
+                if (connectorIdRef.current) {
+                  try {
+                    await deleteConnector(connectorIdRef.current);
+                  } catch {
+                    // Best effort: the validation error below is what matters.
+                  }
+                  connectorIdRef.current = null;
+                }
+
                 if (!timeoutErrorHappenedRef.current) {
                   // Only show error if timeout didn't happen
                   toast.error(errorData.detail || errorData.message);
