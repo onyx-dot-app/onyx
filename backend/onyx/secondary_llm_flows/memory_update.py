@@ -1,11 +1,14 @@
 from onyx.configs.constants import MessageType
-from onyx.llm.interfaces import LLM
-from onyx.llm.model_request import UserMessage
-from onyx.llm.models import ReasoningEffort
+from onyx.llm.interfaces import LLM, GenerationContext
+from onyx.llm.models import (
+    GenerationOptions,
+    GenerationRequest,
+    ReasoningEffort,
+    UserMessage,
+)
 from onyx.prompts.basic_memory import FULL_MEMORY_UPDATE_PROMPT
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import parse_llm_json_response
 
@@ -114,18 +117,16 @@ def process_memory_update(
         new_memory=new_memory,
     )
 
-    # Call LLM with Braintrust tracing
     try:
         prompt_msg = UserMessage(content=prompt)
-        with llm_generation_span(
-            llm=llm, flow=LLMFlow.MEMORY_UPDATE, input_messages=[prompt_msg]
-        ) as span_generation:
-            response = llm.invoke(
-                prompt=prompt_msg,
-                reasoning_effort=ReasoningEffort.OFF,
-            )
-            record_llm_response(span_generation, response)
-            content = response.choice.message.content
+        response = llm.invoke(
+            GenerationRequest(
+                messages=[prompt_msg],
+                options=GenerationOptions(reasoning_effort=ReasoningEffort.OFF),
+            ),
+            context=GenerationContext(flow=LLMFlow.MEMORY_UPDATE),
+        )
+        content = response.text
     except Exception as e:
         logger.warning("LLM invocation failed for memory update: %s", e)
         return (new_memory, None)

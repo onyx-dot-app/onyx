@@ -393,9 +393,9 @@ class _RecordingInvokeLLM(_InvokeLLM):
         super().__init__(response)
         self.received_tool_choice: ToolChoice | None = None
 
-    def invoke(self, *args: object, **kwargs: object) -> ModelResponse:
+    def invoke_raw(self, *args: object, **kwargs: object) -> ModelResponse:
         self.received_tool_choice = cast("ToolChoice | None", kwargs.get("tool_choice"))
-        return super().invoke(*args, **kwargs)
+        return super().invoke_raw(*args, **kwargs)
 
 
 def test_handle_anthropic_messages_forwards_named_tool_choice() -> None:

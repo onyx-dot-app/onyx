@@ -227,11 +227,12 @@ LLM calls go through LiteLLM; models are configurable per feature (chat, search,
 
 Every LLM, embedding, rerank, image-generation, voice (STT/TTS), and intent-classification call must open a generation span tagged with a value from the `LLMFlow` registry in `backend/onyx/tracing/flows.py`. Use one of:
 
-- `llm_generation_span(llm=..., flow=LLMFlow.X, input_messages=...)` for calls going through an `LLM` subclass.
+- `LLM.invoke(request, GenerationContext(flow=LLMFlow.X))` records its own span; set the flow on the context.
+- `llm_generation_span(llm=..., flow=LLMFlow.X, input_messages=...)` around `LitellmLLM.invoke_raw` / `stream_raw`, which do not trace.
 - `traced_llm_call(flow=LLMFlow.X, model=..., provider=..., input_messages=...)` for direct provider SDK / `litellm` / model_server HTTP calls that bypass the `LLM` abstraction.
 
 Rules:
 
 1. Add a new `LLMFlow` enum value before instrumenting a new operation. Don't pass raw strings.
 2. Flow tags name the **operation** (e.g. `IMAGE_EDIT`, `RERANK`) — not the provider. Provider lives in `model_config["model_provider"]`.
-3. The auto-wrap fallback in `onyx/llm/tracing_wrap.py` emits `LLMFlow.UNTAGGED_INVOKE` / `UNTAGGED_STREAM` for calls that reach `LLM.invoke` / `LLM.stream` without an explicit span. These sentinels are visible in dashboards and indicate missing instrumentation — fix the call site, don't rely on the fallback.
+3. `LLM.invoke` tags its span `LLMFlow.UNTAGGED_INVOKE` when the context has no flow. This sentinel is visible in dashboards and indicates missing instrumentation — set the flow at the call site.

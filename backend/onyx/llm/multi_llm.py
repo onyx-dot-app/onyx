@@ -7,6 +7,7 @@ from contextlib import AbstractContextManager, contextmanager, nullcontext
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Union, cast
 
+from pydantic import BaseModel
 from readerwriterlock import rwlock
 
 from onyx.configs.app_configs import (
@@ -34,7 +35,7 @@ from onyx.llm.custom_config_mapping import (
     UI_ONLY_CONFIG_KEYS,
     map_custom_config_to_model_kwargs,
 )
-from onyx.llm.interfaces import LLM, LLMConfig, LLMUserIdentity
+from onyx.llm.interfaces import LLM, GenerationContext, LLMConfig, LLMUserIdentity
 from onyx.llm.model_capabilities import (
     OPENAI_API_PROVIDERS,
     ReasoningParamStyle,
@@ -54,9 +55,20 @@ from onyx.llm.model_capabilities import (
 from onyx.llm.model_capabilities import (
     model_identity_names as resolve_model_identity_names,
 )
-from onyx.llm.model_request import LanguageModelInput
-from onyx.llm.model_response import ModelResponse, ModelResponseStream
+from onyx.llm.model_request import (
+    ChatCompletionMessage,
+    serialize_request,
+    serialize_tools,
+)
+from onyx.llm.model_response import (
+    ModelResponse,
+    ModelResponseStream,
+    to_assistant_message,
+)
 from onyx.llm.models import (
+    AssistantMessage,
+    GenerationRequest,
+    GenerationRequestParams,
     NamedToolChoice,
     ReasoningEffort,
     ToolChoice,
@@ -64,10 +76,16 @@ from onyx.llm.models import (
     Usage,
     resolve_reasoning_effort,
 )
-from onyx.llm.request_context import get_llm_mock_response, set_llm_request_params
+from onyx.llm.prompt_cache.processor import process_with_prompt_cache
+from onyx.llm.request_context import get_llm_mock_response
 from onyx.llm.utils import build_litellm_passthrough_kwargs
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
-from onyx.tracing.llm_utils import record_llm_request_params
+from onyx.tracing.flows import LLMFlow
+from onyx.tracing.llm_utils import (
+    llm_generation_span,
+    record_llm_request_params,
+    record_llm_response,
+)
 from onyx.utils.encryption import mask_env_value_for_logging, mask_string
 from onyx.utils.logger import setup_logger
 
@@ -222,6 +240,12 @@ class LLMRateLimitError(Exception):
     """
 
 
+class ProviderOperation(BaseModel):
+    """Diagnostics for one provider call, including its retry attempts."""
+
+    request_params: GenerationRequestParams | None = None
+
+
 def _as_onyx_llm_error(error: Exception) -> Exception:
     """Translate a litellm exception into the Onyx one callers catch.
 
@@ -276,15 +300,13 @@ def _consume_stream_until_deadline(stream: Any, deadline: float) -> list[Any]:
     return chunks
 
 
-def _prompt_to_dicts(prompt: LanguageModelInput) -> list[dict[str, Any]]:
+def _prompt_to_dicts(prompt: list[ChatCompletionMessage]) -> list[dict[str, Any]]:
     """Convert Pydantic message models to dictionaries for LiteLLM.
 
     LiteLLM expects messages to be dictionaries (with .get() method),
     not Pydantic models. This function serializes the messages.
     """
-    if isinstance(prompt, list):
-        return [msg.model_dump(exclude_none=True) for msg in prompt]
-    return [prompt.model_dump(exclude_none=True)]
+    return [msg.model_dump(exclude_none=True) for msg in prompt]
 
 
 def _normalize_content(raw: Any) -> str:
@@ -438,7 +460,7 @@ def _messages_contain_tool_content(messages: list[dict[str, Any]]) -> bool:
     return False
 
 
-def _prompt_contains_tool_call_history(prompt: LanguageModelInput) -> bool:
+def _prompt_contains_tool_call_history(prompt: list[ChatCompletionMessage]) -> bool:
     """Check if the prompt contains any assistant messages with tool_calls.
 
     When Anthropic's extended thinking is enabled, the API requires every
@@ -447,10 +469,11 @@ def _prompt_contains_tool_call_history(prompt: LanguageModelInput) -> bool:
     cryptographic signatures that can't be reconstructed), we must skip
     the thinking param whenever history contains prior tool-calling turns.
     """
-    from onyx.llm.model_request import AssistantMessage
+    from onyx.llm.model_request import AssistantMessage as ProviderAssistantMessage
 
-    msgs = prompt if isinstance(prompt, list) else [prompt]
-    return any(isinstance(msg, AssistantMessage) and msg.tool_calls for msg in msgs)
+    return any(
+        isinstance(msg, ProviderAssistantMessage) and msg.tool_calls for msg in prompt
+    )
 
 
 @lru_cache(maxsize=None)
@@ -691,7 +714,7 @@ class LitellmLLM(LLM):
 
     def _completion(
         self,
-        prompt: LanguageModelInput,
+        prompt: list[ChatCompletionMessage],
         tools: list[dict] | None,
         tool_choice: ToolChoice | None,
         stream: bool,
@@ -702,6 +725,7 @@ class LitellmLLM(LLM):
         max_tokens: int | None = None,
         user_identity: LLMUserIdentity | None = None,
         client: "HTTPHandler | None" = None,
+        operation: ProviderOperation | None = None,
         env_injection_enabled: bool | None = None,
         deadline: float | None = None,
     ) -> Union["ModelResponse", "CustomStreamWrapper"]:
@@ -1203,19 +1227,19 @@ class LitellmLLM(LLM):
                 # Last write wins: sent_kwargs holds what the returning (or
                 # final failing) attempt sent, reasoning_effort the effective
                 # intent. One dict, two sinks, so they cannot drift.
-                request_params = {
-                    "model_name": self.config.model_name,
-                    "model_provider": self.config.model_provider,
-                    "reasoning_effort": reasoning_effort.value,
-                    "max_tokens": max_tokens,
-                    "stream": stream,
-                    "sent_kwargs": {
+                request_params = GenerationRequestParams(
+                    model_name=self.config.model_name,
+                    model_provider=self.config.model_provider,
+                    reasoning_effort=reasoning_effort,
+                    max_tokens=max_tokens,
+                    sent_kwargs={
                         k: _json_safe(opts[k])
                         for k in sorted(_BEST_EFFORT_KWARG_KEYS & opts.keys())
                     },
-                }
+                )
                 record_llm_request_params(request_params)
-                set_llm_request_params(request_params)
+                if operation is not None:
+                    operation.request_params = request_params
                 try:
                     return _call_litellm(opts)
                 except BadRequestError as e:
@@ -1285,9 +1309,9 @@ class LitellmLLM(LLM):
             LlmProviderNames.BEDROCK_CONVERSE,
         )
 
-    def invoke(
+    def invoke_raw(
         self,
-        prompt: LanguageModelInput,
+        prompt: list[ChatCompletionMessage],
         tools: list[dict] | None = None,
         tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
@@ -1295,8 +1319,11 @@ class LitellmLLM(LLM):
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
         total_timeout_s: float = LLM_INVOKE_TIMEOUT_S,
+        operation: ProviderOperation | None = None,
     ) -> ModelResponse:
-        """One complete response within ``total_timeout_s``. See ``LLM.invoke``.
+        """One complete provider response within ``total_timeout_s``.
+
+        The caller owns the generation span. Use ``invoke`` for shared messages.
 
         Sends one plain request, so the socket read timeout is the whole budget.
         The only exception is env injection of custom_config (self-hosted
@@ -1367,6 +1394,7 @@ class LitellmLLM(LLM):
                 reasoning_effort=reasoning_effort,
                 user_identity=user_identity,
                 client=client,
+                operation=operation,
                 env_injection_enabled=env_injection_enabled,
                 deadline=deadline,
             )
@@ -1401,9 +1429,9 @@ class LitellmLLM(LLM):
             if client is not None:
                 client.close()
 
-    def stream(
+    def stream_raw(
         self,
-        prompt: LanguageModelInput,
+        prompt: list[ChatCompletionMessage],
         tools: list[dict] | None = None,
         tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
@@ -1411,7 +1439,15 @@ class LitellmLLM(LLM):
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
         stall_timeout_s: int = LLM_SOCKET_READ_TIMEOUT,
+        operation: ProviderOperation | None = None,
     ) -> Iterator[ModelResponseStream]:
+        """Yield provider chunks as they arrive; the caller owns the generation span.
+
+        ``stall_timeout_s`` bounds the gap between deltas, not the whole run. A
+        stream takes no total timeout: its consumer sees progress and owns the
+        end-to-end deadline, and some runs (deep research reports) take many
+        minutes.
+        """
         from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
         from litellm import HTTPHandler
         from litellm.exceptions import APIConnectionError as LiteLLMAPIConnectionError
@@ -1481,6 +1517,7 @@ class LitellmLLM(LLM):
                         reasoning_effort=reasoning_effort,
                         user_identity=user_identity,
                         client=client,
+                        operation=operation,
                     ),
                 )
 
@@ -1507,6 +1544,47 @@ class LitellmLLM(LLM):
             finally:
                 if client is not None:
                     client.close()
+
+    def _prepare_request(
+        self, request: GenerationRequest
+    ) -> list[ChatCompletionMessage]:
+        config = self.config
+        messages, cacheable_prefix = serialize_request(request, config)
+        if cacheable_prefix:
+            messages, _ = process_with_prompt_cache(
+                llm_config=config,
+                cacheable_prefix=messages[:cacheable_prefix],
+                suffix=messages[cacheable_prefix:],
+                continuation=False,
+                with_metadata=False,
+            )
+        return messages
+
+    def invoke(
+        self, request: GenerationRequest, context: GenerationContext | None = None
+    ) -> AssistantMessage:
+        context = context or GenerationContext()
+        messages = self._prepare_request(request)
+        tools = serialize_tools(request.tools) or None
+        with llm_generation_span(
+            self,
+            context.flow or LLMFlow.UNTAGGED_INVOKE,
+            input_messages=messages,
+            tools=tools,
+            content_mode=context.content_mode,
+        ) as span:
+            response = self.invoke_raw(
+                messages,
+                tools=tools,
+                tool_choice=request.options.tool_choice,
+                structured_response_format=request.options.structured_response_format,
+                max_tokens=request.options.max_tokens,
+                reasoning_effort=request.options.reasoning_effort,
+                user_identity=context.user_identity,
+                total_timeout_s=context.total_timeout_s or LLM_INVOKE_TIMEOUT_S,
+            )
+            record_llm_response(span, response)
+        return to_assistant_message(response, request)
 
 
 @contextmanager

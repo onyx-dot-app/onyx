@@ -29,6 +29,7 @@ from ee.onyx.server.gateway.stream_bridge import (
     _sse_response,
     _stream_worker_guard,
     _StreamAccumulator,
+    finalize_tool_calls,
 )
 from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
@@ -59,9 +60,8 @@ from onyx.llm.models import (
     ToolChoice,
     ToolChoiceOptions,
 )
-from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
+from onyx.llm.multi_llm import LitellmLLM, LLMRateLimitError, LLMTimeoutError
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
-from onyx.llm.tracing_wrap import _finalize_tool_calls
 from onyx.server.features.build.craft_gateway import gateway_request_flow
 from onyx.server.gateway.configs import (
     GATEWAY_LLM_TOTAL_TIMEOUT_SECONDS,
@@ -266,8 +266,6 @@ def _prepare_messages(
         continuation=False,
         with_metadata=False,
     )
-    if not isinstance(processed_messages, list):
-        raise RuntimeError("LLM gateway message processing returned non-list input")
     return processed_messages
 
 
@@ -310,7 +308,7 @@ def _emit_stream_error(
 
 
 def _stream_worker(
-    llm: LLM,
+    llm: LitellmLLM,
     flow: LLMFlow,
     messages: list[ChatCompletionMessage],
     tools: list[dict[str, Any]] | None,
@@ -342,7 +340,7 @@ def _stream_worker(
             out=out,
             cancelled=cancelled,
         ):
-            state.upstream = llm.stream(
+            state.upstream = llm.stream_raw(
                 prompt=messages,
                 tools=tools,
                 tool_choice=tool_choice,
@@ -409,7 +407,7 @@ def handle_chat_completion(
         ) as span,
     ):
         try:
-            response = llm.invoke(
+            response = llm.invoke_raw(
                 prompt=messages,
                 total_timeout_s=GATEWAY_LLM_TOTAL_TIMEOUT_SECONDS,
                 tools=request.tools,
@@ -547,7 +545,7 @@ def _build_responses_output_items(
 
 
 def _responses_stream_worker(
-    llm: LLM,
+    llm: LitellmLLM,
     flow: LLMFlow,
     messages: list[ChatCompletionMessage],
     tools: list[dict[str, Any]] | None,
@@ -639,7 +637,7 @@ def _responses_stream_worker(
             out=out,
             cancelled=cancelled,
         ):
-            state.upstream = llm.stream(
+            state.upstream = llm.stream_raw(
                 prompt=messages,
                 tools=tools,
                 tool_choice=tool_choice,
@@ -692,7 +690,7 @@ def _responses_stream_worker(
                     item
                     for item in (
                         _function_call_item(tool_call)
-                        for tool_call in _finalize_tool_calls(state.tool_call_buffer)
+                        for tool_call in finalize_tool_calls(state.tool_call_buffer)
                         or []
                     )
                     if item is not None
@@ -789,7 +787,7 @@ def handle_responses_request(
         ) as span,
     ):
         try:
-            response = llm.invoke(
+            response = llm.invoke_raw(
                 prompt=messages,
                 total_timeout_s=GATEWAY_LLM_TOTAL_TIMEOUT_SECONDS,
                 tools=tools,
@@ -1083,7 +1081,7 @@ def _anthropic_tool_use_blocks(
 
 
 def _anthropic_stream_worker(
-    llm: LLM,
+    llm: LitellmLLM,
     flow: LLMFlow,
     messages: list[ChatCompletionMessage],
     tools: list[dict[str, Any]] | None,
@@ -1211,7 +1209,7 @@ def _anthropic_stream_worker(
             out=out,
             cancelled=cancelled,
         ):
-            state.upstream = llm.stream(
+            state.upstream = llm.stream_raw(
                 prompt=messages,
                 tools=tools,
                 tool_choice=tool_choice,
@@ -1249,7 +1247,7 @@ def _anthropic_stream_worker(
                         break
             else:
                 close_open_block()
-                finalized_tool_calls = _finalize_tool_calls(state.tool_call_buffer)
+                finalized_tool_calls = finalize_tool_calls(state.tool_call_buffer)
                 tool_blocks = _anthropic_tool_use_blocks(finalized_tool_calls)
                 named_tool_calls = [
                     tc for tc in finalized_tool_calls or [] if tc.function.name
@@ -1339,7 +1337,7 @@ def handle_anthropic_messages(
         ) as span,
     ):
         try:
-            response = llm.invoke(
+            response = llm.invoke_raw(
                 prompt=messages,
                 total_timeout_s=GATEWAY_LLM_TOTAL_TIMEOUT_SECONDS,
                 tools=tools,

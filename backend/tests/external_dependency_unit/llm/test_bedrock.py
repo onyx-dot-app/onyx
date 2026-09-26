@@ -69,7 +69,7 @@ def test_nova_streaming_does_not_leak_thinking_tags(
 
     content_parts: list[str] = []
     reasoning_parts: list[str] = []
-    for chunk in llm.stream(prompt=prompt):
+    for chunk in llm.stream_raw(prompt=prompt):
         delta = chunk.choice.delta
         if delta.content:
             content_parts.append(delta.content)
