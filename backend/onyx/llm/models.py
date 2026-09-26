@@ -251,13 +251,14 @@ class AssistantMessage(BaseMessage):
 
 class ToolResultMessage(BaseMessage):
     role: Literal["tool_result"] = "tool_result"
-    content: str | list[ContentPart]
+    # Provider tool messages carry text only.
+    content: str
     tool_call_id: str
     tool_name: str
 
     @property
     def text(self) -> str:
-        return content_text(self.content)
+        return self.content
 
 
 Message = Annotated[

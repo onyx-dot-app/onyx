@@ -145,8 +145,6 @@ def format_provider_message(message: app.Message) -> ChatCompletionMessage:
             or None,
         )
     if isinstance(message, app.ToolResultMessage):
-        if not isinstance(message.content, str):
-            raise ValueError("Provider tool messages require text content")
         return ToolMessage(content=message.content, tool_call_id=message.tool_call_id)
     raise TypeError(f"Unsupported message type: {type(message).__name__}")
 

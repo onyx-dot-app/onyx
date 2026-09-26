@@ -453,11 +453,18 @@ def recover_tool_calls(
     tools = {tool.name: tool for tool in request.tools}
     for call in calls:
         call.arguments = _normalize_arguments(call.arguments, tools.get(call.name))
-    content: list[TextContent | ToolCall] = []
-    if _looks_like_xml_tool_call_payload(message.text):
-        content_filter = XmlToolCallContentFilter()
-        visible_text = content_filter.process(message.text) + content_filter.flush()
-        if visible_text:
-            content.append(TextContent(text=visible_text))
+    # Keep answer text and signed thinking beside the recovered calls; strip
+    # only XML call payloads, which are not meant for the reader.
+    content: list[TextContent | ThinkingContent | ToolCall] = []
+    for block in message.content:
+        if isinstance(block, TextContent) and _looks_like_xml_tool_call_payload(
+            block.text
+        ):
+            content_filter = XmlToolCallContentFilter()
+            visible_text = content_filter.process(block.text) + content_filter.flush()
+            if visible_text:
+                content.append(TextContent(text=visible_text))
+        elif isinstance(block, (TextContent, ThinkingContent)):
+            content.append(block)
     content.extend(calls)
     return message.model_copy(update={"content": content})

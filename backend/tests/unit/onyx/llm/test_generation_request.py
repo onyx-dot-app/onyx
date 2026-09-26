@@ -401,3 +401,44 @@ def test_invoke_records_the_provider_response_on_its_span() -> None:
         provider.invoke(GenerationRequest(messages=[UserMessage(content="Hi")]))
 
     record.assert_called_once_with(span, provider._response)
+
+
+def test_invoke_records_provider_failures_on_its_span() -> None:
+    provider = RecordingProvider()
+    span = MagicMock()
+    failure = TimeoutError("provider stalled")
+    with (
+        patch("onyx.llm.multi_llm.llm_generation_span") as open_span,
+        patch.object(provider, "invoke_raw", side_effect=failure),
+        pytest.raises(TimeoutError),
+    ):
+        open_span.return_value.__enter__.return_value = span
+        provider.invoke(GenerationRequest(messages=[UserMessage(content="Hi")]))
+
+    span.set_error.assert_called_once_with(
+        {"message": "TimeoutError: provider stalled", "data": None}
+    )
+
+
+def test_tool_recovery_keeps_answer_text_and_signed_thinking() -> None:
+    signed = ThinkingBlock(thinking="plan", signature="provider-signature")
+    payload = '{"name": "search", "arguments": {"query": "onyx"}}'
+    request = GenerationRequest(
+        tools=[ToolDefinition(name="search", description="Search", parameters={})],
+        options=GenerationOptions(tool_choice=ToolChoiceOptions.REQUIRED),
+    )
+    response = _response(
+        Message(
+            content=f"Searching now. {payload}",
+            reasoning_content="plan",
+            thinking_blocks=[signed],
+        )
+    )
+
+    message = to_assistant_message(response, request)
+
+    assert message.text == f"Searching now. {payload}"
+    assert message.thinking == "plan"
+    assert message.thinking_blocks == [signed]
+    assert [call.name for call in message.tool_calls] == ["search"]
+    assert message.tool_calls[0].arguments == {"query": "onyx"}
