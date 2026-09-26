@@ -11,6 +11,10 @@ from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
 )
 
+MISSING_LIST_ID_PERMISSION_ERROR = (
+    "SharePoint permission lookup requires a list ID for the drive"
+)
+
 
 class SharepointGroup(BaseModel):
     model_config = {"frozen": True}
@@ -46,6 +50,8 @@ def get_sharepoint_external_access(
 ) -> ExternalAccess:
     if drive_item and drive_item.id is None:
         raise ValueError("DriveItem ID is required")
+    if drive_item and not list_id:
+        raise ValueError(MISSING_LIST_ID_PERMISSION_ERROR)
 
     # Get external access using the EE implementation
     def noop_fallback(
@@ -82,6 +88,9 @@ def get_sharepoint_hierarchy_node_external_access(
     list_id: str | None = None,
     folder_server_relative_path: str | None = None,
 ) -> ExternalAccess:
+    if node_type == HierarchyNodeType.DRIVE and not list_id:
+        raise ValueError(MISSING_LIST_ID_PERMISSION_ERROR)
+
     def noop_fallback(
         *args: Any,  # noqa: ARG001
         **kwargs: Any,  # noqa: ARG001
