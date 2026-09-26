@@ -111,6 +111,8 @@ class ResearchAgent(FeatureRestoration):
         self.token_counter = token_counter
         self.language_section = language_section
         self.reasoning_effort = reasoning_effort
+        # Preserve citation markers in intermediate reports so the parent can
+        # renumber them when it combines reports from multiple research agents.
         self.citation_processor = DynamicCitationProcessor(
             citation_mode=CitationMode.KEEP_MARKERS
         )

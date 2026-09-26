@@ -1,4 +1,7 @@
-"""Prepare chat requests and return streamed or complete responses."""
+"""
+IMPORTANT: familiarize yourself with the design concepts prior to contributing to this file.
+An overview can be found in the README.md file in this directory.
+"""
 
 import re
 from concurrent.futures import Future

@@ -64,7 +64,10 @@ def _disambiguate_mcp_tool_names(tools: list[Tool]) -> None:
 
 class SearchToolConfig(BaseModel):
     user_selected_filters: BaseFilters | None = None
-    # Scope search to attached files that exceed the model context budget.
+    # Search metadata filters for overflowing user files.  These are NOT the
+    # IDs of the current project/persona — they are only set when the
+    # project's/persona's user files didn't fit in the LLM context window and
+    # must be found via vector DB search instead.
     project_id_filter: int | None = None
     persona_id_filter: int | None = None
     additional_context: str | None = None
@@ -223,7 +226,10 @@ def _construct_tools_impl(
 
     added_search_tool = False
     for db_tool_model in configuration.tools:
-        # Disabled tools remain attached to Persona records.
+        # Disabling an action leaves it attached to its personas, so an attached
+        # tool is not necessarily a usable one (see Persona__Tool). Only the tool
+        # listing endpoints filtered on this, which left a disabled tool callable
+        # by any request that sends no allowed_tool_ids whitelist.
         if not db_tool_model.enabled:
             continue
 

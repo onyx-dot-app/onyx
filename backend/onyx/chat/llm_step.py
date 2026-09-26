@@ -96,7 +96,18 @@ def _user_content_parts(
 def _select_recent_image_indices(
     history: Sequence[Message], cap: int
 ) -> tuple[set[tuple[int, int]], int]:
-    """Keep recent messages first, then image order within each message."""
+    """Pick which (msg_idx, part_idx) positions to keep when the request has
+    more images than the cap. Walks messages newest-to-oldest (recency wins
+    across turns) but walks images within each message in attachment order
+    (earlier positions preferred). This matters in mixed messages where
+    user-attached images appear first in image_files and project-context
+    images are appended at the end — when the cap bites, we prefer to keep
+    what the user explicitly attached over project-context fill.
+
+    Returns the keep-set and the count of images that would be dropped. Only
+    image parts on non-reminder user messages count, so cap slots aren't
+    wasted on images that would never reach the LLM.
+    """
     keep: set[tuple[int, int]] = set()
     total = 0
     for msg_idx in range(len(history) - 1, -1, -1):
@@ -127,6 +138,9 @@ def _format_user_message(
             continue
         if keep_images is not None and (message_index, part_index) not in keep_images:
             continue
+        # History can contain images even when the current model cannot accept
+        # them (e.g. the user switched models mid-session). Sending them yields a
+        # provider 400, so replay a text marker instead.
         if not supports_images:
             marker = (
                 NON_VISION_IMAGE_MARKER.format(file_id=part.file_id)

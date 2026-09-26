@@ -111,7 +111,10 @@ def check_number_of_tokens(
     return len(encode_fn(text))
 
 
-# Credential-bearing custom configuration keys used for response and error masking.
+# Substrings that mark a `custom_config` key as containing credential material.
+# Source of truth shared by:
+#   - response masking in `onyx.server.manage.llm.api`
+#   - error-message scrubbing in `scrub_sensitive_values`
 SENSITIVE_CUSTOM_CONFIG_KEY_FRAGMENTS: frozenset[str] = frozenset(
     {
         "vertex_credentials",

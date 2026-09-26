@@ -361,7 +361,12 @@ def _as_onyx_llm_error(error: Exception) -> Exception:
 
 
 def _consume_stream_until_deadline[T](stream: Iterable[T], deadline: float) -> list[T]:
-    """Drain provider output within the invocation's remaining budget."""
+    """Drain provider output within the invocation's remaining budget.
+
+    Socket read timeouts bound the gap between packets, so keepalive pings
+    can keep a call open indefinitely. Check the total deadline between chunks
+    as well; this check alone can overshoot by up to one socket read timeout.
+    """
     chunks: list[T] = []
     try:
         for chunk in stream:
@@ -1132,8 +1137,22 @@ class LitellmLLM(LLM):
             user_identity=user_identity,
         )
 
-        # OpenRouter uses session_id for stable upstream routing and user for activity logs.
-        # Both identifiers respect the deployment's metadata privacy setting.
+        # OpenRouter: inject session_id and user into extra_body.
+        #
+        # session_id — sticky routing: pins all turns of a conversation to the
+        # same upstream provider, enabling prompt cache hits across turns.
+        # Without this, OpenRouter may alternate between e.g. Anthropic and Google
+        # for the same model, causing cache misses on every other turn.
+        # See: https://openrouter.ai/docs/features/provider-routing#session-id
+        #
+        # user — activity tracking: OpenRouter reads the user identifier from
+        # extra_body for its per-user activity logs; the top-level LiteLLM
+        # `user` parameter is forwarded to the upstream model but is not picked
+        # up by OpenRouter's own tracking dashboard.
+        #
+        # Both are gated on SEND_USER_METADATA_TO_LLM_PROVIDER: an operator who
+        # opted out of sending session/user identifiers to providers should not
+        # have them forwarded to OpenRouter either.
         if (
             SEND_USER_METADATA_TO_LLM_PROVIDER
             and self._model_provider == LlmProviderNames.OPENROUTER
@@ -1226,6 +1245,8 @@ class LitellmLLM(LLM):
             def _call_litellm(
                 opts: dict[str, JsonValue],
             ) -> "LiteLLMModelResponse | CustomStreamWrapper | CancellableStream":
+                # Retry attempts share one deadline. Give each attempt only the
+                # remaining budget so retries cannot multiply the total timeout.
                 timeout = read_timeout_s
                 if deadline is not None:
                     remaining = deadline - time.monotonic()
@@ -1239,6 +1260,7 @@ class LitellmLLM(LLM):
                     api_version=api_version,
                     custom_llm_provider=self._custom_llm_provider or None,
                     messages=messages,
+                    # Some OpenAI-compatible servers reject an empty tools array.
                     tools=tools or None,
                     stream=stream,
                     timeout=timeout,
@@ -1349,8 +1371,23 @@ class LitellmLLM(LLM):
         )
 
     def _uses_isolated_client(self) -> bool:
-        """Providers whose sync calls need a fresh per-call HTTPHandler instead of
-        litellm's shared module_level_client (see threading notes in invoke())."""
+        """Select providers that need a fresh per-call HTTPHandler.
+
+        Isolated clients prevent stale connections or abandoned streams from
+        affecting other threads. Shared pools have caused "Bad file descriptor"
+        errors during concurrent OpenAI streaming.
+
+        For Anthropic and Bedrock, GC can finalize an abandoned sync stream
+        while its thread holds the shared pool's non-reentrant lock. This can
+        deadlock all later calls (encode/httpcore#996; seen in production).
+        Their LiteLLM handlers use module_level_client when client is None.
+
+        The client type also matters: LiteLLM's OpenAI responses path accepts
+        HTTPHandler, but its OpenAI-compatible completion path expects an
+        OpenAI SDK client. Passing HTTPHandler there causes an AttributeError
+        for api_key. Check is_true_openai_model, not just provider == "openai":
+        GLM, DeepSeek, and local proxies can use that provider name too.
+        """
         return any(
             is_true_openai_model(self.config.model_provider, name)
             for name in resolve_model_identity_names(
@@ -1670,6 +1707,10 @@ class LitellmLLM(LLM):
                 )
                 raise
             finally:
+                # Providers bill for tokens streamed before consumer abandonment.
+                # Record partial content and usage on errors and GeneratorExit,
+                # not just clean completion. GeneratorExit is a BaseException,
+                # so it does not pass through the Exception handler above.
                 stream.close()
                 accumulator.finalize()
                 message = accumulator.message

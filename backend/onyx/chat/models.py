@@ -53,6 +53,23 @@ MAX_DISCOVERED_AGENTS = 128
 
 
 class CitationMode(str, Enum):
+    """Defines how citations should be handled in the output.
+
+    REMOVE: Citations are completely removed from output text.
+            No CitationInfo objects are emitted.
+            Use case: When you need to remove citations from the output if they are not shared with the user
+            (e.g. in discord bot, public slack bot).
+
+    KEEP_MARKERS: Original citation markers like [1], [2] are preserved unchanged.
+                  No CitationInfo objects are emitted.
+                  Use case: When you need to track citations in research agent and later process
+                  them with collapse_citations() to renumber.
+
+    HYPERLINK: Citations are replaced with markdown links like [[1]](url).
+               CitationInfo objects are emitted for UI tracking.
+               Use case: Final reports shown to users with clickable links.
+    """
+
     REMOVE = "remove"
     KEEP_MARKERS = "keep_markers"
     HYPERLINK = "hyperlink"

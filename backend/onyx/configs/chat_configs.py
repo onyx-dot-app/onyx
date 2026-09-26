@@ -11,9 +11,16 @@ NUM_RETURNED_HITS = 50
 MAX_CHUNKS_FED_TO_CHAT = int(os.environ.get("MAX_CHUNKS_FED_TO_CHAT") or 25)
 
 # Maximum number of LLM cycles (one tool-call round-trip per cycle) before the
-# agent is forced to answer. Default 6 covers the common search → open_url
-# pattern documented at the call site; raise via env when integrating with
-# tool-heavy MCPs that legitimately need more turns.
+# agent is forced to answer.
+# Default 6 covers the common search → open_url pattern:
+# Cycle 1: Calls web_search for something
+# Cycle 2: Calls open_url for some results
+# Cycle 3: Calls web_search for some other aspect of the question
+# Cycle 4: Calls open_url for some results
+# Cycle 5: Maybe call open_url for some additional results or because last set failed
+# Cycle 6: No more tools available, forced to answer
+# Override via the MAX_LLM_CYCLES env var when running with tool-heavy MCPs
+# that legitimately need more turns.
 MAX_LLM_CYCLES: int = int(os.environ.get("MAX_LLM_CYCLES") or 6)
 
 # 1 / (1 + DOC_TIME_DECAY * doc-age-in-years), set to 0 to have no decay
