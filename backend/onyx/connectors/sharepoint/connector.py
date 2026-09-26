@@ -90,6 +90,7 @@ from onyx.connectors.models import (
     TextSection,
 )
 from onyx.connectors.sharepoint.connector_utils import (
+    MISSING_LIST_ID_PERMISSION_ERROR,
     SharepointPermissionCache,
     get_sharepoint_external_access,
     get_sharepoint_hierarchy_node_external_access,
@@ -105,6 +106,9 @@ from onyx.utils.url import SSRFException, validate_outbound_http_url
 logger = setup_logger()
 SLIM_BATCH_SIZE = 1000
 DRIVE_SELECT_FIELDS = ["id", "name", "webUrl", "driveType", "sharePointIds"]
+MISSING_DRIVE_TRAVERSAL_METADATA_ERROR = (
+    "Graph drive is missing required traversal metadata"
+)
 
 
 SHARED_DOCUMENTS_MAP = {
@@ -173,9 +177,9 @@ class SiteDescriptor(BaseModel):
 
 class SiteDrive(BaseModel):
     drive_id: str
-    list_id: str
     display_name: str
     web_url: str
+    list_id: str | None = None
 
 
 class FetchedDriveItem(BaseModel):
@@ -1104,8 +1108,8 @@ class SharepointConnector(
         list_id = drive.sharepoint_ids.listId
         display_name = drive.name
         web_url = drive.web_url
-        if not drive_id or not list_id or not display_name or not web_url:
-            raise ValueError("Graph drive is missing durable SharePoint identity")
+        if not drive_id or not display_name or not web_url:
+            raise ValueError(MISSING_DRIVE_TRAVERSAL_METADATA_ERROR)
         return SiteDrive(
             drive_id=drive_id,
             list_id=list_id,
@@ -1836,6 +1840,8 @@ class SharepointConnector(
         checkpoint.seen_hierarchy_node_raw_ids.add(drive.web_url)
         external_access = None
         if include_permissions:
+            if not drive.list_id:
+                raise ValueError(MISSING_LIST_ID_PERMISSION_ERROR)
             ctx = self._create_rest_client_context(site_url)
             external_access = get_sharepoint_hierarchy_node_external_access(
                 ctx,
@@ -2176,6 +2182,12 @@ class SharepointConnector(
                         checkpoint.current_drive.drive_id,
                         site_descriptor.folder_path,
                     )
+                yield from self._yield_drive_hierarchy_node(
+                    site_descriptor.url,
+                    checkpoint.current_drive,
+                    checkpoint,
+                    include_permissions=include_permissions,
+                )
             except Exception as e:
                 logger.error(
                     "Failed to retrieve items from drive '%s' in site: %s: %s",
@@ -2192,13 +2204,6 @@ class SharepointConnector(
                 )
                 self._clear_drive_checkpoint_state(checkpoint)
                 return checkpoint
-
-            yield from self._yield_drive_hierarchy_node(
-                site_descriptor.url,
-                checkpoint.current_drive,
-                checkpoint,
-                include_permissions=include_permissions,
-            )
 
             if not site_descriptor.folder_path:
                 checkpoint.current_drive_delta_next_link = build_delta_start_url(

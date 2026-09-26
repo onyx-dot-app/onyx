@@ -61,7 +61,7 @@ class _FakeDrive:
 
 
 class _FakeSharepointIds:
-    def __init__(self, list_id: str) -> None:
+    def __init__(self, list_id: str | None) -> None:
         self.listId = list_id
 
 
@@ -187,6 +187,32 @@ def test_fetch_driveitems_matches_international_drive_names(
     assert results[0].driveitem.id == _SAMPLE_ITEM.id
     assert results[0].drive.display_name == graph_drive_name
     assert results[0].drive.web_url is not None
+
+
+def test_fetch_driveitems_uses_drive_id_without_list_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    drive = _FakeDrive("System")
+    drive.sharepoint_ids = _FakeSharepointIds(None)
+    connector = _build_connector([drive])
+    traversed_drive_ids: list[str] = []
+
+    def fake_delta(
+        client: GraphApiClient,  # noqa: ARG001
+        drive_id: str,
+        start: datetime | None = None,  # noqa: ARG001
+        end: datetime | None = None,  # noqa: ARG001
+        page_size: int = 200,  # noqa: ARG001
+    ) -> Generator[DriveItemData, None, None]:
+        traversed_drive_ids.append(drive_id)
+        yield _SAMPLE_ITEM
+
+    monkeypatch.setattr(sp_connector, "iter_drive_items_delta", fake_delta)
+
+    results = list(connector._fetch_driveitems(site_descriptor=_site()))
+
+    assert traversed_drive_ids == [drive.id]
+    assert results[0].drive.list_id is None
 
 
 def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -> None:
