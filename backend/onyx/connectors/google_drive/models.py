@@ -84,7 +84,7 @@ class DriveRetrievalPhase(str, Enum):
 
 # Order the connector advances through. INVENTORY collects the partition keys
 # the later phases walk, so it has to come first.
-PHASE_ORDER = (
+PHASE_ORDER: tuple[DriveRetrievalPhase, ...] = (
     DriveRetrievalPhase.INVENTORY,
     DriveRetrievalPhase.SHARED_DRIVES,
     DriveRetrievalPhase.MY_DRIVES,
@@ -113,7 +113,7 @@ class PhaseProgress(BaseModel):
     # Stable order. Built once when the phase starts so a resumed run walks the
     # same partitions in the same sequence.
     partition_keys: list[str] = []
-    partition_index: int = 0
+    partition_index: int = Field(default=0, ge=0)
     next_page_token: str | None = None
     # Frontier within the current partition, reset when the partition changes.
     completed_until: SecondsSinceUnixEpoch = 0
