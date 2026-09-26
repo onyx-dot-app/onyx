@@ -72,6 +72,10 @@ _WATCH_OVERLAP = timedelta(minutes=10)
 # A release before the object store writes to MinIO alone, and a pass after this
 # long without such a write shows that none still runs.
 _RETIRE_QUIET_SECONDS = 60
+# A store that stops answering fails every key. Past this many failures in a
+# row the pass gives up, so the retry in a few minutes finds the store back
+# instead of timing out on every remaining object.
+_MAX_CONSECUTIVE_FAILURES = 32
 # A retired MinIO that misses this many watch passes in a row has been stopped.
 _RETIRED_STOP_AFTER_FAILED_PASSES = 3
 
@@ -333,6 +337,22 @@ def _resync_out_of_sync(source: "S3Client", target: "S3Client", bucket: str) -> 
     return failed
 
 
+# Only the copy uses multipart uploads and its passes run one at a time, so an
+# upload open when a pass starts is a copy that died mid-put, holding disk.
+def _abort_stale_uploads(target: "S3Client", bucket: str) -> int:
+    aborted = 0
+    paginator = target.get_paginator("list_multipart_uploads")
+    for page in paginator.paginate(Bucket=bucket):
+        for upload in page.get("Uploads", []):
+            target.abort_multipart_upload(
+                Bucket=bucket, Key=upload["Key"], UploadId=upload["UploadId"]
+            )
+            aborted += 1
+    if aborted:
+        logger.info("Aborted %d uploads left by an earlier copy of %s", aborted, bucket)
+    return aborted
+
+
 def run_pass(
     source: "S3Client",
     target: "S3Client",
@@ -341,11 +361,14 @@ def run_pass(
     modified_since: datetime | None = None,
 ) -> PassStats:
     """Copy the objects of the given buckets that a file record points at, or
-    only those modified since the given time."""
+    only those modified since the given time. Raises RuntimeError once
+    _MAX_CONSECUTIVE_FAILURES objects in a row fail, since a store is down."""
     stats = PassStats()
+    consecutive_failures = 0
     paginator = source.get_paginator("list_objects_v2")
     with ThreadPoolExecutor(max_workers=workers) as pool:
         for bucket in buckets:
+            _abort_stale_uploads(target, bucket)
             stats.failed += _resync_out_of_sync(source, target, bucket)
             copy_key = partial(_copy_object_logged, source, target, bucket)
             for page in paginator.paginate(Bucket=bucket):
@@ -361,6 +384,18 @@ def run_pass(
                     continue
                 for outcome, size in pool.map(copy_key, keys):
                     stats.add(outcome, size)
+                    if outcome != CopyOutcome.FAILED:
+                        consecutive_failures = 0
+                        continue
+                    consecutive_failures += 1
+                    if consecutive_failures < _MAX_CONSECUTIVE_FAILURES:
+                        continue
+                    # Only the copies in flight finish, not the rest of the page.
+                    pool.shutdown(wait=False, cancel_futures=True)
+                    raise RuntimeError(
+                        f"{consecutive_failures} objects in a row failed to copy "
+                        f"from {bucket}, so a store is not answering and the pass stops"
+                    )
                 logger.info(
                     "Legacy copy pass so far (at %s): %d listed, %d copied (%d MiB), "
                     "%d present, %d vanished, %d to retry, %d failed, %d without a file record",
@@ -388,7 +423,8 @@ def _list_and_ensure_buckets(
 
 
 def _clients() -> tuple["S3Client", "S3Client"]:
-    """(legacy MinIO, object store)."""
+    """(legacy MinIO, object store). Short timeouts, so a hung store fails a
+    pass in about a minute rather than minutes per object."""
     assert S3_LEGACY_ENDPOINT_URL
     source = build_s3_client(
         S3_LEGACY_ENDPOINT_URL,
@@ -396,6 +432,8 @@ def _clients() -> tuple["S3Client", "S3Client"]:
         S3_LEGACY_AWS_SECRET_ACCESS_KEY,
         AWS_REGION_NAME,
         S3_VERIFY_SSL,
+        fail_fast=True,
+        max_pool_connections=LEGACY_COPY_WORKERS,
     )
     target = build_s3_client(
         S3_ENDPOINT_URL,
@@ -403,6 +441,8 @@ def _clients() -> tuple["S3Client", "S3Client"]:
         S3_AWS_SECRET_ACCESS_KEY,
         AWS_REGION_NAME,
         S3_VERIFY_SSL,
+        fail_fast=True,
+        max_pool_connections=LEGACY_COPY_WORKERS,
     )
     return source, target
 

@@ -1,6 +1,7 @@
 """The file store and the legacy copy against a real object store and a real
 legacy MinIO store (S3_ENDPOINT_URL and S3_LEGACY_ENDPOINT_URL)."""
 
+import itertools
 import os
 import time
 import uuid
@@ -577,6 +578,55 @@ def test_copy_skips_objects_without_a_file_record(
 
     assert (stats.copied, stats.unreferenced) == (0, 1)
     assert not _object_exists(target, key)
+
+
+def test_a_pass_aborts_the_uploads_a_killed_copy_left(
+    stores: tuple[S3BackedFileStore, S3BackedFileStore],
+) -> None:
+    old_release, new_release = stores
+    source, target = old_release._get_s3_client(), new_release._get_s3_client()
+    prefix = new_release._s3_prefix
+    target.create_multipart_upload(Bucket=BUCKET, Key=f"{prefix}/public/died-mid-put")
+
+    run_pass(source, target, [BUCKET], workers=4)
+
+    uploads = target.list_multipart_uploads(Bucket=BUCKET, Prefix=prefix)
+    assert uploads.get("Uploads", []) == []
+
+
+def test_a_pass_stops_once_a_store_stops_answering(
+    stores: tuple[S3BackedFileStore, S3BackedFileStore],
+) -> None:
+    old_release, new_release = stores
+    for i in range(legacy_copy._MAX_CONSECUTIVE_FAILURES + 8):
+        _save(old_release, f"file {i}".encode())
+    source, target = old_release._get_s3_client(), new_release._get_s3_client()
+    down = EndpointConnectionError(endpoint_url="http://minio:9000")
+
+    with patch.object(legacy_copy, "copy_object", side_effect=down):
+        with pytest.raises(RuntimeError, match="in a row"):
+            run_pass(source, target, [BUCKET], workers=4)
+
+
+def test_scattered_failures_do_not_stop_a_pass(
+    stores: tuple[S3BackedFileStore, S3BackedFileStore],
+) -> None:
+    old_release, new_release = stores
+    for i in range(2 * legacy_copy._MAX_CONSECUTIVE_FAILURES + 4):
+        _save(old_release, f"file {i}".encode())
+    source, target = old_release._get_s3_client(), new_release._get_s3_client()
+    real_copy = legacy_copy.copy_object
+    calls = itertools.count()
+
+    def every_other_fails(*args: Any, **kwargs: Any) -> Any:
+        if next(calls) % 2:
+            raise EndpointConnectionError(endpoint_url="http://minio:9000")
+        return real_copy(*args, **kwargs)
+
+    with patch.object(legacy_copy, "copy_object", side_effect=every_other_fails):
+        stats = run_pass(source, target, [BUCKET], workers=1)
+
+    assert stats.failed >= legacy_copy._MAX_CONSECUTIVE_FAILURES
 
 
 def test_a_write_marker_yields_to_a_later_write_of_an_older_release(

@@ -137,6 +137,7 @@ def build_s3_client(
     region_name: str,
     verify_ssl: bool,
     fail_fast: bool = False,
+    max_pool_connections: int | None = None,
 ) -> "S3Client":
     try:
         # Imported here: boto3 costs ~16 MB and most workers never build an S3 client.
@@ -147,11 +148,17 @@ def build_s3_client(
             "service_name": "s3",
             "region_name": region_name,
         }
+        # One connection per concurrent caller, or the pool opens and drops a
+        # connection for every request beyond boto3's default of ten.
+        if max_pool_connections is not None:
+            client_kwargs["config"] = Config(max_pool_connections=max_pool_connections)
 
         # An endpoint URL means a self-hosted store, which needs path-style addressing.
         if endpoint_url:
             client_kwargs["endpoint_url"] = endpoint_url
             config = Config(signature_version="s3v4", s3={"addressing_style": "path"})
+            if max_pool_connections is not None:
+                config = config.merge(client_kwargs["config"])
             # A hung secondary store must not hold up the request it serves.
             if fail_fast:
                 config = config.merge(
