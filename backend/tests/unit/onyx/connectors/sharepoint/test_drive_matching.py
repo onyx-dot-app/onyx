@@ -8,6 +8,7 @@ from urllib.parse import quote
 
 import pytest
 import requests
+from office365.graph_client import GraphClient
 from office365.runtime.client_request_exception import ClientRequestException
 from requests import Response
 from requests.exceptions import HTTPError
@@ -458,14 +459,16 @@ def test_resolve_drive_matches_library_url_and_returns_display_name() -> None:
     assert result.display_name == "R&D Library"
 
 
-def test_drive_listing_selects_all_identity_fields() -> None:
-    fake_client = _FakeGraphClient([_FakeDrive("Documents")])
-    connector = SharepointConnector()
-    connector._graph_client = fake_client  # ty: ignore[invalid-assignment]
+def test_drive_select_fields_generate_sdk_compatible_query() -> None:
+    graph_client = GraphClient(lambda: {"access_token": "unused"})
+    graph_client.sites["site-id"].drives.select(DRIVE_SELECT_FIELDS).get()
 
-    connector._get_drives_for_site("https://example.sharepoint.com/sites/sample")
+    request = graph_client.pending_request().build_request(graph_client._queries[0])
 
-    assert fake_client.sites.drives.selected_fields == DRIVE_SELECT_FIELDS
+    assert request.url == (
+        "https://graph.microsoft.com/v1.0/sites/site-id/drives?"
+        "$select=id,name,webUrl,driveType,sharepointIds"
+    )
 
 
 def test_configured_drive_selection_reads_later_page() -> None:
