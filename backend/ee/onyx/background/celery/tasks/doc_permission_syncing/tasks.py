@@ -1,6 +1,8 @@
 import time
 import traceback
+from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
+from logging import Logger
 from time import sleep
 from typing import Any, cast
 from uuid import uuid4
@@ -51,6 +53,7 @@ from onyx.db.connector import mark_cc_pair_as_permissions_synced
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.document import (
     get_document_ids_for_connector_credential_pair,
+    get_document_ids_with_other_acl_contributors,
     get_documents_for_connector_credential_pair_limited_columns,
 )
 from onyx.db.engine.sql_engine import (
@@ -79,6 +82,7 @@ from onyx.db.utils import DocumentRow, SortOrder, is_retryable_sqlalchemy_error
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_doc_perm_sync import (
+    PermissionSyncResult,
     RedisConnectorPermissionSync,
     RedisConnectorPermissionSyncPayload,
 )
@@ -111,11 +115,63 @@ logger = setup_logger()
 DOCUMENT_PERMISSIONS_UPDATE_MAX_RETRIES = 3
 DOCUMENT_PERMISSIONS_UPDATE_STOP_AFTER = 10 * 60
 DOCUMENT_PERMISSIONS_UPDATE_MAX_WAIT = 60
+DOCUMENT_PERMISSION_SYNC_BATCH_SIZE = 50
 
 
 # 5 seconds more than RetryDocumentIndex STOP_AFTER+MAX_WAIT
 LIGHT_SOFT_TIME_LIMIT = 105
 LIGHT_TIME_LIMIT = LIGHT_SOFT_TIME_LIMIT + 15
+
+
+def _update_streamed_permissions(
+    permissions: Iterable[ElementExternalAccess],
+    redis_permissions: RedisConnectorPermissionSync,
+    callback: "PermissionSyncCallback",
+    lock: RedisLock,
+    source_string: str,
+    connector_id: int,
+    credential_id: int,
+    cc_pair_id: int,
+    task_log: Logger,
+) -> PermissionSyncResult:
+    num_updated = 0
+    num_errors = 0
+    document_batch: list[ElementExternalAccess] = []
+
+    def update_batch(batch: list[ElementExternalAccess]) -> None:
+        nonlocal num_updated, num_errors
+        result = redis_permissions.update_db(
+            lock=lock,
+            new_permissions=batch,
+            source_string=source_string,
+            connector_id=connector_id,
+            credential_id=credential_id,
+            task_logger=task_log,
+        )
+        num_updated += result.num_updated
+        num_errors += result.num_errors
+
+    for permission in permissions:
+        if callback.should_stop():
+            raise RuntimeError(
+                "Permission sync task timed out or stop signal detected: "
+                f"cc_pair={cc_pair_id} tasks_generated={num_updated}"
+            )
+        if isinstance(permission, DocExternalAccess):
+            document_batch.append(permission)
+            if len(document_batch) < DOCUMENT_PERMISSION_SYNC_BATCH_SIZE:
+                continue
+            update_batch(document_batch)
+            document_batch = []
+            continue
+        if document_batch:
+            update_batch(document_batch)
+            document_batch = []
+        update_batch([permission])
+
+    if document_batch:
+        update_batch(document_batch)
+    return PermissionSyncResult(num_updated=num_updated, num_errors=num_errors)
 
 
 def _get_fence_validation_block_expiration() -> int:
@@ -622,24 +678,19 @@ def connector_permission_sync_generator_task(
             f"RedisConnector.permissions.generate_tasks starting. cc_pair={cc_pair_id}"
         )
 
-        for doc_external_access in document_external_accesses:
-            if callback.should_stop():
-                raise RuntimeError(
-                    f"Permission sync task timed out or stop signal detected: "
-                    f"cc_pair={cc_pair_id} "
-                    f"tasks_generated={tasks_generated}"
-                )
-
-            result = redis_connector.permissions.update_db(
-                lock=lock,
-                new_permissions=[doc_external_access],
-                source_string=connector_type,
-                connector_id=connector_id,
-                credential_id=credential_id,
-                task_logger=task_logger,
-            )
-            tasks_generated += result.num_updated
-            docs_with_errors += result.num_errors
+        result = _update_streamed_permissions(
+            permissions=document_external_accesses,
+            redis_permissions=redis_connector.permissions,
+            callback=callback,
+            lock=lock,
+            source_string=connector_type,
+            connector_id=connector_id,
+            credential_id=credential_id,
+            cc_pair_id=cc_pair_id,
+            task_log=task_logger,
+        )
+        tasks_generated += result.num_updated
+        docs_with_errors += result.num_errors
 
         task_logger.info(
             f"RedisConnector.permissions.generate_tasks finished. "
@@ -696,6 +747,21 @@ def connector_permission_sync_generator_task(
     )
 
 
+def classify_multi_source_document_ids(
+    tenant_id: str,
+    document_ids: list[str],
+    connector_id: int,
+    credential_id: int,
+) -> set[str]:
+    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+        return get_document_ids_with_other_acl_contributors(
+            db_session,
+            document_ids,
+            connector_id,
+            credential_id,
+        )
+
+
 # NOTE(rkuo): this should probably move to the db layer
 @retry(
     retry=retry_if_exception(is_retryable_sqlalchemy_error),
@@ -710,6 +776,7 @@ def element_update_permissions(
     source_type_str: str,
     connector_id: int,
     credential_id: int,
+    multi_source_document_ids: set[str],
 ) -> bool:
     """Update permissions for a document or hierarchy node."""
     start = time.monotonic()
@@ -741,6 +808,7 @@ def element_update_permissions(
                     credential_id=credential_id,
                     external_access=external_access,
                     source_type=DocumentSource(source_type_str),
+                    multi_source_document_ids=multi_source_document_ids,
                 )
             else:
                 # Hierarchy node permission update

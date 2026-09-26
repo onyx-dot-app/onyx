@@ -4,7 +4,7 @@ from threading import Barrier
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import delete, event
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.document import upsert_document_external_perms
@@ -16,6 +16,8 @@ from onyx.db.credentials import delete_credential
 from onyx.db.document import (
     delete_all_documents_by_connector_credential_pair__no_commit,
     delete_document_by_connector_credential_pair__no_commit,
+    delete_document_relationships_by_credential__no_commit,
+    get_document_ids_with_other_acl_contributors,
     get_document_source_types,
     get_document_source_types_after_cc_pair_removal,
     upsert_document_by_connector_credential_pair,
@@ -40,6 +42,7 @@ def _add_cc_pair(
     source: DocumentSource,
     status: ConnectorCredentialPairStatus,
     unique: str,
+    access_type: AccessType = AccessType.SYNC,
 ) -> ConnectorCredentialPair:
     connector = Connector(
         name=f"multi-source-{source.value}-{unique}",
@@ -62,7 +65,7 @@ def _add_cc_pair(
         credential_id=credential.id,
         name=f"multi-source-{source.value}",
         status=status,
-        access_type=AccessType.PUBLIC,
+        access_type=access_type,
         auto_sync_options=None,
     )
     db_session.add(cc_pair)
@@ -311,6 +314,57 @@ def test_normal_acl_update_preserves_legacy_until_all_contributions_are_known(
         _delete_test_data(db_session, [document_id], cc_pairs)
 
 
+def test_multi_source_classification_uses_one_query_for_batch(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    unique = uuid4().hex
+    document_ids = [f"batch-acl-{unique}-{index}" for index in range(4)]
+    cc_pairs = [
+        _add_cc_pair(
+            db_session,
+            source,
+            ConnectorCredentialPairStatus.ACTIVE,
+            unique,
+        )
+        for source in (DocumentSource.WEB, DocumentSource.SHAREPOINT)
+    ]
+    for document_id in document_ids:
+        db_session.add(Document(id=document_id, semantic_id=document_id))
+        for cc_pair in cc_pairs:
+            db_session.add(
+                DocumentByConnectorCredentialPair(
+                    id=document_id,
+                    connector_id=cc_pair.connector_id,
+                    credential_id=cc_pair.credential_id,
+                    has_been_indexed=True,
+                )
+            )
+    db_session.commit()
+
+    statements: list[str] = []
+
+    def _record(_conn: object, _cursor: object, statement: str, *_rest: object) -> None:
+        statements.append(statement)
+
+    try:
+        event.listen(db_session.bind, "before_cursor_execute", _record)
+        classified_ids = get_document_ids_with_other_acl_contributors(
+            db_session,
+            document_ids,
+            cc_pairs[0].connector_id,
+            cc_pairs[0].credential_id,
+        )
+        event.remove(db_session.bind, "before_cursor_execute", _record)
+
+        assert classified_ids == set(document_ids)
+        assert len(statements) == 1
+    finally:
+        if event.contains(db_session.bind, "before_cursor_execute", _record):
+            event.remove(db_session.bind, "before_cursor_execute", _record)
+        _delete_test_data(db_session, document_ids, cc_pairs)
+
+
 def test_relationship_deletion_wipes_acl_when_a_remaining_contribution_is_unknown(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
@@ -351,20 +405,14 @@ def test_relationship_deletion_wipes_acl_when_a_remaining_contribution_is_unknow
     db_session.commit()
 
     try:
-        for cc_pair, email, source in zip(
-            cc_pairs[:2],
-            ["removed@example.com", "known@example.com"],
-            [DocumentSource.WEB, DocumentSource.SHAREPOINT],
-            strict=True,
-        ):
-            upsert_document_external_perms(
-                db_session,
-                document_id,
-                cc_pair.connector_id,
-                cc_pair.credential_id,
-                ExternalAccess({email}, set(), False),
-                source,
-            )
+        upsert_document_external_perms(
+            db_session,
+            document_id,
+            cc_pairs[0].connector_id,
+            cc_pairs[0].credential_id,
+            ExternalAccess({"removed@example.com"}, set(), False),
+            DocumentSource.WEB,
+        )
 
         delete_document_by_connector_credential_pair__no_commit(
             db_session,
@@ -383,6 +431,125 @@ def test_relationship_deletion_wipes_acl_when_a_remaining_contribution_is_unknow
         assert document.is_public is False
     finally:
         _delete_test_data(db_session, [document_id], cc_pairs)
+
+
+def test_relationship_deletion_leaves_unknown_survivor_in_single_mode(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    unique = uuid4().hex
+    document_id = f"unknown-survivor-acl-{unique}"
+    cc_pairs = [
+        _add_cc_pair(
+            db_session,
+            source,
+            ConnectorCredentialPairStatus.ACTIVE,
+            unique,
+        )
+        for source in (DocumentSource.WEB, DocumentSource.SHAREPOINT)
+    ]
+    db_session.add(
+        Document(
+            id=document_id,
+            semantic_id=document_id,
+            external_user_emails=["legacy@example.com"],
+            external_user_group_ids=["legacy-group"],
+            is_public=True,
+        )
+    )
+    for cc_pair in cc_pairs:
+        db_session.add(
+            DocumentByConnectorCredentialPair(
+                id=document_id,
+                connector_id=cc_pair.connector_id,
+                credential_id=cc_pair.credential_id,
+                has_been_indexed=True,
+            )
+        )
+    db_session.commit()
+
+    try:
+        delete_document_by_connector_credential_pair__no_commit(
+            db_session,
+            document_id,
+            ConnectorCredentialPairIdentifier(
+                connector_id=cc_pairs[0].connector_id,
+                credential_id=cc_pairs[0].credential_id,
+            ),
+        )
+        db_session.commit()
+
+        document = db_session.get(Document, document_id)
+        survivor = db_session.get(
+            DocumentByConnectorCredentialPair,
+            (
+                document_id,
+                cc_pairs[1].connector_id,
+                cc_pairs[1].credential_id,
+            ),
+        )
+        assert document is not None
+        assert survivor is not None
+        assert document.external_user_emails == []
+        assert document.external_user_group_ids == []
+        assert document.is_public is False
+        assert survivor.external_user_emails is None
+        assert survivor.external_user_group_ids is None
+        assert survivor.is_public is None
+    finally:
+        _delete_test_data(db_session, [document_id], cc_pairs)
+
+
+def test_deleting_every_relationship_wipes_retained_document_acl(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    unique = uuid4().hex
+    document_id = f"all-relationships-delete-acl-{unique}"
+    permission_pair = _add_cc_pair(
+        db_session,
+        DocumentSource.WEB,
+        ConnectorCredentialPairStatus.ACTIVE,
+        unique,
+    )
+    public_pair = _add_cc_pair(
+        db_session,
+        DocumentSource.SHAREPOINT,
+        ConnectorCredentialPairStatus.ACTIVE,
+        unique,
+        AccessType.PUBLIC,
+    )
+    db_session.commit()
+
+    try:
+        upsert_document_external_perms(
+            db_session,
+            document_id,
+            permission_pair.connector_id,
+            permission_pair.credential_id,
+            ExternalAccess({"only@example.com"}, set(), False),
+            DocumentSource.WEB,
+        )
+        upsert_document_by_connector_credential_pair(
+            db_session,
+            public_pair.connector_id,
+            public_pair.credential_id,
+            [document_id],
+        )
+
+        delete_document_by_connector_credential_pair__no_commit(
+            db_session,
+            document_id,
+        )
+        db_session.commit()
+
+        document = db_session.get(Document, document_id)
+        assert document is not None
+        assert document.external_user_emails == []
+        assert document.external_user_group_ids == []
+        assert document.is_public is False
+    finally:
+        _delete_test_data(db_session, [document_id], [permission_pair, public_pair])
 
 
 def test_concurrent_source_acl_updates_create_document_and_preserve_contributions(
@@ -520,6 +687,9 @@ def test_single_source_external_acl_replacement_creates_unindexed_relationship(
         )
         assert relationship is not None
         assert relationship.has_been_indexed is False
+        assert relationship.external_user_emails is None
+        assert relationship.external_user_group_ids is None
+        assert relationship.is_public is None
 
         upsert_document_external_perms(
             db_session,
@@ -570,10 +740,194 @@ def test_github_raw_group_starting_with_source_prefix_remains_distinct(
         assert relationship is not None
         assert document is not None
         expected_groups = ["github_github_team", "github_team"]
-        assert relationship.external_user_group_ids == expected_groups
+        assert relationship.external_user_emails is None
+        assert relationship.external_user_group_ids is None
+        assert relationship.is_public is None
         assert document.external_user_group_ids == expected_groups
     finally:
         _delete_test_data(db_session, [document_id], [cc_pair])
+
+
+def test_non_permission_relationship_does_not_promote_acl(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    unique = uuid4().hex
+    document_id = f"non-permission-acl-{unique}"
+    permission_pair = _add_cc_pair(
+        db_session,
+        DocumentSource.WEB,
+        ConnectorCredentialPairStatus.ACTIVE,
+        unique,
+    )
+    public_pair = _add_cc_pair(
+        db_session,
+        DocumentSource.SHAREPOINT,
+        ConnectorCredentialPairStatus.ACTIVE,
+        unique,
+        AccessType.PUBLIC,
+    )
+    db_session.add(
+        Document(
+            id=document_id,
+            semantic_id=document_id,
+            kg_stage=KGStage.NOT_STARTED,
+        )
+    )
+    db_session.add(
+        DocumentByConnectorCredentialPair(
+            id=document_id,
+            connector_id=public_pair.connector_id,
+            credential_id=public_pair.credential_id,
+            has_been_indexed=True,
+        )
+    )
+    db_session.commit()
+
+    try:
+        upsert_document_external_perms(
+            db_session,
+            document_id,
+            permission_pair.connector_id,
+            permission_pair.credential_id,
+            ExternalAccess({"only@example.com"}, set(), False),
+            DocumentSource.WEB,
+        )
+
+        document = db_session.get(Document, document_id)
+        relationship = db_session.get(
+            DocumentByConnectorCredentialPair,
+            (
+                document_id,
+                permission_pair.connector_id,
+                permission_pair.credential_id,
+            ),
+        )
+        assert document is not None
+        assert relationship is not None
+        assert document.external_user_emails == ["only@example.com"]
+        assert relationship.external_user_emails is None
+        assert relationship.external_user_group_ids is None
+        assert relationship.is_public is None
+
+        delete_document_by_connector_credential_pair__no_commit(
+            db_session,
+            document_id,
+            ConnectorCredentialPairIdentifier(
+                connector_id=public_pair.connector_id,
+                credential_id=public_pair.credential_id,
+            ),
+        )
+        db_session.commit()
+        db_session.refresh(document)
+        assert document.external_user_emails == ["only@example.com"]
+        assert document.external_user_group_ids == []
+        assert document.is_public is False
+    finally:
+        _delete_test_data(db_session, [document_id], [permission_pair, public_pair])
+
+
+def test_bulk_private_relationship_deletion_preserves_lazy_acl(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    unique = uuid4().hex
+    document_id = f"private-bulk-delete-acl-{unique}"
+    permission_pair = _add_cc_pair(
+        db_session,
+        DocumentSource.WEB,
+        ConnectorCredentialPairStatus.ACTIVE,
+        unique,
+    )
+    private_pair = _add_cc_pair(
+        db_session,
+        DocumentSource.SHAREPOINT,
+        ConnectorCredentialPairStatus.ACTIVE,
+        unique,
+        AccessType.PRIVATE,
+    )
+    db_session.commit()
+
+    try:
+        upsert_document_external_perms(
+            db_session,
+            document_id,
+            permission_pair.connector_id,
+            permission_pair.credential_id,
+            ExternalAccess({"only@example.com"}, set(), False),
+            DocumentSource.WEB,
+        )
+        upsert_document_by_connector_credential_pair(
+            db_session,
+            private_pair.connector_id,
+            private_pair.credential_id,
+            [document_id],
+        )
+        delete_all_documents_by_connector_credential_pair__no_commit(
+            db_session,
+            private_pair.connector_id,
+            private_pair.credential_id,
+        )
+        db_session.commit()
+
+        document = db_session.get(Document, document_id)
+        assert document is not None
+        assert document.external_user_emails == ["only@example.com"]
+        assert document.external_user_group_ids == []
+        assert document.is_public is False
+    finally:
+        _delete_test_data(db_session, [document_id], [permission_pair, private_pair])
+
+
+def test_public_credential_relationship_deletion_preserves_lazy_acl(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    unique = uuid4().hex
+    document_id = f"public-credential-delete-acl-{unique}"
+    permission_pair = _add_cc_pair(
+        db_session,
+        DocumentSource.WEB,
+        ConnectorCredentialPairStatus.ACTIVE,
+        unique,
+    )
+    public_pair = _add_cc_pair(
+        db_session,
+        DocumentSource.SHAREPOINT,
+        ConnectorCredentialPairStatus.ACTIVE,
+        unique,
+        AccessType.PUBLIC,
+    )
+    db_session.commit()
+
+    try:
+        upsert_document_external_perms(
+            db_session,
+            document_id,
+            permission_pair.connector_id,
+            permission_pair.credential_id,
+            ExternalAccess({"only@example.com"}, set(), False),
+            DocumentSource.WEB,
+        )
+        upsert_document_by_connector_credential_pair(
+            db_session,
+            public_pair.connector_id,
+            public_pair.credential_id,
+            [document_id],
+        )
+        delete_document_relationships_by_credential__no_commit(
+            db_session,
+            public_pair.credential_id,
+        )
+        db_session.commit()
+
+        document = db_session.get(Document, document_id)
+        assert document is not None
+        assert document.external_user_emails == ["only@example.com"]
+        assert document.external_user_group_ids == []
+        assert document.is_public is False
+    finally:
+        _delete_test_data(db_session, [document_id], [permission_pair, public_pair])
 
 
 def test_deleting_cc_pair_rejects_permission_update(
@@ -672,6 +1026,18 @@ def test_bulk_relationship_deletion_recomputes_retained_document_acl(
         document = db_session.get(Document, document_id)
         assert document is not None
         assert document.external_user_emails == ["retained@example.com"]
+        survivor = db_session.get(
+            DocumentByConnectorCredentialPair,
+            (
+                document_id,
+                cc_pairs[1].connector_id,
+                cc_pairs[1].credential_id,
+            ),
+        )
+        assert survivor is not None
+        assert survivor.external_user_emails is None
+        assert survivor.external_user_group_ids is None
+        assert survivor.is_public is None
     finally:
         _delete_test_data(db_session, [document_id], cc_pairs)
 

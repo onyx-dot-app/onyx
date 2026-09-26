@@ -20,6 +20,7 @@ from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.connectors.models import IndexAttemptMetadata
+from onyx.db.enums import AccessType
 from onyx.db.models import ConnectorCredentialPair, DocumentByConnectorCredentialPair
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
 from tests.external_dependency_unit.indexing_helpers import (
@@ -43,6 +44,8 @@ def cc_pair(
     initialize_file_store: None,  # noqa: ARG001
 ) -> Generator[ConnectorCredentialPair, None, None]:
     pair = make_cc_pair(db_session)
+    pair.access_type = AccessType.SYNC
+    db_session.commit()
     try:
         yield pair
     finally:
@@ -185,9 +188,9 @@ class TestExistingDocuments:
         expected_group = build_ext_group_name_for_onyx(
             "new", DocumentSource.MOCK_CONNECTOR
         )
-        assert relationship.external_user_emails == ["new@example.com"]
-        assert relationship.external_user_group_ids == [expected_group]
-        assert relationship.is_public is True
+        assert relationship.external_user_emails is None
+        assert relationship.external_user_group_ids is None
+        assert relationship.is_public is None
 
         updated_row = get_doc_row(db_session, doc.id)
         assert updated_row is not None

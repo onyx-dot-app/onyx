@@ -18,6 +18,7 @@ from onyx.db.document import (
     get_document_connector_count,
     upsert_document_by_connector_credential_pair,
 )
+from onyx.db.enums import AccessType
 from onyx.db.models import ConnectorCredentialPair, DocumentByConnectorCredentialPair
 from onyx.document_index.interfaces_new import MetadataUpdateRequest
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
@@ -75,7 +76,12 @@ def test_indexing_acl_can_be_revoked_by_permission_sync(
     expected_group = build_ext_group_name_for_onyx(
         "raw-group", DocumentSource.MOCK_CONNECTOR
     )
-    assert relationship.external_user_group_ids == [expected_group]
+    assert relationship.external_user_emails is None
+    assert relationship.external_user_group_ids is None
+    assert relationship.is_public is None
+    indexed_doc = get_doc_row(db_session, doc.id)
+    assert indexed_doc is not None
+    assert indexed_doc.external_user_group_ids == [expected_group]
 
     upsert_document_external_perms(
         db_session,
@@ -104,6 +110,8 @@ def cc_pair(
     initialize_file_store: None,  # noqa: ARG001
 ) -> Generator[ConnectorCredentialPair, None, None]:
     pair = make_cc_pair(db_session)
+    pair.access_type = AccessType.SYNC
+    db_session.commit()
     try:
         yield pair
     finally:

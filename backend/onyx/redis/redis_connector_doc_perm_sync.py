@@ -187,44 +187,58 @@ class RedisConnectorPermissionSync:
             "onyx.background.celery.tasks.doc_permission_syncing.tasks",
             "element_update_permissions",
         )
+        accepted_permissions: list[ElementExternalAccess] = []
+        num_errors = 0
+        for permissions in new_permissions:
+            if (
+                permissions.external_access.num_entries
+                <= permissions.external_access.MAX_NUM_ENTRIES
+            ):
+                accepted_permissions.append(permissions)
+                continue
+            num_errors += 1
+            if task_logger:
+                element_id = (
+                    permissions.doc_id
+                    if isinstance(permissions, DocExternalAccess)
+                    else permissions.raw_node_id
+                )
+                task_logger.warning(
+                    "Permissions length exceeded, skipping...: "
+                    "%s num_users=%s num_groups=%s max_entries=%s",
+                    element_id,
+                    len(permissions.external_access.external_user_emails),
+                    len(permissions.external_access.external_user_group_ids),
+                    permissions.external_access.MAX_NUM_ENTRIES,
+                )
+
+        document_ids = [
+            permissions.doc_id
+            for permissions in accepted_permissions
+            if isinstance(permissions, DocExternalAccess)
+        ]
+        multi_source_document_ids: set[str] = set()
+        if document_ids:
+            classify_multi_source_document_ids_fn = fetch_versioned_implementation(
+                "onyx.background.celery.tasks.doc_permission_syncing.tasks",
+                "classify_multi_source_document_ids",
+            )
+            multi_source_document_ids = classify_multi_source_document_ids_fn(
+                self.tenant_id,
+                document_ids,
+                connector_id,
+                credential_id,
+            )
 
         num_permissions = 0
-        num_errors = 0
         cumulative_db_update_time = 0.0
-        for permissions in new_permissions:
+        for permissions in accepted_permissions:
             current_time = time.monotonic()
             if lock and current_time - last_lock_time >= (
                 CELERY_GENERIC_BEAT_LOCK_TIMEOUT / 4
             ):
                 lock.reacquire()
                 last_lock_time = current_time
-
-            if (
-                permissions.external_access.num_entries
-                > permissions.external_access.MAX_NUM_ENTRIES
-            ):
-                num_errors += 1
-                if task_logger:
-                    num_users = len(permissions.external_access.external_user_emails)
-                    num_groups = len(
-                        permissions.external_access.external_user_group_ids
-                    )
-                    element_id = (
-                        permissions.doc_id
-                        if isinstance(permissions, DocExternalAccess)
-                        else permissions.raw_node_id
-                    )
-                    task_logger.warning(
-                        "Permissions length exceeded, skipping...: "
-                        "%s "
-                        "num_users=%s num_groups=%s "
-                        "permissions.external_access.MAX_NUM_ENTRIES=%s",
-                        element_id,
-                        num_users,
-                        num_groups,
-                        permissions.external_access.MAX_NUM_ENTRIES,
-                    )
-                continue
 
             # NOTE(rkuo): this used to fire a task instead of directly writing to the DB,
             # but the permissions can be excessively large if sent over the wire.
@@ -242,6 +256,7 @@ class RedisConnectorPermissionSync:
                     source_string,
                     connector_id,
                     credential_id,
+                    multi_source_document_ids,
                 )
                 num_permissions += 1
             except Exception:

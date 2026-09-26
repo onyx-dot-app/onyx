@@ -35,6 +35,7 @@ from onyx.connectors.models import (
 )
 from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.document import (
+    get_document_ids_with_other_acl_contributors,
     get_documents_by_ids,
     update_docs_content_hash__no_commit,
     upsert_document_acl_contributions__no_commit,
@@ -606,6 +607,12 @@ def index_doc_batch_prepare(
     )
 
     if documents:
+        multi_source_document_ids = get_document_ids_with_other_acl_contributors(
+            db_session=db_session,
+            document_ids=document_ids,
+            connector_id=index_attempt_metadata.connector_id,
+            credential_id=index_attempt_metadata.credential_id,
+        )
         upsert_document_acl_contributions__no_commit(
             db_session=db_session,
             connector_id=index_attempt_metadata.connector_id,
@@ -617,6 +624,7 @@ def index_doc_batch_prepare(
                 if document.external_access is not None
             },
             source=documents[0].source,
+            multi_source_document_ids=multi_source_document_ids,
         )
         db_session.commit()
 
