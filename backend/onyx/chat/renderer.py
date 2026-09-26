@@ -171,7 +171,13 @@ class MessageRenderer:
         result = []
         if self._answer_placement is None:
             result.extend(self._close_reasoning())
-            self._answer_placement = self.layout.next_section(self.parent)
+            # Research reports belong to the parent card, not a nested tool section.
+            self._answer_placement = (
+                self.parent
+                if self.settings.mode == PresentationMode.REPORT
+                and self.parent is not None
+                else self.layout.next_section(self.parent)
+            )
             if self.settings.mode == PresentationMode.PLAN:
                 start: packets.PacketObj = packets.DeepResearchPlanStart()
             elif self.settings.mode == PresentationMode.REPORT:
@@ -528,9 +534,8 @@ class ToolRenderer:
             objects.append(packets.CodingAgentThinkingDelta(content=details.answer))
         elif isinstance(details, ResearchAgentCallResult):
             if not self.has_child_output:
-                nested = self.placement.model_copy(update={"sub_turn_index": 0})
                 return [
-                    packets.Packet(placement=nested, obj=obj)
+                    packets.Packet(placement=self.placement, obj=obj)
                     for obj in [
                         packets.IntermediateReportStart(),
                         packets.IntermediateReportDelta(
