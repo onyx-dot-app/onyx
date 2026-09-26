@@ -104,7 +104,7 @@ from onyx.utils.url import SSRFException, validate_outbound_http_url
 
 logger = setup_logger()
 SLIM_BATCH_SIZE = 1000
-DRIVE_SELECT_FIELDS = ["id", "name", "webUrl", "driveType", "sharePointIds"]
+DRIVE_SELECT_FIELDS = ["id", "name", "webUrl", "driveType", "sharepointIds"]
 
 
 SHARED_DOCUMENTS_MAP = {
