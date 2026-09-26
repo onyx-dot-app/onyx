@@ -14,8 +14,12 @@ from onyx.chat.llm_step import translate_history_to_llm_format
 from onyx.chat.models import ChatMessageSimple
 from onyx.configs.constants import MessageType
 from onyx.llm.interfaces import LLMConfig
-from onyx.llm.models import ChatCompletionMessage, SystemMessage, UserMessage
-from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN
+from onyx.llm.model_request import (
+    CODE_BLOCK_MARKDOWN,
+    ChatCompletionMessage,
+    SystemMessage,
+    UserMessage,
+)
 from onyx.prompts.constants import SYSTEM_REMINDER_TAG_CLOSE, SYSTEM_REMINDER_TAG_OPEN
 
 

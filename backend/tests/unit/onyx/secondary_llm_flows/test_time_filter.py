@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import BaseFilters, TimeRange
-from onyx.llm.models import UserMessage
+from onyx.llm.model_request import UserMessage
 from onyx.secondary_llm_flows.time_filter import (
     DocumentTimeField,
     TimeFilter,

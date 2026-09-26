@@ -4,7 +4,8 @@ from pydantic import BaseModel
 
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.llm.interfaces import LLM
-from onyx.llm.models import ChatCompletionMessage, ReasoningEffort, UserMessage
+from onyx.llm.model_request import ChatCompletionMessage, UserMessage
+from onyx.llm.models import ReasoningEffort
 from onyx.prompts.filter_extration import SOURCE_SCOPE_DECISION_PROMPT
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tracing.flows import LLMFlow

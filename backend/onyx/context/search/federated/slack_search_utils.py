@@ -11,7 +11,7 @@ from onyx.context.search.federated.models import ChannelMetadata, DirectThreadFe
 from onyx.context.search.models import ChunkIndexRequest
 from onyx.federated_connectors.slack.models import SlackEntities
 from onyx.llm.interfaces import LLM
-from onyx.llm.models import UserMessage
+from onyx.llm.model_request import UserMessage
 from onyx.llm.utils import llm_response_to_string
 from onyx.natural_language_processing.english_stopwords import ENGLISH_STOPWORDS_SET
 from onyx.onyxbot.slack.models import ChannelType

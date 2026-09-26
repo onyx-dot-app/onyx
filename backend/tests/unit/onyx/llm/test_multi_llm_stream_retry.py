@@ -5,9 +5,8 @@ import pytest
 from litellm.exceptions import MidStreamFallbackError, RateLimitError
 from litellm.exceptions import Timeout as LiteLLMTimeout
 
-from onyx.llm.interfaces import LanguageModelInput
+from onyx.llm.model_request import LanguageModelInput, UserMessage
 from onyx.llm.model_response import Delta, ModelResponseStream, StreamingChoice
-from onyx.llm.models import UserMessage
 from onyx.llm.multi_llm import LitellmLLM, LLMRateLimitError, LLMTimeoutError
 
 

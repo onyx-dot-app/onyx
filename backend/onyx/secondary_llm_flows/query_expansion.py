@@ -1,12 +1,12 @@
 from onyx.configs.constants import MessageType
 from onyx.llm.interfaces import LLM
-from onyx.llm.models import (
+from onyx.llm.model_request import (
     AssistantMessage,
     ChatCompletionMessage,
-    ReasoningEffort,
     SystemMessage,
     UserMessage,
 )
+from onyx.llm.models import ReasoningEffort
 from onyx.prompts.prompt_utils import get_current_llm_day_time
 from onyx.prompts.search_prompts import (
     KEYWORD_REPHRASE_SYSTEM_PROMPT,

@@ -15,13 +15,13 @@ import pytest
 from litellm import completion_cost
 from sqlalchemy.orm import Session
 
-from onyx.llm.model_response import Usage
-from onyx.llm.models import (
+from onyx.llm.model_request import (
     AssistantMessage,
     ChatCompletionMessage,
     SystemMessage,
     UserMessage,
 )
+from onyx.llm.models import Usage
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 

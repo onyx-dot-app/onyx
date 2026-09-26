@@ -3,7 +3,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from onyx.llm.interfaces import LLMConfig
-from onyx.llm.models import ChatCompletionMessage, SystemMessage, UserMessage
+from onyx.llm.model_request import ChatCompletionMessage, SystemMessage, UserMessage
 from onyx.llm.prompt_cache import processor as processor_module
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 

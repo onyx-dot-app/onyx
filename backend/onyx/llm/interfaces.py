@@ -5,13 +5,9 @@ from typing import Any
 from pydantic import BaseModel
 
 from onyx.configs.chat_configs import LLM_INVOKE_TIMEOUT_S, LLM_SOCKET_READ_TIMEOUT
+from onyx.llm.model_request import LanguageModelInput
 from onyx.llm.model_response import ModelResponse, ModelResponseStream
-from onyx.llm.models import (
-    LanguageModelInput,
-    ReasoningEffort,
-    ToolChoice,
-    ToolChoiceOptions,  # noqa: F401  # re-exported: onyx.chat imports it from here
-)
+from onyx.llm.models import ReasoningEffort, ToolChoice
 from onyx.llm.tracing_wrap import wrap_invoke, wrap_stream
 from onyx.utils.logger import setup_logger
 

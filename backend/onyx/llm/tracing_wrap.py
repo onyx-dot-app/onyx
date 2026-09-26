@@ -20,15 +20,16 @@ import inspect
 from collections.abc import Callable, Iterator
 from typing import TYPE_CHECKING, Any
 
-from onyx.llm.model_response import ChatCompletionDeltaToolCall, Usage
-from onyx.llm.model_response import FunctionCall as DeltaFunctionCall
+from onyx.llm.model_response import ChatCompletionDeltaToolCall
+from onyx.llm.model_response import ResponseFunctionCall as DeltaFunctionCall
+from onyx.llm.models import Usage
 from onyx.tracing.framework.create import get_current_span
 from onyx.tracing.framework.span_data import GenerationSpanData
 
 if TYPE_CHECKING:
     from onyx.llm.interfaces import LLM
+    from onyx.llm.model_request import ToolCall
     from onyx.llm.model_response import ModelResponse, ModelResponseStream
-    from onyx.llm.models import ToolCall
 
 
 _ALREADY_WRAPPED_ATTR = "_onyx_tracing_wrapped"
@@ -310,8 +311,8 @@ def _finalize_tool_calls(
     if not buffer:
         return None
 
-    from onyx.llm.models import FunctionCall as ModelFunctionCall
-    from onyx.llm.models import ToolCall
+    from onyx.llm.model_request import RequestFunctionCall as ModelFunctionCall
+    from onyx.llm.model_request import ToolCall
 
     finalized: list[ToolCall] = []
     for idx in sorted(buffer.keys()):

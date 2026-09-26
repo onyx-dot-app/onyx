@@ -16,7 +16,7 @@ import httpx
 import pytest
 
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.models import ChatCompletionMessage, UserMessage
+from onyx.llm.model_request import ChatCompletionMessage, UserMessage
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.well_known_providers.constants import VERCEL_AI_GATEWAY_DEFAULT_API_BASE
 from tests.utils.secret_names import TestSecret
