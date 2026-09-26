@@ -1,11 +1,11 @@
 """Typed Microsoft Graph drive delta pages and checkpoint-safe fetching."""
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import Annotated, Any
 from urllib.parse import quote, urljoin, urlsplit
 
 import requests
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
 from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
 from onyx.utils.logger import setup_logger
@@ -30,7 +30,7 @@ DRIVE_ITEM_CREATED_DATETIME_PROPERTY = "createdDateTime"
 DRIVE_ITEM_LAST_MODIFIED_DATETIME_PROPERTY = "lastModifiedDateTime"
 DRIVE_ITEM_LAST_MODIFIED_BY_PROPERTY = "lastModifiedBy"
 DRIVE_ITEM_PARENT_REFERENCE_PROPERTY = "parentReference"
-DRIVE_ITEM_SHAREPOINT_IDS_PROPERTY = "sharepointIds"
+SHAREPOINT_IDS_PROPERTY = "sharepointIds"
 DRIVE_ITEM_DOWNLOAD_URL_PROPERTY = "@microsoft.graph.downloadUrl"
 DRIVE_ITEM_DOWNLOAD_URL_SELECT = "content.downloadUrl"
 DEFAULT_DRIVE_DELTA_PAGE_SIZE = 200
@@ -57,7 +57,7 @@ DRIVE_DELTA_SELECT_FIELDS = ",".join(
         DRIVE_ITEM_LAST_MODIFIED_DATETIME_PROPERTY,
         DRIVE_ITEM_LAST_MODIFIED_BY_PROPERTY,
         DRIVE_ITEM_PARENT_REFERENCE_PROPERTY,
-        DRIVE_ITEM_SHAREPOINT_IDS_PROPERTY,
+        SHAREPOINT_IDS_PROPERTY,
         DRIVE_ITEM_DOWNLOAD_URL_SELECT,
     )
 )
@@ -105,7 +105,7 @@ class DriveDeltaParentReference(_GraphModel):
     site_id: str | None = Field(default=None, alias="siteId")
 
 
-class DriveDeltaSharePointIds(_GraphModel):
+class GraphSharePointIds(_GraphModel):
     list_id: str | None = Field(default=None, alias="listId")
     list_item_id: str | None = Field(default=None, alias="listItemId")
     list_item_unique_id: str | None = Field(default=None, alias="listItemUniqueId")
@@ -113,6 +113,12 @@ class DriveDeltaSharePointIds(_GraphModel):
     site_url: str | None = Field(default=None, alias="siteUrl")
     tenant_id: str | None = Field(default=None, alias="tenantId")
     web_id: str | None = Field(default=None, alias="webId")
+
+
+def parse_graph_sharepoint_ids(value: object) -> GraphSharePointIds | None:
+    if not isinstance(value, dict):
+        return None
+    return GraphSharePointIds.model_validate(value)
 
 
 class DriveDeltaSharingFacet(_GraphModel):
@@ -149,9 +155,9 @@ class DriveDeltaItem(_GraphModel):
     parent_reference: DriveDeltaParentReference | None = Field(
         default=None, alias=DRIVE_ITEM_PARENT_REFERENCE_PROPERTY
     )
-    sharepoint_ids: DriveDeltaSharePointIds | None = Field(
-        default=None, alias=DRIVE_ITEM_SHAREPOINT_IDS_PROPERTY
-    )
+    sharepoint_ids: Annotated[
+        GraphSharePointIds | None, BeforeValidator(parse_graph_sharepoint_ids)
+    ] = Field(default=None, alias=SHAREPOINT_IDS_PROPERTY)
     download_url: str | None = Field(
         default=None, alias=DRIVE_ITEM_DOWNLOAD_URL_PROPERTY
     )

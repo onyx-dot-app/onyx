@@ -13,8 +13,10 @@ from onyx.connectors.exceptions import (
 )
 from onyx.connectors.microsoft_utils.drive_delta import (
     DRIVE_DELTA_SELECT_FIELDS,
+    DriveDeltaItem,
     build_delta_start_url,
 )
+from onyx.connectors.microsoft_utils.entra import EntraGroup
 from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftAuthError as OneDriveAuthError,
 )
@@ -42,6 +44,11 @@ _PROBE_PAGE_SIZE = 1
 _CANDIDATE_PAGES = 20
 
 T = TypeVar("T")
+_HIDDEN_MEMBERSHIP_VISIBILITY = "HiddenMembership"
+
+
+class _NoCandidateFound(ConnectorValidationError):
+    pass
 
 
 def _gateway(context: CapabilityCheckContext) -> OneDriveSourceOperations:
@@ -130,7 +137,80 @@ def _first_drive_that(
             return drive, opened
     if denied is not None:
         raise_for_graph_error(denied, denied_message)
-    raise ConnectorValidationError(nothing_to_probe)
+    raise _NoCandidateFound(nothing_to_probe)
+
+
+def _first_delta_item(
+    gateway: OneDriveSourceOperations,
+    drive: OneDriveDrive,
+    start_url: str,
+) -> DriveDeltaItem | None:
+    cursor: str | None = start_url
+    for _ in range(_CANDIDATE_PAGES):
+        assert cursor is not None
+        result = gateway.get_delta_page(
+            drive_id=drive.id,
+            page_url=cursor,
+            page_size=_PROBE_PAGE_SIZE,
+        )
+        item = next(
+            (item for item in result.page.items if not item.is_tombstone),
+            None,
+        )
+        if item is not None:
+            return item
+        cursor = result.next_cursor
+        if cursor is None:
+            return None
+    raise ConnectorValidationError(
+        f"No readable OneDrive item was found in {_CANDIDATE_PAGES} delta pages."
+    )
+
+
+def _probe_item_permissions(
+    gateway: OneDriveSourceOperations,
+    drive: OneDriveDrive,
+    graph_api_base: str,
+) -> bool | None:
+    item = _first_delta_item(
+        gateway,
+        drive,
+        build_delta_start_url(
+            graph_api_base,
+            drive.id,
+            page_size=_PROBE_PAGE_SIZE,
+            select_fields=DRIVE_DELTA_SELECT_FIELDS,
+        ),
+    )
+    if item is None:
+        return None
+    gateway.list_permissions(drive_id=drive.id, item_id=item.id)
+    return True
+
+
+def _group_membership_probe_group(
+    gateway: OneDriveSourceOperations,
+) -> EntraGroup | None:
+    next_link: str | None = None
+    for _ in range(_CANDIDATE_PAGES):
+        page = gateway.list_groups(
+            page_size=_PROBE_PAGE_SIZE,
+            next_link=next_link,
+        )
+        visible_group = next(
+            (
+                group
+                for group in page.items
+                if group.visibility != _HIDDEN_MEMBERSHIP_VISIBILITY
+            ),
+            None,
+        )
+        if visible_group is not None:
+            return visible_group
+        next_link = page.next_link
+        if next_link is None:
+            return None
+    return None
 
 
 class _TokenCheck(CapabilityCheck):
@@ -253,6 +333,89 @@ class _DeltaCheck(CapabilityCheck):
             raise_for_graph_error(error, "The app cannot read OneDrive changes.")
 
 
+class _PermissionCheck(CapabilityCheck):
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.DOC_PERMISSION_SYNC,
+            check_id="onedrive_item_permissions",
+            display_name="OneDrive item permissions are readable",
+            requires_connector_instance=False,
+            requires_connector_config=True,
+            remediation="Grant `Sites.Read.All` or a selected personal-site read grant.",
+            docs_link=_DOCS_LINK,
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        gateway = _gateway(context)
+        host = _config(context).graph_api_host.rstrip("/")
+        found_empty_drive = False
+
+        def probe_permissions(drive: OneDriveDrive) -> bool | None:
+            nonlocal found_empty_drive
+            result = _probe_item_permissions(
+                gateway,
+                drive,
+                f"{host}/{GRAPH_API_VERSION}",
+            )
+            found_empty_drive = result is None
+            return result
+
+        try:
+            _first_drive_that(
+                context,
+                probe_permissions,
+                "The app cannot read permissions in the tenant's first OneDrives.",
+                "No readable OneDrive was found among the first users.",
+            )
+        except _NoCandidateFound:
+            if found_empty_drive:
+                return
+            raise
+        except OneDriveGraphError as error:
+            raise_for_graph_error(error, "The app cannot read OneDrive permissions.")
+
+
+class _GroupListCheck(CapabilityCheck):
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
+            check_id="onedrive_groups",
+            display_name="Entra groups are readable",
+            requires_connector_instance=False,
+            remediation="Grant and admin-consent `GroupMember.ReadBasic.All`.",
+            docs_link=_DOCS_LINK,
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        try:
+            _gateway(context).list_groups(page_size=_PROBE_PAGE_SIZE)
+        except OneDriveGraphError as error:
+            raise_for_graph_error(error, "The app cannot list Entra groups.")
+
+
+class _GroupMembershipCheck(CapabilityCheck):
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
+            check_id="onedrive_group_members",
+            display_name="Entra transitive group members are readable",
+            requires_connector_instance=False,
+            remediation="Grant `GroupMember.ReadBasic.All`.",
+            docs_link=_DOCS_LINK,
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        gateway = _gateway(context)
+        try:
+            group = _group_membership_probe_group(gateway)
+            if group is None:
+                return
+            gateway.list_transitive_group_members(group_id=group.id)
+        except OneDriveGraphError as error:
+            denied = "The app cannot expand transitive Entra group members."
+            raise_for_graph_error(error, denied)
+
+
 def build_onedrive_indexing_checks() -> list[CapabilityCheck]:
     return [
         _TokenCheck(),
@@ -261,3 +424,11 @@ def build_onedrive_indexing_checks() -> list[CapabilityCheck]:
         _DriveCheck(),
         _DeltaCheck(),
     ]
+
+
+def build_onedrive_doc_permission_sync_checks() -> list[CapabilityCheck]:
+    return [_PermissionCheck()]
+
+
+def build_onedrive_group_sync_checks() -> list[CapabilityCheck]:
+    return [_GroupListCheck(), _GroupMembershipCheck()]

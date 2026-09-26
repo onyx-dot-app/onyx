@@ -6,12 +6,16 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
+from requests import HTTPError
 
 from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.microsoft_utils.drive_items import DriveItemData
 from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
-from onyx.connectors.models import ExternalAccess
+from onyx.connectors.models import ExternalAccess, SlimDocument
 from onyx.connectors.sharepoint.connector import (
+    FetchedDriveItem,
     SharepointConnector,
+    SiteDrive,
     _convert_sitepage_to_document,
     _convert_sitepage_to_slim_document,
 )
@@ -73,6 +77,60 @@ def test_full_and_slim_site_pages_share_permission_resolution(
 # ---------------------------------------------------------------------------
 # _fetch_slim_documents_from_sharepoint — site page error resilience
 # ---------------------------------------------------------------------------
+
+
+@patch("onyx.connectors.sharepoint.connector._convert_driveitem_to_slim_document")
+@patch(
+    "onyx.connectors.sharepoint.connector.get_sharepoint_hierarchy_node_external_access",
+    return_value=ExternalAccess.empty(),
+)
+@patch(
+    "onyx.connectors.sharepoint.connector.SharepointConnector._create_rest_client_context"
+)
+@patch("onyx.connectors.sharepoint.connector.SharepointConnector._fetch_driveitems")
+@patch("onyx.connectors.sharepoint.connector.SharepointConnector.fetch_sites")
+def test_slim_permission_sync_skips_missing_list_id_and_continues(
+    mock_fetch_sites: MagicMock,
+    mock_fetch_driveitems: MagicMock,
+    _mock_create_ctx: MagicMock,
+    _mock_get_access: MagicMock,
+    mock_convert: MagicMock,
+) -> None:
+    connector = _make_connector()
+    connector.include_site_documents = True
+    connector.include_site_pages = False
+    site = MagicMock(url=SITE_URL)
+    mock_fetch_sites.return_value = [site]
+
+    def fetched_item(item_id: str, list_id: str | None) -> FetchedDriveItem:
+        return FetchedDriveItem(
+            driveitem=DriveItemData(
+                id=item_id,
+                name=f"{item_id}.pdf",
+                web_url=f"{SITE_URL}/{item_id}.pdf",
+            ),
+            drive=SiteDrive(
+                drive_id=f"{item_id}-drive",
+                display_name=item_id,
+                web_url=f"{SITE_URL}/{item_id}",
+                list_id=list_id,
+            ),
+        )
+
+    missing = fetched_item("missing", None)
+    valid = fetched_item("valid", "valid-list")
+    mock_fetch_driveitems.return_value = [missing, valid]
+    mock_convert.return_value = SlimDocument(id="valid")
+
+    results = [
+        item
+        for batch in connector._fetch_slim_documents_from_sharepoint()
+        for item in batch
+        if isinstance(item, SlimDocument)
+    ]
+
+    assert [item.id for item in results] == ["valid"]
+    assert mock_convert.call_args.args[0] is valid.driveitem
 
 
 @patch("onyx.connectors.sharepoint.connector._convert_sitepage_to_slim_document")
@@ -248,7 +306,11 @@ def test_retrieve_all_slim_docs_does_not_fetch_permissions(
     """retrieve_all_slim_docs (pruning path) never calls _create_rest_client_context
     and returns SlimDocuments with empty ExternalAccess."""
     from onyx.connectors.models import ExternalAccess, SlimDocument
-    from onyx.connectors.sharepoint.connector import DriveItemData
+    from onyx.connectors.sharepoint.connector import (
+        DriveItemData,
+        FetchedDriveItem,
+        SiteDrive,
+    )
 
     connector = _make_connector()
     connector.include_site_documents = True
@@ -264,7 +326,15 @@ def test_retrieve_all_slim_docs_does_not_fetch_permissions(
     driveitem.parent_reference_path = None
     driveitem.created_datetime = None
     mock_fetch_driveitems.return_value = [
-        (driveitem, "Documents", None),
+        FetchedDriveItem(
+            driveitem=driveitem,
+            drive=SiteDrive(
+                drive_id="drive-id",
+                list_id="list-id",
+                display_name="Documents",
+                web_url=f"{SITE_URL}/Shared%20Documents",
+            ),
+        ),
     ]
 
     mock_fetch_site_pages.return_value = [
@@ -427,7 +497,9 @@ def test_probe_group_members_raises_on_401_or_403(
 ) -> None:
     """probe raises ConnectorValidationError naming GroupMember.Read.All when Graph rejects."""
     mock_token.return_value = "tok"
-    mock_get.return_value = MagicMock(status_code=status_code)
+    response = MagicMock(status_code=status_code)
+    response.raise_for_status.side_effect = HTTPError(response=response)
+    mock_get.return_value = response
 
     connector = _make_connector()
 
@@ -445,7 +517,9 @@ def test_probe_group_members_passes_on_200(
 ) -> None:
     """A 200 response means the app has the required Graph permission."""
     mock_token.return_value = "tok"
-    mock_get.return_value = MagicMock(status_code=200)
+    response = MagicMock(status_code=200)
+    response.json.return_value = {"value": []}
+    mock_get.return_value = response
 
     connector = _make_connector()
     connector.probe_group_members_permission()  # should not raise

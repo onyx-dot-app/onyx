@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+from onyx.access.models import ExternalAccess
 from onyx.connectors.models import (
     Document,
     DocumentSource,
@@ -1263,6 +1264,9 @@ def _make_db_doc(
     db_doc.id = doc_id
     db_doc.content_hash = content_hash
     db_doc.doc_updated_at = doc_updated_at
+    db_doc.external_user_emails = []
+    db_doc.external_user_group_ids = []
+    db_doc.is_public = False
     return db_doc
 
 
@@ -1335,6 +1339,30 @@ def test_get_docs_to_update_time_skip_still_works() -> None:
     db_doc = _make_db_doc("doc1", content_hash=None, doc_updated_at=old_time)
 
     docs, hashes = get_docs_to_update([doc], db_docs=[db_doc])
+    assert docs == []
+    assert hashes == {}
+
+
+def test_get_docs_to_update_ignores_permission_changes() -> None:
+    updated_at = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    doc = _doc_with_text("Title", "unchanged content")
+    doc.id = "doc1"
+    doc.doc_updated_at = updated_at
+    doc.external_access = ExternalAccess(
+        external_user_emails={"latest@example.com"},
+        external_user_group_ids={"onedrive_latest-group"},
+        is_public=False,
+    )
+    db_doc = _make_db_doc(
+        "doc1",
+        content_hash=doc.content_hash(),
+        doc_updated_at=updated_at,
+    )
+    db_doc.external_user_emails = ["former@example.com"]
+    db_doc.external_user_group_ids = ["onedrive_former-group"]
+
+    docs, hashes = get_docs_to_update([doc], db_docs=[db_doc])
+
     assert docs == []
     assert hashes == {}
 

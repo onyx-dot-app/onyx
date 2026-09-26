@@ -1,5 +1,8 @@
+from enum import Enum
+
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
+from onyx.access.models import ExternalAccess
 from onyx.connectors.microsoft_utils.drive_delta import DriveDeltaItem, DriveDeltaPage
 from onyx.connectors.microsoft_utils.graph_env import (
     DEFAULT_AUTHORITY_HOST,
@@ -38,6 +41,7 @@ class OneDriveConnectorConfig(BaseModel):
 
 class OneDriveSettings(OneDriveConnectorConfig):
     excluded_paths: list[str] = Field(default_factory=list)
+    treat_organization_link_as_public: bool = False
 
 
 class OneDriveUser(BaseModel):
@@ -77,31 +81,61 @@ class OneDriveDiscoveredFile(BaseModel):
 
     drive: OneDriveDrive
     item: DriveDeltaItem
+    external_access: ExternalAccess | None = None
 
 
-class OneDrivePermission(BaseModel):
-    model_config = ConfigDict(extra="allow")
+class GraphModel(BaseModel):
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
 
+
+class GraphLinkScope(str, Enum):
+    ANONYMOUS = "anonymous"
+    ORGANIZATION = "organization"
+    USERS = "users"
+
+
+class GraphIdentity(GraphModel):
+    id: str | None = None
+    display_name: str | None = Field(default=None, alias="displayName")
+    email: str | None = None
+    user_principal_name: str | None = Field(default=None, alias="userPrincipalName")
+    login_name: str | None = Field(default=None, alias="loginName")
+
+
+class GraphSharePointIdentitySet(GraphModel):
+    user: GraphIdentity | None = None
+    group: GraphIdentity | None = None
+    site_user: GraphIdentity | None = Field(default=None, alias="siteUser")
+
+
+class GraphSharingLink(GraphModel):
+    scope: GraphLinkScope | None = None
+    type: str | None = None
+
+
+class GraphInheritedFrom(GraphModel):
+    drive_id: str | None = Field(default=None, alias="driveId")
+    id: str | None = None
+    path: str | None = None
+
+
+class OneDrivePermission(GraphModel):
     id: str | None = None
     roles: list[str] = Field(default_factory=list)
+    granted_to_v2: GraphSharePointIdentitySet | None = Field(
+        default=None, alias="grantedToV2"
+    )
+    granted_to_identities_v2: list[GraphSharePointIdentitySet] = Field(
+        default_factory=list, alias="grantedToIdentitiesV2"
+    )
+    link: GraphSharingLink | None = None
+    inherited_from: GraphInheritedFrom | None = Field(
+        default=None, alias="inheritedFrom"
+    )
 
 
 class OneDrivePermissionPage(BaseModel):
     permissions: list[OneDrivePermission]
-    next_link: str | None = None
-
-
-class OneDriveGroupMember(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    id: str
-    display_name: str | None = Field(default=None, alias="displayName")
-    mail: str | None = None
-    user_principal_name: str | None = Field(default=None, alias="userPrincipalName")
-
-
-class OneDriveGroupMemberPage(BaseModel):
-    members: list[OneDriveGroupMember]
     next_link: str | None = None
 
 

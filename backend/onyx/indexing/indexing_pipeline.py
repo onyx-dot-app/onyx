@@ -394,6 +394,7 @@ def get_docs_to_update(
     updatable_docs: list[Document] = []
     doc_id_to_content_hash: dict[str, str] = {}
     for doc in documents:
+        db_doc = id_to_db_doc_map.get(doc.id)
         timestamp_advanced = (
             doc.doc_updated_at is not None
             and doc.id in id_update_time_map
@@ -414,7 +415,6 @@ def get_docs_to_update(
         # check so we never suppress a legitimate re-index (see docstring).
         content_hash = doc.content_hash()
         if not timestamp_advanced and not ignore_content_hash_gate:
-            db_doc = id_to_db_doc_map.get(doc.id)
             if db_doc and db_doc.content_hash == content_hash:
                 logger.debug("Skipping document %r — content hash unchanged", doc.id)
                 continue

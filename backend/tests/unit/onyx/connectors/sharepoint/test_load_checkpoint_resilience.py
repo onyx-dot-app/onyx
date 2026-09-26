@@ -1,23 +1,14 @@
-"""Tests for resilience wrappers added to SharepointConnector._load_from_checkpoint.
-
-Covers three failure modes that previously aborted the whole attempt:
-- G1: BFS-mode generator (`iter_drive_items_paged`) raising mid-iteration.
-- G2: `_fetch_site_pages` raising a non-Graph 4xx in Phase 5.
-- G3: A single site page failing to convert in Phase 5.
-
-All three now yield a ConnectorFailure (EntityFailure or DocumentFailure)
-and let the rest of the indexing run continue.
-"""
-
-from __future__ import annotations
+"""SharePoint checkpoint resilience tests."""
 
 from collections import deque
 from collections.abc import Generator
 from datetime import datetime, timezone
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
+from onyx.connectors.microsoft_utils.drive_items import DriveFolderReference
 from onyx.connectors.models import (
     ConnectorFailure,
     Document,
@@ -95,19 +86,18 @@ def _setup_connector(monkeypatch: pytest.MonkeyPatch) -> SharepointConnector:
     connector._graph_client = object()  # ty: ignore[invalid-assignment]
     connector.include_site_pages = False
 
-    def fake_resolve_drive(
-        self: SharepointConnector,  # noqa: ARG001
-        site_descriptor: SiteDescriptor,  # noqa: ARG001
-        drive_name: str,
-    ) -> SiteDrive:
-        return SiteDrive(drive_id=DRIVE_ID, name=drive_name, web_url=DRIVE_WEB_URL)
-
     def fake_get_access_token(self: SharepointConnector) -> str:  # noqa: ARG001
         return "fake-access-token"
 
-    monkeypatch.setattr(SharepointConnector, "_resolve_drive", fake_resolve_drive)
     monkeypatch.setattr(
         SharepointConnector, "_get_graph_access_token", fake_get_access_token
+    )
+    monkeypatch.setattr(
+        sp_connector,
+        "resolve_drive_folder",
+        lambda *_args, **_kwargs: DriveFolderReference(
+            id="folder-id", web_url=f"{DRIVE_WEB_URL}/Engineering/Docs"
+        ),
     )
     return connector
 
@@ -115,7 +105,7 @@ def _setup_connector(monkeypatch: pytest.MonkeyPatch) -> SharepointConnector:
 def _mock_convert(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_convert(
         driveitem: DriveItemData,
-        drive_name: str,  # noqa: ARG001
+        drive: SiteDrive,  # noqa: ARG001
         ctx: Any = None,  # noqa: ARG001
         graph_client: Any = None,  # noqa: ARG001
         graph_api_base: str = "",  # noqa: ARG001
@@ -143,7 +133,16 @@ def _build_phase3_checkpoint(
     cp.current_site_descriptor = SiteDescriptor(
         url=SITE_URL, drive_name=None, folder_path=folder_path
     )
-    cp.cached_drive_names = deque([DRIVE_NAME])
+    cp.cached_drives = deque(
+        [
+            SiteDrive(
+                drive_id=DRIVE_ID,
+                list_id="fake-list-id",
+                display_name=DRIVE_NAME,
+                web_url=DRIVE_WEB_URL,
+            )
+        ]
+    )
     cp.process_site_pages = False
     return cp
 
@@ -155,9 +154,74 @@ def _build_phase5_checkpoint() -> SharepointConnectorCheckpoint:
     cp.current_site_descriptor = SiteDescriptor(
         url=SITE_URL, drive_name=None, folder_path=None
     )
-    cp.cached_drive_names = deque()
+    cp.cached_drives = deque()
     cp.process_site_pages = True
     return cp
+
+
+def test_docs_only_indexing_accepts_drive_without_list_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connector = _setup_connector(monkeypatch)
+    _mock_convert(monkeypatch)
+    checkpoint = _build_phase3_checkpoint()
+    assert checkpoint.cached_drives is not None
+    checkpoint.cached_drives[0].list_id = None
+    monkeypatch.setattr(
+        sp_connector,
+        "fetch_one_delta_page",
+        lambda *_args, **_kwargs: ([_make_item("doc")], None),
+    )
+
+    yielded, _ = _consume_generator(
+        connector._load_from_checkpoint(
+            _EPOCH_START, _END_TS, checkpoint, include_permissions=False
+        )
+    )
+
+    assert [document.id for document in _docs_from(yielded)] == ["doc"]
+    assert not _failures_from(yielded)
+
+
+def test_checkpoint_accepts_drive_without_list_id() -> None:
+    checkpoint = SharepointConnectorCheckpoint.model_validate(
+        {
+            "has_more": True,
+            "cached_drives": [
+                {
+                    "drive_id": DRIVE_ID,
+                    "display_name": DRIVE_NAME,
+                    "web_url": DRIVE_WEB_URL,
+                }
+            ],
+        }
+    )
+
+    assert checkpoint.cached_drives is not None
+    assert checkpoint.cached_drives[0].list_id is None
+
+
+def test_permission_indexing_skips_drive_without_list_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connector = _setup_connector(monkeypatch)
+    monkeypatch.setattr(
+        connector, "_create_rest_client_context", lambda _site_url: MagicMock()
+    )
+    checkpoint = _build_phase3_checkpoint()
+    assert checkpoint.cached_drives is not None
+    checkpoint.cached_drives[0].list_id = None
+
+    yielded, final_checkpoint = _consume_generator(
+        connector._load_from_checkpoint(
+            _EPOCH_START, _END_TS, checkpoint, include_permissions=True
+        )
+    )
+
+    failures = _failures_from(yielded)
+    assert len(failures) == 1
+    assert "requires a list ID" in failures[0].failure_message
+    assert final_checkpoint.current_drive is None
 
 
 # ---------------------------------------------------------------------------
@@ -183,6 +247,7 @@ class TestBfsIterationFailure:
             client: Any,  # noqa: ARG001
             drive_id: str,  # noqa: ARG001
             folder_path: str | None = None,  # noqa: ARG001
+            folder_id: str | None = None,  # noqa: ARG001
             start: datetime | None = None,  # noqa: ARG001
             end: datetime | None = None,  # noqa: ARG001
             page_size: int = 200,  # noqa: ARG001
@@ -207,13 +272,11 @@ class TestBfsIterationFailure:
         failed_entity = failures[0].failed_entity
         assert failed_entity is not None
         assert isinstance(failed_entity, EntityFailure)
-        assert failed_entity.entity_id == f"{SITE_URL}|{DRIVE_NAME}|bfs_iter"
+        assert failed_entity.entity_id == f"{DRIVE_ID}|bfs_iter"
         assert "graph 500 mid-page" in failures[0].failure_message
 
         # Drive state cleared so resume doesn't loop on the broken drive.
-        assert final_cp.current_drive_name is None
-        assert final_cp.current_drive_id is None
-        assert final_cp.current_drive_web_url is None
+        assert final_cp.current_drive is None
         assert final_cp.current_drive_delta_next_link is None
 
     def test_bfs_generator_failure_at_start_still_yields_failure(
@@ -228,6 +291,7 @@ class TestBfsIterationFailure:
             client: Any,  # noqa: ARG001
             drive_id: str,  # noqa: ARG001
             folder_path: str | None = None,  # noqa: ARG001
+            folder_id: str | None = None,  # noqa: ARG001
             start: datetime | None = None,  # noqa: ARG001
             end: datetime | None = None,  # noqa: ARG001
             page_size: int = 200,  # noqa: ARG001
@@ -247,10 +311,8 @@ class TestBfsIterationFailure:
         failures = _failures_from(yielded)
         assert len(failures) == 1
         assert failures[0].failed_entity is not None
-        assert (
-            failures[0].failed_entity.entity_id == f"{SITE_URL}|{DRIVE_NAME}|bfs_iter"
-        )
-        assert final_cp.current_drive_name is None
+        assert failures[0].failed_entity.entity_id == f"{DRIVE_ID}|bfs_iter"
+        assert final_cp.current_drive is None
 
 
 # ---------------------------------------------------------------------------

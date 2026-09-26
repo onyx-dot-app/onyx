@@ -6,13 +6,14 @@ from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.interfaces import (
-    CheckpointedConnector,
+    CheckpointedConnectorWithPermSync,
     CheckpointOutput,
     CredentialsConnector,
     CredentialsProviderInterface,
     GenerateSlimDocumentOutput,
     SecondsSinceUnixEpoch,
     SlimConnector,
+    SlimConnectorWithPermSync,
 )
 from onyx.connectors.microsoft_utils.drive_delta import (
     DEFAULT_DRIVE_DELTA_PAGE_SIZE,
@@ -45,10 +46,15 @@ from onyx.connectors.models import (
     HierarchyNode,
     SlimDocument,
 )
+from onyx.connectors.onedrive.access import (
+    get_onedrive_external_access,
+    prefix_onedrive_external_groups,
+)
 from onyx.connectors.onedrive.models import (
     OneDriveCheckpoint,
     OneDriveDiscoveredFile,
     OneDriveDrive,
+    OneDrivePermission,
     OneDriveSettings,
     OneDriveUser,
 )
@@ -75,6 +81,22 @@ METADATA_PATH = "path"
 MAX_USER_LISTING_PAGES = 100_000
 MAX_DRIVE_DELTA_PAGES = 100_000
 DRIVE_ENTITY_PREFIX = "drive:"
+MAX_PERMISSION_ENTRIES = ExternalAccess.MAX_NUM_ENTRIES
+MAX_PERMISSION_PAGES = 10_000
+MAX_CACHED_FOLDER_PERMISSIONS = 1_000
+
+
+def _last_delta_item_occurrences(
+    items: list[DriveDeltaItem],
+) -> list[DriveDeltaItem]:
+    seen_ids: set[str] = set()
+    latest_items: list[DriveDeltaItem] = []
+    for item in reversed(items):
+        if item.id in seen_ids:
+            continue
+        seen_ids.add(item.id)
+        latest_items.append(item)
+    return list(reversed(latest_items))
 
 
 def hierarchy_item_id(drive_id: str, item_id: str) -> str:
@@ -95,25 +117,33 @@ def item_parent_id(drive_id: str, item: DriveDeltaItem) -> str:
     return hierarchy_item_id(drive_id, parent.id)
 
 
-def user_root_node(user: OneDriveUser, drive: OneDriveDrive) -> HierarchyNode:
+def user_root_node(
+    user: OneDriveUser,
+    drive: OneDriveDrive,
+    external_access: ExternalAccess | None = None,
+) -> HierarchyNode:
     return HierarchyNode(
         raw_node_id=drive_root_id(drive.id),
         raw_parent_id=None,
         display_name=user.display_name or user.user_principal_name,
         link=drive.web_url,
         node_type=HierarchyNodeType.MY_DRIVE,
-        external_access=ExternalAccess.empty(),
+        external_access=external_access or ExternalAccess.empty(),
     )
 
 
-def folder_node(drive: OneDriveDrive, item: DriveDeltaItem) -> HierarchyNode:
+def folder_node(
+    drive: OneDriveDrive,
+    item: DriveDeltaItem,
+    external_access: ExternalAccess | None = None,
+) -> HierarchyNode:
     return HierarchyNode(
         raw_node_id=hierarchy_item_id(drive.id, item.id),
         raw_parent_id=item_parent_id(drive.id, item),
         display_name=item.name or "",
         link=item.web_url,
         node_type=HierarchyNodeType.FOLDER,
-        external_access=ExternalAccess.empty(),
+        external_access=external_access or ExternalAccess.empty(),
     )
 
 
@@ -133,6 +163,7 @@ def drive_item_document(
     drive: OneDriveDrive,
     content: DriveItemContent,
     parent_hierarchy_raw_node_id: str,
+    external_access: ExternalAccess | None = None,
 ) -> Document:
     return Document(
         id=item.id,
@@ -149,7 +180,7 @@ def drive_item_document(
                 item.parent_reference_path, item.name
             ),
         },
-        external_access=ExternalAccess.empty(),
+        external_access=external_access or ExternalAccess.empty(),
         parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
         file_id=content.staged_file_id,
     )
@@ -178,13 +209,15 @@ def _document_failure(item: DriveItemData, error: Exception) -> ConnectorFailure
 
 class OneDriveConnector(
     SlimConnector,
+    SlimConnectorWithPermSync,
     CredentialsConnector,
-    CheckpointedConnector[OneDriveCheckpoint],
+    CheckpointedConnectorWithPermSync[OneDriveCheckpoint],
 ):
     def __init__(
         self,
         users: list[str] | None = None,
         excluded_paths: list[str] | None = None,
+        treat_organization_link_as_public: bool = False,
         authority_host: str = DEFAULT_AUTHORITY_HOST,
         graph_api_host: str = DEFAULT_GRAPH_API_HOST,
     ) -> None:
@@ -194,6 +227,7 @@ class OneDriveConnector(
             excluded_paths=[
                 path.strip() for path in excluded_paths or [] if path.strip()
             ],
+            treat_organization_link_as_public=treat_organization_link_as_public,
             authority_host=authority_host.rstrip("/"),
             graph_api_host=graph_api_host.rstrip("/"),
         )
@@ -201,6 +235,7 @@ class OneDriveConnector(
             self.settings.graph_api_host, self.settings.authority_host
         )
         self._ops: OneDriveSourceOperations | None = None
+        self._folder_access: dict[str, ExternalAccess] = {}
 
     @property
     def ops(self) -> OneDriveSourceOperations:
@@ -248,6 +283,76 @@ class OneDriveConnector(
 
     def _finish_drive(self, checkpoint: OneDriveCheckpoint) -> None:
         self._clear_current_user(checkpoint)
+        self._folder_access.clear()
+
+    def _list_all_permissions(
+        self, drive_id: str, item_id: str
+    ) -> list[OneDrivePermission]:
+        permissions: list[OneDrivePermission] = []
+        next_link: str | None = None
+        for _ in range(MAX_PERMISSION_PAGES):
+            request_url = next_link
+            page = self.ops.list_permissions(
+                drive_id=drive_id,
+                item_id=item_id,
+                next_link=next_link,
+            )
+            permissions.extend(page.permissions)
+            if len(permissions) > MAX_PERMISSION_ENTRIES:
+                raise ValueError(
+                    f"OneDrive item `{item_id}` exceeds the permission entry limit."
+                )
+            next_link = page.next_link
+            if next_link is None:
+                return permissions
+            if next_link == request_url:
+                raise ValueError(
+                    f"OneDrive item `{item_id}` returned a repeated permission cursor."
+                )
+        raise ValueError(
+            f"OneDrive item `{item_id}` exceeds the permission page limit."
+        )
+
+    def _direct_access(
+        self,
+        user: OneDriveUser,
+        drive: OneDriveDrive,
+        item_id: str,
+        *,
+        add_prefix: bool,
+    ) -> ExternalAccess:
+        permissions: list[OneDrivePermission] = self._list_all_permissions(
+            drive.id, item_id
+        )
+        return get_onedrive_external_access(
+            permissions,
+            user.user_principal_name,
+            self.settings.treat_organization_link_as_public,
+            add_prefix=add_prefix,
+        )
+
+    def _item_access(
+        self,
+        user: OneDriveUser,
+        drive: OneDriveDrive,
+        item: DriveDeltaItem,
+        *,
+        add_prefix: bool,
+    ) -> ExternalAccess:
+        parent_id = item.parent_reference.id if item.parent_reference else None
+        parent_access = self._folder_access.get(
+            hierarchy_item_id(drive.id, parent_id) if parent_id else ""
+        )
+        if not item.is_folder and item.shared is None and parent_access is not None:
+            return parent_access
+        access = self._direct_access(user, drive, item.id, add_prefix=add_prefix)
+        if item.is_folder:
+            cache_key = hierarchy_item_id(drive.id, item.id)
+            self._folder_access[cache_key] = access
+            if len(self._folder_access) > MAX_CACHED_FOLDER_PERMISSIONS:
+                oldest_key = next(iter(self._folder_access))
+                del self._folder_access[oldest_key]
+        return access
 
     def _select_explicit_user(
         self, checkpoint: OneDriveCheckpoint
@@ -347,7 +452,10 @@ class OneDriveConnector(
         return self._path_allowed(item)
 
     def _file_output(
-        self, item: DriveDeltaItem, drive: OneDriveDrive
+        self,
+        item: DriveDeltaItem,
+        drive: OneDriveDrive,
+        external_access: ExternalAccess | None = None,
     ) -> Document | ConnectorFailure | None:
         drive_item = DriveItemData.from_graph_json(item.to_graph_json())
         if drive_item.drive_id is None:
@@ -361,13 +469,18 @@ class OneDriveConnector(
         if content is None:
             return None
         parent = item_parent_id(drive.id, item)
-        return drive_item_document(drive_item, drive, content, parent)
+        return drive_item_document(
+            drive_item, drive, content, parent, external_access=external_access
+        )
 
     def _discover_delta_page(
         self,
         checkpoint: OneDriveCheckpoint,
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
+        *,
+        include_permissions: bool,
+        add_group_prefix: bool,
     ) -> Generator[
         OneDriveDiscoveredFile | HierarchyNode | ConnectorFailure, None, None
     ]:
@@ -412,22 +525,82 @@ class OneDriveConnector(
             )
         checkpoint.delta_pages += 1
         if not checkpoint.delta_started:
-            yield user_root_node(user, drive)
+            root_access = (
+                ExternalAccess(
+                    external_user_emails={user.user_principal_name.lower()},
+                    external_user_group_ids=set(),
+                    is_public=False,
+                )
+                if include_permissions
+                else None
+            )
+            yield user_root_node(user, drive, root_access)
         checkpoint.delta_started = True
         checkpoint.delta_cursor = result.next_cursor
         if result.resynced:
             return
-        for item in result.page.items:
+        for item in _last_delta_item_occurrences(result.page.items):
             if item.is_tombstone:
                 continue
             if item.is_folder:
                 if not self._path_allowed(item):
                     continue
-                yield folder_node(drive, item)
+                try:
+                    access = (
+                        self._item_access(
+                            user,
+                            drive,
+                            item,
+                            add_prefix=add_group_prefix,
+                        )
+                        if include_permissions
+                        else None
+                    )
+                except OneDriveGraphError as error:
+                    if error.fails_the_attempt:
+                        raise
+                    yield _entity_failure(item.id, str(error), error)
+                    continue
+                except Exception as error:
+                    yield _entity_failure(item.id, str(error), error)
+                    continue
+                node_access = (
+                    prefix_onedrive_external_groups(access)
+                    if access is not None and not add_group_prefix
+                    else access
+                )
+                yield folder_node(drive, item, node_access)
                 continue
             if not item.is_file or not self._item_allowed(item, start_at, end_at):
                 continue
-            yield OneDriveDiscoveredFile(drive=drive, item=item)
+            try:
+                access = (
+                    self._item_access(
+                        user,
+                        drive,
+                        item,
+                        add_prefix=add_group_prefix,
+                    )
+                    if include_permissions
+                    else None
+                )
+            except OneDriveGraphError as error:
+                if error.fails_the_attempt:
+                    raise
+                yield _document_failure(
+                    DriveItemData.from_graph_json(item.to_graph_json()), error
+                )
+                continue
+            except Exception as error:
+                yield _document_failure(
+                    DriveItemData.from_graph_json(item.to_graph_json()), error
+                )
+                continue
+            yield OneDriveDiscoveredFile(
+                drive=drive,
+                item=item,
+                external_access=access,
+            )
         if result.next_cursor is None:
             self._finish_drive(checkpoint)
 
@@ -436,6 +609,9 @@ class OneDriveConnector(
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: OneDriveCheckpoint,
+        *,
+        include_permissions: bool,
+        add_group_prefix: bool,
     ) -> Generator[
         OneDriveDiscoveredFile | HierarchyNode | ConnectorFailure,
         None,
@@ -452,7 +628,13 @@ class OneDriveConnector(
             yield from self._open_current_drive(checkpoint)
             if checkpoint.current_drive is None:
                 return checkpoint
-        yield from self._discover_delta_page(checkpoint, start, end)
+        yield from self._discover_delta_page(
+            checkpoint,
+            start,
+            end,
+            include_permissions=include_permissions,
+            add_group_prefix=add_group_prefix,
+        )
         return checkpoint
 
     def load_from_checkpoint(
@@ -460,22 +642,47 @@ class OneDriveConnector(
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: OneDriveCheckpoint,
+        *,
+        include_permissions: bool = False,
     ) -> CheckpointOutput[OneDriveCheckpoint]:
-        for item in self._discover_from_checkpoint(start, end, checkpoint):
+        for item in self._discover_from_checkpoint(
+            start,
+            end,
+            checkpoint,
+            include_permissions=include_permissions,
+            add_group_prefix=False,
+        ):
             if not isinstance(item, OneDriveDiscoveredFile):
                 yield item
                 continue
-            output = self._file_output(item.item, item.drive)
+            output = self._file_output(
+                item.item,
+                item.drive,
+                item.external_access,
+            )
             if output is not None:
                 yield output
         return checkpoint
+
+    def load_from_checkpoint_with_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: OneDriveCheckpoint,
+    ) -> CheckpointOutput[OneDriveCheckpoint]:
+        return self.load_from_checkpoint(
+            start,
+            end,
+            checkpoint,
+            include_permissions=True,
+        )
 
     def _slim_document(self, discovered: OneDriveDiscoveredFile) -> SlimDocument:
         item = discovered.item
         drive = discovered.drive
         return SlimDocument(
             id=item.id,
-            external_access=ExternalAccess.empty(),
+            external_access=discovered.external_access or ExternalAccess.empty(),
             parent_hierarchy_raw_node_id=item_parent_id(drive.id, item),
             doc_created_at=item.created_datetime,
         )
@@ -485,6 +692,8 @@ class OneDriveConnector(
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
+        *,
+        include_permissions: bool = False,
     ) -> GenerateSlimDocumentOutput:
         del start, end
         checkpoint = self.build_dummy_checkpoint()
@@ -492,7 +701,13 @@ class OneDriveConnector(
             if callback and callback.should_stop():
                 return
             batch: list[SlimDocument | HierarchyNode] = []
-            for item in self._discover_from_checkpoint(0, 0, checkpoint):
+            for item in self._discover_from_checkpoint(
+                0,
+                0,
+                checkpoint,
+                include_permissions=include_permissions,
+                add_group_prefix=False,
+            ):
                 if isinstance(item, ConnectorFailure):
                     if item.exception is None:
                         continue
@@ -508,3 +723,16 @@ class OneDriveConnector(
                 yield batch
             if callback:
                 callback.progress("onedrive_slim_retrieval", 1)
+
+    def retrieve_all_slim_docs_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        yield from self.retrieve_all_slim_docs(
+            start,
+            end,
+            callback,
+            include_permissions=True,
+        )

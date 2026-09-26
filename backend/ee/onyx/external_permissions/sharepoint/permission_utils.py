@@ -26,15 +26,14 @@ from ee.onyx.external_permissions.microsoft_utils.entra_groups import (
 from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.microsoft_utils.drive_items import (
-    LIST_ITEM_ID_PROPERTY,
+from onyx.connectors.microsoft_utils.drive_delta import (
     SHAREPOINT_IDS_PROPERTY,
+    parse_graph_sharepoint_ids,
 )
 from onyx.connectors.microsoft_utils.graph_client import (
     GraphApiClient,
     sleep_and_retry,
 )
-from onyx.connectors.sharepoint.connector import SHARED_DOCUMENTS_MAP_REVERSE
 from onyx.connectors.sharepoint.connector_utils import (
     SharepointGroup,
     SharepointGroupExpansion,
@@ -89,32 +88,23 @@ class DocumentGroupsResult(BaseModel):
     found_public_group: bool
 
 
-def _get_sharepoint_list_item_id(drive_item: DriveItem) -> str | None:
+def _get_sharepoint_list_item_id(drive_item: DriveItem) -> int | None:
     try:
-        properties = getattr(drive_item, "properties", None)  # ods: ignore[getattr]
-        sharepoint_ids = properties.get(SHAREPOINT_IDS_PROPERTY) if properties else None
-        if isinstance(sharepoint_ids, dict):
-            if list_item_id := sharepoint_ids.get(LIST_ITEM_ID_PROPERTY):
-                return str(list_item_id)
+        sharepoint_ids = parse_graph_sharepoint_ids(
+            drive_item.properties.get(SHAREPOINT_IDS_PROPERTY)
+        )
+        if sharepoint_ids and sharepoint_ids.list_item_id:
+            return int(sharepoint_ids.list_item_id)
 
-        if hasattr(drive_item, "listItem"):
-            list_item = drive_item.listItem
-            if list_item:
-                sleep_and_retry(list_item.get(), GET_SHAREPOINT_LIST_ITEM_ID_LABEL)
-                if hasattr(list_item, "id") and list_item.id:
-                    return str(list_item.id)
-
-        if properties:
-            for prop_name, prop_value in properties.items():
-                if "listitemid" in prop_name.lower():
-                    return str(prop_value)
+        list_item = drive_item.listItem
+        sleep_and_retry(list_item.get(), GET_SHAREPOINT_LIST_ITEM_ID_LABEL)
+        if list_item.id:
+            return int(list_item.id)
 
         return None
-    except Exception as e:
-        logger.error(
-            "Error getting SharePoint list item ID for item %s: %s", drive_item.id, e
-        )
-        raise e
+    except Exception:
+        logger.exception("Failed to get list item ID for drive item %s", drive_item.id)
+        raise
 
 
 def _is_public_item(
@@ -468,7 +458,7 @@ def _get_external_access_from_securable_object(
 def get_external_access_from_sharepoint(
     client_context: ClientContext,
     graph_client: GraphClient,
-    drive_name: str | None,
+    list_id: str | None,
     drive_item: DriveItem | None,
     site_page: dict[str, Any] | None,
     add_prefix: bool = False,
@@ -476,7 +466,7 @@ def get_external_access_from_sharepoint(
     permission_cache: SharepointPermissionCache | None = None,
 ) -> ExternalAccess:
     permission_cache = permission_cache or SharepointPermissionCache()
-    if drive_item and drive_name:
+    if drive_item and list_id:
         is_public = _is_public_item(drive_item, treat_sharing_link_as_public)
         if is_public:
             logger.info("Item %s is public", drive_item.id)
@@ -493,12 +483,7 @@ def get_external_access_from_sharepoint(
                 f"Failed to get SharePoint list item ID for item {drive_item.id}"
             )
 
-        if drive_name in SHARED_DOCUMENTS_MAP_REVERSE:
-            drive_name = SHARED_DOCUMENTS_MAP_REVERSE[drive_name]
-
-        item = client_context.web.lists.get_by_title(drive_name).items.get_by_id(
-            item_id
-        )
+        item = client_context.web.lists.get_by_id(list_id).items.get_by_id(item_id)
     elif site_page:
         site_url = site_page.get("webUrl")
         # Keep percent-encoding intact so the path matches the encoding
@@ -527,7 +512,7 @@ def get_hierarchy_node_external_access_from_sharepoint(
     client_context: ClientContext,
     graph_client: GraphClient,
     node_type: HierarchyNodeType,
-    drive_name: str | None,
+    list_id: str | None,
     folder_server_relative_path: str | None,
     permission_cache: SharepointPermissionCache | None = None,
 ) -> ExternalAccess:
@@ -538,9 +523,8 @@ def get_hierarchy_node_external_access_from_sharepoint(
     permission_cache = permission_cache or SharepointPermissionCache()
     if node_type == HierarchyNodeType.SITE:
         securable_object = client_context.web
-    elif node_type == HierarchyNodeType.DRIVE and drive_name:
-        list_name = SHARED_DOCUMENTS_MAP_REVERSE.get(drive_name, drive_name)
-        securable_object = client_context.web.lists.get_by_title(list_name)
+    elif node_type == HierarchyNodeType.DRIVE and list_id:
+        securable_object = client_context.web.lists.get_by_id(list_id)
     elif node_type == HierarchyNodeType.FOLDER and folder_server_relative_path:
         securable_object = client_context.web.get_folder_by_server_relative_path(
             folder_server_relative_path

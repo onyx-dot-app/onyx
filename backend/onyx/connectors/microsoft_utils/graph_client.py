@@ -11,7 +11,7 @@ This layer carries no source identity, so a connector composes it.
 
 import random
 import time
-from collections.abc import Callable, Generator
+from collections.abc import Callable
 from typing import Any
 
 import requests
@@ -270,17 +270,3 @@ class GraphApiClient:
         headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         return graph_api_get_json(self.get_access_token, url, params, headers)
-
-
-def iter_graph_collection(
-    client: GraphApiClient,
-    url: str,
-    params: dict[str, str] | None = None,
-) -> Generator[dict[str, Any], None, None]:
-    """Yield every item of a Graph collection, following nextLink page by page."""
-    page_url: str | None = url
-    while page_url:
-        data = client.get_json(page_url, params)
-        params = None  # nextLink already embeds the query
-        yield from data.get("value", [])
-        page_url = data.get("@odata.nextLink")

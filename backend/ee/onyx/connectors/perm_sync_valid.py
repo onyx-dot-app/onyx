@@ -4,10 +4,16 @@ from typing import Any
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.box.connector import BoxConnector
 from onyx.connectors.canvas.connector import CanvasConnector
+from onyx.connectors.capability_checks.models import CapabilityCheckContext
 from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.factory import identify_connector_class
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.interfaces import BaseConnector
+from onyx.connectors.onedrive.capability_checks import (
+    build_onedrive_doc_permission_sync_checks,
+    build_onedrive_group_sync_checks,
+)
+from onyx.connectors.onedrive.connector import OneDriveConnector
 from onyx.connectors.sharepoint.connector import SharepointConnector
 
 
@@ -67,6 +73,21 @@ def validate_sharepoint_perm_sync(connector: SharepointConnector) -> None:
     connector.probe_group_members_permission()
 
 
+def validate_onedrive_perm_sync(connector: OneDriveConnector) -> None:
+    context: CapabilityCheckContext = CapabilityCheckContext(
+        source=DocumentSource.ONEDRIVE,
+        credential_json={},
+        connector=connector,
+        connector_specific_config=connector.settings.model_dump(),
+        source_operations=connector.ops,
+    )
+    checks = (
+        build_onedrive_doc_permission_sync_checks() + build_onedrive_group_sync_checks()
+    )
+    for check in checks:
+        check.run(context)
+
+
 # The single source of truth for which connectors carry a real perm-sync probe:
 # ``validate_perm_sync`` dispatches through it, and the capability check
 # framework derives probe-bearing sources from it via
@@ -77,6 +98,7 @@ _VALIDATOR_BY_CONNECTOR_CLASS: dict[type[BaseConnector], Callable[[Any], None]] 
     CanvasConnector: validate_canvas_perm_sync,
     ConfluenceConnector: validate_confluence_perm_sync,
     GoogleDriveConnector: validate_drive_perm_sync,
+    OneDriveConnector: validate_onedrive_perm_sync,
     SharepointConnector: validate_sharepoint_perm_sync,
 }
 

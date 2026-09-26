@@ -1,4 +1,5 @@
 from typing import Any
+from urllib.parse import quote
 
 import requests
 
@@ -14,6 +15,18 @@ from onyx.connectors.microsoft_utils.drive_items import (
     DriveItemContent,
     DriveItemData,
     extract_drive_item_content,
+)
+from onyx.connectors.microsoft_utils.entra import (
+    ENTRA_GROUP_MEMBER_SELECT,
+    ENTRA_GROUP_SELECT,
+    ENTRA_PAGE_SIZE,
+    ENTRA_USER_SELECT,
+    EntraDirectoryObject,
+    EntraGroup,
+    EntraPage,
+    EntraUser,
+    fetch_entra_page,
+    fetch_entra_user,
 )
 from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
 from onyx.connectors.microsoft_utils.graph_env import (
@@ -39,8 +52,6 @@ from onyx.connectors.onedrive.models import (
     OneDriveCredentials,
     OneDriveDeltaResult,
     OneDriveDrive,
-    OneDriveGroupMember,
-    OneDriveGroupMemberPage,
     OneDrivePermission,
     OneDrivePermissionPage,
     OneDriveTokenInfo,
@@ -55,26 +66,23 @@ from onyx.connectors.source_operations import (
 from onyx.file_store.staging import RawFileCallback
 
 GRAPH_API_VERSION = "v1.0"
-USERS_PAGE_SIZE = 999
-USER_SELECT = "id,userPrincipalName,mail,displayName,userType,accountEnabled"
 CONFIG_AUTHORITY_HOST = "authority_host"
 CONFIG_GRAPH_API_HOST = "graph_api_host"
 CONFIG_USERS = "users"
 
 
-def _user(raw: dict[str, Any]) -> OneDriveUser | None:
+def _user(entra_user: EntraUser) -> OneDriveUser | None:
     if (
-        not raw.get("id")
-        or not raw.get("userPrincipalName")
-        or raw.get("accountEnabled") is False
-        or raw.get("userType") == "Guest"
+        not entra_user.user_principal_name
+        or entra_user.account_enabled is False
+        or entra_user.user_type == "Guest"
     ):
         return None
     return OneDriveUser(
-        id=raw["id"],
-        user_principal_name=raw["userPrincipalName"],
-        mail=raw.get("mail"),
-        display_name=raw.get("displayName"),
+        id=entra_user.id,
+        user_principal_name=entra_user.user_principal_name,
+        mail=entra_user.mail,
+        display_name=entra_user.display_name,
     )
 
 
@@ -152,16 +160,18 @@ class OneDriveSourceOperations(SourceOperations):
         consumes=OperationConsumes.CREDENTIAL,
     )
     def list_users(
-        self, *, next_link: str | None = None, page_size: int = USERS_PAGE_SIZE
+        self, *, next_link: str | None = None, page_size: int = ENTRA_PAGE_SIZE
     ) -> OneDriveUserPage:
-        params = None
-        url = next_link
-        if url is None:
-            url = f"{self._base()}/users"
-            params = {"$select": USER_SELECT, "$top": str(page_size)}
-        data = self._get(url, params)
-        users = [user for raw in data.get("value", []) if (user := _user(raw))]
-        return OneDriveUserPage(users=users, next_link=data.get("@odata.nextLink"))
+        page = fetch_entra_page(
+            self._gateway().get_json,
+            url=f"{self._base()}/users",
+            item_model=EntraUser,
+            select_fields=ENTRA_USER_SELECT,
+            next_link=next_link,
+            page_size=page_size,
+        )
+        users = [user for item in page.items if (user := _user(item))]
+        return OneDriveUserPage(users=users, next_link=page.next_link)
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
@@ -173,15 +183,16 @@ class OneDriveSourceOperations(SourceOperations):
     )
     def get_user(self, *, identifier: str) -> OneDriveUser | None:
         try:
-            raw = self._get(
-                build_graph_user_url(self._base(), identifier),
-                {"$select": USER_SELECT},
+            user = fetch_entra_user(
+                self._gateway().get_json,
+                self._base(),
+                identifier,
             )
         except OneDriveGraphError as error:
             if error.status == 404:
                 return None
             raise
-        return _user(raw)
+        return _user(user)
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
@@ -277,6 +288,22 @@ class OneDriveSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
+    )
+    def list_groups(
+        self, *, next_link: str | None = None, page_size: int = ENTRA_PAGE_SIZE
+    ) -> EntraPage[EntraGroup]:
+        return fetch_entra_page(
+            self._gateway().get_json,
+            url=f"{self._base()}/groups",
+            item_model=EntraGroup,
+            select_fields=ENTRA_GROUP_SELECT,
+            next_link=next_link,
+            page_size=page_size,
+        )
+
+    @source_operation(
+        capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
+        consumes=OperationConsumes.CREDENTIAL,
         untested=(
             "Group expansion needs a concrete group id unavailable to "
             "credential checks."
@@ -284,12 +311,11 @@ class OneDriveSourceOperations(SourceOperations):
     )
     def list_transitive_group_members(
         self, *, group_id: str, next_link: str | None = None
-    ) -> OneDriveGroupMemberPage:
-        url = next_link or f"{self._base()}/groups/{group_id}/transitiveMembers"
-        data = self._get(url)
-        return OneDriveGroupMemberPage(
-            members=[
-                OneDriveGroupMember.model_validate(raw) for raw in data.get("value", [])
-            ],
-            next_link=data.get("@odata.nextLink"),
+    ) -> EntraPage[EntraDirectoryObject]:
+        return fetch_entra_page(
+            self._gateway().get_json,
+            url=f"{self._base()}/groups/{quote(group_id)}/transitiveMembers",
+            item_model=EntraDirectoryObject,
+            select_fields=ENTRA_GROUP_MEMBER_SELECT,
+            next_link=next_link,
         )

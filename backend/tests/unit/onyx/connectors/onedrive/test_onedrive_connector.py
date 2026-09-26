@@ -1,10 +1,15 @@
 import json
 from pathlib import Path
 from typing import Any
-from unittest.mock import create_autospec
+from unittest.mock import MagicMock, create_autospec
 
 import pytest
 
+from ee.onyx.external_permissions.onedrive.permission_mapper import (
+    map_onedrive_permissions,
+)
+from onyx.access.models import ExternalAccess
+from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import CapabilityCheckContext
 from onyx.connectors.exceptions import (
@@ -18,6 +23,8 @@ from onyx.connectors.microsoft_utils.drive_delta import (
     DriveDeltaPage,
 )
 from onyx.connectors.microsoft_utils.drive_items import DriveItemContent, DriveItemData
+from onyx.connectors.microsoft_utils.entra import EntraDirectoryObject, EntraPage
+from onyx.connectors.microsoft_utils.entra import EntraGroup as OneDriveGroup
 from onyx.connectors.microsoft_utils.graph_errors import (
     MISSING_CREDENTIAL_CODE,
     raise_for_auth_error,
@@ -35,7 +42,11 @@ from onyx.connectors.models import (
     SlimDocument,
     TextSection,
 )
-from onyx.connectors.onedrive.capability_checks import build_onedrive_indexing_checks
+from onyx.connectors.onedrive.capability_checks import (
+    build_onedrive_doc_permission_sync_checks,
+    build_onedrive_group_sync_checks,
+    build_onedrive_indexing_checks,
+)
 from onyx.connectors.onedrive.connector import (
     MAX_DRIVE_DELTA_PAGES,
     MAX_USER_LISTING_PAGES,
@@ -49,6 +60,7 @@ from onyx.connectors.onedrive.models import (
     OneDriveCheckpoint,
     OneDriveDeltaResult,
     OneDriveDrive,
+    OneDrivePermissionPage,
     OneDriveUser,
     OneDriveUserPage,
 )
@@ -56,6 +68,8 @@ from onyx.connectors.onedrive.scope import normalize_configured_users
 from onyx.connectors.onedrive.source_operations import OneDriveSourceOperations
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 
+OneDriveGroupPage = EntraPage[OneDriveGroup]
+OneDriveGroupMemberPage = EntraPage[EntraDirectoryObject]
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "tenant_spike.json"
 
 
@@ -72,6 +86,45 @@ def _run_step(
             output.append(next(generator))
         except StopIteration as stop:
             return output, stop.value
+
+
+def _run_perm_step(
+    connector: OneDriveConnector,
+    checkpoint: OneDriveCheckpoint,
+) -> tuple[list[Document | HierarchyNode | ConnectorFailure], OneDriveCheckpoint]:
+    generator = connector.load_from_checkpoint_with_perm_sync(
+        0, 2_000_000_000, checkpoint
+    )
+    output: list[Document | HierarchyNode | ConnectorFailure] = []
+    while True:
+        try:
+            output.append(next(generator))
+        except StopIteration as stop:
+            return output, stop.value
+
+
+def _fixture_payload() -> dict[str, Any]:
+    return json.loads(FIXTURE_PATH.read_text())
+
+
+def _fixture_item(item_id: str, section: str) -> DriveDeltaItem:
+    payload = _fixture_payload()
+    raw_item = next(
+        item
+        for page in payload[section]
+        for item in page["value"]
+        if item["id"] == item_id
+    )
+    normalized_item = dict(raw_item)
+    for field in ("createdDateTime", "lastModifiedDateTime"):
+        if normalized_item.get(field) == "<timestamp>":
+            normalized_item[field] = "2026-01-01T00:00:00Z"
+    return DriveDeltaItem.model_validate(normalized_item)
+
+
+def _fixture_permissions(shape: str) -> OneDrivePermissionPage:
+    payload = _fixture_payload()["permission_shapes"][shape]
+    return OneDrivePermissionPage.model_validate({"permissions": payload["value"]})
 
 
 def _user(name: str = "owner@example.com") -> OneDriveUser:
@@ -131,6 +184,14 @@ def test_onedrive_scope_is_ordered_normalized_and_deduplicated() -> None:
         normalize_configured_users(["not-an-email"])
     with pytest.raises(ConnectorValidationError, match="at least one email"):
         normalize_configured_users([" ", ""])
+
+
+def test_onedrive_preserves_organization_link_setting() -> None:
+    connector: OneDriveConnector = OneDriveConnector(
+        treat_organization_link_as_public=True
+    )
+
+    assert connector.settings.treat_organization_link_as_public
 
 
 def test_onedrive_credential_validation_error_does_not_expose_input() -> None:
@@ -339,6 +400,84 @@ def test_onedrive_checkpoint_emits_later_occurrences_across_pages() -> None:
     assert gateway.download_item.call_count == 2
 
 
+def test_onedrive_delta_page_keeps_last_occurrence_order() -> None:
+    connector, gateway = _connector()
+    old_item = _file_item()
+    latest_item = old_item.model_copy(update={"name": "latest.txt"})
+    gateway.download_item.return_value = DriveItemContent(
+        sections=[TextSection(text="body")]
+    )
+    gateway.get_delta_page.return_value = OneDriveDeltaResult(
+        page=DriveDeltaPage(items=[old_item, _folder_item(), latest_item])
+    )
+    checkpoint = OneDriveCheckpoint(
+        has_more=True,
+        current_user=_user(),
+        current_drive=_drive(),
+    )
+
+    output, _ = _run_step(connector, checkpoint)
+
+    assert [type(item) for item in output] == [
+        HierarchyNode,
+        HierarchyNode,
+        Document,
+    ]
+    document = output[-1]
+    assert isinstance(document, Document)
+    assert document.semantic_identifier == "latest.txt"
+    gateway.download_item.assert_called_once()
+
+
+def test_onedrive_checkpoint_repeats_refresh_latest_acl(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connector, gateway = _connector()
+    first_access = ExternalAccess(
+        external_user_emails={"first@example.com"},
+        external_user_group_ids=set(),
+        is_public=False,
+    )
+    latest_access = ExternalAccess(
+        external_user_emails={"latest@example.com"},
+        external_user_group_ids=set(),
+        is_public=False,
+    )
+    mapper = MagicMock(side_effect=[first_access, latest_access])
+    monkeypatch.setattr(
+        "onyx.connectors.onedrive.connector.get_onedrive_external_access", mapper
+    )
+    item = DriveDeltaItem.model_validate(
+        {**_file_item().to_graph_json(), "shared": {"scope": "users"}}
+    )
+    gateway.list_permissions.return_value = OneDrivePermissionPage(permissions=[])
+    gateway.download_item.return_value = DriveItemContent(
+        sections=[TextSection(text="body")]
+    )
+    gateway.get_delta_page.side_effect = [
+        OneDriveDeltaResult(
+            page=DriveDeltaPage(items=[item]),
+            next_cursor="next-delta",
+        ),
+        OneDriveDeltaResult(page=DriveDeltaPage(items=[item])),
+    ]
+    checkpoint = OneDriveCheckpoint(
+        has_more=True,
+        current_user=_user(),
+        current_drive=_drive(),
+    )
+
+    first_output, checkpoint = _run_perm_step(connector, checkpoint)
+    checkpoint = connector.validate_checkpoint_json(checkpoint.model_dump_json())
+    latest_output, _ = _run_perm_step(connector, checkpoint)
+
+    first_document = next(item for item in first_output if isinstance(item, Document))
+    latest_document = next(item for item in latest_output if isinstance(item, Document))
+    assert first_document.external_access == first_access
+    assert latest_document.external_access == latest_access
+    assert gateway.list_permissions.call_count == 2
+
+
 def test_onedrive_delta_denial_skips_discovered_drive_and_reports_explicit_user() -> (
     None
 ):
@@ -458,6 +597,233 @@ def test_onedrive_recorded_spike_item_does_not_require_shared_changed() -> None:
     assert item.is_file
     assert item.shared_changed is None
     assert item.id == "<file-direct-id>"
+
+
+def test_onedrive_fixture_permission_mutations_traverse_connector(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connector, gateway = _connector()
+    monkeypatch.setattr(
+        "onyx.connectors.onedrive.connector.get_onedrive_external_access",
+        map_onedrive_permissions,
+    )
+    destination = _fixture_item(
+        "<folder-move-destination-id>", "incremental_delta_pages"
+    )
+    moved = _fixture_item("<file-move-id>", "incremental_delta_pages")
+    remove_share = _fixture_item("<file-remove-share-id>", "incremental_delta_pages")
+    restore_inheritance = _fixture_item(
+        "<file-restore-inheritance-id>", "incremental_delta_pages"
+    )
+    permission_shapes = {
+        destination.id: "move_destination_after",
+        remove_share.id: "remove_share_after",
+        restore_inheritance.id: "restore_inheritance_after",
+    }
+
+    def list_permissions(
+        *,
+        drive_id: str,
+        item_id: str,
+        next_link: str | None,
+    ) -> OneDrivePermissionPage:
+        del drive_id, next_link
+        return _fixture_permissions(permission_shapes[item_id])
+
+    gateway.list_permissions.side_effect = list_permissions
+    gateway.download_item.return_value = DriveItemContent(
+        sections=[TextSection(text="body")]
+    )
+    gateway.get_delta_page.return_value = OneDriveDeltaResult(
+        page=DriveDeltaPage(
+            items=[destination, moved, remove_share, restore_inheritance]
+        )
+    )
+    checkpoint = OneDriveCheckpoint(
+        has_more=True,
+        current_user=_user(),
+        current_drive=_drive(),
+    )
+
+    output, _ = _run_perm_step(connector, checkpoint)
+
+    documents = {item.id: item for item in output if isinstance(item, Document)}
+    moved_access = documents[moved.id].external_access
+    remove_share_access = documents[remove_share.id].external_access
+    restored_access = documents[restore_inheritance.id].external_access
+    assert moved_access is not None
+    assert remove_share_access is not None
+    assert restored_access is not None
+    assert "<alternate-user-email>" in moved_access.external_user_emails
+    assert remove_share_access.external_user_emails == {
+        "owner@example.com",
+        "<owner-email>",
+    }
+    assert "<primary-user-email>" in restored_access.external_user_emails
+    permission_item_ids = [
+        call.kwargs["item_id"] for call in gateway.list_permissions.call_args_list
+    ]
+    assert permission_item_ids == [
+        destination.id,
+        remove_share.id,
+        restore_inheritance.id,
+    ]
+
+
+def test_onedrive_permission_pagination_rejects_page_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connector, gateway = _connector()
+    monkeypatch.setattr("onyx.connectors.onedrive.connector.MAX_PERMISSION_PAGES", 2)
+    gateway.list_permissions.side_effect = [
+        OneDrivePermissionPage(permissions=[], next_link="permissions-1"),
+        OneDrivePermissionPage(permissions=[], next_link="permissions-2"),
+    ]
+
+    with pytest.raises(ValueError, match="permission page limit"):
+        connector._list_all_permissions("drive", "item")
+
+    assert gateway.list_permissions.call_count == 2
+
+
+def test_onedrive_file_permission_transient_error_fails_attempt() -> None:
+    connector, gateway = _connector()
+    gateway.get_delta_page.return_value = OneDriveDeltaResult(
+        page=DriveDeltaPage(items=[_file_item()])
+    )
+    gateway.list_permissions.side_effect = OneDriveGraphError(
+        429, "tooManyRequests", "retry later"
+    )
+    checkpoint = OneDriveCheckpoint(
+        has_more=True,
+        current_user=_user(),
+        current_drive=_drive(),
+    )
+
+    with pytest.raises(OneDriveGraphError, match="tooManyRequests"):
+        _run_perm_step(connector, checkpoint)
+
+
+def test_onedrive_slim_folder_access_prefixes_external_groups(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connector, gateway = _connector()
+    monkeypatch.setattr(
+        "onyx.connectors.onedrive.connector.get_onedrive_external_access",
+        map_onedrive_permissions,
+    )
+    folder = _folder_item()
+    gateway.get_delta_page.return_value = OneDriveDeltaResult(
+        page=DriveDeltaPage(items=[folder])
+    )
+    gateway.list_permissions.return_value = _fixture_permissions("visible_group")
+    checkpoint = OneDriveCheckpoint(
+        has_more=True,
+        current_user=_user(),
+        current_drive=_drive(),
+    )
+
+    output = list(
+        connector._discover_from_checkpoint(
+            0,
+            0,
+            checkpoint,
+            include_permissions=True,
+            add_group_prefix=False,
+        )
+    )
+
+    node = next(
+        item
+        for item in output
+        if isinstance(item, HierarchyNode)
+        and item.raw_node_id == hierarchy_item_id("drive-1", folder.id)
+    )
+    assert node.external_access is not None
+    assert node.external_access.external_user_group_ids == {
+        build_ext_group_name_for_onyx("<visible-group-id>", DocumentSource.ONEDRIVE)
+    }
+
+
+def test_onedrive_fixture_child_before_parent_reads_child_permissions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connector, gateway = _connector()
+    monkeypatch.setattr(
+        "onyx.connectors.onedrive.connector.get_onedrive_external_access",
+        map_onedrive_permissions,
+    )
+    destination = _fixture_item(
+        "<folder-move-destination-id>", "incremental_delta_pages"
+    )
+    moved = _fixture_item("<file-move-id>", "incremental_delta_pages")
+    gateway.list_permissions.return_value = _fixture_permissions(
+        "move_destination_after"
+    )
+    gateway.download_item.return_value = DriveItemContent(
+        sections=[TextSection(text="body")]
+    )
+    gateway.get_delta_page.return_value = OneDriveDeltaResult(
+        page=DriveDeltaPage(items=[moved, destination])
+    )
+    checkpoint = OneDriveCheckpoint(
+        has_more=True,
+        current_user=_user(),
+        current_drive=_drive(),
+    )
+
+    output, _ = _run_perm_step(connector, checkpoint)
+
+    assert [item.id for item in output if isinstance(item, Document)] == [moved.id]
+    assert [
+        call.kwargs["item_id"] for call in gateway.list_permissions.call_args_list
+    ] == [moved.id, destination.id]
+
+
+def test_onedrive_fixture_cache_loss_checkpoint_restart_reads_item_permissions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connector, gateway = _connector()
+    monkeypatch.setattr(
+        "onyx.connectors.onedrive.connector.get_onedrive_external_access",
+        map_onedrive_permissions,
+    )
+    destination = _fixture_item(
+        "<folder-move-destination-id>", "incremental_delta_pages"
+    )
+    moved = _fixture_item("<file-move-id>", "incremental_delta_pages")
+    gateway.list_permissions.return_value = _fixture_permissions(
+        "move_destination_after"
+    )
+    gateway.download_item.return_value = DriveItemContent(
+        sections=[TextSection(text="body")]
+    )
+    gateway.get_delta_page.side_effect = [
+        OneDriveDeltaResult(
+            page=DriveDeltaPage(items=[destination]),
+            next_cursor="next-delta",
+        ),
+        OneDriveDeltaResult(page=DriveDeltaPage(items=[moved])),
+    ]
+    checkpoint = OneDriveCheckpoint(
+        has_more=True,
+        current_user=_user(),
+        current_drive=_drive(),
+    )
+
+    _, checkpoint = _run_perm_step(connector, checkpoint)
+    checkpoint = connector.validate_checkpoint_json(checkpoint.model_dump_json())
+    connector._folder_access.clear()
+    output, _ = _run_perm_step(connector, checkpoint)
+
+    documents = [item for item in output if isinstance(item, Document)]
+    assert len(documents) == 1
+    access = documents[0].external_access
+    assert access is not None
+    assert "<alternate-user-email>" in access.external_user_emails
+    assert [
+        call.kwargs["item_id"] for call in gateway.list_permissions.call_args_list
+    ] == [destination.id, moved.id]
 
 
 def test_onedrive_slim_walk_is_complete_without_downloads() -> None:
@@ -774,3 +1140,305 @@ def test_onedrive_delta_check_finds_later_readable_configured_drive() -> None:
 
     assert gateway.get_delta_page.call_count == 2
     assert gateway.get_delta_page.call_args.kwargs["drive_id"] == "second-drive"
+
+
+def test_onedrive_permission_and_group_checks_use_gateway() -> None:
+    gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
+    gateway.get_user.return_value = _user()
+    gateway.get_default_drive.return_value = _drive()
+    gateway.get_delta_page.return_value = OneDriveDeltaResult(
+        page=DriveDeltaPage(items=[_file_item()])
+    )
+    gateway.list_permissions.return_value = OneDrivePermissionPage(permissions=[])
+    gateway.list_groups.return_value = OneDriveGroupPage(
+        items=[OneDriveGroup(id="group", displayName="Visible")]
+    )
+    gateway.list_transitive_group_members.return_value = OneDriveGroupMemberPage(
+        items=[]
+    )
+    context = CapabilityCheckContext(
+        source=DocumentSource.ONEDRIVE,
+        credential_json={},
+        connector_specific_config={"users": ["owner@example.com"]},
+        source_operations=gateway,
+    )
+
+    checks = (
+        build_onedrive_doc_permission_sync_checks() + build_onedrive_group_sync_checks()
+    )
+    for check in checks:
+        check.run(context)
+
+    gateway.list_permissions.assert_called_once_with(
+        drive_id="drive-1", item_id="raw-item-id"
+    )
+    gateway.list_transitive_group_members.assert_called_once_with(group_id="group")
+
+
+def test_onedrive_permission_check_follows_tombstone_pages() -> None:
+    gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
+    gateway.get_user.return_value = _user()
+    gateway.get_default_drive.return_value = _drive()
+    tombstone = DriveDeltaItem.model_validate(
+        {"id": "deleted", "deleted": {"state": "deleted"}}
+    )
+    gateway.get_delta_page.side_effect = [
+        OneDriveDeltaResult(
+            page=DriveDeltaPage(items=[tombstone]),
+            next_cursor="next-delta",
+        ),
+        OneDriveDeltaResult(page=DriveDeltaPage(items=[_file_item()])),
+    ]
+    gateway.list_permissions.return_value = OneDrivePermissionPage(permissions=[])
+    context = CapabilityCheckContext(
+        source=DocumentSource.ONEDRIVE,
+        credential_json={},
+        connector_specific_config={"users": ["owner@example.com"]},
+        source_operations=gateway,
+    )
+
+    build_onedrive_doc_permission_sync_checks()[0].run(context)
+
+    assert gateway.get_delta_page.call_count == 2
+    assert gateway.get_delta_page.call_args.kwargs["page_url"] == "next-delta"
+    gateway.list_permissions.assert_called_once_with(
+        drive_id="drive-1", item_id="raw-item-id"
+    )
+
+
+def test_onedrive_permission_check_accepts_empty_drive_at_end_cursor() -> None:
+    gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
+    gateway.get_user.return_value = _user()
+    gateway.get_default_drive.return_value = _drive()
+    gateway.get_delta_page.return_value = OneDriveDeltaResult(page=DriveDeltaPage())
+    context = CapabilityCheckContext(
+        source=DocumentSource.ONEDRIVE,
+        credential_json={},
+        connector_specific_config={"users": ["owner@example.com"]},
+        source_operations=gateway,
+    )
+
+    build_onedrive_doc_permission_sync_checks()[0].run(context)
+
+    gateway.get_delta_page.assert_called_once()
+    gateway.list_permissions.assert_not_called()
+
+
+def test_onedrive_permission_check_probes_past_empty_drive() -> None:
+    gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
+    gateway.get_user.side_effect = [
+        _user("empty@example.com"),
+        _user("populated@example.com"),
+    ]
+    gateway.get_default_drive.side_effect = [
+        OneDriveDrive(id="empty-drive", name="Empty"),
+        OneDriveDrive(id="populated-drive", name="Populated"),
+    ]
+    gateway.get_delta_page.side_effect = [
+        OneDriveDeltaResult(page=DriveDeltaPage()),
+        OneDriveDeltaResult(page=DriveDeltaPage(items=[_file_item()])),
+    ]
+    gateway.list_permissions.return_value = OneDrivePermissionPage(permissions=[])
+    context = CapabilityCheckContext(
+        source=DocumentSource.ONEDRIVE,
+        credential_json={},
+        connector_specific_config={
+            "users": ["empty@example.com", "populated@example.com"]
+        },
+        source_operations=gateway,
+    )
+
+    build_onedrive_doc_permission_sync_checks()[0].run(context)
+
+    assert gateway.get_delta_page.call_count == 2
+    gateway.list_permissions.assert_called_once_with(
+        drive_id="populated-drive", item_id="raw-item-id"
+    )
+
+
+def test_onedrive_permission_check_bounds_empty_delta_pages() -> None:
+    gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
+    gateway.get_user.return_value = _user()
+    gateway.get_default_drive.return_value = _drive()
+    gateway.get_delta_page.return_value = OneDriveDeltaResult(
+        page=DriveDeltaPage(),
+        next_cursor="another-empty-page",
+    )
+    context = CapabilityCheckContext(
+        source=DocumentSource.ONEDRIVE,
+        credential_json={},
+        connector_specific_config={"users": ["owner@example.com"]},
+        source_operations=gateway,
+    )
+
+    with pytest.raises(
+        ConnectorValidationError, match="No readable OneDrive item was found"
+    ):
+        build_onedrive_doc_permission_sync_checks()[0].run(context)
+
+    assert gateway.get_delta_page.call_count == 20
+    gateway.list_permissions.assert_not_called()
+
+
+def test_onedrive_hidden_group_check_does_not_require_optional_scope() -> None:
+    gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
+    gateway.list_groups.return_value = OneDriveGroupPage(
+        items=[
+            OneDriveGroup(
+                id="hidden", displayName="Hidden", visibility="HiddenMembership"
+            )
+        ]
+    )
+    context = CapabilityCheckContext(
+        source=DocumentSource.ONEDRIVE,
+        credential_json={},
+        source_operations=gateway,
+    )
+    check = next(
+        check
+        for check in build_onedrive_group_sync_checks()
+        if check.check_id == "onedrive_group_members"
+    )
+
+    check.run(context)
+
+    gateway.list_transitive_group_members.assert_not_called()
+
+
+def test_onedrive_group_check_skips_hidden_group_for_later_visible_group() -> None:
+    gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
+    gateway.list_groups.side_effect = [
+        OneDriveGroupPage(
+            items=[
+                OneDriveGroup(
+                    id="hidden",
+                    displayName="Hidden",
+                    visibility="HiddenMembership",
+                )
+            ],
+            next_link="next-groups",
+        ),
+        OneDriveGroupPage(items=[OneDriveGroup(id="visible", displayName="Visible")]),
+    ]
+    gateway.list_transitive_group_members.return_value = OneDriveGroupMemberPage(
+        items=[]
+    )
+    context = CapabilityCheckContext(
+        source=DocumentSource.ONEDRIVE,
+        credential_json={},
+        source_operations=gateway,
+    )
+    check = next(
+        check
+        for check in build_onedrive_group_sync_checks()
+        if check.check_id == "onedrive_group_members"
+    )
+
+    check.run(context)
+
+    assert gateway.list_groups.call_count == 2
+    gateway.list_transitive_group_members.assert_called_once_with(group_id="visible")
+
+
+def test_onedrive_group_check_uses_first_visible_group() -> None:
+    gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
+    gateway.list_groups.side_effect = [
+        OneDriveGroupPage(
+            items=[OneDriveGroup(id="visible", displayName="Visible")],
+            next_link="next-groups",
+        ),
+        OneDriveGroupPage(items=[]),
+    ]
+    gateway.list_transitive_group_members.return_value = OneDriveGroupMemberPage(
+        items=[]
+    )
+    context = CapabilityCheckContext(
+        source=DocumentSource.ONEDRIVE,
+        credential_json={},
+        source_operations=gateway,
+    )
+    check = next(
+        check
+        for check in build_onedrive_group_sync_checks()
+        if check.check_id == "onedrive_group_members"
+    )
+
+    check.run(context)
+
+    assert gateway.list_groups.call_count == 1
+    gateway.list_transitive_group_members.assert_called_once_with(group_id="visible")
+
+
+def test_onedrive_group_check_bounds_hidden_group_discovery() -> None:
+    gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
+    gateway.list_groups.return_value = OneDriveGroupPage(
+        items=[
+            OneDriveGroup(
+                id="hidden",
+                displayName="Hidden",
+                visibility="HiddenMembership",
+            )
+        ],
+        next_link="another-group-page",
+    )
+    gateway.list_transitive_group_members.return_value = OneDriveGroupMemberPage(
+        items=[]
+    )
+    context = CapabilityCheckContext(
+        source=DocumentSource.ONEDRIVE,
+        credential_json={},
+        source_operations=gateway,
+    )
+    check = next(
+        check
+        for check in build_onedrive_group_sync_checks()
+        if check.check_id == "onedrive_group_members"
+    )
+
+    check.run(context)
+
+    assert gateway.list_groups.call_count == 20
+    gateway.list_transitive_group_members.assert_not_called()
+
+
+def test_onedrive_hybrid_permissions_inherit_known_parent_and_read_shared_child(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connector, gateway = _connector()
+    inherited_access = ExternalAccess(
+        external_user_emails={"parent@example.com"},
+        external_user_group_ids=set(),
+        is_public=False,
+    )
+    direct_access = ExternalAccess(
+        external_user_emails={"child@example.com"},
+        external_user_group_ids=set(),
+        is_public=False,
+    )
+    gateway.list_permissions.return_value = OneDrivePermissionPage(permissions=[])
+    mapper = MagicMock()
+    mapper.side_effect = [inherited_access, direct_access]
+    monkeypatch.setattr(
+        "onyx.connectors.onedrive.connector.get_onedrive_external_access", mapper
+    )
+    user = _user()
+    drive = _drive()
+    folder = _folder_item()
+    child = _file_item()
+    shared_child = child.model_copy(
+        update={
+            "id": "shared-child",
+            "shared": {"scope": "users"},
+        }
+    )
+
+    assert connector._item_access(user, drive, folder, add_prefix=False) == (
+        inherited_access
+    )
+    assert connector._item_access(user, drive, child, add_prefix=False) == (
+        inherited_access
+    )
+    assert connector._item_access(user, drive, shared_child, add_prefix=False) == (
+        direct_access
+    )
+    assert gateway.list_permissions.call_count == 2
