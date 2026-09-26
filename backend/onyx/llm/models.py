@@ -1,7 +1,7 @@
 from enum import Enum
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 
 class LLMErrorInfo(BaseModel):
@@ -166,3 +166,144 @@ class Usage(BaseModel):
     total_tokens: int
     cache_creation_input_tokens: int
     cache_read_input_tokens: int
+
+
+class TextContent(BaseModel):
+    type: Literal["text"] = "text"
+    text: str
+
+
+class ThinkingContent(BaseModel):
+    type: Literal["thinking"] = "thinking"
+    text: str
+    blocks: list[AnyThinkingBlock] | None = None
+
+
+class ToolCall(BaseModel):
+    type: Literal["tool_call"] = "tool_call"
+    id: str
+    name: str
+    arguments: dict[str, JsonValue]
+    argument_error: str | None = None
+    raw_arguments: str | None = None
+    arguments_complete: bool = True
+
+
+AssistantContent = Annotated[
+    TextContent | ThinkingContent | ToolCall, Field(discriminator="type")
+]
+
+
+class BaseMessage(BaseModel):
+    # Marks a stable prompt prefix for provider prompt caching; never sent as content.
+    cacheable: bool = Field(default=False, exclude=True)
+
+
+class SystemMessage(BaseMessage):
+    role: Literal["system"] = "system"
+    content: str
+
+    @property
+    def text(self) -> str:
+        return self.content
+
+
+class UserMessage(BaseMessage):
+    role: Literal["user"] = "user"
+    content: str | list[ContentPart]
+
+    @property
+    def text(self) -> str:
+        return content_text(self.content)
+
+
+class AssistantMessage(BaseMessage):
+    role: Literal["assistant"] = "assistant"
+    content: list[AssistantContent] = Field(default_factory=list)
+    stop_reason: str | None = None
+    usage: Usage | None = None
+
+    @property
+    def text(self) -> str:
+        return "".join(
+            block.text for block in self.content if isinstance(block, TextContent)
+        )
+
+    @property
+    def thinking(self) -> str:
+        return "".join(
+            block.text for block in self.content if isinstance(block, ThinkingContent)
+        )
+
+    @property
+    def thinking_blocks(self) -> list[AnyThinkingBlock] | None:
+        return [
+            block
+            for content in self.content
+            if isinstance(content, ThinkingContent)
+            for block in content.blocks or []
+        ] or None
+
+    @property
+    def tool_calls(self) -> list[ToolCall]:
+        return [block for block in self.content if isinstance(block, ToolCall)]
+
+
+class ToolResultMessage(BaseMessage):
+    role: Literal["tool_result"] = "tool_result"
+    # Provider tool messages carry text only.
+    content: str
+    tool_call_id: str
+    tool_name: str
+
+    @property
+    def text(self) -> str:
+        return self.content
+
+
+Message = Annotated[
+    SystemMessage | UserMessage | AssistantMessage | ToolResultMessage,
+    Field(discriminator="role"),
+]
+
+
+def content_text(content: str | list[ContentPart]) -> str:
+    if isinstance(content, str):
+        return content
+    return "".join(part.text for part in content if isinstance(part, TextContentPart))
+
+
+class ToolDefinition(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    name: str
+    description: str
+    parameters: dict[str, JsonValue]
+
+
+class GenerationOptions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tool_choice: ToolChoice = ToolChoiceOptions.AUTO
+    reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO
+    max_tokens: int | None = Field(default=None, gt=0)
+    structured_response_format: dict[str, JsonValue] | None = None
+
+
+class GenerationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    messages: list[Message] = Field(default_factory=list)
+    system_prompt: str = ""
+    tools: list[ToolDefinition] = Field(default_factory=list)
+    options: GenerationOptions = Field(default_factory=GenerationOptions)
+
+
+class GenerationRequestParams(BaseModel):
+    """Effective provider settings for the attempt that produced the response."""
+
+    model_config = ConfigDict(extra="forbid")
+    model_name: str
+    model_provider: str
+    reasoning_effort: ReasoningEffort
+    max_tokens: int | None
+    sent_kwargs: dict[str, JsonValue]

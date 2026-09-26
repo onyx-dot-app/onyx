@@ -6,6 +6,7 @@ from onyx.configs.constants import MessageType
 from onyx.db.models import ChatMessage
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import ReasoningEffort
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.utils import llm_response_to_string
 from onyx.prompts.chat_prompts import CHAT_NAMING_REMINDER, CHAT_NAMING_SYSTEM_PROMPT
 from onyx.tracing.flows import LLMFlow
@@ -56,12 +57,17 @@ def generate_chat_session_name(
         complete_message_history, llm.config
     )
 
+    # Chat history is already in provider format, which only LitellmLLM accepts.
+    if not isinstance(llm, LitellmLLM):
+        raise TypeError(f"Chat session naming requires LitellmLLM, got {type(llm)}")
     with llm_generation_span(
         llm=llm,
         flow=LLMFlow.CHAT_SESSION_NAMING,
         input_messages=llm_facing_history,
     ) as span_generation:
-        response = llm.invoke(llm_facing_history, reasoning_effort=ReasoningEffort.OFF)
+        response = llm.invoke_raw(
+            llm_facing_history, reasoning_effort=ReasoningEffort.OFF
+        )
         record_llm_response(span_generation, response)
         new_name_raw = llm_response_to_string(response)
 

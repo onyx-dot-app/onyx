@@ -247,5 +247,5 @@ tool calls and returns that to the LLM Loop to execute.
   1. **ChatMessage** — The database model. Should be converted into ChatMessageSimple early and never passed deep into the flow.
   2. **ChatMessageSimple** — The canonical data model used throughout the codebase. This is the rich, full-featured representation
      of a message. Any modifications or additions to message structure should be made here.
-  3. **LanguageModelInput** — The LLM-facing representation. Intentionally minimal so the LLM interface layer stays clean and
+  3. **ChatCompletionMessage** (`onyx.llm.model_request`) — The LLM-facing representation. Intentionally minimal so the LLM interface layer stays clean and
      easy to maintain/extend.

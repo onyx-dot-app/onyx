@@ -9,7 +9,7 @@ The prompt caching framework provides a unified interface for enabling prompt ca
 ## Features
 
 - **Provider Support**: OpenAI (implicit), Anthropic (explicit), Vertex AI (explicit)
-- **Flexible Input**: Supports both `str` and `Sequence[ChatCompletionMessage]` inputs
+- **Message Input**: Accepts `list[ChatCompletionMessage]` for the prefix and suffix
 - **Continuation Handling**: Smart merging of cacheable prefix and suffix messages
 - **Best-Effort**: Gracefully degrades if caching fails
 - **Tenant-Aware**: Automatic tenant isolation for multi-tenant deployments
@@ -43,25 +43,8 @@ processed_prompt, cache_metadata = process_with_prompt_cache(
     continuation=False,
 )
 
-# Make LLM call with processed prompt
-response = llm.invoke(processed_prompt)
-```
-
-### Using String Inputs
-
-```python
-# Both prefix and suffix can be strings
-cacheable_prefix = "You are a helpful assistant. Context: ..."
-suffix = "What is the weather?"
-
-processed_prompt, cache_metadata = process_with_prompt_cache(
-    llm_config=llm.config,
-    cacheable_prefix=cacheable_prefix,
-    suffix=suffix,
-    continuation=False,
-)
-
-response = llm.invoke(processed_prompt)
+# Make the provider call with the processed prompt
+response = llm.invoke_raw(processed_prompt)
 ```
 
 ### Continuation Flag

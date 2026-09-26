@@ -1,6 +1,4 @@
-from collections.abc import Iterator
-from contextlib import contextmanager
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from onyx.configs.chat_configs import SECONDARY_LLM_FLOW_TIMEOUT_S
 from onyx.configs.constants import DocumentSource
@@ -10,16 +8,12 @@ from onyx.context.search.models import (
     InferenceSection,
 )
 from onyx.llm.interfaces import LLM
+from onyx.llm.models import AssistantMessage, TextContent
 from onyx.llm.multi_llm import LLMTimeoutError
 from onyx.secondary_llm_flows.document_filter import (
     classify_section_relevance,
     select_sections_for_expansion,
 )
-
-
-@contextmanager
-def _noop_span(*_args: object, **_kwargs: object) -> Iterator[MagicMock]:
-    yield MagicMock()
 
 
 def _make_section(index: int = 1) -> InferenceSection:
@@ -55,14 +49,7 @@ def _make_llm(invoke: MagicMock) -> LLM:
     return llm
 
 
-@patch("onyx.secondary_llm_flows.document_filter.record_llm_response")
-@patch(
-    "onyx.secondary_llm_flows.document_filter.llm_generation_span",
-    return_value=_noop_span(),
-)
-def test_classify_section_relevance_timeout_falls_back(
-    _span: MagicMock, _record: MagicMock
-) -> None:
+def test_classify_section_relevance_timeout_falls_back() -> None:
     """A timed-out classification call must degrade to the safe default instead
     of propagating, so a stalled provider can't hang the worker."""
     invoke = MagicMock(side_effect=LLMTimeoutError("timed out"))
@@ -80,19 +67,14 @@ def test_classify_section_relevance_timeout_falls_back(
 
     assert result == ContextExpansionType.MAIN_SECTION_ONLY
     # the bound that makes the call fail fast must actually be passed through
-    assert invoke.call_args.kwargs["total_timeout_s"] == SECONDARY_LLM_FLOW_TIMEOUT_S
+    assert (
+        invoke.call_args.kwargs["context"].total_timeout_s
+        == SECONDARY_LLM_FLOW_TIMEOUT_S
+    )
 
 
-@patch("onyx.secondary_llm_flows.document_filter.record_llm_response")
-@patch(
-    "onyx.secondary_llm_flows.document_filter.llm_generation_span",
-    return_value=_noop_span(),
-)
-def test_classify_section_relevance_passes_timeout_on_success(
-    _span: MagicMock, _record: MagicMock
-) -> None:
-    response = MagicMock()
-    response.choice.message.content = "3"  # FULL_DOCUMENT
+def test_classify_section_relevance_passes_timeout_on_success() -> None:
+    response = AssistantMessage(content=[TextContent(text="3")])
     invoke = MagicMock(return_value=response)
     llm = _make_llm(invoke)
 
@@ -106,17 +88,13 @@ def test_classify_section_relevance_passes_timeout_on_success(
     )
 
     assert result == ContextExpansionType.FULL_DOCUMENT
-    assert invoke.call_args.kwargs["total_timeout_s"] == SECONDARY_LLM_FLOW_TIMEOUT_S
+    assert (
+        invoke.call_args.kwargs["context"].total_timeout_s
+        == SECONDARY_LLM_FLOW_TIMEOUT_S
+    )
 
 
-@patch("onyx.secondary_llm_flows.document_filter.record_llm_response")
-@patch(
-    "onyx.secondary_llm_flows.document_filter.llm_generation_span",
-    return_value=_noop_span(),
-)
-def test_select_sections_for_expansion_timeout_falls_back(
-    _span: MagicMock, _record: MagicMock
-) -> None:
+def test_select_sections_for_expansion_timeout_falls_back() -> None:
     """A timed-out selection call must degrade to returning the input sections
     (capped) instead of propagating and hanging the worker."""
     sections = [_make_section()]
@@ -129,20 +107,15 @@ def test_select_sections_for_expansion_timeout_falls_back(
 
     assert selected == sections
     assert doc_ids is None
-    assert invoke.call_args.kwargs["total_timeout_s"] == SECONDARY_LLM_FLOW_TIMEOUT_S
+    assert (
+        invoke.call_args.kwargs["context"].total_timeout_s
+        == SECONDARY_LLM_FLOW_TIMEOUT_S
+    )
 
 
-@patch("onyx.secondary_llm_flows.document_filter.record_llm_response")
-@patch(
-    "onyx.secondary_llm_flows.document_filter.llm_generation_span",
-    return_value=_noop_span(),
-)
-def test_select_sections_for_expansion_passes_timeout_on_success(
-    _span: MagicMock, _record: MagicMock
-) -> None:
+def test_select_sections_for_expansion_passes_timeout_on_success() -> None:
     sections = [_make_section()]
-    response = MagicMock()
-    response.choice.message.content = "[0]"
+    response = AssistantMessage(content=[TextContent(text="[0]")])
     invoke = MagicMock(return_value=response)
     llm = _make_llm(invoke)
 
@@ -151,4 +124,7 @@ def test_select_sections_for_expansion_passes_timeout_on_success(
     )
 
     assert selected == sections
-    assert invoke.call_args.kwargs["total_timeout_s"] == SECONDARY_LLM_FLOW_TIMEOUT_S
+    assert (
+        invoke.call_args.kwargs["context"].total_timeout_s
+        == SECONDARY_LLM_FLOW_TIMEOUT_S
+    )

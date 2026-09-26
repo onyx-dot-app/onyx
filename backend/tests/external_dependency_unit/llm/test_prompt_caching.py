@@ -212,7 +212,7 @@ def test_openai_prompt_caching_reduces_costs(
         # print(f"Cache key 1: {metadata1.cache_key if metadata1 else None}")
 
         # Call litellm directly so we can get the raw response
-        response1 = llm.invoke(prompt=processed_messages1)
+        response1 = llm.invoke_raw(prompt=processed_messages1)
         cost1 = completion_cost(
             completion_response=response1.model_dump(),
             model=f"{llm._model_provider}/{llm._model_version}",
@@ -241,7 +241,7 @@ def test_openai_prompt_caching_reduces_costs(
             continuation=False,
         )
         # print(f"Processed messages 2: {processed_messages2}")
-        response2 = llm.invoke(prompt=processed_messages2)
+        response2 = llm.invoke_raw(prompt=processed_messages2)
         cost2 = completion_cost(
             completion_response=response2.model_dump(),
             model=f"{llm._model_provider}/{llm._model_version}",
@@ -351,7 +351,7 @@ def test_anthropic_prompt_caching_reduces_costs(
         )
 
         try:
-            response1 = llm.invoke(prompt=processed_messages1, max_tokens=8)
+            response1 = llm.invoke_raw(prompt=processed_messages1, max_tokens=8)
         except Exception as e:
             error_str = str(e).lower()
             if (
@@ -391,7 +391,7 @@ def test_anthropic_prompt_caching_reduces_costs(
             continuation=False,
         )
 
-        response2 = llm.invoke(prompt=processed_messages2, max_tokens=8)
+        response2 = llm.invoke_raw(prompt=processed_messages2, max_tokens=8)
         cost2 = completion_cost(
             completion_response=response2.model_dump(),
             model=f"{llm._model_provider}/{llm._model_version}",
@@ -518,7 +518,7 @@ def test_google_genai_prompt_caching_reduces_costs(
             )
             print(f"Processed messages structure (first msg): {first_msg}")
 
-            response1 = llm.invoke(prompt=processed_messages1)
+            response1 = llm.invoke_raw(prompt=processed_messages1)
             cost1 = completion_cost(
                 completion_response=response1.model_dump(),
                 model=f"{llm._model_provider}/{llm._model_version}",
@@ -549,7 +549,7 @@ def test_google_genai_prompt_caching_reduces_costs(
                 continuation=False,
             )
 
-            response2 = llm.invoke(prompt=processed_messages2)
+            response2 = llm.invoke_raw(prompt=processed_messages2)
             cost2 = completion_cost(
                 completion_response=response2.model_dump(),
                 model=f"{llm._model_provider}/{llm._model_version}",
@@ -649,7 +649,7 @@ def test_prompt_caching_with_conversation_history(
         UserMessage(role="user", content=long_context + "\n\nWhat is this about?"),
     ]
 
-    response1 = llm.invoke(prompt=messages_turn1)
+    response1 = llm.invoke_raw(prompt=messages_turn1)
     cost1 = completion_cost(
         completion_response=response1.model_dump(),
         model=f"{llm._model_provider}/{llm._model_version}",
@@ -671,7 +671,7 @@ def test_prompt_caching_with_conversation_history(
         UserMessage(role="user", content="Tell me about the first topic."),
     ]
 
-    response2 = llm.invoke(prompt=messages_turn2)
+    response2 = llm.invoke_raw(prompt=messages_turn2)
     cost2 = completion_cost(
         completion_response=response2.model_dump(),
         model=f"{llm._model_provider}/{llm._model_version}",
@@ -688,7 +688,7 @@ def test_prompt_caching_with_conversation_history(
         UserMessage(role="user", content="What about the second topic?"),
     ]
 
-    response3 = llm.invoke(prompt=messages_turn3)
+    response3 = llm.invoke_raw(prompt=messages_turn3)
     cost3 = completion_cost(
         completion_response=response3.model_dump(),
         model=f"{llm._model_provider}/{llm._model_version}",
@@ -750,7 +750,7 @@ def test_no_caching_without_process_with_prompt_cache(
         UserMessage(role="user", content=long_context + "\n\nSummarize this.")
     ]
 
-    response1 = llm.invoke(prompt=messages1)
+    response1 = llm.invoke_raw(prompt=messages1)
     cost1 = completion_cost(
         completion_response=response1.model_dump(),
         model=f"{llm._model_provider}/{llm._model_version}",

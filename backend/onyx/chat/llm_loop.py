@@ -16,11 +16,7 @@ from onyx.chat.citation_processor import (
 )
 from onyx.chat.citation_utils import update_citation_processor_from_tool_response
 from onyx.chat.emitter import Emitter
-from onyx.chat.llm_step import (
-    _looks_like_xml_tool_call_payload,
-    extract_tool_calls_from_response_text,
-    run_llm_step,
-)
+from onyx.chat.llm_step import extract_tool_calls_from_response_text, run_llm_step
 from onyx.chat.models import (
     ChatMessageSimple,
     ContextFileMetadata,
@@ -49,6 +45,7 @@ from onyx.llm.exceptions import ClassifiedLLMError
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.model_capabilities import is_true_openai_model
 from onyx.llm.models import ReasoningEffort, ToolChoiceOptions
+from onyx.llm.tool_parsing import _looks_like_xml_tool_call_payload
 from onyx.llm.utils import model_supports_image_input
 from onyx.prompts.chat_prompts import (
     IMAGE_GEN_REMINDER,

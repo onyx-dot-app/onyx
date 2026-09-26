@@ -1,9 +1,7 @@
 import json
-import re
 import time
 import uuid
 from collections.abc import Callable, Generator, Mapping, Sequence
-from html import unescape
 from typing import Any, cast
 
 from onyx.chat.chat_state import ChatStateContainer
@@ -28,7 +26,6 @@ from onyx.llm.model_request import (
     CODE_BLOCK_MARKDOWN,
     AssistantMessage,
     ChatCompletionMessage,
-    LanguageModelInput,
     RequestFunctionCall,
     SystemMessage,
     ToolCall,
@@ -43,8 +40,17 @@ from onyx.llm.models import (
     TextContentPart,
     ToolChoiceOptions,
 )
+from onyx.llm.multi_llm import LitellmLLM, ProviderOperation
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
-from onyx.llm.request_context import get_llm_request_params
+from onyx.llm.tool_parsing import (
+    _XML_INVOKE_BLOCK_RE,
+    _XML_PARAMETER_RE,
+    XmlToolCallContentFilter,
+    _extract_xml_attribute,
+    _looks_like_xml_tool_call_payload,
+    _parse_xml_parameter_value,
+    _resolve_tool_arguments,
+)
 from onyx.llm.utils import model_supports_image_input
 from onyx.prompts.chat_prompts import IMAGE_DROP_REMINDER, NON_VISION_IMAGE_MARKER
 from onyx.prompts.constants import SYSTEM_REMINDER_TAG_CLOSE, SYSTEM_REMINDER_TAG_OPEN
@@ -70,102 +76,6 @@ from onyx.utils.postgres_sanitization import sanitize_string
 from onyx.utils.text_processing import find_all_json_objects
 
 logger = setup_logger()
-
-_XML_INVOKE_BLOCK_RE = re.compile(
-    r"<invoke\b(?P<attrs>[^>]*)>(?P<body>.*?)</invoke>",
-    re.IGNORECASE | re.DOTALL,
-)
-_XML_PARAMETER_RE = re.compile(
-    r"<parameter\b(?P<attrs>[^>]*)>(?P<value>.*?)</parameter>",
-    re.IGNORECASE | re.DOTALL,
-)
-_FUNCTION_CALLS_OPEN_MARKER = "<function_calls"
-_FUNCTION_CALLS_OPEN_RE = re.compile(
-    r"<function_calls(?=[> \t\n\r]|\Z)", re.IGNORECASE | re.ASCII
-)
-_FUNCTION_CALLS_CLOSE_RE = re.compile(r"</function_calls>", re.IGNORECASE | re.ASCII)
-_SPACES = " \t"
-
-
-class _XmlToolCallContentFilter:
-    """Streaming filter that strips XML-style tool call payload blocks from text.
-
-    Text that could be the start of a split "<function_calls" marker is held
-    back until the next chunk (or flush) decides it.
-    """
-
-    def __init__(self) -> None:
-        self._pending = ""
-        self._inside_block = False
-        # Empty until text is emitted.
-        self._last_emitted_char = ""
-        # Set after a removed block so spaces after it do not double up with
-        # spaces emitted before it. Line breaks are always kept.
-        self._drop_spaces = False
-
-    def process(self, content: str) -> str:
-        self._pending += content
-        output_parts: list[str] = []
-        while True:
-            if self._inside_block:
-                close = _FUNCTION_CALLS_CLOSE_RE.search(self._pending)
-                if close is None:
-                    break
-                self._pending = self._pending[close.end() :]
-                self._inside_block = False
-                self._drop_spaces = self._last_emitted_char in ("", *_SPACES)
-
-            if self._drop_spaces:
-                self._pending = self._pending.lstrip(_SPACES)
-                if not self._pending:
-                    break
-                self._drop_spaces = False
-
-            open_match = _FUNCTION_CALLS_OPEN_RE.search(self._pending)
-            if open_match is not None:
-                cut = open_match.start()
-            else:
-                # A possible marker prefix can only start at the last "<".
-                cut = self._pending.rfind("<")
-                if cut == -1 or not _FUNCTION_CALLS_OPEN_MARKER.startswith(
-                    self._pending[cut:].lower()
-                ):
-                    cut = len(self._pending)
-
-            if cut > 0:
-                output_parts.append(self._pending[:cut])
-                self._last_emitted_char = self._pending[cut - 1]
-
-            if open_match is None:
-                self._pending = self._pending[cut:]
-                break
-            self._pending = self._pending[open_match.end() :]
-            self._inside_block = True
-
-        return "".join(output_parts)
-
-    def flush(self) -> str:
-        # An incomplete block at stream end is dropped.
-        remaining = "" if self._inside_block else self._pending
-        self._pending = ""
-        self._inside_block = False
-        self._drop_spaces = False
-        return remaining
-
-
-def _looks_like_xml_tool_call_payload(text: str | None) -> bool:
-    """Detect XML-style marshaled tool calls emitted as plain text.
-
-    Intentionally does NOT require a <parameter> tag: zero-argument invocations
-    (e.g. <function_calls><invoke name="get_time"></invoke></function_calls>) are
-    valid tool calls that _extract_xml_tool_calls_from_response_text can parse, so
-    requiring <parameter> would both miss them in fallback extraction and let the
-    empty-answer recovery leak the raw markup as an answer.
-    """
-    if not text:
-        return False
-    lowered = text.lower()
-    return "<function_calls" in lowered and "<invoke" in lowered
 
 
 def _try_parse_json_string(value: Any) -> Any:
@@ -248,7 +158,7 @@ def _parse_tool_args_to_dict(raw_args: Any) -> dict[str, Any]:
 
 
 def _format_message_history_for_logging(
-    message_history: LanguageModelInput,
+    message_history: list[ChatCompletionMessage],
 ) -> str:
     """Format message history for logging, with special handling for tool calls.
 
@@ -530,49 +440,6 @@ def _extract_xml_tool_calls_from_response_text(
     return matched_tool_calls
 
 
-def _extract_xml_attribute(attrs: str, attr_name: str) -> str | None:
-    """Extract a single XML-style attribute value from a tag attribute string."""
-    attr_match = re.search(
-        rf"""\b{re.escape(attr_name)}\s*=\s*(['"])(.*?)\1""",
-        attrs,
-        flags=re.IGNORECASE | re.DOTALL,
-    )
-    if not attr_match:
-        return None
-    return sanitize_string(unescape(attr_match.group(2).strip()))
-
-
-def _parse_xml_parameter_value(raw_value: str, string_attr: str | None) -> Any:
-    """Parse a parameter value from XML-style tool call payloads."""
-    value = sanitize_string(unescape(raw_value).strip())
-
-    if string_attr and string_attr.lower() == "true":
-        return value
-
-    try:
-        return json.loads(value)
-    except json.JSONDecodeError:
-        return value
-
-
-def _resolve_tool_arguments(obj: dict[str, Any]) -> dict[str, Any] | None:
-    """Extract and parse an arguments/parameters value from a tool-call-like object.
-
-    Looks for "arguments" or "parameters" keys, handles JSON-string values,
-    and returns a dict if successful, or None otherwise.
-    """
-    arguments = obj.get("arguments", obj.get("parameters", {}))
-    if isinstance(arguments, str):
-        arguments = sanitize_string(arguments)
-        try:
-            arguments = json.loads(arguments)
-        except json.JSONDecodeError:
-            arguments = {}
-    if isinstance(arguments, dict):
-        return arguments
-    return None
-
-
 def _try_match_json_to_tool(
     json_obj: dict[str, Any],
     tool_name_to_def: dict[str, dict],
@@ -826,8 +693,8 @@ def _select_recent_image_indices(
 def translate_history_to_llm_format(
     history: list[ChatMessageSimple],
     llm_config: LLMConfig,
-) -> LanguageModelInput:
-    """Convert a list of ChatMessageSimple to LanguageModelInput format.
+) -> list[ChatCompletionMessage]:
+    """Convert a list of ChatMessageSimple to list[ChatCompletionMessage] format.
 
     Converts ChatMessageSimple messages to ChatCompletionMessage format,
     handling different message types and image files for multimodal support.
@@ -1151,7 +1018,7 @@ def run_llm_step_pkt_generator(
     empty_chunk_count = 0
     finish_reasons: set[str] = set()
     terminal_finish_reason: str | None = None
-    xml_tool_call_content_filter = _XmlToolCallContentFilter()
+    xml_tool_call_content_filter = XmlToolCallContentFilter()
 
     processor_state: Any = None
 
@@ -1276,7 +1143,11 @@ def run_llm_step_pkt_generator(
                     obj=AgentResponseDelta(content=content_chunk),
                 )
 
-        for packet in llm.stream(
+        # The chat loop consumes provider chunks, which only LitellmLLM exposes.
+        if not isinstance(llm, LitellmLLM):
+            raise TypeError(f"Chat streaming requires LitellmLLM, got {type(llm)}")
+        operation = ProviderOperation()
+        for packet in llm.stream_raw(
             prompt=llm_msg_history,
             tools=tool_definitions,
             tool_choice=tool_choice,
@@ -1285,11 +1156,16 @@ def run_llm_step_pkt_generator(
             reasoning_effort=reasoning_effort,
             user_identity=user_identity,
             stall_timeout_s=stall_timeout_s,
+            operation=operation,
         ):
             # On the first chunk, not at stream end: a mid-step stop persists
             # from another thread and needs this step's params already there.
             if stream_chunk_count == 0 and state_container:
-                state_container.set_request_params(get_llm_request_params())
+                state_container.set_request_params(
+                    operation.request_params.model_dump(mode="json")
+                    if operation.request_params
+                    else None
+                )
             stream_chunk_count += 1
             if packet.usage:
                 usage = packet.usage

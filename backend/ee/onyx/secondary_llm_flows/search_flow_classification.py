@@ -3,10 +3,15 @@ from ee.onyx.prompts.search_flow_classification import (
     SEARCH_CHAT_PROMPT,
     SEARCH_CLASS,
 )
-from onyx.llm.interfaces import LLM
-from onyx.llm.model_request import LanguageModelInput, UserMessage
-from onyx.llm.models import ReasoningEffort
-from onyx.llm.utils import llm_response_to_string
+from onyx.llm.interfaces import LLM, GenerationContext
+from onyx.llm.models import (
+    GenerationOptions,
+    GenerationRequest,
+    Message,
+    ReasoningEffort,
+    UserMessage,
+)
+from onyx.tracing.flows import LLMFlow
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
 
@@ -18,20 +23,27 @@ def classify_is_search_flow(
     query: str,
     llm: LLM,
 ) -> bool:
-    messages: LanguageModelInput = [
+    messages: list[Message] = [
         UserMessage(content=SEARCH_CHAT_PROMPT.format(user_query=query))
     ]
     response = llm.invoke(
-        prompt=messages,
-        reasoning_effort=ReasoningEffort.OFF,
-        # Nothing can happen in the UI until this call finishes so we need to be aggressive with the timeout
-        total_timeout_s=2,
-        # Well more than necessary but just to ensure completion and in case it succeeds with classifying but
-        # ends up rambling
-        max_tokens=20,
+        GenerationRequest(
+            messages=messages,
+            options=GenerationOptions(
+                reasoning_effort=ReasoningEffort.OFF,
+                # Well more than necessary but just to ensure completion and in case it succeeds with classifying but
+                # ends up rambling
+                max_tokens=20,
+            ),
+        ),
+        context=GenerationContext(
+            # Nothing can happen in the UI until this call finishes so we need to be aggressive with the timeout
+            total_timeout_s=2,
+            flow=LLMFlow.SEARCH_FLOW_CLASSIFICATION,
+        ),
     )
 
-    content = llm_response_to_string(response).strip().lower()
+    content = response.text.strip().lower()
     if not content:
         logger.warning(
             "Search flow classification returned empty response; defaulting to chat flow."

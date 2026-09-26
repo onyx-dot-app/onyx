@@ -117,6 +117,6 @@ def test_streaming_completion_through_the_gateway(
     ]
 
     content = "".join(
-        chunk.choice.delta.content or "" for chunk in llm.stream(prompt=prompt)
+        chunk.choice.delta.content or "" for chunk in llm.stream_raw(prompt=prompt)
     )
     assert "pong" in content.lower()

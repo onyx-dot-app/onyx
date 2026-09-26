@@ -5,7 +5,7 @@ import json
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from onyx.llm.model_request import ChatCompletionMessage, LanguageModelInput
+from onyx.llm.model_request import ChatCompletionMessage
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -77,20 +77,19 @@ def revalidate_message_from_original(
 
 
 def prepare_messages_with_cacheable_transform(
-    cacheable_prefix: LanguageModelInput | None,
-    suffix: LanguageModelInput,
+    cacheable_prefix: list[ChatCompletionMessage] | None,
+    suffix: list[ChatCompletionMessage],
     continuation: bool,
     transform_cacheable: (
         Callable[[Sequence[ChatCompletionMessage]], Sequence[ChatCompletionMessage]]
         | None
     ) = None,
-) -> LanguageModelInput:
+) -> list[ChatCompletionMessage]:
     """Prepare messages for caching with optional transformation of cacheable prefix.
 
     This is a shared utility that handles the common flow:
-    1. Normalize inputs
-    2. Optionally transform cacheable messages
-    3. Combine with continuation handling
+    1. Optionally transform cacheable messages
+    2. Combine with continuation handling
 
     Args:
         cacheable_prefix: Optional cacheable prefix
@@ -105,15 +104,12 @@ def prepare_messages_with_cacheable_transform(
     if cacheable_prefix is None:
         return suffix
 
-    prefix_msgs = (
-        cacheable_prefix if isinstance(cacheable_prefix, list) else [cacheable_prefix]
-    )
-    suffix_msgs = suffix if isinstance(suffix, list) else [suffix]
+    prefix_msgs = cacheable_prefix
 
     # Apply transformation to cacheable messages if provided
     if transform_cacheable is not None:
         prefix_msgs = list(transform_cacheable(prefix_msgs))
 
     return combine_messages_with_continuation(
-        prefix_msgs=prefix_msgs, suffix_msgs=suffix_msgs, continuation=continuation
+        prefix_msgs=prefix_msgs, suffix_msgs=suffix, continuation=continuation
     )

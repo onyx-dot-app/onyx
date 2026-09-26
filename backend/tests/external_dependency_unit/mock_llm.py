@@ -12,8 +12,8 @@ from unittest.mock import patch
 from pydantic import BaseModel
 
 from onyx.configs.chat_configs import LLM_INVOKE_TIMEOUT_S, LLM_SOCKET_READ_TIMEOUT
-from onyx.llm.interfaces import LLM, LLMConfig, LLMUserIdentity
-from onyx.llm.model_request import LanguageModelInput
+from onyx.llm.interfaces import LLMConfig, LLMUserIdentity
+from onyx.llm.model_request import ChatCompletionMessage
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
@@ -23,6 +23,7 @@ from onyx.llm.model_response import (
     StreamingChoice,
 )
 from onyx.llm.models import ReasoningEffort, ToolChoice
+from onyx.llm.multi_llm import LitellmLLM, ProviderOperation
 
 T = TypeVar("T")
 
@@ -215,8 +216,14 @@ class MockLLMController(abc.ABC):
         raise NotImplementedError
 
 
-class MockLLM(LLM, MockLLMController):
+class MockLLM(LitellmLLM, MockLLMController):
     def __init__(self) -> None:
+        super().__init__(
+            model_provider="openai",
+            api_key=None,
+            model_name="gpt-5-mini",
+            max_input_tokens=1000000000,
+        )
         self.stream_controller = SyncStreamController[StreamItem]()
 
     def add_response(self, response: LLMResponse) -> None:
@@ -294,9 +301,9 @@ class MockLLM(LLM, MockLLMController):
             max_input_tokens=1000000000,
         )
 
-    def invoke(
+    def invoke_raw(
         self,
-        prompt: LanguageModelInput,
+        prompt: list[ChatCompletionMessage],
         tools: list[dict] | None = None,
         tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
@@ -304,12 +311,13 @@ class MockLLM(LLM, MockLLMController):
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
         total_timeout_s: float = LLM_INVOKE_TIMEOUT_S,
+        operation: ProviderOperation | None = None,
     ) -> ModelResponse:
         raise NotImplementedError("We only care about streaming atm")
 
-    def stream(
+    def stream_raw(
         self,
-        prompt: LanguageModelInput,  # noqa: ARG002
+        prompt: list[ChatCompletionMessage],  # noqa: ARG002
         tools: list[dict] | None = None,  # noqa: ARG002
         tool_choice: ToolChoice | None = None,  # noqa: ARG002
         structured_response_format: dict | None = None,  # noqa: ARG002
@@ -317,6 +325,7 @@ class MockLLM(LLM, MockLLMController):
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,  # noqa: ARG002
         user_identity: LLMUserIdentity | None = None,  # noqa: ARG002
         stall_timeout_s: int = LLM_SOCKET_READ_TIMEOUT,  # noqa: ARG002
+        operation: ProviderOperation | None = None,  # noqa: ARG002
     ) -> Iterator[ModelResponseStream]:
         if not self.stream_controller:
             return
