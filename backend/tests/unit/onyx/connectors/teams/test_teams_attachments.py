@@ -18,6 +18,7 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     UnexpectedValidationError,
 )
+from onyx.connectors.microsoft_utils.drive_delta import SHAREPOINT_IDS_PROPERTY
 from onyx.connectors.microsoft_utils.drive_items import (
     DriveItemContent,
     DriveItemContentError,
@@ -58,7 +59,7 @@ DRIVE = "drive-1"
 LIST_ID = "list-1"
 FOLDER_ID = "folder-1"
 SITE_URL = "https://tenant.sharepoint.example/sites/T"
-DRIVE_URL = f"drives/{DRIVE}?$select=sharePointIds"
+DRIVE_URL = f"drives/{DRIVE}?$select={SHAREPOINT_IDS_PROPERTY}"
 # The shape a live tenant answers with: the files folder names its drive and
 # leaves its site id empty, and the drive names the site.
 LIBRARY_ROUTES: dict[str, dict[str, Any]] = {
@@ -67,7 +68,7 @@ LIBRARY_ROUTES: dict[str, dict[str, Any]] = {
         "parentReference": {"driveId": DRIVE, "siteId": None},
     },
     DRIVE_URL: {
-        "sharePointIds": {"listId": LIST_ID, "siteUrl": SITE_URL},
+        SHAREPOINT_IDS_PROPERTY: {"listId": LIST_ID, "siteUrl": SITE_URL},
     },
 }
 MEMBERS = {MEMBERS_URL: {"value": [member("Ada", "ada@example.com", "u1")]}}

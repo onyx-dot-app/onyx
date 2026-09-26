@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections import deque
 from collections.abc import Callable, Generator, Sequence
 from datetime import datetime
@@ -9,10 +10,12 @@ from urllib.parse import quote
 import pytest
 import requests
 from office365.graph_client import GraphClient
+from office365.onedrive.drives.drive import Drive
 from office365.runtime.client_request_exception import ClientRequestException
 from requests import Response
 from requests.exceptions import HTTPError
 
+from onyx.connectors.microsoft_utils.drive_delta import SHAREPOINT_IDS_PROPERTY
 from onyx.connectors.microsoft_utils.drive_items import (
     DriveFolderReference,
     DriveItemData,
@@ -55,15 +58,12 @@ class _FakeDrive:
         self.name = name
         self.drive_type = drive_type
         self.id = f"fake-drive-id-{name}"
-        self.sharepoint_ids = _FakeSharepointIds(list_id or f"list-id-{name}")
+        self.properties = {
+            SHAREPOINT_IDS_PROPERTY: {"listId": list_id or f"list-id-{name}"}
+        }
         self.web_url = (
             f"https://example.sharepoint.com/sites/sample/{quote(url_name or name)}"
         )
-
-
-class _FakeSharepointIds:
-    def __init__(self, list_id: str | None) -> None:
-        self.listId = list_id
 
 
 class _FakeDrivesCollection:
@@ -196,7 +196,7 @@ def test_fetch_driveitems_uses_drive_id_without_list_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     drive = _FakeDrive("System")
-    drive.sharepoint_ids = _FakeSharepointIds(None)
+    drive.properties = {}
     connector = _build_connector([drive])
     traversed_drive_ids: list[str] = []
 
@@ -459,16 +459,41 @@ def test_resolve_drive_matches_library_url_and_returns_display_name() -> None:
     assert result.display_name == "R&D Library"
 
 
-def test_drive_select_fields_generate_sdk_compatible_query() -> None:
+def _odata_mapped_drive(include_sharepoint_ids: bool) -> Drive:
     graph_client = GraphClient(lambda: {"access_token": "unused"})
-    graph_client.sites["site-id"].drives.select(DRIVE_SELECT_FIELDS).get()
+    drives = graph_client.sites["site-id"].drives.select(DRIVE_SELECT_FIELDS).get()
+    properties: dict[str, Any] = {
+        "id": "drive-id",
+        "name": "Documents",
+        "webUrl": "https://example.sharepoint.com/sites/sample/Documents",
+        "driveType": "documentLibrary",
+    }
+    if include_sharepoint_ids:
+        properties[SHAREPOINT_IDS_PROPERTY] = {"listId": "list-id"}
 
-    request = graph_client.pending_request().build_request(graph_client._queries[0])
+    response = Response()
+    response.status_code = 200
+    response.headers["Content-Type"] = "application/json"
+    response._content = json.dumps({"value": [properties]}).encode()
+    graph_client.pending_request().process_response(response, graph_client._queries[0])
+    return drives[0]
 
-    assert request.url == (
-        "https://graph.microsoft.com/v1.0/sites/site-id/drives?"
-        "$select=id,name,webUrl,driveType,sharepointIds"
-    )
+
+def test_site_drive_reads_sharepoint_ids_from_odata_mapped_properties() -> None:
+    drive = _odata_mapped_drive(include_sharepoint_ids=True)
+
+    result = SharepointConnector._site_drive_from_graph(drive)
+
+    assert drive.properties[SHAREPOINT_IDS_PROPERTY] == {"listId": "list-id"}
+    assert result.list_id == "list-id"
+
+
+def test_site_drive_without_sharepoint_ids_has_no_list_id() -> None:
+    drive = _odata_mapped_drive(include_sharepoint_ids=False)
+
+    result = SharepointConnector._site_drive_from_graph(drive)
+
+    assert result.list_id is None
 
 
 def test_configured_drive_selection_reads_later_page() -> None:

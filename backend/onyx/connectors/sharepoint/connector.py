@@ -38,7 +38,11 @@ from onyx.connectors.interfaces import (
     SlimConnector,
     SlimConnectorWithPermSync,
 )
-from onyx.connectors.microsoft_utils.drive_delta import build_delta_start_url
+from onyx.connectors.microsoft_utils.drive_delta import (
+    SHAREPOINT_IDS_PROPERTY,
+    GraphDrive,
+    build_delta_start_url,
+)
 from onyx.connectors.microsoft_utils.drive_items import (
     DriveFolderReference,
     DriveItemContentError,
@@ -104,7 +108,7 @@ from onyx.utils.url import SSRFException, validate_outbound_http_url
 
 logger = setup_logger()
 SLIM_BATCH_SIZE = 1000
-DRIVE_SELECT_FIELDS = ["id", "name", "webUrl", "driveType", "sharepointIds"]
+DRIVE_SELECT_FIELDS = ["id", "name", "webUrl", "driveType", SHAREPOINT_IDS_PROPERTY]
 
 
 SHARED_DOCUMENTS_MAP = {
@@ -1076,14 +1080,14 @@ class SharepointConnector(
     @staticmethod
     def _site_drive_from_graph(drive: Drive) -> SiteDrive:
         drive_id = drive.id
-        list_id = drive.sharepoint_ids.listId
+        sharepoint_ids = GraphDrive.model_validate(drive.properties).sharepoint_ids
         display_name = drive.name
         web_url = drive.web_url
         if not drive_id or not display_name or not web_url:
             raise ValueError("Graph drive is missing required traversal metadata")
         return SiteDrive(
             drive_id=drive_id,
-            list_id=list_id,
+            list_id=sharepoint_ids.list_id if sharepoint_ids else None,
             display_name=display_name,
             web_url=web_url,
         )
