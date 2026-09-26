@@ -58,6 +58,7 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
+from onyx.server.query_and_chat.session_loading import _response_packets
 from onyx.server.query_and_chat.streaming_models import (
     AgentResponseDelta,
     DeepResearchPlanDelta,
@@ -336,6 +337,27 @@ def test_deep_research_composes_plan_child_and_report() -> None:
     assert len(snapshot.response.child_runs) == 1
     assert snapshot.response.child_runs[0].messages[-1].text == "Child report"
     packets = list(output.queue)
+    report_packets = [
+        packet for packet in packets if isinstance(packet.obj, IntermediateReportDelta)
+    ]
+    assert report_packets
+    assert all(packet.placement.sub_turn_index is None for packet in report_packets)
+    saved_reports = [
+        packet
+        for packet in _response_packets(
+            snapshot.response, {}, {}, snapshot.presentation, snapshot.all_search_docs
+        )
+        if isinstance(packet.obj, IntermediateReportDelta)
+    ]
+    assert (
+        "".join(
+            packet.obj.content
+            for packet in saved_reports
+            if isinstance(packet.obj, IntermediateReportDelta)
+        )
+        == "Child report"
+    )
+    assert all(packet.placement.sub_turn_index is None for packet in saved_reports)
     assert (
         "".join(
             packet.obj.content
