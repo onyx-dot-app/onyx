@@ -14,6 +14,7 @@ import msal
 import requests
 from office365.graph_client import GraphClient
 from office365.onedrive.drives.drive import Drive
+from office365.onedrive.lists.list import List as GraphList
 from office365.onedrive.sites.site import Site
 from office365.onedrive.sites.sites_with_root import SitesWithRoot
 from office365.runtime.client_request import ClientRequestException
@@ -38,11 +39,7 @@ from onyx.connectors.interfaces import (
     SlimConnector,
     SlimConnectorWithPermSync,
 )
-from onyx.connectors.microsoft_utils.drive_delta import (
-    SHAREPOINT_IDS_PROPERTY,
-    build_delta_start_url,
-    parse_graph_sharepoint_ids,
-)
+from onyx.connectors.microsoft_utils.drive_delta import build_delta_start_url
 from onyx.connectors.microsoft_utils.drive_items import (
     DriveFolderReference,
     DriveItemContentError,
@@ -108,7 +105,9 @@ from onyx.utils.url import SSRFException, validate_outbound_http_url
 
 logger = setup_logger()
 SLIM_BATCH_SIZE = 1000
-DRIVE_SELECT_FIELDS = ["id", "name", "webUrl", "driveType", SHAREPOINT_IDS_PROPERTY]
+DRIVE_LIST_PROPERTY = "list"
+DRIVE_SELECT_FIELDS = ["id", "name", "webUrl", "driveType"]
+DRIVE_EXPAND_FIELDS = [f"{DRIVE_LIST_PROPERTY}($select=id)"]
 
 
 SHARED_DOCUMENTS_MAP = {
@@ -1080,16 +1079,17 @@ class SharepointConnector(
     @staticmethod
     def _site_drive_from_graph(drive: Drive) -> SiteDrive:
         drive_id = drive.id
-        sharepoint_ids = parse_graph_sharepoint_ids(
-            drive.properties.get(SHAREPOINT_IDS_PROPERTY)
-        )
-        display_name = drive.name
+        display_name = SHARED_DOCUMENTS_MAP.get(drive.name, drive.name)
         web_url = drive.web_url
         if not drive_id or not display_name or not web_url:
             raise ValueError("Graph drive is missing required traversal metadata")
+
+        expanded_list = drive.properties.get(DRIVE_LIST_PROPERTY)
+        if expanded_list is not None and not isinstance(expanded_list, GraphList):
+            raise ValueError("Graph drive list relationship has an unexpected type")
         return SiteDrive(
             drive_id=drive_id,
-            list_id=sharepoint_ids.list_id if sharepoint_ids else None,
+            list_id=expanded_list.id if expanded_list is not None else None,
             display_name=display_name,
             web_url=web_url,
         )
@@ -1734,6 +1734,7 @@ class SharepointConnector(
         site = self.graph_client.sites.get_by_url(site_url)
         drives = (
             site.drives.select(DRIVE_SELECT_FIELDS)
+            .expand(DRIVE_EXPAND_FIELDS)
             .get_all(page_loaded=lambda _: None)
             .execute_query()
         )

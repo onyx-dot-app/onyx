@@ -11,14 +11,12 @@ import pytest
 import requests
 from office365.graph_client import GraphClient
 from office365.onedrive.drives.drive import Drive
+from office365.onedrive.lists.list import List as GraphList
 from office365.runtime.client_request_exception import ClientRequestException
 from requests import Response
 from requests.exceptions import HTTPError
 
-from onyx.connectors.microsoft_utils.drive_delta import (
-    SHAREPOINT_IDS_PROPERTY,
-    parse_graph_sharepoint_ids,
-)
+from onyx.connectors.microsoft_utils.drive_delta import parse_graph_sharepoint_ids
 from onyx.connectors.microsoft_utils.drive_items import (
     DriveFolderReference,
     DriveItemData,
@@ -32,6 +30,8 @@ from onyx.connectors.models import (
 )
 from onyx.connectors.sharepoint import connector as sp_connector
 from onyx.connectors.sharepoint.connector import (
+    DRIVE_EXPAND_FIELDS,
+    DRIVE_LIST_PROPERTY,
     DRIVE_SELECT_FIELDS,
     SHARED_DOCUMENTS_MAP,
     SharepointConnector,
@@ -61,9 +61,9 @@ class _FakeDrive:
         self.name = name
         self.drive_type = drive_type
         self.id = f"fake-drive-id-{name}"
-        self.properties = {
-            SHAREPOINT_IDS_PROPERTY: {"listId": list_id or f"list-id-{name}"}
-        }
+        graph_list = GraphList(GraphClient(lambda: {"access_token": "unused"}))
+        graph_list.properties["id"] = list_id or f"list-id-{name}"
+        self.properties = {DRIVE_LIST_PROPERTY: graph_list}
         self.web_url = (
             f"https://example.sharepoint.com/sites/sample/{quote(url_name or name)}"
         )
@@ -78,9 +78,14 @@ class _FakeDrivesCollection:
         self._drives = drives
         self._first_page_size = first_page_size
         self.selected_fields: list[str] | None = None
+        self.expanded_fields: list[str] | None = None
 
     def select(self, fields: list[str]) -> "_FakeDrivesCollection":
         self.selected_fields = fields
+        return self
+
+    def expand(self, fields: list[str]) -> "_FakeDrivesCollection":
+        self.expanded_fields = fields
         return self
 
     def get(self) -> _FakeQuery:
@@ -191,7 +196,7 @@ def test_fetch_driveitems_matches_international_drive_names(
 
     assert len(results) == 1
     assert results[0].driveitem.id == _SAMPLE_ITEM.id
-    assert results[0].drive.display_name == graph_drive_name
+    assert results[0].drive.display_name == requested_drive_name
     assert results[0].drive.web_url is not None
 
 
@@ -314,7 +319,7 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
     hierarchy_nodes = [item for item in all_yielded if isinstance(item, HierarchyNode)]
 
     assert len(documents) == 1
-    assert captured_drive_names == ["Documents"]
+    assert captured_drive_names == ["Shared Documents"]
     assert len(hierarchy_nodes) >= 1
 
 
@@ -462,17 +467,22 @@ def test_resolve_drive_matches_library_url_and_returns_display_name() -> None:
     assert result.display_name == "R&D Library"
 
 
-def _odata_mapped_drive(include_sharepoint_ids: bool) -> Drive:
+def _odata_mapped_drive(include_list: bool) -> Drive:
     graph_client = GraphClient(lambda: {"access_token": "unused"})
-    drives = graph_client.sites["site-id"].drives.select(DRIVE_SELECT_FIELDS).get()
+    drives = (
+        graph_client.sites["site-id"]
+        .drives.select(DRIVE_SELECT_FIELDS)
+        .expand(DRIVE_EXPAND_FIELDS)
+        .get()
+    )
     properties: dict[str, Any] = {
         "id": "drive-id",
         "name": "Documents",
         "webUrl": "https://example.sharepoint.com/sites/sample/Documents",
         "driveType": "documentLibrary",
     }
-    if include_sharepoint_ids:
-        properties[SHAREPOINT_IDS_PROPERTY] = {"listId": "list-id"}
+    if include_list:
+        properties[DRIVE_LIST_PROPERTY] = {"id": "list-id"}
 
     response = Response()
     response.status_code = 200
@@ -482,21 +492,31 @@ def _odata_mapped_drive(include_sharepoint_ids: bool) -> Drive:
     return drives[0]
 
 
-def test_site_drive_reads_sharepoint_ids_from_odata_mapped_properties() -> None:
-    drive = _odata_mapped_drive(include_sharepoint_ids=True)
+def test_site_drive_reads_expanded_odata_mapped_list() -> None:
+    drive = _odata_mapped_drive(include_list=True)
 
     result = SharepointConnector._site_drive_from_graph(drive)
 
-    assert drive.properties[SHAREPOINT_IDS_PROPERTY] == {"listId": "list-id"}
+    expanded_list = drive.properties[DRIVE_LIST_PROPERTY]
+    assert isinstance(expanded_list, GraphList)
+    assert expanded_list.id == "list-id"
     assert result.list_id == "list-id"
 
 
-def test_site_drive_without_sharepoint_ids_has_no_list_id() -> None:
-    drive = _odata_mapped_drive(include_sharepoint_ids=False)
+def test_site_drive_without_expanded_list_has_no_list_id() -> None:
+    drive = _odata_mapped_drive(include_list=False)
 
     result = SharepointConnector._site_drive_from_graph(drive)
 
     assert result.list_id is None
+
+
+def test_site_drive_rejects_unmapped_expanded_list() -> None:
+    drive = _odata_mapped_drive(include_list=False)
+    drive.properties[DRIVE_LIST_PROPERTY] = {"id": "list-id"}
+
+    with pytest.raises(ValueError, match="unexpected type"):
+        SharepointConnector._site_drive_from_graph(drive)
 
 
 def test_graph_sharepoint_ids_parser_reads_valid_facet() -> None:
@@ -518,10 +538,11 @@ def test_graph_sharepoint_ids_parser_rejects_malformed_dict() -> None:
 
 def test_configured_drive_selection_reads_later_page() -> None:
     target = _FakeDrive("Target")
-    connector = _build_connector(
-        [_FakeDrive("First Page"), target],
-        first_page_size=1,
+    graph_client = _FakeGraphClient(
+        [_FakeDrive("First Page"), target], first_page_size=1
     )
+    connector = SharepointConnector()
+    connector._graph_client = graph_client  # ty: ignore[invalid-assignment]
     site = SiteDescriptor(
         url="https://example.sharepoint.com/sites/sample",
         drive_name="Target",
@@ -532,6 +553,8 @@ def test_configured_drive_selection_reads_later_page() -> None:
 
     assert result is not None
     assert result.drive_id == target.id
+    assert graph_client.sites.drives.selected_fields == DRIVE_SELECT_FIELDS
+    assert graph_client.sites.drives.expanded_fields == DRIVE_EXPAND_FIELDS
 
 
 def test_slim_all_drive_traversal_reads_later_page(
