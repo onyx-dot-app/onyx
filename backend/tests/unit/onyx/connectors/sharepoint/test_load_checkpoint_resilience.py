@@ -1,20 +1,10 @@
-"""Tests for resilience wrappers added to SharepointConnector._load_from_checkpoint.
-
-Covers three failure modes that previously aborted the whole attempt:
-- G1: BFS-mode generator (`iter_drive_items_paged`) raising mid-iteration.
-- G2: `_fetch_site_pages` raising a non-Graph 4xx in Phase 5.
-- G3: A single site page failing to convert in Phase 5.
-
-All three now yield a ConnectorFailure (EntityFailure or DocumentFailure)
-and let the rest of the indexing run continue.
-"""
-
-from __future__ import annotations
+"""SharePoint checkpoint resilience tests."""
 
 from collections import deque
 from collections.abc import Generator
 from datetime import datetime, timezone
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -215,6 +205,9 @@ def test_permission_indexing_skips_drive_without_list_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     connector = _setup_connector(monkeypatch)
+    monkeypatch.setattr(
+        connector, "_create_rest_client_context", lambda _site_url: MagicMock()
+    )
     checkpoint = _build_phase3_checkpoint()
     assert checkpoint.cached_drives is not None
     checkpoint.cached_drives[0].list_id = None
