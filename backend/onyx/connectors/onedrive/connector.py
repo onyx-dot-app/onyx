@@ -650,7 +650,7 @@ class OneDriveConnector(
             end,
             checkpoint,
             include_permissions=include_permissions,
-            add_group_prefix=True,
+            add_group_prefix=False,
         ):
             if not isinstance(item, OneDriveDiscoveredFile):
                 yield item
