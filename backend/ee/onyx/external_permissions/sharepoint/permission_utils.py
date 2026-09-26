@@ -26,9 +26,11 @@ from ee.onyx.external_permissions.microsoft_utils.entra_groups import (
 from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.microsoft_utils.drive_delta import (
+    SHAREPOINT_IDS_PROPERTY,
+)
 from onyx.connectors.microsoft_utils.drive_items import (
     LIST_ITEM_ID_PROPERTY,
-    SHAREPOINT_IDS_PROPERTY,
 )
 from onyx.connectors.microsoft_utils.graph_client import (
     GraphApiClient,
