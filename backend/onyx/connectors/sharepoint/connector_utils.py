@@ -39,7 +39,7 @@ def get_sharepoint_external_access(
     graph_client: GraphClient,
     permission_cache: SharepointPermissionCache,
     drive_item: DriveItem | None = None,
-    drive_name: str | None = None,
+    list_id: str | None = None,
     site_page: dict[str, Any] | None = None,
     add_prefix: bool = False,
     treat_sharing_link_as_public: bool = False,
@@ -63,7 +63,7 @@ def get_sharepoint_external_access(
     external_access = get_external_access_func(
         ctx,
         graph_client,
-        drive_name,
+        list_id,
         drive_item,
         site_page,
         add_prefix,
@@ -79,7 +79,7 @@ def get_sharepoint_hierarchy_node_external_access(
     graph_client: GraphClient,
     permission_cache: SharepointPermissionCache,
     node_type: HierarchyNodeType,
-    drive_name: str | None = None,
+    list_id: str | None = None,
     folder_server_relative_path: str | None = None,
 ) -> ExternalAccess:
     def noop_fallback(
@@ -97,7 +97,7 @@ def get_sharepoint_hierarchy_node_external_access(
         ctx,
         graph_client,
         node_type,
-        drive_name,
+        list_id,
         folder_server_relative_path,
         permission_cache,
     )

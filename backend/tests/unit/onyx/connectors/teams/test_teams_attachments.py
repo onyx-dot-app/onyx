@@ -55,9 +55,10 @@ from tests.unit.onyx.connectors.teams.helpers import (
 
 FOLDER_URL = f"teams/{TEAM_ID}/channels/{CHANNEL_ID}/filesFolder"
 DRIVE = "drive-1"
+LIST_ID = "list-1"
 FOLDER_ID = "folder-1"
 SITE_URL = "https://tenant.sharepoint.example/sites/T"
-DRIVE_URL = f"drives/{DRIVE}?$select=name,sharePointIds"
+DRIVE_URL = f"drives/{DRIVE}?$select=sharePointIds"
 # The shape a live tenant answers with: the files folder names its drive and
 # leaves its site id empty, and the drive names the site.
 LIBRARY_ROUTES: dict[str, dict[str, Any]] = {
@@ -65,7 +66,9 @@ LIBRARY_ROUTES: dict[str, dict[str, Any]] = {
         "id": FOLDER_ID,
         "parentReference": {"driveId": DRIVE, "siteId": None},
     },
-    DRIVE_URL: {"name": "Documents", "sharePointIds": {"siteUrl": SITE_URL}},
+    DRIVE_URL: {
+        "sharePointIds": {"listId": LIST_ID, "siteUrl": SITE_URL},
+    },
 }
 MEMBERS = {MEMBERS_URL: {"value": [member("Ada", "ada@example.com", "u1")]}}
 # A thread names the group of its channel's members, without the source prefix
@@ -122,7 +125,7 @@ def library(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         )
 
     def access(**kwargs: Any) -> ExternalAccess:
-        seen["access"].append((kwargs["drive_item"].id, kwargs["drive_name"]))
+        seen["access"].append((kwargs["drive_item"].id, kwargs["list_id"]))
         return SHAREPOINT_READERS
 
     monkeypatch.setattr(files_module, "iter_drive_items_paged", iter_items)
@@ -220,7 +223,7 @@ def test_channel_files_become_documents_with_sharepoints_readers(
     assert [owner.email for owner in plan.primary_owners or []] == ["ada@example.com"]
     assert [section.text for section in plan.sections] == ["Text of Plan.pdf"]
     assert library["listed"] == [(DRIVE, FOLDER_ID, None)]
-    assert library["access"] == [("item-1", "Documents"), ("item-2", "Documents")]
+    assert library["access"] == [("item-1", LIST_ID), ("item-2", LIST_ID)]
     assert [token for _, token in library["extracted"]] == ["token", "token"]
     assert _requested(client).count(FOLDER_URL) == 1
 
@@ -701,7 +704,9 @@ def test_a_library_that_names_no_site_keeps_the_pair_active(
     routes = {**LIBRARY_ROUTES, DRIVE_URL: {"name": "Documents"}}
     teams_connector, teams = _validation_connector(monkeypatch, routes)
 
-    with pytest.raises(UnexpectedValidationError, match="without its name or its site"):
+    with pytest.raises(
+        UnexpectedValidationError, match="without its list or site identity"
+    ):
         _files(teams_connector).validate(teams)
 
 
@@ -733,7 +738,7 @@ def test_a_library_that_names_no_site_is_one_channel_failure(
     assert len(failures) == 1
     assert failures[0].failed_entity is not None
     assert failures[0].failed_entity.entity_id == CHANNEL_ID
-    assert "without its name or its site" in failures[0].failure_message
+    assert "without its list or site identity" in failures[0].failure_message
 
 
 def test_a_refused_files_folder_names_the_grant(

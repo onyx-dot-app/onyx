@@ -4,7 +4,6 @@ SharePoint document library, so its readers come from SharePoint REST."""
 
 import time
 from collections.abc import Callable, Iterable, Iterator
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
@@ -43,7 +42,7 @@ from onyx.connectors.sharepoint.connector_utils import (
     get_sharepoint_external_access,
 )
 from onyx.connectors.teams import listing
-from onyx.connectors.teams.models import ChannelRef
+from onyx.connectors.teams.models import ChannelLibrary, ChannelRef
 from onyx.connectors.teams.refusals import (
     GRANT_BY_CALL,
     channel_context,
@@ -56,8 +55,7 @@ from onyx.connectors.teams.sources import SlimWalk
 from onyx.connectors.teams.utils import (
     ChannelFilesUnavailable,
     GraphRetriesExhausted,
-    fetch_channel_files_folder,
-    fetch_drive_library,
+    resolve_channel_library,
     source_group_ids,
 )
 from onyx.file_processing.file_types import OnyxMimeTypes
@@ -74,17 +72,6 @@ FILE_DOCUMENT_ID_PREFIX = "teams-file:"
 
 def file_document_id(item_id: str) -> str:
     return f"{FILE_DOCUMENT_ID_PREFIX}{item_id}"
-
-
-@dataclass
-class ChannelLibrary:
-    """Where a channel's files live: the SharePoint site, its document library
-    and the channel's folder in it."""
-
-    site_url: str
-    drive_id: str
-    drive_name: str
-    folder_id: str
 
 
 def _indexable_file(item: DriveItemData) -> bool:
@@ -241,14 +228,8 @@ class FileSource:
 
     def resolve_library(self, channel: ChannelRef) -> ChannelLibrary:
         """Where the channel's files live, resolved through Graph."""
-        graph_client = self._session.graph()
-        folder = fetch_channel_files_folder(graph_client, channel.team_id, channel.id)
-        drive_name, site_url = fetch_drive_library(graph_client, folder.drive_id)
-        return ChannelLibrary(
-            site_url=site_url,
-            drive_id=folder.drive_id,
-            drive_name=drive_name,
-            folder_id=folder.id,
+        return resolve_channel_library(
+            self._session.graph(), channel.team_id, channel.id
         )
 
     def rest_context(self, site_url: str) -> ClientContext:
@@ -277,7 +258,7 @@ class FileSource:
             graph_client=self._session.graph(),
             permission_cache=self._permission_cache,
             drive_item=item.to_sdk_driveitem(self._session.graph()),
-            drive_name=library.drive_name,
+            list_id=library.list_id,
         )
         return ExternalAccess(
             external_user_emails=access.external_user_emails,
