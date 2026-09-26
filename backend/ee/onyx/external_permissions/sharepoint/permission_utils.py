@@ -28,9 +28,7 @@ from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.microsoft_utils.drive_delta import (
     SHAREPOINT_IDS_PROPERTY,
-)
-from onyx.connectors.microsoft_utils.drive_items import (
-    LIST_ITEM_ID_PROPERTY,
+    parse_graph_sharepoint_ids,
 )
 from onyx.connectors.microsoft_utils.graph_client import (
     GraphApiClient,
@@ -92,11 +90,11 @@ class DocumentGroupsResult(BaseModel):
 
 def _get_sharepoint_list_item_id(drive_item: DriveItem) -> int | None:
     try:
-        properties = drive_item.properties
-        sharepoint_ids = properties.get(SHAREPOINT_IDS_PROPERTY)
-        if isinstance(sharepoint_ids, dict):
-            if list_item_id := sharepoint_ids.get(LIST_ITEM_ID_PROPERTY):
-                return int(list_item_id)
+        sharepoint_ids = parse_graph_sharepoint_ids(
+            drive_item.properties.get(SHAREPOINT_IDS_PROPERTY)
+        )
+        if sharepoint_ids and sharepoint_ids.list_item_id:
+            return int(sharepoint_ids.list_item_id)
 
         list_item = drive_item.listItem
         sleep_and_retry(list_item.get(), GET_SHAREPOINT_LIST_ITEM_ID_LABEL)

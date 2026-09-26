@@ -18,7 +18,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.microsoft_utils.drive_delta import (
     SHAREPOINT_IDS_PROPERTY,
-    GraphDrive,
+    parse_graph_sharepoint_ids,
 )
 from onyx.connectors.microsoft_utils.graph_client import (
     GRAPH_API_MAX_RETRIES,
@@ -414,18 +414,26 @@ def resolve_channel_library(
         request_url=f"teams/{team_id}/channels/{channel_id}/filesFolder",
     )
     parent = folder.get("parentReference") or {}
-    drive_id = parent.get("driveId")
-    if not drive_id:
+    drive_id = parent.get("driveId") if isinstance(parent, dict) else None
+    if not isinstance(drive_id, str):
         raise ChannelFilesUnavailable(
             f"The files folder of channel {channel_id} names no document library"
         )
-    drive = GraphDrive.model_validate(
-        get_json_with_retry(
-            graph_client=graph_client,
-            request_url=f"drives/{drive_id}?$select={SHAREPOINT_IDS_PROPERTY}",
+    folder_id = folder.get("id")
+    if not isinstance(folder_id, str):
+        raise ChannelFilesUnavailable(
+            f"The files folder of channel {channel_id} has no durable identity"
         )
+    drive = get_json_with_retry(
+        graph_client=graph_client,
+        request_url=f"drives/{drive_id}?$select={SHAREPOINT_IDS_PROPERTY}",
     )
-    sharepoint_ids = drive.sharepoint_ids
+    try:
+        sharepoint_ids = parse_graph_sharepoint_ids(drive.get(SHAREPOINT_IDS_PROPERTY))
+    except ValueError as e:
+        raise ChannelFilesUnavailable(
+            f"Document library {drive_id} returned malformed identity"
+        ) from e
     if not sharepoint_ids or not sharepoint_ids.list_id or not sharepoint_ids.site_url:
         raise ChannelFilesUnavailable(
             f"Document library {drive_id} came back without its list or site identity"
@@ -434,7 +442,7 @@ def resolve_channel_library(
         drive_id=drive_id,
         list_id=sharepoint_ids.list_id,
         site_url=sharepoint_ids.site_url,
-        folder_id=folder["id"],
+        folder_id=folder_id,
     )
 
 
