@@ -169,6 +169,68 @@ def _build_phase5_checkpoint() -> SharepointConnectorCheckpoint:
     return cp
 
 
+def test_docs_only_indexing_accepts_drive_without_list_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connector = _setup_connector(monkeypatch)
+    _mock_convert(monkeypatch)
+    checkpoint = _build_phase3_checkpoint()
+    assert checkpoint.cached_drives is not None
+    checkpoint.cached_drives[0].list_id = None
+    monkeypatch.setattr(
+        sp_connector,
+        "fetch_one_delta_page",
+        lambda *_args, **_kwargs: ([_make_item("doc")], None),
+    )
+
+    yielded, _ = _consume_generator(
+        connector._load_from_checkpoint(
+            _EPOCH_START, _END_TS, checkpoint, include_permissions=False
+        )
+    )
+
+    assert [document.id for document in _docs_from(yielded)] == ["doc"]
+    assert not _failures_from(yielded)
+
+
+def test_checkpoint_accepts_drive_without_list_id() -> None:
+    checkpoint = SharepointConnectorCheckpoint.model_validate(
+        {
+            "has_more": True,
+            "cached_drives": [
+                {
+                    "drive_id": DRIVE_ID,
+                    "display_name": DRIVE_NAME,
+                    "web_url": DRIVE_WEB_URL,
+                }
+            ],
+        }
+    )
+
+    assert checkpoint.cached_drives is not None
+    assert checkpoint.cached_drives[0].list_id is None
+
+
+def test_permission_indexing_skips_drive_without_list_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connector = _setup_connector(monkeypatch)
+    checkpoint = _build_phase3_checkpoint()
+    assert checkpoint.cached_drives is not None
+    checkpoint.cached_drives[0].list_id = None
+
+    yielded, final_checkpoint = _consume_generator(
+        connector._load_from_checkpoint(
+            _EPOCH_START, _END_TS, checkpoint, include_permissions=True
+        )
+    )
+
+    failures = _failures_from(yielded)
+    assert len(failures) == 1
+    assert "requires a list ID" in failures[0].failure_message
+    assert final_checkpoint.current_drive is None
+
+
 # ---------------------------------------------------------------------------
 # G1 — BFS-mode generator failures mid-iteration
 # ---------------------------------------------------------------------------

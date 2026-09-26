@@ -31,6 +31,8 @@ from onyx.connectors.sharepoint.connector import (
 from onyx.connectors.sharepoint.connector_utils import (
     SharepointGroup,
     SharepointPermissionCache,
+    get_sharepoint_external_access,
+    get_sharepoint_hierarchy_node_external_access,
 )
 from onyx.db.enums import HierarchyNodeType
 
@@ -350,6 +352,22 @@ def test_hierarchy_node_access_uses_securable_object(
     assert mock_get_access.call_args.kwargs == {"add_prefix": True}
 
 
+def test_drive_hierarchy_without_list_id_fails_without_name_lookup() -> None:
+    client_context = MagicMock()
+
+    with pytest.raises(ValueError, match="requires a list ID"):
+        get_sharepoint_hierarchy_node_external_access(
+            client_context,
+            MagicMock(),
+            SharepointPermissionCache(),
+            HierarchyNodeType.DRIVE,
+            list_id=None,
+        )
+
+    client_context.web.lists.get_by_id.assert_not_called()
+    client_context.web.lists.get_by_title.assert_not_called()
+
+
 @patch(f"{MODULE}._get_groups_and_members_recursively")
 @patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label: query)
 def test_sharepoint_group_ids_are_scoped_to_their_site(
@@ -618,6 +636,22 @@ def test_is_public_item_skips_api_call_when_disabled() -> None:
 # ---------------------------------------------------------------------------
 # get_external_access_from_sharepoint – sharing link integration
 # ---------------------------------------------------------------------------
+
+
+def test_drive_item_without_list_id_fails_without_name_lookup() -> None:
+    client_context = MagicMock()
+
+    with pytest.raises(ValueError, match="requires a list ID"):
+        get_sharepoint_external_access(
+            ctx=client_context,
+            graph_client=MagicMock(),
+            permission_cache=SharepointPermissionCache(),
+            list_id=None,
+            drive_item=MagicMock(),
+        )
+
+    client_context.web.lists.get_by_id.assert_not_called()
+    client_context.web.lists.get_by_title.assert_not_called()
 
 
 @patch(f"{MODULE}._is_public_item", return_value=True)
