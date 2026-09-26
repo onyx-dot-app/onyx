@@ -49,7 +49,11 @@ def _collect_available_file_ids(
     chat_history: list[ChatMessage],
     context_user_files: list[UserFileMetadata],
 ) -> AvailableFiles:
-    """Collect authorized file IDs, separated by storage type."""
+    """Collect all file IDs the FileReaderTool should be allowed to access.
+
+    Returns *separate* lists for chat-attached files (``file_record`` IDs) and
+    project/user files (``user_file`` IDs) so the tool can pick the right
+    loader without a try/except fallback."""
     chat_file_ids: set[UUID] = set()
     user_file_ids: set[UUID] = set()
 
@@ -102,7 +106,14 @@ def _load_context_user_files_for_tools(
     user_files: list[UserFileMetadata],
     existing_filenames: set[str],
 ) -> list[ChatFile]:
-    """Expose tabular context files to tools with lazy content loading."""
+    """Stage tabular project/persona files for code-interpreter as lazy
+    ChatFile instances.
+
+    Raw bytes are not read here; each ChatFile carries a loader closure that
+    pulls from the file store only when PythonTool actually accesses
+    ``.content`` during staging. This avoids loading every project/persona
+    file into RAM for chats that never invoke the Python tool.
+    """
     if not user_files:
         return []
 
@@ -202,7 +213,12 @@ def extract_context_files(
     # more files, this makes it so that we don't throw away the history too quickly every time.
     max_llm_context_percentage: float = 0.6,
 ) -> ExtractedContextFiles:
-    """Load files that fit the prompt budget; expose overflow through search or tools."""
+    """Load user files into context if they fit; otherwise flag for search.
+
+    The caller is responsible for deciding *which* user files to pass in
+    (project files, persona files, etc.).  This function only cares about
+    the all-or-nothing fit check and the actual content loading.
+    """
     # TODO(yuhong): I believe this is not handling all file types correctly.
 
     if not user_files:
@@ -494,6 +510,20 @@ def _get_or_extract_plaintext(
 def _load_chat_file(
     file_descriptor: FileDescriptor, token_count: int, content_pending: bool
 ) -> ChatLoadedFile:
+    """Build a ChatLoadedFile whose raw ``content`` bytes are loaded lazily.
+
+    Chat sessions accumulate hundreds of files over time, and a new message
+    sent in such a session previously triggered an unbounded parallel fan-out
+    of full-bytes-into-memory reads, the vast majority of which were
+    immediately discarded by chat-history truncation. We now defer the raw
+    bytes read until something downstream actually accesses ``.content`` —
+    typically only a handful of files survive truncation per turn.
+
+    ``content_text`` (used for LLM context injection) and ``token_count``
+    remain eager because they're cheap: the cached-plaintext store hit avoids
+    reading the original bytes entirely on the common path, and token_count
+    is supplied by the caller from a batch DB lookup.
+    """
     file_id = file_descriptor["id"]
     file_type = ChatFileType(file_descriptor["type"])
     filename = file_descriptor.get("name")
@@ -576,6 +606,8 @@ _MAX_PARALLEL_CHAT_FILE_LOADS = 16
 
 def load_chat_files(inputs: list[ChatFileInput]) -> list[ChatLoadedFile]:
     """Load attachments from metadata without retaining a preparation session."""
+    # Raw bytes are loaded lazily. Even so, cap fan-out so a session with
+    # hundreds of files cannot start hundreds of concurrent storage reads.
     # The shared parallel helper erases each callable's return type.
     return cast(
         list[ChatLoadedFile],

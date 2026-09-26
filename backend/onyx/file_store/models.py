@@ -9,7 +9,12 @@ from typing_extensions import TypedDict  # noreorder
 
 
 class _LazyContent:
-    """Own one loader and cache shared by copied file descriptors."""
+    """Own one loader and cache shared by copied file descriptors.
+
+    Two threads racing on first access must not both call the loader: that
+    would fetch the same bytes from object storage twice. The lock protects
+    the shared cache, including reads through copies of the descriptor.
+    """
 
     def __init__(self, loader: Callable[[], bytes]) -> None:
         self._loader = loader
@@ -29,7 +34,12 @@ class _LazyContent:
 def install_lazy_content_loader(
     instance: BaseModel, loader: Callable[[], bytes]
 ) -> None:
-    """Attach shared resource ownership outside serialized descriptor fields."""
+    """Attach shared resource ownership outside serialized descriptor fields.
+
+    The model's __getattribute__ calls maybe_materialize_lazy_content when
+    content is accessed. object.__setattr__ stores the resource in __dict__
+    without adding a Pydantic field, so model_dump does not include it.
+    """
     object.__setattr__(instance, "_lazy_content", _LazyContent(loader))
 
 
@@ -200,6 +210,9 @@ class FileToolMetadata(BaseModel):
     filename: str
     approx_char_count: int
 
+    # Whether the bytes are available to tools that receive files (PythonTool).
+    # Summary-truncated attachments are listed for the LLM but never staged;
+    # listing them must not promise Python access to bytes it does not have.
     staged_for_tools: bool = True
 
 

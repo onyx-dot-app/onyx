@@ -27,9 +27,13 @@ class ToolContext(BaseModel):
     user_info: str | None = None
     citation_mapping: dict[int, str] = Field(default_factory=dict)
     next_citation_num: int = 1
+    # On repeat searches, defer to the model's new queries instead of repeating
+    # the expansion flow that may have produced poor results on the first pass.
     skip_search_query_expansion: bool = False
     chat_files: list[ChatFile] = Field(default_factory=list)
     url_snippet_map: dict[str, str] = Field(default_factory=dict)
+    # When False, don't pass memory context to search tools for query expansion
+    # (but still pass it to the memory tool for persistence)
     inject_memories_in_prompt: bool = True
 
 

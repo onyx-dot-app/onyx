@@ -72,6 +72,10 @@ def messages_for_model(
 ) -> list[Message]:
     """Exclude unfinished tool calls while preserving recorded partial output.
 
+    History truncation can drop an assistant tool call while leaving its
+    result behind. Providers such as Ollama reject these orphaned results
+    with an "unexpected tool call id" error, so omit them from model context.
+
     Set copy_messages=False only when the caller owns the detached input messages.
     """
     result: list[Message] = []

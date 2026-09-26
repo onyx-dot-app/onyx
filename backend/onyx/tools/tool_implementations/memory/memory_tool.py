@@ -1,3 +1,11 @@
+"""
+Memory Tool for storing user-specific information.
+
+This tool allows the LLM to save memories about the user for future conversations.
+The memories are passed in via ToolContext.user_memory_context, which contains the current list of
+memories that exist for the user.
+"""
+
 from pydantic import BaseModel
 from typing_extensions import override
 

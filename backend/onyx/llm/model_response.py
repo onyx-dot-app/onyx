@@ -201,7 +201,9 @@ def from_litellm_model_response_stream(
     response: "LiteLLMModelResponseStream",
 ) -> ModelResponseStream:
     data = _ProviderResponse.model_validate(response.model_dump())
-    # Usage-only terminal chunks have no choices.
+    # OpenAI (and other providers) emit a final usage-only chunk with an empty
+    # `choices` array when stream_options.include_usage is set. Treat it as an
+    # empty-delta chunk that still carries usage rather than failing the stream.
     choice = data.choices[0] if data.choices else _ProviderChoice()
     return ModelResponseStream(
         id=str(data.id),
@@ -218,12 +220,32 @@ def from_litellm_model_response_stream(
 def from_litellm_model_response(
     response: "LiteLLMModelResponse",
 ) -> ModelResponse:
+    """Collapse a response's ``choices`` into the single answer they describe.
+
+    ``choices`` normally holds one entry per requested completion, and Onyx only
+    ever requests one. litellm's OpenAI-responses bridge (non-streamed) is the
+    exception: it emits one choice per message content part, then one holding
+    every tool call. Reading ``choices[0]`` drops the tool calls, and on
+    gpt-5.4+ it can return a preamble instead of the answer.
+
+    Upstream: BerriAI/litellm#37299, open PRs #33931 and #41123 (unfixed in
+    1.102.1). Once a single choice comes back, this is a pass-through.
+
+    Merging is safe because Onyx never sets ``n``: more than one choice always
+    means a split answer, never alternative answers.
+    """
     data = _ProviderResponse.model_validate(response.model_dump())
     if not data.choices:
         raise ValueError("LiteLLM response must include at least one choice.")
     choice = data.choices[0]
     if len(data.choices) > 1:
+        # Kept as sent, repeats included. gpt-5.4+ sometimes re-sends a message
+        # item, but a choice carries no item id, so a resend cannot be told apart
+        # from text that really repeats. The streamed path keeps resends too
+        # (litellm#41117 is open), so both transports return the same text.
         messages = [item.message for item in data.choices]
+        # The bridge appends the tool-call choice after the text ones, so the last
+        # stated finish_reason is the one describing how the answer ended.
         finish_reasons = [
             item.finish_reason for item in data.choices if item.finish_reason
         ]

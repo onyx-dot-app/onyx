@@ -39,6 +39,8 @@ class ContextThreadPoolExecutor(ThreadPoolExecutor):
     def submit[T, **P](
         self, fn: Callable[P, T], /, *args: P.args, **kwargs: P.kwargs
     ) -> Future[T]:
+        # A single Context cannot be entered concurrently by multiple threads.
+        # Copy per submission to preserve tenant and trace state without races.
         context = contextvars.copy_context()
         return super().submit(lambda: context.run(fn, *args, **kwargs))
 
@@ -487,7 +489,12 @@ def start_thread_with_context(
     kwargs: dict[str, Any] | None = None,
     context: contextvars.Context | None = None,
 ) -> threading.Thread:
-    """Start a thread with an explicit context or a copy of the caller's context."""
+    """Start a thread with an explicit context or a copy of the caller's context.
+
+    Preserve tenant ID, request ID, and trace context across threads.
+    A thread with an empty context cannot use tenant-scoped DB access:
+    it would raise "Tenant ID is not set".
+    """
     ctx = context if context is not None else contextvars.copy_context()
     thread = threading.Thread(
         target=lambda: ctx.run(target, *args, **(kwargs or {})),

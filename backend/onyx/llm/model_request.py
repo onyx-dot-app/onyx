@@ -75,6 +75,11 @@ def serialize_request(
         else []
     ) + request.messages
     messages: list[ChatCompletionMessage] = []
+    # The last message for which cacheable is true
+    # AND is true for all previous messages
+    # (counting from the start of the history)
+    # represents the end of the cacheable prefix
+    # used for prompt caching
     cacheable_prefix = 0
     ollama = config.model_provider == LlmProviderNames.OLLAMA_CHAT
     for index, message in enumerate(history):

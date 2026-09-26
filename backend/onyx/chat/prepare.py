@@ -349,10 +349,15 @@ def _prepare_chat_data(
             persona, chat_session.project_id, user.id, db_session
         )
     ]
+    # Collect file IDs for the file reader tool *before* summary truncation so
+    # that files attached to older (summarized-away) messages are still accessible
+    # via the FileReaderTool.
     available_files = _collect_available_file_ids(chat_history, context_user_files)
     memory = get_memories(user, db_session)
     custom_prompt = get_custom_agent_prompt(persona, chat_session)
     base_system_prompt = get_default_base_system_prompt(db_session)
+    # Reserve against the placeholder-substituted text sent to the model,
+    # so long directory values cannot invalidate the reservation.
     reserved_tokens = calculate_reserved_tokens(
         db_session=db_session,
         persona_system_prompt=substitute_user_placeholders(
@@ -493,6 +498,9 @@ def _prepare_history(
         )
         else {}
     )
+    # Summary-truncated messages no longer carry file_id tags in the history.
+    # Keep their metadata so the model can still discover these files through
+    # the forgotten-file notice after context-window truncation.
     for file_id, metadata in prepared.summarized_file_metadata.items():
         file_metadata.setdefault(file_id, metadata)
     if prepared.summary:
@@ -636,7 +644,12 @@ def prepare_chat_turn(
 
 
 def get_custom_agent_prompt(persona: Persona, chat_session: ChatSession) -> str | None:
-    """Select persona instructions, or project instructions for the default persona."""
+    """Select persona instructions, or project instructions for the default persona.
+
+    A custom agent retains its own prompt inside a project. A prompt that
+    replaces the base system prompt is not also added as a custom prompt.
+    Empty persona prompts become None rather than falling back to the project.
+    """
     # Custom agent instructions take precedence over project instructions, including an empty prompt.
     if persona.id != DEFAULT_PERSONA_ID:
         if persona.replace_base_system_prompt:

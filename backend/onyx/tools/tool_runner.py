@@ -30,7 +30,12 @@ MERGEABLE_TOOL_FIELDS: dict[str, str] = {
 def _merge_tool_arguments(
     first: dict[str, JsonValue], second: dict[str, JsonValue], *, field: str
 ) -> dict[str, JsonValue] | None:
-    """Combine query lists only when all other retrieval settings match."""
+    """Combine query lists only when all other retrieval settings match.
+
+    SearchTool and WebSearchTool merge queries; OpenURLTool merges urls.
+    This collapses repeated retrieval calls into a single call per tool.
+    Other tool calls are left unchanged.
+    """
     if {key: value for key, value in first.items() if key != field} != {
         key: value for key, value in second.items() if key != field
     }:

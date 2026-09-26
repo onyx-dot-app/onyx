@@ -364,6 +364,7 @@ class DeepResearchAgent(FeatureRestoration):
 
     def _research(self, invocation: ToolInvocation) -> ToolResult | ChildRunWait:
         task = parse_tool_arguments(ResearchTask, invocation.arguments)
+        # Session override wins in sub-agents. AUTO keeps the tuned LOW default.
         child = ResearchAgent(
             tools=self.tools,
             llm=self.llm,
@@ -415,6 +416,8 @@ class DeepResearchAgent(FeatureRestoration):
         if not isinstance(output.metadata, ResearchMessageMetadata) or not output.text:
             raise ValueError("Research child requires a report with source metadata")
         with self._citation_lock:
+            # Intermediate reports keep their original [1], [2] markers.
+            # Renumber them and merge their source mappings for the combined report.
             report, self.citation_mapping = collapse_citations(
                 answer_text=output.text,
                 existing_citation_mapping=self.citation_mapping,
