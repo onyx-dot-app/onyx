@@ -123,8 +123,8 @@ OAUTH_PAGES_PER_CHECKPOINT = 2
 FOLDERS_PER_CHECKPOINT = 1
 
 # Upper bound on the dedup set. Drive file ids measure ~119 bytes per entry with
-# deep_getsizeof, so this holds it near 95 MB and leaves room under the
-# checkpoint size budget for the rest of the checkpoint.
+# deep_getsizeof, so this holds it near 95 MB, well under
+# CHECKPOINT_SIZE_LIMIT_BYTES.
 MAX_DEDUP_DRIVE_FILE_IDS = 800_000
 
 
@@ -1621,8 +1621,8 @@ class GoogleDriveConnector(
             # Dedup on the Drive file id rather than the document URL. The URL
             # costs ~159 bytes per entry under deep_getsizeof (what the
             # checkpoint size guard measures) against ~119 for the id.
-            dedup_key = drive_file.get("id") or document_id
-            seen_file_ids = checkpoint.retrieved_drive_file_ids
+            dedup_key: str = drive_file.get("id") or document_id
+            seen_file_ids: set[str] = checkpoint.retrieved_drive_file_ids
             logger.debug(
                 "Updating checkpoint for file: %s. Seen: %s",
                 drive_file.get("name"),
@@ -1631,15 +1631,16 @@ class GoogleDriveConnector(
             if dedup_key in seen_file_ids:
                 continue
 
-            # Past the cap, stop tracking and let duplicates through. The
-            # indexing pipeline drops them on doc_updated_at, which is far
-            # cheaper than failing the sync outright.
+            # Past the cap, stop tracking and let duplicates through. Each one
+            # costs a re-download; indexing skips it on content hash once an
+            # earlier copy is persisted, and otherwise re-upserts the same
+            # document id. Both are cheaper than failing the sync.
             if len(seen_file_ids) < MAX_DEDUP_DRIVE_FILE_IDS:
                 seen_file_ids.add(dedup_key)
                 if len(seen_file_ids) == MAX_DEDUP_DRIVE_FILE_IDS:
                     logger.warning(
                         "Reached the %s file dedup cap; later duplicates will be "
-                        "re-yielded and deduplicated during indexing.",
+                        "re-yielded to indexing.",
                         MAX_DEDUP_DRIVE_FILE_IDS,
                     )
             yield file
