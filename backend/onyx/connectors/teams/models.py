@@ -82,9 +82,8 @@ class ChannelRef(BaseModel):
     membership_type: str | None = None
 
 
-class ChannelFilesFolder(BaseModel):
-    """The SharePoint folder a channel's files are posted into, and the
-    document library it belongs to."""
-
+class ChannelLibrary(BaseModel):
     drive_id: str
-    id: str
+    list_id: str
+    site_url: str
+    folder_id: str

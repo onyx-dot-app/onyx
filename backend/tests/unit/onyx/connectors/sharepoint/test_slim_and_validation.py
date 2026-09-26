@@ -249,7 +249,11 @@ def test_retrieve_all_slim_docs_does_not_fetch_permissions(
     """retrieve_all_slim_docs (pruning path) never calls _create_rest_client_context
     and returns SlimDocuments with empty ExternalAccess."""
     from onyx.connectors.models import ExternalAccess, SlimDocument
-    from onyx.connectors.sharepoint.connector import DriveItemData
+    from onyx.connectors.sharepoint.connector import (
+        DriveItemData,
+        FetchedDriveItem,
+        SiteDrive,
+    )
 
     connector = _make_connector()
     connector.include_site_documents = True
@@ -265,7 +269,15 @@ def test_retrieve_all_slim_docs_does_not_fetch_permissions(
     driveitem.parent_reference_path = None
     driveitem.created_datetime = None
     mock_fetch_driveitems.return_value = [
-        (driveitem, "Documents", None),
+        FetchedDriveItem(
+            driveitem=driveitem,
+            drive=SiteDrive(
+                drive_id="drive-id",
+                list_id="list-id",
+                display_name="Documents",
+                web_url=f"{SITE_URL}/Shared%20Documents",
+            ),
+        ),
     ]
 
     mock_fetch_site_pages.return_value = [

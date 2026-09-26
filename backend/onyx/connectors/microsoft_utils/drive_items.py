@@ -21,7 +21,7 @@ import requests
 from office365.graph_client import GraphClient
 from office365.onedrive.driveitems.driveItem import DriveItem
 from office365.runtime.paths.resource_path import ResourcePath
-from pydantic import BaseModel
+from pydantic import AliasChoices, BaseModel, Field
 
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import FileOrigin
@@ -279,6 +279,25 @@ class DriveItemData(BaseModel):
                 {LIST_ITEM_ID_PROPERTY: self.list_item_id},
             )
         return item
+
+
+class DriveFolderReference(BaseModel):
+    id: str
+    web_url: str = Field(
+        validation_alias=AliasChoices(DRIVE_ITEM_WEB_URL_PROPERTY, "web_url")
+    )
+
+
+def resolve_drive_folder(
+    client: GraphApiClient, drive_id: str, folder_path: str
+) -> DriveFolderReference:
+    return DriveFolderReference.model_validate(
+        client.get_json(
+            f"{client.graph_api_base}/drives/{drive_id}/root:/"
+            f"{quote(folder_path, safe='/')}",
+            {"$select": "id,webUrl"},
+        )
+    )
 
 
 class DriveItemContent(BaseModel):
