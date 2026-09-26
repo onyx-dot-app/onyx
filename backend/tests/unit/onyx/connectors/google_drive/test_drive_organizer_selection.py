@@ -210,20 +210,26 @@ def test_other_errors_are_unknown_rather_than_unreachable(status: int) -> None:
 
 
 def test_successful_get_is_reachable() -> None:
-    assert check_drive_reachable(MagicMock(), _DRIVE) is DriveReachability.REACHABLE
+    service = MagicMock()
+
+    assert check_drive_reachable(service, _DRIVE) is DriveReachability.REACHABLE
+    service.drives().get.assert_called_once_with(driveId=_DRIVE, fields="id")
+    service.drives().get().execute.assert_called_once_with()
 
 
 def test_members_with_unrecognized_role_or_type_are_skipped() -> None:
-    """Google can add roles; an unknown one must not crash discovery."""
+    """Google can add roles or types; an unknown one must not crash discovery."""
     raw = [
         {"emailAddress": f"boss@{_DOMAIN}", "type": "user", "role": "organizer"},
         {"emailAddress": f"odd@{_DOMAIN}", "type": "user", "role": "brandNewRole"},
+        {"emailAddress": f"bot@{_DOMAIN}", "type": "brandNewType", "role": "reader"},
         {"type": "domain", "domain": _DOMAIN, "role": "reader"},
     ]
+    service = MagicMock()
     with patch(
         f"{_MOD}.execute_paginated_retrieval", return_value=iter(raw)
     ) as retrieval:
-        members = list_drive_members(MagicMock(), _DRIVE)
+        members = list_drive_members(service, _DRIVE)
 
     assert [(m.email, m.role, m.principal_type) for m in members] == [
         (f"boss@{_DOMAIN}", DriveRole.ORGANIZER, PrincipalType.USER),
@@ -231,6 +237,9 @@ def test_members_with_unrecognized_role_or_type_are_skipped() -> None:
     ]
     # Domain admin access is the whole reason this works for drives the admin
     # is not a member of; without it files.list would 403 and discovery stops.
+    assert (
+        retrieval.call_args.kwargs["retrieval_function"] is service.permissions().list
+    )
     assert retrieval.call_args.kwargs["useDomainAdminAccess"] is True
     assert retrieval.call_args.kwargs["supportsAllDrives"] is True
     assert retrieval.call_args.kwargs["fileId"] == _DRIVE
