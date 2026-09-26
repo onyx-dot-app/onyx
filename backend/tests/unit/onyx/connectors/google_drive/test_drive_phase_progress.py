@@ -5,6 +5,9 @@ re-list a partition that already finished. This is the state that replaces the
 per-document seen-set, so it also has to stay proportional to drives and users.
 """
 
+import pytest
+from pydantic import ValidationError
+
 from onyx.connectors.google_drive.models import (
     DriveRetrievalPhase,
     DriveRetrievalStage,
@@ -70,6 +73,12 @@ def test_finished_partitions_are_not_revisited() -> None:
     progress = _progress(["a", "b", "c"], index=2)
 
     assert progress.remaining_partitions == ["c"]
+
+
+def test_negative_partition_index_is_rejected() -> None:
+    """A negative index would silently resume from the wrong end of the list."""
+    with pytest.raises(ValidationError):
+        _progress(["a", "b"], index=-1)
 
 
 def test_resume_keeps_partition_and_page_token() -> None:
