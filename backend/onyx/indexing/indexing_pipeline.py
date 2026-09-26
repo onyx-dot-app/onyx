@@ -226,7 +226,11 @@ def _upsert_documents_in_db(
         )
         document_metadata_list.append(db_doc_metadata)
 
-    upsert_documents(db_session, document_metadata_list)
+    upsert_documents(
+        db_session,
+        document_metadata_list,
+        source=documents[0].source if documents else None,
+    )
 
     # Insert document content metadata
     for doc in documents:
