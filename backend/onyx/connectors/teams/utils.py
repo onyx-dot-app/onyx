@@ -16,6 +16,10 @@ from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.microsoft_utils.drive_delta import (
+    SHAREPOINT_IDS_PROPERTY,
+    GraphDrive,
+)
 from onyx.connectors.microsoft_utils.graph_client import (
     GRAPH_API_MAX_RETRIES,
     GRAPH_API_RETRYABLE_STATUSES,
@@ -415,21 +419,21 @@ def resolve_channel_library(
         raise ChannelFilesUnavailable(
             f"The files folder of channel {channel_id} names no document library"
         )
-    drive = get_json_with_retry(
-        graph_client=graph_client,
-        request_url=f"drives/{drive_id}?$select=sharePointIds",
+    drive = GraphDrive.model_validate(
+        get_json_with_retry(
+            graph_client=graph_client,
+            request_url=f"drives/{drive_id}?$select={SHAREPOINT_IDS_PROPERTY}",
+        )
     )
-    sharepoint_ids = drive.get("sharePointIds") or {}
-    list_id = sharepoint_ids.get("listId")
-    site_url = sharepoint_ids.get("siteUrl")
-    if not list_id or not site_url:
+    sharepoint_ids = drive.sharepoint_ids
+    if not sharepoint_ids or not sharepoint_ids.list_id or not sharepoint_ids.site_url:
         raise ChannelFilesUnavailable(
             f"Document library {drive_id} came back without its list or site identity"
         )
     return ChannelLibrary(
         drive_id=drive_id,
-        list_id=list_id,
-        site_url=site_url,
+        list_id=sharepoint_ids.list_id,
+        site_url=sharepoint_ids.site_url,
         folder_id=folder["id"],
     )
 

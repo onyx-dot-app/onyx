@@ -22,6 +22,7 @@ import pytest
 import requests
 
 from onyx.connectors.microsoft_utils.drive_delta import (
+    SHAREPOINT_IDS_PROPERTY,
     DriveDeltaFetchResult,
     DriveDeltaPage,
 )
@@ -380,7 +381,9 @@ class TestDeltaPerPageCheckpointing:
         graph_drive.id = DRIVE_ID
         graph_drive.name = "OneDrive"
         graph_drive.web_url = DRIVE_WEB_URL
-        graph_drive.sharepoint_ids.listId = LIST_ID
+        graph_drive.properties = {
+            SHAREPOINT_IDS_PROPERTY: {"listId": LIST_ID},
+        }
         graph_client = MagicMock()
         drives = graph_client.sites.get_by_url.return_value.drives
         drives.select.return_value.get_all.return_value.execute_query.return_value = [

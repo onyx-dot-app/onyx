@@ -30,6 +30,7 @@ from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     is_tabular_file,
 )
 from onyx.connectors.microsoft_utils.drive_delta import (
+    SHAREPOINT_IDS_PROPERTY,
     DriveDeltaPage,
     fetch_drive_delta_checkpoint_page,
 )
@@ -54,7 +55,6 @@ logger = setup_logger()
 
 _EPOCH = datetime.fromtimestamp(0, tz=timezone.utc)
 
-SHAREPOINT_IDS_PROPERTY = "sharepointIds"
 LIST_ITEM_ID_PROPERTY = "listItemId"
 DRIVE_ITEM_ID_PROPERTY = "id"
 DRIVE_ITEM_NAME_PROPERTY = "name"
