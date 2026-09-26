@@ -1,11 +1,11 @@
 """Typed Microsoft Graph drive delta pages and checkpoint-safe fetching."""
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import Annotated, Any
 from urllib.parse import quote, urljoin, urlsplit
 
 import requests
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
 from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
 from onyx.utils.logger import setup_logger
@@ -115,10 +115,10 @@ class GraphSharePointIds(_GraphModel):
     web_id: str | None = Field(default=None, alias="webId")
 
 
-class GraphDrive(_GraphModel):
-    sharepoint_ids: GraphSharePointIds | None = Field(
-        None, alias=SHAREPOINT_IDS_PROPERTY
-    )
+def parse_graph_sharepoint_ids(value: object) -> GraphSharePointIds | None:
+    if not isinstance(value, dict):
+        return None
+    return GraphSharePointIds.model_validate(value)
 
 
 class DriveDeltaSharingFacet(_GraphModel):
@@ -155,9 +155,9 @@ class DriveDeltaItem(_GraphModel):
     parent_reference: DriveDeltaParentReference | None = Field(
         default=None, alias=DRIVE_ITEM_PARENT_REFERENCE_PROPERTY
     )
-    sharepoint_ids: GraphSharePointIds | None = Field(
-        default=None, alias=SHAREPOINT_IDS_PROPERTY
-    )
+    sharepoint_ids: Annotated[
+        GraphSharePointIds | None, BeforeValidator(parse_graph_sharepoint_ids)
+    ] = Field(default=None, alias=SHAREPOINT_IDS_PROPERTY)
     download_url: str | None = Field(
         default=None, alias=DRIVE_ITEM_DOWNLOAD_URL_PROPERTY
     )

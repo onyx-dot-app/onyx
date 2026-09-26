@@ -15,7 +15,10 @@ from office365.runtime.client_request_exception import ClientRequestException
 from requests import Response
 from requests.exceptions import HTTPError
 
-from onyx.connectors.microsoft_utils.drive_delta import SHAREPOINT_IDS_PROPERTY
+from onyx.connectors.microsoft_utils.drive_delta import (
+    SHAREPOINT_IDS_PROPERTY,
+    parse_graph_sharepoint_ids,
+)
 from onyx.connectors.microsoft_utils.drive_items import (
     DriveFolderReference,
     DriveItemData,
@@ -494,6 +497,23 @@ def test_site_drive_without_sharepoint_ids_has_no_list_id() -> None:
     result = SharepointConnector._site_drive_from_graph(drive)
 
     assert result.list_id is None
+
+
+def test_graph_sharepoint_ids_parser_reads_valid_facet() -> None:
+    result = parse_graph_sharepoint_ids({"listId": "list-id"})
+
+    assert result is not None
+    assert result.list_id == "list-id"
+
+
+@pytest.mark.parametrize("value", [None, "invalid", []])
+def test_graph_sharepoint_ids_parser_ignores_non_dict_facets(value: object) -> None:
+    assert parse_graph_sharepoint_ids(value) is None
+
+
+def test_graph_sharepoint_ids_parser_rejects_malformed_dict() -> None:
+    with pytest.raises(ValueError):
+        parse_graph_sharepoint_ids({"listId": {"unexpected": "object"}})
 
 
 def test_configured_drive_selection_reads_later_page() -> None:

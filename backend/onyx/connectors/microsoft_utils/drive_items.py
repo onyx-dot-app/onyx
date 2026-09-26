@@ -33,6 +33,7 @@ from onyx.connectors.microsoft_utils.drive_delta import (
     SHAREPOINT_IDS_PROPERTY,
     DriveDeltaPage,
     fetch_drive_delta_checkpoint_page,
+    parse_graph_sharepoint_ids,
 )
 from onyx.connectors.microsoft_utils.graph_client import (
     TRANSIENT_TRANSPORT_EXCEPTIONS,
@@ -238,7 +239,7 @@ class DriveItemData(BaseModel):
             "user", {}
         )
         parent_ref = item.get(DRIVE_ITEM_PARENT_REFERENCE_PROPERTY, {})
-        sharepoint_ids = item.get(SHAREPOINT_IDS_PROPERTY) or {}
+        sharepoint_ids = parse_graph_sharepoint_ids(item.get(SHAREPOINT_IDS_PROPERTY))
 
         return cls(
             id=item[DRIVE_ITEM_ID_PROPERTY],
@@ -260,7 +261,7 @@ class DriveItemData(BaseModel):
             ),
             parent_reference_path=parent_ref.get("path"),
             drive_id=parent_ref.get("driveId"),
-            list_item_id=sharepoint_ids.get(LIST_ITEM_ID_PROPERTY),
+            list_item_id=sharepoint_ids.list_item_id if sharepoint_ids else None,
         )
 
     def to_sdk_driveitem(self, graph_client: GraphClient) -> DriveItem:

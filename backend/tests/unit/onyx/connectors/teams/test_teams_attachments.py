@@ -747,6 +747,22 @@ def test_a_library_that_names_no_site_is_one_channel_failure(
     assert "without its list or site identity" in failures[0].failure_message
 
 
+def test_a_library_with_malformed_identity_is_one_channel_failure(
+    library: dict[str, Any],  # noqa: ARG001
+) -> None:
+    routes = {
+        **_channel_routes(message("m1", "Plan")),
+        DRIVE_URL: {SHAREPOINT_IDS_PROPERTY: {"listId": {"bad": "shape"}}},
+    }
+
+    items = walk_channel(connector(graph_client(routes), include_attachments=True))
+
+    assert _document_ids(items) == ["m1"]
+    failures = [item for item in items if isinstance(item, ConnectorFailure)]
+    assert len(failures) == 1
+    assert "returned malformed identity" in failures[0].failure_message
+
+
 def test_a_refused_files_folder_names_the_grant(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

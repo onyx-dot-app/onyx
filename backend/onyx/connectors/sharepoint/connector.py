@@ -40,8 +40,8 @@ from onyx.connectors.interfaces import (
 )
 from onyx.connectors.microsoft_utils.drive_delta import (
     SHAREPOINT_IDS_PROPERTY,
-    GraphDrive,
     build_delta_start_url,
+    parse_graph_sharepoint_ids,
 )
 from onyx.connectors.microsoft_utils.drive_items import (
     DriveFolderReference,
@@ -1080,7 +1080,9 @@ class SharepointConnector(
     @staticmethod
     def _site_drive_from_graph(drive: Drive) -> SiteDrive:
         drive_id = drive.id
-        sharepoint_ids = GraphDrive.model_validate(drive.properties).sharepoint_ids
+        sharepoint_ids = parse_graph_sharepoint_ids(
+            drive.properties.get(SHAREPOINT_IDS_PROPERTY)
+        )
         display_name = drive.name
         web_url = drive.web_url
         if not drive_id or not display_name or not web_url:
