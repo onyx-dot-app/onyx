@@ -16,9 +16,11 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import FileOrigin
+from onyx.access.models import ExternalAccess
+from onyx.access.utils import build_ext_group_name_for_onyx
+from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.connectors.models import IndexAttemptMetadata
-from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import ConnectorCredentialPair, DocumentByConnectorCredentialPair
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
@@ -143,6 +145,55 @@ class TestExistingDocuments:
 
         row = get_doc_row(db_session, doc.id)
         assert row is not None and row.file_id == file_id
+
+    def test_changed_acl_updates_without_content_work(
+        self,
+        db_session: Session,
+        attempt_metadata: IndexAttemptMetadata,
+    ) -> None:
+        doc = make_doc(f"doc-{uuid4().hex[:8]}")
+        doc.external_access = ExternalAccess({"old@example.com"}, {"old"}, False)
+        index_doc_batch_prepare(
+            documents=[doc],
+            index_attempt_metadata=attempt_metadata,
+            db_session=db_session,
+            ignore_time_skip=True,
+        )
+
+        row = get_doc_row(db_session, doc.id)
+        assert row is not None
+        row.content_hash = doc.content_hash()
+        db_session.commit()
+
+        doc.external_access = ExternalAccess({"new@example.com"}, {"new"}, True)
+        result = index_doc_batch_prepare(
+            documents=[doc],
+            index_attempt_metadata=attempt_metadata,
+            db_session=db_session,
+        )
+
+        assert result is None
+        relationship = db_session.get(
+            DocumentByConnectorCredentialPair,
+            (
+                doc.id,
+                attempt_metadata.connector_id,
+                attempt_metadata.credential_id,
+            ),
+        )
+        assert relationship is not None
+        expected_group = build_ext_group_name_for_onyx(
+            "new", DocumentSource.MOCK_CONNECTOR
+        )
+        assert relationship.external_user_emails == ["new@example.com"]
+        assert relationship.external_user_group_ids == [expected_group]
+        assert relationship.is_public is True
+
+        updated_row = get_doc_row(db_session, doc.id)
+        assert updated_row is not None
+        assert updated_row.external_user_emails == ["new@example.com"]
+        assert updated_row.external_user_group_ids == [expected_group]
+        assert updated_row.is_public is True
 
     def test_swapping_file_id_promotes_new_and_deletes_old(
         self,

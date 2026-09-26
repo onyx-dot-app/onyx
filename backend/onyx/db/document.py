@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, NamedTuple
 from uuid import UUID
 
+from pydantic import BaseModel
 from sqlalchemy import (
     CompoundSelect,
     Integer,
@@ -30,6 +31,8 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.expression import null
 
+from onyx.access.models import ExternalAccess
+from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DEFAULT_BOOST, DocumentSource
 from onyx.configs.kg_configs import KG_SIMPLE_ANSWER_MAX_DISPLAYED_SOURCES
 from onyx.db.chunk import delete_chunk_stats_by_connector_credential_pair__no_commit
@@ -961,8 +964,6 @@ def upsert_documents(
         logger.info("No documents to upsert. Skipping.")
         return
 
-    includes_permissions = any(doc.external_access for doc in seen_documents.values())
-
     insert_stmt = insert(DbDocument).values(
         [
             model_to_dict(
@@ -982,19 +983,6 @@ def upsert_documents(
                     secondary_owners=doc.secondary_owners,
                     kg_stage=KGStage.NOT_STARTED,
                     parent_hierarchy_node_id=doc.parent_hierarchy_node_id,
-                    **(
-                        {
-                            "external_user_emails": list(
-                                doc.external_access.external_user_emails
-                            ),
-                            "external_user_group_ids": list(
-                                doc.external_access.external_user_group_ids
-                            ),
-                            "is_public": doc.external_access.is_public,
-                        }
-                        if doc.external_access
-                        else {}
-                    ),
                     doc_metadata=doc.doc_metadata,
                     file_id=doc.file_id,
                 )
@@ -1015,26 +1003,6 @@ def upsert_documents(
         "parent_hierarchy_node_id": insert_stmt.excluded.parent_hierarchy_node_id,
         "file_id": insert_stmt.excluded.file_id,
     }
-    if includes_permissions:
-        # Use COALESCE to preserve existing permissions when new values are NULL.
-        # This prevents subsequent indexing runs (which don't fetch permissions)
-        # from overwriting permissions set by permission sync jobs.
-        update_set.update(
-            {
-                "external_user_emails": func.coalesce(
-                    insert_stmt.excluded.external_user_emails,
-                    DbDocument.external_user_emails,
-                ),
-                "external_user_group_ids": func.coalesce(
-                    insert_stmt.excluded.external_user_group_ids,
-                    DbDocument.external_user_group_ids,
-                ),
-                "is_public": func.coalesce(
-                    insert_stmt.excluded.is_public,
-                    DbDocument.is_public,
-                ),
-            }
-        )
     on_conflict_stmt = insert_stmt.on_conflict_do_update(
         index_elements=["id"],
         set_=update_set,  # Conflict target
@@ -1051,37 +1019,291 @@ def upsert_document_by_connector_credential_pair(
         logger.info("`document_ids` is empty. Skipping.")
         return
 
-    insert_stmt = insert(DocumentByConnectorCredentialPair).values(
-        [
-            model_to_dict(
-                DocumentByConnectorCredentialPair(
-                    id=doc_id,
-                    connector_id=connector_id,
-                    credential_id=credential_id,
-                    has_been_indexed=False,
-                )
-            )
-            for doc_id in document_ids
-        ]
+    _lock_valid_cc_pair__no_commit(db_session, connector_id, credential_id)
+    _upsert_document_cc_pair_relationships__no_commit(
+        db_session, connector_id, credential_id, document_ids
     )
-    # this must be `on_conflict_do_nothing` rather than `on_conflict_do_update`
-    # since we don't want to update the `has_been_indexed` field for documents
-    # that already exist
-    on_conflict_stmt = insert_stmt.on_conflict_do_nothing().returning(
-        DocumentByConnectorCredentialPair.id
+    db_session.commit()
+
+
+def _lock_valid_cc_pair__no_commit(
+    db_session: Session,
+    connector_id: int,
+    credential_id: int,
+) -> None:
+    cc_pair = db_session.scalar(
+        select(ConnectorCredentialPair)
+        .where(
+            ConnectorCredentialPair.connector_id == connector_id,
+            ConnectorCredentialPair.credential_id == credential_id,
+        )
+        .with_for_update()
     )
-    inserted_document_ids = list(db_session.scalars(on_conflict_stmt))
-    if inserted_document_ids:
-        # Relationship changes use metadata sync for chunks that already exist.
+    if cc_pair is None:
+        raise ValueError(
+            f"No connector credential pair for connector {connector_id} "
+            f"and credential {credential_id}"
+        )
+    if cc_pair.status == ConnectorCredentialPairStatus.DELETING:
+        raise ValueError(f"Connector credential pair {cc_pair.id} is being deleted")
+
+
+def _upsert_document_cc_pair_relationships__no_commit(
+    db_session: Session,
+    connector_id: int,
+    credential_id: int,
+    document_ids: Iterable[str],
+) -> None:
+    rows = [
+        {
+            "id": document_id,
+            "connector_id": connector_id,
+            "credential_id": credential_id,
+            "has_been_indexed": False,
+        }
+        for document_id in sorted(set(document_ids))
+    ]
+    if not rows:
+        return
+    stmt = (
+        insert(DocumentByConnectorCredentialPair)
+        .values(rows)
+        .on_conflict_do_nothing()
+        .returning(DocumentByConnectorCredentialPair.id)
+    )
+    inserted_ids = set(db_session.scalars(stmt))
+    if inserted_ids:
         db_session.execute(
             update(DbDocument)
             .where(
-                DbDocument.id.in_(inserted_document_ids),
+                DbDocument.id.in_(inserted_ids),
                 DbDocument.chunk_count.is_not(None),
             )
             .values(last_modified=datetime.now(timezone.utc))
         )
-    db_session.commit()
+
+
+def _lock_documents__no_commit(
+    db_session: Session,
+    document_ids: Iterable[str],
+) -> dict[str, DbDocument]:
+    ordered_ids = sorted(set(document_ids))
+    if not ordered_ids:
+        return {}
+    documents = db_session.scalars(
+        select(DbDocument)
+        .where(DbDocument.id.in_(ordered_ids))
+        .order_by(DbDocument.id)
+        .with_for_update()
+    ).all()
+    return {document.id: document for document in documents}
+
+
+def _create_missing_documents__no_commit(
+    db_session: Session,
+    document_ids: Iterable[str],
+) -> None:
+    rows = [
+        {
+            "id": document_id,
+            "semantic_id": document_id,
+            "kg_stage": KGStage.NOT_STARTED,
+        }
+        for document_id in sorted(set(document_ids))
+    ]
+    if not rows:
+        return
+    db_session.execute(
+        insert(DbDocument)
+        .values(rows)
+        .on_conflict_do_nothing(index_elements=[DbDocument.id])
+    )
+
+
+class _DocumentExternalAclContributionSummary(BaseModel):
+    external_user_emails: set[str]
+    external_user_group_ids: set[str]
+    is_public: bool
+    has_unknown_contribution: bool
+
+
+def _summarize_active_document_acl_contributions(
+    db_session: Session,
+    documents: dict[str, DbDocument],
+) -> dict[str, _DocumentExternalAclContributionSummary]:
+    if not documents:
+        return {}
+
+    contribution_rows = db_session.execute(
+        select(
+            DocumentByConnectorCredentialPair.id,
+            DocumentByConnectorCredentialPair.external_user_emails,
+            DocumentByConnectorCredentialPair.external_user_group_ids,
+            DocumentByConnectorCredentialPair.is_public,
+        )
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                ConnectorCredentialPair.connector_id
+                == DocumentByConnectorCredentialPair.connector_id,
+                ConnectorCredentialPair.credential_id
+                == DocumentByConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(
+            DocumentByConnectorCredentialPair.id.in_(documents),
+            ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING,
+        )
+    ).all()
+
+    summaries = {
+        document_id: _DocumentExternalAclContributionSummary(
+            external_user_emails=set(),
+            external_user_group_ids=set(),
+            is_public=False,
+            has_unknown_contribution=False,
+        )
+        for document_id in documents
+    }
+    for document_id, emails, groups, is_public in contribution_rows:
+        summary = summaries[document_id]
+        if emails is None or groups is None or is_public is None:
+            summary.has_unknown_contribution = True
+            continue
+        summary.external_user_emails.update(emails)
+        summary.external_user_group_ids.update(groups)
+        summary.is_public = summary.is_public or is_public
+    return summaries
+
+
+def _set_document_external_acl(
+    document: DbDocument,
+    external_user_emails: set[str],
+    external_user_group_ids: set[str],
+    is_public: bool,
+    modified_at: datetime,
+) -> None:
+    if (
+        external_user_emails == set(document.external_user_emails or [])
+        and external_user_group_ids == set(document.external_user_group_ids or [])
+        and is_public == document.is_public
+    ):
+        return
+    document.external_user_emails = sorted(external_user_emails)
+    document.external_user_group_ids = sorted(external_user_group_ids)
+    document.is_public = is_public
+    document.last_modified = modified_at
+
+
+def _recompute_external_acl_after_contribution_update__no_commit(
+    db_session: Session,
+    documents: dict[str, DbDocument],
+) -> None:
+    summaries = _summarize_active_document_acl_contributions(db_session, documents)
+    modified_at = datetime.now(timezone.utc)
+    for document_id, document in documents.items():
+        summary = summaries[document_id]
+        emails = summary.external_user_emails
+        groups = summary.external_user_group_ids
+        is_public = summary.is_public
+        if summary.has_unknown_contribution:
+            emails |= set(document.external_user_emails or [])
+            groups |= set(document.external_user_group_ids or [])
+            is_public = is_public or document.is_public
+        _set_document_external_acl(
+            document,
+            emails,
+            groups,
+            is_public,
+            modified_at,
+        )
+
+
+def _recompute_external_acl_after_relationship_deletion__no_commit(
+    db_session: Session,
+    documents: dict[str, DbDocument],
+) -> None:
+    summaries = _summarize_active_document_acl_contributions(db_session, documents)
+    modified_at = datetime.now(timezone.utc)
+    for document_id, document in documents.items():
+        summary = summaries[document_id]
+        if summary.has_unknown_contribution:
+            _set_document_external_acl(document, set(), set(), False, modified_at)
+            continue
+        _set_document_external_acl(
+            document,
+            summary.external_user_emails,
+            summary.external_user_group_ids,
+            summary.is_public,
+            modified_at,
+        )
+
+
+def namespace_external_access_for_document_acl(
+    external_access: ExternalAccess,
+    source: DocumentSource,
+) -> ExternalAccess:
+    """Namespace raw source groups at the document ACL persistence boundary."""
+    return ExternalAccess(
+        external_user_emails=external_access.external_user_emails,
+        external_user_group_ids={
+            build_ext_group_name_for_onyx(group_id, source)
+            for group_id in external_access.external_user_group_ids
+        },
+        is_public=external_access.is_public,
+    )
+
+
+def _replace_document_external_acl_contributions__no_commit(
+    db_session: Session,
+    connector_id: int,
+    credential_id: int,
+    external_access_by_document_id: dict[str, ExternalAccess],
+) -> None:
+    for document_id, access in external_access_by_document_id.items():
+        db_session.execute(
+            update(DocumentByConnectorCredentialPair)
+            .where(
+                DocumentByConnectorCredentialPair.id == document_id,
+                DocumentByConnectorCredentialPair.connector_id == connector_id,
+                DocumentByConnectorCredentialPair.credential_id == credential_id,
+            )
+            .values(
+                external_user_emails=sorted(access.external_user_emails),
+                external_user_group_ids=sorted(access.external_user_group_ids),
+                is_public=access.is_public,
+            )
+        )
+
+
+def upsert_document_acl_contributions__no_commit(
+    db_session: Session,
+    connector_id: int,
+    credential_id: int,
+    document_ids: Iterable[str],
+    external_access_by_document_id: dict[str, ExternalAccess],
+    source: DocumentSource,
+) -> None:
+    _lock_valid_cc_pair__no_commit(db_session, connector_id, credential_id)
+    _create_missing_documents__no_commit(db_session, external_access_by_document_id)
+    documents = _lock_documents__no_commit(db_session, external_access_by_document_id)
+
+    _upsert_document_cc_pair_relationships__no_commit(
+        db_session, connector_id, credential_id, document_ids
+    )
+    if not external_access_by_document_id:
+        return
+    namespaced_access_by_document_id = {
+        document_id: namespace_external_access_for_document_acl(access, source)
+        for document_id, access in external_access_by_document_id.items()
+    }
+    _replace_document_external_acl_contributions__no_commit(
+        db_session,
+        connector_id,
+        credential_id,
+        namespaced_access_by_document_id,
+    )
+    _recompute_external_acl_after_contribution_update__no_commit(db_session, documents)
 
 
 def mark_document_as_indexed_for_cc_pair__no_commit(
@@ -1275,10 +1497,17 @@ def delete_document_by_connector_credential_pair__no_commit(
     The implicit assumption is that the document itself still has other cc_pair
     references and needs to continue existing.
     """
+    document = get_document_for_update(document_id, db_session)
+    if document is None:
+        return
+
     delete_documents_by_connector_credential_pair__no_commit(
         db_session=db_session,
         document_ids=[document_id],
         connector_credential_pair_identifier=connector_credential_pair_identifier,
+    )
+    _recompute_external_acl_after_relationship_deletion__no_commit(
+        db_session, {document_id: document}
     )
 
 
@@ -1322,13 +1551,52 @@ def delete_all_documents_by_connector_credential_pair__no_commit(
 
     NOTE: Does not commit the transaction, this must be done by the caller.
     """
-    stmt = delete(DocumentByConnectorCredentialPair).where(
-        and_(
+    document_ids = list(
+        db_session.scalars(
+            select(DocumentByConnectorCredentialPair.id).where(
+                DocumentByConnectorCredentialPair.connector_id == connector_id,
+                DocumentByConnectorCredentialPair.credential_id == credential_id,
+            )
+        )
+    )
+    if not document_ids:
+        return
+
+    documents = _lock_documents__no_commit(db_session, document_ids)
+    db_session.execute(
+        delete(DocumentByConnectorCredentialPair).where(
             DocumentByConnectorCredentialPair.connector_id == connector_id,
             DocumentByConnectorCredentialPair.credential_id == credential_id,
         )
     )
-    db_session.execute(stmt)
+    _recompute_external_acl_after_relationship_deletion__no_commit(
+        db_session, documents
+    )
+
+
+def delete_document_relationships_by_credential__no_commit(
+    db_session: Session,
+    credential_id: int,
+) -> None:
+    document_ids = list(
+        db_session.scalars(
+            select(DocumentByConnectorCredentialPair.id)
+            .where(DocumentByConnectorCredentialPair.credential_id == credential_id)
+            .distinct()
+        )
+    )
+    if not document_ids:
+        return
+
+    documents = _lock_documents__no_commit(db_session, document_ids)
+    db_session.execute(
+        delete(DocumentByConnectorCredentialPair).where(
+            DocumentByConnectorCredentialPair.credential_id == credential_id
+        )
+    )
+    _recompute_external_acl_after_relationship_deletion__no_commit(
+        db_session, documents
+    )
 
 
 def delete_documents__no_commit(db_session: Session, document_ids: list[str]) -> None:

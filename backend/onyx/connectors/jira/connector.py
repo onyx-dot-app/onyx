@@ -838,7 +838,7 @@ class JiraConnector(
                     if include_permissions:
                         document.external_access = self._get_project_permissions(
                             project_key,  # ty: ignore[invalid-argument-type]
-                            add_prefix=True,  # Indexing path - prefix here
+                            add_prefix=False,
                         )
                     yield document
 
