@@ -11,6 +11,7 @@ import pytest
 from onyx.access.models import ExternalAccess
 from onyx.background.celery.celery_utils import extract_ids_from_runnable_connector
 from onyx.connectors.github.connector import GithubConnector
+from onyx.connectors.github.utils import get_external_access_permission
 from onyx.connectors.interfaces import SlimConnector, SlimConnectorWithPermSync
 from onyx.connectors.models import SlimDocument
 
@@ -78,6 +79,27 @@ def test_github_connector_implements_slim_connector() -> None:
 def test_github_connector_implements_slim_connector_with_perm_sync() -> None:
     connector = _make_connector()
     assert isinstance(connector, SlimConnectorWithPermSync)
+
+
+def test_github_document_access_requests_raw_groups(mock_repo: MagicMock) -> None:
+    github_client = MagicMock()
+    raw_access = ExternalAccess(set(), {"github_team"}, False)
+    ee_get_external_access = MagicMock(return_value=raw_access)
+
+    with (
+        patch(
+            "onyx.connectors.github.utils.global_version.is_ee_version",
+            return_value=True,
+        ),
+        patch(
+            "onyx.connectors.github.utils.fetch_versioned_implementation",
+            return_value=ee_get_external_access,
+        ),
+    ):
+        access = get_external_access_permission(mock_repo, github_client)
+
+    assert access.external_user_group_ids == {"github_team"}
+    ee_get_external_access.assert_called_once_with(mock_repo, github_client, False)
 
 
 def test_retrieve_all_slim_docs_returns_pr_urls(mock_repo: MagicMock) -> None:

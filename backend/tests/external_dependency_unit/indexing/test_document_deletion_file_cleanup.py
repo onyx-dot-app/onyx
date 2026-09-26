@@ -1,13 +1,4 @@
-"""External dependency unit tests for the file_id cleanup that runs alongside
-document deletion across the three deletion paths:
-
-    1. `document_by_cc_pair_cleanup_task` (pruning + connector deletion)
-    2. `delete_ingestion_doc` (public ingestion API DELETE)
-    3. `delete_all_documents_for_connector_credential_pair` (index swap)
-
-Each path captures attached `Document.file_id`s before the row is removed and
-best-effort deletes the underlying files after the DB commit.
-"""
+"""Document cleanup coverage for attached files and retained-document metadata."""
 
 from collections.abc import Generator
 from unittest.mock import patch
@@ -16,14 +7,19 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
+from ee.onyx.db.document import upsert_document_external_perms
+from onyx.access.models import ExternalAccess
+from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.background.celery.tasks.shared.tasks import document_by_cc_pair_cleanup_task
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document, IndexAttemptMetadata
 from onyx.db.document import (
     delete_all_documents_for_connector_credential_pair,
     get_document_connector_count,
     upsert_document_by_connector_credential_pair,
 )
-from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import ConnectorCredentialPair, DocumentByConnectorCredentialPair
+from onyx.document_index.interfaces_new import MetadataUpdateRequest
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
 from onyx.server.onyx_api.ingestion import delete_ingestion_doc
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
@@ -56,6 +52,44 @@ def _index_doc(
         ignore_time_skip=True,
     )
     db_session.commit()
+
+
+def test_indexing_acl_can_be_revoked_by_permission_sync(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    attempt_metadata: IndexAttemptMetadata,
+) -> None:
+    doc = make_doc(f"index-acl-{uuid4().hex[:8]}")
+    doc.external_access = ExternalAccess(
+        {"indexed@example.com"},
+        {"raw-group"},
+        True,
+    )
+    _index_doc(db_session, doc, attempt_metadata)
+
+    relationship = db_session.get(
+        DocumentByConnectorCredentialPair,
+        (doc.id, cc_pair.connector_id, cc_pair.credential_id),
+    )
+    assert relationship is not None
+    expected_group = build_ext_group_name_for_onyx(
+        "raw-group", DocumentSource.MOCK_CONNECTOR
+    )
+    assert relationship.external_user_group_ids == [expected_group]
+
+    upsert_document_external_perms(
+        db_session,
+        doc.id,
+        cc_pair.connector_id,
+        cc_pair.credential_id,
+        ExternalAccess.empty(),
+        DocumentSource.MOCK_CONNECTOR,
+    )
+    stored_doc = get_doc_row(db_session, doc.id)
+    assert stored_doc is not None
+    assert stored_doc.external_user_emails == []
+    assert stored_doc.external_user_group_ids == []
+    assert stored_doc.is_public is False
 
 
 # ---------------------------------------------------------------------------
@@ -299,19 +333,47 @@ class TestDocumentByCcPairCleanupTask:
             second_cc_pair.credential_id,
             [doc.id],
         )
-        db_session.commit()
+        first_relationship = db_session.get(
+            DocumentByConnectorCredentialPair,
+            (doc.id, cc_pair.connector_id, cc_pair.credential_id),
+        )
+        second_relationship = db_session.get(
+            DocumentByConnectorCredentialPair,
+            (doc.id, second_cc_pair.connector_id, second_cc_pair.credential_id),
+        )
+        assert first_relationship is not None
+        assert second_relationship is not None
+        first_relationship.external_user_emails = ["first@example.com"]
+        first_relationship.external_user_group_ids = []
+        first_relationship.is_public = False
+        second_relationship.external_user_emails = ["second@example.com"]
+        second_relationship.external_user_group_ids = []
+        second_relationship.is_public = False
         indexed_doc = get_doc_row(db_session, doc.id)
         assert indexed_doc is not None
+        indexed_doc.external_user_emails = [
+            "first@example.com",
+            "second@example.com",
+        ]
+        indexed_doc.external_user_group_ids = []
+        indexed_doc.is_public = False
+        db_session.commit()
         assert indexed_doc.last_modified is not None
         indexed_at = indexed_doc.last_modified
 
-        def assert_relationship_removed(_update_requests: object) -> None:
+        def assert_relationship_removed(
+            update_requests: list[MetadataUpdateRequest],
+        ) -> None:
             db_session.expire_all()
             stored_doc = get_doc_row(db_session, doc.id)
             assert stored_doc is not None
             assert stored_doc.last_modified is not None
             assert get_document_connector_count(db_session, doc.id) == 1
             assert stored_doc.last_modified > indexed_at
+            assert stored_doc.external_user_emails == ["second@example.com"]
+            request_access = update_requests[0].access
+            assert request_access is not None
+            assert request_access.external_user_emails == {"second@example.com"}
 
         with (
             patch(

@@ -1343,7 +1343,7 @@ def test_get_docs_to_update_time_skip_still_works() -> None:
     assert hashes == {}
 
 
-def test_get_docs_to_update_permission_change_bypasses_deduplication() -> None:
+def test_get_docs_to_update_ignores_permission_changes() -> None:
     updated_at = datetime(2020, 1, 1, tzinfo=timezone.utc)
     doc = _doc_with_text("Title", "unchanged content")
     doc.id = "doc1"
@@ -1363,8 +1363,8 @@ def test_get_docs_to_update_permission_change_bypasses_deduplication() -> None:
 
     docs, hashes = get_docs_to_update([doc], db_docs=[db_doc])
 
-    assert docs == [doc]
-    assert hashes == {"doc1": doc.content_hash()}
+    assert docs == []
+    assert hashes == {}
 
 
 def test_get_docs_to_update_mixed_batch() -> None:

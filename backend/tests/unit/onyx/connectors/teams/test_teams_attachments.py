@@ -79,19 +79,14 @@ CHANNEL_READERS = channel_access(
     ChannelRef(team_id=TEAM_ID, id=CHANNEL_ID, display_name="General"),
     for_indexing=False,
 )
-# What the SharePoint permission code answers for a file, and what the file's
-# document carries: the same groups under this connector's source prefix.
+# What the SharePoint permission code and document producer return.
 SITE_GROUP = f"{SITE_URL.lower()}::members"
 SHAREPOINT_READERS = ExternalAccess(
     external_user_emails={"ada@example.com"},
     external_user_group_ids={SITE_GROUP},
     is_public=False,
 )
-FILE_READERS = ExternalAccess(
-    external_user_emails={"ada@example.com"},
-    external_user_group_ids={f"teams_{SITE_GROUP}"},
-    is_public=False,
-)
+FILE_READERS = SHAREPOINT_READERS
 
 
 def _item(item_id: str, name: str) -> DriveItemData:

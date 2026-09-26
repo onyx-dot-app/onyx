@@ -247,7 +247,7 @@ def test_the_channel_walk_lists_no_members_and_names_the_thread_authors() -> Non
     documents = [item for item in items if isinstance(item, Document)]
     assert len(documents) == 2 and len(items) == 2
     for document in documents:
-        assert document.external_access == channel_access(STANDARD, for_indexing=True)
+        assert document.external_access == channel_access(STANDARD, for_indexing=False)
         owners = document.primary_owners or []
         assert [(o.display_name, o.email) for o in owners] == [("Ada", None)]
     # Naming a channel's people is the group sync's work, so indexing lists no
@@ -295,7 +295,7 @@ def test_a_checkpoint_without_the_channel_type_reads_it_from_graph() -> None:
     # The group sync names a standard channel's group by its team, so a resumed
     # checkpoint that named it by channel would share its threads with no one.
     assert [item.external_access for item in items if isinstance(item, Document)] == [
-        channel_access(STANDARD, for_indexing=True)
+        channel_access(STANDARD, for_indexing=False)
     ]
     assert _requested(client).count(CHANNEL_TYPE_URL) == 1
 

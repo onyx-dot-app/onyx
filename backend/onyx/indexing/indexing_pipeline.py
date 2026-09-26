@@ -37,7 +37,7 @@ from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.document import (
     get_documents_by_ids,
     update_docs_content_hash__no_commit,
-    upsert_document_by_connector_credential_pair,
+    upsert_document_acl_contributions__no_commit,
     upsert_documents,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -364,8 +364,6 @@ def get_docs_to_update(
 
     Two-gate dedup:
 
-    Permission changes bypass both gates so ACL updates persist.
-
     Gate 1 — timestamp skip (fast path):
       If the connector supplies doc_updated_at and it hasn't advanced past what we
       already indexed, skip immediately. No hash computation needed.
@@ -397,17 +395,6 @@ def get_docs_to_update(
     doc_id_to_content_hash: dict[str, str] = {}
     for doc in documents:
         db_doc = id_to_db_doc_map.get(doc.id)
-        access_changed = bool(
-            db_doc
-            and doc.external_access is not None
-            and (
-                doc.external_access.external_user_emails
-                != set(db_doc.external_user_emails or [])
-                or doc.external_access.external_user_group_ids
-                != set(db_doc.external_user_group_ids or [])
-                or doc.external_access.is_public != db_doc.is_public
-            )
-        )
         timestamp_advanced = (
             doc.doc_updated_at is not None
             and doc.id in id_update_time_map
@@ -420,7 +407,6 @@ def get_docs_to_update(
             and doc.doc_updated_at
             and doc.id in id_update_time_map
             and not timestamp_advanced
-            and not access_changed
         ):
             continue
 
@@ -429,7 +415,7 @@ def get_docs_to_update(
         # check so we never suppress a legitimate re-index (see docstring).
         content_hash = doc.content_hash()
         if not timestamp_advanced and not ignore_content_hash_gate:
-            if db_doc and db_doc.content_hash == content_hash and not access_changed:
+            if db_doc and db_doc.content_hash == content_hash:
                 logger.debug("Skipping document %r — content hash unchanged", doc.id)
                 continue
 
@@ -619,13 +605,20 @@ def index_doc_batch_prepare(
         len(documents),
     )
 
-    # for all docs, upsert the document to cc pair relationship
-    upsert_document_by_connector_credential_pair(
-        db_session,
-        index_attempt_metadata.connector_id,
-        index_attempt_metadata.credential_id,
-        document_ids,
-    )
+    if documents:
+        upsert_document_acl_contributions__no_commit(
+            db_session=db_session,
+            connector_id=index_attempt_metadata.connector_id,
+            credential_id=index_attempt_metadata.credential_id,
+            document_ids=document_ids,
+            external_access_by_document_id={
+                document.id: document.external_access
+                for document in documents
+                if document.external_access is not None
+            },
+            source=documents[0].source,
+        )
+        db_session.commit()
 
     # Link hierarchy nodes to documents for sources where pages can be both
     # hierarchy nodes AND documents (e.g., Notion, Confluence).
