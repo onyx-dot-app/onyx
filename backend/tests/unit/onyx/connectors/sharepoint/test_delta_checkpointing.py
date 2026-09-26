@@ -20,6 +20,8 @@ from unittest.mock import MagicMock
 
 import pytest
 import requests
+from office365.graph_client import GraphClient
+from office365.onedrive.lists.list import List as GraphList
 
 from onyx.connectors.microsoft_utils.drive_delta import (
     SHAREPOINT_IDS_PROPERTY,
@@ -35,6 +37,8 @@ from onyx.connectors.models import (
 )
 from onyx.connectors.sharepoint import connector as sp_connector
 from onyx.connectors.sharepoint.connector import (
+    DRIVE_EXPAND_FIELDS,
+    DRIVE_LIST_PROPERTY,
     DRIVE_SELECT_FIELDS,
     DriveItemData,
     SharepointConnector,
@@ -381,14 +385,14 @@ class TestDeltaPerPageCheckpointing:
         graph_drive.id = DRIVE_ID
         graph_drive.name = "OneDrive"
         graph_drive.web_url = DRIVE_WEB_URL
-        graph_drive.properties = {
-            SHAREPOINT_IDS_PROPERTY: {"listId": LIST_ID},
-        }
+        graph_list = GraphList(GraphClient(lambda: {"access_token": "unused"}))
+        graph_list.properties["id"] = LIST_ID
+        graph_drive.properties = {DRIVE_LIST_PROPERTY: graph_list}
         graph_client = MagicMock()
         drives = graph_client.sites.get_by_url.return_value.drives
-        drives.select.return_value.get_all.return_value.execute_query.return_value = [
-            graph_drive
-        ]
+        selected_drives = drives.select.return_value
+        expanded_drives = selected_drives.expand.return_value
+        expanded_drives.get_all.return_value.execute_query.return_value = [graph_drive]
         connector._graph_client = graph_client
         monkeypatch.setattr(
             sp_connector,
@@ -421,7 +425,8 @@ class TestDeltaPerPageCheckpointing:
 
         assert [doc.id for doc in _docs_from(yielded)] == ["resumed"]
         drives.select.assert_called_once_with(DRIVE_SELECT_FIELDS)
-        drives.select.return_value.get_all.assert_called_once()
+        selected_drives.expand.assert_called_once_with(DRIVE_EXPAND_FIELDS)
+        expanded_drives.get_all.assert_called_once()
         graph_client.drives.__getitem__.assert_not_called()
         assert migrated.current_drive is None
         dumped = migrated.model_dump()
@@ -434,8 +439,9 @@ class TestDeltaPerPageCheckpointing:
         connector = _setup_connector(monkeypatch)
         graph_client = MagicMock()
         drives = graph_client.sites.get_by_url.return_value.drives
-        drives.select.return_value.get_all.return_value.execute_query.side_effect = (
-            RuntimeError("Graph unavailable")
+        expanded_drives = drives.select.return_value.expand.return_value
+        expanded_drives.get_all.return_value.execute_query.side_effect = RuntimeError(
+            "Graph unavailable"
         )
         connector._graph_client = graph_client
         checkpoint = SharepointConnectorCheckpoint(
