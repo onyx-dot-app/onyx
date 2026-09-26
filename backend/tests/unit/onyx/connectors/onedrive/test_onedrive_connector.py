@@ -265,6 +265,25 @@ def test_onedrive_new_attempt_uses_fixed_delta_page_size() -> None:
     )
 
 
+def test_onedrive_trusts_timestamp_delta_for_lower_bound() -> None:
+    connector, gateway = _connector(users=["owner@example.com"])
+    gateway.get_user.return_value = _user()
+    gateway.get_default_drive.return_value = _drive()
+    gateway.get_delta_page.return_value = OneDriveDeltaResult(
+        page=DriveDeltaPage(items=[_file_item()])
+    )
+    gateway.download_item.return_value = DriveItemContent(
+        sections=[TextSection(text="body")]
+    )
+    output, _ = _run_step(
+        connector,
+        connector.build_dummy_checkpoint(),
+        start=1_800_000_000,
+    )
+
+    assert any(isinstance(item, Document) for item in output)
+
+
 def test_onedrive_explicit_user_failure_is_reported() -> None:
     connector, gateway = _connector(users=["missing@example.com"])
     gateway.get_user.return_value = None

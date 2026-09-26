@@ -571,7 +571,7 @@ class OneDriveConnector(
                 )
                 yield folder_node(drive, item, node_access)
                 continue
-            if not item.is_file or not self._item_allowed(item, start_at, end_at):
+            if not item.is_file or not self._item_allowed(item, None, end_at):
                 continue
             try:
                 access = (
