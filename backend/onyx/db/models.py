@@ -3151,6 +3151,14 @@ class DocumentByConnectorCredentialPair(Base):
     # the actual indexing is complete
     has_been_indexed: Mapped[bool] = mapped_column(Boolean)
 
+    external_user_emails: Mapped[list[str] | None] = mapped_column(
+        postgresql.ARRAY(String), nullable=True
+    )
+    external_user_group_ids: Mapped[list[str] | None] = mapped_column(
+        postgresql.ARRAY(String), nullable=True
+    )
+    is_public: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
     connector: Mapped[Connector] = relationship(
         "Connector", back_populates="documents_by_connector", passive_deletes=True
     )

@@ -52,7 +52,6 @@ from onyx.db.connector_credential_pair import get_connector_credential_pair_from
 from onyx.db.document import (
     get_document_ids_for_connector_credential_pair,
     get_documents_for_connector_credential_pair_limited_columns,
-    upsert_document_by_connector_credential_pair,
 )
 from onyx.db.engine.sql_engine import (
     get_session_with_current_tenant,
@@ -735,21 +734,14 @@ def element_update_permissions(
 
             if isinstance(permissions, DocExternalAccess):
                 # Document permission update
-                created_new_doc = upsert_document_external_perms(
+                upsert_document_external_perms(
                     db_session=db_session,
                     doc_id=permissions.doc_id,
+                    connector_id=connector_id,
+                    credential_id=credential_id,
                     external_access=external_access,
                     source_type=DocumentSource(source_type_str),
                 )
-
-                if created_new_doc:
-                    # If a new document was created, we associate it with the cc_pair
-                    upsert_document_by_connector_credential_pair(
-                        db_session=db_session,
-                        connector_id=connector_id,
-                        credential_id=credential_id,
-                        document_ids=[permissions.doc_id],
-                    )
             else:
                 # Hierarchy node permission update
                 db_update_hierarchy_node_permissions(

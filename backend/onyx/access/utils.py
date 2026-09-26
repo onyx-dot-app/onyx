@@ -20,10 +20,7 @@ def prefix_external_group(ext_group_name: str) -> str:
 
 
 def build_ext_group_name_for_onyx(ext_group_name: str, source: DocumentSource) -> str:
-    """
-    External groups may collide across sources, every source needs its own prefix.
-    NOTE: the name is lowercased to handle case sensitivity for group names
-    """
+    """Namespace an external group and normalize it for case-insensitive lookup."""
     return f"{source.value}_{ext_group_name}".lower()
 
 

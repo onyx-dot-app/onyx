@@ -102,7 +102,7 @@ def get_external_access_permission(
         ),
     )
 
-    return ee_get_external_access_permission(repo, github_client, True)
+    return ee_get_external_access_permission(repo, github_client, False)
 
 
 def deserialize_repository(
