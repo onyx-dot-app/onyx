@@ -9,10 +9,13 @@ import pytest
 from requests import HTTPError
 
 from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.microsoft_utils.drive_items import DriveItemData
 from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
-from onyx.connectors.models import ExternalAccess
+from onyx.connectors.models import ExternalAccess, SlimDocument
 from onyx.connectors.sharepoint.connector import (
+    FetchedDriveItem,
     SharepointConnector,
+    SiteDrive,
     _convert_sitepage_to_document,
     _convert_sitepage_to_slim_document,
 )
@@ -74,6 +77,60 @@ def test_full_and_slim_site_pages_share_permission_resolution(
 # ---------------------------------------------------------------------------
 # _fetch_slim_documents_from_sharepoint — site page error resilience
 # ---------------------------------------------------------------------------
+
+
+@patch("onyx.connectors.sharepoint.connector._convert_driveitem_to_slim_document")
+@patch(
+    "onyx.connectors.sharepoint.connector.get_sharepoint_hierarchy_node_external_access",
+    return_value=ExternalAccess.empty(),
+)
+@patch(
+    "onyx.connectors.sharepoint.connector.SharepointConnector._create_rest_client_context"
+)
+@patch("onyx.connectors.sharepoint.connector.SharepointConnector._fetch_driveitems")
+@patch("onyx.connectors.sharepoint.connector.SharepointConnector.fetch_sites")
+def test_slim_permission_sync_skips_missing_list_id_and_continues(
+    mock_fetch_sites: MagicMock,
+    mock_fetch_driveitems: MagicMock,
+    _mock_create_ctx: MagicMock,
+    _mock_get_access: MagicMock,
+    mock_convert: MagicMock,
+) -> None:
+    connector = _make_connector()
+    connector.include_site_documents = True
+    connector.include_site_pages = False
+    site = MagicMock(url=SITE_URL)
+    mock_fetch_sites.return_value = [site]
+
+    def fetched_item(item_id: str, list_id: str | None) -> FetchedDriveItem:
+        return FetchedDriveItem(
+            driveitem=DriveItemData(
+                id=item_id,
+                name=f"{item_id}.pdf",
+                web_url=f"{SITE_URL}/{item_id}.pdf",
+            ),
+            drive=SiteDrive(
+                drive_id=f"{item_id}-drive",
+                display_name=item_id,
+                web_url=f"{SITE_URL}/{item_id}",
+                list_id=list_id,
+            ),
+        )
+
+    missing = fetched_item("missing", None)
+    valid = fetched_item("valid", "valid-list")
+    mock_fetch_driveitems.return_value = [missing, valid]
+    mock_convert.return_value = SlimDocument(id="valid")
+
+    results = [
+        item
+        for batch in connector._fetch_slim_documents_from_sharepoint()
+        for item in batch
+        if isinstance(item, SlimDocument)
+    ]
+
+    assert [item.id for item in results] == ["valid"]
+    assert mock_convert.call_args.args[0] is valid.driveitem
 
 
 @patch("onyx.connectors.sharepoint.connector._convert_sitepage_to_slim_document")

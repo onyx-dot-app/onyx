@@ -168,7 +168,9 @@ def test_fetch_driveitems_matches_international_drive_names(
     graph_drive_name: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    connector = _build_connector([_FakeDrive(graph_drive_name)])
+    connector = _build_connector(
+        [_FakeDrive(graph_drive_name, url_name=requested_drive_name)]
+    )
     site_descriptor = SiteDescriptor(
         url="https://example.sharepoint.com/sites/sample",
         drive_name=requested_drive_name,
@@ -405,14 +407,13 @@ def test_resolve_drive_personal_selects_url_segment_between_business_drives() ->
     assert result.display_name == "OneDrive"
 
 
-def test_resolve_drive_personal_falls_back_to_name_when_type_missing() -> None:
+def test_resolve_drive_personal_does_not_fall_back_to_name() -> None:
     extra_library = _FakeDrive("Extra Library", drive_type="documentLibrary")
     onedrive = _FakeDrive("OneDrive", drive_type=None)
 
     result = _resolve_personal([extra_library, onedrive])
 
-    assert result is not None
-    assert result.drive_id == onedrive.id
+    assert result is None
 
 
 def test_resolve_drive_personal_prefers_type_over_name_collision() -> None:

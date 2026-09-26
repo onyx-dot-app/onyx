@@ -90,7 +90,6 @@ from onyx.connectors.models import (
     TextSection,
 )
 from onyx.connectors.sharepoint.connector_utils import (
-    MISSING_LIST_ID_PERMISSION_ERROR,
     SharepointPermissionCache,
     get_sharepoint_external_access,
     get_sharepoint_hierarchy_node_external_access,
@@ -106,9 +105,6 @@ from onyx.utils.url import SSRFException, validate_outbound_http_url
 logger = setup_logger()
 SLIM_BATCH_SIZE = 1000
 DRIVE_SELECT_FIELDS = ["id", "name", "webUrl", "driveType", "sharePointIds"]
-MISSING_DRIVE_TRAVERSAL_METADATA_ERROR = (
-    "Graph drive is missing required traversal metadata"
-)
 
 
 SHARED_DOCUMENTS_MAP = {
@@ -117,11 +113,6 @@ SHARED_DOCUMENTS_MAP = {
     "Documentos": "Documentos compartidos",
 }
 
-# On OneDrive personal sites the Graph API reports the primary library's name as
-# one of these, while the browser/SharePoint URL uses "Documents".
-ONEDRIVE_DRIVE_NAMES = frozenset(
-    {"onedrive", "onedrive for business", "documentlibrary"}
-)
 # `driveType` values that identify a user's primary OneDrive (as opposed to an
 # extra "documentLibrary" added to the personal site). OneDrive personal returns
 # "personal", OneDrive for Business returns "business".
@@ -1059,40 +1050,18 @@ class SharepointConnector(
                 f"site '{site_descriptor.url}'"
             )
 
-        legacy_matches = [
-            d
-            for d in drives
-            if (d.name and d.name.lower() == configured_url_name.lower())
-            or (
-                d.name in SHARED_DOCUMENTS_MAP
-                and SHARED_DOCUMENTS_MAP[d.name].lower() == configured_url_name.lower()
-            )
-        ]
-        if not matched:
-            if len(legacy_matches) > 1:
-                raise ValueError(
-                    f"Drive name '{configured_url_name}' is ambiguous in "
-                    f"site '{site_descriptor.url}'"
-                )
-            matched = legacy_matches
-
         is_personal_site = PERSONAL_SITE_URL_MARKER in site_descriptor.url.lower()
         if not matched and is_personal_site and drives:
-            type_matches = [
+            matched = [
                 d
                 for d in drives
                 if (d.drive_type or "").lower() in ONEDRIVE_PRIMARY_DRIVE_TYPES
             ]
-            name_matches = [
-                d for d in drives if d.name and d.name.lower() in ONEDRIVE_DRIVE_NAMES
-            ]
-            onedrive_matches = type_matches or name_matches
-            if len(onedrive_matches) > 1:
+            if len(matched) > 1:
                 raise ValueError(
                     f"Could not unambiguously resolve the primary OneDrive for "
                     f"personal site '{site_descriptor.url}'"
                 )
-            matched = onedrive_matches
 
         if not matched:
             logger.warning("Drive '%s' not found", configured_url_name)
@@ -1109,7 +1078,7 @@ class SharepointConnector(
         display_name = drive.name
         web_url = drive.web_url
         if not drive_id or not display_name or not web_url:
-            raise ValueError(MISSING_DRIVE_TRAVERSAL_METADATA_ERROR)
+            raise ValueError("Graph drive is missing required traversal metadata")
         return SiteDrive(
             drive_id=drive_id,
             list_id=list_id,
@@ -1549,6 +1518,12 @@ class SharepointConnector(
                     driveitem = fetched_item.driveitem
                     drive = fetched_item.drive
                     temp_checkpoint.current_folder = fetched_item.configured_folder
+                    if include_permissions and not drive.list_id:
+                        logger.warning(
+                            "Skipping permission sync for drive %s without a list ID",
+                            drive.drive_id,
+                        )
+                        continue
                     if self._is_driveitem_excluded(driveitem):
                         logger.debug(
                             "Excluding by path denylist: %s", driveitem.web_url
@@ -1840,8 +1815,6 @@ class SharepointConnector(
         checkpoint.seen_hierarchy_node_raw_ids.add(drive.web_url)
         external_access = None
         if include_permissions:
-            if not drive.list_id:
-                raise ValueError(MISSING_LIST_ID_PERMISSION_ERROR)
             ctx = self._create_rest_client_context(site_url)
             external_access = get_sharepoint_hierarchy_node_external_access(
                 ctx,
