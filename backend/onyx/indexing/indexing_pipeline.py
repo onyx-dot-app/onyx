@@ -35,9 +35,10 @@ from onyx.connectors.models import (
 )
 from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.document import (
+    get_document_ids_with_other_acl_contributors,
     get_documents_by_ids,
     update_docs_content_hash__no_commit,
-    upsert_document_by_connector_credential_pair,
+    upsert_document_acl_contributions__no_commit,
     upsert_documents,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -605,13 +606,27 @@ def index_doc_batch_prepare(
         len(documents),
     )
 
-    # for all docs, upsert the document to cc pair relationship
-    upsert_document_by_connector_credential_pair(
-        db_session,
-        index_attempt_metadata.connector_id,
-        index_attempt_metadata.credential_id,
-        document_ids,
-    )
+    if documents:
+        multi_source_document_ids = get_document_ids_with_other_acl_contributors(
+            db_session=db_session,
+            document_ids=document_ids,
+            connector_id=index_attempt_metadata.connector_id,
+            credential_id=index_attempt_metadata.credential_id,
+        )
+        upsert_document_acl_contributions__no_commit(
+            db_session=db_session,
+            connector_id=index_attempt_metadata.connector_id,
+            credential_id=index_attempt_metadata.credential_id,
+            document_ids=document_ids,
+            external_access_by_document_id={
+                document.id: document.external_access
+                for document in documents
+                if document.external_access is not None
+            },
+            source=documents[0].source,
+            multi_source_document_ids=multi_source_document_ids,
+        )
+        db_session.commit()
 
     # Link hierarchy nodes to documents for sources where pages can be both
     # hierarchy nodes AND documents (e.g., Notion, Confluence).

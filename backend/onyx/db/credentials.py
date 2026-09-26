@@ -1,6 +1,6 @@
 from typing import Any
 
-from sqlalchemy import Select, select, update
+from sqlalchemy import Select, delete, exists, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.expression import and_, or_
 
@@ -325,37 +325,50 @@ def _delete_credential_internal(
     associated_connectors = (
         db_session.query(ConnectorCredentialPair)
         .filter(ConnectorCredentialPair.credential_id == credential_id)
+        .order_by(ConnectorCredentialPair.id)
+        .with_for_update()
         .all()
     )
 
-    associated_doc_cc_pairs = (
-        db_session.query(DocumentByConnectorCredentialPair)
-        .filter(DocumentByConnectorCredentialPair.credential_id == credential_id)
-        .all()
+    has_associated_documents = bool(
+        db_session.scalar(
+            select(
+                exists().where(
+                    DocumentByConnectorCredentialPair.credential_id == credential_id
+                )
+            )
+        )
     )
 
-    if associated_connectors or associated_doc_cc_pairs:
+    if associated_connectors or has_associated_documents:
         if force:
+            from onyx.db.document import (
+                delete_document_relationships_by_credential__no_commit,
+            )
+
             logger.warning(
                 "Force deleting credential %s and its associated records", credential_id
             )
 
-            # Delete DocumentByConnectorCredentialPair records first
-            for doc_cc_pair in associated_doc_cc_pairs:
-                db_session.delete(doc_cc_pair)
-
-            # Then delete ConnectorCredentialPair records
-            for connector in associated_connectors:
-                db_session.delete(connector)
-
-            # Commit these deletions before deleting the credential
+            delete_document_relationships_by_credential__no_commit(
+                db_session=db_session,
+                credential_id=credential_id,
+            )
+            db_session.execute(
+                delete(ConnectorCredentialPair).where(
+                    ConnectorCredentialPair.credential_id == credential_id
+                )
+            )
             db_session.flush()
         else:
+            document_association = (
+                " and one or more document(s)" if has_associated_documents else ""
+            )
             raise OnyxError(
                 OnyxErrorCode.RESOURCE_IN_USE,
                 f"Cannot delete credential as it is still associated with "
-                f"{len(associated_connectors)} connector(s) and "
-                f"{len(associated_doc_cc_pairs)} document(s).",
+                f"{len(associated_connectors)} connector(s)"
+                f"{document_association}.",
             )
 
     if force:

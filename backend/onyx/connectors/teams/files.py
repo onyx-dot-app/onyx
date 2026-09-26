@@ -358,7 +358,7 @@ class FileSource:
             doc_updated_at=item.last_modified_datetime,
             primary_owners=owners,
             metadata={"channel": channel.display_name},
-            external_access=self._file_access(library, item, for_indexing=True),
+            external_access=self._file_access(library, item, for_indexing=False),
             file_id=content.staged_file_id if content is not None else None,
         )
 

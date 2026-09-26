@@ -121,7 +121,7 @@ def _convert_thread_to_document(
         doc_updated_at=max(modified_at(message) for message in messages),
         primary_owners=message_authors(messages),
         metadata=({IMAGES_NOT_INDEXED: str(missed_images)} if missed_images else {}),
-        external_access=channel_access(channel, for_indexing=True),
+        external_access=channel_access(channel, for_indexing=False),
     )
 
 

@@ -18,9 +18,12 @@ from onyx.db.document import (
     delete_document_by_connector_credential_pair__no_commit,
     delete_documents_complete,
     fetch_chunk_count_for_document,
-    get_document,
     get_document_connector_count,
+    get_document_for_update,
+    get_document_source_types,
+    get_document_source_types_after_cc_pair_removal,
     mark_document_as_modified,
+    mark_document_as_modified__no_commit,
     mark_document_as_synced,
 )
 from onyx.db.document_set import fetch_document_sets_for_document
@@ -115,20 +118,10 @@ def document_by_cc_pair_cleanup_task(
     credential_id: int,
     tenant_id: str,  # noqa: ARG001 — kept on the celery task signature
 ) -> bool:
-    """A lightweight subtask used to clean up document to cc pair relationships.
-    Created by connection deletion and connector pruning parent tasks."""
+    """Remove one document relationship and reconcile its index metadata.
 
-    """
-    To delete a connector / credential pair:
-    (1) find all documents associated with connector / credential pair where there
-    this the is only connector / credential pair that has indexed it
-    (2) delete all documents from document stores
-    (3) delete all entries from postgres
-    (4) find all documents associated with connector / credential pair where there
-    are multiple connector / credential pairs that have indexed it
-    (5) update document store entries to remove access associated with the
-    connector / credential pair from the access list
-    (6) delete all relevant entries from postgres
+    Retained documents commit the relationship removal first. The stale
+    watermark then makes failed or concurrent index writes retry safely.
     """
     task_logger.debug(f"Task start: doc={document_id}")
 
@@ -152,8 +145,20 @@ def document_by_cc_pair_cleanup_task(
             primary_search_settings = active_search_settings.primary
             secondary_search_settings = active_search_settings.secondary
 
+            doc = get_document_for_update(document_id, db_session)
+            if not doc:
+                return False
+
             count = get_document_connector_count(db_session, document_id)
-            if count == 1:
+            source_types_after_removal = (
+                get_document_source_types_after_cc_pair_removal(
+                    db_session=db_session,
+                    document_id=document_id,
+                    connector_id=connector_id,
+                    credential_id=credential_id,
+                )
+            )
+            if count == 1 and not source_types_after_removal:
                 action = DocumentCleanupAction.DELETE
                 chunk_count = fetch_chunk_count_for_document(document_id, db_session)
 
@@ -168,21 +173,33 @@ def document_by_cc_pair_cleanup_task(
                     secondary_search_settings,
                 ):
                     db_session.commit()
-            elif count > 1:
-                doc = get_document(document_id, db_session)
-                if not doc:
-                    return False
-
+            elif count:
                 action = DocumentCleanupAction.UPDATE
-                doc_last_modified = doc.last_modified
+                delete_document_by_connector_credential_pair__no_commit(
+                    db_session=db_session,
+                    document_id=document_id,
+                    connector_credential_pair_identifier=ConnectorCredentialPairIdentifier(
+                        connector_id=connector_id,
+                        credential_id=credential_id,
+                    ),
+                )
+                doc_last_modified = mark_document_as_modified__no_commit(
+                    document_id, db_session
+                )
+                db_session.flush()
 
-                # the below functions do not include cc_pairs being deleted.
-                # i.e. they will correctly omit access for the current cc_pair
                 doc_access = get_access_for_document(
                     document_id=document_id, db_session=db_session
                 )
 
                 doc_sets = fetch_document_sets_for_document(document_id, db_session)
+                source_types = get_document_source_types(
+                    db_session=db_session,
+                    document_ids=[document_id],
+                ).get(document_id, ())
+                assert source_types, (
+                    f"Document {document_id} has no source after relationship cleanup"
+                )
 
                 update_request = MetadataUpdateRequest(
                     document_ids=[document_id],
@@ -195,7 +212,9 @@ def document_by_cc_pair_cleanup_task(
                     document_sets=set(doc_sets),
                     boost=doc.boost,
                     hidden=doc.hidden,
+                    source_types=source_types,
                 )
+                db_session.commit()
 
         # Build document-index clients outside the DB session — construction
         # can take a few seconds to connect to the document index server,
@@ -242,17 +261,7 @@ def document_by_cc_pair_cleanup_task(
             completion_status = OnyxCeleryTaskCompletionStatus.SUCCEEDED
         elif action == DocumentCleanupAction.UPDATE:
             with get_session_with_current_tenant() as db_session:
-                # there are still other cc_pair references to the doc, so just resync to the document index
-                delete_document_by_connector_credential_pair__no_commit(
-                    db_session=db_session,
-                    document_id=document_id,
-                    connector_credential_pair_identifier=ConnectorCredentialPairIdentifier(
-                        connector_id=connector_id,
-                        credential_id=credential_id,
-                    ),
-                )
-
-                # the phase-1 watermark keeps a concurrently-modified doc stale
+                # The phase-1 watermark keeps a concurrently-modified doc stale.
                 mark_document_as_synced(
                     document_id, db_session, synced_as_of=doc_last_modified
                 )

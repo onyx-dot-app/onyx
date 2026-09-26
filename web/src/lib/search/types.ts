@@ -60,6 +60,7 @@ export interface MinimalOnyxDocument {
 export interface OnyxDocument extends MinimalOnyxDocument {
   link: string;
   source_type: ValidSources;
+  source_types?: ValidSources[] | null;
   blurb: string;
   boost: number;
   hidden: boolean;
@@ -247,6 +248,7 @@ export interface SearchDocWithContent {
   link: string | null;
   blurb: string;
   source_type: ValidSources;
+  source_types?: ValidSources[] | null;
   boost: number;
   hidden: boolean;
   metadata: Record<string, string | string[]>;

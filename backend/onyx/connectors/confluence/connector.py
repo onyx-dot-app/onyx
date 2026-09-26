@@ -999,7 +999,7 @@ class ConfluenceConnector(
 
         space_level_access: dict[str, ExternalAccess] = (
             get_all_space_permissions(
-                self.confluence_client, self.is_cloud, add_prefix=True
+                self.confluence_client, self.is_cloud, add_prefix=False
             )
             if include_permissions
             else {}
@@ -1053,7 +1053,7 @@ class ConfluenceConnector(
                     doc_or_failure.id,
                     page.get("restrictions") or {},
                     page.get("ancestors", []),
-                    add_prefix=True,
+                    add_prefix=False,
                 ) or space_level_access.get(space_key)
             yield doc_or_failure
 
