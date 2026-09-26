@@ -863,7 +863,7 @@ def _convert_drive_item_to_document(
                 admin_drive_service=get_drive_service(
                     creds, user_email=permission_sync_context.primary_admin_email
                 ),
-                add_prefix=True,  # Indexing path - prefix here
+                add_prefix=False,
                 fallback_user_email=retriever_email,
             )
             if permission_sync_context
