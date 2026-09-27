@@ -7,6 +7,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
 from onyx.connectors.microsoft_utils.drive_delta import (
     DRIVE_DELTA_SELECT_FIELDS,
+    DriveDeltaFetchResult,
     build_onedrive_delta_request_headers,
     fetch_drive_delta_checkpoint_page,
 )
@@ -37,7 +38,6 @@ from onyx.connectors.microsoft_utils.graph_gateway import (
 )
 from onyx.connectors.onedrive.models import (
     OneDriveCredentials,
-    OneDriveDeltaResult,
     OneDriveDrive,
     OneDriveGroupMember,
     OneDriveGroupMemberPage,
@@ -211,24 +211,25 @@ class OneDriveSourceOperations(SourceOperations):
         ),
     )
     def get_delta_page(
-        self, *, drive_id: str, page_url: str, page_size: int
-    ) -> OneDriveDeltaResult:
+        self,
+        *,
+        drive_id: str,
+        page_url: str,
+        page_size: int,
+        allow_full_resync: bool,
+    ) -> DriveDeltaFetchResult:
         try:
-            result = fetch_drive_delta_checkpoint_page(
+            return fetch_drive_delta_checkpoint_page(
                 self._client(),
                 page_url=page_url,
                 drive_id=drive_id,
                 request_headers=build_onedrive_delta_request_headers(),
                 page_size=page_size,
                 select_fields=DRIVE_DELTA_SELECT_FIELDS,
+                allow_full_resync=allow_full_resync,
             )
         except (requests.RequestException, ValueError) as error:
             raise microsoft_error_from_exception(error) from error
-        return OneDriveDeltaResult(
-            page=result.page,
-            next_cursor=result.next_checkpoint_url,
-            resynced=result.resync_after_410,
-        )
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},

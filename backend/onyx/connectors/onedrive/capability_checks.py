@@ -245,6 +245,7 @@ class _DeltaCheck(CapabilityCheck):
                         select_fields=DRIVE_DELTA_SELECT_FIELDS,
                     ),
                     page_size=_PROBE_PAGE_SIZE,
+                    allow_full_resync=True,
                 ),
                 "The app cannot read changes in the tenant's first OneDrives.",
                 "No readable OneDrive delta was found among the first users.",

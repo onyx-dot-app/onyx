@@ -49,9 +49,10 @@ def test_onedrive_delta_uses_preferences_next_link_and_ignores_delta_link() -> N
         drive_id="drive",
         page_url="https://graph.microsoft.com/start",
         page_size=17,
+        allow_full_resync=True,
     )
 
-    assert result.next_cursor == "https://graph.microsoft.com/next"
+    assert result.next_checkpoint_url == "https://graph.microsoft.com/next"
     headers = client.get_json.call_args.args[2]
     assert HIERARCHICAL_SHARING_PREFERENCE in headers[PREFER_HEADER]
 
@@ -63,8 +64,9 @@ def test_onedrive_delta_uses_preferences_next_link_and_ignores_delta_link() -> N
         drive_id="drive",
         page_url="https://graph.microsoft.com/next",
         page_size=17,
+        allow_full_resync=True,
     )
-    assert result.next_cursor is None
+    assert result.next_checkpoint_url is None
 
 
 def test_onedrive_delta_410_uses_safe_full_resync_cursor() -> None:
@@ -80,15 +82,16 @@ def test_onedrive_delta_410_uses_safe_full_resync_cursor() -> None:
         drive_id="drive",
         page_url="https://graph.microsoft.com/v1.0/drives/drive/root/delta?token=x",
         page_size=17,
+        allow_full_resync=True,
     )
 
-    assert result.resynced
-    assert result.next_cursor is not None
-    assert result.next_cursor.startswith(
+    assert result.resync_after_410
+    assert result.next_checkpoint_url is not None
+    assert result.next_checkpoint_url.startswith(
         "https://graph.microsoft.com/v1.0/drives/drive/root/delta?"
     )
-    assert "$top=17" in result.next_cursor
-    assert f"$select={DRIVE_DELTA_SELECT_FIELDS}" in result.next_cursor
+    assert "$top=17" in result.next_checkpoint_url
+    assert f"$select={DRIVE_DELTA_SELECT_FIELDS}" in result.next_checkpoint_url
 
 
 def test_onedrive_delta_start_url_uses_sharing_fields_and_page_size() -> None:

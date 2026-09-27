@@ -772,5 +772,3 @@ def iter_delta_pages(
         else:
             yield from iter_delta_page_files(result.page, start, end)
         page_url = result.next_checkpoint_url
-
-

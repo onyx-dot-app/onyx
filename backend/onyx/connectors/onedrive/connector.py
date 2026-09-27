@@ -17,6 +17,7 @@ from onyx.connectors.interfaces import (
 from onyx.connectors.microsoft_utils.drive_delta import (
     DEFAULT_DRIVE_DELTA_PAGE_SIZE,
     DRIVE_DELTA_SELECT_FIELDS,
+    HTTP_GONE_STATUS,
     DriveDeltaItem,
     build_delta_start_url,
 )
@@ -243,6 +244,7 @@ class OneDriveConnector(
         checkpoint.current_user = None
         checkpoint.current_drive = None
         checkpoint.delta_cursor = None
+        checkpoint.current_drive_delta_resync_attempted = False
         checkpoint.delta_started = False
         checkpoint.delta_pages = 0
 
@@ -393,8 +395,16 @@ class OneDriveConnector(
                 drive_id=drive.id,
                 page_url=page_url,
                 page_size=DEFAULT_DRIVE_DELTA_PAGE_SIZE,
+                allow_full_resync=not (checkpoint.current_drive_delta_resync_attempted),
             )
         except OneDriveGraphError as error:
+            if (
+                error.status == HTTP_GONE_STATUS
+                and checkpoint.current_drive_delta_resync_attempted
+            ):
+                yield _entity_failure(user, str(error), error)
+                self._finish_drive(checkpoint)
+                return
             if not error.is_permanent_refusal:
                 raise
             if self.settings.indexes_all_users:
@@ -406,7 +416,7 @@ class OneDriveConnector(
             yield _entity_failure(user, str(error), error)
             self._finish_drive(checkpoint)
             return
-        if not result.resynced and result.next_cursor == page_url:
+        if not result.resync_after_410 and result.next_checkpoint_url == page_url:
             raise RuntimeError(
                 f"OneDrive delta cursor did not advance for drive `{drive.id}`."
             )
@@ -414,8 +424,9 @@ class OneDriveConnector(
         if not checkpoint.delta_started:
             yield user_root_node(user, drive)
         checkpoint.delta_started = True
-        checkpoint.delta_cursor = result.next_cursor
-        if result.resynced:
+        checkpoint.delta_cursor = result.next_checkpoint_url
+        if result.resync_after_410:
+            checkpoint.current_drive_delta_resync_attempted = True
             return
         for item in result.page.items:
             if item.is_tombstone:
@@ -428,7 +439,7 @@ class OneDriveConnector(
             if not item.is_file or not self._item_allowed(item, start_at, end_at):
                 continue
             yield OneDriveDiscoveredFile(drive=drive, item=item)
-        if result.next_cursor is None:
+        if result.next_checkpoint_url is None:
             self._finish_drive(checkpoint)
 
     def _discover_from_checkpoint(
