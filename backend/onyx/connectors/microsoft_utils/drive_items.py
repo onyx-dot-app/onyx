@@ -634,7 +634,7 @@ def extract_drive_item_content(
     return DriveItemContent(sections=sections, staged_file_id=staged_file_id)
 
 
-def _iter_delta_page_files(
+def iter_delta_page_files(
     page: DriveDeltaPage,
     start: datetime | None,
     end: datetime | None,
@@ -770,7 +770,7 @@ def iter_delta_pages(
         if result.resync_after_410:
             allow_full_resync = False
         else:
-            yield from _iter_delta_page_files(result.page, start, end)
+            yield from iter_delta_page_files(result.page, start, end)
         page_url = result.next_checkpoint_url
 
 
@@ -794,31 +794,3 @@ def build_delta_start_url(
         token = quote(start.isoformat(timespec="seconds"))
         params.append(f"token={token}")
     return f"{base_url}?{'&'.join(params)}"
-
-
-def fetch_one_delta_page(
-    client: GraphApiClient,
-    page_url: str,
-    drive_id: str,
-    start: datetime | None = None,
-    end: datetime | None = None,
-    page_size: int = 200,
-) -> tuple[list[DriveItemData], str | None]:
-    """Fetch a single page of delta API results.
-
-    Returns ``(items, next_page_url)``.  *next_page_url* is ``None`` when
-    the delta enumeration is complete (deltaLink with no nextLink).
-
-    On 410 Gone (expired token) returns ``([], full_resync_url)`` so
-    the caller can store the resync URL in the checkpoint and retry on
-    the next cycle.
-    """
-    result = fetch_drive_delta_checkpoint_page(
-        client,
-        page_url=page_url,
-        drive_id=drive_id,
-        page_size=page_size,
-        select_fields=DRIVE_ITEM_SELECT_FIELDS,
-    )
-    items = list(_iter_delta_page_files(result.page, start, end))
-    return items, result.next_checkpoint_url

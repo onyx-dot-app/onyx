@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Any
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import parse_qsl, urljoin, urlsplit
 
 import requests
 from pydantic import BaseModel, ConfigDict, Field
@@ -242,10 +242,24 @@ def _response_resync_candidates(response: requests.Response) -> list[str]:
     return [candidate for candidate in candidates if candidate]
 
 
-def _trusted_resync_url(response: requests.Response, fallback: str) -> str:
+def _urls_equivalent(first: str, second: str) -> bool:
+    if not _same_delta_endpoint(first, second):
+        return False
+    return sorted(parse_qsl(urlsplit(first).query, keep_blank_values=True)) == sorted(
+        parse_qsl(urlsplit(second).query, keep_blank_values=True)
+    )
+
+
+def _trusted_resync_url(
+    response: requests.Response,
+    fallback: str,
+    failed_url: str,
+) -> str:
     for candidate in _response_resync_candidates(response):
         absolute_candidate = urljoin(fallback, candidate)
-        if _same_delta_endpoint(absolute_candidate, fallback):
+        if _same_delta_endpoint(absolute_candidate, fallback) and not _urls_equivalent(
+            absolute_candidate, failed_url
+        ):
             return absolute_candidate
     return fallback
 
@@ -279,7 +293,7 @@ def fetch_drive_delta_checkpoint_page(
             page_size=page_size,
             select_fields=select_fields,
         )
-        resync_url = _trusted_resync_url(response, fallback)
+        resync_url = _trusted_resync_url(response, fallback, page_url)
         logger.warning(
             "Delta token expired for drive '%s'; restarting full enumeration",
             drive_id,

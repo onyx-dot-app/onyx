@@ -6,17 +6,19 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 
+import pytest
 import requests
 
 from onyx.connectors.microsoft_utils.drive_delta import (
     GRAPH_SHARED_CHANGED_PROPERTY,
     ODATA_DELTA_LINK_PROPERTY,
     ODATA_NEXT_LINK_PROPERTY,
+    DriveDeltaFetchResult,
     DriveDeltaPage,
     build_onedrive_delta_request_headers,
     fetch_drive_delta_checkpoint_page,
 )
-from onyx.connectors.microsoft_utils.drive_items import fetch_one_delta_page
+from onyx.connectors.microsoft_utils.drive_items import iter_delta_page_files
 from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
 
 GRAPH_API_BASE = "https://graph.microsoft.com/v1.0"
@@ -135,6 +137,31 @@ def test_410_keeps_trusted_server_resync_location() -> None:
     assert result.resync_after_410 is True
 
 
+@pytest.mark.parametrize(
+    "location",
+    [
+        f"{DELTA_URL}?token=expired&$top=200",
+        f"{DELTA_URL}?$top=200&token=expired",
+    ],
+)
+def test_410_rejects_resync_location_equivalent_to_failed_url(location: str) -> None:
+    failed_url = f"{DELTA_URL}?token=expired&$top=200"
+
+    def get_json(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        raise _gone(location)
+
+    result = fetch_drive_delta_checkpoint_page(
+        _FakeGraphClient(get_json),
+        page_url=failed_url,
+        drive_id=DRIVE_ID,
+    )
+
+    assert result.next_checkpoint_url is not None
+    assert result.next_checkpoint_url.startswith(f"{DELTA_URL}?$top=200&$select=")
+    assert "token=" not in result.next_checkpoint_url
+    assert result.resync_after_410
+
+
 def test_410_rejects_untrusted_resync_location() -> None:
     def get_json(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
         raise _gone("https://attacker.example/root/delta?token=stolen")
@@ -150,7 +177,7 @@ def test_410_rejects_untrusted_resync_location() -> None:
     assert "token=" not in result.next_checkpoint_url
 
 
-def test_sharepoint_file_wrapper_keeps_filtering_and_file_only_result() -> None:
+def test_one_page_fetch_keeps_typed_result_and_file_filtering() -> None:
     payload = {
         "value": [
             {
@@ -179,13 +206,15 @@ def test_sharepoint_file_wrapper_keeps_filtering_and_file_only_result() -> None:
         page_url=DELTA_URL,
         drive_id=DRIVE_ID,
     )
-    files, next_url = fetch_one_delta_page(
-        client,
-        page_url=DELTA_URL,
-        drive_id=DRIVE_ID,
-        start=datetime(2026, 9, 1, tzinfo=timezone.utc),
+    files = list(
+        iter_delta_page_files(
+            delta_result.page,
+            start=datetime(2026, 9, 1, tzinfo=timezone.utc),
+            end=None,
+        )
     )
 
+    assert isinstance(delta_result, DriveDeltaFetchResult)
     assert len(delta_result.page.items) == 5
     assert [item.id for item in files] == ["current-file"]
-    assert next_url is None
+    assert delta_result.next_checkpoint_url is None
