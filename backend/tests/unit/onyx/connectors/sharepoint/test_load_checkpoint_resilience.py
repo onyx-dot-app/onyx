@@ -8,6 +8,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from onyx.connectors.microsoft_utils.drive_delta import (
+    DriveDeltaFetchResult,
+    DriveDeltaPage,
+)
 from onyx.connectors.microsoft_utils.drive_items import DriveFolderReference
 from onyx.connectors.models import (
     ConnectorFailure,
@@ -59,6 +63,23 @@ def _make_document(item: DriveItemData) -> Document:
         semantic_identifier=item.name,
         metadata={},
         sections=[TextSection(link=item.web_url, text="content")],
+    )
+
+
+def _delta_result(item: DriveItemData) -> DriveDeltaFetchResult:
+    return DriveDeltaFetchResult(
+        page=DriveDeltaPage.model_validate(
+            {
+                "value": [
+                    {
+                        "id": item.id,
+                        "name": item.name,
+                        "webUrl": item.web_url,
+                        "parentReference": {"driveId": item.drive_id},
+                    }
+                ]
+            }
+        )
     )
 
 
@@ -169,8 +190,8 @@ def test_docs_only_indexing_accepts_drive_without_list_id(
     checkpoint.cached_drives[0].list_id = None
     monkeypatch.setattr(
         sp_connector,
-        "fetch_one_delta_page",
-        lambda *_args, **_kwargs: ([_make_item("doc")], None),
+        "fetch_drive_delta_checkpoint_page",
+        lambda *_args, **_kwargs: _delta_result(_make_item("doc")),
     )
 
     yielded, _ = _consume_generator(

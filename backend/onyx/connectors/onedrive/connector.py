@@ -475,6 +475,17 @@ class OneDriveConnector(
             drive_item, drive, content, parent, external_access=external_access
         )
 
+    @staticmethod
+    def _is_drive_local_delta_error(
+        error: OneDriveGraphError,
+        checkpoint: OneDriveCheckpoint,
+    ) -> bool:
+        repeated_resync = (
+            error.status == HTTP_GONE_STATUS
+            and checkpoint.current_drive_delta_resync_attempted
+        )
+        return error.is_permanent_refusal or repeated_resync
+
     def _discover_delta_page(
         self,
         checkpoint: OneDriveCheckpoint,
@@ -511,14 +522,7 @@ class OneDriveConnector(
                 allow_full_resync=not (checkpoint.current_drive_delta_resync_attempted),
             )
         except OneDriveGraphError as error:
-            if (
-                error.status == HTTP_GONE_STATUS
-                and checkpoint.current_drive_delta_resync_attempted
-            ):
-                yield _entity_failure(user, str(error), error)
-                self._finish_drive(checkpoint)
-                return
-            if not error.is_permanent_refusal:
+            if not self._is_drive_local_delta_error(error, checkpoint):
                 raise
             if self.settings.indexes_all_users:
                 logger.info(

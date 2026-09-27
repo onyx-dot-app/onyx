@@ -17,7 +17,6 @@ from requests import Response
 from requests.exceptions import HTTPError
 
 from onyx.connectors.microsoft_utils.drive_delta import (
-    SHAREPOINT_IDS_PROPERTY,
     DriveDeltaFetchResult,
     DriveDeltaPage,
     parse_graph_sharepoint_ids,
@@ -344,7 +343,9 @@ def test_deleted_legacy_current_drive_preserves_queue_after_resume(
     connector = _build_connector([remaining])
     connector.include_site_pages = False
     monkeypatch.setattr(
-        sp_connector, "fetch_one_delta_page", lambda *_, **__: ([_SAMPLE_ITEM], None)
+        sp_connector,
+        "fetch_drive_delta_checkpoint_page",
+        lambda *_, **__: _delta_fetch_result(_SAMPLE_ITEM),
     )
     monkeypatch.setattr(
         sp_connector,

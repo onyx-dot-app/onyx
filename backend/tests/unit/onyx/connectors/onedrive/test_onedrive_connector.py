@@ -407,7 +407,7 @@ def test_onedrive_delta_page_keeps_last_occurrence_order() -> None:
     gateway.download_item.return_value = DriveItemContent(
         sections=[TextSection(text="body")]
     )
-    gateway.get_delta_page.return_value = OneDriveDeltaResult(
+    gateway.get_delta_page.return_value = DriveDeltaFetchResult(
         page=DriveDeltaPage(items=[old_item, _folder_item(), latest_item])
     )
     checkpoint = OneDriveCheckpoint(
@@ -455,11 +455,11 @@ def test_onedrive_checkpoint_repeats_refresh_latest_acl(
         sections=[TextSection(text="body")]
     )
     gateway.get_delta_page.side_effect = [
-        OneDriveDeltaResult(
+        DriveDeltaFetchResult(
             page=DriveDeltaPage(items=[item]),
-            next_cursor="next-delta",
+            next_checkpoint_url="next-delta",
         ),
-        OneDriveDeltaResult(page=DriveDeltaPage(items=[item])),
+        DriveDeltaFetchResult(page=DriveDeltaPage(items=[item])),
     ]
     checkpoint = OneDriveCheckpoint(
         has_more=True,
@@ -672,7 +672,7 @@ def test_onedrive_fixture_permission_mutations_traverse_connector(
     gateway.download_item.return_value = DriveItemContent(
         sections=[TextSection(text="body")]
     )
-    gateway.get_delta_page.return_value = OneDriveDeltaResult(
+    gateway.get_delta_page.return_value = DriveDeltaFetchResult(
         page=DriveDeltaPage(
             items=[destination, moved, remove_share, restore_inheritance]
         )
@@ -726,7 +726,7 @@ def test_onedrive_permission_pagination_rejects_page_limit(
 
 def test_onedrive_file_permission_transient_error_fails_attempt() -> None:
     connector, gateway = _connector()
-    gateway.get_delta_page.return_value = OneDriveDeltaResult(
+    gateway.get_delta_page.return_value = DriveDeltaFetchResult(
         page=DriveDeltaPage(items=[_file_item()])
     )
     gateway.list_permissions.side_effect = OneDriveGraphError(
@@ -751,7 +751,7 @@ def test_onedrive_slim_folder_access_prefixes_external_groups(
         map_onedrive_permissions,
     )
     folder = _folder_item()
-    gateway.get_delta_page.return_value = OneDriveDeltaResult(
+    gateway.get_delta_page.return_value = DriveDeltaFetchResult(
         page=DriveDeltaPage(items=[folder])
     )
     gateway.list_permissions.return_value = _fixture_permissions("visible_group")
@@ -801,7 +801,7 @@ def test_onedrive_fixture_child_before_parent_reads_child_permissions(
     gateway.download_item.return_value = DriveItemContent(
         sections=[TextSection(text="body")]
     )
-    gateway.get_delta_page.return_value = OneDriveDeltaResult(
+    gateway.get_delta_page.return_value = DriveDeltaFetchResult(
         page=DriveDeltaPage(items=[moved, destination])
     )
     checkpoint = OneDriveCheckpoint(
@@ -837,11 +837,11 @@ def test_onedrive_fixture_cache_loss_checkpoint_restart_reads_item_permissions(
         sections=[TextSection(text="body")]
     )
     gateway.get_delta_page.side_effect = [
-        OneDriveDeltaResult(
+        DriveDeltaFetchResult(
             page=DriveDeltaPage(items=[destination]),
-            next_cursor="next-delta",
+            next_checkpoint_url="next-delta",
         ),
-        OneDriveDeltaResult(page=DriveDeltaPage(items=[moved])),
+        DriveDeltaFetchResult(page=DriveDeltaPage(items=[moved])),
     ]
     checkpoint = OneDriveCheckpoint(
         has_more=True,
@@ -1184,7 +1184,7 @@ def test_onedrive_permission_and_group_checks_use_gateway() -> None:
     gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
     gateway.get_user.return_value = _user()
     gateway.get_default_drive.return_value = _drive()
-    gateway.get_delta_page.return_value = OneDriveDeltaResult(
+    gateway.get_delta_page.return_value = DriveDeltaFetchResult(
         page=DriveDeltaPage(items=[_file_item()])
     )
     gateway.list_permissions.return_value = OneDrivePermissionPage(permissions=[])
@@ -1221,11 +1221,11 @@ def test_onedrive_permission_check_follows_tombstone_pages() -> None:
         {"id": "deleted", "deleted": {"state": "deleted"}}
     )
     gateway.get_delta_page.side_effect = [
-        OneDriveDeltaResult(
+        DriveDeltaFetchResult(
             page=DriveDeltaPage(items=[tombstone]),
-            next_cursor="next-delta",
+            next_checkpoint_url="next-delta",
         ),
-        OneDriveDeltaResult(page=DriveDeltaPage(items=[_file_item()])),
+        DriveDeltaFetchResult(page=DriveDeltaPage(items=[_file_item()])),
     ]
     gateway.list_permissions.return_value = OneDrivePermissionPage(permissions=[])
     context = CapabilityCheckContext(
@@ -1248,7 +1248,7 @@ def test_onedrive_permission_check_accepts_empty_drive_at_end_cursor() -> None:
     gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
     gateway.get_user.return_value = _user()
     gateway.get_default_drive.return_value = _drive()
-    gateway.get_delta_page.return_value = OneDriveDeltaResult(page=DriveDeltaPage())
+    gateway.get_delta_page.return_value = DriveDeltaFetchResult(page=DriveDeltaPage())
     context = CapabilityCheckContext(
         source=DocumentSource.ONEDRIVE,
         credential_json={},
@@ -1273,8 +1273,8 @@ def test_onedrive_permission_check_probes_past_empty_drive() -> None:
         OneDriveDrive(id="populated-drive", name="Populated"),
     ]
     gateway.get_delta_page.side_effect = [
-        OneDriveDeltaResult(page=DriveDeltaPage()),
-        OneDriveDeltaResult(page=DriveDeltaPage(items=[_file_item()])),
+        DriveDeltaFetchResult(page=DriveDeltaPage()),
+        DriveDeltaFetchResult(page=DriveDeltaPage(items=[_file_item()])),
     ]
     gateway.list_permissions.return_value = OneDrivePermissionPage(permissions=[])
     context = CapabilityCheckContext(
@@ -1298,9 +1298,9 @@ def test_onedrive_permission_check_bounds_empty_delta_pages() -> None:
     gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
     gateway.get_user.return_value = _user()
     gateway.get_default_drive.return_value = _drive()
-    gateway.get_delta_page.return_value = OneDriveDeltaResult(
+    gateway.get_delta_page.return_value = DriveDeltaFetchResult(
         page=DriveDeltaPage(),
-        next_cursor="another-empty-page",
+        next_checkpoint_url="another-empty-page",
     )
     context = CapabilityCheckContext(
         source=DocumentSource.ONEDRIVE,

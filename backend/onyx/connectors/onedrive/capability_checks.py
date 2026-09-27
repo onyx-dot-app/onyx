@@ -152,6 +152,7 @@ def _first_delta_item(
             drive_id=drive.id,
             page_url=cursor,
             page_size=_PROBE_PAGE_SIZE,
+            allow_full_resync=True,
         )
         item = next(
             (item for item in result.page.items if not item.is_tombstone),
@@ -159,7 +160,7 @@ def _first_delta_item(
         )
         if item is not None:
             return item
-        cursor = result.next_cursor
+        cursor = result.next_checkpoint_url
         if cursor is None:
             return None
     raise ConnectorValidationError(

@@ -24,7 +24,6 @@ from office365.graph_client import GraphClient
 from office365.onedrive.lists.list import List as GraphList
 
 from onyx.connectors.microsoft_utils.drive_delta import (
-    SHAREPOINT_IDS_PROPERTY,
     DriveDeltaFetchResult,
     DriveDeltaPage,
 )
@@ -396,8 +395,8 @@ class TestDeltaPerPageCheckpointing:
         connector._graph_client = graph_client
         monkeypatch.setattr(
             sp_connector,
-            "fetch_one_delta_page",
-            lambda *_args, **_kwargs: ([_make_item("resumed")], None),
+            "fetch_drive_delta_checkpoint_page",
+            lambda *_args, **_kwargs: _delta_result([_make_item("resumed")], None),
         )
         legacy_json = json.dumps(
             {
