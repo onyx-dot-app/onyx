@@ -11,6 +11,7 @@ from sqlalchemy import (
     Select,
     String,
     and_,
+    case,
     column,
     delete,
     distinct,
@@ -947,6 +948,7 @@ def upsert_documents(
     db_session: Session,
     document_metadata_batch: list[DocumentMetadata],
     initial_boost: int = DEFAULT_BOOST,
+    source: DocumentSource | None = None,
 ) -> None:
     """NOTE: this function is Postgres specific. Not all DBs support the ON CONFLICT clause.
     Also note, this function should not be used for updating documents, only creating and
@@ -1016,23 +1018,63 @@ def upsert_documents(
         "file_id": insert_stmt.excluded.file_id,
     }
     if includes_permissions:
+        preserve_onedrive_permissions = exists(
+            select(DocumentByConnectorCredentialPair.id)
+            .join(
+                Connector,
+                Connector.id == DocumentByConnectorCredentialPair.connector_id,
+            )
+            .join(
+                ConnectorCredentialPair,
+                and_(
+                    ConnectorCredentialPair.connector_id
+                    == DocumentByConnectorCredentialPair.connector_id,
+                    ConnectorCredentialPair.credential_id
+                    == DocumentByConnectorCredentialPair.credential_id,
+                ),
+            )
+            .where(
+                DocumentByConnectorCredentialPair.id == DbDocument.id,
+                DocumentByConnectorCredentialPair.has_been_indexed.is_(True),
+                Connector.source == DocumentSource.ONEDRIVE,
+                ConnectorCredentialPair.access_type.in_(AccessType.perm_synced_types()),
+            )
+            .correlate(DbDocument)
+        )
+
         # Use COALESCE to preserve existing permissions when new values are NULL.
         # This prevents subsequent indexing runs (which don't fetch permissions)
         # from overwriting permissions set by permission sync jobs.
+        external_user_emails = func.coalesce(
+            insert_stmt.excluded.external_user_emails,
+            DbDocument.external_user_emails,
+        )
+        external_user_group_ids = func.coalesce(
+            insert_stmt.excluded.external_user_group_ids,
+            DbDocument.external_user_group_ids,
+        )
+        is_public = func.coalesce(
+            insert_stmt.excluded.is_public,
+            DbDocument.is_public,
+        )
+        if source == DocumentSource.SHAREPOINT:
+            external_user_emails = case(
+                (preserve_onedrive_permissions, DbDocument.external_user_emails),
+                else_=external_user_emails,
+            )
+            external_user_group_ids = case(
+                (preserve_onedrive_permissions, DbDocument.external_user_group_ids),
+                else_=external_user_group_ids,
+            )
+            is_public = case(
+                (preserve_onedrive_permissions, DbDocument.is_public),
+                else_=is_public,
+            )
         update_set.update(
             {
-                "external_user_emails": func.coalesce(
-                    insert_stmt.excluded.external_user_emails,
-                    DbDocument.external_user_emails,
-                ),
-                "external_user_group_ids": func.coalesce(
-                    insert_stmt.excluded.external_user_group_ids,
-                    DbDocument.external_user_group_ids,
-                ),
-                "is_public": func.coalesce(
-                    insert_stmt.excluded.is_public,
-                    DbDocument.is_public,
-                ),
+                "external_user_emails": external_user_emails,
+                "external_user_group_ids": external_user_group_ids,
+                "is_public": is_public,
             }
         )
     on_conflict_stmt = insert_stmt.on_conflict_do_update(

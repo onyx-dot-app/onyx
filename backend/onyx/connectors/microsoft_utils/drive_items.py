@@ -21,7 +21,7 @@ import requests
 from office365.graph_client import GraphClient
 from office365.onedrive.driveitems.driveItem import DriveItem
 from office365.runtime.paths.resource_path import ResourcePath
-from pydantic import BaseModel
+from pydantic import AliasChoices, BaseModel, Field
 
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import FileOrigin
@@ -30,8 +30,10 @@ from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     is_tabular_file,
 )
 from onyx.connectors.microsoft_utils.drive_delta import (
+    SHAREPOINT_IDS_PROPERTY,
     DriveDeltaPage,
     fetch_drive_delta_checkpoint_page,
+    parse_graph_sharepoint_ids,
 )
 from onyx.connectors.microsoft_utils.graph_client import (
     TRANSIENT_TRANSPORT_EXCEPTIONS,
@@ -54,7 +56,6 @@ logger = setup_logger()
 
 _EPOCH = datetime.fromtimestamp(0, tz=timezone.utc)
 
-SHAREPOINT_IDS_PROPERTY = "sharepointIds"
 LIST_ITEM_ID_PROPERTY = "listItemId"
 DRIVE_ITEM_ID_PROPERTY = "id"
 DRIVE_ITEM_NAME_PROPERTY = "name"
@@ -238,7 +239,7 @@ class DriveItemData(BaseModel):
             "user", {}
         )
         parent_ref = item.get(DRIVE_ITEM_PARENT_REFERENCE_PROPERTY, {})
-        sharepoint_ids = item.get(SHAREPOINT_IDS_PROPERTY) or {}
+        sharepoint_ids = parse_graph_sharepoint_ids(item.get(SHAREPOINT_IDS_PROPERTY))
 
         return cls(
             id=item[DRIVE_ITEM_ID_PROPERTY],
@@ -260,7 +261,7 @@ class DriveItemData(BaseModel):
             ),
             parent_reference_path=parent_ref.get("path"),
             drive_id=parent_ref.get("driveId"),
-            list_item_id=sharepoint_ids.get(LIST_ITEM_ID_PROPERTY),
+            list_item_id=sharepoint_ids.list_item_id if sharepoint_ids else None,
         )
 
     def to_sdk_driveitem(self, graph_client: GraphClient) -> DriveItem:
@@ -279,6 +280,25 @@ class DriveItemData(BaseModel):
                 {LIST_ITEM_ID_PROPERTY: self.list_item_id},
             )
         return item
+
+
+class DriveFolderReference(BaseModel):
+    id: str
+    web_url: str = Field(
+        validation_alias=AliasChoices(DRIVE_ITEM_WEB_URL_PROPERTY, "web_url")
+    )
+
+
+def resolve_drive_folder(
+    client: GraphApiClient, drive_id: str, folder_path: str
+) -> DriveFolderReference:
+    return DriveFolderReference.model_validate(
+        client.get_json(
+            f"{client.graph_api_base}/drives/{drive_id}/root:/"
+            f"{quote(folder_path, safe='/')}",
+            {"$select": "id,webUrl"},
+        )
+    )
 
 
 class DriveItemContent(BaseModel):

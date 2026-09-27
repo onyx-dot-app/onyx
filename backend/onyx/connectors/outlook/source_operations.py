@@ -22,6 +22,14 @@ from onyx.connectors.microsoft_utils.drive_items import (
     download_graph_url_with_cap,
     parse_graph_datetime,
 )
+from onyx.connectors.microsoft_utils.entra import (
+    ENABLED_USERS_FILTER,
+    ENTRA_PAGE_SIZE,
+    ENTRA_USER_SELECT,
+    EntraUser,
+    fetch_entra_page,
+    fetch_entra_user,
+)
 from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
 from onyx.connectors.microsoft_utils.graph_env import (
     DEFAULT_AUTHORITY_HOST,
@@ -75,9 +83,7 @@ CREDENTIAL_AUTH_METHOD = "authentication_method"
 CONFIG_AUTHORITY_HOST = "authority_host"
 CONFIG_GRAPH_API_HOST = "graph_api_host"
 
-# Graph caps $top at 999 for users. Message pages stay small because each row
-# carries a full body.
-USERS_PAGE_SIZE = 999
+# Message pages stay small because each row carries a full body.
 FOLDERS_PAGE_SIZE = 250
 MESSAGES_PAGE_SIZE = 100
 # The calendar view delta takes no $select, so every row carries a full body.
@@ -152,13 +158,14 @@ def _body_text(raw: dict[str, Any] | None) -> str:
     return " ".join(soup.stripped_strings)
 
 
-def _parse_mailbox(raw: dict[str, Any]) -> OutlookMailbox | None:
-    user_id = raw.get("id")
-    address = raw.get("mail") or raw.get("userPrincipalName")
-    if not user_id or not address:
+def _mailbox(user: EntraUser) -> OutlookMailbox | None:
+    address = user.mail or user.user_principal_name
+    if not address:
         return None
     return OutlookMailbox(
-        id=user_id, address=address, display_name=raw.get("displayName")
+        id=user.id,
+        address=address,
+        display_name=user.display_name,
     )
 
 
@@ -405,7 +412,7 @@ class OutlookSourceOperations(SourceOperations):
         consumes=OperationConsumes.CREDENTIAL,
     )
     def list_mailbox_users(
-        self, *, page_size: int = USERS_PAGE_SIZE, next_link: str | None = None
+        self, *, page_size: int = ENTRA_PAGE_SIZE, next_link: str | None = None
     ) -> OutlookMailboxPage:
         """One page of enabled users with a mail address, the candidates in
         every-mailbox mode.
@@ -413,27 +420,24 @@ class OutlookSourceOperations(SourceOperations):
         Needs ``User.Read.All``. Whether a user actually has a mailbox is only
         known once :meth:`probe_mailbox` is called for it.
         """
-        params = None
-        url = next_link
-        if url is None:
-            url = f"{self._graph_base()}/users"
-            params = {
-                "$filter": "accountEnabled eq true",
-                "$select": MAILBOX_SELECT,
-                "$top": str(page_size),
-            }
-        data = self._get(url, params)
-        # No primary SMTP address means no Exchange mailbox, so those users are
-        # dropped here instead of costing a probe each.
+        page = fetch_entra_page(
+            self._gateway().get_json,
+            url=f"{self._graph_base()}/users",
+            item_model=EntraUser,
+            select_fields=ENTRA_USER_SELECT,
+            next_link=next_link,
+            page_size=page_size,
+            filter_expression=ENABLED_USERS_FILTER,
+        )
         mailboxes = [
             mailbox
-            for mailbox in (
-                _parse_mailbox(raw) for raw in data.get("value", []) if raw.get("mail")
-            )
-            if mailbox is not None
+            for user in page.items
+            if user.mail
+            if (mailbox := _mailbox(user)) is not None
         ]
         return OutlookMailboxPage(
-            mailboxes=mailboxes, next_link=data.get("@odata.nextLink")
+            mailboxes=mailboxes,
+            next_link=page.next_link,
         )
 
     @source_operation(
@@ -449,13 +453,19 @@ class OutlookSourceOperations(SourceOperations):
         """Find the user behind an address: by UPN or object id, then by primary SMTP."""
         params = {"$select": MAILBOX_SELECT}
         try:
-            return _parse_mailbox(self._get(self._user_url(address), params))
+            return _mailbox(
+                fetch_entra_user(
+                    self._gateway().get_json,
+                    self._graph_base(),
+                    address,
+                )
+            )
         except OutlookGraphError as e:
             if e.status != 404:
                 raise
         params["$filter"] = f"mail eq '{_odata_quote(address)}'"
         user = self._first_item(f"{self._graph_base()}/users", params)
-        return _parse_mailbox(user) if user else None
+        return _mailbox(EntraUser.model_validate(user)) if user else None
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},

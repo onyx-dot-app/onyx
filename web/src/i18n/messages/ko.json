@@ -2583,6 +2583,10 @@
           "label": "제외 경로",
           "description": "각 파일 경로와 파일 이름에 적용할 glob 패턴입니다(예: '*.tmp' 또는 'Archive/*')."
         },
+        "organizationLinks": {
+          "label": "조직 링크를 공개로 처리",
+          "description": "조직 전체 링크로 공유된 파일을 모든 Onyx 사용자에게 표시합니다."
+        },
         "authorityHost": {
           "label": "기관 호스트",
           "description": "Microsoft ID 기관 호스트입니다. GCC High 또는 DoD에는 https://login.microsoftonline.us를 사용하세요."
