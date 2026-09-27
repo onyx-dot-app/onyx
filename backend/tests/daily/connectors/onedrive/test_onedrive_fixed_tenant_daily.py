@@ -16,7 +16,6 @@ from onyx.connectors.onedrive.connector import (
     drive_root_id,
     hierarchy_item_id,
 )
-from onyx.db.engine.sql_engine import SqlEngine
 from tests.daily.connectors.utils import (
     ConnectorOutput,
     load_all_from_connector,
@@ -38,7 +37,7 @@ from tests.utils.pytest_secrets import RedactedDict
 from tests.utils.secret_names import TestSecret
 
 pytestmark = [
-    pytest.mark.usefixtures("enable_ee"),
+    pytest.mark.usefixtures("enable_ee", "mock_get_unstructured_api_key"),
     pytest.mark.secrets(
         TestSecret.PERM_SYNC_SHAREPOINT_CLIENT_ID,
         TestSecret.PERM_SYNC_SHAREPOINT_DIRECTORY_ID,
@@ -59,17 +58,6 @@ EXPECTED_BASELINE_FILES = {
     }
 }
 LIVE_PAGE_SIZE = 10
-
-
-@pytest.fixture(scope="module", autouse=True)
-def sql_engine() -> Generator[None, None, None]:
-    try:
-        SqlEngine.get_engine()
-    except RuntimeError:
-        with SqlEngine.scoped_engine(pool_size=2, max_overflow=1):
-            yield
-        return
-    yield
 
 
 @pytest.fixture(scope="module", autouse=True)
